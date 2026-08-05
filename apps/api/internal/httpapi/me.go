@@ -7,16 +7,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func mountMeRoutes(r chi.Router, service AuthenticationService, limits RateLimitOptions) {
-	for _, endpoint := range meEndpoints(service) {
+func mountMeRoutes(r chi.Router, service AuthenticationService, recent RecentAuthService, limits RateLimitOptions) {
+	for _, endpoint := range meEndpoints(service, recent) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func meEndpoints(service AuthenticationService) []RouteEndpoint {
-	return []RouteEndpoint{
-		meEndpoint(service),
-	}
+func meEndpoints(service AuthenticationService, recent RecentAuthService) []RouteEndpoint {
+	endpoints := []RouteEndpoint{meEndpoint(service)}
+	endpoints = append(endpoints, recentAuthEndpoints(service, recent)...)
+	return endpoints
 }
 
 func meEndpoint(service AuthenticationService) Endpoint[noRequest, authUserResponse] {

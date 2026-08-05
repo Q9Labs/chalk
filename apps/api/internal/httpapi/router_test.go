@@ -137,13 +137,14 @@ type recordingObjectService struct {
 }
 
 type authenticationService struct {
-	register             func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error)
-	login                func(context.Context, authentication.LoginInput) (authentication.AuthResult, error)
-	authenticateSession  func(context.Context, string) (authentication.SessionUser, error)
-	principalForSession  func(authentication.Session) authentication.Principal
-	logout               func(context.Context, authentication.Principal) error
-	startGoogleSignIn    func(context.Context) (authentication.GoogleStart, error)
-	completeGoogleSignIn func(context.Context, string, string, *string) (authentication.AuthResult, error)
+	register                    func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error)
+	login                       func(context.Context, authentication.LoginInput) (authentication.AuthResult, error)
+	authenticateSession         func(context.Context, string) (authentication.SessionUser, error)
+	principalForSession         func(authentication.Session) authentication.Principal
+	logout                      func(context.Context, authentication.Principal) error
+	startGoogleSignIn           func(context.Context) (authentication.GoogleStart, error)
+	completeGoogleSignIn        func(context.Context, string, string, *string) (authentication.AuthResult, error)
+	startGoogleReauthentication func(context.Context, utilities.ID, string, utilities.ID) (authentication.GoogleReauthenticationStart, error)
 }
 
 type tenantAuthorizer struct {
@@ -205,6 +206,13 @@ func (s authenticationService) CompleteGoogleSignIn(ctx context.Context, state s
 		return authentication.AuthResult{}, errors.New("unexpected google callback call")
 	}
 	return s.completeGoogleSignIn(ctx, state, code, userAgent)
+}
+
+func (s authenticationService) StartGoogleReauthentication(ctx context.Context, accountID utilities.ID, action string, resourceID utilities.ID) (authentication.GoogleReauthenticationStart, error) {
+	if s.startGoogleReauthentication == nil {
+		return authentication.GoogleReauthenticationStart{}, errors.New("unexpected google reauthentication start call")
+	}
+	return s.startGoogleReauthentication(ctx, accountID, action, resourceID)
 }
 
 func (a tenantAuthorizer) AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
@@ -3648,6 +3656,13 @@ func bearerRequest(method string, path string, token string) *http.Request {
 func bearerRequestWithBody(method string, path string, token string, body string) *http.Request {
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
+	// Space creation is idempotent at the HTTP boundary. Keep the shared
+	// authenticated test fixture aligned with that contract so tests that use
+	// the generic helper still exercise authorization rather than request-key
+	// decoding.
+	if method == http.MethodPost && strings.HasSuffix(path, "/spaces") {
+		req.Header.Set("Idempotency-Key", "space-test-request-0001")
+	}
 	return req
 }
 

@@ -142,6 +142,13 @@ Production requires `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`,
 the unpadded base64url encoding of a 64-byte Ed25519 private key and must be
 supplied through the runtime secret boundary.
 
+Sensitive dashboard mutations use a five-minute, action- and resource-bound
+recent-auth proof. Local development uses a deterministic local-only default;
+every non-local environment must supply `CHALK_AUTH_RECENT_AUTH_SECRET` with at
+least 32 bytes through the runtime secret boundary. The API never logs proof
+values or passwords, and API-key credentials cannot obtain or satisfy this
+Dashboard Account challenge.
+
 ## Managed web SDK credentials
 
 Customer backends authenticate tenant API requests with credentials created by
@@ -283,7 +290,7 @@ sanitized Markdown and HTML summaries are written to `scratchpad/`.
 
 ## gopls MCP
 
-`gopls MCP` is semantic assistance for Codex sessions. It is useful for
+`gopls MCP` is semantic assistance for Codex work. It is useful for
 workspace shape, symbol search, references, package API summaries, and fast
 diagnostics. The shell gate remains the source of truth.
 

@@ -1,3 +1,24 @@
+-- name: ReserveSpaceCreateRequest :one
+insert into space_create_requests (
+    tenant_id,
+    request_key,
+    request_fingerprint,
+    space_id
+) values (
+    sqlc.arg(tenant_id),
+    sqlc.arg(request_key),
+    sqlc.arg(request_fingerprint),
+    sqlc.arg(space_id)
+)
+on conflict (tenant_id, request_key) do nothing
+returning *;
+
+-- name: GetSpaceCreateRequest :one
+select *
+from space_create_requests
+where tenant_id = sqlc.arg(tenant_id)
+  and request_key = sqlc.arg(request_key);
+
 -- name: CreateSpace :one
 with inserted as (
 insert into spaces (
@@ -78,7 +99,8 @@ select
     spaces.linger_window_seconds,
     spaces.created_by_user_id,
     spaces.updated_at,
-    spaces.created_at
+    spaces.created_at,
+    spaces.archived_at
 from spaces
 join inserted on inserted.id = spaces.id;
 
@@ -149,7 +171,8 @@ select
     linger_window_seconds,
     created_by_user_id,
     updated_at,
-    created_at
+    created_at,
+    archived_at
 from spaces
 where
     tenant_id = sqlc.arg(tenant_id)
@@ -170,10 +193,16 @@ select
     linger_window_seconds,
     created_by_user_id,
     updated_at,
-    created_at
+    created_at,
+    archived_at
 from spaces
 where
     tenant_id = sqlc.arg(tenant_id)
+    and (
+        not sqlc.arg(archived_set)::boolean
+        or (sqlc.arg(archived)::boolean and archived_at is not null)
+        or (not sqlc.arg(archived)::boolean and archived_at is null)
+    )
     and (
         not sqlc.arg(cursor_set)::boolean
         or (created_at, id) < (
@@ -241,7 +270,56 @@ returning
     linger_window_seconds,
     created_by_user_id,
     updated_at,
-    created_at;
+    created_at,
+    archived_at;
+
+-- name: ArchiveTenantSpace :one
+update spaces
+set
+    archived_at = coalesce(archived_at, now()),
+    updated_at = now()
+where tenant_id = sqlc.arg(tenant_id)
+  and id = sqlc.arg(id)
+returning
+    id,
+    name,
+    tenant_id,
+    slug,
+    media_plane,
+    metadata,
+    recurring_policy,
+    admission_policy,
+    default_episode_duration_seconds,
+    maximum_episode_duration_seconds,
+    linger_window_seconds,
+    created_by_user_id,
+    updated_at,
+    created_at,
+    archived_at;
+
+-- name: RestoreTenantSpace :one
+update spaces
+set
+    archived_at = null,
+    updated_at = now()
+where tenant_id = sqlc.arg(tenant_id)
+  and id = sqlc.arg(id)
+returning
+    id,
+    name,
+    tenant_id,
+    slug,
+    media_plane,
+    metadata,
+    recurring_policy,
+    admission_policy,
+    default_episode_duration_seconds,
+    maximum_episode_duration_seconds,
+    linger_window_seconds,
+    created_by_user_id,
+    updated_at,
+    created_at,
+    archived_at;
 
 -- name: CreateEpisode :one
 insert into episodes (
@@ -278,6 +356,8 @@ from spaces
 where
     spaces.tenant_id = sqlc.arg(tenant_id)
     and spaces.id = sqlc.arg(space_id)
+    and spaces.archived_at is null
+for update
 returning
     id,
     status,

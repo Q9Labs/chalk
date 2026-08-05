@@ -1,3 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ContractPage } from "../components/dashboard/ContractPage";
-export const Route = createFileRoute("/_app/developer")({ component: () => <ContractPage kind="developer" /> });
+import { useDashboardAccount } from "../components/dashboard/DashboardAccount";
+import { APIKeysPage } from "../components/dashboard/APIKeysPage";
+
+export const Route = createFileRoute("/_app/developer")({
+  component: () => {
+    const { current } = useDashboardAccount();
+    return <APIKeysPage tenantID={current.tenant.id} />;
+  },
+});

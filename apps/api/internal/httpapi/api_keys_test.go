@@ -83,6 +83,29 @@ type apiKeyAuditWriterStub struct {
 	err    error
 }
 
+type apiKeyRecentAuthStub struct {
+	proof string
+	err   error
+	calls []struct {
+		proof, action         string
+		accountID, resourceID utilities.ID
+	}
+}
+
+func (s *apiKeyRecentAuthStub) Verify(_ context.Context, proof string, accountID utilities.ID, action string, resourceID utilities.ID) error {
+	s.calls = append(s.calls, struct {
+		proof, action         string
+		accountID, resourceID utilities.ID
+	}{proof: proof, action: action, accountID: accountID, resourceID: resourceID})
+	if s.err != nil {
+		return s.err
+	}
+	if s.proof != "" && proof != s.proof {
+		return errors.New("proof mismatch")
+	}
+	return nil
+}
+
 func (w *apiKeyAuditWriterStub) Create(_ context.Context, input auditlogs.CreateInput) (auditlogs.AuditLog, error) {
 	w.inputs = append(w.inputs, input)
 	return auditlogs.AuditLog{}, w.err
@@ -124,6 +147,21 @@ func TestAPIKeyRouteContractsDeclareProtectedBoundedLifecycle(t *testing.T) {
 		if !apiKeyContractHasError(contract, "access.unauthenticated") || !apiKeyContractHasError(contract, "access.forbidden") {
 			t.Fatalf("%s omits auth errors", contract.OperationID)
 		}
+		if expected.write {
+			recentAuth := apiKeyParameterByName(contract.Parameters, recentAuthHeader)
+			if recentAuth == nil || !recentAuth.Required {
+				t.Fatalf("%s recent-auth parameter = %#v", contract.OperationID, recentAuth)
+			}
+		}
+		if contract.OperationID == "createAPIKey" || contract.OperationID == "rotateAPIKey" {
+			requestKey := apiKeyParameterByName(contract.Parameters, idempotencyKeyHeader)
+			if requestKey == nil || !requestKey.Required {
+				t.Fatalf("%s idempotency parameter = %#v", contract.OperationID, requestKey)
+			}
+			if !apiKeyContractHasError(contract, apiErrorInvalidRequestKey.Code) || !apiKeyContractHasError(contract, apiErrorIdempotencyConflict.Code) {
+				t.Fatalf("%s omits idempotency errors", contract.OperationID)
+			}
+		}
 	}
 }
 
@@ -150,7 +188,7 @@ func TestAPIKeyRoutesRejectAnonymousAndInsufficientCallers(t *testing.T) {
 	assertAPIKeyError(t, crossTenantResponse, http.StatusForbidden, "access.forbidden")
 }
 
-func TestAPIKeyCreateAllowsOwnerAndAdminAndReturnsSecretOnce(t *testing.T) {
+func TestAPIKeyCreateAllowsOwnerAndCollaboratorAndReturnsSecretOnce(t *testing.T) {
 	for _, role := range []memberships.Role{memberships.RoleOwner, memberships.RoleCollaborator} {
 		t.Run(string(role), func(t *testing.T) {
 			service := apiKeyServiceStub{create: func(_ context.Context, input apikeys.CreateInput) (apikeys.CreateResult, error) {
@@ -170,7 +208,120 @@ func TestAPIKeyCreateAllowsOwnerAndAdminAndReturnsSecretOnce(t *testing.T) {
 			if strings.Count(response.Body.String(), "chalk_sk_new.once") != 1 || strings.Contains(response.Body.String(), "hash") {
 				t.Fatalf("create response leaked or duplicated credential data: %s", response.Body.String())
 			}
+			if response.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("cache-control = %q, want no-store", response.Header().Get("Cache-Control"))
+			}
 		})
+	}
+}
+
+func TestAPIKeyMutationsRequireRecentAuthWhenConfigured(t *testing.T) {
+	service := apiKeyServiceStub{create: func(context.Context, apikeys.CreateInput) (apikeys.CreateResult, error) {
+		return apikeys.CreateResult{Key: apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesRead}), RawKey: "chalk_sk_recent.once"}, nil
+	}}
+	verifier := &apiKeyRecentAuthStub{proof: "proof-1"}
+	body := `{"name":"backend","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`
+
+	missing := serveAPIKeyRequestWithRecentAuth(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleCollaborator}), verifier, apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body, "")
+	assertAPIKeyError(t, missing, http.StatusPreconditionRequired, "access.recent_auth_required")
+
+	apiKey := serveAPIKeyRequestWithRecentAuth(t, service, authorization.NewTenantPolicy(nil), verifier, apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeSpacesRead), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body, "proof-1")
+	if apiKey.Code != http.StatusCreated {
+		t.Fatalf("API-key bearer mutation = %d %s", apiKey.Code, apiKey.Body.String())
+	}
+	if len(verifier.calls) != 0 {
+		t.Fatalf("API-key bearer should not invoke recent-auth verifier: %+v", verifier.calls)
+	}
+
+	valid := serveAPIKeyRequestWithRecentAuth(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleCollaborator}), verifier, apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body, "proof-1")
+	if valid.Code != http.StatusCreated || len(verifier.calls) != 1 {
+		t.Fatalf("valid recent-auth response = %d %s, calls = %+v", valid.Code, valid.Body.String(), verifier.calls)
+	}
+	call := verifier.calls[0]
+	if call.proof != "proof-1" || call.action != "api_key.create" || call.accountID != apiKeyTestUserID || call.resourceID != apiKeyTestTenantID {
+		t.Fatalf("recent-auth call = %+v", call)
+	}
+}
+
+func TestAPIKeyBearerMutationsBypassDashboardRecentAuth(t *testing.T) {
+	caller := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeAPIKeysDelete, authentication.ScopeSpacesRead)
+	verifier := &apiKeyRecentAuthStub{proof: "dashboard-proof"}
+	service := apiKeyServiceStub{
+		create: func(context.Context, apikeys.CreateInput) (apikeys.CreateResult, error) {
+			return apikeys.CreateResult{Key: apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesRead}), RawKey: "chalk_sk_bearer.once"}, nil
+		},
+		get: func(_ context.Context, tenantID, keyID utilities.ID) (apikeys.Key, error) {
+			if tenantID != apiKeyTestTenantID || keyID != apiKeyTestKeyID {
+				t.Fatalf("target lookup = %s / %s", tenantID, keyID)
+			}
+			return apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesRead}), nil
+		},
+		rotate: func(context.Context, utilities.ID, utilities.ID, apikeys.RotateInput) (apikeys.RotateResult, error) {
+			return apikeys.RotateResult{Key: apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesRead}), RawKey: "chalk_sk_bearer_rotated.once"}, nil
+		},
+		revoke: func(context.Context, utilities.ID, utilities.ID) error { return nil },
+	}
+	authorizer := authorization.NewTenantPolicy(nil)
+
+	create := serveAPIKeyRequestWithRecentAuth(t, service, authorizer, verifier, caller, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"bearer","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`, "")
+	if create.Code != http.StatusCreated {
+		t.Fatalf("bearer create = %d %s", create.Code, create.Body.String())
+	}
+
+	rotate := serveAPIKeyRequestWithRecentAuth(t, service, authorizer, verifier, caller, http.MethodPost, apiKeyItemPath(apiKeyTestTenantID, apiKeyTestKeyID)+"/rotate", `{}`, "")
+	if rotate.Code != http.StatusOK {
+		t.Fatalf("bearer rotate = %d %s", rotate.Code, rotate.Body.String())
+	}
+
+	revoke := serveAPIKeyRequestWithRecentAuth(t, service, authorizer, verifier, caller, http.MethodDelete, apiKeyItemPath(apiKeyTestTenantID, apiKeyTestKeyID), "", "")
+	if revoke.Code != http.StatusNoContent {
+		t.Fatalf("bearer revoke = %d %s", revoke.Code, revoke.Body.String())
+	}
+	if len(verifier.calls) != 0 {
+		t.Fatalf("bearer mutations invoked Dashboard recent-auth: %+v", verifier.calls)
+	}
+}
+
+func TestAPIKeyCreateAndRotateRequireIdempotencyKey(t *testing.T) {
+	service := apiKeyServiceStub{
+		create: func(context.Context, apikeys.CreateInput) (apikeys.CreateResult, error) {
+			t.Fatal("create should not be called")
+			return apikeys.CreateResult{}, nil
+		},
+		rotate: func(context.Context, utilities.ID, utilities.ID, apikeys.RotateInput) (apikeys.RotateResult, error) {
+			t.Fatal("rotate should not be called")
+			return apikeys.RotateResult{}, nil
+		},
+	}
+	router := chi.NewRouter()
+	router.Route("/v1", func(r chi.Router) {
+		mountAPIKeyRoutes(r, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleCollaborator}), nil, RateLimitOptions{})
+	})
+	for _, test := range []struct {
+		name, path, body string
+	}{
+		{name: "create", path: apiKeyCollectionPath(apiKeyTestTenantID), body: `{"name":"backend","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`},
+		{name: "rotate", path: apiKeyItemPath(apiKeyTestTenantID, apiKeyTestKeyID) + "/rotate", body: `{}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
+			request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), apiKeyUserPrincipal()))
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			assertAPIKeyError(t, response, http.StatusBadRequest, "request.invalid_idempotency_key")
+		})
+	}
+}
+
+func TestAPIKeyReplayNeverReturnsSecretMaterial(t *testing.T) {
+	service := apiKeyServiceStub{create: func(context.Context, apikeys.CreateInput) (apikeys.CreateResult, error) {
+		return apikeys.CreateResult{Key: apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesRead}), Replayed: true}, nil
+	}}
+	body := `{"name":"backend","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`
+	response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleCollaborator}), apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
+	assertAPIKeyError(t, response, http.StatusConflict, "api_key.secret_not_replayable")
+	if strings.Contains(response.Body.String(), "secret") && strings.Contains(response.Body.String(), "chalk_sk_") {
+		t.Fatalf("replay response leaked secret material: %s", response.Body.String())
 	}
 }
 
@@ -356,11 +507,35 @@ func serveAPIKeyRequest(t testing.TB, service APIKeyService, authorizer TenantAu
 	return serveAPIKeyRequestWithAudit(t, service, authorizer, nil, principal, method, path, body)
 }
 
+func serveAPIKeyRequestWithRecentAuth(t testing.TB, service APIKeyService, authorizer TenantAuthorizer, recentAuth APIKeyRecentAuthVerifier, principal authentication.Principal, method, path, body, proof string) *httptest.ResponseRecorder {
+	t.Helper()
+	router := chi.NewRouter()
+	router.Route("/v1", func(r chi.Router) {
+		mountAPIKeyRoutesWithOptions(r, service, authorizer, nil, APIKeyRouteOptions{RecentAuth: recentAuth}, RateLimitOptions{})
+	})
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if method == http.MethodPost {
+		request.Header.Set(idempotencyKeyHeader, "api-key-test-request-0001")
+	}
+	if proof != "" {
+		request.Header.Set(recentAuthHeader, proof)
+	}
+	if principal.IsAuthenticated() {
+		request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), principal))
+	}
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	return response
+}
+
 func serveAPIKeyRequestWithAudit(t testing.TB, service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, principal authentication.Principal, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	router := chi.NewRouter()
 	router.Route("/v1", func(r chi.Router) { mountAPIKeyRoutes(r, service, authorizer, audits, RateLimitOptions{}) })
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if method == http.MethodPost {
+		request.Header.Set(idempotencyKeyHeader, "api-key-test-request-0001")
+	}
 	if principal.IsAuthenticated() {
 		request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), principal))
 	}
@@ -400,6 +575,15 @@ func apiKeyContractHasError(contract APIRouteContract, code string) bool {
 		}
 	}
 	return false
+}
+
+func apiKeyParameterByName(parameters []APIParameterContract, name string) *APIParameterContract {
+	for index := range parameters {
+		if parameters[index].Name == name {
+			return &parameters[index]
+		}
+	}
+	return nil
 }
 
 func assertAPIKeyError(t testing.TB, response *httptest.ResponseRecorder, status int, code string) {

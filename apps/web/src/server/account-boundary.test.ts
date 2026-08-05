@@ -5,6 +5,15 @@ const upstream = { CHALK_API_ORIGIN: "https://api.chalk.test" };
 const secureOrigin = "https://chalk.test";
 const upstreamCredentialField = "session_token";
 
+function recentAuthFailureFetcher() {
+  return vi.fn(async () => Response.json({ error: { code: "auth.invalid_recent_auth", message: "Recent authentication failed" } }, { status: 401 }));
+}
+
+function expectAccountCookiePreserved(response: Response) {
+  expect(response.status).toBe(401);
+  expect(response.headers.get("set-cookie")).toBeNull();
+}
+
 describe("account boundary", () => {
   it("issues a hardened CSRF cookie and private response", async () => {
     const response = await handleAccountBoundary(new Request(`${secureOrigin}/api/auth/csrf`), upstream, vi.fn());
@@ -115,6 +124,231 @@ describe("account boundary", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("allowlists nested Space and Episode routes without accepting arbitrary upstream paths", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const spaceID = "22222222-2222-4222-8222-222222222222";
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/episodes?page_size=25`);
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
+      return Response.json({ episodes: [], pagination: { page_size: 25, next_cursor: null, has_more: false } });
+    });
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/episodes?page_size=25&admin=true`, {
+        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledOnce();
+
+    const rejected = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/not-a-uuid/episodes`, {
+        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+    expect(rejected.status).toBe(404);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("requires same-origin CSRF proof for API-key revocation", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const apiKeyID = "33333333-3333-4333-8333-333333333333";
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/api-keys/${apiKeyID}`);
+      expect(init?.method).toBe("DELETE");
+      return new Response(null, { status: 204 });
+    });
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/tenants/${tenantID}/api-keys/${apiKeyID}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: secureOrigin,
+          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+          "X-Chalk-CSRF": "csrf-token",
+        },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("cache-control")).toBe("no-store, private");
+  });
+
+  it("forwards a bounded recent-auth proof only on an allowlisted API-key mutation", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("x-chalk-recent-auth")).toBe("recent-proof");
+      return Response.json({ api_key: { id: "key-1" }, secret: "chalk_secret_once" }, { status: 201 });
+    });
+    const response = await handleAccountBoundary(
+      jsonRequest(
+        `/api/tenants/${tenantID}/api-keys`,
+        { name: "CI", scopes: ["spaces:read"], expires_at: "2030-01-01T00:00:00Z" },
+        {
+          Origin: secureOrigin,
+          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+          "X-Chalk-CSRF": "csrf-token",
+          "X-Chalk-Recent-Auth": "recent-proof",
+        },
+      ),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({ secret: "chalk_secret_once" });
+  });
+
+  it("does not clear Account authentication when recent password verification fails", async () => {
+    const response = await handleAccountBoundary(
+      jsonRequest(
+        "/api/me/recent-auth",
+        { password: "wrong", action: "api_key.create", resource_id: "11111111-1111-4111-8111-111111111111" },
+        {
+          Origin: secureOrigin,
+          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+          "X-Chalk-CSRF": "csrf-token",
+        },
+      ),
+      upstream,
+      recentAuthFailureFetcher(),
+    );
+
+    expectAccountCookiePreserved(response);
+  });
+
+  it("forwards only the Google recent-auth start query contract", async () => {
+    const resourceID = "22222222-2222-4222-8222-222222222222";
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(`https://api.chalk.test/v1/me/recent-auth/google/start?action=api_key.create&resource_id=${resourceID}`);
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
+      return Response.json({ authorization_url: "https://accounts.google.test/oauth?state=opaque", state: "opaque-state" });
+    });
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/me/recent-auth/google/start?action=api_key.create&resource_id=${resourceID}&discarded=1`, {
+        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store, private");
+    await expect(response.json()).resolves.toEqual({ authorization_url: "https://accounts.google.test/oauth?state=opaque", state: "opaque-state" });
+  });
+
+  it("bridges the browser Google callback with a nonce-bound same-origin message", async () => {
+    const proof = "opaque-provider-proof";
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://api.chalk.test/v1/me/recent-auth/google/callback?state=opaque-state&code=provider-code");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
+      return Response.json({ proof, expires_at: "2030-08-04T12:00:00Z" });
+    });
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/me/recent-auth/google/callback?state=opaque-state&code=provider-code&discarded=1`, {
+        headers: { Accept: "text/html", Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(response.headers.get("cache-control")).toBe("no-store, private");
+    const csp = response.headers.get("content-security-policy");
+    expect(csp).toMatch(/script-src 'nonce-[0-9a-f]+/);
+    const body = await response.text();
+    expect(body).toContain("chalk.recent-auth.google.complete");
+    expect(body).toContain(JSON.stringify(proof));
+    expect(body).toContain(JSON.stringify(secureOrigin));
+    expect(body).not.toContain("discarded");
+    expect(info).not.toHaveBeenCalledWith(expect.stringContaining(proof));
+    info.mockRestore();
+  });
+
+  it("keeps JSON callback responses available to same-origin API clients", async () => {
+    const fetcher = vi.fn(async () => Response.json({ proof: "opaque-provider-proof", expires_at: "2030-08-04T12:00:00Z" }));
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/me/recent-auth/google/callback?state=opaque-state&code=provider-code`, {
+        headers: { Accept: "application/json", Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.headers.get("content-type")).toContain("application/json");
+    await expect(response.json()).resolves.toEqual({ proof: "opaque-provider-proof", expires_at: "2030-08-04T12:00:00Z" });
+  });
+
+  it("preserves the Account cookie when the browser callback reports a recent-auth failure", async () => {
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/me/recent-auth/google/callback?state=opaque-state&code=provider-code`, {
+        headers: { Accept: "text/html", Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      recentAuthFailureFetcher(),
+    );
+
+    expectAccountCookiePreserved(response);
+    expect(await response.text()).toContain("auth.invalid_recent_auth");
+  });
+
+  it("preserves the Account cookie when an API-key mutation rejects recent authentication", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const apiKeyID = "22222222-2222-4222-8222-222222222222";
+    const routes = [
+      { method: "POST", path: `/api/tenants/${tenantID}/api-keys`, body: { name: "CI", scopes: ["spaces:read"], expires_at: "2030-01-01T00:00:00Z" } },
+      { method: "POST", path: `/api/tenants/${tenantID}/api-keys/${apiKeyID}/rotate`, body: {} },
+      { method: "DELETE", path: `/api/tenants/${tenantID}/api-keys/${apiKeyID}`, body: {} },
+    ] as const;
+
+    for (const route of routes) {
+      const fetcher = vi.fn(async () => Response.json({ error: { code: "auth.invalid_recent_auth", message: "Recent authentication failed" } }, { status: 401 }));
+      const response = await handleAccountBoundary(
+        new Request(`${secureOrigin}${route.path}`, {
+          method: route.method,
+          headers: {
+            "Content-Type": "application/json",
+            Origin: secureOrigin,
+            Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+            "X-Chalk-CSRF": "csrf-token",
+            "X-Chalk-Recent-Auth": "expired-proof",
+          },
+          body: JSON.stringify(route.body),
+        }),
+        upstream,
+        fetcher,
+      );
+
+      expect(response.status).toBe(401);
+      expect(response.headers.get("set-cookie")).toBeNull();
+      expect(fetcher).toHaveBeenCalledOnce();
+    }
+
+    const expiredLogin = await handleAccountBoundary(
+      jsonRequest(
+        `/api/tenants/${tenantID}/api-keys`,
+        { name: "CI", scopes: ["spaces:read"], expires_at: "2030-01-01T00:00:00Z" },
+        {
+          Origin: secureOrigin,
+          Cookie: "__Host-chalk_account=expired-account-token; __Host-chalk_csrf=csrf-token",
+          "X-Chalk-CSRF": "csrf-token",
+        },
+      ),
+      upstream,
+      vi.fn(async () => Response.json({ error: { code: "access.unauthenticated", message: "Authentication required" } }, { status: 401 })),
+    );
+
+    expect(expiredLogin.headers.get("set-cookie")).toContain("__Host-chalk_account=");
+  });
+
   it("clears both account and CSRF cookies on logout", async () => {
     const response = await handleAccountBoundary(
       jsonRequest(
@@ -177,6 +411,20 @@ describe("account boundary", () => {
     );
 
     expect(info).toHaveBeenCalledWith(expect.stringContaining('"journey_id":"11111111-1111-4111-8111-111111111111"'));
+    info.mockRestore();
+  });
+
+  it("logs bounded route templates instead of resource identifiers", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces`, { headers: { Cookie: "__Host-chalk_account=server-held-account-token" } }),
+      upstream,
+      vi.fn(async () => Response.json({ spaces: [], pagination: { page_size: 50, next_cursor: null, has_more: false } })),
+    );
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('"route":"/api/tenants/{id}/spaces"'));
+    expect(info).not.toHaveBeenCalledWith(expect.stringContaining(tenantID));
     info.mockRestore();
   });
 

@@ -73,6 +73,7 @@ export const APIKeyWithSecretSchema = Schema.Struct({
     tenant_id: TenantIdSchema,
     updated_at: DateTimeStringSchema,
   }),
+  replayed: Schema.Boolean,
   secret: Schema.String,
 });
 export type APIKeyWithSecret = typeof APIKeyWithSecretSchema.Type;
@@ -761,6 +762,28 @@ export const ParticipantRemovalSchema = Schema.Struct({
 });
 export type ParticipantRemoval = typeof ParticipantRemovalSchema.Type;
 
+export const RecentAuthSchema = Schema.Struct({
+  expires_at: DateTimeStringSchema,
+  proof: Schema.String,
+});
+export type RecentAuth = typeof RecentAuthSchema.Type;
+
+export const RecentAuthGoogleStartSchema = Schema.Struct({
+  authorization_url: URLStringSchema,
+  state: Schema.String,
+});
+export type RecentAuthGoogleStart = typeof RecentAuthGoogleStartSchema.Type;
+
+export const RecentAuthRequestSchema = Schema.Struct({
+  action: Schema.String.check(Schema.isMinLength(1)),
+  password: Schema.String.check(Schema.isMinLength(1)),
+  provider: Schema.String.check(Schema.isMinLength(1)),
+  provider_code: Schema.String.check(Schema.isMinLength(1)),
+  provider_state: Schema.String.check(Schema.isMinLength(1)),
+  resource_id: Schema.optional(Schema.NullOr(UUIDSchema)),
+});
+export type RecentAuthRequest = typeof RecentAuthRequestSchema.Type;
+
 export const RecordingIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId"));
 export type RecordingId = typeof RecordingIdSchema.Type;
 
@@ -876,6 +899,8 @@ export type SetEpisodeDeadlineRequest = typeof SetEpisodeDeadlineRequestSchema.T
 
 export const SpaceSchema = Schema.Struct({
   admission_policy: Schema.Unknown,
+  archived: Schema.Boolean,
+  archived_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   created_at: DateTimeStringSchema,
   created_by_user_id: Schema.NullOr(UserIdSchema),
   default_episode_duration_seconds: Schema.Number,
@@ -1215,6 +1240,22 @@ export const AdmitEpisodeParticipant429ResponseHeadersSchema = Schema.Struct({
 });
 export type AdmitEpisodeParticipant429ResponseHeaders = typeof AdmitEpisodeParticipant429ResponseHeadersSchema.Type;
 
+export const ArchiveSpacePathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type ArchiveSpacePathParams = typeof ArchiveSpacePathParamsSchema.Type;
+
+export const ArchiveSpaceResponseSchema = SpaceSchema;
+export type ArchiveSpaceResponse = typeof ArchiveSpaceResponseSchema.Type;
+
+export const ArchiveSpace429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ArchiveSpace429ResponseHeaders = typeof ArchiveSpace429ResponseHeadersSchema.Type;
+
 export const CloseCloudflareSFUTracksPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
   participant_id: ParticipantIdSchema,
@@ -1252,10 +1293,32 @@ export const CompleteGoogleSignIn429ResponseHeadersSchema = Schema.Struct({
 });
 export type CompleteGoogleSignIn429ResponseHeaders = typeof CompleteGoogleSignIn429ResponseHeadersSchema.Type;
 
+export const CompleteRecentAuthGoogleQueryParamsSchema = Schema.Struct({
+  code: Schema.String,
+  state: Schema.String,
+});
+export type CompleteRecentAuthGoogleQueryParams = typeof CompleteRecentAuthGoogleQueryParamsSchema.Type;
+
+export const CompleteRecentAuthGoogleResponseSchema = RecentAuthSchema;
+export type CompleteRecentAuthGoogleResponse = typeof CompleteRecentAuthGoogleResponseSchema.Type;
+
+export const CompleteRecentAuthGoogle429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CompleteRecentAuthGoogle429ResponseHeaders = typeof CompleteRecentAuthGoogle429ResponseHeadersSchema.Type;
+
 export const CreateAPIKeyPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
 export type CreateAPIKeyPathParams = typeof CreateAPIKeyPathParamsSchema.Type;
+
+export const CreateAPIKeyRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  "X-Chalk-Recent-Auth": Schema.String,
+});
+export type CreateAPIKeyRequestHeaders = typeof CreateAPIKeyRequestHeadersSchema.Type;
 
 export const CreateAPIKeyRequestBodySchema = CreateAPIKeyRequestSchema;
 export type CreateAPIKeyRequestBody = typeof CreateAPIKeyRequestBodySchema.Type;
@@ -1380,6 +1443,11 @@ export const CreateSpacePathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
 export type CreateSpacePathParams = typeof CreateSpacePathParamsSchema.Type;
+
+export const CreateSpaceRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type CreateSpaceRequestHeaders = typeof CreateSpaceRequestHeadersSchema.Type;
 
 export const CreateSpaceRequestBodySchema = CreateSpaceRequestSchema;
 export type CreateSpaceRequestBody = typeof CreateSpaceRequestBodySchema.Type;
@@ -1840,6 +1908,19 @@ export const IssueEpisodeParticipantSyncToken429ResponseHeadersSchema = Schema.S
 });
 export type IssueEpisodeParticipantSyncToken429ResponseHeaders = typeof IssueEpisodeParticipantSyncToken429ResponseHeadersSchema.Type;
 
+export const IssueRecentAuthProofRequestBodySchema = RecentAuthRequestSchema;
+export type IssueRecentAuthProofRequestBody = typeof IssueRecentAuthProofRequestBodySchema.Type;
+
+export const IssueRecentAuthProofResponseSchema = RecentAuthSchema;
+export type IssueRecentAuthProofResponse = typeof IssueRecentAuthProofResponseSchema.Type;
+
+export const IssueRecentAuthProof429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type IssueRecentAuthProof429ResponseHeaders = typeof IssueRecentAuthProof429ResponseHeadersSchema.Type;
+
 export const ListAPIKeysPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -1973,6 +2054,7 @@ export const ListSpacesPathParamsSchema = Schema.Struct({
 export type ListSpacesPathParams = typeof ListSpacesPathParamsSchema.Type;
 
 export const ListSpacesQueryParamsSchema = Schema.Struct({
+  archived: Schema.optional(Schema.Boolean),
   cursor: Schema.optional(Schema.String),
   page_size: Schema.optional(Schema.NumberFromString),
 });
@@ -2023,7 +2105,25 @@ export type ListWebhookDeliveriesPathParams = typeof ListWebhookDeliveriesPathPa
 export const ListWebhookDeliveriesQueryParamsSchema = Schema.Struct({
   cursor: Schema.optional(Schema.String),
   event_type: Schema.optional(
-    Schema.Array(Schema.Literals(["endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.created", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"])),
+    Schema.Array(
+      Schema.Literals([
+        "endpoint.test",
+        "episode.ended",
+        "episode.started",
+        "participant.joined",
+        "participant.left",
+        "recording.completed",
+        "recording.failed",
+        "recording.started",
+        "space.archived",
+        "space.created",
+        "space.restored",
+        "space.updated",
+        "transcript.completed",
+        "transcript.failed",
+        "transcript.started",
+      ]),
+    ),
   ),
   page_size: Schema.optional(Schema.NumberFromString),
   state: Schema.optional(Schema.Array(Schema.Literals(["pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"]))),
@@ -2228,11 +2328,32 @@ export const RequestTranscript429ResponseHeadersSchema = Schema.Struct({
 });
 export type RequestTranscript429ResponseHeaders = typeof RequestTranscript429ResponseHeadersSchema.Type;
 
+export const RestoreSpacePathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RestoreSpacePathParams = typeof RestoreSpacePathParamsSchema.Type;
+
+export const RestoreSpaceResponseSchema = SpaceSchema;
+export type RestoreSpaceResponse = typeof RestoreSpaceResponseSchema.Type;
+
+export const RestoreSpace429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RestoreSpace429ResponseHeaders = typeof RestoreSpace429ResponseHeadersSchema.Type;
+
 export const RevokeAPIKeyPathParamsSchema = Schema.Struct({
   api_key_id: UUIDSchema,
   tenant_id: TenantIdSchema,
 });
 export type RevokeAPIKeyPathParams = typeof RevokeAPIKeyPathParamsSchema.Type;
+
+export const RevokeAPIKeyRequestHeadersSchema = Schema.Struct({
+  "X-Chalk-Recent-Auth": Schema.String,
+});
+export type RevokeAPIKeyRequestHeaders = typeof RevokeAPIKeyRequestHeadersSchema.Type;
 
 export const RevokeAPIKey429ResponseHeadersSchema = Schema.Struct({
   "Retry-After": RetryAfterHeaderSchema,
@@ -2246,6 +2367,12 @@ export const RotateAPIKeyPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
 export type RotateAPIKeyPathParams = typeof RotateAPIKeyPathParamsSchema.Type;
+
+export const RotateAPIKeyRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  "X-Chalk-Recent-Auth": Schema.String,
+});
+export type RotateAPIKeyRequestHeaders = typeof RotateAPIKeyRequestHeadersSchema.Type;
 
 export const RotateAPIKeyRequestBodySchema = RotateAPIKeyRequestSchema;
 export type RotateAPIKeyRequestBody = typeof RotateAPIKeyRequestBodySchema.Type;
@@ -2338,6 +2465,22 @@ export const StartIntegrationConnection429ResponseHeadersSchema = Schema.Struct(
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type StartIntegrationConnection429ResponseHeaders = typeof StartIntegrationConnection429ResponseHeadersSchema.Type;
+
+export const StartRecentAuthGoogleQueryParamsSchema = Schema.Struct({
+  action: Schema.String.check(Schema.isMaxLength(64)),
+  resource_id: Schema.optional(UUIDSchema),
+});
+export type StartRecentAuthGoogleQueryParams = typeof StartRecentAuthGoogleQueryParamsSchema.Type;
+
+export const StartRecentAuthGoogleResponseSchema = RecentAuthGoogleStartSchema;
+export type StartRecentAuthGoogleResponse = typeof StartRecentAuthGoogleResponseSchema.Type;
+
+export const StartRecentAuthGoogle429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type StartRecentAuthGoogle429ResponseHeaders = typeof StartRecentAuthGoogle429ResponseHeadersSchema.Type;
 
 export const TestWebhookEndpointPathParamsSchema = Schema.Struct({
   endpoint_id: UUIDSchema,
@@ -2517,6 +2660,25 @@ export const AccessInvalidPasswordErrorSchema = AccessInvalidPasswordErrorWireSc
   }),
 );
 
+export class AccessRecentAuthRequiredError extends Schema.TaggedErrorClass<AccessRecentAuthRequiredError>()("AccessRecentAuthRequiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.recent_auth_required"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessRecentAuthRequiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.recent_auth_required"),
+    message: Schema.String,
+  }),
+});
+export const AccessRecentAuthRequiredErrorSchema = AccessRecentAuthRequiredErrorWireSchema.pipe(
+  Schema.decodeTo(AccessRecentAuthRequiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessRecentAuthRequiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class AccessUnauthenticatedError extends Schema.TaggedErrorClass<AccessUnauthenticatedError>()("AccessUnauthenticatedError", {
   error: Schema.Struct({
     code: Schema.Literal("access.unauthenticated"),
@@ -2593,6 +2755,25 @@ export const ApiKeyNotFoundErrorSchema = ApiKeyNotFoundErrorWireSchema.pipe(
   }),
 );
 
+export class ApiKeySecretNotReplayableError extends Schema.TaggedErrorClass<ApiKeySecretNotReplayableError>()("ApiKeySecretNotReplayableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("api_key.secret_not_replayable"),
+    message: Schema.String,
+  }),
+}) {}
+export const ApiKeySecretNotReplayableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("api_key.secret_not_replayable"),
+    message: Schema.String,
+  }),
+});
+export const ApiKeySecretNotReplayableErrorSchema = ApiKeySecretNotReplayableErrorWireSchema.pipe(
+  Schema.decodeTo(ApiKeySecretNotReplayableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ApiKeySecretNotReplayableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class AuditInvalidIdError extends Schema.TaggedErrorClass<AuditInvalidIdError>()("AuditInvalidIdError", {
   error: Schema.Struct({
     code: Schema.Literal("audit.invalid_id"),
@@ -2627,6 +2808,25 @@ export const AuditNotFoundErrorWireSchema = Schema.Struct({
 export const AuditNotFoundErrorSchema = AuditNotFoundErrorWireSchema.pipe(
   Schema.decodeTo(AuditNotFoundError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "AuditNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AuthInvalidRecentAuthError extends Schema.TaggedErrorClass<AuthInvalidRecentAuthError>()("AuthInvalidRecentAuthError", {
+  error: Schema.Struct({
+    code: Schema.Literal("auth.invalid_recent_auth"),
+    message: Schema.String,
+  }),
+}) {}
+export const AuthInvalidRecentAuthErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("auth.invalid_recent_auth"),
+    message: Schema.String,
+  }),
+});
+export const AuthInvalidRecentAuthErrorSchema = AuthInvalidRecentAuthErrorWireSchema.pipe(
+  Schema.decodeTo(AuthInvalidRecentAuthError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AuthInvalidRecentAuthError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -3866,6 +4066,25 @@ export const ServiceUnavailableErrorSchema = ServiceUnavailableErrorWireSchema.p
   }),
 );
 
+export class SpaceInvalidArchiveFilterError extends Schema.TaggedErrorClass<SpaceInvalidArchiveFilterError>()("SpaceInvalidArchiveFilterError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_archive_filter"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceInvalidArchiveFilterErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_archive_filter"),
+    message: Schema.String,
+  }),
+});
+export const SpaceInvalidArchiveFilterErrorSchema = SpaceInvalidArchiveFilterErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceInvalidArchiveFilterError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidArchiveFilterError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class SpaceInvalidIdError extends Schema.TaggedErrorClass<SpaceInvalidIdError>()("SpaceInvalidIdError", {
   error: Schema.Struct({
     code: Schema.Literal("space.invalid_id"),
@@ -4722,6 +4941,9 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
 ]);
 export type AdmitEpisodeParticipantError = typeof AdmitEpisodeParticipantErrorSchema.Type;
 
+export const ArchiveSpaceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
+export type ArchiveSpaceError = typeof ArchiveSpaceErrorSchema.Type;
+
 export const CloseCloudflareSFUTracksErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -4742,7 +4964,24 @@ export type CloseCloudflareSFUTracksError = typeof CloseCloudflareSFUTracksError
 export const CompleteGoogleSignInErrorSchema = Schema.Union([OauthEmailConflictErrorSchema, OauthEmailNotVerifiedErrorSchema, OauthInvalidStateErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type CompleteGoogleSignInError = typeof CompleteGoogleSignInErrorSchema.Type;
 
-export const CreateAPIKeyErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export const CompleteRecentAuthGoogleErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, AuthInvalidRecentAuthErrorSchema, OauthNotConfiguredErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export type CompleteRecentAuthGoogleError = typeof CompleteRecentAuthGoogleErrorSchema.Type;
+
+export const CreateAPIKeyErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessRecentAuthRequiredErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  ApiKeySecretNotReplayableErrorSchema,
+  AuthInvalidRecentAuthErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type CreateAPIKeyError = typeof CreateAPIKeyErrorSchema.Type;
 
 export const CreateEpisodeErrorSchema = Schema.Union([
@@ -4838,7 +5077,9 @@ export type CreateRecordingReservationError = typeof CreateRecordingReservationE
 export const CreateSpaceErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
   RequestPayloadTooLargeErrorSchema,
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
@@ -5244,6 +5485,9 @@ export const IssueEpisodeParticipantSyncTokenErrorSchema = Schema.Union([
 ]);
 export type IssueEpisodeParticipantSyncTokenError = typeof IssueEpisodeParticipantSyncTokenErrorSchema.Type;
 
+export const IssueRecentAuthProofErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, AuthInvalidRecentAuthErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export type IssueRecentAuthProofError = typeof IssueRecentAuthProofErrorSchema.Type;
+
 export const ListAPIKeysErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListAPIKeysError = typeof ListAPIKeysErrorSchema.Type;
 
@@ -5316,7 +5560,16 @@ export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
 export const ListRegionsErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type ListRegionsError = typeof ListRegionsErrorSchema.Type;
 
-export const ListSpacesErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export const ListSpacesErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PaginationInvalidCursorErrorSchema,
+  PaginationInvalidPageSizeErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidArchiveFilterErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type ListSpacesError = typeof ListSpacesErrorSchema.Type;
 
 export const ListTenantsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
@@ -5526,12 +5779,17 @@ export const RequestTranscriptErrorSchema = Schema.Union([
 ]);
 export type RequestTranscriptError = typeof RequestTranscriptErrorSchema.Type;
 
+export const RestoreSpaceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
+export type RestoreSpaceError = typeof RestoreSpaceErrorSchema.Type;
+
 export const RevokeAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
+  AccessRecentAuthRequiredErrorSchema,
   AccessUnauthenticatedErrorSchema,
   ApiKeyInactiveErrorSchema,
   ApiKeyInvalidIdErrorSchema,
   ApiKeyNotFoundErrorSchema,
+  AuthInvalidRecentAuthErrorSchema,
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
@@ -5541,11 +5799,16 @@ export type RevokeAPIKeyError = typeof RevokeAPIKeyErrorSchema.Type;
 
 export const RotateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
+  AccessRecentAuthRequiredErrorSchema,
   AccessUnauthenticatedErrorSchema,
   ApiKeyInactiveErrorSchema,
   ApiKeyInvalidIdErrorSchema,
   ApiKeyNotFoundErrorSchema,
+  ApiKeySecretNotReplayableErrorSchema,
+  AuthInvalidRecentAuthErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
   RequestPayloadTooLargeErrorSchema,
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
@@ -5621,6 +5884,9 @@ export const StartIntegrationConnectionErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type StartIntegrationConnectionError = typeof StartIntegrationConnectionErrorSchema.Type;
+
+export const StartRecentAuthGoogleErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, OauthNotConfiguredErrorSchema, RequestInvalidErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export type StartRecentAuthGoogleError = typeof StartRecentAuthGoogleErrorSchema.Type;
 
 export const TestWebhookEndpointErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -5748,8 +6014,10 @@ export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema
 export const ChalkOperationPolicies = {
   addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  archiveSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
+  completeRecentAuthGoogle: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -5778,6 +6046,7 @@ export const ChalkOperationPolicies = {
   intakeJourneyEvents: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  issueRecentAuthProof: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.recent_auth", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
@@ -5790,12 +6059,14 @@ export const ChalkOperationPolicies = {
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   revokeAPIKey: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   startIntegrationConnection: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  startRecentAuthGoogle: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

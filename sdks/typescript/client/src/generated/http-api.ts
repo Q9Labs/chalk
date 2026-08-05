@@ -52,6 +52,20 @@ const authGroup = HttpApiGroup.make("auth")
     }),
   )
   .add(
+    HttpApiEndpoint.get("completeRecentAuthGoogle", "/v1/me/recent-auth/google/callback", {
+      query: S.CompleteRecentAuthGoogleQueryParamsSchema,
+      success: S.CompleteRecentAuthGoogleResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.OauthNotConfiguredErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("login", "/v1/auth/login", {
       payload: S.LoginRequestBodySchema,
       success: S.LoginResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -95,6 +109,20 @@ const authGroup = HttpApiGroup.make("auth")
     HttpApiEndpoint.get("startGoogleSignIn", "/v1/auth/google/start", {
       success: HttpApiSchema.Empty(302).pipe(HttpApiSchema.status(302)),
       error: [S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)), S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)), S.OauthNotConfiguredErrorSchema.pipe(HttpApiSchema.status(503)), S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503))],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("startRecentAuthGoogle", "/v1/me/recent-auth/google/start", {
+      query: S.StartRecentAuthGoogleQueryParamsSchema,
+      success: S.StartRecentAuthGoogleResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.OauthNotConfiguredErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
     }),
   );
 
@@ -146,14 +174,20 @@ const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.post("createAPIKey", "/v1/tenants/:tenant_id/api-keys", {
       params: S.CreateAPIKeyPathParamsSchema,
+      headers: S.CreateAPIKeyRequestHeadersSchema,
       payload: S.CreateAPIKeyRequestBodySchema,
       success: S.CreateAPIKeyResponseSchema.pipe(HttpApiSchema.status(201)),
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ApiKeySecretNotReplayableErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.AccessRecentAuthRequiredErrorSchema.pipe(HttpApiSchema.status(428)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -440,6 +474,21 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("issueRecentAuthProof", "/v1/me/recent-auth", {
+      payload: S.IssueRecentAuthProofRequestBodySchema,
+      success: S.IssueRecentAuthProofResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listAPIKeys", "/v1/tenants/:tenant_id/api-keys", {
       params: S.ListAPIKeysPathParamsSchema,
       query: S.ListAPIKeysQueryParamsSchema,
@@ -577,14 +626,17 @@ const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.delete("revokeAPIKey", "/v1/tenants/:tenant_id/api-keys/:api_key_id", {
       params: S.RevokeAPIKeyPathParamsSchema,
+      headers: S.RevokeAPIKeyRequestHeadersSchema,
       success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
       error: [
         S.ApiKeyInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ApiKeyNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.ApiKeyInactiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.AccessRecentAuthRequiredErrorSchema.pipe(HttpApiSchema.status(428)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -594,17 +646,23 @@ const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.post("rotateAPIKey", "/v1/tenants/:tenant_id/api-keys/:api_key_id/rotate", {
       params: S.RotateAPIKeyPathParamsSchema,
+      headers: S.RotateAPIKeyRequestHeadersSchema,
       payload: S.RotateAPIKeyRequestBodySchema,
       success: S.RotateAPIKeyResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
         S.ApiKeyInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ApiKeyNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.ApiKeyInactiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ApiKeySecretNotReplayableErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.AccessRecentAuthRequiredErrorSchema.pipe(HttpApiSchema.status(428)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -1313,15 +1371,34 @@ const regionsGroup = HttpApiGroup.make("regions").add(
 
 const spacesGroup = HttpApiGroup.make("spaces")
   .add(
+    HttpApiEndpoint.post("archiveSpace", "/v1/tenants/:tenant_id/spaces/:space_id/archive", {
+      params: S.ArchiveSpacePathParamsSchema,
+      success: S.ArchiveSpaceResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createSpace", "/v1/tenants/:tenant_id/spaces", {
       params: S.CreateSpacePathParamsSchema,
+      headers: S.CreateSpaceRequestHeadersSchema,
       payload: S.CreateSpaceRequestBodySchema,
       success: S.CreateSpaceResponseSchema.pipe(HttpApiSchema.status(201)),
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.SpaceSlugConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
@@ -1353,9 +1430,26 @@ const spacesGroup = HttpApiGroup.make("spaces")
       error: [
         S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
         S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidArchiveFilterErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("restoreSpace", "/v1/tenants/:tenant_id/spaces/:space_id/restore", {
+      params: S.RestoreSpacePathParamsSchema,
+      success: S.RestoreSpaceResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],

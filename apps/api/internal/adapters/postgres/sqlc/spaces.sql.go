@@ -11,6 +11,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveTenantSpace = `-- name: ArchiveTenantSpace :one
+update spaces
+set
+    archived_at = coalesce(archived_at, now()),
+    updated_at = now()
+where tenant_id = $1
+  and id = $2
+returning
+    id,
+    name,
+    tenant_id,
+    slug,
+    media_plane,
+    metadata,
+    recurring_policy,
+    admission_policy,
+    default_episode_duration_seconds,
+    maximum_episode_duration_seconds,
+    linger_window_seconds,
+    created_by_user_id,
+    updated_at,
+    created_at,
+    archived_at
+`
+
+type ArchiveTenantSpaceParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error) {
+	row := q.db.QueryRow(ctx, archiveTenantSpace, arg.TenantID, arg.ID)
+	var i Space
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.TenantID,
+		&i.Slug,
+		&i.MediaPlane,
+		&i.Metadata,
+		&i.RecurringPolicy,
+		&i.AdmissionPolicy,
+		&i.DefaultEpisodeDurationSeconds,
+		&i.MaximumEpisodeDurationSeconds,
+		&i.LingerWindowSeconds,
+		&i.CreatedByUserID,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const createEpisode = `-- name: CreateEpisode :one
 insert into episodes (
     id,
@@ -46,6 +99,8 @@ from spaces
 where
     spaces.tenant_id = $7
     and spaces.id = $8
+    and spaces.archived_at is null
+for update
 returning
     id,
     status,
@@ -185,7 +240,7 @@ insert into spaces (
     $11,
     $12
 )
-returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at
+returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 ), seeded as (
     insert into space_roles (id, tenant_id, space_id, name, capabilities)
     select
@@ -236,7 +291,8 @@ select
     spaces.linger_window_seconds,
     spaces.created_by_user_id,
     spaces.updated_at,
-    spaces.created_at
+    spaces.created_at,
+    spaces.archived_at
 from spaces
 join inserted on inserted.id = spaces.id
 `
@@ -287,6 +343,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Space
 		&i.CreatedByUserID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -399,6 +456,31 @@ type DeleteSpaceMemberParams struct {
 func (q *Queries) DeleteSpaceMember(ctx context.Context, arg DeleteSpaceMemberParams) error {
 	_, err := q.db.Exec(ctx, deleteSpaceMember, arg.TenantID, arg.SpaceID, arg.IdentityID)
 	return err
+}
+
+const getSpaceCreateRequest = `-- name: GetSpaceCreateRequest :one
+select tenant_id, request_key, request_fingerprint, space_id, created_at
+from space_create_requests
+where tenant_id = $1
+  and request_key = $2
+`
+
+type GetSpaceCreateRequestParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	RequestKey string      `json:"request_key"`
+}
+
+func (q *Queries) GetSpaceCreateRequest(ctx context.Context, arg GetSpaceCreateRequestParams) (SpaceCreateRequest, error) {
+	row := q.db.QueryRow(ctx, getSpaceCreateRequest, arg.TenantID, arg.RequestKey)
+	var i SpaceCreateRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.SpaceID,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getSpaceMember = `-- name: GetSpaceMember :one
@@ -524,7 +606,8 @@ select
     linger_window_seconds,
     created_by_user_id,
     updated_at,
-    created_at
+    created_at,
+    archived_at
 from spaces
 where
     tenant_id = $1
@@ -554,6 +637,7 @@ func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) 
 		&i.CreatedByUserID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -744,23 +828,31 @@ select
     linger_window_seconds,
     created_by_user_id,
     updated_at,
-    created_at
+    created_at,
+    archived_at
 from spaces
 where
     tenant_id = $1
     and (
         not $2::boolean
+        or ($3::boolean and archived_at is not null)
+        or (not $3::boolean and archived_at is null)
+    )
+    and (
+        not $4::boolean
         or (created_at, id) < (
-            $3::timestamptz,
-            $4::uuid
+            $5::timestamptz,
+            $6::uuid
         )
     )
 order by created_at desc, id desc
-limit $5::integer
+limit $7::integer
 `
 
 type ListTenantSpacesParams struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ArchivedSet     bool               `json:"archived_set"`
+	Archived        bool               `json:"archived"`
 	CursorSet       bool               `json:"cursor_set"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        pgtype.UUID        `json:"cursor_id"`
@@ -770,6 +862,8 @@ type ListTenantSpacesParams struct {
 func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesParams) ([]Space, error) {
 	rows, err := q.db.Query(ctx, listTenantSpaces,
 		arg.TenantID,
+		arg.ArchivedSet,
+		arg.Archived,
 		arg.CursorSet,
 		arg.CursorCreatedAt,
 		arg.CursorID,
@@ -797,6 +891,7 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 			&i.CreatedByUserID,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -806,6 +901,100 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 		return nil, err
 	}
 	return items, nil
+}
+
+const reserveSpaceCreateRequest = `-- name: ReserveSpaceCreateRequest :one
+insert into space_create_requests (
+    tenant_id,
+    request_key,
+    request_fingerprint,
+    space_id
+) values (
+    $1,
+    $2,
+    $3,
+    $4
+)
+on conflict (tenant_id, request_key) do nothing
+returning tenant_id, request_key, request_fingerprint, space_id, created_at
+`
+
+type ReserveSpaceCreateRequestParams struct {
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	RequestKey         string      `json:"request_key"`
+	RequestFingerprint []byte      `json:"request_fingerprint"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+}
+
+func (q *Queries) ReserveSpaceCreateRequest(ctx context.Context, arg ReserveSpaceCreateRequestParams) (SpaceCreateRequest, error) {
+	row := q.db.QueryRow(ctx, reserveSpaceCreateRequest,
+		arg.TenantID,
+		arg.RequestKey,
+		arg.RequestFingerprint,
+		arg.SpaceID,
+	)
+	var i SpaceCreateRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.SpaceID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const restoreTenantSpace = `-- name: RestoreTenantSpace :one
+update spaces
+set
+    archived_at = null,
+    updated_at = now()
+where tenant_id = $1
+  and id = $2
+returning
+    id,
+    name,
+    tenant_id,
+    slug,
+    media_plane,
+    metadata,
+    recurring_policy,
+    admission_policy,
+    default_episode_duration_seconds,
+    maximum_episode_duration_seconds,
+    linger_window_seconds,
+    created_by_user_id,
+    updated_at,
+    created_at,
+    archived_at
+`
+
+type RestoreTenantSpaceParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpaceParams) (Space, error) {
+	row := q.db.QueryRow(ctx, restoreTenantSpace, arg.TenantID, arg.ID)
+	var i Space
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.TenantID,
+		&i.Slug,
+		&i.MediaPlane,
+		&i.Metadata,
+		&i.RecurringPolicy,
+		&i.AdmissionPolicy,
+		&i.DefaultEpisodeDurationSeconds,
+		&i.MaximumEpisodeDurationSeconds,
+		&i.LingerWindowSeconds,
+		&i.CreatedByUserID,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
 }
 
 const seedDefaultSpaceRoles = `-- name: SeedDefaultSpaceRoles :exec
@@ -1065,7 +1254,8 @@ returning
     linger_window_seconds,
     created_by_user_id,
     updated_at,
-    created_at
+    created_at,
+    archived_at
 `
 
 type UpdateTenantSpaceParams struct {
@@ -1130,6 +1320,7 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		&i.CreatedByUserID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

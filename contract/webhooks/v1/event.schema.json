@@ -16,6 +16,8 @@
   "oneOf": [
     { "$ref": "#/$defs/spaceCreated" },
     { "$ref": "#/$defs/spaceUpdated" },
+    { "$ref": "#/$defs/spaceArchived" },
+    { "$ref": "#/$defs/spaceRestored" },
     { "$ref": "#/$defs/episodeStarted" },
     { "$ref": "#/$defs/episodeEnded" },
     { "$ref": "#/$defs/participantJoined" },
@@ -66,6 +68,7 @@
         "name": { "type": "string" },
         "slug": { "type": "string" },
         "media_plane": { "type": "string" },
+        "archived_at": { "$ref": "#/$defs/nullableTimestamp" },
         "created_at": { "$ref": "#/$defs/timestamp" },
         "updated_at": { "$ref": "#/$defs/timestamp" }
       },
@@ -190,6 +193,17 @@
     },
     "spaceUpdated": {
       "properties": { "event": { "const": "space.updated" }, "data": { "$ref": "#/$defs/spaceUpdatedData" } }
+    },
+    "spaceArchived": {
+      "properties": {
+        "event": { "const": "space.archived" },
+        "data": {
+          "allOf": [{ "$ref": "#/$defs/spaceData" }, { "properties": { "object": { "required": ["archived_at"], "properties": { "archived_at": { "$ref": "#/$defs/timestamp" } } } } }]
+        }
+      }
+    },
+    "spaceRestored": {
+      "properties": { "event": { "const": "space.restored" }, "data": { "$ref": "#/$defs/spaceData" } }
     },
     "episodeStarted": {
       "properties": {

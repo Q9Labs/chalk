@@ -33,6 +33,36 @@ returning
     updated_at,
     created_at;
 
+-- name: ReserveAPIKeyMutation :one
+insert into api_key_mutation_requests (
+    tenant_id,
+    operation,
+    request_key,
+    request_fingerprint
+) values (
+    sqlc.arg(tenant_id),
+    sqlc.arg(operation),
+    sqlc.arg(request_key),
+    sqlc.arg(request_fingerprint)
+)
+on conflict (tenant_id, operation, request_key) do nothing
+returning tenant_id, operation, request_key, request_fingerprint, api_key_id, created_at;
+
+-- name: GetAPIKeyMutation :one
+select tenant_id, operation, request_key, request_fingerprint, api_key_id, created_at
+from api_key_mutation_requests
+where tenant_id = sqlc.arg(tenant_id)
+  and operation = sqlc.arg(operation)
+  and request_key = sqlc.arg(request_key);
+
+-- name: LinkAPIKeyMutation :exec
+update api_key_mutation_requests
+set api_key_id = sqlc.arg(api_key_id)
+where tenant_id = sqlc.arg(tenant_id)
+  and operation = sqlc.arg(operation)
+  and request_key = sqlc.arg(request_key)
+  and api_key_id is null;
+
 -- name: GetTenantAPIKey :one
 select
     id,

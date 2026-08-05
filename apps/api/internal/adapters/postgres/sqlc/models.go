@@ -26,6 +26,15 @@ type ApiKey struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type ApiKeyMutationRequest struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	Operation          string             `json:"operation"`
+	RequestKey         string             `json:"request_key"`
+	RequestFingerprint []byte             `json:"request_fingerprint"`
+	ApiKeyID           pgtype.UUID        `json:"api_key_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type ArtifactJob struct {
 	ID                   pgtype.UUID        `json:"id"`
 	IdempotencyKey       string             `json:"idempotency_key"`
@@ -397,6 +406,15 @@ type Space struct {
 	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
 	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
+}
+
+type SpaceCreateRequest struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	RequestKey         string             `json:"request_key"`
+	RequestFingerprint []byte             `json:"request_fingerprint"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type SpaceMember struct {

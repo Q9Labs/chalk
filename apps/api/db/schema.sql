@@ -140,6 +140,22 @@ create table api_keys (
     unique (key_prefix)
 );
 
+-- API-key mutation reservations contain no secret material. They make retries
+-- deterministic while preserving one-time secret display semantics.
+create table api_key_mutation_requests (
+    tenant_id uuid not null references tenants(id),
+    operation text not null check (operation in ('create', 'rotate')),
+    request_key text not null,
+    request_fingerprint bytea not null,
+    api_key_id uuid references api_keys(id),
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, operation, request_key)
+);
+
+create index api_key_mutation_requests_resource_idx
+    on api_key_mutation_requests (tenant_id, api_key_id)
+    where api_key_id is not null;
+
 -- Participant tokens: JWT/JWS
 -- Algorithm: EdDSA / Ed25519
 -- Key model: tenant signs with private key, Chalk stores public
@@ -182,6 +198,7 @@ create table spaces (
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
     linger_window_seconds integer not null default 0,
+    archived_at timestamptz,
     created_by_user_id uuid references users(id),
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
@@ -193,6 +210,23 @@ create table spaces (
     check (linger_window_seconds >= 0)
 );
 create index spaces_tenant_created_at_id_idx on spaces(tenant_id, created_at desc, id desc);
+create index spaces_tenant_archived_created_at_id_idx on spaces(tenant_id, archived_at, created_at desc, id desc);
+
+create table space_create_requests (
+    tenant_id uuid not null,
+    request_key text not null,
+    request_fingerprint bytea not null,
+    space_id uuid not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, request_key),
+    foreign key (tenant_id, space_id)
+        references spaces(tenant_id, id)
+        on delete no action
+        deferrable initially deferred,
+    check (request_key ~ '^[A-Za-z0-9_-]{16,128}$'),
+    check (octet_length(request_fingerprint) = 32)
+);
+create index space_create_requests_space_idx on space_create_requests(tenant_id, space_id);
 
 create function valid_capabilities(value text[])
 returns boolean

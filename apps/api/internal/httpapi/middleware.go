@@ -76,7 +76,7 @@ func requireAuthentication(service AuthenticationService) func(http.Handler) htt
 }
 
 // requireTenantAuthentication accepts either a tenant API key or the existing
-// user Session credential. A value in the API-key namespace is never handed to
+// user login credential. A value in the API-key namespace is never handed to
 // Session authentication, even when malformed or unknown.
 func requireTenantAuthentication(service AuthenticationService, apiKeys APIKeyAuthenticator, clientIPs ClientIPOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

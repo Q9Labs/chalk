@@ -18,16 +18,18 @@ const (
 )
 
 var (
-	ErrInvalidTenantID = errors.New("invalid tenant id")
-	ErrInvalidAPIKeyID = errors.New("invalid api key id")
-	ErrInvalidName     = errors.New("invalid api key name")
-	ErrInvalidScopes   = errors.New("invalid api key scopes")
-	ErrInvalidExpiry   = errors.New("invalid api key expiry")
-	ErrAPIKeyNotFound  = errors.New("api key not found")
-	ErrAPIKeyRevoked   = errors.New("api key revoked")
-	ErrAPIKeyExpired   = errors.New("api key expired")
-	ErrPrefixConflict  = errors.New("api key prefix conflict")
-	ErrUnauthenticated = authentication.ErrUnauthenticated
+	ErrInvalidTenantID     = errors.New("invalid tenant id")
+	ErrInvalidAPIKeyID     = errors.New("invalid api key id")
+	ErrInvalidName         = errors.New("invalid api key name")
+	ErrInvalidScopes       = errors.New("invalid api key scopes")
+	ErrInvalidExpiry       = errors.New("invalid api key expiry")
+	ErrInvalidRequestKey   = errors.New("invalid api key idempotency key")
+	ErrIdempotencyConflict = errors.New("api key idempotency conflict")
+	ErrAPIKeyNotFound      = errors.New("api key not found")
+	ErrAPIKeyRevoked       = errors.New("api key revoked")
+	ErrAPIKeyExpired       = errors.New("api key expired")
+	ErrPrefixConflict      = errors.New("api key prefix conflict")
+	ErrUnauthenticated     = authentication.ErrUnauthenticated
 )
 
 type Key struct {
@@ -55,40 +57,48 @@ type CreateInput struct {
 	Scopes          []authentication.Scope
 	ExpiresAt       time.Time
 	CreatedByUserID utilities.ID
+	RequestKey      string
 }
 
 type CreateRecordInput struct {
-	ID              utilities.ID
-	TenantID        utilities.ID
-	Name            string
-	Scopes          []authentication.Scope
-	KeyPrefix       string
-	KeyHash         string
-	ExpiresAt       time.Time
-	CreatedByUserID utilities.ID
+	ID                 utilities.ID
+	TenantID           utilities.ID
+	Name               string
+	Scopes             []authentication.Scope
+	KeyPrefix          string
+	KeyHash            string
+	ExpiresAt          time.Time
+	CreatedByUserID    utilities.ID
+	RequestKey         string
+	RequestFingerprint [32]byte
 }
 
 type CreateResult struct {
-	Key    Key
-	RawKey string
+	Key      Key
+	RawKey   string
+	Replayed bool
 }
 
 type RotateInput struct {
-	ExpiresAt *time.Time
+	ExpiresAt  *time.Time
+	RequestKey string
 }
 
 type RotateRecordInput struct {
-	TenantID  utilities.ID
-	ID        utilities.ID
-	KeyPrefix string
-	KeyHash   string
-	ExpiresAt time.Time
-	RotatedAt time.Time
+	TenantID           utilities.ID
+	ID                 utilities.ID
+	KeyPrefix          string
+	KeyHash            string
+	ExpiresAt          time.Time
+	RotatedAt          time.Time
+	RequestKey         string
+	RequestFingerprint [32]byte
 }
 
 type RotateResult struct {
-	Key    Key
-	RawKey string
+	Key      Key
+	RawKey   string
+	Replayed bool
 }
 
 type RecordList struct {
@@ -120,6 +130,15 @@ type Repository interface {
 	Rotate(context.Context, RotateRecordInput) (Record, error)
 	Revoke(context.Context, utilities.ID, utilities.ID, time.Time) error
 	TouchLastUsed(context.Context, Usage) error
+}
+
+// IdempotentRepository is implemented by durable adapters that can reserve a
+// mutation request. The request record stores only a fingerprint and resource
+// metadata; it never stores the generated secret. Replays therefore return
+// metadata with an empty RawKey and can never disclose the original secret.
+type IdempotentRepository interface {
+	CreateIdempotent(context.Context, CreateRecordInput) (Record, bool, error)
+	RotateIdempotent(context.Context, RotateRecordInput) (Record, bool, error)
 }
 
 type AuthenticationOutcome string

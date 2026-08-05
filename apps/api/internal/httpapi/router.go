@@ -46,6 +46,7 @@ type Options struct {
 	Readiness              ReadinessChecker
 	RecorderHealth         RecorderHealthChecker
 	Authentication         AuthenticationService
+	RecentAuth             RecentAuthProvider
 	AccountTenants         AccountTenantService
 	APIKeys                APIKeyService
 	APIKeyAuthentication   APIKeyAuthenticator
@@ -204,7 +205,7 @@ func enabledStatus(enabled bool) string {
 
 // requireSessionAuthentication keeps tenant API keys out of routes without an
 // explicit tenant-and-scope authorization decision. Recognized API-key values
-// never fall through to user Session authentication.
+// never fall through to user login authentication.
 func requireSessionAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return rejectTenantAPIKeyCredential(requireAuthentication(service)(next))

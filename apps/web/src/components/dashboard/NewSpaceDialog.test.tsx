@@ -8,5 +8,10 @@ describe("new Space dialog", () => {
     expect(markup).toContain("recurring Episodes and shared context");
     expect(markup).toContain("Everyone in the Tenant");
     expect(markup).not.toContain("API key");
+    expect(markup).toContain("Join slug");
+    expect(markup).toContain("Ask to join");
+    expect(markup).not.toContain("Invited people");
+    expect(markup).not.toContain("Members only");
+    expect(markup).toContain("Choose a Tenant before creating a Space");
   });
 });

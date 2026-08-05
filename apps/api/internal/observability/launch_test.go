@@ -11,6 +11,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
+	"github.com/q9labs/chalk/apps/api/internal/recentauth"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
@@ -54,6 +55,33 @@ func TestLaunchTelemetryEmitsOnlyBoundedAPIKeySignals(t *testing.T) {
 		}
 		assertMetricAttributeKeys(t, metric, map[string]bool{"outcome": true})
 	}
+	assertSignalDoesNotContain(t, output.String())
+}
+
+func TestLaunchTelemetryEmitsOnlyBoundedRecentAuthSignals(t *testing.T) {
+	reader, restore := installMetricReader(t)
+	defer restore()
+	var output bytes.Buffer
+	telemetry := newLaunchTelemetry(slog.New(slog.NewJSONHandler(&output, nil)), time.Now)
+	ctx := context.Background()
+	telemetry.RecordIssue(ctx, recentauth.Event{Outcome: "issued", Reason: "none", Latency: 3 * time.Millisecond})
+	telemetry.RecordVerification(ctx, recentauth.Event{Outcome: "rejected", Reason: "wrong_context", Latency: 4 * time.Millisecond})
+	telemetry.RecordVerification(ctx, recentauth.Event{Outcome: "failed", Reason: "invalid_configuration", Latency: 5 * time.Millisecond})
+
+	metrics := collectMetrics(t, reader)
+	for _, name := range []string{
+		"chalk.api.recent_auth.issue",
+		"chalk.api.recent_auth.issue.duration_seconds",
+		"chalk.api.recent_auth.verification",
+		"chalk.api.recent_auth.verification.duration_seconds",
+	} {
+		metric, ok := metrics[name]
+		if !ok {
+			t.Fatalf("metric %q was not recorded", name)
+		}
+		assertMetricAttributeKeys(t, metric, map[string]bool{"outcome": true, "reason": true})
+	}
+	assertMetricHasAttributes(t, metrics["chalk.api.recent_auth.verification"], map[string]string{"outcome": "rejected", "reason": "wrong_context"})
 	assertSignalDoesNotContain(t, output.String())
 }
 

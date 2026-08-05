@@ -26,10 +26,16 @@ type repository struct {
 	getByPrefixErr error
 	createConflict int
 	rotateConflict int
+	mutations      map[string]mutation
+}
+
+type mutation struct {
+	fingerprint [32]byte
+	id          utilities.ID
 }
 
 func newRepository() *repository {
-	return &repository{records: map[string]apikeys.Record{}, prefixes: map[string]string{}}
+	return &repository{records: map[string]apikeys.Record{}, prefixes: map[string]string{}, mutations: map[string]mutation{}}
 }
 
 func (r *repository) Create(_ context.Context, input apikeys.CreateRecordInput) (apikeys.Record, error) {
@@ -46,6 +52,23 @@ func (r *repository) Create(_ context.Context, input apikeys.CreateRecordInput) 
 	r.records[input.ID.String()] = record
 	r.prefixes[input.KeyPrefix] = input.ID.String()
 	return cloneRecord(record), nil
+}
+
+func (r *repository) CreateIdempotent(ctx context.Context, input apikeys.CreateRecordInput) (apikeys.Record, bool, error) {
+	key := "create:" + input.TenantID.String() + ":" + input.RequestKey
+	if existing, ok := r.mutations[key]; ok {
+		if existing.fingerprint != input.RequestFingerprint {
+			return apikeys.Record{}, true, apikeys.ErrIdempotencyConflict
+		}
+		record, err := r.Get(ctx, input.TenantID, existing.id)
+		return record, true, err
+	}
+	record, err := r.Create(ctx, input)
+	if err != nil {
+		return apikeys.Record{}, false, err
+	}
+	r.mutations[key] = mutation{fingerprint: input.RequestFingerprint, id: record.ID}
+	return record, false, nil
 }
 
 func (r *repository) Get(_ context.Context, tenantID, id utilities.ID) (apikeys.Record, error) {
@@ -94,6 +117,23 @@ func (r *repository) Rotate(_ context.Context, input apikeys.RotateRecordInput) 
 	r.records[input.ID.String()] = record
 	r.prefixes[input.KeyPrefix] = input.ID.String()
 	return cloneRecord(record), nil
+}
+
+func (r *repository) RotateIdempotent(ctx context.Context, input apikeys.RotateRecordInput) (apikeys.Record, bool, error) {
+	key := "rotate:" + input.TenantID.String() + ":" + input.RequestKey
+	if existing, ok := r.mutations[key]; ok {
+		if existing.fingerprint != input.RequestFingerprint {
+			return apikeys.Record{}, true, apikeys.ErrIdempotencyConflict
+		}
+		record, err := r.Get(ctx, input.TenantID, existing.id)
+		return record, true, err
+	}
+	record, err := r.Rotate(ctx, input)
+	if err != nil {
+		return apikeys.Record{}, false, err
+	}
+	r.mutations[key] = mutation{fingerprint: input.RequestFingerprint, id: record.ID}
+	return record, false, nil
 }
 
 func (r *repository) Revoke(_ context.Context, tenantID, id utilities.ID, revokedAt time.Time) error {

@@ -105,6 +105,34 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Cre
 	return i, err
 }
 
+const getAPIKeyMutation = `-- name: GetAPIKeyMutation :one
+select tenant_id, operation, request_key, request_fingerprint, api_key_id, created_at
+from api_key_mutation_requests
+where tenant_id = $1
+  and operation = $2
+  and request_key = $3
+`
+
+type GetAPIKeyMutationParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	Operation  string      `json:"operation"`
+	RequestKey string      `json:"request_key"`
+}
+
+func (q *Queries) GetAPIKeyMutation(ctx context.Context, arg GetAPIKeyMutationParams) (ApiKeyMutationRequest, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyMutation, arg.TenantID, arg.Operation, arg.RequestKey)
+	var i ApiKeyMutationRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.Operation,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.ApiKeyID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getActiveAPIKeyByPrefix = `-- name: GetActiveAPIKeyByPrefix :one
 select
     id,
@@ -227,6 +255,32 @@ func (q *Queries) GetTenantAPIKey(ctx context.Context, arg GetTenantAPIKeyParams
 	return i, err
 }
 
+const linkAPIKeyMutation = `-- name: LinkAPIKeyMutation :exec
+update api_key_mutation_requests
+set api_key_id = $1
+where tenant_id = $2
+  and operation = $3
+  and request_key = $4
+  and api_key_id is null
+`
+
+type LinkAPIKeyMutationParams struct {
+	ApiKeyID   pgtype.UUID `json:"api_key_id"`
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	Operation  string      `json:"operation"`
+	RequestKey string      `json:"request_key"`
+}
+
+func (q *Queries) LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error {
+	_, err := q.db.Exec(ctx, linkAPIKeyMutation,
+		arg.ApiKeyID,
+		arg.TenantID,
+		arg.Operation,
+		arg.RequestKey,
+	)
+	return err
+}
+
 const listTenantAPIKeys = `-- name: ListTenantAPIKeys :many
 select
     id,
@@ -318,6 +372,48 @@ func (q *Queries) ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const reserveAPIKeyMutation = `-- name: ReserveAPIKeyMutation :one
+insert into api_key_mutation_requests (
+    tenant_id,
+    operation,
+    request_key,
+    request_fingerprint
+) values (
+    $1,
+    $2,
+    $3,
+    $4
+)
+on conflict (tenant_id, operation, request_key) do nothing
+returning tenant_id, operation, request_key, request_fingerprint, api_key_id, created_at
+`
+
+type ReserveAPIKeyMutationParams struct {
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	Operation          string      `json:"operation"`
+	RequestKey         string      `json:"request_key"`
+	RequestFingerprint []byte      `json:"request_fingerprint"`
+}
+
+func (q *Queries) ReserveAPIKeyMutation(ctx context.Context, arg ReserveAPIKeyMutationParams) (ApiKeyMutationRequest, error) {
+	row := q.db.QueryRow(ctx, reserveAPIKeyMutation,
+		arg.TenantID,
+		arg.Operation,
+		arg.RequestKey,
+		arg.RequestFingerprint,
+	)
+	var i ApiKeyMutationRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.Operation,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.ApiKeyID,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const revokeActiveAPIKey = `-- name: RevokeActiveAPIKey :one

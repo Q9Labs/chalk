@@ -451,8 +451,8 @@ values ($1::uuid, $2::uuid, $3::uuid, 'owner')
 	}
 
 	_, err = tx.Exec(ctx, `
-insert into spaces (id, name, tenant_id, status, slug, media_plane, metadata, created_by_user_id)
-values ($1::uuid, $2, $3::uuid, 'active', $4, 'cf_sfu', '{"source":"perf"}'::jsonb, $5::uuid)
+insert into spaces (id, name, tenant_id, slug, media_plane, metadata, created_by_user_id)
+values ($1::uuid, $2, $3::uuid, $4, 'cf_sfu', '{"source":"perf"}'::jsonb, $5::uuid)
 `, spaceID, fmt.Sprintf("Perf Space %d", index), tenantID, fmt.Sprintf("perf-%s-%d", runID, index), userID)
 	if err != nil {
 		return perfTenant{}, fmt.Errorf("insert perf space: %w", err)
@@ -460,7 +460,7 @@ values ($1::uuid, $2, $3::uuid, 'active', $4, 'cf_sfu', '{"source":"perf"}'::jso
 
 	_, err = tx.Exec(ctx, `
 insert into episodes (id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, config_snapshot)
-values ($1::uuid, 'active', '{"source":"perf"}'::jsonb, $2::uuid, $3::uuid, $4::uuid, $5, '{"roles":{"owner":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard","manageWhiteboard","manageAdmission","assignRoles","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording","startEpisode","extendEpisode","endEpisode","manageMembers","clearSpaceContent"],"collaborator":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard"],"observer":["subscribe","sendReaction"]},"role_capabilities":{"owner":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard","manageWhiteboard","manageAdmission","assignRoles","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording","startEpisode","extendEpisode","endEpisode","manageMembers","clearSpaceContent"],"collaborator":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard"],"observer":["subscribe","sendReaction"]},"admission_policy":"open","default_episode_duration_seconds":3600,"maximum_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"maximum_duration_ceiling_seconds":86400,"linger_window_seconds":30}'::jsonb)
+values ($1::uuid, 'active', '{"source":"perf"}'::jsonb, $2::uuid, $3::uuid, $4::uuid, $5, '{"roles":{"owner":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard","manageWhiteboard","manageAdmission","assignRoles","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording","startEpisode","extendEpisode","endEpisode","manageMembers","clearSpaceContent"],"collaborator":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard"],"observer":["subscribe","sendReaction"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":3600,"maximum_episode_duration_seconds":86400,"linger_window_seconds":30}'::jsonb)
 `, episodeID, spaceID, tenantID, userID, time.Now())
 	if err != nil {
 		return perfTenant{}, fmt.Errorf("insert perf episode: %w", err)

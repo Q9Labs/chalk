@@ -25,6 +25,7 @@ type EventMetadata struct {
 
 type SpaceSnapshot struct {
 	ID, Name, Slug, MediaPlane string
+	ArchivedAt                 *time.Time
 	CreatedAt, UpdatedAt       time.Time
 }
 type EpisodeSnapshot struct {
@@ -71,12 +72,13 @@ type spaceData struct {
 	ChangedFields []string    `json:"changed_fields,omitempty"`
 }
 type spaceObject struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Slug       string `json:"slug"`
-	MediaPlane string `json:"media_plane"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	Slug       string  `json:"slug"`
+	MediaPlane string  `json:"media_plane"`
+	ArchivedAt *string `json:"archived_at,omitempty"`
+	CreatedAt  string  `json:"created_at"`
+	UpdatedAt  string  `json:"updated_at"`
 }
 type episodeData struct {
 	Object episodeObject `json:"object"`
@@ -142,7 +144,7 @@ type transcriptObject struct {
 }
 
 func EncodeSpaceEvent(metadata EventMetadata, snapshot SpaceSnapshot, changedFields []string) ([]byte, [32]byte, error) {
-	if metadata.Name != "space.created" && metadata.Name != "space.updated" {
+	if metadata.Name != "space.created" && metadata.Name != "space.updated" && metadata.Name != "space.archived" && metadata.Name != "space.restored" {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
 	if metadata.Name == "space.updated" && len(changedFields) == 0 {
@@ -150,6 +152,12 @@ func EncodeSpaceEvent(metadata EventMetadata, snapshot SpaceSnapshot, changedFie
 	}
 	if metadata.Name != "space.updated" && len(changedFields) != 0 {
 		return nil, [32]byte{}, errors.New("changed_fields only applies to space.updated")
+	}
+	if metadata.Name == "space.archived" && snapshot.ArchivedAt == nil {
+		return nil, [32]byte{}, errors.New("space.archived requires archived_at")
+	}
+	if metadata.Name == "space.restored" && snapshot.ArchivedAt != nil {
+		return nil, [32]byte{}, errors.New("space.restored requires a live space")
 	}
 	if !validUUIDv4(snapshot.ID) || snapshot.CreatedAt.IsZero() || snapshot.UpdatedAt.IsZero() {
 		return nil, [32]byte{}, errors.New("invalid space snapshot")
@@ -167,7 +175,7 @@ func EncodeSpaceEvent(metadata EventMetadata, snapshot SpaceSnapshot, changedFie
 	}
 	sortedChanges := append([]string(nil), changedFields...)
 	sort.Strings(sortedChanges)
-	data := spaceData{Object: spaceObject{snapshot.ID, snapshot.Name, snapshot.Slug, snapshot.MediaPlane, timestamp(snapshot.CreatedAt), timestamp(snapshot.UpdatedAt)}}
+	data := spaceData{Object: spaceObject{ID: snapshot.ID, Name: snapshot.Name, Slug: snapshot.Slug, MediaPlane: snapshot.MediaPlane, ArchivedAt: optionalTimestamp(snapshot.ArchivedAt), CreatedAt: timestamp(snapshot.CreatedAt), UpdatedAt: timestamp(snapshot.UpdatedAt)}}
 	if metadata.Name == "space.updated" {
 		data.ChangedFields = sortedChanges
 	}

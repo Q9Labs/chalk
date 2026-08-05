@@ -34,6 +34,12 @@ export const webhookEventSchemaV1 = {
       $ref: "#/$defs/spaceUpdated",
     },
     {
+      $ref: "#/$defs/spaceArchived",
+    },
+    {
+      $ref: "#/$defs/spaceRestored",
+    },
+    {
       $ref: "#/$defs/episodeStarted",
     },
     {
@@ -132,6 +138,9 @@ export const webhookEventSchemaV1 = {
         },
         media_plane: {
           type: "string",
+        },
+        archived_at: {
+          $ref: "#/$defs/nullableTimestamp",
         },
         created_at: {
           $ref: "#/$defs/timestamp",
@@ -373,6 +382,42 @@ export const webhookEventSchemaV1 = {
         },
         data: {
           $ref: "#/$defs/spaceUpdatedData",
+        },
+      },
+    },
+    spaceArchived: {
+      properties: {
+        event: {
+          const: "space.archived",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/spaceData",
+            },
+            {
+              properties: {
+                object: {
+                  required: ["archived_at"],
+                  properties: {
+                    archived_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    spaceRestored: {
+      properties: {
+        event: {
+          const: "space.restored",
+        },
+        data: {
+          $ref: "#/$defs/spaceData",
         },
       },
     },
@@ -722,6 +767,8 @@ export const webhookEventSchemaV1 = {
 export const knownWebhookEventNamesV1 = [
   "space.created",
   "space.updated",
+  "space.archived",
+  "space.restored",
   "episode.started",
   "episode.ended",
   "participant.joined",
@@ -764,6 +811,7 @@ type SchemaAllOf<Schema> = Schema extends { readonly allOf: readonly [infer Firs
 export type SchemaType<Schema> = SchemaBase<Schema> & SchemaBranches<Schema> & SchemaAllOf<Schema>;
 
 export type KnownWebhookEventV1 = SchemaType<typeof webhookEventSchemaV1>;
+export type SpaceWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `space.${string}` }>;
 export type ParticipantWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `participant.${string}` }>;
 export type RecordingWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `recording.${string}` }>;
 export type TranscriptWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `transcript.${string}` }>;

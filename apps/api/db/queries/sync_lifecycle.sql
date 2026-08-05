@@ -58,7 +58,17 @@ from spaces
 where
     spaces.tenant_id = sqlc.arg(tenant_id)
     and spaces.id = sqlc.arg(space_id)
+    and spaces.archived_at is null
+for update
 returning *;
+
+-- name: LockTenantSpaceForUpdate :one
+select *
+from spaces
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and id = sqlc.arg(id)
+for update;
 
 -- name: CreateSyncEpisodeControl :one
 insert into sync_episode_control (

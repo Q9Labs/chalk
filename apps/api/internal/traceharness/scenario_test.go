@@ -86,6 +86,7 @@ func TestRunRouteSpaceCreateMemberScenario(t *testing.T) {
 	assertEvent(t, result.Events, "auth", "AuthenticateSession")
 	assertEvent(t, result.Events, "repository", "MembershipRepository.GetTenantMembershipForUser")
 	assertEvent(t, result.Events, "service", "spaces.Service.CreateSpace")
+	assertEvent(t, result.Events, "database", "INSERT space_create_requests")
 	assertEvent(t, result.Events, "repository", "SpaceRepository.CreateSpace")
 	assertEvent(t, result.Events, "database", "INSERT spaces RETURNING *")
 }

@@ -39,7 +39,7 @@ func mountJourneyRoutes(r chi.Router, options Options) {
 func mountAuthenticatedSessionRoutes(r chi.Router, options Options) {
 	r.Group(func(r chi.Router) {
 		r.Use(requireSessionAuthentication(options.Authentication))
-		mountMeRoutes(r, options.Authentication, options.RateLimit)
+		mountMeRoutes(r, options.Authentication, options.RecentAuth, options.RateLimit)
 		mountAccountTenantRoutes(r, options.AccountTenants, options.RateLimit)
 		if options.LocalTelemetry {
 			mountLocalJourneyQueryRoutes(r, options.Journeys, options.RateLimit)

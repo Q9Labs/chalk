@@ -8,6 +8,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
+	"github.com/q9labs/chalk/apps/api/internal/recentauth"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -39,6 +40,10 @@ type LaunchTelemetry struct {
 	participantIssuanceDuration    otelmetric.Float64Histogram
 	participantAuthentication      otelmetric.Int64Counter
 	participantAuthenticationDelay otelmetric.Float64Histogram
+	recentAuthIssue                otelmetric.Int64Counter
+	recentAuthIssueDuration        otelmetric.Float64Histogram
+	recentAuthVerification         otelmetric.Int64Counter
+	recentAuthVerificationDuration otelmetric.Float64Histogram
 }
 
 func NewLaunchTelemetry(logger *slog.Logger) *LaunchTelemetry {
@@ -60,6 +65,10 @@ func newLaunchTelemetry(logger *slog.Logger, now func() time.Time) *LaunchTeleme
 	participantIssuanceDuration, _ := meter.Float64Histogram("chalk.api.access_grant.issuance.duration_seconds", otelmetric.WithDescription("Participant media credential issuance latency by bounded outcome"), otelmetric.WithUnit("s"))
 	participantAuthentication, _ := meter.Int64Counter("chalk.api.participant_media.authentication", otelmetric.WithDescription("Participant media credential authentication outcomes"))
 	participantAuthenticationDelay, _ := meter.Float64Histogram("chalk.api.participant_media.authentication.duration_seconds", otelmetric.WithDescription("Participant media credential authentication latency by bounded outcome"), otelmetric.WithUnit("s"))
+	recentAuthIssue, _ := meter.Int64Counter("chalk.api.recent_auth.issue", otelmetric.WithDescription("Recent-auth proof issuance outcomes"))
+	recentAuthIssueDuration, _ := meter.Float64Histogram("chalk.api.recent_auth.issue.duration_seconds", otelmetric.WithDescription("Recent-auth proof issuance latency by bounded outcome"), otelmetric.WithUnit("s"))
+	recentAuthVerification, _ := meter.Int64Counter("chalk.api.recent_auth.verification", otelmetric.WithDescription("Recent-auth proof verification outcomes"))
+	recentAuthVerificationDuration, _ := meter.Float64Histogram("chalk.api.recent_auth.verification.duration_seconds", otelmetric.WithDescription("Recent-auth proof verification latency by bounded outcome"), otelmetric.WithUnit("s"))
 	return &LaunchTelemetry{
 		logger:                         logger,
 		now:                            now,
@@ -70,6 +79,10 @@ func newLaunchTelemetry(logger *slog.Logger, now func() time.Time) *LaunchTeleme
 		participantIssuanceDuration:    participantIssuanceDuration,
 		participantAuthentication:      participantAuthentication,
 		participantAuthenticationDelay: participantAuthenticationDelay,
+		recentAuthIssue:                recentAuthIssue,
+		recentAuthIssueDuration:        recentAuthIssueDuration,
+		recentAuthVerification:         recentAuthVerification,
+		recentAuthVerificationDuration: recentAuthVerificationDuration,
 	}
 }
 
@@ -91,6 +104,30 @@ func (t *LaunchTelemetry) RecordUsageTouch(ctx context.Context, outcome apikeys.
 	bounded := boundedUsageTouchOutcome(outcome)
 	t.apiKeyUsageTouch.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("outcome", bounded)))
 	t.logger.Log(ctx, launchLogLevel(bounded, "succeeded"), "api key usage touch", "event", "api_key.usage_touch", "outcome", bounded)
+}
+
+func (t *LaunchTelemetry) RecordIssue(ctx context.Context, event recentauth.Event) {
+	if t == nil {
+		return
+	}
+	outcome := boundedRecentAuthOutcome(event.Outcome)
+	reason := boundedRecentAuthReason(event.Reason)
+	attributes := otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason))
+	t.recentAuthIssue.Add(ctx, 1, attributes)
+	t.recentAuthIssueDuration.Record(ctx, nonNegative(event.Latency).Seconds(), attributes)
+	t.logger.Log(ctx, launchLogLevel(outcome, "issued"), "recent-auth proof issuance", "event", "recent_auth.issue", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(event.Latency)))
+}
+
+func (t *LaunchTelemetry) RecordVerification(ctx context.Context, event recentauth.Event) {
+	if t == nil {
+		return
+	}
+	outcome := boundedRecentAuthOutcome(event.Outcome)
+	reason := boundedRecentAuthReason(event.Reason)
+	attributes := otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason))
+	t.recentAuthVerification.Add(ctx, 1, attributes)
+	t.recentAuthVerificationDuration.Record(ctx, nonNegative(event.Latency).Seconds(), attributes)
+	t.logger.Log(ctx, launchLogLevel(outcome, "accepted"), "recent-auth proof verification", "event", "recent_auth.verification", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(event.Latency)))
 }
 
 type AccessGrantIssuer struct {
@@ -181,6 +218,24 @@ func boundedUsageTouchOutcome(outcome apikeys.UsageTouchOutcome) string {
 		return string(outcome)
 	default:
 		return "failed"
+	}
+}
+
+func boundedRecentAuthOutcome(outcome string) string {
+	switch outcome {
+	case "issued", "accepted", "rejected", "failed":
+		return outcome
+	default:
+		return "failed"
+	}
+}
+
+func boundedRecentAuthReason(reason string) string {
+	switch reason {
+	case "none", "invalid_password", "invalid_request", "invalid_configuration", "issuance_failed", "expired", "wrong_context", "not_yet_valid", "invalid_proof", "verification_failed":
+		return reason
+	default:
+		return "unknown"
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
@@ -32,6 +34,15 @@ type SpaceService interface {
 	UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input spaces.UpdateSpaceInput) (spaces.Space, error)
 }
 
+type SpaceArchiveService interface {
+	ArchiveSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error)
+	RestoreSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error)
+}
+
+type SpaceFilterService interface {
+	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error)
+}
+
 type spaceRoleResponse struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
@@ -50,6 +61,8 @@ type spaceResponse struct {
 	DefaultEpisodeDurationSeconds int32               `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32               `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32               `json:"linger_window_seconds"`
+	ArchivedAt                    *string             `json:"archived_at,omitempty"`
+	Archived                      bool                `json:"archived"`
 	Roles                         []spaceRoleResponse `json:"roles"`
 	CreatedByUserID               *string             `json:"created_by_user_id"`
 	UpdatedAt                     string              `json:"updated_at"`
@@ -86,13 +99,15 @@ type updateSpaceRequest struct {
 }
 
 type createSpaceEndpointRequest struct {
-	TenantID utilities.ID
-	Body     createSpaceRequest
+	TenantID   utilities.ID
+	RequestKey string
+	Body       createSpaceRequest
 }
 
 type listSpacesRequest struct {
 	TenantID utilities.ID
 	Page     pagination.PageRequest
+	Archived *bool
 }
 
 type getSpaceRequest struct {
@@ -118,6 +133,8 @@ func spaceEndpoints(service SpaceService, authorizer TenantAuthorizer) []RouteEn
 		listSpacesEndpoint(service, authorizer),
 		getSpaceEndpoint(service, authorizer),
 		updateSpaceEndpoint(service, authorizer),
+		archiveSpaceEndpoint(service, authorizer),
+		restoreSpaceEndpoint(service, authorizer),
 	}
 }
 
@@ -130,7 +147,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 			return spaceResponse{}, err
 		}
 
-		space, err := service.CreateSpace(ctx, request.Body.toCreateInput(request.TenantID, createdByUserID(ctx)))
+		space, err := service.CreateSpace(ctx, request.Body.toCreateInput(request.TenantID, createdByUserID(ctx), request.RequestKey))
 		if err != nil {
 			return spaceResponse{}, err
 		}
@@ -138,10 +155,10 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter()).
+		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -154,16 +171,26 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 			return spaceListResponse{}, err
 		}
 
-		list, err := service.ListSpaces(ctx, request.TenantID, request.Page)
+		var list spaces.SpaceList
+		var err error
+		if request.Archived != nil {
+			if filtered, ok := service.(SpaceFilterService); ok {
+				list, err = filtered.ListSpacesFiltered(ctx, request.TenantID, request.Page, request.Archived)
+			} else {
+				list, err = service.ListSpaces(ctx, request.TenantID, request.Page)
+			}
+		} else {
+			list, err = service.ListSpaces(ctx, request.TenantID, request.Page)
+		}
 		if err != nil {
 			return spaceListResponse{}, err
 		}
 		return newSpaceListResponse(list)
 	}).
 		Auth(APIAuthSessionOrBearer).
-		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
-		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
+		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -213,6 +240,44 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		MapErrors(spaceEndpointAPIError)
 }
 
+func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/archive", "/tenants/{tenant_id}/spaces/{space_id}/archive", "archiveSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
+		archive, ok := service.(SpaceArchiveService)
+		if !ok {
+			return spaceResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
+			return spaceResponse{}, err
+		}
+		space, err := archive.ArchiveSpace(ctx, request.TenantID, request.SpaceID)
+		if err != nil {
+			return spaceResponse{}, err
+		}
+		return newSpaceResponse(space), nil
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
+		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
+}
+
+func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/restore", "/tenants/{tenant_id}/spaces/{space_id}/restore", "restoreSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
+		restore, ok := service.(SpaceArchiveService)
+		if !ok {
+			return spaceResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
+			return spaceResponse{}, err
+		}
+		space, err := restore.RestoreSpace(ctx, request.TenantID, request.SpaceID)
+		if err != nil {
+			return spaceResponse{}, err
+		}
+		return newSpaceResponse(space), nil
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
+		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
+}
+
 func decodeCreateSpaceRequest(r *http.Request) (createSpaceEndpointRequest, error) {
 	tenantID, err := tenantIDRequest(r)
 	if err != nil {
@@ -222,7 +287,11 @@ func decodeCreateSpaceRequest(r *http.Request) (createSpaceEndpointRequest, erro
 	if err != nil {
 		return createSpaceEndpointRequest{}, err
 	}
-	return createSpaceEndpointRequest{TenantID: tenantID, Body: body}, nil
+	requestKey := r.Header.Get(idempotencyKeyHeader)
+	if strings.TrimSpace(requestKey) == "" {
+		return createSpaceEndpointRequest{}, apiErrorInvalidRequestKey
+	}
+	return createSpaceEndpointRequest{TenantID: tenantID, RequestKey: requestKey, Body: body}, nil
 }
 
 func decodeListSpacesRequest(r *http.Request) (listSpacesRequest, error) {
@@ -234,7 +303,23 @@ func decodeListSpacesRequest(r *http.Request) (listSpacesRequest, error) {
 	if err != nil {
 		return listSpacesRequest{}, paginationAPIError(err)
 	}
-	return listSpacesRequest{TenantID: tenantID, Page: page}, nil
+	archived, err := optionalArchivedQuery(r)
+	if err != nil {
+		return listSpacesRequest{}, err
+	}
+	return listSpacesRequest{TenantID: tenantID, Page: page, Archived: archived}, nil
+}
+
+func optionalArchivedQuery(r *http.Request) (*bool, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get("archived"))
+	if raw == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return nil, apiErrorInvalidSpaceArchiveFilter
+	}
+	return &value, nil
 }
 
 func decodeGetSpaceRequest(r *http.Request) (getSpaceRequest, error) {
@@ -320,6 +405,10 @@ func spaceServiceAPIError(err error) (APIError, bool) {
 		return apiErrorSpaceNotFound, true
 	case errors.Is(err, spaces.ErrSpaceSlugAlreadyUsed):
 		return apiErrorSpaceSlugAlreadyUsed, true
+	case errors.Is(err, spaces.ErrInvalidRequestKey):
+		return apiErrorInvalidRequestKey, true
+	case errors.Is(err, spaces.ErrIdempotencyConflict):
+		return apiErrorIdempotencyConflict, true
 	default:
 		return APIError{}, false
 	}
@@ -355,6 +444,8 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		DefaultEpisodeDurationSeconds: space.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           space.LingerWindowSeconds,
+		ArchivedAt:                    optionalTimestampString(space.ArchivedAt),
+		Archived:                      space.ArchivedAt != nil,
 		Roles:                         roles,
 		CreatedByUserID:               optionalIDString(space.CreatedByUserID),
 		UpdatedAt:                     utilities.FormatTimestamp(space.UpdatedAt),
@@ -362,7 +453,7 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 	}
 }
 
-func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID utilities.ID) spaces.CreateSpaceInput {
+func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID utilities.ID, requestKey string) spaces.CreateSpaceInput {
 	return spaces.CreateSpaceInput{
 		Name:                          request.Name,
 		TenantID:                      tenantID,
@@ -375,6 +466,7 @@ func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID ut
 		MaximumEpisodeDurationSeconds: request.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           request.LingerWindowSeconds,
 		CreatedByUserID:               userID,
+		RequestKey:                    requestKey,
 	}
 }
 

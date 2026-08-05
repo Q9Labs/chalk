@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { useDashboardAccount } from "./DashboardAccount";
 import { NewSpaceDialog } from "./NewSpaceDialog";
@@ -17,6 +17,7 @@ const utilityNavigation = [
 ] as const;
 
 export function DashboardShell() {
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const [tenantMenuOpen, setTenantMenuOpen] = useState(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -122,7 +123,16 @@ export function DashboardShell() {
         <Outlet />
       </main>
 
-      <NewSpaceDialog open={createOpen} onClose={() => setCreateOpen(false)} />
+      <NewSpaceDialog
+        open={createOpen}
+        tenantID={current.tenant.id}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          setCreateOpen(false);
+          window.dispatchEvent(new Event("chalk:spaces-refresh"));
+          void navigate({ to: "/spaces" });
+        }}
+      />
     </div>
   );
 }
@@ -133,6 +143,22 @@ function DashboardLink({ to, label, icon, pathname }: { to: string; label: strin
       <Icon name={icon} />
       {label}
     </Link>
+  );
+}
+
+export function ResourcePageHeader({ eyebrow, title, description, actionLabel, onAction }: { eyebrow: string; title: string; description: string; actionLabel: string; onAction: () => void }) {
+  return (
+    <header className="dashboard-page-header resource-heading">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      <button className="dashboard-button primary" type="button" onClick={onAction}>
+        <Icon name="plus" />
+        {actionLabel}
+      </button>
+    </header>
   );
 }
 

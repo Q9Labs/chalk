@@ -1101,6 +1101,363 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         },
       },
     },
+    "/v1/me/recent-auth": {
+      post: {
+        operationId: "issueRecentAuthProof",
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/RecentAuthRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RecentAuth",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated", "auth.invalid_recent_auth"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Issue recent auth proof",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 10,
+          name: "auth.recent_auth",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/me/recent-auth/google/callback": {
+      get: {
+        operationId: "completeRecentAuthGoogle",
+        parameters: [
+          {
+            in: "query",
+            name: "state",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
+          {
+            in: "query",
+            name: "code",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RecentAuth",
+                },
+              },
+            },
+            description: "OK",
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated", "auth.invalid_recent_auth"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["oauth.not_configured", "service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Complete recent auth google",
+        "x-chalk-rate-limit": {
+          limit: 30,
+          name: "auth.oauth.callback",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/me/recent-auth/google/start": {
+      get: {
+        operationId: "startRecentAuthGoogle",
+        parameters: [
+          {
+            in: "query",
+            name: "action",
+            required: true,
+            schema: {
+              maxLength: 64,
+              type: "string",
+            },
+          },
+          {
+            in: "query",
+            name: "resource_id",
+            required: false,
+            schema: {
+              $ref: "#/components/schemas/UUID",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RecentAuthGoogleStart",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["oauth.not_configured", "service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Start recent auth google",
+        "x-chalk-rate-limit": {
+          limit: 20,
+          name: "auth.oauth.start",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/me/tenants": {
       get: {
         operationId: "listMyTenants",
@@ -2109,6 +2466,25 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               $ref: "#/components/schemas/TenantId",
             },
           },
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+          {
+            in: "header",
+            name: "X-Chalk-Recent-Auth",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
         ],
         requestBody: {
           content: {
@@ -2140,7 +2516,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -2151,7 +2527,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Unauthorized",
-            "x-chalk-error-codes": ["access.unauthenticated"],
+            "x-chalk-error-codes": ["access.unauthenticated", "auth.invalid_recent_auth"],
           },
           403: {
             content: {
@@ -2164,6 +2540,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             description: "Forbidden",
             "x-chalk-error-codes": ["access.forbidden"],
           },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["api_key.secret_not_replayable", "request.idempotency_conflict"],
+          },
           413: {
             content: {
               "application/json": {
@@ -2174,6 +2561,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             },
             description: "Request Entity Too Large",
             "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          428: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Precondition Required",
+            "x-chalk-error-codes": ["access.recent_auth_required"],
           },
           429: {
             content: {
@@ -2263,6 +2661,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               $ref: "#/components/schemas/UUID",
             },
           },
+          {
+            in: "header",
+            name: "X-Chalk-Recent-Auth",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
         ],
         responses: {
           204: {
@@ -2288,7 +2694,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Unauthorized",
-            "x-chalk-error-codes": ["access.unauthenticated"],
+            "x-chalk-error-codes": ["access.unauthenticated", "auth.invalid_recent_auth"],
           },
           403: {
             content: {
@@ -2322,6 +2728,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             },
             description: "Conflict",
             "x-chalk-error-codes": ["api_key.inactive"],
+          },
+          428: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Precondition Required",
+            "x-chalk-error-codes": ["access.recent_auth_required"],
           },
           429: {
             content: {
@@ -2410,6 +2827,25 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               $ref: "#/components/schemas/UUID",
             },
           },
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+          {
+            in: "header",
+            name: "X-Chalk-Recent-Auth",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
         ],
         requestBody: {
           content: {
@@ -2441,7 +2877,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["api_key.invalid_id", "request.invalid", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["api_key.invalid_id", "request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -2452,7 +2888,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Unauthorized",
-            "x-chalk-error-codes": ["access.unauthenticated"],
+            "x-chalk-error-codes": ["access.unauthenticated", "auth.invalid_recent_auth"],
           },
           403: {
             content: {
@@ -2485,7 +2921,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Conflict",
-            "x-chalk-error-codes": ["api_key.inactive"],
+            "x-chalk-error-codes": ["api_key.inactive", "api_key.secret_not_replayable", "request.idempotency_conflict"],
           },
           413: {
             content: {
@@ -2497,6 +2933,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             },
             description: "Request Entity Too Large",
             "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          428: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Precondition Required",
+            "x-chalk-error-codes": ["access.recent_auth_required"],
           },
           429: {
             content: {
@@ -5446,6 +5893,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
           {
             in: "query",
+            name: "archived",
+            required: false,
+            schema: {
+              type: "boolean",
+            },
+          },
+          {
+            in: "query",
             name: "page_size",
             required: false,
             schema: {
@@ -5481,7 +5936,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["pagination.invalid_cursor", "pagination.invalid_page_size", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["pagination.invalid_cursor", "pagination.invalid_page_size", "space.invalid_archive_filter", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -5546,6 +6001,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               $ref: "#/components/schemas/TenantId",
             },
           },
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
         ],
         requestBody: {
           content: {
@@ -5577,7 +6043,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -5610,7 +6076,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Conflict",
-            "x-chalk-error-codes": ["space.slug_conflict"],
+            "x-chalk-error-codes": ["request.idempotency_conflict", "space.slug_conflict"],
           },
           413: {
             content: {
@@ -5965,6 +6431,149 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         ],
         summary: "Update space",
         "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/archive": {
+      post: {
+        operationId: "archiveSpace",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/Space",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["space.not_found"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Archive space",
         "x-chalk-rate-limit": {
           limit: 60,
           name: "v1.authenticated.write",
@@ -8587,6 +9196,149 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         },
       },
     },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/restore": {
+      post: {
+        operationId: "restoreSpace",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/Space",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["space.not_found"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Restore space",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/tenants/{tenant_id}/transcripts": {
       get: {
         operationId: "listTranscripts",
@@ -10077,7 +10829,23 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             required: false,
             schema: {
               items: {
-                enum: ["endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.created", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"],
+                enum: [
+                  "endpoint.test",
+                  "episode.ended",
+                  "episode.started",
+                  "participant.joined",
+                  "participant.left",
+                  "recording.completed",
+                  "recording.failed",
+                  "recording.started",
+                  "space.archived",
+                  "space.created",
+                  "space.restored",
+                  "space.updated",
+                  "transcript.completed",
+                  "transcript.failed",
+                  "transcript.started",
+                ],
                 type: "string",
               },
               type: "array",
@@ -12008,11 +12776,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             required: ["created_at", "created_by_user_id", "expires_at", "id", "key_prefix", "last_used_at", "name", "revoked_at", "scopes", "tenant_id", "updated_at"],
             type: "object",
           },
+          replayed: {
+            type: "boolean",
+          },
           secret: {
             type: "string",
           },
         },
-        required: ["api_key", "secret"],
+        required: ["api_key", "replayed", "secret"],
         type: "object",
       },
       AccessGrant: {
@@ -13919,6 +14690,69 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["external_operation", "participant"],
         type: "object",
       },
+      RecentAuth: {
+        additionalProperties: false,
+        properties: {
+          expires_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          proof: {
+            type: "string",
+          },
+        },
+        required: ["expires_at", "proof"],
+        type: "object",
+      },
+      RecentAuthGoogleStart: {
+        additionalProperties: false,
+        properties: {
+          authorization_url: {
+            $ref: "#/components/schemas/URLString",
+          },
+          state: {
+            type: "string",
+          },
+        },
+        required: ["authorization_url", "state"],
+        type: "object",
+      },
+      RecentAuthRequest: {
+        additionalProperties: false,
+        properties: {
+          action: {
+            minLength: 1,
+            type: "string",
+          },
+          password: {
+            minLength: 1,
+            type: "string",
+          },
+          provider: {
+            minLength: 1,
+            type: "string",
+          },
+          provider_code: {
+            minLength: 1,
+            type: "string",
+          },
+          provider_state: {
+            minLength: 1,
+            type: "string",
+          },
+          resource_id: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/UUID",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
+        },
+        required: ["action", "password", "provider", "provider_code", "provider_state"],
+        type: "object",
+      },
       Recording: {
         additionalProperties: false,
         properties: {
@@ -14246,6 +15080,19 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             items: {},
             type: ["object", "array", "string", "number", "boolean", "null"],
           },
+          archived: {
+            type: "boolean",
+          },
+          archived_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
           created_at: {
             $ref: "#/components/schemas/DateTimeString",
           },
@@ -14319,7 +15166,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             $ref: "#/components/schemas/DateTimeString",
           },
         },
-        required: ["admission_policy", "created_at", "created_by_user_id", "default_episode_duration_seconds", "id", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "metadata", "name", "recurring_policy", "roles", "slug", "tenant_id", "updated_at"],
+        required: ["admission_policy", "archived", "created_at", "created_by_user_id", "default_episode_duration_seconds", "id", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "metadata", "name", "recurring_policy", "roles", "slug", "tenant_id", "updated_at"],
         type: "object",
       },
       SpaceId: {

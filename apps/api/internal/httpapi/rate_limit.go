@@ -30,6 +30,11 @@ var (
 		Limit:  100,
 		Window: time.Minute,
 	}
+	authRecentAuthRateLimit = ratelimit.Policy{
+		Name:   ratelimit.PolicyNameAuthRecentAuth,
+		Limit:  10,
+		Window: time.Minute,
+	}
 	authOAuthStartRateLimit = ratelimit.Policy{
 		Name:   ratelimit.PolicyNameAuthOAuthStart,
 		Limit:  20,

@@ -22,6 +22,11 @@ type Provider struct {
 	config   oauth2.Config
 }
 
+var (
+	_ authentication.GoogleProvider                 = Provider{}
+	_ authentication.GoogleReauthenticationProvider = Provider{}
+)
+
 func NewProvider(cfg Config) (Provider, error) {
 	if cfg.ClientID == "" || cfg.ClientSecret == "" || cfg.RedirectURL == "" {
 		return Provider{}, authentication.ErrOAuthNotConfigured
@@ -48,7 +53,23 @@ func (p Provider) AuthCodeURL(state string, verifier string) string {
 }
 
 func (p Provider) Authenticate(ctx context.Context, code string, verifier string) (authentication.GoogleIdentity, error) {
-	token, err := p.config.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+	return p.authenticate(ctx, code, verifier, p.config.RedirectURL)
+}
+
+func (p Provider) AuthCodeURLWithRedirect(state string, verifier string, redirectURL string) string {
+	config := p.config
+	config.RedirectURL = redirectURL
+	return config.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))
+}
+
+func (p Provider) AuthenticateWithRedirect(ctx context.Context, code string, verifier string, redirectURL string) (authentication.GoogleIdentity, error) {
+	return p.authenticate(ctx, code, verifier, redirectURL)
+}
+
+func (p Provider) authenticate(ctx context.Context, code string, verifier string, redirectURL string) (authentication.GoogleIdentity, error) {
+	config := p.config
+	config.RedirectURL = redirectURL
+	token, err := config.Exchange(ctx, code, oauth2.VerifierOption(verifier))
 	if err != nil {
 		return authentication.GoogleIdentity{}, fmt.Errorf("exchange google code: %w", err)
 	}

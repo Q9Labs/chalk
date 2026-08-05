@@ -11,7 +11,7 @@ const (
 )
 
 // Principal is the authenticated caller accepted at the HTTP edge. It can
-// represent a user session, a tenant-bound API key, or rare internal system work.
+// represent a signed-in user, a tenant-bound API key, or rare internal system work.
 type Principal struct {
 	Kind      PrincipalKind
 	UserID    utilities.ID

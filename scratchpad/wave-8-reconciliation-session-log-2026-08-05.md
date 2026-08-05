@@ -328,3 +328,108 @@ published map has columns that disagree with rewritten declarations. Two proof
 tests cover the negatives and file-level cleanup, and the proof runs inside the
 normal package test command. Final Whiteboard tests, check-types, build, lint,
 Publint, NodeNext consumer compile, and direct iOS Metro bundling pass.
+
+## 2026-08-05T12:31:09+05:00
+
+Completed the canonical merge checkpoint. Exact staged Git tree
+`f4370502c16695ca36b8019e4efa2d56e72c6618` passed the full `pnpm run gate` on
+`agents-macmini`: vocabulary, hygiene, secret and static analysis, migrations,
+the Go API gate, 371 Sync tests plus breaker/replay proofs, generated-contract
+drift, all affected typechecks and coverage suites, packed Chromium consumer,
+both mobile exports, workspace/web builds, recorder OpenTofu validation,
+Publint, and AreTheTypesWrong. The first identical-tree run stopped only at
+`scripts/recorder/gate.sh: line 7: tofu: command not found`; complaint `#3700`
+records the verifier dependency gap. Installing OpenTofu 1.12.5 and rerunning a
+fresh byte-identical checkout produced `Smart gate passed`. All unique remote
+checkouts, browser caches, transfer files, and task processes were removed and
+verified absent.
+
+Committed the proven tree as two-parent merge checkpoint
+`fd7e8f9abf07430fc0517443577fdad796e65563` (`merge: reconcile canonical space
+integration`) with parents `e45395e1875b692e7cc620ab8b52423d0b79bda9` and
+`ade3a3984732e13e52d2b8123bbd6c9fd335a52a`. The dashboard completion replay is
+now the active Wave 8 lane. Its Luna implementation is serialized ahead of the
+dirty live Episode debugger replay because both can touch the web application;
+each lane receives a bounded Terra xhigh review before integration.
+
+## 2026-08-05T12:32:43+05:00
+
+Revalidated the two legacy evidence sources before replay. Dashboard remains a
+clean `0c6768c01d92829f2c5ec26c6b698586131d6f31`, and all seven recorded
+dashboard allowlist/deny manifests match their recorded SHA-256 values. Its
+bounded Luna replay is active against the clean checkpoint.
+
+The live Episode debugger still has head
+`c69de85875aca2c33e7889e136f59c41dd97ce0b`, zero staged files, 260 tracked
+unstaged paths, 257 untracked paths, and the same sorted untracked-path SHA-256
+`31d194436b2c4af4b0f828e9b6180fec63912d8e0e44dc376d5e3b99d697892a`.
+All four lane manifests match their recorded hashes. Its current full binary
+tracked-diff SHA-256 is now
+`ef817024cdbe60226f01c4aa9e029ce430a6903444a596a242725b2f3a320128`, however,
+not the prompt's audited `0138041986542419c3a4154b17e2b4c7eeae7909045f0ad1556ce4e67181f40c`.
+Debugger extraction is therefore paused under the prompt's fail-closed rule
+while a read-only Luna lane produces and repeats a fresh path/content-hash
+inventory. No debugger behavior will be imported from an unstable snapshot.
+
+## 2026-08-05T12:54:24+05:00
+
+Completed the dashboard completion replay handoff. Luna applied exactly the 92
+allowlisted dashboard paths from `0c6768c^..0c6768c`; the frozen 93-row content
+manifest (those 92 paths plus its lane log, excluding this root-owned log) had
+SHA-256 `18de2b5c085c2c23b8c0f36917f0bd3b1f35d56ed7a8033e4a85f00dcddf347d`
+at review handoff. The commit hook required Markdown table formatting in the
+lane log; the post-format 93-row manifest is
+`42ed21cf83825b63966666a6efc59fad4dfb1f84c1af69017568bbb4a1b0efd3`, with
+no source-code change. Focused API and web tests, web
+typecheck/build, webhook-contract validation, formatting, and diff hygiene
+passed. Terra xhigh independently reviewed the replay and returned no P0, P1,
+or P2 findings. Generated SQLC, generated webhook receivers, and language
+ratchet tightening remain root-owned integration seams for the final Wave 8
+pass.
+
+The debugger evidence pause is resolved without source drift. Two independent
+root captures and two Luna captures match. The prompt's audited SHA-256
+`0138041986542419c3a4154b17e2b4c7eeae7909045f0ad1556ce4e67181f40c` is
+the current default `git diff --binary`; the apparent replacement
+`ef817024cdbe60226f01c4aa9e029ce430a6903444a596a242725b2f3a320128` is the
+same current tree emitted with `--full-index`. The source remains at
+`c69de85875aca2c33e7889e136f59c41dd97ce0b`, with zero staged paths, 260
+tracked dirty paths, and 257 untracked paths. The four extraction manifests
+contain 195 unique, disjoint, present, currently dirty selected paths; the
+remaining 260 tracked and 62 untracked paths are explicitly outside selection.
+Extraction may proceed from this stable allowlist-bounded snapshot after the
+dashboard checkpoint.
+
+## 2026-08-05T13:05:01+05:00
+
+The first dashboard checkpoint attempt stopped at Oxfmt on the new dashboard
+lane log. Formatting that Markdown-only file changed the frozen 93-row manifest
+from `18de2b5c085c2c23b8c0f36917f0bd3b1f35d56ed7a8033e4a85f00dcddf347d`
+to `42ed21cf83825b63966666a6efc59fad4dfb1f84c1af69017568bbb4a1b0efd3`;
+complaint `#3701` records the handoff mismatch.
+
+The second attempt passed vocabulary, hygiene, secret scanning, formatting,
+Fallow, and Semgrep, then failed at the API compile with the expected stale
+SQLC symbols (`GetAPIKeyMutationParams`, `ArchiveTenantSpaceParams`, and related
+generated queries). Complaint `#3702` records that source/generated checkpoint
+boundary. Root ran the canonical SQLC generator and reviewed the resulting five
+generated Go files. Root also regenerated the two webhook receiver artifacts;
+the generator's own instruction named a nonexistent `pnpm run
+generate:webhooks` script, recorded as complaint `#3703`, so the checked-in
+generator was invoked directly. Its non-mutating `--check` now passes. These
+seven deterministic generated files join the dashboard checkpoint so the
+repository does not record an uncompilable source/generated boundary.
+
+## 2026-08-05T13:09:47+05:00
+
+The third checkpoint attempt passed the full service-backed API gate, including
+all Go tests, lifecycle smoke, vet, Staticcheck, and vulnerability analysis. It
+then stopped at the next declared generated seam: the OpenAPI and TypeScript SDK
+artifacts did not yet contain recent-auth, idempotency, Space archive/restore,
+or the new webhook events. Complaint `#3704` records this second source/codegen
+boundary. Root ran `pnpm run generate:sdk`, which changed exactly the canonical
+OpenAPI plus three client generated files, then regenerated the canonical API
+design projection. `pnpm run contract:check` now passes with 68 paths and 116
+schemas. These five deterministic files join the same checkpoint; the debugger
+lanes will still treat all generated outputs as root-owned and final generation
+will run again after their producer changes settle.

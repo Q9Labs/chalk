@@ -107,7 +107,10 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("oauth state ttl = %s, want %s", cfg.Auth.OAuthStateTTL, config.DefaultOAuthStateTTL)
 	}
 	if cfg.Auth.SessionTTL != config.DefaultSessionTTL {
-		t.Fatalf("session ttl = %s, want %s", cfg.Auth.SessionTTL, config.DefaultSessionTTL)
+		t.Fatalf("login ttl = %s, want %s", cfg.Auth.SessionTTL, config.DefaultSessionTTL)
+	}
+	if string(cfg.Auth.RecentAuthSecret) != config.DefaultRecentAuthSecret {
+		t.Fatalf("recent-auth secret = %q, want local default", cfg.Auth.RecentAuthSecret)
 	}
 	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription || cfg.Capabilities.WhiteboardFiles {
 		t.Fatalf("local capabilities = %#v, want disabled", cfg.Capabilities)
@@ -234,6 +237,24 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadRecentAuthSecret(t *testing.T) {
+	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if string(cfg.Auth.RecentAuthSecret) != strings.Repeat("r", 32) {
+		t.Fatalf("recent-auth secret = %q, want configured value", cfg.Auth.RecentAuthSecret)
+	}
+}
+
+func TestLoadRejectsShortRecentAuthSecret(t *testing.T) {
+	t.Setenv(config.AuthRecentAuthSecret, "short")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.AuthRecentAuthSecret) {
+		t.Fatalf("load error = %v, want recent-auth secret validation", err)
+	}
+}
+
 func TestLoadAPICORSAllowedOrigins(t *testing.T) {
 	t.Setenv(config.APICORSAllowedOrigins, "https://app.chalk.test, http://localhost:3000 ,,")
 
@@ -332,7 +353,7 @@ func TestLoadAuth(t *testing.T) {
 		t.Fatalf("oauth state ttl = %s, want 2m", cfg.Auth.OAuthStateTTL)
 	}
 	if cfg.Auth.SessionTTL != time.Hour {
-		t.Fatalf("session ttl = %s, want 1h", cfg.Auth.SessionTTL)
+		t.Fatalf("login ttl = %s, want 1h", cfg.Auth.SessionTTL)
 	}
 }
 
@@ -573,6 +594,7 @@ func TestLoadComposio(t *testing.T) {
 
 func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.TranscriptionEnabled, "false")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
@@ -677,6 +699,7 @@ func TestLoadRejectsInsecureDatabaseURLOutsideLocal(t *testing.T) {
 
 func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.TranscriptionEnabled, "false")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
@@ -763,6 +786,7 @@ func TestLoadRejectsMissingComposioAPIKeyOutsideLocal(t *testing.T) {
 
 func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
@@ -780,6 +804,7 @@ func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
 
 func TestLoadAcceptsExplicitlyDisabledCapabilitiesOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.IntegrationsEnabled, "false")
 	t.Setenv(config.TranscriptionEnabled, "false")

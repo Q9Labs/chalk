@@ -120,7 +120,14 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 	var result episodes.Admission
 
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
-		_, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID)
+		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return episodes.ErrSpaceNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock participant admission space: %w", err)
+		}
+		_, err = lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID)
 		if err != nil {
 			return err
 		}
@@ -130,6 +137,12 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("lock participant admission intent: %w", err)
+		}
+		// The Space lock makes this check authoritative against archive/restore.
+		// A replay found above still returns its committed admission, while a
+		// fresh request must not create a participant in an archived Space.
+		if space.ArchivedAt.Valid {
+			return episodes.ErrAdmissionClosed
 		}
 
 		episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID)

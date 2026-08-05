@@ -32,6 +32,7 @@ const (
 	APIVersion            = "CHALK_API_VERSION"
 
 	AuthEmailVerificationRequired = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
+	AuthRecentAuthSecret          = "CHALK_AUTH_RECENT_AUTH_SECRET"
 	AuthOAuthStateTTLMS           = "CHALK_AUTH_OAUTH_STATE_TTL_MS"
 	AuthSessionTTLMS              = "CHALK_AUTH_SESSION_TTL_MS"
 	SyncTokenAudience             = "CHALK_SYNC_TOKEN_AUDIENCE"
@@ -116,6 +117,7 @@ const (
 	DefaultRedisURL                           = "redis://127.0.0.1:6379/0"
 	DefaultResendTimeoutMS                    = int64(10000)
 	DefaultSessionTTLMS                       = int64(30 * 24 * 60 * 60 * 1000)
+	DefaultRecentAuthSecret                   = "chalk-local-recent-auth-key-32!!"
 	DefaultServiceName                        = "chalk-api"
 	DefaultSlowRequestMS                      = int64(250)
 	DefaultVersion                            = "dev"
@@ -198,6 +200,7 @@ type TranscriptionConfig struct {
 type AuthConfig struct {
 	EmailVerificationRequired bool
 	OAuthStateTTL             time.Duration
+	RecentAuthSecret          []byte
 	SessionTTL                time.Duration
 }
 
@@ -320,7 +323,6 @@ func Load() (Config, error) {
 	if oauthStateTTL <= 0 {
 		return Config{}, fmt.Errorf("%s must be greater than zero", AuthOAuthStateTTLMS)
 	}
-
 	logFormat, err := envEnum(APILogFormat, DefaultLogFormat, "json", "text")
 	if err != nil {
 		return Config{}, err
@@ -436,6 +438,10 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 	}
+	recentAuthSecret, err := loadRecentAuthSecret(environment)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		API: APIConfig{
@@ -447,6 +453,7 @@ func Load() (Config, error) {
 		Auth: AuthConfig{
 			EmailVerificationRequired: envBool(AuthEmailVerificationRequired),
 			OAuthStateTTL:             oauthStateTTL,
+			RecentAuthSecret:          recentAuthSecret,
 			SessionTTL:                sessionTTL,
 		},
 		Capabilities: capabilities,
@@ -506,6 +513,20 @@ func Load() (Config, error) {
 		Transcription: transcriptionConfig,
 		Webhooks:      webhookConfig,
 	}, nil
+}
+
+func loadRecentAuthSecret(environment string) ([]byte, error) {
+	secret := strings.TrimSpace(envOrDefault(AuthRecentAuthSecret, ""))
+	if secret == "" {
+		if environment == DefaultEnvironment {
+			return []byte(DefaultRecentAuthSecret), nil
+		}
+		return nil, fmt.Errorf("%s must be set outside local environments", AuthRecentAuthSecret)
+	}
+	if len([]byte(secret)) < 32 {
+		return nil, fmt.Errorf("%s must contain at least 32 bytes", AuthRecentAuthSecret)
+	}
+	return []byte(secret), nil
 }
 
 func loadCapabilityConfig(environment string) (CapabilityConfig, error) {

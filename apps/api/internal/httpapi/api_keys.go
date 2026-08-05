@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +19,7 @@ import (
 )
 
 var (
+	recentAuthHeader      = "X-Chalk-Recent-Auth"
 	readAPIKeysPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeAPIKeysRead,
 		MinimumRole: memberships.RoleCollaborator,
@@ -39,7 +41,28 @@ var (
 	apiErrorAPIKeyInactive = APIError{
 		Status: http.StatusConflict, Code: "api_key.inactive", Message: "API key is not active",
 	}
+	apiErrorAPIKeyRecentAuthRequired = APIError{
+		Status: http.StatusPreconditionRequired, Code: "access.recent_auth_required", Message: "Recent authentication is required for this API key action",
+	}
+	apiErrorAPIKeyRecentAuthInvalid = APIError{
+		Status: http.StatusUnauthorized, Code: "auth.invalid_recent_auth", Message: "Recent authentication could not be verified",
+	}
+	apiErrorAPIKeySecretNotReplayable = APIError{
+		Status: http.StatusConflict, Code: "api_key.secret_not_replayable", Message: "This request already created the key; its secret cannot be shown again. Rotate the key to recover access.",
+	}
 )
+
+// APIKeyRecentAuthVerifier is deliberately small so the API-key domain does
+// not own password or login policy. Implementations must bind proof to the
+// authenticated Dashboard Account, action, and resource, and must reject
+// API-key principals.
+type APIKeyRecentAuthVerifier interface {
+	Verify(context.Context, string, utilities.ID, string, utilities.ID) error
+}
+
+type APIKeyRouteOptions struct {
+	RecentAuth APIKeyRecentAuthVerifier
+}
 
 type APIKeyService interface {
 	Create(context.Context, apikeys.CreateInput) (apikeys.CreateResult, error)
@@ -68,8 +91,9 @@ type apiKeyResponse struct {
 }
 
 type apiKeyWithSecretResponse struct {
-	APIKey apiKeyResponse `json:"api_key"`
-	Secret string         `json:"secret"`
+	APIKey   apiKeyResponse `json:"api_key"`
+	Secret   string         `json:"secret"`
+	Replayed bool           `json:"replayed"`
 }
 
 type apiKeyListResponse struct {
@@ -88,8 +112,10 @@ type rotateAPIKeyBody struct {
 }
 
 type createAPIKeyRequest struct {
-	TenantID utilities.ID
-	Body     createAPIKeyBody
+	TenantID   utilities.ID
+	RequestKey string
+	RecentAuth string
+	Body       createAPIKeyBody
 }
 
 type listAPIKeysRequest struct {
@@ -98,34 +124,47 @@ type listAPIKeysRequest struct {
 }
 
 type apiKeyIDsRequest struct {
-	TenantID utilities.ID
-	APIKeyID utilities.ID
+	TenantID   utilities.ID
+	APIKeyID   utilities.ID
+	RecentAuth string
 }
 
 type rotateAPIKeyRequest struct {
 	apiKeyIDsRequest
-	Body rotateAPIKeyBody
+	RequestKey string
+	Body       rotateAPIKeyBody
 }
 
 func mountAPIKeyRoutes(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, limits RateLimitOptions) {
-	for _, endpoint := range apiKeyEndpoints(service, authorizer, audits) {
+	mountAPIKeyRoutesWithOptions(r, service, authorizer, audits, APIKeyRouteOptions{}, limits)
+}
+
+func mountAPIKeyRoutesWithOptions(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, options APIKeyRouteOptions, limits RateLimitOptions) {
+	for _, endpoint := range apiKeyEndpoints(service, authorizer, audits, options.RecentAuth) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter) []RouteEndpoint {
+func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth ...APIKeyRecentAuthVerifier) []RouteEndpoint {
+	var verifier APIKeyRecentAuthVerifier
+	if len(recentAuth) > 0 {
+		verifier = recentAuth[0]
+	}
 	return []RouteEndpoint{
-		createAPIKeyEndpoint(service, authorizer, audits),
+		createAPIKeyEndpoint(service, authorizer, audits, verifier),
 		listAPIKeysEndpoint(service, authorizer),
-		rotateAPIKeyEndpoint(service, authorizer, audits),
-		revokeAPIKeyEndpoint(service, authorizer, audits),
+		rotateAPIKeyEndpoint(service, authorizer, audits, verifier),
+		revokeAPIKeyEndpoint(service, authorizer, audits, verifier),
 	}
 }
 
-func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter) Endpoint[createAPIKeyRequest, apiKeyWithSecretResponse] {
+func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth APIKeyRecentAuthVerifier) Endpoint[createAPIKeyRequest, apiKeyWithSecretResponse] {
 	return Post("/v1/tenants/{tenant_id}/api-keys", "/tenants/{tenant_id}/api-keys", "createAPIKey", decodeCreateAPIKeyRequest, func(ctx context.Context, request createAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if service == nil {
 			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
+		}
+		if err := verifyAPIKeyRecentAuth(ctx, recentAuth, request.RecentAuth, "api_key.create", request.TenantID); err != nil {
+			return apiKeyWithSecretResponse{}, err
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
 			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.created", utilities.ID{}, err)
@@ -142,18 +181,23 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, au
 			Scopes:          request.Body.Scopes,
 			ExpiresAt:       request.Body.ExpiresAt,
 			CreatedByUserID: createdByUserID(ctx),
+			RequestKey:      request.RequestKey,
 		})
 		if err != nil {
 			return apiKeyWithSecretResponse{}, err
 		}
-		return newAPIKeyWithSecretResponse(result.Key, result.RawKey), nil
+		if result.Replayed {
+			return apiKeyWithSecretResponse{}, apiErrorAPIKeySecretNotReplayable
+		}
+		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter()).
+		Middleware(noStoreAPIKeyResponse).
+		Parameters(tenantIDParameter(), idempotencyKeyParameter(), recentAuthParameter()).
 		RequestBody("CreateAPIKeyRequest", createAPIKeyBody{}).
 		Responds(http.StatusCreated, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
-		Errors(apiKeyWriteErrors(apiErrorInvalidRequest)...).
+		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeyRecentAuthRequired, apiErrorAPIKeyRecentAuthInvalid, apiErrorAPIKeySecretNotReplayable)...).
 		MapErrors(apiKeyAPIError)
 }
 
@@ -174,15 +218,19 @@ func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) End
 	}).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
+		Middleware(noStoreAPIKeyResponse).
 		Responds(http.StatusOK, "APIKeyList", apiKeyListResponse{}).
 		Errors(apiKeyReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
 		MapErrors(apiKeyAPIError)
 }
 
-func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
+func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth APIKeyRecentAuthVerifier) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
 	return Post("/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "rotateAPIKey", decodeRotateAPIKeyRequest, func(ctx context.Context, request rotateAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if service == nil {
 			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
+		}
+		if err := verifyAPIKeyRecentAuth(ctx, recentAuth, request.RecentAuth, "api_key.rotate", request.APIKeyID); err != nil {
+			return apiKeyWithSecretResponse{}, err
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
 			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.rotated", request.APIKeyID, err)
@@ -193,25 +241,32 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, au
 			return apiKeyWithSecretResponse{}, err
 		}
 
-		result, err := service.Rotate(ctx, request.TenantID, request.APIKeyID, apikeys.RotateInput{ExpiresAt: request.Body.ExpiresAt})
+		result, err := service.Rotate(ctx, request.TenantID, request.APIKeyID, apikeys.RotateInput{ExpiresAt: request.Body.ExpiresAt, RequestKey: request.RequestKey})
 		if err != nil {
 			return apiKeyWithSecretResponse{}, err
 		}
-		return newAPIKeyWithSecretResponse(result.Key, result.RawKey), nil
+		if result.Replayed {
+			return apiKeyWithSecretResponse{}, apiErrorAPIKeySecretNotReplayable
+		}
+		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), apiKeyIDParameter()).
+		Middleware(noStoreAPIKeyResponse).
+		Parameters(tenantIDParameter(), apiKeyIDParameter(), idempotencyKeyParameter(), recentAuthParameter()).
 		RequestBody("RotateAPIKeyRequest", rotateAPIKeyBody{}).
 		Responds(http.StatusOK, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
-		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyID, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive)...).
+		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyID, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive, apiErrorAPIKeyRecentAuthRequired, apiErrorAPIKeyRecentAuthInvalid, apiErrorAPIKeySecretNotReplayable)...).
 		MapErrors(apiKeyAPIError)
 }
 
-func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter) Endpoint[apiKeyIDsRequest, noResponse] {
+func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth APIKeyRecentAuthVerifier) Endpoint[apiKeyIDsRequest, noResponse] {
 	return Delete("/v1/tenants/{tenant_id}/api-keys/{api_key_id}", "/tenants/{tenant_id}/api-keys/{api_key_id}", "revokeAPIKey", decodeAPIKeyIDsRequest, func(ctx context.Context, request apiKeyIDsRequest) (noResponse, error) {
 		if service == nil {
 			return noResponse{}, apiErrorServiceUnavailable
+		}
+		if err := verifyAPIKeyRecentAuth(ctx, recentAuth, request.RecentAuth, "api_key.revoke", request.APIKeyID); err != nil {
+			return noResponse{}, err
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, deleteAPIKeysPermission); err != nil {
 			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.revoked", request.APIKeyID, err)
@@ -225,9 +280,10 @@ func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, au
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), apiKeyIDParameter()).
+		Middleware(noStoreAPIKeyResponse).
+		Parameters(tenantIDParameter(), apiKeyIDParameter(), recentAuthParameter()).
 		RespondsNoBody(http.StatusNoContent).
-		Errors(apiKeyWriteErrors(apiErrorInvalidAPIKeyID, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive)...).
+		Errors(apiKeyWriteErrors(apiErrorInvalidAPIKeyID, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive, apiErrorAPIKeyRecentAuthRequired, apiErrorAPIKeyRecentAuthInvalid)...).
 		MapErrors(apiKeyAPIError)
 }
 
@@ -236,8 +292,12 @@ func decodeCreateAPIKeyRequest(r *http.Request) (createAPIKeyRequest, error) {
 	if err != nil {
 		return createAPIKeyRequest{}, err
 	}
+	requestKey := strings.TrimSpace(r.Header.Get(idempotencyKeyHeader))
+	if requestKey == "" {
+		return createAPIKeyRequest{}, apiErrorInvalidRequestKey
+	}
 	body, err := decodeJSONBody[createAPIKeyBody](r)
-	return createAPIKeyRequest{TenantID: tenantID, Body: body}, err
+	return createAPIKeyRequest{TenantID: tenantID, RequestKey: requestKey, RecentAuth: r.Header.Get(recentAuthHeader), Body: body}, err
 }
 
 func decodeListAPIKeysRequest(r *http.Request) (listAPIKeysRequest, error) {
@@ -258,7 +318,7 @@ func decodeAPIKeyIDsRequest(r *http.Request) (apiKeyIDsRequest, error) {
 		return apiKeyIDsRequest{}, err
 	}
 	apiKeyID, err := routeID(r, "api_key_id", apiErrorInvalidAPIKeyID)
-	return apiKeyIDsRequest{TenantID: tenantID, APIKeyID: apiKeyID}, err
+	return apiKeyIDsRequest{TenantID: tenantID, APIKeyID: apiKeyID, RecentAuth: r.Header.Get(recentAuthHeader)}, err
 }
 
 func decodeRotateAPIKeyRequest(r *http.Request) (rotateAPIKeyRequest, error) {
@@ -266,8 +326,12 @@ func decodeRotateAPIKeyRequest(r *http.Request) (rotateAPIKeyRequest, error) {
 	if err != nil {
 		return rotateAPIKeyRequest{}, err
 	}
+	requestKey := strings.TrimSpace(r.Header.Get(idempotencyKeyHeader))
+	if requestKey == "" {
+		return rotateAPIKeyRequest{}, apiErrorInvalidRequestKey
+	}
 	body, err := decodeJSONBody[rotateAPIKeyBody](r)
-	return rotateAPIKeyRequest{apiKeyIDsRequest: ids, Body: body}, err
+	return rotateAPIKeyRequest{apiKeyIDsRequest: ids, RequestKey: requestKey, Body: body}, err
 }
 
 func preventAPIKeyTargetEscalation(ctx context.Context, service APIKeyService, request apiKeyIDsRequest) error {
@@ -329,6 +393,43 @@ func apiKeyIDParameter() APIParameterContract {
 	return APIParameterContract{Name: "api_key_id", In: "path", Type: "string", Required: true}
 }
 
+func recentAuthParameter() APIParameterContract {
+	return APIParameterContract{Name: recentAuthHeader, In: "header", Type: "string", Required: true}
+}
+
+func noStoreAPIKeyResponse(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func verifyAPIKeyRecentAuth(ctx context.Context, verifier APIKeyRecentAuthVerifier, proof, action string, resourceID utilities.ID) error {
+	// Recent-auth is a Dashboard Account step-up. Bearer API-key callers retain
+	// their scope-bound mutation contract and are checked by the tenant policy.
+	if verifier == nil {
+		return nil
+	}
+	principal, ok := authentication.PrincipalFromContext(ctx)
+	if !ok {
+		return apiErrorAPIKeyRecentAuthRequired
+	}
+	if principal.Kind == authentication.PrincipalAPIKey {
+		return nil
+	}
+	if principal.Kind != authentication.PrincipalUser || principal.UserID.IsZero() {
+		return apiErrorAPIKeyRecentAuthRequired
+	}
+	if proof == "" {
+		return apiErrorAPIKeyRecentAuthRequired
+	}
+	if err := verifier.Verify(ctx, proof, principal.UserID, action, resourceID); err != nil {
+		return apiErrorAPIKeyRecentAuthInvalid
+	}
+	return nil
+}
+
 func apiKeyReadErrors(extra ...APIError) []APIError {
 	return append([]APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
 }
@@ -345,6 +446,10 @@ func apiKeyAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidAPIKeyID, true
 	case errors.Is(err, apikeys.ErrInvalidName), errors.Is(err, apikeys.ErrInvalidScopes), errors.Is(err, apikeys.ErrInvalidExpiry):
 		return apiErrorInvalidRequest, true
+	case errors.Is(err, apikeys.ErrInvalidRequestKey):
+		return apiErrorInvalidRequestKey, true
+	case errors.Is(err, apikeys.ErrIdempotencyConflict):
+		return apiErrorIdempotencyConflict, true
 	case errors.Is(err, apikeys.ErrAPIKeyNotFound):
 		return apiErrorAPIKeyNotFound, true
 	case errors.Is(err, apikeys.ErrAPIKeyRevoked), errors.Is(err, apikeys.ErrAPIKeyExpired):
@@ -364,8 +469,8 @@ func newAPIKeyResponse(key apikeys.Key) apiKeyResponse {
 	}
 }
 
-func newAPIKeyWithSecretResponse(key apikeys.Key, secret string) apiKeyWithSecretResponse {
-	return apiKeyWithSecretResponse{APIKey: newAPIKeyResponse(key), Secret: secret}
+func newAPIKeyWithSecretResponse(key apikeys.Key, secret string, replayed bool) apiKeyWithSecretResponse {
+	return apiKeyWithSecretResponse{APIKey: newAPIKeyResponse(key), Secret: secret, Replayed: replayed}
 }
 
 func newAPIKeyListResponse(list apikeys.KeyList) (apiKeyListResponse, error) {

@@ -38,6 +38,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridgeserver"
+	"github.com/q9labs/chalk/apps/api/internal/recentauth"
 	"github.com/q9labs/chalk/apps/api/internal/recorderhealth"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -152,6 +153,10 @@ func run() error {
 		RequireEmailVerification: cfg.Auth.EmailVerificationRequired,
 		OAuthStateTTL:            cfg.Auth.OAuthStateTTL,
 		SessionTTL:               cfg.Auth.SessionTTL,
+	})
+	recentAuthService := recentauth.NewService(authenticationService, recentauth.Config{
+		Secret:    cfg.Auth.RecentAuthSecret,
+		Telemetry: launchTelemetry,
 	})
 	apiKeyRepository := postgres.NewAPIKeyRepository(operationQueries, pool, diagnostics.Queries)
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
@@ -358,6 +363,7 @@ func run() error {
 		RateLimit:              rateLimitOptions,
 		Readiness:              postgres.Readiness{Pool: pool},
 		Authentication:         authenticationService,
+		RecentAuth:             recentAuthService,
 		AccountTenants:         accountTenantService,
 		APIKeys:                apiKeyService,
 		APIKeyAuthentication:   apiKeyService,

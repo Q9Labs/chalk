@@ -3,9 +3,12 @@ package apikeys
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -27,6 +30,8 @@ type Service struct {
 	random     io.Reader
 	telemetry  Telemetry
 }
+
+var apiKeyRequestKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 
 func NewService(repository Repository, cfg Config) Service {
 	now := cfg.Now
@@ -57,6 +62,13 @@ func (s Service) Create(ctx context.Context, input CreateInput) (CreateResult, e
 	if err != nil {
 		return CreateResult{}, err
 	}
+	if err := validRequestKey(input.RequestKey); err != nil {
+		return CreateResult{}, err
+	}
+	fingerprint, err := createFingerprint(name, scopes, expiresAt)
+	if err != nil {
+		return CreateResult{}, fmt.Errorf("fingerprint api key creation: %w", err)
+	}
 	id, err := utilities.NewID()
 	if err != nil {
 		return CreateResult{}, err
@@ -66,13 +78,29 @@ func (s Service) Create(ctx context.Context, input CreateInput) (CreateResult, e
 		if err != nil {
 			return CreateResult{}, fmt.Errorf("generate api key: %w", err)
 		}
-		record, err := s.repository.Create(ctx, CreateRecordInput{
+		recordInput := CreateRecordInput{
 			ID: id, TenantID: input.TenantID, Name: name, Scopes: scopes,
 			KeyPrefix: generated.prefix, KeyHash: generated.hash, ExpiresAt: expiresAt,
 			CreatedByUserID: input.CreatedByUserID,
-		})
+			RequestKey:      input.RequestKey, RequestFingerprint: fingerprint,
+		}
+		var replayed bool
+		var record Record
+		if input.RequestKey != "" {
+			idempotent, ok := s.repository.(IdempotentRepository)
+			if !ok {
+				return CreateResult{}, errors.New("api key idempotency repository unavailable")
+			}
+			record, replayed, err = idempotent.CreateIdempotent(ctx, recordInput)
+		} else {
+			record, err = s.repository.Create(ctx, recordInput)
+		}
 		if err == nil {
-			return CreateResult{Key: publicKey(record), RawKey: generated.raw}, nil
+			result := CreateResult{Key: publicKey(record), Replayed: replayed}
+			if !replayed {
+				result.RawKey = generated.raw
+			}
+			return result, nil
 		}
 		if !errors.Is(err, ErrPrefixConflict) {
 			return CreateResult{}, err
@@ -127,17 +155,40 @@ func (s Service) Rotate(ctx context.Context, tenantID, id utilities.ID, input Ro
 			return RotateResult{}, err
 		}
 	}
+	if err := validRequestKey(input.RequestKey); err != nil {
+		return RotateResult{}, err
+	}
+	fingerprint, err := rotateFingerprint(id, expiresAt)
+	if err != nil {
+		return RotateResult{}, fmt.Errorf("fingerprint api key rotation: %w", err)
+	}
 	for range MaxPrefixAttempts {
 		generated, err := newCredential(s.random)
 		if err != nil {
 			return RotateResult{}, fmt.Errorf("generate api key: %w", err)
 		}
-		record, err := s.repository.Rotate(ctx, RotateRecordInput{
+		recordInput := RotateRecordInput{
 			TenantID: tenantID, ID: id, KeyPrefix: generated.prefix,
 			KeyHash: generated.hash, ExpiresAt: expiresAt, RotatedAt: now,
-		})
+			RequestKey: input.RequestKey, RequestFingerprint: fingerprint,
+		}
+		var replayed bool
+		var record Record
+		if input.RequestKey != "" {
+			idempotent, ok := s.repository.(IdempotentRepository)
+			if !ok {
+				return RotateResult{}, errors.New("api key idempotency repository unavailable")
+			}
+			record, replayed, err = idempotent.RotateIdempotent(ctx, recordInput)
+		} else {
+			record, err = s.repository.Rotate(ctx, recordInput)
+		}
 		if err == nil {
-			return RotateResult{Key: publicKey(record), RawKey: generated.raw}, nil
+			result := RotateResult{Key: publicKey(record), Replayed: replayed}
+			if !replayed {
+				result.RawKey = generated.raw
+			}
+			return result, nil
 		}
 		if !errors.Is(err, ErrPrefixConflict) {
 			return RotateResult{}, err
@@ -239,6 +290,36 @@ func validIDs(tenantID, id utilities.ID) error {
 		return ErrInvalidAPIKeyID
 	}
 	return nil
+}
+
+func validRequestKey(value string) error {
+	if value == "" || apiKeyRequestKeyPattern.MatchString(value) {
+		return nil
+	}
+	return ErrInvalidRequestKey
+}
+
+func createFingerprint(name string, scopes []authentication.Scope, expiresAt time.Time) ([32]byte, error) {
+	value, err := json.Marshal(struct {
+		Name      string                 `json:"name"`
+		Scopes    []authentication.Scope `json:"scopes"`
+		ExpiresAt time.Time              `json:"expires_at"`
+	}{Name: name, Scopes: scopes, ExpiresAt: expiresAt.UTC()})
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return sha256.Sum256(value), nil
+}
+
+func rotateFingerprint(id utilities.ID, expiresAt time.Time) ([32]byte, error) {
+	value, err := json.Marshal(struct {
+		APIKeyID  string    `json:"api_key_id"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}{APIKeyID: id.String(), ExpiresAt: expiresAt.UTC()})
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return sha256.Sum256(value), nil
 }
 
 func activeAt(record Record, now time.Time) error {

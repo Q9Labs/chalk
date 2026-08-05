@@ -9,8 +9,11 @@ const JOURNEY_HEADER = "x-chalk-journey-id";
 const TRACEPARENT_HEADER = "traceparent";
 const TRACESTATE_HEADER = "tracestate";
 const IDEMPOTENCY_HEADER = "idempotency-key";
+const RECENT_AUTH_HEADER = "x-chalk-recent-auth";
 const CSRF_HEADER = "x-chalk-csrf";
+const RECENT_AUTH_GOOGLE_MESSAGE = "chalk.recent-auth.google.complete";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_SEGMENT_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
 const TRACEPARENT_PATTERN = /^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/i;
 
 type BoundaryRoute = {
@@ -18,6 +21,8 @@ type BoundaryRoute = {
   authenticated?: boolean;
   mutation?: boolean;
   authResult?: boolean;
+  browserCallback?: boolean;
+  preserveAuthOnUnauthorized?: boolean;
   queryParameters?: readonly string[];
 };
 
@@ -58,17 +63,18 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
       }
     }
 
-    const sessionToken = readCookie(request.headers.get("cookie"), accountCookieName(url));
-    if (route.authenticated && !sessionToken) {
+    const accountToken = readCookie(request.headers.get("cookie"), accountCookieName(url));
+    if (route.authenticated && !accountToken) {
       responseStatus = 401;
       return secureResponse(errorResponse(401, "unauthenticated", "Authentication required"), journeyID);
     }
 
     const upstreamURL = resolveUpstreamURL(env.CHALK_API_ORIGIN, route.upstreamPath, allowedSearch(url, route.queryParameters));
-    const headers = upstreamHeaders(request, journeyID, sessionToken);
+    const headers = upstreamHeaders(request, journeyID, accountToken);
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : await boundedBody(request);
     const upstream = await fetcher(upstreamURL, { method: request.method, headers, body, redirect: "manual" });
     let response: Response;
+    let preserveAuthOnUnauthorized = false;
 
     if (route.authResult && upstream.ok) {
       const auth = await readJSONObject(upstream);
@@ -98,12 +104,14 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
       }
     } else {
       response = await sanitizeUpstreamResponse(upstream);
+      preserveAuthOnUnauthorized = route.preserveAuthOnUnauthorized === true && (await isRecentAuthFailure(response));
+      if (route.browserCallback && acceptsHTML(request)) response = await browserOAuthCallbackResponse(response, url.origin);
     }
 
     if (url.pathname === "/api/auth/logout") {
       response.headers.append("Set-Cookie", clearCookie(accountCookieName(url), url, true));
       response.headers.append("Set-Cookie", clearCookie(csrfCookieName(url), url, false));
-    } else if (upstream.status === 401 && route.authenticated) {
+    } else if (upstream.status === 401 && route.authenticated && !preserveAuthOnUnauthorized) {
       response.headers.append("Set-Cookie", clearCookie(accountCookieName(url), url, true));
     }
 
@@ -128,11 +136,74 @@ function resolveRoute(method: string, pathname: string): BoundaryRoute | undefin
     ["GET /api/auth/google/start", { upstreamPath: "/v1/auth/google/start" }],
     ["GET /api/auth/google/callback", { upstreamPath: "/v1/auth/google/callback", authResult: true, queryParameters: ["state", "code"] }],
     ["GET /api/me", { upstreamPath: "/v1/me", authenticated: true }],
+    ["POST /api/me/recent-auth", { upstreamPath: "/v1/me/recent-auth", authenticated: true, mutation: true, preserveAuthOnUnauthorized: true }],
+    ["GET /api/me/recent-auth/google/start", { upstreamPath: "/v1/me/recent-auth/google/start", authenticated: true, preserveAuthOnUnauthorized: true, queryParameters: ["action", "resource_id"] }],
+    ["GET /api/me/recent-auth/google/callback", { upstreamPath: "/v1/me/recent-auth/google/callback", authenticated: true, browserCallback: true, preserveAuthOnUnauthorized: true, queryParameters: ["state", "code"] }],
     ["GET /api/me/tenants", { upstreamPath: "/v1/me/tenants", authenticated: true, queryParameters: ["cursor", "page_size"] }],
     ["POST /api/me/tenants", { upstreamPath: "/v1/me/tenants", authenticated: true, mutation: true }],
     ["GET /api/regions", { upstreamPath: "/v1/regions", authenticated: true }],
   ]);
-  return routes.get(`${method.toUpperCase()} ${pathname}`);
+  return routes.get(`${method.toUpperCase()} ${pathname}`) ?? resolveTenantResourceRoute(method.toUpperCase(), pathname);
+}
+
+function resolveTenantResourceRoute(method: string, pathname: string): BoundaryRoute | undefined {
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length < 4 || segments[0] !== "api" || segments[1] !== "tenants" || !UUID_PATTERN.test(segments[2] ?? "")) return undefined;
+
+  const tenantID = segments[2]!;
+  const resource = segments[3];
+  if (resource === "spaces") return resolveSpaceRoute(method, segments, tenantID);
+  if (resource === "api-keys") return resolveAPIKeyRoute(method, segments, tenantID);
+  return undefined;
+}
+
+function resolveSpaceRoute(method: string, segments: string[], tenantID: string): BoundaryRoute | undefined {
+  const base = `/v1/tenants/${tenantID}/spaces`;
+  if (segments.length === 4) {
+    if (method === "GET") return { upstreamPath: base, authenticated: true, queryParameters: ["cursor", "page_size", "archived"] };
+    if (method === "POST") return { upstreamPath: base, authenticated: true, mutation: true };
+    return undefined;
+  }
+
+  const spaceID = segments[4];
+  if (!spaceID || !UUID_PATTERN.test(spaceID)) return undefined;
+  const spacePath = `${base}/${spaceID}`;
+  if (segments.length === 5) {
+    if (method === "GET") return { upstreamPath: spacePath, authenticated: true };
+    if (method === "PATCH") return { upstreamPath: spacePath, authenticated: true, mutation: true };
+    return undefined;
+  }
+  if (segments[5] === "archive" && segments.length === 6 && method === "POST") return { upstreamPath: `${spacePath}/archive`, authenticated: true, mutation: true };
+  if (segments[5] === "restore" && segments.length === 6 && method === "POST") return { upstreamPath: `${spacePath}/restore`, authenticated: true, mutation: true };
+  if (segments[5] !== "episodes") return undefined;
+
+  const episodesPath = `${spacePath}/episodes`;
+  if (segments.length === 6) {
+    if (method === "GET") return { upstreamPath: episodesPath, authenticated: true, queryParameters: ["cursor", "page_size"] };
+    if (method === "POST") return { upstreamPath: episodesPath, authenticated: true, mutation: true };
+    return undefined;
+  }
+  const episodeID = segments[6];
+  if (!episodeID || !UUID_PATTERN.test(episodeID)) return undefined;
+  const episodePath = `${episodesPath}/${episodeID}`;
+  if (segments.length === 7 && method === "GET") return { upstreamPath: episodePath, authenticated: true };
+  if (segments.length === 8 && segments[7] === "end" && method === "POST") return { upstreamPath: `${episodePath}/end`, authenticated: true, mutation: true };
+  return undefined;
+}
+
+function resolveAPIKeyRoute(method: string, segments: string[], tenantID: string): BoundaryRoute | undefined {
+  const base = `/v1/tenants/${tenantID}/api-keys`;
+  if (segments.length === 4) {
+    if (method === "GET") return { upstreamPath: base, authenticated: true, queryParameters: ["cursor", "page_size"] };
+    if (method === "POST") return { upstreamPath: base, authenticated: true, mutation: true, preserveAuthOnUnauthorized: true };
+    return undefined;
+  }
+  const apiKeyID = segments[4];
+  if (!apiKeyID || !UUID_PATTERN.test(apiKeyID)) return undefined;
+  const apiKeyPath = `${base}/${apiKeyID}`;
+  if (segments.length === 5 && method === "DELETE") return { upstreamPath: apiKeyPath, authenticated: true, mutation: true, preserveAuthOnUnauthorized: true };
+  if (segments.length === 6 && segments[5] === "rotate" && method === "POST") return { upstreamPath: `${apiKeyPath}/rotate`, authenticated: true, mutation: true, preserveAuthOnUnauthorized: true };
+  return undefined;
 }
 
 function allowedSearch(url: URL, names: readonly string[] | undefined): string {
@@ -162,12 +233,14 @@ function validateMutationRequest(request: Request, url: URL): Response | undefin
   return undefined;
 }
 
-function upstreamHeaders(request: Request, journeyID: string, sessionToken?: string): Headers {
+function upstreamHeaders(request: Request, journeyID: string, accountToken?: string): Headers {
   const headers = new Headers({ Accept: "application/json", [JOURNEY_HEADER]: journeyID });
   if (request.headers.get("content-type")) headers.set("Content-Type", "application/json");
-  if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
+  if (accountToken) headers.set("Authorization", `Bearer ${accountToken}`);
   const requestKey = request.headers.get(IDEMPOTENCY_HEADER);
   if (requestKey) headers.set("Idempotency-Key", requestKey);
+  const recentAuth = request.headers.get(RECENT_AUTH_HEADER);
+  if (recentAuth && recentAuth.length <= 2048 && !/[\r\n]/.test(recentAuth)) headers.set("X-Chalk-Recent-Auth", recentAuth);
   const traceparent = request.headers.get(TRACEPARENT_HEADER);
   if (traceparent && TRACEPARENT_PATTERN.test(traceparent)) headers.set(TRACEPARENT_HEADER, traceparent.toLowerCase());
   const tracestate = request.headers.get(TRACESTATE_HEADER);
@@ -193,6 +266,48 @@ async function sanitizeUpstreamResponse(upstream: Response): Promise<Response> {
   const code = error ? stringField(error, "code") : undefined;
   const message = error ? stringField(error, "message") : undefined;
   return errorResponse(upstream.status, code ?? "upstream_error", message ?? "Request failed");
+}
+
+async function isRecentAuthFailure(response: Response): Promise<boolean> {
+  if (response.status !== 401) return false;
+  const value = await readJSONObject(response.clone());
+  const error = objectField(value, "error");
+  return ["auth.invalid_recent_auth", "access.recent_auth_required"].includes(stringField(error ?? {}, "code") ?? "");
+}
+
+function acceptsHTML(request: Request): boolean {
+  const accept = request.headers.get("accept");
+  return !accept || accept.split(",").some((value) => value.trim().toLowerCase().startsWith("text/html"));
+}
+
+async function browserOAuthCallbackResponse(response: Response, origin: string): Promise<Response> {
+  const value = await readJSONObject(response.clone());
+  const error = objectField(value, "error");
+  const proof = stringField(value, "proof");
+  const expiresAt = stringField(value, "expires_at");
+  const payload = proof && expiresAt ? { type: RECENT_AUTH_GOOGLE_MESSAGE, proof, expires_at: expiresAt } : { type: RECENT_AUTH_GOOGLE_MESSAGE, error: { code: stringField(error ?? {}, "code") ?? "recent_auth_failed", message: stringField(error ?? {}, "message") ?? "Recent authentication failed" } };
+  const nonce = randomToken();
+  const serializedPayload = safeInlineJSON(payload);
+  const serializedOrigin = safeInlineJSON(origin);
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Returning to Chalk</title></head><body><p>Returning to Chalk…</p><script nonce="${nonce}">window.opener?.postMessage(${serializedPayload},${serializedOrigin});window.close();</script></body></html>`;
+  return new Response(html, {
+    status: response.status,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store, private",
+      Pragma: "no-cache",
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'`,
+    },
+  });
+}
+
+function safeInlineJSON(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 async function boundaryHealth(env: AccountBoundaryEnv, fetcher: Fetcher, journeyID: string): Promise<Response> {
@@ -223,7 +338,7 @@ function secureResponse(response: Response, journeyID: string): Response {
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-store, private");
   headers.set("Pragma", "no-cache");
-  headers.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+  if (!headers.has("Content-Security-Policy")) headers.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   headers.set("Referrer-Policy", "same-origin");
   headers.set("X-Content-Type-Options", "nosniff");
@@ -342,7 +457,7 @@ function objectField(value: Record<string, unknown>, key: string): Record<string
 }
 
 function boundedRouteName(pathname: string): string {
-  return pathname.startsWith("/api/") && pathname.length <= 80 ? pathname : "/api/unknown";
+  return pathname.startsWith("/api/") && pathname.length <= 160 ? pathname.replaceAll(UUID_SEGMENT_PATTERN, "{id}") : "/api/unknown";
 }
 
 class BoundaryError extends Error {

@@ -2,9 +2,11 @@ package spaces
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"math"
+	"regexp"
 	"strings"
 	"time"
 
@@ -25,6 +27,8 @@ var (
 	ErrInvalidSpaceField      = errors.New("invalid space field")
 	ErrSpaceNotFound          = errors.New("space not found")
 	ErrSpaceSlugAlreadyUsed   = errors.New("space slug already used")
+	ErrInvalidRequestKey      = errors.New("invalid space request key")
+	ErrIdempotencyConflict    = errors.New("space request key conflicts with original request")
 )
 
 const (
@@ -49,6 +53,8 @@ var allCapabilities = []string{
 	"removeParticipant", "manageRecording", "startEpisode", "extendEpisode",
 	"endEpisode", "manageMembers", "clearSpaceContent",
 }
+
+var spaceRequestKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 
 // DefaultRole is the product-provided role bundle seeded with each Space.
 // Role names are defaults, not authority checks; customers may rename or
@@ -84,6 +90,7 @@ type Space struct {
 	DefaultEpisodeDurationSeconds int32
 	MaximumEpisodeDurationSeconds int32
 	LingerWindowSeconds           int32
+	ArchivedAt                    *time.Time
 	Roles                         []Role
 	CreatedByUserID               utilities.ID
 	UpdatedAt                     time.Time
@@ -105,6 +112,24 @@ type Repository interface {
 	UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input UpdateSpaceInput) (Space, error)
 }
 
+// ArchiveRepository is the persistence seam for the reversible Space
+// lifecycle controls. Archive keeps all Episodes and their artifacts while
+// preventing new live activity; restore makes the Space joinable again.
+type ArchiveRepository interface {
+	ArchiveSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (Space, error)
+	RestoreSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (Space, error)
+}
+
+type IdempotentRepository interface {
+	CreateSpaceIdempotent(ctx context.Context, input CreateSpaceInput) (Space, error)
+}
+
+// FilteredRepository optionally supports the dashboard's archived-state
+// filter without changing the original list method used by older callers.
+type FilteredRepository interface {
+	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (SpaceList, error)
+}
+
 type Service struct {
 	repository Repository
 }
@@ -122,6 +147,8 @@ type CreateSpaceInput struct {
 	MaximumEpisodeDurationSeconds int32
 	LingerWindowSeconds           int32
 	CreatedByUserID               utilities.ID
+	RequestKey                    string
+	RequestFingerprint            [32]byte
 }
 
 type UpdateSpaceInput struct {
@@ -178,6 +205,21 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
+	if input.RequestKey != "" {
+		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
+			return Space{}, ErrInvalidRequestKey
+		}
+		fingerprint, err := createFingerprint(input)
+		if err != nil {
+			return Space{}, err
+		}
+		input.RequestFingerprint = fingerprint
+		idempotent, ok := s.repository.(IdempotentRepository)
+		if !ok {
+			return Space{}, errors.New("space idempotency repository unavailable")
+		}
+		return idempotent.CreateSpaceIdempotent(ctx, input)
+	}
 
 	return s.repository.CreateSpace(ctx, input)
 }
@@ -198,6 +240,17 @@ func (s Service) ListSpaces(ctx context.Context, tenantID utilities.ID, page pag
 	return s.repository.ListSpaces(ctx, tenantID, page)
 }
 
+func (s Service) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (SpaceList, error) {
+	if tenantID.IsZero() {
+		return SpaceList{}, ErrInvalidTenantID
+	}
+	filtered, ok := s.repository.(FilteredRepository)
+	if !ok || archived == nil {
+		return s.repository.ListSpaces(ctx, tenantID, page)
+	}
+	return filtered.ListSpacesFiltered(ctx, tenantID, page, archived)
+}
+
 func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input UpdateSpaceInput) (Space, error) {
 	if err := validateTenantSpaceIDs(tenantID, spaceID); err != nil {
 		return Space{}, err
@@ -207,6 +260,28 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	}
 
 	return s.repository.UpdateSpace(ctx, tenantID, spaceID, input)
+}
+
+func (s Service) ArchiveSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (Space, error) {
+	if err := validateTenantSpaceIDs(tenantID, spaceID); err != nil {
+		return Space{}, err
+	}
+	repository, ok := s.repository.(ArchiveRepository)
+	if !ok {
+		return Space{}, ErrSpaceNotFound
+	}
+	return repository.ArchiveSpace(ctx, tenantID, spaceID)
+}
+
+func (s Service) RestoreSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (Space, error) {
+	if err := validateTenantSpaceIDs(tenantID, spaceID); err != nil {
+		return Space{}, err
+	}
+	repository, ok := s.repository.(ArchiveRepository)
+	if !ok {
+		return Space{}, ErrSpaceNotFound
+	}
+	return repository.RestoreSpace(ctx, tenantID, spaceID)
 }
 
 func prepareCreateSpaceInput(input *CreateSpaceInput) error {
@@ -423,4 +498,29 @@ func requiredOptionalString(value utilities.OptionalString, invalid error) (util
 	}
 
 	return utilities.OptionalString{Set: true, Value: &prepared}, nil
+}
+
+type createFingerprintInput struct {
+	Name                          string          `json:"name"`
+	Slug                          string          `json:"slug"`
+	MediaPlane                    string          `json:"media_plane"`
+	Metadata                      json.RawMessage `json:"metadata"`
+	RecurringPolicy               json.RawMessage `json:"recurring_policy"`
+	AdmissionPolicy               json.RawMessage `json:"admission_policy"`
+	DefaultEpisodeDurationSeconds int32           `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32           `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32           `json:"linger_window_seconds"`
+}
+
+func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
+	payload, err := json.Marshal(createFingerprintInput{
+		Name: input.Name, Slug: input.Slug, MediaPlane: input.MediaPlane,
+		Metadata: input.Metadata, RecurringPolicy: input.RecurringPolicy, AdmissionPolicy: input.AdmissionPolicy,
+		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds, MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,
+		LingerWindowSeconds: input.LingerWindowSeconds,
+	})
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return sha256.Sum256(payload), nil
 }

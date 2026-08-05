@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -23,6 +25,45 @@ func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input space
 	}
 	defer tx.Rollback(ctx)
 	queries := sqlc.New(tx)
+	if input.RequestKey != "" {
+		_, err := queries.ReserveSpaceCreateRequest(ctx, sqlc.ReserveSpaceCreateRequestParams{
+			TenantID:           uuid(input.TenantID),
+			RequestKey:         input.RequestKey,
+			RequestFingerprint: input.RequestFingerprint[:],
+			SpaceID:            uuid(input.ID),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			existing, getErr := queries.GetSpaceCreateRequest(ctx, sqlc.GetSpaceCreateRequestParams{
+				TenantID: uuid(input.TenantID), RequestKey: input.RequestKey,
+			})
+			if getErr != nil {
+				return spaces.Space{}, fmt.Errorf("get space create replay: %w", getErr)
+			}
+			if !bytes.Equal(existing.RequestFingerprint, input.RequestFingerprint[:]) {
+				return spaces.Space{}, spaces.ErrIdempotencyConflict
+			}
+			if !existing.SpaceID.Valid {
+				return spaces.Space{}, errors.New("space create replay has no resource")
+			}
+			row, getErr := queries.GetTenantSpace(ctx, sqlc.GetTenantSpaceParams{
+				TenantID: uuid(input.TenantID), ID: existing.SpaceID,
+			})
+			if errors.Is(getErr, pgx.ErrNoRows) {
+				return spaces.Space{}, spaces.ErrSpaceNotFound
+			}
+			if getErr != nil {
+				return spaces.Space{}, fmt.Errorf("get space create replay resource: %w", getErr)
+			}
+			space := mapSpace(row)
+			if err := tx.Commit(ctx); err != nil {
+				return spaces.Space{}, fmt.Errorf("commit space create replay: %w", err)
+			}
+			return r.withSpaceRoles(ctx, space)
+		}
+		if err != nil {
+			return spaces.Space{}, fmt.Errorf("reserve space create request: %w", err)
+		}
+	}
 	row, err := queries.CreateSpace(ctx, createSpaceParams(input))
 	if err != nil {
 		if uniqueConstraintViolation(err, "spaces_tenant_id_slug_key") {
@@ -124,6 +165,104 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 	return r.withSpaceRoles(ctx, after)
 }
 
+func (r SpaceRepository) archiveSpaceWithWebhook(ctx context.Context, tenantID, spaceID utilities.ID) (spaces.Space, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return spaces.Space{}, err
+	}
+	defer tx.Rollback(ctx)
+	queries := sqlc.New(tx)
+	beforeRow, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(tenantID), ID: uuid(spaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return spaces.Space{}, spaces.ErrSpaceNotFound
+	}
+	if err != nil {
+		return spaces.Space{}, err
+	}
+	before := mapSpace(beforeRow)
+	if before.ArchivedAt != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return spaces.Space{}, err
+		}
+		return r.withSpaceRoles(ctx, before)
+	}
+	row, err := queries.ArchiveTenantSpace(ctx, sqlc.ArchiveTenantSpaceParams{TenantID: uuid(tenantID), ID: uuid(spaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return spaces.Space{}, spaces.ErrSpaceNotFound
+	}
+	if err != nil {
+		return spaces.Space{}, err
+	}
+	after := mapSpace(row)
+	if err := persistSpaceLifecycleJourney(ctx, tx, "space.archived", after.UpdatedAt); err != nil {
+		return spaces.Space{}, fmt.Errorf("persist space.archived journey: %w", err)
+	}
+	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
+		TenantID: tenantID, EventName: "space.archived", SemanticKey: "space:" + spaceID.String() + ":archived:" + after.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		ResourceType: "space", ResourceID: spaceID, OccurredAt: after.UpdatedAt,
+		Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+			return webhooks.EncodeSpaceEvent(metadata, spaceWebhookSnapshot(after), nil)
+		},
+	})
+	if err != nil {
+		return spaces.Space{}, fmt.Errorf("produce space.archived webhook: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return spaces.Space{}, err
+	}
+	metric.Record(ctx)
+	return r.withSpaceRoles(ctx, after)
+}
+
+func (r SpaceRepository) restoreSpaceWithWebhook(ctx context.Context, tenantID, spaceID utilities.ID) (spaces.Space, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return spaces.Space{}, err
+	}
+	defer tx.Rollback(ctx)
+	queries := sqlc.New(tx)
+	beforeRow, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(tenantID), ID: uuid(spaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return spaces.Space{}, spaces.ErrSpaceNotFound
+	}
+	if err != nil {
+		return spaces.Space{}, err
+	}
+	before := mapSpace(beforeRow)
+	if before.ArchivedAt == nil {
+		if err := tx.Commit(ctx); err != nil {
+			return spaces.Space{}, err
+		}
+		return r.withSpaceRoles(ctx, before)
+	}
+	row, err := queries.RestoreTenantSpace(ctx, sqlc.RestoreTenantSpaceParams{TenantID: uuid(tenantID), ID: uuid(spaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return spaces.Space{}, spaces.ErrSpaceNotFound
+	}
+	if err != nil {
+		return spaces.Space{}, err
+	}
+	after := mapSpace(row)
+	if err := persistSpaceLifecycleJourney(ctx, tx, "space.restored", after.UpdatedAt); err != nil {
+		return spaces.Space{}, fmt.Errorf("persist space.restored journey: %w", err)
+	}
+	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
+		TenantID: tenantID, EventName: "space.restored", SemanticKey: "space:" + spaceID.String() + ":restored:" + after.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		ResourceType: "space", ResourceID: spaceID, OccurredAt: after.UpdatedAt,
+		Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+			return webhooks.EncodeSpaceEvent(metadata, spaceWebhookSnapshot(after), nil)
+		},
+	})
+	if err != nil {
+		return spaces.Space{}, fmt.Errorf("produce space.restored webhook: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return spaces.Space{}, err
+	}
+	metric.Record(ctx)
+	return r.withSpaceRoles(ctx, after)
+}
+
 func spaceChangedFields(before spaces.Space, input spaces.UpdateSpaceInput) []string {
 	result := []string{}
 	if input.Name.Set && input.Name.Value != nil && *input.Name.Value != before.Name {
@@ -169,5 +308,62 @@ func semanticJSONEqual(left, right []byte) bool {
 }
 
 func spaceWebhookSnapshot(value spaces.Space) webhooks.SpaceSnapshot {
-	return webhooks.SpaceSnapshot{ID: value.ID.String(), Name: value.Name, Slug: value.Slug, MediaPlane: value.MediaPlane, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
+	return webhooks.SpaceSnapshot{ID: value.ID.String(), Name: value.Name, Slug: value.Slug, MediaPlane: value.MediaPlane, ArchivedAt: value.ArchivedAt, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
+}
+
+// persistSpaceLifecycleJourney records the committed Space transition inside
+// the same transaction as the archive/restore write and webhook outbox event.
+// Its attributes intentionally contain only the bounded transition label;
+// names, slugs, policies, request bodies, and other tenant payloads never
+// enter the journey ledger.
+func persistSpaceLifecycleJourney(ctx context.Context, tx pgx.Tx, name string, occurredAt time.Time) error {
+	if name != "space.archived" && name != "space.restored" {
+		return fmt.Errorf("unsupported Space lifecycle journey transition %q", name)
+	}
+	journey, err := lifecycleJourneyFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	if err := persistLifecycleJourneyRoot(ctx, tx, journey, name+"_requested"); err != nil {
+		return err
+	}
+	eventID, err := utilities.NewID()
+	if err != nil {
+		return err
+	}
+	attributes, err := json.Marshal(map[string]string{"transition": name})
+	if err != nil {
+		return err
+	}
+	_, err = sqlc.New(tx).InsertJourneyEvent(ctx, insertJourneyEventParams(spaceLifecycleJourneyEvent(journey, eventID, name, occurredAt, attributes)))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	return err
+}
+
+func spaceLifecycleJourneyEvent(journey lifecycleJourney, eventID utilities.ID, name string, occurredAt time.Time, attributes json.RawMessage) journeys.Event {
+	var traceID, spanID *string
+	if journey.TraceID != "" {
+		traceID = &journey.TraceID
+	}
+	if journey.SpanID != "" {
+		spanID = &journey.SpanID
+	}
+	return journeys.Event{
+		EventID:            eventID,
+		JourneyID:          journey.JourneyID,
+		Sequence:           1,
+		OccurredAt:         occurredAt,
+		Name:               name,
+		Phase:              "terminal",
+		State:              "succeeded",
+		OriginKind:         "server",
+		FirstObservedLayer: "api",
+		UpstreamVisibility: "complete",
+		ParentEventID:      journey.ParentEventID,
+		TraceID:            traceID,
+		SpanID:             spanID,
+		Attributes:         attributes,
+	}
 }

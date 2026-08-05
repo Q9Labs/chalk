@@ -485,6 +485,7 @@ func runRouteSpaceCreateMember(ctx context.Context) (ScenarioResult, error) {
 		Path:           "/v1/tenants/" + tenantID().String() + "/spaces",
 		Body:           body,
 		Authorization:  "Bearer trace-session-token",
+		Headers:        map[string]string{"Idempotency-Key": "space-create-trace-0001"},
 		ExpectedStatus: http.StatusCreated,
 	})
 }
@@ -1514,6 +1515,13 @@ func (r tracedSpaceRepository) CreateSpace(ctx context.Context, input spaces.Cre
 	}
 	span.End("map database row to domain Space", map[string]any{"space": spaceFields(space)}, nil)
 	return space, nil
+}
+
+func (r tracedSpaceRepository) CreateSpaceIdempotent(ctx context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
+	r.recorder.Add("database", "INSERT space_create_requests", "reserve the durable Space create request", map[string]any{
+		"request_key": input.RequestKey,
+	})
+	return r.CreateSpace(ctx, input)
 }
 
 func (r tracedSpaceRepository) GetSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error) {

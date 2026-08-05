@@ -25,6 +25,26 @@ func TestSpaceUpdatedEncoderMatchesGoldenBytes(t *testing.T) {
 	}
 }
 
+func TestSpaceArchiveEventsCarryTheLifecycleState(t *testing.T) {
+	archivedAt := mustTime(t, "2026-07-13T08:00:00.000Z")
+	for _, event := range []struct {
+		name       string
+		archivedAt *time.Time
+	}{
+		{name: "space.archived", archivedAt: &archivedAt},
+		{name: "space.restored"},
+	} {
+		metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000013", event.name, "2026-07-13T08:00:00.000Z")
+		body, _, err := EncodeSpaceEvent(metadata, SpaceSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "Design review", Slug: "design-review", MediaPlane: "cf_rtk", ArchivedAt: event.archivedAt, CreatedAt: metadata.OccurredAt, UpdatedAt: metadata.OccurredAt}, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", event.name, err)
+		}
+		if event.name == "space.archived" && !strings.Contains(string(body), `"archived_at":"2026-07-13T08:00:00.000Z"`) {
+			t.Fatalf("archived event omitted archived_at: %s", body)
+		}
+	}
+}
+
 func TestEventEncoderUsesCrossRuntimeStringEscaping(t *testing.T) {
 	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "space.created", "2026-07-12T18:01:00.000Z")
 	body, _, err := EncodeSpaceEvent(metadata, SpaceSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "<tag>& \\\"quote\\\" \\\\ tab\t newline\n", Slug: "hostile", MediaPlane: "cf_rtk", CreatedAt: metadata.OccurredAt, UpdatedAt: metadata.OccurredAt}, nil)

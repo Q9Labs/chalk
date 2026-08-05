@@ -270,7 +270,7 @@ func webhookDeliveryIDParameter() APIParameterContract {
 func webhookDeliveryFilterParameters() []APIParameterContract {
 	return []APIParameterContract{
 		{Name: "state", In: "query", Type: "array", ItemsType: "string", Enum: []string{"pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"}},
-		{Name: "event_type", In: "query", Type: "array", ItemsType: "string", Enum: []string{"endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.created", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"}},
+		{Name: "event_type", In: "query", Type: "array", ItemsType: "string", Enum: []string{"endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.archived", "space.created", "space.restored", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"}},
 	}
 }
 func ifMatchParameter() APIParameterContract {

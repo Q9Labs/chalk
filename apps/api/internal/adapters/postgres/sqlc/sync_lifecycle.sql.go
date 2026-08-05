@@ -285,6 +285,8 @@ from spaces
 where
     spaces.tenant_id = $6
     and spaces.id = $7
+    and spaces.archived_at is null
+for update
 returning id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
 `
 
@@ -1528,6 +1530,43 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 		&i.CompletedAt,
 		&i.ProducingTraceparent,
 		&i.ProducingTracestate,
+	)
+	return i, err
+}
+
+const lockTenantSpaceForUpdate = `-- name: LockTenantSpaceForUpdate :one
+select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+from spaces
+where
+    tenant_id = $1
+    and id = $2
+for update
+`
+
+type LockTenantSpaceForUpdateParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSpaceForUpdateParams) (Space, error) {
+	row := q.db.QueryRow(ctx, lockTenantSpaceForUpdate, arg.TenantID, arg.ID)
+	var i Space
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.TenantID,
+		&i.Slug,
+		&i.MediaPlane,
+		&i.Metadata,
+		&i.RecurringPolicy,
+		&i.AdmissionPolicy,
+		&i.DefaultEpisodeDurationSeconds,
+		&i.MaximumEpisodeDurationSeconds,
+		&i.LingerWindowSeconds,
+		&i.CreatedByUserID,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

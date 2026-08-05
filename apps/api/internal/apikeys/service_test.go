@@ -65,6 +65,51 @@ func TestCreateReturnsRawKeyOnceAndStoresHash(t *testing.T) {
 	}
 }
 
+func TestCreateIdempotencyNeverReplaysSecret(t *testing.T) {
+	repository := newRepository()
+	service := newService(repository, nil)
+	input := apikeys.CreateInput{
+		TenantID: tenantID, Name: "Backend", Scopes: []authentication.Scope{authentication.ScopeSpacesRead},
+		ExpiresAt: testNow.Add(24 * time.Hour), RequestKey: "api-key-create-0001",
+	}
+	first, err := service.Create(context.Background(), input)
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	if first.RawKey == "" || first.Replayed {
+		t.Fatalf("first result = %+v, want one-time secret", first)
+	}
+	second, err := service.Create(context.Background(), input)
+	if err != nil {
+		t.Fatalf("replayed create: %v", err)
+	}
+	if second.Key.ID != first.Key.ID || second.RawKey != "" || !second.Replayed {
+		t.Fatalf("replayed result = %+v, want metadata only", second)
+	}
+	input.Name = "Different"
+	if _, err := service.Create(context.Background(), input); !errors.Is(err, apikeys.ErrIdempotencyConflict) {
+		t.Fatalf("changed replay error = %v, want %v", err, apikeys.ErrIdempotencyConflict)
+	}
+}
+
+func TestRotateIdempotencyNeverReplaysSecret(t *testing.T) {
+	repository := newRepository()
+	service := newService(repository, nil)
+	created := createKey(t, service, testNow.Add(24*time.Hour))
+	input := apikeys.RotateInput{RequestKey: "api-key-rotate-0001"}
+	first, err := service.Rotate(context.Background(), tenantID, created.Key.ID, input)
+	if err != nil {
+		t.Fatalf("first rotate: %v", err)
+	}
+	second, err := service.Rotate(context.Background(), tenantID, created.Key.ID, input)
+	if err != nil {
+		t.Fatalf("replayed rotate: %v", err)
+	}
+	if second.Key.ID != first.Key.ID || second.RawKey != "" || !second.Replayed {
+		t.Fatalf("replayed rotation = %+v, want metadata only", second)
+	}
+}
+
 func TestCreateRequiresConcreteScopesAndBoundedExpiry(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -25,6 +25,8 @@ type spaceQuerier interface {
 	GetTenantSpace(ctx context.Context, arg sqlc.GetTenantSpaceParams) (sqlc.Space, error)
 	ListTenantSpaces(ctx context.Context, arg sqlc.ListTenantSpacesParams) ([]sqlc.Space, error)
 	UpdateTenantSpace(ctx context.Context, arg sqlc.UpdateTenantSpaceParams) (sqlc.Space, error)
+	ArchiveTenantSpace(ctx context.Context, arg sqlc.ArchiveTenantSpaceParams) (sqlc.Space, error)
+	RestoreTenantSpace(ctx context.Context, arg sqlc.RestoreTenantSpaceParams) (sqlc.Space, error)
 }
 
 func NewSpaceRepository(queries spaceQuerier, pools ...*pgxpool.Pool) SpaceRepository {
@@ -51,6 +53,16 @@ func (r SpaceRepository) CreateSpace(ctx context.Context, input spaces.CreateSpa
 	return r.withSpaceRoles(ctx, mapSpace(space))
 }
 
+// CreateSpaceIdempotent persists the request reservation and Space in the
+// same transaction. Replays return the original resource metadata and never
+// emit a second space.created webhook.
+func (r SpaceRepository) CreateSpaceIdempotent(ctx context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
+	if r.pool == nil {
+		return spaces.Space{}, errors.New("space idempotency requires a postgres pool")
+	}
+	return r.createSpaceWithWebhook(ctx, input)
+}
+
 func (r SpaceRepository) GetSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error) {
 	space, err := r.queries.GetTenantSpace(ctx, sqlc.GetTenantSpaceParams{TenantID: uuid(tenantID), ID: uuid(spaceID)})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -64,7 +76,15 @@ func (r SpaceRepository) GetSpace(ctx context.Context, tenantID utilities.ID, sp
 }
 
 func (r SpaceRepository) ListSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (spaces.SpaceList, error) {
-	rows, err := r.queries.ListTenantSpaces(ctx, listTenantSpacesParams(tenantID, page))
+	return r.listSpaces(ctx, tenantID, page, nil)
+}
+
+func (r SpaceRepository) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error) {
+	return r.listSpaces(ctx, tenantID, page, archived)
+}
+
+func (r SpaceRepository) listSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error) {
+	rows, err := r.queries.ListTenantSpaces(ctx, listTenantSpacesParams(tenantID, page, archived))
 	if err != nil {
 		return spaces.SpaceList{}, fmt.Errorf("list spaces: %w", err)
 	}
@@ -134,6 +154,34 @@ func (r SpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID,
 	return r.withSpaceRoles(ctx, mapSpace(space))
 }
 
+func (r SpaceRepository) ArchiveSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error) {
+	if r.pool != nil {
+		return r.archiveSpaceWithWebhook(ctx, tenantID, spaceID)
+	}
+	space, err := r.queries.ArchiveTenantSpace(ctx, sqlc.ArchiveTenantSpaceParams{TenantID: uuid(tenantID), ID: uuid(spaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return spaces.Space{}, spaces.ErrSpaceNotFound
+	}
+	if err != nil {
+		return spaces.Space{}, fmt.Errorf("archive space: %w", err)
+	}
+	return r.withSpaceRoles(ctx, mapSpace(space))
+}
+
+func (r SpaceRepository) RestoreSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error) {
+	if r.pool != nil {
+		return r.restoreSpaceWithWebhook(ctx, tenantID, spaceID)
+	}
+	space, err := r.queries.RestoreTenantSpace(ctx, sqlc.RestoreTenantSpaceParams{TenantID: uuid(tenantID), ID: uuid(spaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return spaces.Space{}, spaces.ErrSpaceNotFound
+	}
+	if err != nil {
+		return spaces.Space{}, fmt.Errorf("restore space: %w", err)
+	}
+	return r.withSpaceRoles(ctx, mapSpace(space))
+}
+
 func (r SpaceRepository) withSpaceRoles(ctx context.Context, space spaces.Space) (spaces.Space, error) {
 	roles, err := r.queries.ListSpaceRoles(ctx, sqlc.ListSpaceRolesParams{TenantID: uuid(space.TenantID), SpaceID: uuid(space.ID)})
 	if err != nil {
@@ -163,11 +211,15 @@ func createSpaceParams(input spaces.CreateSpaceInput) sqlc.CreateSpaceParams {
 	}
 }
 
-func listTenantSpacesParams(tenantID utilities.ID, page pagination.PageRequest) sqlc.ListTenantSpacesParams {
+func listTenantSpacesParams(tenantID utilities.ID, page pagination.PageRequest, archived *bool) sqlc.ListTenantSpacesParams {
 	cursor := page.Cursor()
 	params := sqlc.ListTenantSpacesParams{
 		TenantID: uuid(tenantID),
 		PageSize: int32(page.Size() + 1),
+	}
+	if archived != nil {
+		params.ArchivedSet = true
+		params.Archived = *archived
 	}
 	if cursor == nil {
 		return params
@@ -199,6 +251,7 @@ func mapSpace(space sqlc.Space) spaces.Space {
 		DefaultEpisodeDurationSeconds: space.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           space.LingerWindowSeconds,
+		ArchivedAt:                    nullableTimestamp(space.ArchivedAt),
 		CreatedByUserID:               nullableID(space.CreatedByUserID),
 		UpdatedAt:                     timestamp(space.UpdatedAt),
 		CreatedAt:                     timestamp(space.CreatedAt),

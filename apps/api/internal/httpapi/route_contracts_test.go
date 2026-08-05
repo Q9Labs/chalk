@@ -39,6 +39,9 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/auth/logout"},
 		{http.MethodPost, "/v1/auth/register"},
 		{http.MethodGet, "/v1/me"},
+		{http.MethodPost, "/v1/me/recent-auth"},
+		{http.MethodGet, "/v1/me/recent-auth/google/start"},
+		{http.MethodGet, "/v1/me/recent-auth/google/callback"},
 		{http.MethodGet, "/v1/me/tenants"},
 		{http.MethodPost, "/v1/me/tenants"},
 		{http.MethodPost, "/v1/telemetry/journey-events"},
@@ -79,6 +82,8 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}"},
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/spaces/{space_id}"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/archive"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/restore"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}"},
@@ -227,7 +232,7 @@ func TestWebhookRouteContracts(t *testing.T) {
 		t.Fatalf("state parameter = %#v", state)
 	}
 	eventType := parameterByName(list.Parameters, "event_type")
-	if eventType == nil || eventType.Type != "array" || eventType.ItemsType != "string" || !equalStrings(eventType.Enum, []string{"endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.created", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"}) {
+	if eventType == nil || eventType.Type != "array" || eventType.ItemsType != "string" || !equalStrings(eventType.Enum, []string{"endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.archived", "space.created", "space.restored", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"}) {
 		t.Fatalf("event_type parameter = %#v", eventType)
 	}
 }
