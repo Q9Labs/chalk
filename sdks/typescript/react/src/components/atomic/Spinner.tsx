@@ -18,7 +18,7 @@ export const Spinner = React.memo<SpinnerProps>(({ size = "md", color, className
     xl: "w-12 h-12",
   };
 
-  return <Loading01Icon className={cn(!prefersReducedMotion && "animate-spin", "text-primary", sizeClasses[size], className)} style={color ? { color } : undefined} role="status" aria-label="Loading" />;
+  return <Loading01Icon className={cn(!prefersReducedMotion && "animate-spin", "text-[var(--chalk-accent)]", sizeClasses[size], className)} style={color ? { color } : undefined} role="status" aria-label="Loading" />;
 });
 
 Spinner.displayName = "Spinner";

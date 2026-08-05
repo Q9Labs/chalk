@@ -3,10 +3,10 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import type { WhiteboardCollaborationEvent } from "../collab/engine.js";
-import { WhiteboardCanvas } from "../react/WhiteboardCanvas.js";
-import type { ChalkEmbeddedWhiteboardHostEnvelope } from "./protocol.js";
-import { ChalkEmbeddedWhiteboardRendererBridge } from "./renderer-bridge.js";
+import type { WhiteboardCollaborationEvent } from "../collab/engine";
+import { WhiteboardCanvas } from "../react/WhiteboardCanvas";
+import type { ChalkEmbeddedWhiteboardHostEnvelope } from "./protocol";
+import { ChalkEmbeddedWhiteboardRendererBridge } from "./renderer-bridge";
 
 declare global {
   interface Window {

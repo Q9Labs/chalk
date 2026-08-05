@@ -27,7 +27,7 @@ type Job struct {
 	ProtocolVersion   string           `json:"protocol_version"`
 	JobID             string           `json:"job_id"`
 	TenantID          string           `json:"tenant_id"`
-	SessionID         string           `json:"session_id"`
+	EpisodeID         string           `json:"episode_id"`
 	Attempt           int              `json:"attempt"`
 	FencingGeneration int64            `json:"fencing_generation"`
 	Role              WorkerRole       `json:"role"`
@@ -63,12 +63,12 @@ type JobAuthorization struct {
 	IssuedAt       time.Time `json:"issued_at"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	Scope          string    `json:"scope"`
-	SessionEpoch   string    `json:"session_epoch"`
+	EpisodeEpoch   string    `json:"episode_epoch"`
 	KeyAuthorityID string    `json:"key_authority_id,omitempty"`
 }
 
 func (j Job) Validate(now time.Time) error {
-	if j.ProtocolVersion != ProtocolVersion || j.JobID == "" || j.TenantID == "" || j.SessionID == "" || j.ArtifactClass == "" {
+	if j.ProtocolVersion != ProtocolVersion || j.JobID == "" || j.TenantID == "" || j.EpisodeID == "" || j.ArtifactClass == "" {
 		return fmt.Errorf("%w: protocol and immutable IDs are required", ErrInvalidJob)
 	}
 	if j.Attempt < 1 || j.FencingGeneration < 1 || (j.Role != RoleCapture && j.Role != RoleRender) {
@@ -131,7 +131,7 @@ type WorkerEvent struct {
 	Type              EventType       `json:"type"`
 	JobID             string          `json:"job_id"`
 	TenantID          string          `json:"tenant_id"`
-	SessionID         string          `json:"session_id"`
+	EpisodeID         string          `json:"episode_id"`
 	Attempt           int             `json:"attempt"`
 	FencingGeneration int64           `json:"fencing_generation"`
 	JourneyID         string          `json:"journey_id,omitempty"`
@@ -183,7 +183,7 @@ func (e WorkerEvent) Validate(now time.Time) error {
 	if e.ProtocolVersion != ProtocolVersion {
 		return errors.New("unsupported worker event protocol")
 	}
-	if e.JobID == "" || e.TenantID == "" || e.SessionID == "" || e.Attempt < 1 || e.FencingGeneration < 1 {
+	if e.JobID == "" || e.TenantID == "" || e.EpisodeID == "" || e.Attempt < 1 || e.FencingGeneration < 1 {
 		return errors.New("worker event identity is incomplete")
 	}
 	if e.At.IsZero() || e.At.After(now.Add(5*time.Minute)) {

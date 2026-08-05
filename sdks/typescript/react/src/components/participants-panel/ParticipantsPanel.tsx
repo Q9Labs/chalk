@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
-import { Badge, IconButton, Input } from "../atomic";
+import { IconButton } from "../atomic";
+import { Badge } from "../atomic/Badge";
+import { Input } from "../atomic/Input";
 import { Button } from "@q9labsai/chalk-ui";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -14,7 +16,6 @@ export interface ParticipantListParticipant {
   isMuted?: boolean;
   isVideoEnabled?: boolean;
   isHandRaised?: boolean;
-  role?: "host" | "co-host" | "participant";
   avatarUrl?: string;
 }
 
@@ -27,8 +28,6 @@ export interface ParticipantsPanelProps {
   onStopParticipantCamera?: (id: string) => void;
   onRequestStartCamera?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
-  onMakeHost?: (id: string) => void;
-  onMakeCoHost?: (id: string) => void;
   onUpdateDisplayName?: (name: string) => void;
   onAddPeople?: () => void;
   canManageParticipants?: boolean;
@@ -57,8 +56,6 @@ export const ParticipantsPanel = React.memo(
     onStopParticipantCamera,
     onRequestStartCamera,
     onRemoveParticipant,
-    onMakeHost,
-    onMakeCoHost,
     onUpdateDisplayName,
     onAddPeople,
     participantVolumes,
@@ -81,11 +78,6 @@ export const ParticipantsPanel = React.memo(
       const uniqueParticipants = Array.from(new Map(participants.map((participant) => [getParticipantIdentity(participant), participant])).values());
 
       let sorted = [...uniqueParticipants].sort((a, b) => {
-        const aScore = a.role === "host" ? 2 : a.role === "co-host" ? 1 : 0;
-        const bScore = b.role === "host" ? 2 : b.role === "co-host" ? 1 : 0;
-
-        if (aScore !== bScore) return bScore - aScore;
-
         if (a.isLocal) return -1;
         if (b.isLocal) return 1;
 
@@ -118,8 +110,6 @@ export const ParticipantsPanel = React.memo(
               onStopParticipantCamera={onStopParticipantCamera}
               onRequestStartCamera={onRequestStartCamera}
               onRemoveParticipant={onRemoveParticipant}
-              onMakeHost={onMakeHost}
-              onMakeCoHost={onMakeCoHost}
               onUpdateDisplayName={onUpdateDisplayName}
               participantVolumes={participantVolumes}
               onParticipantVolumeChange={onParticipantVolumeChange}
@@ -133,7 +123,7 @@ export const ParticipantsPanel = React.memo(
       </div>
     );
 
-    // Mobile variant - fills container, no header (MobilePanel provides it)
+    // Mobile variant - fills container, no header (the parent provides it)
     if (variant === "mobile") {
       return (
         <div className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
@@ -147,7 +137,7 @@ export const ParticipantsPanel = React.memo(
 
             {/* Section Label */}
             <div className="mb-3 px-1">
-              <p className="text-[var(--chalk-app-text-muted)] text-[10px] font-semibold uppercase tracking-[0.1em]">IN THE MEETING ({participants.length})</p>
+              <p className="text-[var(--chalk-app-text-muted)] text-[10px] font-semibold uppercase tracking-[0.1em]">IN THIS SPACE ({participants.length})</p>
             </div>
 
             {/* Participants List */}

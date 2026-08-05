@@ -40,11 +40,11 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
   def publish_observation(controller, version),
     do: GenServer.call(controller, {:publish_observation, version})
 
-  def confirmed_publication_loss(controller, session, participant_id, source) do
+  def confirmed_publication_loss(controller, episode, participant_id, source) do
     GenServer.call(
       controller,
       {:effect, :revoke_publication, "publication-loss:#{participant_id}:#{source}",
-       [session, participant_id, source]}
+       [episode, participant_id, source]}
     )
   end
 
@@ -52,32 +52,32 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
   def release(controller, tag), do: GenServer.call(controller, {:release, tag})
 
   @impl true
-  def grant_publication(adapter, operation_id, session, participant_id, source),
-    do: execute(adapter, :grant_publication, operation_id, [session, participant_id, source])
+  def grant_publication(adapter, operation_id, episode, participant_id, source),
+    do: execute(adapter, :grant_publication, operation_id, [episode, participant_id, source])
 
   @impl true
-  def revoke_publication(adapter, operation_id, session, participant_id, source),
-    do: execute(adapter, :revoke_publication, operation_id, [session, participant_id, source])
+  def revoke_publication(adapter, operation_id, episode, participant_id, source),
+    do: execute(adapter, :revoke_publication, operation_id, [episode, participant_id, source])
 
   @impl true
-  def remove_participant(adapter, operation_id, session, participant_id),
-    do: execute(adapter, :remove_participant, operation_id, [session, participant_id])
+  def remove_participant(adapter, operation_id, episode, participant_id),
+    do: execute(adapter, :remove_participant, operation_id, [episode, participant_id])
 
   @impl true
-  def end_session(adapter, operation_id, session),
-    do: execute(adapter, :end_session, operation_id, [session])
+  def end_episode(adapter, operation_id, episode),
+    do: execute(adapter, :end_episode, operation_id, [episode])
 
   @impl true
-  def observe_session_publications(adapter, session),
-    do: execute(adapter, :observe_session_publications, nil, [session])
+  def observe_episode_publications(adapter, episode),
+    do: execute(adapter, :observe_episode_publications, nil, [episode])
 
   @impl true
-  def start_recording(adapter, operation_id, session, recording_id),
-    do: execute(adapter, :start_recording, operation_id, [session, recording_id])
+  def start_recording(adapter, operation_id, episode, recording_id),
+    do: execute(adapter, :start_recording, operation_id, [episode, recording_id])
 
   @impl true
-  def stop_recording(adapter, operation_id, session, recording_id),
-    do: execute(adapter, :stop_recording, operation_id, [session, recording_id])
+  def stop_recording(adapter, operation_id, episode, recording_id),
+    do: execute(adapter, :stop_recording, operation_id, [episode, recording_id])
 
   @impl true
   def init({actions, observer, truth}) do
@@ -272,7 +272,7 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
     end
   end
 
-  defp effect_and_reply(controller, :observe_session_publications, _id, _arguments, _reply),
+  defp effect_and_reply(controller, :observe_episode_publications, _id, _arguments, _reply),
     do: GenServer.call(controller, {:observe, current_version(controller)})
 
   defp effect_and_reply(controller, operation, operation_id, arguments, reply) do
@@ -280,7 +280,7 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
     reply
   end
 
-  defp effect(_controller, :observe_session_publications, _id, _arguments), do: :ok
+  defp effect(_controller, :observe_episode_publications, _id, _arguments), do: :ok
 
   defp effect(controller, operation, operation_id, arguments),
     do: GenServer.call(controller, {:effect, operation, operation_id, arguments})
@@ -288,12 +288,12 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
   defp current_version(controller), do: GenServer.call(controller, :current_version)
 
   defp take_action([{operation, action} | rest], operation), do: {action, rest}
-  defp take_action(actions, :observe_session_publications), do: {:observe, actions}
+  defp take_action(actions, :observe_episode_publications), do: {:observe, actions}
   defp take_action(actions, _operation), do: {:confirmed, actions}
 
-  defp apply_effect(state, :grant_publication, [_session, participant_id, source]) do
+  defp apply_effect(state, :grant_publication, [_episode, participant_id, source]) do
     publication = %{
-      participant_session_id: participant_id,
+      participant_id: participant_id,
       source: source,
       enabled: true,
       publication_id: "provider-#{participant_id}-#{source}"
@@ -302,22 +302,22 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
     %{state | publications: Map.put(state.publications, {participant_id, source}, publication)}
   end
 
-  defp apply_effect(state, :revoke_publication, [_session, participant_id, source]),
+  defp apply_effect(state, :revoke_publication, [_episode, participant_id, source]),
     do: %{state | publications: Map.delete(state.publications, {participant_id, source})}
 
-  defp apply_effect(state, :remove_participant, [_session, participant_id]) do
+  defp apply_effect(state, :remove_participant, [_episode, participant_id]) do
     publications =
       Map.reject(state.publications, fn {{owner, _source}, _item} -> owner == participant_id end)
 
     %{state | publications: publications}
   end
 
-  defp apply_effect(state, :end_session, [_session]), do: %{state | publications: %{}}
+  defp apply_effect(state, :end_episode, [_episode]), do: %{state | publications: %{}}
 
-  defp apply_effect(state, :start_recording, [_session, recording_id]),
+  defp apply_effect(state, :start_recording, [_episode, recording_id]),
     do: %{state | recordings: Map.put(state.recordings, recording_id, recording_id)}
 
-  defp apply_effect(state, :stop_recording, [_session, recording_id]),
+  defp apply_effect(state, :stop_recording, [_episode, recording_id]),
     do: %{state | recordings: Map.delete(state.recordings, recording_id)}
 
   defp apply_effect(state, _operation, _arguments), do: state
@@ -334,12 +334,11 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
   end
 
   defp publication_list(state),
-    do:
-      state.publications |> Map.values() |> Enum.sort_by(&{&1.participant_session_id, &1.source})
+    do: state.publications |> Map.values() |> Enum.sort_by(&{&1.participant_id, &1.source})
 
   defp normalize_publication(publication) do
     %{
-      "participant_session_id" => publication.participant_session_id,
+      "participant_id" => publication.participant_id,
       "source" => Atom.to_string(publication.source),
       "enabled" => publication.enabled,
       "publication_id" => publication.publication_id

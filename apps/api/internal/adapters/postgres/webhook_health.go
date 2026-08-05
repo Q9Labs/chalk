@@ -9,7 +9,7 @@ import (
 
 // Health reports dispatcher/backlog health for metrics and alerts only. It is
 // intentionally separate from API and Sync readiness: receiver outages and a
-// webhook backlog must never make the meeting control plane unready.
+// webhook backlog must never make the Episode control plane unready.
 func (r WebhookDispatchRepository) Health(ctx context.Context) (webhooks.HealthSnapshot, error) {
 	var result webhooks.HealthSnapshot
 	var oldestEligibleSeconds, cleanupLagSeconds, journeyAgeSeconds float64

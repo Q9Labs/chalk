@@ -2,9 +2,9 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Stateholder.Command
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Memory
-  alias ChalkSync.Stateholder.SessionKey
 
   setup do
     Memory.reset()
@@ -12,7 +12,7 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
   end
 
   test "keeps committed and rejected receipts stable beyond the former cache limit" do
-    {session, identity} = seed_identity("session-a")
+    {episode, identity} = seed_identity("episode-a")
     command = command("original_command", :raise_hand)
 
     assert {:ok, %{result: :committed, revision: 2} = committed} =
@@ -22,8 +22,8 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
       rejected =
         command_with_payload(
           "filler_command_#{String.pad_leading(to_string(index), 4, "0")}",
-          :transfer_host,
-          %{"participantSessionId" => "55555555-5555-4555-8555-555555555555"}
+          :assign_roles,
+          %{"participantId" => "55555555-5555-4555-8555-555555555555", "role" => "unknown"}
         )
 
       assert {:ok, %{result: :rejected, reason: :invalid_target}} =
@@ -36,12 +36,12 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
     assert duplicate.revision == committed.revision
     assert duplicate.event_id == committed.event_id
 
-    assert {:ok, recovery} = Memory.recover(session, nil)
+    assert {:ok, recovery} = Memory.recover(episode, nil)
     assert recovery.head.revision == 2
   end
 
   test "derives command ID conflicts without changing the original receipt" do
-    {_session, identity} = seed_identity("session-a")
+    {_episode, identity} = seed_identity("episode-a")
     original = command("same_command_id_1", :raise_hand)
     changed = command("same_command_id_1", :lower_hand)
 
@@ -55,12 +55,12 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
   end
 
   test "receipt lookup precedes current generation validation" do
-    {session, identity} = seed_identity("session-a")
+    {episode, identity} = seed_identity("episode-a")
     command = command("rotation_retry_01", :raise_hand)
 
     assert {:ok, %{result: :committed, revision: 2}} = Memory.decide_command(identity, command)
 
-    rotated = %{identity | participant_session_generation: 2}
+    rotated = %{identity | participant_generation: 2}
 
     assert {:ok, %{result: :committed, delivery: :duplicate, revision: 2}} =
              Memory.decide_command(rotated, command)
@@ -68,18 +68,18 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
     assert {:ok, %{result: :rejected, reason: :stale_participant_generation}} =
              Memory.decide_command(rotated, command("rotation_new_id1", :lower_hand))
 
-    assert {:ok, recovery} = Memory.recover(session, nil)
+    assert {:ok, recovery} = Memory.recover(episode, nil)
     assert recovery.head.revision == 2
   end
 
-  test "isolates Sessions that share tenant and Room context" do
-    {_first_session, first_identity} = seed_identity("session-a")
-    {second_session, second_identity} = seed_identity("session-b")
+  test "isolates Episodes that share tenant and Space context" do
+    {_first_episode, first_identity} = seed_identity("episode-a")
+    {second_episode, second_identity} = seed_identity("episode-b")
 
     assert {:ok, %{result: :committed, revision: 2}} =
              Memory.decide_command(first_identity, command("isolated_command", :raise_hand))
 
-    assert {:ok, recovery} = Memory.recover(second_session, nil)
+    assert {:ok, recovery} = Memory.recover(second_episode, nil)
     assert recovery.head.revision == 1
     refute recovery.snapshot["participants"] |> hd() |> Map.fetch!("hand_raised")
 
@@ -88,39 +88,39 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
   end
 
   test "returns up-to-date only when revision, schema, and digest all match" do
-    {session, _identity} = seed_identity("session-a")
-    assert {:ok, snapshot} = Memory.recover(session, nil)
+    {episode, _identity} = seed_identity("episode-a")
+    assert {:ok, snapshot} = Memory.recover(episode, nil)
 
-    assert {:ok, up_to_date} = Memory.recover(session, snapshot.head)
+    assert {:ok, up_to_date} = Memory.recover(episode, snapshot.head)
     assert up_to_date.mode == :up_to_date
 
     corrupted = %{snapshot.head | digest: :crypto.strong_rand_bytes(32)}
-    assert {:ok, replacement} = Memory.recover(session, corrupted)
+    assert {:ok, replacement} = Memory.recover(episode, corrupted)
     assert replacement.mode == :snapshot
   end
 
   test "replays only from a historical cursor with the stored schema and digest" do
-    {session, identity} = seed_identity("session-a")
-    assert {:ok, %{head: cursor}} = Memory.recover(session, nil)
+    {episode, identity} = seed_identity("episode-a")
+    assert {:ok, %{head: cursor}} = Memory.recover(episode, nil)
 
     assert {:ok, %{result: :committed, revision: 2}} =
              Memory.decide_command(identity, command("historical_cursor", :raise_hand))
 
-    assert {:ok, %{mode: :replay, replay_cursor: 1}} = Memory.recover(session, cursor)
+    assert {:ok, %{mode: :replay, replay_cursor: 1}} = Memory.recover(episode, cursor)
 
     assert {:ok, %{mode: :snapshot}} =
-             Memory.recover(session, %{cursor | digest: :crypto.strong_rand_bytes(32)})
+             Memory.recover(episode, %{cursor | digest: :crypto.strong_rand_bytes(32)})
 
     assert {:ok, %{mode: :snapshot}} =
-             Memory.recover(session, %{
+             Memory.recover(episode, %{
                cursor
                | state_schema_version: cursor.state_schema_version + 1
              })
   end
 
   test "persists satisfied v1 targets without changing the head and duplicates their semantic outcome" do
-    {session, identity} = seed_identity("session-a")
-    assert {:ok, before} = Memory.recover(session, nil)
+    {episode, identity} = seed_identity("episode-a")
+    assert {:ok, before} = Memory.recover(episode, nil)
 
     target = command_with_payload("hand_already_low1", :set_hand_raised, %{"raised" => false})
 
@@ -136,12 +136,12 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
     assert duplicate.revision == satisfied.revision
     assert duplicate.state_digest == satisfied.state_digest
 
-    assert {:ok, after_recovery} = Memory.recover(session, nil)
+    assert {:ok, after_recovery} = Memory.recover(episode, nil)
     assert after_recovery.head == before.head
   end
 
   test "authorizes from the locked role mapping instead of identity capability claims" do
-    {_session, identity} = seed_identity("session-a")
+    {_episode, identity} = seed_identity("episode-a")
     untrusted_claims = %{identity | capabilities: []}
 
     assert {:ok, %{result: :committed}} =
@@ -154,74 +154,98 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
   end
 
   test "rejects a role outside the target participant eligible set" do
-    session = %SessionKey{
+    episode = %EpisodeKey{
       tenant_id: "11111111-1111-4111-8111-111111111111",
-      room_id: "22222222-2222-4222-8222-222222222222",
-      session_id: session_uuid("session-a")
+      space_id: "22222222-2222-4222-8222-222222222222",
+      episode_id: episode_uuid("episode-a")
     }
 
     host = %{
       id: "55555555-5555-4555-8555-555555555555",
       generation: 1,
       display_name: "Ada",
-      role: "host",
-      eligible_roles: ["host", "cohost", "participant"]
+      role: "owner",
+      capabilities: ["assignRoles", "manageAdmission"]
     }
 
     guest = %{
       id: "66666666-6666-4666-8666-666666666666",
       generation: 1,
       display_name: "Grace",
-      role: "participant",
-      eligible_roles: ["participant"]
+      role: "observer",
+      capabilities: ["subscribe"]
     }
 
-    :ok = Memory.seed_session(session, [host, guest])
+    :ok = Memory.seed_episode(episode, [host, guest])
 
     identity = %Identity{
-      session: session,
-      participant_session_id: host.id,
-      participant_session_generation: 1
+      episode: episode,
+      participant_id: host.id,
+      participant_generation: 1
     }
 
-    assert {:ok, %{result: :rejected, reason: :role_not_eligible}} =
+    assert {:ok, %{result: :rejected, reason: :invalid_target}} =
              Memory.decide_command(
                identity,
-               command_with_payload("ineligible_role1", :set_participant_role, %{
-                 "participantSessionId" => guest.id,
-                 "role" => "cohost"
+               command_with_payload("ineligible_role1", :assign_roles, %{
+                 "participantId" => guest.id,
+                 "role" => "unknown"
                })
              )
   end
 
-  defp seed_identity(session_id) do
-    session = %SessionKey{
+  defp seed_identity(episode_id) do
+    episode = %EpisodeKey{
       tenant_id: "11111111-1111-4111-8111-111111111111",
-      room_id: "22222222-2222-4222-8222-222222222222",
-      session_id: session_uuid(session_id)
+      space_id: "22222222-2222-4222-8222-222222222222",
+      episode_id: episode_uuid(episode_id)
     }
 
     participant = %{
       id: "55555555-5555-4555-8555-555555555555",
       generation: 1,
       display_name: "Ada",
-      capabilities: ["control:hand"]
+      capabilities: [
+        "publishAudio",
+        "publishVideo",
+        "publishScreen",
+        "subscribe",
+        "raiseHand",
+        "renameSelf",
+        "sendChat",
+        "sendReaction",
+        "drawWhiteboard",
+        "manageWhiteboard",
+        "manageAdmission",
+        "assignRoles",
+        "muteOthers",
+        "stopVideoOthers",
+        "stopScreenOthers",
+        "requestMediaOthers",
+        "removeParticipant",
+        "manageRecording",
+        "startEpisode",
+        "extendEpisode",
+        "endEpisode",
+        "manageMembers",
+        "clearSpaceContent"
+      ]
     }
 
-    :ok = Memory.seed_session(session, [participant])
+    :ok = Memory.seed_episode(episode, [participant])
 
     identity = %Identity{
-      session: session,
-      participant_session_id: participant.id,
-      participant_session_generation: participant.generation,
+      episode: episode,
+      participant_id: participant.id,
+      participant_generation: participant.generation,
       capabilities: participant.capabilities
     }
 
-    {session, identity}
+    {episode, identity}
   end
 
-  defp session_uuid("session-a"), do: "33333333-3333-4333-8333-333333333333"
-  defp session_uuid("session-b"), do: "44444444-4444-4444-8444-444444444444"
+  defp episode_uuid("episode-a"), do: "33333333-3333-4333-8333-333333333333"
+  defp episode_uuid("episode-b"), do: "44444444-4444-4444-8444-444444444444"
 
   defp command(id, name) do
     payload = if name == :raise_hand, do: %{"raised" => true}, else: %{"raised" => false}

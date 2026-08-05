@@ -11,7 +11,7 @@ defmodule ChalkSync.Retention.Scheduler do
 
   alias ChalkSync.Database
   alias ChalkSync.Retention.CleanupWorker
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Telemetry
 
   @default_interval_ms 1_000
@@ -46,7 +46,7 @@ defmodule ChalkSync.Retention.Scheduler do
       clock: Keyword.get(options, :clock, fn -> System.monotonic_time(:microsecond) end),
       last_success_at_ms: nil,
       consecutive_failures: 0,
-      sessions: 0,
+      episodes: 0,
       event_rows: 0,
       receipt_rows: 0,
       lifecycle_intent_rows: 0,
@@ -152,7 +152,7 @@ defmodule ChalkSync.Retention.Scheduler do
           state
           | last_success_at_ms: System.monotonic_time(:millisecond),
             consecutive_failures: 0,
-            sessions: state.sessions + cleanup.sessions,
+            episodes: state.episodes + cleanup.episodes,
             event_rows: state.event_rows + cleanup.event_rows,
             receipt_rows: state.receipt_rows + cleanup.receipt_rows,
             lifecycle_intent_rows: state.lifecycle_intent_rows + cleanup.lifecycle_intent_rows
@@ -172,8 +172,8 @@ defmodule ChalkSync.Retention.Scheduler do
   end
 
   defp cleanup_once do
-    session = %SessionKey{tenant_id: "retention", room_id: "retention", session_id: "retention"}
-    CleanupWorker.run_once(Database.connection(session))
+    episode = %EpisodeKey{tenant_id: "retention", space_id: "retention", episode_id: "retention"}
+    CleanupWorker.run_once(Database.connection(episode))
   end
 
   defp public_health(state) do
@@ -181,7 +181,7 @@ defmodule ChalkSync.Retention.Scheduler do
       status: if(state.consecutive_failures == 0, do: "ok", else: "degraded"),
       consecutive_failures: state.consecutive_failures,
       last_success_age_ms: age_ms(state.last_success_at_ms),
-      cleaned_sessions: state.sessions,
+      cleaned_episodes: state.episodes,
       deleted_event_rows: state.event_rows,
       deleted_receipt_rows: state.receipt_rows,
       deleted_lifecycle_intent_rows: state.lifecycle_intent_rows

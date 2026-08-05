@@ -53,7 +53,7 @@ func TestProviderBridgePOSTExecutesExactContract(t *testing.T) {
 func TestProviderBridgePOSTRejectsUnknownAndOversizeBodies(t *testing.T) {
 	handler := NewProviderBridgeHandler(&providerBridgeService{}, syncPeerVerifier{})
 
-	unknown := httptest.NewRequest(http.MethodPost, "/internal/v1/sync/provider-operations/operation-000001", bytes.NewBufferString(`{"effect":"media.end_session","tenant_id":"11111111-1111-4111-8111-111111111111","session_id":"22222222-2222-4222-8222-222222222222","provider_id":"private"}`))
+	unknown := httptest.NewRequest(http.MethodPost, "/internal/v1/sync/provider-operations/operation-000001", bytes.NewBufferString(`{"effect":"media.end_episode","tenant_id":"11111111-1111-4111-8111-111111111111","episode_id":"22222222-2222-4222-8222-222222222222","provider_id":"private"}`))
 	unknownResponse := httptest.NewRecorder()
 	handler.ServeHTTP(unknownResponse, unknown)
 	if unknownResponse.Code != http.StatusBadRequest {
@@ -76,16 +76,16 @@ func TestProviderBridgeGETReturnsProviderNeutralObservationPage(t *testing.T) {
 			Incarnation: 2,
 			Sequence:    7,
 			Publications: []provideroperations.Publication{{
-				ParticipantSessionID: participantID,
-				Source:               "screen",
-				Enabled:              true,
-				PublicationID:        "cf:session-1:screen-track",
+				ParticipantID: participantID,
+				Source:        "screen",
+				Enabled:       true,
+				PublicationID: "cf:episode-1:screen-track",
 			}},
 		}},
 		Next: &provideroperations.Cursor{Incarnation: 2, Sequence: 7},
 	}}
 	handler := NewProviderBridgeHandler(service, syncPeerVerifier{})
-	request := httptest.NewRequest(http.MethodGet, "/internal/v1/sync/media-observations?tenant_id=11111111-1111-4111-8111-111111111111&session_id=22222222-2222-4222-8222-222222222222&limit=10", nil)
+	request := httptest.NewRequest(http.MethodGet, "/internal/v1/sync/media-observations?tenant_id=11111111-1111-4111-8111-111111111111&episode_id=22222222-2222-4222-8222-222222222222&limit=10", nil)
 	response := httptest.NewRecorder()
 
 	handler.ServeHTTP(response, request)
@@ -100,13 +100,13 @@ func TestProviderBridgeGETReturnsProviderNeutralObservationPage(t *testing.T) {
 	if payload["has_more"] != true || payload["next_cursor"] == nil {
 		t.Fatalf("response = %#v", payload)
 	}
-	if !bytes.Contains(response.Body.Bytes(), []byte(`"publication_id":"cf:session-1:screen-track"`)) || bytes.Contains(response.Body.Bytes(), []byte("provider_id")) {
+	if !bytes.Contains(response.Body.Bytes(), []byte(`"publication_id":"cf:episode-1:screen-track"`)) || bytes.Contains(response.Body.Bytes(), []byte("provider_id")) {
 		t.Fatalf("response did not preserve the opaque publication id: %s", response.Body.String())
 	}
 }
 
 func validProviderOperationBody() string {
-	return `{"effect":"media.revoke_publication","tenant_id":"11111111-1111-4111-8111-111111111111","session_id":"22222222-2222-4222-8222-222222222222","participant_session_id":"33333333-3333-4333-8333-333333333333","publication_source":"camera"}`
+	return `{"effect":"media.revoke_publication","tenant_id":"11111111-1111-4111-8111-111111111111","episode_id":"22222222-2222-4222-8222-222222222222","participant_id":"33333333-3333-4333-8333-333333333333","publication_source":"camera"}`
 }
 
 type syncPeerVerifier struct{ err error }

@@ -3,6 +3,7 @@ import { createNativeMediaStream, type NativeMediaStreamTrack } from "../media/n
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Theme } from "../ui/theme";
+import { useNativeTheme } from "../ui/native-theme";
 import { shouldRenderNativeMediaTrack } from "./native-media-visibility";
 import { FaceAvatar } from "./FaceAvatar";
 import { GradientSurface } from "./GradientSurface";
@@ -20,6 +21,7 @@ export interface MediaViewProps {
 }
 
 export function MediaView({ participant, track, mediaKind = "camera", label, mirror = false, objectFit = "cover", zOrder = 0 }: MediaViewProps): React.JSX.Element {
+  const theme = useNativeTheme();
   const shouldRenderVideo = shouldRenderNativeMediaTrack({ participant, track, mediaKind });
   const canRenderPreview = hasRtcVideoView();
   const stream = useMemo(() => {
@@ -35,7 +37,7 @@ export function MediaView({ participant, track, mediaKind = "camera", label, mir
   const streamURL = showStream && stream ? stream.toURL() : null;
 
   return (
-    <View style={styles.surface}>
+    <View style={[styles.surface, { backgroundColor: theme.colors.stageBackground }]}>
       {streamURL ? <RtcVideoView mirror={mirror} objectFit={objectFit} streamURL={streamURL} style={StyleSheet.absoluteFillObject} zOrder={Math.max(1, zOrder)} /> : null}
 
       {!showStream ? (

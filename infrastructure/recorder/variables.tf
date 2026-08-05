@@ -137,6 +137,32 @@ variable "control_plane_role_arn" {
   }
 }
 
+variable "legacy_kms_context_key" {
+  description = "Optional externally supplied legacy KMS context key for the bounded production ciphertext-decrypt transition; it never authorizes new data-key generation."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = var.legacy_kms_context_key == null || (
+      can(regex("^chalk\\.[a-z][a-z0-9_]{1,63}$", var.legacy_kms_context_key)) && !contains([
+        "chalk.environment",
+        "chalk.tenant",
+        "chalk.episode",
+        "chalk.recording_job",
+        "chalk.bundle_schema",
+      ], var.legacy_kms_context_key)
+    )
+    error_message = "legacy_kms_context_key must be a distinct non-canonical chalk.<identifier> context key."
+  }
+}
+
+variable "episode_kms_context_cutover_complete" {
+  description = "Explicit production acknowledgment that every data-key producer emits the canonical Episode context and no legacy ciphertext still requires access."
+  type        = bool
+  default     = false
+}
+
 variable "capture_image_id" {
   description = "Immutable DigitalOcean image ID for the capture pool."
   type        = number
@@ -204,8 +230,8 @@ variable "render_bootstrap_endpoint" {
   nullable    = true
 }
 
-variable "reserved_capture_meetings" {
-  description = "Reserved or active capture meetings used by the desired-capacity formula."
+variable "reserved_capture_episodes" {
+  description = "Reserved or active capture Episodes used by the desired-capacity formula."
   type        = number
   default     = 0
 }
@@ -233,10 +259,16 @@ variable "ready_spare" {
   }
 }
 
-variable "capture_meetings_per_node" {
+variable "capture_episodes_per_node" {
   description = "Qualified capture density for a two-vCPU node."
   type        = number
   default     = 4
+}
+
+variable "capture_capacity_inputs_migrated" {
+  description = "Explicit production acknowledgment that callers and private tfvars use the renamed Episode capacity inputs."
+  type        = bool
+  default     = false
 }
 
 variable "capture_participants_per_node" {

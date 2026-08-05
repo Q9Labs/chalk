@@ -7,15 +7,15 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 export interface InviteDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  meetingLink: string;
-  meetingId?: string;
+  inviteLink: string;
+  spaceId?: string;
   onCopyLink?: () => void | Promise<void>;
   onShareEmail?: () => void;
   onShareCalendar?: () => void;
   className?: string;
 }
 
-export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, meetingLink, meetingId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
+export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, inviteLink, spaceId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
@@ -80,7 +80,7 @@ export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, me
 
         <div className="space-y-5 p-5">
           <div className="space-y-4">
-            <Input label="Meeting link" value={meetingLink} readOnly fullWidth icon={<Link01Icon size={16} />} iconPosition="left" onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <Input label="Space link" value={inviteLink} readOnly fullWidth icon={<Link01Icon size={16} />} iconPosition="left" onClick={(e) => (e.target as HTMLInputElement).select()} />
             {onCopyLink && (
               <button
                 type="button"
@@ -91,16 +91,16 @@ export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, me
                 <Copy01Icon size={18} />
                 {isCopyFeedbackVisible ? "Copied" : "Copy Link"}
                 <span className="sr-only" aria-live="polite">
-                  {isCopyFeedbackVisible ? "Copied meeting link to clipboard" : ""}
+                  {isCopyFeedbackVisible ? "Copied space link to clipboard" : ""}
                 </span>
               </button>
             )}
           </div>
 
-          {meetingId && (
+          {spaceId && (
             <div className="flex items-center justify-between rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] p-3">
-              <span className="text-[var(--chalk-app-text-muted)] text-sm">Meeting ID</span>
-              <span className="select-all font-mono text-[var(--chalk-app-text)] text-sm font-medium">{meetingId}</span>
+              <span className="text-[var(--chalk-app-text-muted)] text-sm">Space ID</span>
+              <span className="select-all font-mono text-[var(--chalk-app-text)] text-sm font-medium">{spaceId}</span>
             </div>
           )}
 

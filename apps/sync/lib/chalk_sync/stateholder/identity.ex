@@ -1,28 +1,26 @@
 defmodule ChalkSync.Stateholder.Identity do
-  @moduledoc "Verified participant-session identity used for durable decisions."
+  @moduledoc "Verified participant-episode identity used for durable decisions."
 
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
 
-  @enforce_keys [:session, :participant_session_id, :participant_session_generation]
+  @enforce_keys [:episode, :participant_id, :participant_generation]
   defstruct [
-    :session,
-    :participant_session_id,
-    :participant_session_generation,
+    :episode,
+    :participant_id,
+    :participant_generation,
     :admission_lifecycle_intent_id,
     :role,
     protocol_version: 1,
-    eligible_roles: [],
     capabilities: []
   ]
 
   @type t :: %__MODULE__{
-          session: SessionKey.t(),
-          participant_session_id: String.t(),
-          participant_session_generation: pos_integer(),
+          episode: EpisodeKey.t(),
+          participant_id: String.t(),
+          participant_generation: pos_integer(),
           admission_lifecycle_intent_id: String.t() | nil,
           role: String.t() | nil,
           protocol_version: 1,
-          eligible_roles: [String.t()],
           capabilities: [String.t()]
         }
 end

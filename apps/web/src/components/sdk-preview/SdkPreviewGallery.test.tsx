@@ -14,17 +14,17 @@ vi.mock("./PreviewGalleryToolbar", () => ({
   ),
 }));
 
-vi.mock("@q9labsai/chalk-react/components", () => {
-  const MockPreJoinScreen = ({ error, onJoin }: { readonly error?: string; readonly onJoin: (settings: { displayName: string; microphoneEnabled: boolean; cameraEnabled: boolean }) => void }) => (
-    <section data-testid="prejoin-screen">
+vi.mock("../../../../../sdks/typescript/react/src/test-support/preview-fixtures", () => {
+  const MockPreviewEntrance = ({ error, onJoin }: { readonly error?: string; readonly onJoin: (settings: { displayName: string; microphone: boolean; camera: boolean }) => void }) => (
+    <section data-testid="entrance-screen">
       <h1>Entrance</h1>
       {error ? <p role="alert">{error}</p> : null}
-      <button type="button" onClick={() => onJoin({ displayName: "Ada", microphoneEnabled: true, cameraEnabled: true })}>
+      <button type="button" onClick={() => onJoin({ displayName: "Ada", microphone: true, camera: true })}>
         Enter Space
       </button>
     </section>
   );
-  const MockJoiningScreen = ({ message }: { readonly message?: string }) => <div data-testid="joining-screen">{message}</div>;
+  const MockPreviewJoiningScreen = ({ message }: { readonly message?: string }) => <div data-testid="joining-screen">{message}</div>;
   const MockJoinFailedScreen = ({ title, message, onRetry, onBack }: { readonly title?: string; readonly message: string; readonly onRetry: () => void; readonly onBack: () => void }) => (
     <section data-testid="join-failed-screen">
       <h1>{title}</h1>
@@ -37,7 +37,7 @@ vi.mock("@q9labsai/chalk-react/components", () => {
       </button>
     </section>
   );
-  const MockEndScreen = ({ roomName }: { readonly roomName?: string }) => <section data-testid="end-screen">{roomName}</section>;
+  const MockPreviewEpisodeEnded = ({ spaceName }: { readonly spaceName?: string }) => <section data-testid="episode-ended">{spaceName}</section>;
   const MockLeaveDialog = ({ isOpen, onClose, onConfirm }: { readonly isOpen: boolean; readonly onClose: () => void; readonly onConfirm: () => void }) =>
     isOpen ? (
       <section role="dialog" aria-label="Leave Space">
@@ -56,20 +56,31 @@ vi.mock("@q9labsai/chalk-react/components", () => {
     readonly controls?: { readonly onToggleHandRaise?: () => void };
     readonly overlay?: React.ReactNode;
     readonly reconnecting?: { readonly status: string };
-    readonly onLeave?: () => void;
+    readonly settingsDialog?: {
+      readonly settings: { readonly appearance: { readonly palette?: string; readonly texture?: string } };
+      readonly onUpdateAppearance: (updates: { readonly palette?: string; readonly texture?: string }) => void;
+    };
+    readonly spaceName: string;
+    readonly onLeft?: () => void;
   }) => (
     <main data-testid="space-view">
+      <h1 data-testid="space-name">{props.spaceName}</h1>
       <output data-testid="participant-count">{props.participants.length}</output>
       <output data-testid="active-panel">{props.panels?.active ?? "none"}</output>
       <output data-testid="chat-count">{props.panels?.chat?.messages.length ?? 0}</output>
       <output data-testid="pending-count">{props.panels?.chat?.pendingMessages?.length ?? 0}</output>
       <output data-testid="transcript-count">{props.panels?.transcript?.transcripts.length ?? 0}</output>
+      <output data-testid="settings-palette">{props.settingsDialog?.settings.appearance.palette ?? ""}</output>
+      <output data-testid="settings-texture">{props.settingsDialog?.settings.appearance.texture ?? ""}</output>
+      <button type="button" data-testid="update-appearance" onClick={() => props.settingsDialog?.onUpdateAppearance({ palette: "light", texture: "none" })}>
+        Update appearance
+      </button>
       {props.reconnecting ? <p role="alert">{props.reconnecting.status}</p> : null}
       {props.overlay}
       <button type="button" onClick={props.controls?.onToggleHandRaise}>
         Raise hand
       </button>
-      <button type="button" onClick={props.onLeave}>
+      <button type="button" onClick={props.onLeft}>
         Leave Space
       </button>
     </main>
@@ -77,12 +88,12 @@ vi.mock("@q9labsai/chalk-react/components", () => {
 
   return {
     CommandErrorAlert: MockCommandErrorAlert,
-    ConferenceView: MockSpaceView,
-    EndScreen: MockEndScreen,
+    PreviewEntrance: MockPreviewEntrance,
+    PreviewEpisodeEnded: MockPreviewEpisodeEnded,
+    PreviewJoiningScreen: MockPreviewJoiningScreen,
+    PreviewSpaceView: MockSpaceView,
     JoinFailedScreen: MockJoinFailedScreen,
-    JoiningScreen: MockJoiningScreen,
     LeaveDialog: MockLeaveDialog,
-    PreJoinScreen: MockPreJoinScreen,
     getThemeMode: () => "dark",
   };
 });
@@ -97,8 +108,8 @@ function search(overrides: Partial<PreviewSearch>): PreviewSearch {
 
 describe("SdkPreviewGallery", () => {
   it.each([
-    ["ready", "prejoin-screen"],
-    ["warning", "prejoin-screen"],
+    ["ready", "entrance-screen"],
+    ["warning", "entrance-screen"],
     ["joining", "joining-screen"],
     ["waiting", "joining-screen"],
     ["timeout", "join-failed-screen"],
@@ -128,7 +139,7 @@ describe("SdkPreviewGallery", () => {
     ["confirmation", "space-view"],
     ["timeout", "space-view"],
     ["failure", "space-view"],
-    ["ended", "end-screen"],
+    ["ended", "episode-ended"],
   ] as const)("selects the production Space surface for %s", (state, testId) => {
     render(<SdkPreviewGallery search={search({ view: "space", state })} onSearchChange={vi.fn()} />);
 
@@ -142,7 +153,26 @@ describe("SdkPreviewGallery", () => {
     expect(screen.getByTestId("active-panel").textContent).toBe("chat");
     expect(screen.getByTestId("pending-count").textContent).toBe("1");
     expect(screen.getByRole("alert").textContent).toContain("reconnecting");
-    expect(screen.getByRole("heading", { name: "Design review" })).toBeTruthy();
+    expect(screen.getByTestId("space-name").textContent).toBe("Design review Space");
+  });
+
+  it("hydrates Settings appearance from direct palette and texture links", () => {
+    const onSearchChange = vi.fn();
+    render(<SdkPreviewGallery search={search({ view: "space", state: "happy", dialog: "settings", palette: "midnight", texture: "soft-dots" })} onSearchChange={onSearchChange} />);
+
+    expect(screen.getByTestId("settings-palette").textContent).toBe("oled-signal");
+    expect(screen.getByTestId("settings-texture").textContent).toBe("slate");
+
+    fireEvent.click(screen.getByTestId("update-appearance"));
+    expect(onSearchChange).toHaveBeenCalledWith({ palette: "paper", texture: "none" });
+  });
+
+  it("keeps the whiteboard fixture local and network-free", () => {
+    render(<SdkPreviewGallery search={search({ view: "space", state: "happy", stage: "whiteboard" })} onSearchChange={vi.fn()} />);
+
+    expect(screen.getByTestId("space-view")).toBeTruthy();
+    expect(screen.getByTestId("preview-whiteboard")).toBeTruthy();
+    expect(document.head.querySelector('link[href*="jsdelivr"], link[href*="excalidraw"]')).toBeNull();
   });
 
   it("keeps the direct Empty Space link empty even with default knobs", () => {

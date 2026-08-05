@@ -13,32 +13,32 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
 
-func TestWhiteboardFileCleanupClaimsOnlyExpiredUploadsAndRetainedSessions(t *testing.T) {
+func TestWhiteboardFileCleanupClaimsOnlyExpiredUploadsAndRetainedEpisodes(t *testing.T) {
 	pool := whiteboardFileIntegrationPool(t)
 	ctx := context.Background()
 	now := time.Date(2026, time.July, 29, 12, 0, 0, 0, time.UTC)
 	tenantID := whiteboardIntegrationID(t)
-	roomID := whiteboardIntegrationID(t)
+	spaceID := whiteboardIntegrationID(t)
 
 	if _, err := pool.Exec(ctx, "insert into tenants (id, name) values ($1, 'Whiteboard cleanup test')", uuid(tenantID)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(
 		ctx,
-		"insert into rooms (id, name, tenant_id, status, slug, media_plane) values ($1, 'Whiteboard cleanup test', $2, 'active', $3, 'cf_rtk')",
-		uuid(roomID),
+		"insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, 'Whiteboard cleanup test', $2, $3, 'cf_rtk')",
+		uuid(spaceID),
 		uuid(tenantID),
-		"whiteboard-cleanup-"+roomID.String(),
+		"whiteboard-cleanup-"+spaceID.String(),
 	); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { cleanupWhiteboardIntegrationTenant(t, pool, tenantID) })
 
-	active := seedWhiteboardCleanupSession(t, pool, tenantID, roomID, "active", nil)
+	active := seedWhiteboardCleanupEpisode(t, pool, tenantID, spaceID, "active", nil)
 	oldEndedAt := now.Add(-8 * 24 * time.Hour)
-	oldEnded := seedWhiteboardCleanupSession(t, pool, tenantID, roomID, "ended", &oldEndedAt)
+	oldEnded := seedWhiteboardCleanupEpisode(t, pool, tenantID, spaceID, "ended", &oldEndedAt)
 	recentEndedAt := now.Add(-6 * 24 * time.Hour)
-	recentEnded := seedWhiteboardCleanupSession(t, pool, tenantID, roomID, "ended", &recentEndedAt)
+	recentEnded := seedWhiteboardCleanupEpisode(t, pool, tenantID, spaceID, "ended", &recentEndedAt)
 
 	seedWhiteboardCleanupFile(t, pool, active, "active-expired-pending", "pending", now.Add(-time.Minute))
 	seedWhiteboardCleanupFile(t, pool, active, "active-expired-finalizing", "finalizing", now.Add(-time.Minute))
@@ -81,31 +81,31 @@ func TestWhiteboardFileCleanupClaimsOnlyExpiredUploadsAndRetainedSessions(t *tes
 	}
 }
 
-type whiteboardCleanupSession struct {
-	tenantID, roomID, sessionID utilities.ID
-	sceneID, participantID      utilities.ID
+type whiteboardCleanupEpisode struct {
+	tenantID, spaceID, episodeID utilities.ID
+	sceneID, participantID       utilities.ID
 }
 
-func seedWhiteboardCleanupSession(
+func seedWhiteboardCleanupEpisode(
 	t *testing.T,
 	pool *pgxpool.Pool,
-	tenantID, roomID utilities.ID,
+	tenantID, spaceID utilities.ID,
 	status string,
 	endedAt *time.Time,
-) whiteboardCleanupSession {
+) whiteboardCleanupEpisode {
 	t.Helper()
 	ctx := context.Background()
-	session := whiteboardCleanupSession{
-		tenantID: tenantID, roomID: roomID,
-		sessionID: whiteboardIntegrationID(t), sceneID: whiteboardIntegrationID(t),
+	episode := whiteboardCleanupEpisode{
+		tenantID: tenantID, spaceID: spaceID,
+		episodeID: whiteboardIntegrationID(t), sceneID: whiteboardIntegrationID(t),
 		participantID: whiteboardIntegrationID(t),
 	}
 	if _, err := pool.Exec(
 		ctx,
-		"insert into room_sessions (id, status, room_id, tenant_id, started_at, ended_at) values ($1, $2, $3, $4, now(), $5)",
-		uuid(session.sessionID),
+		"insert into episodes (id, status, space_id, tenant_id, started_at, ended_at, config_snapshot) values ($1, $2, $3, $4, now(), $5, '{\"roles\":{\"collaborator\":[\"drawWhiteboard\"]},\"admission_policy\":{\"mode\":\"open\"},\"default_episode_duration_seconds\":86400,\"maximum_episode_duration_seconds\":86400,\"linger_window_seconds\":0}'::jsonb)",
+		uuid(episode.episodeID),
 		status,
-		uuid(roomID),
+		uuid(spaceID),
 		uuid(tenantID),
 		endedAt,
 	); err != nil {
@@ -118,34 +118,33 @@ func seedWhiteboardCleanupSession(
 	if _, err := pool.Exec(
 		ctx,
 		`insert into participants (
-			id, name, capabilities, tenant_id, room_id, session_id,
-			generation, status, role, eligible_roles
-		) values ($1, 'Whiteboard cleanup test', '{}', $2, $3, $4, 1, $5, 'participant', '{"participant"}')`,
-		uuid(session.participantID),
+			id, name, capabilities, tenant_id, space_id, episode_id,
+			generation, status, role
+		) values ($1, 'Whiteboard cleanup test', '{drawWhiteboard}', $2, $3, $4, 1, $5, 'participant')`,
+		uuid(episode.participantID),
 		uuid(tenantID),
-		uuid(roomID),
-		uuid(session.sessionID),
+		uuid(spaceID),
+		uuid(episode.episodeID),
 		participantStatus,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(
 		ctx,
-		"insert into sync_whiteboard_scenes (tenant_id, room_id, session_id, scene_id) values ($1, $2, $3, $4)",
+		"insert into sync_whiteboard_scenes (tenant_id, space_id, scene_id) values ($1, $2, $3)",
 		uuid(tenantID),
-		uuid(roomID),
-		uuid(session.sessionID),
-		uuid(session.sceneID),
+		uuid(spaceID),
+		uuid(episode.sceneID),
 	); err != nil {
 		t.Fatal(err)
 	}
-	return session
+	return episode
 }
 
 func seedWhiteboardCleanupFile(
 	t *testing.T,
 	pool *pgxpool.Pool,
-	session whiteboardCleanupSession,
+	episode whiteboardCleanupEpisode,
 	key, status string,
 	expiresAt time.Time,
 ) {
@@ -159,17 +158,17 @@ func seedWhiteboardCleanupFile(
 	if _, err := pool.Exec(
 		context.Background(),
 		`insert into sync_whiteboard_files (
-			upload_id, tenant_id, room_id, session_id, scene_id,
-			participant_session_id, participant_generation, file_id,
+			upload_id, tenant_id, space_id, episode_id, scene_id,
+			participant_id, participant_generation, file_id,
 			object_key, mime_type, byte_length, sha256, status,
 			immutable_object_identity, expires_at, finalized_at
 		) values ($1, $2, $3, $4, $5, $6, 1, $7, $8, 'image/png', 32, $9, $10, $11, $12, $13)`,
 		uuid(whiteboardIntegrationID(t)),
-		uuid(session.tenantID),
-		uuid(session.roomID),
-		uuid(session.sessionID),
-		uuid(session.sceneID),
-		uuid(session.participantID),
+		uuid(episode.tenantID),
+		uuid(episode.spaceID),
+		uuid(episode.episodeID),
+		uuid(episode.sceneID),
+		uuid(episode.participantID),
 		key,
 		key,
 		make([]byte, 32),
@@ -188,8 +187,8 @@ func cleanupWhiteboardIntegrationTenant(t *testing.T, pool *pgxpool.Pool, tenant
 		"sync_whiteboard_files",
 		"sync_whiteboard_scenes",
 		"participants",
-		"room_sessions",
-		"rooms",
+		"episodes",
+		"spaces",
 	} {
 		if _, err := pool.Exec(
 			context.Background(),

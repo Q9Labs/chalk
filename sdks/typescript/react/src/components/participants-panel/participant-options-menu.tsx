@@ -1,4 +1,4 @@
-import { Crown01Icon, Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, Shield01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
+import { Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { VolumeSlider } from "../atomic";
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
@@ -13,39 +13,22 @@ export interface ParticipantOptionsMenuProps {
   onStopParticipantCamera?: (id: string) => void;
   onRequestStartCamera?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
-  onMakeHost?: (id: string) => void;
-  onMakeCoHost?: (id: string) => void;
   onEditName?: () => void;
   participantVolumes?: ReadonlyMap<string, number>;
   onParticipantVolumeChange?: (id: string, volume: number) => void;
 }
 
-export function ParticipantOptionsMenu({
-  participant,
-  variant,
-  canManageParticipants,
-  onClose,
-  onMuteParticipant,
-  onRequestUnmute,
-  onStopParticipantCamera,
-  onRequestStartCamera,
-  onRemoveParticipant,
-  onMakeHost,
-  onMakeCoHost,
-  onEditName,
-  participantVolumes,
-  onParticipantVolumeChange,
-}: ParticipantOptionsMenuProps) {
+export function ParticipantOptionsMenu({ participant, variant, canManageParticipants, onClose, onMuteParticipant, onRequestUnmute, onStopParticipantCamera, onRequestStartCamera, onRemoveParticipant, onEditName, participantVolumes, onParticipantVolumeChange }: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
-  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant || (!!onMakeHost && participant.role !== "host") || (!!onMakeCoHost && participant.role === "participant"));
+  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant);
 
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
 
   const menuItemClassName = cn("flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)]");
 
-  const dividerClassName = cn("my-1.5 h-px bg-[var(--chalk-app-line)]");
+  const dividerClassName = "my-1.5 h-px bg-[var(--chalk-app-line)]";
 
   return (
     <>
@@ -135,34 +118,6 @@ export function ParticipantOptionsMenu({
             >
               <Video01Icon className="h-4 w-4" />
               Ask to start camera
-            </button>
-          ) : null}
-
-          {onMakeHost && participant.role !== "host" ? (
-            <button
-              type="button"
-              onClick={() => {
-                onMakeHost(participant.id);
-                onClose();
-              }}
-              className={menuItemClassName}
-            >
-              <Crown01Icon className="h-4 w-4" />
-              Make Host
-            </button>
-          ) : null}
-
-          {onMakeCoHost && participant.role === "participant" ? (
-            <button
-              type="button"
-              onClick={() => {
-                onMakeCoHost(participant.id);
-                onClose();
-              }}
-              className={menuItemClassName}
-            >
-              <Shield01Icon className="h-4 w-4" />
-              Make Co-Host
             </button>
           ) : null}
 

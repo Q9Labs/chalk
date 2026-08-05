@@ -1,5 +1,5 @@
 export type HapticPattern = "light" | "medium" | "heavy" | "soft" | "selection" | "success" | "warning" | "error";
-export type ChalkHapticInput = HapticPattern;
+export type HapticInput = HapticPattern;
 
 const vibrationPattern: Record<HapticPattern, number | number[]> = {
   light: 8,

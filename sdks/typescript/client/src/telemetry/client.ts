@@ -1,5 +1,5 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { normalizeTelemetryAttributes } from "./attributes";
+import { normalizeTelemetryAttributes, type TelemetryAttributeNormalizationOptions } from "./attributes";
 import { TelemetryDeliveryService, makeTelemetryDeliveryLayer, type TelemetryDeliveryEffectService, type TelemetryExporterHealth, type TelemetryTimelineEntry } from "./delivery";
 import { createJourneyIntakeExporter, MAX_JOURNEY_INTAKE_EVENTS_PER_BATCH, type TelemetryExporter, type TelemetryExportOptions } from "./exporter";
 import { TelemetryJourney, type StartJourneyOptions } from "./journey";
@@ -67,17 +67,8 @@ export class TelemetryClient {
   }
 
   startJourney(options: StartJourneyOptions): TelemetryJourney {
-    const parentContext = options.parent?.context;
-    const trace = createTraceContext(parentContext?.traceparent ?? options.traceparent, parentContext?.tracestate ?? options.tracestate);
-    const journeyId = options.journeyId && validJourneyIdentifier(options.journeyId) ? options.journeyId.toLowerCase() : this.#eventSource.createUuid();
-    const journey = new TelemetryJourney(this, {
-      journeyId,
-      rootJourneyId: parentContext?.rootJourneyId ?? journeyId,
-      traceparent: trace.traceparent,
-      ...(trace.tracestate ? { tracestate: trace.tracestate } : {}),
-    });
-    const parentEventId = options.parent?.linkChild(journey.context);
-    journey.start(options.kind, options.attributes, parentEventId);
+    const journey = new TelemetryJourney(this, createJourneyContext(options, this.#eventSource));
+    journey.start(options.kind, options.attributes, linkParentJourney(options.parent, journey.context));
     return journey;
   }
 
@@ -111,10 +102,10 @@ export class TelemetryClient {
   }
 
   /** Internal for TelemetryJourney. Event construction remains synchronous and never waits for storage or network I/O. */
-  emit(context: JourneyTelemetryContext, sequence: number, draft: TelemetryEventDraft): TelemetryEvent {
+  emit(context: JourneyTelemetryContext, sequence: number, draft: TelemetryEventDraft, options?: TelemetryAttributeNormalizationOptions): TelemetryEvent {
     const trace = traceContextFromJourney(context);
     const { attributes: draftAttributes, ...eventDraft } = draft;
-    const attributes = normalizeTelemetryAttributes(draftAttributes);
+    const attributes = normalizeTelemetryAttributes(draftAttributes, options);
     const event: TelemetryEvent = {
       ...eventDraft,
       version: TELEMETRY_EVENT_VERSION,
@@ -144,6 +135,29 @@ function resolveExporter(options: TelemetryClientOptions): TelemetryExporter | u
   if (options.exporter) return options.exporter;
   if (!options.baseUrl) return undefined;
   return createJourneyIntakeExporter({ baseUrl: options.baseUrl, credentials: options.credentials, fetch: options.fetch, path: options.exporterPath });
+}
+
+function createJourneyContext(options: StartJourneyOptions, eventSource: TelemetryEventSource): JourneyTelemetryContext {
+  const parentContext = options.parent?.context;
+  const trace = createTraceContext(parentContext?.traceparent ?? options.traceparent, parentContext?.tracestate ?? options.tracestate);
+  const journeyId = resolveJourneyId(options.journeyId, eventSource);
+
+  return {
+    journeyId,
+    rootJourneyId: parentContext?.rootJourneyId ?? journeyId,
+    traceparent: trace.traceparent,
+    ...(trace.tracestate ? { tracestate: trace.tracestate } : {}),
+  };
+}
+
+function linkParentJourney(parent: TelemetryJourney | undefined, child: JourneyTelemetryContext): string | undefined {
+  if (!parent) return undefined;
+  return parent.linkChild(child);
+}
+
+function resolveJourneyId(value: string | undefined, eventSource: TelemetryEventSource): string {
+  if (!value || !validJourneyIdentifier(value)) return eventSource.createUuid();
+  return value.toLowerCase();
 }
 
 function validJourneyIdentifier(value: string): boolean {

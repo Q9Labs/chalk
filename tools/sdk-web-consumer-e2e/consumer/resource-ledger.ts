@@ -1,11 +1,20 @@
-import type { ChalkSessionClock, ChalkSessionMediaDevices } from "@q9labsai/chalk-client";
+type FixtureClock = {
+  readonly now: () => number;
+  readonly setTimeout: (callback: () => void, milliseconds: number) => unknown;
+  readonly clearTimeout: (handle: unknown) => void;
+};
+
+type FixtureMediaDevices = {
+  readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+  readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
+};
 
 const tracks = new Set<MediaStreamTrack>();
 const sockets = new Set<WebSocket>();
 const peers = new Set<RTCPeerConnection>();
 const timers = new Set<unknown>();
 
-export const fixtureClock: ChalkSessionClock = {
+export const fixtureClock: FixtureClock = {
   now: () => Date.now(),
   setTimeout: (callback, milliseconds) => {
     let handle: ReturnType<typeof setTimeout>;
@@ -22,7 +31,7 @@ export const fixtureClock: ChalkSessionClock = {
   },
 };
 
-export const fixtureMediaDevices: ChalkSessionMediaDevices = {
+export const fixtureMediaDevices: FixtureMediaDevices = {
   getUserMedia: async (constraints) => {
     const mediaTracks: MediaStreamTrack[] = [];
     if (constraints.audio) mediaTracks.push(createAudioTrack());

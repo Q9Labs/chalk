@@ -10,22 +10,20 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
   @targets [
     {"set_hand_raised", %{"raised" => true}},
     {"set_display_name", %{"display_name" => "Wire name"}},
-    {"set_admission_policy", %{"policy" => "approval"}},
-    {"set_participant_role",
-     %{"participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "role" => "cohost"}},
-    {"transfer_host", %{"participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"}}
+    {"set_admission_policy", %{"policy" => "knock"}},
+    {"assign_roles",
+     %{"participant_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "role" => "observer"}}
   ]
   @forbidden_aliases [
     {"raise_hand", %{}},
     {"lower_hand", %{}},
     {"open_admission", %{}},
-    {"promote_participant",
-     %{"participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"}},
-    {"demote_participant", %{"participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"}}
+    {"promote_participant", %{"participant_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"}},
+    {"demote_participant", %{"participant_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"}}
   ]
   @target_names Enum.map(@targets, &elem(&1, 0))
   @bounds %{
-    "wire_targets" => 5,
+    "wire_targets" => 4,
     "wire_rejections" => 6,
     "sdk_rejections" => 6,
     "max_observations" => 32,
@@ -37,8 +35,8 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
     sdk = exercise_sdk(seed)
 
     invariants = %{
-      "all_five_declarative_targets_round_trip" =>
-        wire["invariants"]["all_five_declarative_targets_round_trip"],
+      "all_declarative_targets_round_trip" =>
+        wire["invariants"]["all_declarative_targets_round_trip"],
       "relative_setters_and_remote_force_on_are_rejected" =>
         wire["invariants"]["relative_setters_and_remote_force_on_are_rejected"] and
           sdk["invariants"]["forbidden_client_shapes_are_encoder_rejected"],
@@ -110,7 +108,7 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
     invalid = invalid_wire_shapes()
 
     invariants = %{
-      "all_five_declarative_targets_round_trip" =>
+      "all_declarative_targets_round_trip" =>
         Enum.map(target_observations, & &1["decoded_name"]) == @target_names and
           Enum.all?(target_observations, &(&1["encoded_ack_bytes"] > 0)),
       "relative_setters_and_remote_force_on_are_rejected" => invalid["all_decode_rejected"]
@@ -160,7 +158,7 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
              "operation_id" => "wire-sdk-invalid-006",
              "name" => "set_microphone_enabled",
              "enabled" => true,
-             "participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"
+             "participant_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"
            }}
         ]
 
@@ -182,15 +180,9 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
   end
 
   defp exercise_sdk(seed) do
-    script =
-      Path.expand(
-        "../../../../../sdks/typescript/client/scripts/sync-breaker-v1-wire-sdk.mjs",
-        __DIR__
-      )
-
-    root = Path.expand("../../../../../", __DIR__)
-
-    package = Path.expand("../../../../../sdks/typescript/client", __DIR__)
+    root = Path.expand("../..", File.cwd!())
+    script = Path.join(root, "sdks/typescript/client/scripts/sync-breaker-v1-wire-sdk.mjs")
+    package = Path.join(root, "sdks/typescript/client")
 
     {output, 0} =
       System.cmd(

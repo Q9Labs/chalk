@@ -2,11 +2,11 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRe
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
-import type { ExcalidrawCollabEngine, ExcalidrawCollabEngineOptions } from "../collab/engine.js";
-import type { AppState, BinaryFiles } from "../collab/types.js";
-import { MathEditor } from "./MathEditor.js";
-import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements.js";
-import { renderLatexToSvg } from "./mathjax-renderer.js";
+import type { ExcalidrawCollabEngine, ExcalidrawCollabEngineOptions } from "../collab/engine";
+import type { AppState, BinaryFiles } from "../collab/types";
+import { MathEditor } from "./MathEditor";
+import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements";
+import { renderLatexToSvg } from "./mathjax-renderer";
 
 const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css";
 const DEFAULT_LATEX = String.raw`E = mc^2`;
@@ -274,7 +274,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((er
     (api: ExcalidrawImperativeAPI) => {
       if (!refs.collabOptionsRef.current || refs.engineRef.current || refs.enginePromiseRef.current) return;
 
-      refs.enginePromiseRef.current = import("../collab/engine.js")
+      refs.enginePromiseRef.current = import("../collab/engine")
         .then(({ ExcalidrawCollabEngine }) => {
           const collab = refs.collabOptionsRef.current;
           if (!refs.isMountedRef.current || !collab || refs.engineRef.current) return;

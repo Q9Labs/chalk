@@ -16,7 +16,7 @@ import (
 
 var readAuditLogsPermission = authorization.TenantPermission{
 	Scope:       authentication.ScopeAuditLogsRead,
-	MinimumRole: memberships.RoleAdmin,
+	MinimumRole: memberships.RoleCollaborator,
 }
 
 type AuditLogService interface {

@@ -2,7 +2,6 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Database
-  alias ChalkSync.Sessions.Reducer
   alias ChalkSync.Stateholder.ObservedContext
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
@@ -34,59 +33,26 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
   @tag :host_exit
   test "host Leave is rejected when transfer is required", %{connections: connections} do
-    fixture = SyncPostgres.seed_session(hd(connections))
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    fixture = SyncPostgres.seed_episode(hd(connections))
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
     host = hd(fixture.identities)
     {:ok, leave} = Operation.new("host_leave_reject01", :participant_leave, %{})
 
-    assert {:ok, %{result: :rejected, reason: :host_transfer_required}} =
+    assert {:ok, %{result: :pending} = pending} =
              Postgres.begin_operation(host, leave)
 
-    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
-
-    assert recovery.snapshot["host_participant_session_id"] ==
-             hd(fixture.identities).participant_session_id
+    assert is_binary(pending.external_operation_id)
   end
 
   @tag :host_exit
   test "host Leave promotes the longest-tenured cohost in one fact", %{
     connections: connections
   } do
-    fixture =
-      SyncPostgres.seed_session(hd(connections), 2, %{host_exit_policy: "promote_cohost"})
+    fixture = SyncPostgres.seed_episode(hd(connections), 2)
 
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
-    [host, successor] = fixture.identities
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
+    [host, _successor] = fixture.identities
     connection = hd(connections)
-
-    Postgrex.query!(
-      connection,
-      "update participants set role = 'cohost' where tenant_id = $1 and id = $2",
-      [UUID.dump!(fixture.session.tenant_id), UUID.dump!(successor.participant_session_id)]
-    )
-
-    state =
-      put_in(
-        fixture.state,
-        [Access.key(:participants), successor.participant_session_id, :role],
-        "cohost"
-      )
-
-    Postgrex.query!(
-      connection,
-      """
-      update sync_session_control
-      set folded_state = $3, state_digest = $4, snapshot_bytes = $5
-      where tenant_id = $1 and session_id = $2
-      """,
-      [
-        UUID.dump!(fixture.session.tenant_id),
-        UUID.dump!(fixture.session.session_id),
-        Reducer.snapshot(state),
-        Reducer.digest(state),
-        Reducer.snapshot_bytes(state)
-      ]
-    )
 
     fixture =
       fixture
@@ -97,14 +63,11 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     assert {:ok, %{result: :pending} = pending} = Postgres.begin_operation(host, operation)
 
     outcome =
-      {:applied, :host_left_and_transferred,
-       %{
-         "departing_participant_session_id" => host.participant_session_id,
-         "successor_participant_session_id" => successor.participant_session_id
-       }}
+      {:applied, :participant_left,
+       %{"participant_id" => host.participant_id, "reason" => "left"}}
 
     assert {:ok, %{result: :applied}} =
-             Postgres.finalize_operation(fixture.session, pending.external_operation_id, outcome)
+             Postgres.finalize_operation(fixture.episode, pending.external_operation_id, outcome)
 
     assert [["participant.left", "left"]] =
              query_rows(fixture, """
@@ -113,11 +76,10 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              where tenant_id = $1 and $2::uuid is not null
              """)
 
-    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
-    assert recovery.snapshot["host_participant_session_id"] == successor.participant_session_id
+    assert {:ok, recovery} = Postgres.recover(fixture.episode, nil)
 
     refute Enum.any?(recovery.snapshot["participants"], fn participant ->
-             participant["participant_session_id"] == host.participant_session_id
+             participant["participant_id"] == host.participant_id
            end)
   end
 
@@ -125,14 +87,14 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     connections: connections
   } do
     fixture = SyncPostgres.seed_pending_join(hd(connections))
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
 
     assert {:ok, before_apply} = Postgres.recover(fixture.identity, nil)
     assert before_apply.mode == :terminal
     assert before_apply.terminal_reason == :participant_inactive
 
     assert {:ok, applied} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert applied.result == :applied
     assert applied.revision == 1
@@ -140,7 +102,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     assert applied.event.lifecycle_intent_id == fixture.lifecycle_intent_id
 
     assert {:ok, duplicate} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert duplicate.result == :already_applied
     assert duplicate.event_id == applied.event_id
@@ -150,8 +112,8 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     assert recovery.mode == :snapshot
     assert recovery.head.revision == 1
 
-    assert hd(recovery.snapshot["participants"])["participant_session_id"] ==
-             fixture.identity.participant_session_id
+    assert hd(recovery.snapshot["participants"])["participant_id"] ==
+             fixture.identity.participant_id
 
     assert [
              [0, 2, 32_768, 2, 32_768, "active"]
@@ -164,36 +126,36 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                c.lifecycle_reserved_intents,
                c.lifecycle_reserved_intent_bytes,
                p.status
-             from sync_session_control c
+             from sync_episode_control c
              join participants p
-               on p.tenant_id = c.tenant_id and p.session_id = c.session_id
-             where c.tenant_id = $1 and c.session_id = $2
+               on p.tenant_id = c.tenant_id and p.episode_id = c.episode_id
+             where c.tenant_id = $1 and c.episode_id = $2
              """)
   end
 
-  test "discovers and applies an approval request without granting participant authority", %{
+  test "discovers and applies a knock request without granting participant authority", %{
     connections: connections
   } do
     connection = hd(connections)
 
-    fixture = SyncPostgres.seed_session(connection)
+    fixture = SyncPostgres.seed_episode(connection)
 
     fixture =
       SyncPostgres.seed_admission_request(connection, fixture, request_status: :pending)
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     assert {:ok, pending} = Postgres.pending_lifecycle_intents(32)
 
-    assert {fixture.session, fixture.admission_requested_intent_id} in pending
+    assert {fixture.episode, fixture.admission_requested_intent_id} in pending
 
-    refute Enum.any?(pending, fn {_session, intent_id} ->
+    refute Enum.any?(pending, fn {_episode, intent_id} ->
              intent_id == fixture.admission_join_intent_id
            end)
 
     assert {:ok, applied} =
              Postgres.apply_lifecycle_intent(
-               fixture.session,
+               fixture.episode,
                fixture.admission_requested_intent_id
              )
 
@@ -204,25 +166,25 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
     assert {:ok, duplicate} =
              Postgres.apply_lifecycle_intent(
-               fixture.session,
+               fixture.episode,
                fixture.admission_requested_intent_id
              )
 
     assert duplicate.result == :already_applied
     assert duplicate.event_id == applied.event_id
 
-    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
+    assert {:ok, recovery} = Postgres.recover(fixture.episode, nil)
     assert recovery.mode == :snapshot
     assert recovery.head.revision == 2
 
     assert recovery.snapshot["admission_requests"] == [fixture.admission_payload]
 
     refute Enum.any?(recovery.snapshot["participants"], fn participant ->
-             participant["participant_session_id"] == fixture.admission_participant_id
+             participant["participant_id"] == fixture.admission_participant_id
            end)
 
     assert {:error, :participant_inactive} =
-             Postgres.participant_authority(fixture.session, fixture.admission_participant_id, 1)
+             Postgres.participant_authority(fixture.episode, fixture.admission_participant_id, 1)
 
     assert [["pending", "joining", 2, 4, 65_536, 2_048, 0, 0]] =
              query_rows(fixture, """
@@ -232,15 +194,15 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                (select count(*) from webhook_events where tenant_id = $1),
                (select count(*) from webhook_deliveries where tenant_id = $1)
              from sync_admission_requests a
-             join participants p on p.id = a.participant_session_id
-             join sync_session_control c
-               on c.tenant_id = a.tenant_id and c.session_id = a.session_id
-             where a.tenant_id = $1 and a.session_id = $2
+             join participants p on p.id = a.participant_id
+             join sync_episode_control c
+               on c.tenant_id = a.tenant_id and c.episode_id = a.episode_id
+             where a.tenant_id = $1 and a.episode_id = $2
              """)
 
     assert {:ok, remaining} = Postgres.pending_lifecycle_intents(32)
 
-    refute Enum.any?(remaining, fn {_session, intent_id} ->
+    refute Enum.any?(remaining, fn {_episode, intent_id} ->
              intent_id in [
                fixture.admission_requested_intent_id,
                fixture.admission_join_intent_id
@@ -253,30 +215,30 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                """
                select status, next_attempt_at = 'infinity'::timestamptz
                from sync_lifecycle_intents
-               where tenant_id = $1 and session_id = $2 and lifecycle_intent_id = $3
+               where tenant_id = $1 and episode_id = $2 and lifecycle_intent_id = $3
                """,
                [UUID.dump!(fixture.admission_join_intent_id)]
              )
   end
 
-  test "rejects malformed and mismatched approval request payloads without folding authority", %{
+  test "rejects malformed and mismatched knock request payloads without folding authority", %{
     connections: connections
   } do
     connection = hd(connections)
 
     fixtures =
       for mutation <- [:malformed, :mismatched] do
-        fixture = SyncPostgres.seed_session(connection)
+        fixture = SyncPostgres.seed_episode(connection)
 
         fixture =
           SyncPostgres.seed_admission_request(connection, fixture, request_status: :pending)
 
-        on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+        on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
         payload =
           case mutation do
             :malformed ->
-              Map.put(fixture.admission_payload, "participant_session_id", "invalid")
+              Map.put(fixture.admission_payload, "participant_id", "invalid")
 
             :mismatched ->
               Map.put(fixture.admission_payload, "display_name", "Different Participant")
@@ -303,13 +265,13 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
       assert {:error, ^expected_error} =
                Postgres.apply_lifecycle_intent(
-                 fixture.session,
+                 fixture.episode,
                  fixture.admission_requested_intent_id
                )
 
       assert {:error, :participant_inactive} =
                Postgres.participant_authority(
-                 fixture.session,
+                 fixture.episode,
                  fixture.admission_participant_id,
                  1
                )
@@ -320,14 +282,14 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                  """
                  select c.control_revision, i.status, p.status,
                    count(e.event_id) filter (where e.lifecycle_intent_id = i.lifecycle_intent_id)
-                 from sync_session_control c
+                 from sync_episode_control c
                  join sync_lifecycle_intents i
-                   on i.tenant_id = c.tenant_id and i.session_id = c.session_id
+                   on i.tenant_id = c.tenant_id and i.episode_id = c.episode_id
                  join participants p
-                   on p.tenant_id = c.tenant_id and p.session_id = c.session_id
+                   on p.tenant_id = c.tenant_id and p.episode_id = c.episode_id
                  left join sync_control_events e
-                   on e.tenant_id = i.tenant_id and e.session_id = i.session_id
-                 where c.tenant_id = $1 and c.session_id = $2
+                   on e.tenant_id = i.tenant_id and e.episode_id = i.episode_id
+                 where c.tenant_id = $1 and c.episode_id = $2
                    and i.lifecycle_intent_id = $3
                    and p.id = $4
                  group by c.control_revision, i.status, p.status
@@ -342,18 +304,18 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
   test "concurrent nodes apply one lifecycle event", %{connections: connections} do
     fixture = SyncPostgres.seed_pending_join(hd(connections))
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
 
     first =
       Task.async(fn ->
         Process.put(:sync_test_node, :first)
-        Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+        Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
       end)
 
     second =
       Task.async(fn ->
         Process.put(:sync_test_node, :second)
-        Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+        Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
       end)
 
     outcomes = Enum.map([Task.await(first), Task.await(second)], fn {:ok, result} -> result end)
@@ -363,31 +325,31 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     assert [[1]] =
              query_rows(
                fixture,
-               "select count(*) from sync_control_events where tenant_id = $1 and session_id = $2"
+               "select count(*) from sync_control_events where tenant_id = $1 and episode_id = $2"
              )
   end
 
   test "participant removal consumes its reserve and becomes terminal for the old token", %{
     connections: connections
   } do
-    fixture = SyncPostgres.seed_session(hd(connections), 2)
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    fixture = SyncPostgres.seed_episode(hd(connections), 2)
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
     [host, participant] = fixture.identities
 
     {:ok, remove} =
       Operation.new("participant_remove01", :remove_participant, %{
-        "participantSessionId" => participant.participant_session_id
+        "participantId" => participant.participant_id
       })
 
     assert {:ok, %{external_operation_id: operation_id}} =
              Postgres.begin_operation(host, remove)
 
     assert {:ok, %{result: :applied, revision: 3}} =
-             Postgres.finalize_operation(fixture.session, operation_id, {
+             Postgres.finalize_operation(fixture.episode, operation_id, {
                :applied,
                :participant_left,
                %{
-                 "participant_session_id" => participant.participant_session_id,
+                 "participant_id" => participant.participant_id,
                  "reason" => "removed"
                }
              })
@@ -405,36 +367,36 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                  count(*) filter (where active.status in ('joining', 'active', 'leaving'))
                from participants p
                join participants active
-                 on active.tenant_id = p.tenant_id and active.session_id = p.session_id
-               where p.tenant_id = $1 and p.session_id = $2 and p.id = $3
+                 on active.tenant_id = p.tenant_id and active.episode_id = p.episode_id
+               where p.tenant_id = $1 and p.episode_id = $2 and p.id = $3
                group by p.status
                """,
-               [UUID.dump!(participant.participant_session_id)]
+               [UUID.dump!(participant.participant_id)]
              )
   end
 
-  test "session end supersedes pending joins and releases every lifecycle reserve", %{
+  test "episode end supersedes pending joins and releases every lifecycle reserve", %{
     connections: connections
   } do
-    fixture = SyncPostgres.seed_session(hd(connections))
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    fixture = SyncPostgres.seed_episode(hd(connections))
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
     fixture = SyncPostgres.seed_admission_request(hd(connections), fixture)
     host = hd(fixture.identities)
-    {:ok, ending} = Operation.new("session_end_external1", :end_session, %{})
+    {:ok, ending} = Operation.new("episode_end_external1", :end_episode, %{})
 
     assert {:ok, %{external_operation_id: operation_id}} =
              Postgres.begin_operation(host, ending)
 
     assert {:ok, %{result: :applied, revision: 3}} =
-             Postgres.finalize_operation(fixture.session, operation_id, {
+             Postgres.finalize_operation(fixture.episode, operation_id, {
                :applied,
-               :session_ended,
+               :episode_ended,
                %{"reason" => "ended_by_participant"}
              })
 
-    assert {:ok, terminal} = Postgres.recover(fixture.session, nil)
+    assert {:ok, terminal} = Postgres.recover(fixture.episode, nil)
     assert terminal.mode == :terminal
-    assert terminal.terminal_reason == :session_ended
+    assert terminal.terminal_reason == :episode_ended
     assert terminal.head.revision == 3
 
     assert [[0, 0, 0, 0, 0, "ended", 0]] =
@@ -447,24 +409,24 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                c.lifecycle_reserved_intent_bytes,
                s.status,
                count(p.id) filter (where p.status <> 'left')
-             from sync_session_control c
-             join room_sessions s
-               on s.tenant_id = c.tenant_id and s.id = c.session_id
+             from sync_episode_control c
+             join episodes s
+               on s.tenant_id = c.tenant_id and s.id = c.episode_id
              left join participants p
-               on p.tenant_id = c.tenant_id and p.session_id = c.session_id
-             where c.tenant_id = $1 and c.session_id = $2
+               on p.tenant_id = c.tenant_id and p.episode_id = c.episode_id
+             where c.tenant_id = $1 and c.episode_id = $2
              group by c.snapshot_reserved_bytes, c.lifecycle_reserved_events,
                c.lifecycle_reserved_bytes, c.lifecycle_reserved_intents,
                c.lifecycle_reserved_intent_bytes, s.status
              """)
 
-    assert [["superseded", "superseded_by_session_end"]] =
+    assert [["superseded", "superseded_by_episode_end"]] =
              query_rows(
                fixture,
                """
                select status, terminal_reason
                from sync_lifecycle_intents
-               where tenant_id = $1 and session_id = $2 and lifecycle_intent_id = $3
+               where tenant_id = $1 and episode_id = $2 and lifecycle_intent_id = $3
                """,
                [UUID.dump!(fixture.admission_join_intent_id)]
              )
@@ -472,7 +434,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
   test "resolves lifecycle success after the commit response is lost", %{connections: connections} do
     fixture = SyncPostgres.seed_pending_join(hd(connections))
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
 
     Application.put_env(:chalk_sync, :lifecycle_fault_hook, fn point, _context ->
       if point == :after_commit_before_reply, do: raise("lost lifecycle commit response")
@@ -480,7 +442,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
     try do
       assert {:ok, decision} =
-               Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+               Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
       assert decision.result == :already_applied
       assert decision.revision == 1
@@ -499,12 +461,12 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
       |> SyncPostgres.seed_pending_join()
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.joined"])
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.joined", "participant.left"])
-      |> SyncPostgres.seed_webhook_endpoint(connection, ["session.ended"])
+      |> SyncPostgres.seed_webhook_endpoint(connection, ["episode.ended"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     assert {:ok, %{result: :applied}} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert [["participant.joined", 1, 2, 1, 1, journey_id, parent_id]] =
              query_rows(
@@ -521,7 +483,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                  and e.resource_id = $3
                group by e.id
                """,
-               [UUID.dump!(fixture.identity.participant_session_id)]
+               [UUID.dump!(fixture.identity.participant_id)]
              )
 
     assert UUID.load!(journey_id) == fixture.journey_id
@@ -556,14 +518,14 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     connections: connections
   } do
     [endpoint_connection, producer_connection | _] = connections
-    fixture = SyncPostgres.seed_session(endpoint_connection)
-    on_exit(fn -> SyncPostgres.cleanup(endpoint_connection, fixture.session) end)
+    fixture = SyncPostgres.seed_episode(endpoint_connection)
+    on_exit(fn -> SyncPostgres.cleanup(endpoint_connection, fixture.episode) end)
     parent = self()
 
     endpoint_task =
       Task.async(fn ->
         Postgrex.transaction(endpoint_connection, fn transaction ->
-          tenant_id = UUID.dump!(fixture.session.tenant_id)
+          tenant_id = UUID.dump!(fixture.episode.tenant_id)
 
           Postgrex.query!(
             transaction,
@@ -580,7 +542,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
           send(parent, :endpoint_tenant_locked)
           receive do: (:finish_endpoint_create -> :ok)
 
-          SyncPostgres.insert_webhook_endpoint(transaction, fixture.session, [
+          SyncPostgres.insert_webhook_endpoint(transaction, fixture.episode, [
             "participant.joined"
           ])
         end)
@@ -595,7 +557,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
         Postgrex.transaction(producer_connection, fn transaction ->
           WebhookProducer.produce(
             transaction,
-            fixture.session,
+            fixture.episode,
             webhook_intent("participant_joined"),
             participant_object(fixture, identity, "active", joined_at, nil)
           )
@@ -620,17 +582,17 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     connections: connections
   } do
     connection = hd(connections)
-    seed = SyncPostgres.seed_session(connection)
+    seed = SyncPostgres.seed_episode(connection)
 
     fixture =
-      %{session: seed.session, identity: hd(seed.identities)}
+      %{episode: seed.episode, identity: hd(seed.identities)}
       |> SyncPostgres.seed_webhook_endpoint(connection, [
         "participant.joined",
         "participant.left",
-        "session.ended"
+        "episode.ended"
       ])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     joined_at = datetime("2026-07-12T18:05:00.123456Z")
     left_at = datetime("2026-07-12T19:05:00.234567Z")
     ended_at = datetime("2026-07-12T20:05:00.345678Z")
@@ -641,10 +603,10 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
        participant_object(fixture, fixture.identity, "active", joined_at, nil)},
       {"participant_left",
        participant_object(fixture, fixture.identity, "left", joined_at, left_at)},
-      {"session_ended",
+      {"episode_ended",
        %{
-         id: fixture.session.session_id,
-         room_id: fixture.session.room_id,
+         id: fixture.episode.episode_id,
+         space_id: fixture.episode.space_id,
          status: "ended",
          started_at: joined_at,
          ended_at: ended_at,
@@ -660,7 +622,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
         Postgrex.transaction(connection, fn transaction ->
           WebhookProducer.produce(
             transaction,
-            fixture.session,
+            fixture.episode,
             webhook_intent(name),
             object
           )
@@ -668,9 +630,9 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     end)
 
     assert [
+             ["episode.ended", ended_persisted, ended_body],
              ["participant.joined", joined_persisted, joined_body],
-             ["participant.left", left_persisted, left_body],
-             ["session.ended", ended_persisted, ended_body]
+             ["participant.left", left_persisted, left_body]
            ] =
              query_rows(fixture, """
              select event_name, occurred_at, body
@@ -686,13 +648,13 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
   test "invalid webhook snapshot aborts producer persistence", %{connections: connections} do
     connection = hd(connections)
-    seed = SyncPostgres.seed_session(connection)
+    seed = SyncPostgres.seed_episode(connection)
 
     fixture =
-      %{session: seed.session, identity: hd(seed.identities)}
+      %{episode: seed.episode, identity: hd(seed.identities)}
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.joined"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     joined_at = datetime("2026-07-12T18:05:00.123456Z")
 
     invalid_object =
@@ -704,7 +666,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
       Postgrex.transaction(connection, fn transaction ->
         WebhookProducer.produce(
           transaction,
-          fixture.session,
+          fixture.episode,
           webhook_intent("participant_joined"),
           invalid_object
         )
@@ -739,19 +701,19 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     on_exit(fn -> :telemetry.detach(handler_id) end)
 
     connection = hd(connections)
-    leave_seed = SyncPostgres.seed_session(connection, 2)
-    end_seed = SyncPostgres.seed_session(connection)
+    leave_seed = SyncPostgres.seed_episode(connection, 2)
+    end_seed = SyncPostgres.seed_episode(connection)
 
     leave_fixture =
-      %{session: leave_seed.session, identity: Enum.at(leave_seed.identities, 1)}
+      %{episode: leave_seed.episode, identity: Enum.at(leave_seed.identities, 1)}
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.left"])
 
     end_fixture =
-      %{session: end_seed.session, identity: hd(end_seed.identities)}
-      |> SyncPostgres.seed_webhook_endpoint(connection, ["session.ended"])
+      %{episode: end_seed.episode, identity: hd(end_seed.identities)}
+      |> SyncPostgres.seed_webhook_endpoint(connection, ["episode.ended"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, leave_fixture.session) end)
-    on_exit(fn -> SyncPostgres.cleanup(connection, end_fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, leave_fixture.episode) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, end_fixture.episode) end)
 
     leave_context = observed_context(1)
     end_context = observed_context(2)
@@ -762,31 +724,31 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     leave_operation =
       observed_operation("observed_leave_0001", :participant_leave, %{}, leave_context)
 
-    end_operation = observed_operation("observed_end_000001", :end_session, %{}, end_context)
+    end_operation = observed_operation("observed_end_000001", :end_episode, %{}, end_context)
 
     assert {:ok, leave_pending} = Postgres.begin_operation(leave_identity, leave_operation)
     assert {:ok, end_pending} = Postgres.begin_operation(end_identity, end_operation)
 
     assert {:ok, %{result: :applied}} =
              Postgres.finalize_operation(
-               leave_fixture.session,
+               leave_fixture.episode,
                leave_pending.external_operation_id,
                leave_outcome(leave_identity)
              )
 
     assert {:ok, %{result: :applied}} =
              Postgres.finalize_operation(
-               end_fixture.session,
+               end_fixture.episode,
                end_pending.external_operation_id,
-               {:applied, :session_ended, %{"reason" => "ended_by_participant"}}
+               {:applied, :episode_ended, %{"reason" => "ended_by_participant"}}
              )
 
     assert_journey_continuity(leave_fixture, "participant.left", leave_context)
-    assert_journey_continuity(end_fixture, "session.ended", end_context)
+    assert_journey_continuity(end_fixture, "episode.ended", end_context)
 
     assert {:ok, stored_leave} =
              Postgres.read_operation(
-               leave_fixture.session,
+               leave_fixture.episode,
                leave_pending.external_operation_id
              )
 
@@ -801,21 +763,21 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
   test "contextless internal end creates a background webhook root", %{connections: connections} do
     connection = hd(connections)
-    seed = SyncPostgres.seed_session(connection)
+    seed = SyncPostgres.seed_episode(connection)
 
     fixture =
-      %{session: seed.session, identity: hd(seed.identities)}
-      |> SyncPostgres.seed_webhook_endpoint(connection, ["session.ended"])
+      %{episode: seed.episode, identity: hd(seed.identities)}
+      |> SyncPostgres.seed_webhook_endpoint(connection, ["episode.ended"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
-    {:ok, operation} = Operation.new("internal_end_000001", :tenant_end_session, %{})
-    assert {:ok, pending} = Postgres.begin_internal_operation(fixture.session, operation)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    {:ok, operation} = Operation.new("internal_end_000001", :tenant_end_episode, %{})
+    assert {:ok, pending} = Postgres.begin_internal_operation(fixture.episode, operation)
 
     assert {:ok, %{result: :applied}} =
              Postgres.finalize_operation(
-               fixture.session,
+               fixture.episode,
                pending.external_operation_id,
-               {:applied, :session_ended, %{"reason" => "tenant_recovery"}}
+               {:applied, :episode_ended, %{"reason" => "tenant_recovery"}}
              )
 
     assert [["background_worker", "unknown", nil, nil]] =
@@ -839,37 +801,37 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
       |> SyncPostgres.seed_webhook_endpoint(connection, [
         "participant.joined",
         "participant.left",
-        "session.ended"
+        "episode.ended"
       ])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
-    leave_seed = SyncPostgres.seed_session(connection, 2)
+    leave_seed = SyncPostgres.seed_episode(connection, 2)
 
     leave_fixture =
       %{
-        session: leave_seed.session,
+        episode: leave_seed.episode,
         identity: Enum.at(leave_seed.identities, 1)
       }
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.left"])
 
-    end_seed = SyncPostgres.seed_session(connection)
+    end_seed = SyncPostgres.seed_episode(connection)
 
     end_fixture =
       %{
-        session: end_seed.session,
+        episode: end_seed.episode,
         identity: hd(end_seed.identities)
       }
-      |> SyncPostgres.seed_webhook_endpoint(connection, ["session.ended"])
+      |> SyncPostgres.seed_webhook_endpoint(connection, ["episode.ended"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, leave_fixture.session) end)
-    on_exit(fn -> SyncPostgres.cleanup(connection, end_fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, leave_fixture.episode) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, end_fixture.episode) end)
 
     assert {:ok, joined} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert {:ok, duplicate} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert duplicate.result == :already_applied
     assert duplicate.event_id == joined.event_id
@@ -887,7 +849,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              order by case event_name
                when 'participant.joined' then 1
                when 'participant.left' then 2
-               when 'session.ended' then 3
+               when 'episode.ended' then 3
              end
              """)
 
@@ -914,7 +876,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     assert leave_transition_key ==
              "sync_external:#{leave_operation_id}:participant.left"
 
-    assert [["session.ended", end_transition_key, "background_worker", "unknown"]] =
+    assert [["episode.ended", end_transition_key, "background_worker", "unknown"]] =
              query_rows(end_fixture, """
              select e.event_name, e.semantic_transition_key,
                j.origin_kind, j.upstream_visibility
@@ -924,7 +886,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              where e.tenant_id = $1 and $2::uuid is not null
              """)
 
-    assert end_transition_key == "sync_external:#{end_operation_id}:session.ended"
+    assert end_transition_key == "sync_external:#{end_operation_id}:episode.ended"
   end
 
   test "webhook failure rolls the product, control Event, operation, Event, and fanout back together",
@@ -948,13 +910,13 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
     connection = hd(connections)
 
-    seed = SyncPostgres.seed_session(connection, 2)
+    seed = SyncPostgres.seed_episode(connection, 2)
 
     fixture =
-      %{session: seed.session, identity: Enum.at(seed.identities, 1)}
+      %{episode: seed.episode, identity: Enum.at(seed.identities, 1)}
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.left"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     {:ok, operation} = Operation.new("webhook_rollback_01", :participant_leave, %{})
 
@@ -968,7 +930,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     try do
       assert {:retryable, :decision_unavailable} =
                Postgres.finalize_operation(
-                 fixture.session,
+                 fixture.episode,
                  pending.external_operation_id,
                  leave_outcome(fixture.identity)
                )
@@ -985,19 +947,19 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                  (select count(*) from webhook_deliveries d where d.tenant_id = $1)
                from participants p
                join sync_external_operations o
-                 on o.tenant_id = p.tenant_id and o.target_participant_session_id = p.id
-               join sync_session_control c
-                 on c.tenant_id = p.tenant_id and c.session_id = p.session_id
-               where p.tenant_id = $1 and p.session_id = $2 and p.id = $3
+                 on o.tenant_id = p.tenant_id and o.target_participant_id = p.id
+               join sync_episode_control c
+                 on c.tenant_id = p.tenant_id and c.episode_id = p.episode_id
+               where p.tenant_id = $1 and p.episode_id = $2 and p.id = $3
                """,
-               [UUID.dump!(fixture.identity.participant_session_id)]
+               [UUID.dump!(fixture.identity.participant_id)]
              )
 
     refute_receive {:webhook_metric, _event, _measurements, _metadata}, 50
 
     assert {:ok, %{result: :applied}} =
              Postgres.finalize_operation(
-               fixture.session,
+               fixture.episode,
                pending.external_operation_id,
                leave_outcome(fixture.identity)
              )
@@ -1014,7 +976,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
     assert {:ok, %{result: :applied, delivery: :duplicate}} =
              Postgres.finalize_operation(
-               fixture.session,
+               fixture.episode,
                pending.external_operation_id,
                leave_outcome(fixture.identity)
              )
@@ -1032,10 +994,10 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
       |> SyncPostgres.seed_pending_join()
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.left"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     assert {:ok, %{result: :applied}} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert [[0, 0]] =
              query_rows(fixture, """
@@ -1056,20 +1018,20 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
       |> SyncPostgres.seed_pending_join()
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.joined"])
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     query_rows(
       fixture,
       """
       update sync_lifecycle_intents
       set journey_id = null, parent_journey_event_id = null
-      where tenant_id = $1 and session_id = $2
+      where tenant_id = $1 and episode_id = $2
       returning lifecycle_intent_id
       """
     )
 
     assert {:ok, %{result: :applied}} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert [["background_worker", "unknown", nil]] =
              query_rows(fixture, """
@@ -1086,20 +1048,20 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
   defp query_rows(fixture, sql, extra_params \\ []) do
     params =
-      [UUID.dump!(fixture.session.tenant_id), UUID.dump!(fixture.session.session_id)] ++
+      [UUID.dump!(fixture.episode.tenant_id), UUID.dump!(fixture.episode.episode_id)] ++
         extra_params
 
-    Database.connection(fixture.session)
+    Database.connection(fixture.episode)
     |> Postgrex.query!(sql, params)
     |> Map.fetch!(:rows)
   end
 
-  defp finalize_leave(%{identity: identity, session: session}) do
+  defp finalize_leave(%{identity: identity, episode: episode}) do
     {:ok, operation} = Operation.new("webhook_leave_op_01", :participant_leave, %{})
     {:ok, pending} = Postgres.begin_operation(identity, operation)
 
     result =
-      Postgres.finalize_operation(session, pending.external_operation_id, leave_outcome(identity))
+      Postgres.finalize_operation(episode, pending.external_operation_id, leave_outcome(identity))
 
     {result, pending.external_operation_id}
   end
@@ -1107,20 +1069,20 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   defp leave_outcome(identity) do
     {:applied, :participant_left,
      %{
-       "participant_session_id" => identity.participant_session_id,
+       "participant_id" => identity.participant_id,
        "reason" => "left"
      }}
   end
 
-  defp finalize_end(%{identity: identity, session: session}) do
-    {:ok, operation} = Operation.new("webhook_end_op_0001", :end_session, %{})
+  defp finalize_end(%{identity: identity, episode: episode}) do
+    {:ok, operation} = Operation.new("webhook_end_op_0001", :end_episode, %{})
     {:ok, pending} = Postgres.begin_operation(identity, operation)
 
     result =
       Postgres.finalize_operation(
-        session,
+        episode,
         pending.external_operation_id,
-        {:applied, :session_ended, %{"reason" => "ended_by_participant"}}
+        {:applied, :episode_ended, %{"reason" => "ended_by_participant"}}
       )
 
     {result, pending.external_operation_id}
@@ -1139,10 +1101,10 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
   defp participant_object(fixture, identity, status, joined_at, left_at) do
     %{
-      id: identity.participant_session_id,
-      user_id: nil,
-      room_id: fixture.session.room_id,
-      session_id: fixture.session.session_id,
+      id: identity.participant_id,
+      identity_id: nil,
+      space_id: fixture.episode.space_id,
+      episode_id: fixture.episode.episode_id,
       name: "Participant",
       status: status,
       joined_at: joined_at,
@@ -1177,7 +1139,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
           assert metadata.stage == "phase"
 
           assert metadata.attributes.api_version == 1
-          assert metadata.attributes.event_name in ["participant.left", "session.ended"]
+          assert metadata.attributes.event_name in ["participant.left", "episode.ended"]
           assert metadata.attributes.producer == "sync"
           assert metadata.attributes.transition == "external_operation"
         else

@@ -1,7 +1,7 @@
 import { FailureKind, failure } from "./model.mjs";
 import { runChecked } from "./chalk-resources.mjs";
 
-const brokerScope = "sessions:write";
+const brokerScope = "episodes:write";
 
 export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, fetchImpl = fetch, now = () => new Date(), fresh = false } = {}) {
   if (!apiOrigin || !systemToken || !runtimeId) throw failure(FailureKind.CONFIG, "API bootstrap requires origin, system token, and runtime id", { stage: "bootstrap" });
@@ -28,13 +28,7 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
     space = await request(fetchImpl, apiOrigin, spacesPath(tenant.id), {
       systemToken,
       method: "POST",
-      body: { name: `Chalk local Space ${marker}`, status: "active", slug: spaceSlug, media_plane: "cf_sfu" },
-    });
-  } else if (space.status && space.status !== "active") {
-    space = await request(fetchImpl, apiOrigin, spacePath(tenant.id, space.id), {
-      systemToken,
-      method: "PATCH",
-      body: { status: "active" },
+      body: { name: `Chalk local Space ${marker}`, slug: spaceSlug, media_plane: "cf_sfu" },
     });
   }
   const keys = await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys?page_size=100`, { systemToken });
@@ -73,7 +67,7 @@ export async function retireLocalFixture({ apiOrigin, systemToken, marker, runti
     await request(fetchImpl, apiOrigin, spacePath(tenant.id, space.id), {
       systemToken,
       method: "PATCH",
-      body: { status: "archived", slug: `${spaceSlug}-retired-${runtimeId.slice(0, 8)}` },
+      body: { slug: `${spaceSlug}-retired-${runtimeId.slice(0, 8)}` },
     });
   }
   const keys = await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys?page_size=100`, { systemToken });
@@ -122,7 +116,7 @@ function runtimeMarker(runtimeId) {
 }
 
 function spacesPath(tenantId, suffix = "") {
-  return `/v1/tenants/${tenantId}/rooms${suffix}`;
+  return `/v1/tenants/${tenantId}/spaces${suffix}`;
 }
 
 function spacePath(tenantId, spaceId) {
@@ -130,7 +124,7 @@ function spacePath(tenantId, spaceId) {
 }
 
 function listSpaces(response) {
-  return response.rooms || [];
+  return response.spaces || [];
 }
 
 async function request(fetchImpl, origin, path, { systemToken, method = "GET", body, ignoreStatuses = [] } = {}) {

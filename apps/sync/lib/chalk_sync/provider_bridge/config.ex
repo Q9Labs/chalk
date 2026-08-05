@@ -4,7 +4,7 @@ defmodule ChalkSync.ProviderBridge.Config do
   alias ChalkSync.ProviderBridge.Client
   alias ChalkSync.ProviderBridge.MediaPlane
 
-  # Cloudflare Realtime may block a session operation for up to five seconds
+  # Cloudflare Realtime may block a episode operation for up to five seconds
   # while the PeerConnection becomes usable. Leave transport and mTLS overhead
   # above that provider budget while remaining below the durable worker budget.
   @request_timeout_ms 7_000

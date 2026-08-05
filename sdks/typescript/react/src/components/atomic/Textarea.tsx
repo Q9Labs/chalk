@@ -18,7 +18,7 @@ export const Textarea = React.memo(
     return (
       <div className="flex flex-col gap-1.5 w-full">
         {label && (
-          <label htmlFor={textareaId} className="text-sm font-medium text-muted-foreground">
+          <label htmlFor={textareaId} className="text-sm font-medium text-[var(--chalk-muted-text)]">
             {label}
           </label>
         )}
@@ -29,24 +29,24 @@ export const Textarea = React.memo(
           maxLength={maxLength}
           onChange={onChange}
           className={cn(
-            "flex min-h-[80px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground transition-colors",
-            "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
-            "placeholder:text-muted-foreground",
+            "flex min-h-[80px] w-full rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-3 py-2 text-sm text-[var(--chalk-text)] transition-colors",
+            "focus:outline-none focus:ring-2 focus:ring-[var(--chalk-focus)] focus:border-transparent",
+            "placeholder:text-[var(--chalk-muted-text)]",
             "disabled:cursor-not-allowed disabled:opacity-50",
             resize === "none" && "resize-none",
             resize === "vertical" && "resize-y",
             resize === "horizontal" && "resize-x",
             resize === "both" && "resize",
-            error && "border-destructive focus:ring-destructive",
+            error && "border-[var(--chalk-danger)] focus:ring-[var(--chalk-danger)]",
             className,
           )}
           aria-invalid={!!error}
           aria-errormessage={error ? `${textareaId}-error` : undefined}
           {...props}
         />
-        <div className="flex justify-between items-center text-xs text-muted-foreground">
+        <div className="flex justify-between items-center text-xs text-[var(--chalk-muted-text)]">
           {error && (
-            <span id={`${textareaId}-error`} className="text-destructive">
+            <span id={`${textareaId}-error`} className="text-[var(--chalk-danger)]">
               {error}
             </span>
           )}

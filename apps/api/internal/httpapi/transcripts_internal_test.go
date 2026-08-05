@@ -11,19 +11,19 @@ func TestRecordingAudioFormatUsesParsedContentType(t *testing.T) {
 	}{
 		{
 			name:        "webm video content type with parameters",
-			storageKey:  "tenants/11111111-1111-1111-1111-111111111111/recordings/meeting",
+			storageKey:  "tenants/11111111-1111-1111-1111-111111111111/recordings/episode",
 			contentType: "video/webm; codecs=opus",
 			want:        "webm",
 		},
 		{
 			name:        "mp4 video content type without extension",
-			storageKey:  "tenants/11111111-1111-1111-1111-111111111111/recordings/meeting",
+			storageKey:  "tenants/11111111-1111-1111-1111-111111111111/recordings/episode",
 			contentType: "video/mp4",
 			want:        "mp4",
 		},
 		{
 			name:        "extension wins",
-			storageKey:  "tenants/11111111-1111-1111-1111-111111111111/recordings/meeting.wav",
+			storageKey:  "tenants/11111111-1111-1111-1111-111111111111/recordings/episode.wav",
 			contentType: "video/mp4",
 			want:        "wav",
 		},

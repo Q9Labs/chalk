@@ -7,6 +7,8 @@ const configDir = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      "@q9labsai/chalk-client/telemetry": resolve(configDir, "../../sdks/typescript/client/src/telemetry/index.ts"),
+      "@q9labsai/chalk-react-native/client": resolve(configDir, "../../sdks/typescript/react-native/src/client.ts"),
       "@q9labsai/chalk-react-native/clipboard": resolve(configDir, "../../sdks/typescript/react-native/src/clipboard.ts"),
       "@q9labsai/chalk-react-native/diagnostics": resolve(configDir, "../../sdks/typescript/react-native/src/diagnostics.ts"),
       "@q9labsai/chalk-react-native/invites": resolve(configDir, "../../sdks/typescript/react-native/src/invites.ts"),

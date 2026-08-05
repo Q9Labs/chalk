@@ -16,28 +16,28 @@ defmodule ChalkSync.Live.MediaPlaneTestAdapter do
   end
 
   @impl true
-  def grant_publication(adapter, operation_id, session, participant_session_id, source) do
-    call(adapter, :grant_publication, operation_id, [session, participant_session_id, source])
+  def grant_publication(adapter, operation_id, episode, participant_id, source) do
+    call(adapter, :grant_publication, operation_id, [episode, participant_id, source])
   end
 
   @impl true
-  def revoke_publication(adapter, operation_id, session, participant_session_id, source) do
-    call(adapter, :revoke_publication, operation_id, [session, participant_session_id, source])
+  def revoke_publication(adapter, operation_id, episode, participant_id, source) do
+    call(adapter, :revoke_publication, operation_id, [episode, participant_id, source])
   end
 
   @impl true
-  def remove_participant(adapter, operation_id, session, participant_session_id) do
-    call(adapter, :remove_participant, operation_id, [session, participant_session_id])
+  def remove_participant(adapter, operation_id, episode, participant_id) do
+    call(adapter, :remove_participant, operation_id, [episode, participant_id])
   end
 
   @impl true
-  def end_session(adapter, operation_id, session) do
-    call(adapter, :end_session, operation_id, [session])
+  def end_episode(adapter, operation_id, episode) do
+    call(adapter, :end_episode, operation_id, [episode])
   end
 
   @impl true
-  def observe_session_publications(adapter, session) do
-    call(adapter, :observe_session_publications, nil, [session])
+  def observe_episode_publications(adapter, episode) do
+    call(adapter, :observe_episode_publications, nil, [episode])
   end
 
   @spec calls(Agent.agent()) :: [tuple()]
@@ -62,7 +62,7 @@ defmodule ChalkSync.Live.MediaPlaneTestAdapter do
   end
 
   defp normalize_outcome(
-         :observe_session_publications,
+         :observe_episode_publications,
          {:ok, publications},
          state
        )
@@ -73,10 +73,10 @@ defmodule ChalkSync.Live.MediaPlaneTestAdapter do
      %{state | observation_sequence: sequence}}
   end
 
-  defp normalize_outcome(:observe_session_publications, outcome, state), do: {outcome, state}
+  defp normalize_outcome(:observe_episode_publications, outcome, state), do: {outcome, state}
   defp normalize_outcome(_operation, outcome, state), do: {outcome, state}
 
-  defp default(:observe_session_publications),
+  defp default(:observe_episode_publications),
     do: {:ok, %{incarnation: 1, sequence: 0, publications: []}}
 
   defp default(_operation), do: :confirmed

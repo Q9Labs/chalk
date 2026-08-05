@@ -15,8 +15,8 @@ internal object ChalkConnectionRegistry {
   const val phoneAccountId = "chalk-self-managed-calls"
   const val eventName = "ChalkAndroidConnectionServiceEvent"
   const val extraCallId = "chalk.call_id"
-  const val extraRoomId = "chalk.room_id"
-  const val extraRoomName = "chalk.room_name"
+  const val extraSpaceId = "chalk.space_id"
+  const val extraSpaceName = "chalk.space_name"
   const val extraDisplayName = "chalk.display_name"
   const val extraHasVideo = "chalk.has_video"
 
@@ -28,8 +28,8 @@ internal object ChalkConnectionRegistry {
 
   data class ChalkCallSpec(
     val callId: String,
-    val roomId: String,
-    val roomName: String,
+    val spaceId: String,
+    val spaceName: String,
     val displayName: String,
     val hasVideo: Boolean,
   )

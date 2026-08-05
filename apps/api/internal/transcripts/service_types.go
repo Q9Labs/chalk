@@ -14,8 +14,8 @@ var (
 	ErrInvalidTranscriptID     = errors.New("invalid transcript id")
 	ErrInvalidTenantID         = errors.New("invalid tenant id")
 	ErrInvalidRecordingID      = errors.New("invalid recording id")
-	ErrInvalidRoomID           = errors.New("invalid room id")
-	ErrInvalidSessionID        = errors.New("invalid session id")
+	ErrInvalidSpaceID          = errors.New("invalid space id")
+	ErrInvalidEpisodeID        = errors.New("invalid episode id")
 	ErrInvalidTranscriptStatus = errors.New("invalid transcript status")
 	ErrInvalidProvider         = errors.New("invalid transcript provider")
 	ErrInvalidModel            = errors.New("invalid transcript model")
@@ -62,8 +62,8 @@ type Transcript struct {
 	ID                        utilities.ID
 	TenantID                  utilities.ID
 	RecordingID               utilities.ID
-	RoomID                    utilities.ID
-	SessionID                 utilities.ID
+	SpaceID                   utilities.ID
+	EpisodeID                 utilities.ID
 	Status                    string
 	Provider                  string
 	Model                     string

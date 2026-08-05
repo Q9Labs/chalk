@@ -5,9 +5,10 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -37,24 +38,24 @@ type sfuCloseTrackRequest struct {
 
 type sfuTracksEndpointRequest struct {
 	TenantID      utilities.ID
-	RoomID        utilities.ID
-	SessionID     utilities.ID
+	SpaceID       utilities.ID
+	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
 	Body          sfuTracksRequest
 }
 
 type sfuRenegotiateEndpointRequest struct {
 	TenantID      utilities.ID
-	RoomID        utilities.ID
-	SessionID     utilities.ID
+	SpaceID       utilities.ID
+	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
 	Body          sfuRenegotiateRequest
 }
 
 type sfuCloseTracksEndpointRequest struct {
 	TenantID      utilities.ID
-	RoomID        utilities.ID
-	SessionID     utilities.ID
+	SpaceID       utilities.ID
+	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
 	Body          sfuCloseTracksRequest
 }
@@ -65,15 +66,15 @@ type sfuRenegotiateResponse struct {
 
 type sfuPublicationsEndpointRequest struct {
 	TenantID      utilities.ID
-	RoomID        utilities.ID
-	SessionID     utilities.ID
+	SpaceID       utilities.ID
+	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
 }
 
 type sfuPublicationResponse struct {
-	ParticipantSessionID string `json:"participant_session_id"`
-	Source               string `json:"source"`
-	PublicationID        string `json:"publication_id"`
+	ParticipantID string `json:"participant_id"`
+	Source        string `json:"source"`
+	PublicationID string `json:"publication_id"`
 }
 
 type sfuPublicationsResponse struct {
@@ -82,37 +83,43 @@ type sfuPublicationsResponse struct {
 	Publications []sfuPublicationResponse `json:"publications"`
 }
 
-func mountParticipantMediaRoutes(r chi.Router, rooms RoomService, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry, verifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, limits RateLimitOptions) {
+// EpisodeLookup provides the bounded read needed to ensure participant media
+// routes refer to an Episode belonging to the requested Space.
+type EpisodeLookup interface {
+	GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error)
+}
+
+func mountParticipantMediaRoutes(r chi.Router, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry, verifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, limits RateLimitOptions) {
 	r.Use(requireParticipantMedia(verifier, active))
-	for _, endpoint := range sfuSignalingEndpoints(rooms, tenants, media, publications) {
+	for _, endpoint := range sfuSignalingEndpoints(spaces, episodeLookup, tenants, media, publications) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func sfuSignalingEndpoints(rooms RoomService, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) []RouteEndpoint {
+func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) []RouteEndpoint {
 	return []RouteEndpoint{
-		sfuAddTracksEndpoint(rooms, tenants, media, publications),
-		sfuCloseTracksEndpoint(rooms, tenants, media, publications),
-		sfuRenegotiateEndpoint(rooms, tenants, media),
-		sfuListPublicationsEndpoint(rooms, tenants, media, publications),
+		sfuAddTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
+		sfuCloseTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
+		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
+		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
 	}
 }
 
-func sfuAddTracksEndpoint(rooms RoomService, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuTracksEndpointRequest, mediaplane.TracksResponse] {
+func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Post(
-		"/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks",
-		"/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks",
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
 		"addCloudflareSFUTracks",
 		decodeSFUTracksRequest,
 		func(ctx context.Context, request sfuTracksEndpointRequest) (mediaplane.TracksResponse, error) {
-			if err := authorizeSFURequest(ctx, request.TenantID, request.RoomID, request.SessionID, request.ParticipantID, request.Body.ConnectionID); err != nil {
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
 				return mediaplane.TracksResponse{}, err
 			}
-			subject, ok := participantaccess.SubjectFromContext(ctx)
+			subject, ok := accessgrants.SubjectFromContext(ctx)
 			if !ok {
 				return mediaplane.TracksResponse{}, apiErrorUnauthenticated
 			}
-			service, err := resolveSFUSignalingPlane(ctx, rooms, tenants, media, request.TenantID, request.RoomID, request.SessionID)
+			service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
 			if err != nil {
 				return mediaplane.TracksResponse{}, err
 			}
@@ -134,7 +141,7 @@ func sfuAddTracksEndpoint(rooms RoomService, tenants TenantService, media MediaP
 				if publications == nil {
 					return mediaplane.TracksResponse{}, mediapublications.ErrUnavailable
 				}
-				references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, SessionID: request.SessionID, ParticipantSessionID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Tracks: published})
+				references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Tracks: published})
 				if err != nil {
 					return mediaplane.TracksResponse{}, err
 				}
@@ -147,28 +154,28 @@ func sfuAddTracksEndpoint(rooms RoomService, tenants TenantService, media MediaP
 	).
 		Auth(APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantRoomSessionParticipantParameters()...).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidParticipantID, apiErrorSessionNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
-		MapErrors(sessionLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
-func sfuCloseTracksEndpoint(rooms RoomService, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuCloseTracksEndpointRequest, mediaplane.CloseTracksResponse] {
+func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuCloseTracksEndpointRequest, mediaplane.CloseTracksResponse] {
 	return Put(
-		"/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks/close",
-		"/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks/close",
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
 		"closeCloudflareSFUTracks",
 		decodeSFUCloseTracksRequest,
 		func(ctx context.Context, request sfuCloseTracksEndpointRequest) (mediaplane.CloseTracksResponse, error) {
-			if err := authorizeSFURequest(ctx, request.TenantID, request.RoomID, request.SessionID, request.ParticipantID, request.Body.ConnectionID); err != nil {
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
 				return mediaplane.CloseTracksResponse{}, err
 			}
-			subject, ok := participantaccess.SubjectFromContext(ctx)
+			subject, ok := accessgrants.SubjectFromContext(ctx)
 			if !ok {
 				return mediaplane.CloseTracksResponse{}, apiErrorUnauthenticated
 			}
-			service, err := resolveSFUSignalingPlane(ctx, rooms, tenants, media, request.TenantID, request.RoomID, request.SessionID)
+			service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
 			if err != nil {
 				return mediaplane.CloseTracksResponse{}, err
 			}
@@ -182,7 +189,7 @@ func sfuCloseTracksEndpoint(rooms RoomService, tenants TenantService, media Medi
 			requiredTracks := make([]mediaplane.CloseTrack, 0, len(tracks))
 			for _, track := range tracks {
 				decision, err := publications.PrepareClose(ctx, mediapublications.CloseInput{
-					TenantID: request.TenantID, SessionID: request.SessionID, ParticipantSessionID: request.ParticipantID,
+					TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
 					ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID,
 					MID: track.Mid, Source: track.Source, PublicationID: track.PublicationID,
 				})
@@ -205,7 +212,7 @@ func sfuCloseTracksEndpoint(rooms RoomService, tenants TenantService, media Medi
 			}
 			for _, track := range requiredTracks {
 				if err := publications.RecordClosedPublication(ctx, mediapublications.CloseInput{
-					TenantID: request.TenantID, SessionID: request.SessionID, ParticipantSessionID: request.ParticipantID,
+					TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
 					ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID,
 					MID: track.Mid, Source: track.Source, PublicationID: track.PublicationID,
 				}); err != nil {
@@ -218,11 +225,11 @@ func sfuCloseTracksEndpoint(rooms RoomService, tenants TenantService, media Medi
 	).
 		Auth(APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantRoomSessionParticipantParameters()...).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		RequestBody("CloudflareSFUCloseTracksRequest", sfuCloseTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUCloseTracksAPIResponse", mediaplane.CloseTracksResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidParticipantID, apiErrorSessionNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
-		MapErrors(sessionLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func attachPublishedReferences(response *mediaplane.TracksResponse, references []mediapublications.PublishedReference) error {
@@ -253,53 +260,53 @@ func attachPublishedReferences(response *mediaplane.TracksResponse, references [
 	return nil
 }
 
-func sfuListPublicationsEndpoint(rooms RoomService, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuPublicationsEndpointRequest, sfuPublicationsResponse] {
+func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuPublicationsEndpointRequest, sfuPublicationsResponse] {
 	return Get(
-		"/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/publications",
-		"/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/publications",
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
 		"listCloudflareSFUPublications",
 		decodeSFUPublicationsRequest,
 		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuPublicationsResponse, error) {
-			if err := authorizeSFURequest(ctx, request.TenantID, request.RoomID, request.SessionID, request.ParticipantID, ""); err != nil {
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, ""); err != nil {
 				return sfuPublicationsResponse{}, err
 			}
-			if _, err := resolveSFUSignalingPlane(ctx, rooms, tenants, media, request.TenantID, request.RoomID, request.SessionID); err != nil {
+			if _, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID); err != nil {
 				return sfuPublicationsResponse{}, err
 			}
 			if publications == nil {
 				return sfuPublicationsResponse{}, mediapublications.ErrUnavailable
 			}
-			snapshot, err := publications.Latest(ctx, request.TenantID, request.SessionID)
+			snapshot, err := publications.Latest(ctx, request.TenantID, request.EpisodeID)
 			if err != nil {
 				return sfuPublicationsResponse{}, err
 			}
 			response := sfuPublicationsResponse{Incarnation: snapshot.Incarnation, Sequence: snapshot.Sequence, Publications: make([]sfuPublicationResponse, 0, len(snapshot.Publications))}
 			for _, publication := range snapshot.Publications {
 				if publication.Enabled && publication.PublicationID != "" {
-					response.Publications = append(response.Publications, sfuPublicationResponse{ParticipantSessionID: publication.ParticipantSessionID.String(), Source: publication.Source, PublicationID: publication.PublicationID})
+					response.Publications = append(response.Publications, sfuPublicationResponse{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID})
 				}
 			}
 			return response, nil
 		},
 	).
 		Auth(APIAuthParticipantMedia).
-		Parameters(tenantRoomSessionParticipantParameters()...).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		Responds(http.StatusOK, "CloudflareSFUPublicationsResponse", sfuPublicationsResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidParticipantID, apiErrorSessionNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
-		MapErrors(sessionLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
-func sfuRenegotiateEndpoint(rooms RoomService, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuRenegotiateEndpointRequest, sfuRenegotiateResponse] {
+func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuRenegotiateEndpointRequest, sfuRenegotiateResponse] {
 	return Post(
-		"/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/renegotiate",
-		"/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/renegotiate",
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
 		"renegotiateCloudflareSFU",
 		decodeSFURenegotiateRequest,
 		func(ctx context.Context, request sfuRenegotiateEndpointRequest) (sfuRenegotiateResponse, error) {
-			if err := authorizeSFURequest(ctx, request.TenantID, request.RoomID, request.SessionID, request.ParticipantID, request.Body.ConnectionID); err != nil {
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
 				return sfuRenegotiateResponse{}, err
 			}
-			service, err := resolveSFUSignalingPlane(ctx, rooms, tenants, media, request.TenantID, request.RoomID, request.SessionID)
+			service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
 			if err != nil {
 				return sfuRenegotiateResponse{}, err
 			}
@@ -312,15 +319,15 @@ func sfuRenegotiateEndpoint(rooms RoomService, tenants TenantService, media Medi
 	).
 		Auth(APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantRoomSessionParticipantParameters()...).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		RequestBody("CloudflareSFURenegotiateRequest", sfuRenegotiateRequest{}).
 		Responds(http.StatusOK, "CloudflareSFURenegotiateResponse", sfuRenegotiateResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidParticipantID, apiErrorSessionNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
-		MapErrors(sessionLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func decodeSFUTracksRequest(request *http.Request) (sfuTracksEndpointRequest, error) {
-	tenantID, roomID, sessionID, participantID, err := tenantRoomSessionParticipantIDsRequest(request)
+	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
 	if err != nil {
 		return sfuTracksEndpointRequest{}, err
 	}
@@ -328,11 +335,11 @@ func decodeSFUTracksRequest(request *http.Request) (sfuTracksEndpointRequest, er
 	if err != nil {
 		return sfuTracksEndpointRequest{}, err
 	}
-	return sfuTracksEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, ParticipantID: participantID, Body: body}, nil
+	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
 }
 
 func decodeSFURenegotiateRequest(request *http.Request) (sfuRenegotiateEndpointRequest, error) {
-	tenantID, roomID, sessionID, participantID, err := tenantRoomSessionParticipantIDsRequest(request)
+	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
 	if err != nil {
 		return sfuRenegotiateEndpointRequest{}, err
 	}
@@ -340,11 +347,11 @@ func decodeSFURenegotiateRequest(request *http.Request) (sfuRenegotiateEndpointR
 	if err != nil {
 		return sfuRenegotiateEndpointRequest{}, err
 	}
-	return sfuRenegotiateEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, ParticipantID: participantID, Body: body}, nil
+	return sfuRenegotiateEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
 }
 
 func decodeSFUCloseTracksRequest(request *http.Request) (sfuCloseTracksEndpointRequest, error) {
-	tenantID, roomID, sessionID, participantID, err := tenantRoomSessionParticipantIDsRequest(request)
+	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
 	if err != nil {
 		return sfuCloseTracksEndpointRequest{}, err
 	}
@@ -352,32 +359,32 @@ func decodeSFUCloseTracksRequest(request *http.Request) (sfuCloseTracksEndpointR
 	if err != nil {
 		return sfuCloseTracksEndpointRequest{}, err
 	}
-	return sfuCloseTracksEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, ParticipantID: participantID, Body: body}, nil
+	return sfuCloseTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
 }
 
 func decodeSFUPublicationsRequest(request *http.Request) (sfuPublicationsEndpointRequest, error) {
-	tenantID, roomID, sessionID, participantID, err := tenantRoomSessionParticipantIDsRequest(request)
+	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
 	if err != nil {
 		return sfuPublicationsEndpointRequest{}, err
 	}
-	return sfuPublicationsEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, ParticipantID: participantID}, nil
+	return sfuPublicationsEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID}, nil
 }
 
-func tenantRoomSessionParticipantIDsRequest(request *http.Request) (utilities.ID, utilities.ID, utilities.ID, utilities.ID, error) {
-	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(request)
+func tenantSpaceEpisodeParticipantIDsRequest(request *http.Request) (utilities.ID, utilities.ID, utilities.ID, utilities.ID, error) {
+	tenantID, spaceID, episodeID, err := tenantSpaceEpisodeIDsRequest(request)
 	if err != nil {
 		return utilities.ID{}, utilities.ID{}, utilities.ID{}, utilities.ID{}, err
 	}
-	participantID, err := routeID(request, "participant_session_id", apiErrorInvalidParticipantID)
-	return tenantID, roomID, sessionID, participantID, err
+	participantID, err := routeID(request, "participant_id", apiErrorInvalidParticipantID)
+	return tenantID, spaceID, episodeID, participantID, err
 }
 
-func tenantRoomSessionParticipantParameters() []APIParameterContract {
-	return []APIParameterContract{tenantIDParameter(), roomIDParameter(), sessionIDParameter(), participantSessionIDParameter()}
+func tenantSpaceEpisodeParticipantParameters() []APIParameterContract {
+	return []APIParameterContract{tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()}
 }
 
-func authorizeSFURequest(ctx context.Context, tenantID, roomID, sessionID, participantID utilities.ID, connectionID string) error {
-	subject, ok := participantaccess.SubjectFromContext(ctx)
+func authorizeSFURequest(ctx context.Context, tenantID, spaceID, episodeID, participantID utilities.ID, connectionID string) error {
+	subject, ok := accessgrants.SubjectFromContext(ctx)
 	if !ok {
 		return apiErrorUnauthenticated
 	}
@@ -385,19 +392,22 @@ func authorizeSFURequest(ctx context.Context, tenantID, roomID, sessionID, parti
 		connectionID = subject.CloudflareConnectionID
 	}
 	return requireParticipantMediaRoute(
-		ctx, tenantID, roomID, sessionID, participantID, subject.ParticipantGeneration,
-		participantaccess.ProviderCloudflareSFU, connectionID,
+		ctx, tenantID, spaceID, episodeID, participantID, subject.ParticipantGeneration,
+		accessgrants.ProviderCloudflareSFU, connectionID,
 	)
 }
 
-func resolveSFUSignalingPlane(ctx context.Context, rooms RoomService, tenants TenantService, media MediaPlaneResolver, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (*mediaplane.Service, error) {
-	if rooms == nil {
+func resolveSFUSignalingPlane(ctx context.Context, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID) (*mediaplane.Service, error) {
+	if spaces == nil {
 		return nil, mediaplane.ErrPlaneUnavailable
 	}
-	if _, err := rooms.GetSession(ctx, tenantID, roomID, sessionID); err != nil {
+	if episodeLookup == nil {
+		return nil, mediaplane.ErrPlaneUnavailable
+	}
+	if _, err := episodeLookup.GetEpisode(ctx, tenantID, spaceID, episodeID); err != nil {
 		return nil, err
 	}
-	service, err := resolveMediaPlane(ctx, media, rooms, tenants, tenantID, roomID)
+	service, err := resolveMediaPlane(ctx, media, spaces, tenants, tenantID, spaceID)
 	if err != nil {
 		return nil, err
 	}

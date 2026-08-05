@@ -70,7 +70,7 @@ create table memberships (
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
     user_id uuid not null references users(id),
-    -- owner, admin, member, viewer
+    -- owner, collaborator, observer
     role text not null,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
@@ -161,16 +161,15 @@ create table tenant_signing_keys (
     unique (key_id)
 );
 
-create table rooms (
+create table spaces (
     id uuid primary key,
     name text not null,
     tenant_id uuid not null references tenants(id),
-    status text not null,
     slug text not null,
     -- cf_sfu, cf_rtk, mediasoup
     media_plane text not null,
     metadata jsonb,
-    -- recurring_policy is null for non-recurring rooms.
+    -- recurring_policy is null for non-recurring spaces.
     -- Example:
     -- {
     --   "timezone": "Asia/Dubai",
@@ -178,170 +177,184 @@ create table rooms (
     --   "rrule": "FREQ=WEEKLY;BYDAY=MO,WE"
     -- }
     recurring_policy jsonb,
+    admission_policy jsonb not null default '{"mode":"open"}'::jsonb
+        check (jsonb_typeof(admission_policy) = 'object' and admission_policy ->> 'mode' in ('open', 'knock', 'members_only')),
+    default_episode_duration_seconds integer not null default 86400,
+    maximum_episode_duration_seconds integer not null default 86400,
+    linger_window_seconds integer not null default 0,
     created_by_user_id uuid references users(id),
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
-    unique (tenant_id, slug)
+    unique (tenant_id, slug),
+    unique (tenant_id, id),
+    check (default_episode_duration_seconds between 60 and 604800),
+    check (maximum_episode_duration_seconds between 60 and 604800),
+    check (default_episode_duration_seconds <= maximum_episode_duration_seconds),
+    check (linger_window_seconds >= 0)
 );
-create index rooms_tenant_created_at_id_idx on rooms(tenant_id, created_at desc, id desc);
+create index spaces_tenant_created_at_id_idx on spaces(tenant_id, created_at desc, id desc);
 
-create function sync_v3_valid_role_capabilities(value jsonb)
-returns boolean
-language plpgsql
-immutable
-strict
-as $$
-declare
-    role_name text;
-    capability_value jsonb;
-    capability_name text;
-    seen text[];
-    allowed constant text[] := array[
-        'publishAudio', 'publishVideo', 'publishScreen', 'subscribe',
-        'raiseHand', 'renameSelf', 'manageAdmission', 'promoteDemote',
-        'transferHost', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
-        'requestMediaOthers', 'removeParticipant', 'manageRecording', 'endMeeting'
-    ];
-begin
-    if jsonb_typeof(value) <> 'object'
-        or not value ?& array['host', 'cohost', 'participant']
-        or (select count(*) from jsonb_object_keys(value)) <> 3 then
-        return false;
-    end if;
-
-    foreach role_name in array array['host', 'cohost', 'participant'] loop
-        capability_value := value -> role_name;
-        if jsonb_typeof(capability_value) <> 'array' or jsonb_array_length(capability_value) > 16 then
-            return false;
-        end if;
-
-        seen := array[]::text[];
-        for capability_name in select jsonb_array_elements_text(capability_value) loop
-            if not capability_name = any(allowed) or capability_name = any(seen) then
-                return false;
-            end if;
-            seen := array_append(seen, capability_name);
-        end loop;
-    end loop;
-
-    return true;
-exception
-    when others then
-        return false;
-end;
-$$;
-
-create function sync_v3_valid_eligible_roles(value text[])
+create function valid_capabilities(value text[])
 returns boolean
 language sql
 immutable
 strict
 as $$
-    select cardinality(value) between 1 and 3
-        and value <@ array['host', 'cohost', 'participant']::text[]
-        and cardinality(value) = (select count(distinct role_name) from unnest(value) as role_name)
+    select value <@ array[
+        'publishAudio', 'publishVideo', 'publishScreen', 'subscribe',
+        'raiseHand', 'renameSelf', 'sendChat', 'sendReaction',
+        'drawWhiteboard', 'manageWhiteboard', 'manageAdmission',
+        'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
+        'requestMediaOthers', 'removeParticipant', 'manageRecording',
+        'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
+        'clearSpaceContent'
+    ]::text[]
+        and cardinality(value) <= 23
+        and cardinality(value) = (select count(distinct capability) from unnest(value) as capability)
 $$;
 
-create table room_sessions (
+create table identities (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    kind text not null check (kind in ('user', 'agent')),
+    external_id text not null,
+    display_name text not null,
+    metadata jsonb,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    unique (tenant_id, external_id),
+    unique (tenant_id, id)
+);
+create index identities_tenant_created_at_id_idx on identities(tenant_id, created_at desc, id desc);
+
+create table space_roles (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    space_id uuid not null,
+    name text not null,
+    capabilities text[] not null,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    unique (tenant_id, space_id, name),
+    unique (tenant_id, space_id, id),
+    foreign key (tenant_id, space_id)
+        references spaces(tenant_id, id)
+        on delete cascade,
+    check (name <> '' and cardinality(capabilities) > 0 and valid_capabilities(capabilities))
+);
+create index space_roles_space_created_at_id_idx on space_roles(space_id, created_at desc, id desc);
+
+create table space_members (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    space_id uuid not null,
+    identity_id uuid not null,
+    role_id uuid not null,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    unique (space_id, identity_id),
+    foreign key (tenant_id, space_id)
+        references spaces(tenant_id, id)
+        on delete cascade,
+    foreign key (tenant_id, space_id, role_id)
+        references space_roles(tenant_id, space_id, id)
+        on delete restrict,
+    foreign key (tenant_id, identity_id)
+        references identities(tenant_id, id)
+        on delete restrict
+);
+create index space_members_space_created_at_id_idx on space_members(space_id, created_at desc, id desc);
+
+create function validate_episode_config_snapshot(value jsonb)
+returns boolean
+language sql
+immutable
+strict
+as $$
+    select jsonb_typeof(value) = 'object'
+        and jsonb_typeof(value -> 'roles') = 'object'
+        and not exists (
+            select 1
+            from jsonb_each(value -> 'roles') role_entry
+            where jsonb_typeof(role_entry.value) <> 'array'
+                or not valid_capabilities(array(select jsonb_array_elements_text(role_entry.value)))
+        )
+        and jsonb_typeof(value -> 'admission_policy') = 'object'
+        and value -> 'admission_policy' ->> 'mode' in ('open', 'knock', 'members_only')
+        and (value ->> 'default_episode_duration_seconds')::integer between 60 and 604800
+        and (value ->> 'maximum_episode_duration_seconds')::integer between 60 and 604800
+        and (value ->> 'default_episode_duration_seconds')::integer <=
+            (value ->> 'maximum_episode_duration_seconds')::integer
+        and (value ->> 'linger_window_seconds')::integer >= 0
+$$;
+
+create table episodes (
     id uuid primary key,
     status text not null check (status in ('active', 'ending', 'ended')),
     metadata jsonb,
-    room_id uuid not null references rooms(id),
+    space_id uuid not null,
     tenant_id uuid not null references tenants(id),
     created_by_user_id uuid references users(id),
     started_at timestamptz,
     ended_at timestamptz,
-    host_exit_policy text not null default 'require_transfer'
-        check (host_exit_policy in ('require_transfer', 'promote_cohost')),
-    role_capabilities jsonb not null
-        default '{"host":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","manageAdmission","promoteDemote","transferHost","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording","endMeeting"],"cohost":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","manageAdmission","promoteDemote","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording"],"participant":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf"]}'::jsonb
-        check (sync_v3_valid_role_capabilities(role_capabilities)),
-    room_action_role_capabilities jsonb not null
-        default '{"host":["sendReaction","sendChat"],"cohost":["sendReaction","sendChat"],"participant":["sendReaction","sendChat"]}'::jsonb
-        check (
-            jsonb_typeof(room_action_role_capabilities) = 'object'
-            and room_action_role_capabilities ?& array['host', 'cohost', 'participant']
-            and room_action_role_capabilities - array['host', 'cohost', 'participant'] = '{}'::jsonb
-            and jsonb_typeof(room_action_role_capabilities -> 'host') = 'array'
-            and jsonb_typeof(room_action_role_capabilities -> 'cohost') = 'array'
-            and jsonb_typeof(room_action_role_capabilities -> 'participant') = 'array'
-            and not jsonb_path_exists(
-                room_action_role_capabilities,
-                '$.*[*] ? (@ != "sendReaction" && @ != "sendChat")'
-            )
-        ),
-    whiteboard_role_capabilities jsonb not null
-        default '{"host":["drawWhiteboard","manageWhiteboard"],"cohost":["drawWhiteboard","manageWhiteboard"],"participant":["drawWhiteboard"]}'::jsonb
-        check (
-            jsonb_typeof(whiteboard_role_capabilities) = 'object'
-            and whiteboard_role_capabilities ?& array['host', 'cohost', 'participant']
-            and whiteboard_role_capabilities - array['host', 'cohost', 'participant'] = '{}'::jsonb
-            and jsonb_typeof(whiteboard_role_capabilities -> 'host') = 'array'
-            and jsonb_typeof(whiteboard_role_capabilities -> 'cohost') = 'array'
-            and jsonb_typeof(whiteboard_role_capabilities -> 'participant') = 'array'
-            and not jsonb_path_exists(
-                whiteboard_role_capabilities,
-                '$.*[*] ? (@ != "drawWhiteboard" && @ != "manageWhiteboard")'
-            )
-        ),
-    maximum_duration_seconds integer not null default 86400,
-    maximum_duration_ceiling_seconds integer not null default 86400,
+    config_snapshot jsonb not null check (validate_episode_config_snapshot(config_snapshot)),
+    end_reason text check (end_reason in ('explicit', 'natural', 'deadline')),
     deadline_at timestamptz not null default (now() + interval '24 hours'),
     deadline_generation bigint not null default 1,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
-    unique (tenant_id, room_id, id),
+    unique (tenant_id, space_id, id),
+    foreign key (tenant_id, space_id)
+        references spaces(tenant_id, id)
+        on delete restrict,
     check (
-        maximum_duration_seconds between 60 and 604800
-        and maximum_duration_ceiling_seconds between 60 and 604800
-        and maximum_duration_seconds <= maximum_duration_ceiling_seconds
-        and deadline_generation > 0
-        and deadline_at <= created_at + make_interval(secs => maximum_duration_ceiling_seconds)
+        deadline_generation > 0
     )
 );
-create index room_sessions_tenant_room_created_at_id_idx on room_sessions(tenant_id, room_id, created_at desc, id desc);
-create index room_sessions_sync_ended_cleanup_idx
-    on room_sessions(ended_at, tenant_id, id)
+create index episodes_tenant_space_created_at_id_idx on episodes(tenant_id, space_id, created_at desc, id desc);
+create index episodes_sync_ended_cleanup_idx
+    on episodes(ended_at, tenant_id, id)
     where status = 'ended';
+create unique index episodes_one_live_per_space_idx
+    on episodes(tenant_id, space_id)
+    where status in ('active', 'ending');
 
-create function sync_v3_protect_immutable_session_policy()
+create function protect_immutable_episode_policy()
 returns trigger
 language plpgsql
 as $$
 begin
-    if new.host_exit_policy is distinct from old.host_exit_policy
-        or new.role_capabilities is distinct from old.role_capabilities
-        or new.maximum_duration_ceiling_seconds is distinct from old.maximum_duration_ceiling_seconds then
-        raise exception 'sync v3 immutable Session policy cannot change';
+    if new.config_snapshot is distinct from old.config_snapshot then
+        raise exception 'Episode config_snapshot is immutable';
     end if;
 
     if new.deadline_at is distinct from old.deadline_at
-        or new.maximum_duration_seconds is distinct from old.maximum_duration_seconds then
+        then
         if new.deadline_generation <> old.deadline_generation + 1 then
-            raise exception 'sync v3 deadline mutation must advance generation exactly once';
+            raise exception 'Episode deadline mutation must advance generation exactly once';
         end if;
     elsif new.deadline_generation is distinct from old.deadline_generation then
-        raise exception 'sync v3 deadline generation cannot change without a deadline mutation';
+            raise exception 'Episode deadline generation cannot change without a deadline mutation';
     end if;
 
     return new;
 end;
 $$;
 
-create trigger room_sessions_sync_v3_immutable_policy
-before update on room_sessions
-for each row execute function sync_v3_protect_immutable_session_policy();
+create trigger episodes_immutable_config_snapshot
+before update on episodes
+for each row execute function protect_immutable_episode_policy();
 
-create table session_create_requests (
+create table episode_create_requests (
     tenant_id uuid not null,
-    room_id uuid not null,
+    space_id uuid not null,
     request_key text not null,
     request_fingerprint bytea not null,
-    session_id uuid not null,
+    episode_id uuid not null,
     created_at timestamptz not null default now(),
-    primary key (tenant_id, room_id, request_key),
-    foreign key (tenant_id, room_id, session_id)
-        references room_sessions(tenant_id, room_id, id)
+    primary key (tenant_id, space_id, request_key),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id)
         on delete restrict
         deferrable initially deferred,
     check (request_key ~ '^[A-Za-z0-9_-]{16,128}$'),
@@ -354,40 +367,33 @@ create table participants (
     metadata jsonb,
     capabilities text[] not null,
     tenant_id uuid not null references tenants(id),
-    room_id uuid not null references rooms(id),
-    session_id uuid not null references room_sessions(id),
-    user_id uuid references users(id),
+    space_id uuid not null,
+    episode_id uuid not null,
+    identity_id uuid,
     generation bigint not null check (generation > 0),
     status text not null check (status in ('joining', 'active', 'leaving', 'left')),
-    role text not null default 'participant'
-        check (role in ('host', 'cohost', 'participant')),
-    eligible_roles text[] not null default array['participant']::text[],
+    role text not null,
     joined_at timestamptz,
     left_at timestamptz,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
-    unique (tenant_id, room_id, session_id, id),
-    unique (tenant_id, room_id, session_id, id, generation),
-    foreign key (tenant_id, room_id, session_id)
-        references room_sessions(tenant_id, room_id, id)
+    unique (tenant_id, space_id, episode_id, id),
+    unique (tenant_id, space_id, episode_id, id, generation),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id)
         on delete restrict,
-    check (
-        sync_v3_valid_eligible_roles(eligible_roles)
-        and role = any(eligible_roles)
-        and (role <> 'host' or 'cohost' = any(eligible_roles))
-    )
+    foreign key (tenant_id, identity_id)
+        references identities(tenant_id, id)
+        on delete restrict,
+    check (cardinality(capabilities) > 0 and valid_capabilities(capabilities))
 );
-create index participants_sync_active_session_capacity_idx
-    on participants(tenant_id, room_id, session_id)
+create index participants_sync_active_episode_capacity_idx
+    on participants(tenant_id, space_id, episode_id)
     where status in ('joining', 'active', 'leaving');
-create unique index participants_sync_v3_one_host_per_session_idx
-    on participants(tenant_id, session_id)
-    where role = 'host' and status in ('joining', 'active', 'leaving');
 
 create table sync_chat_streams (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
     head_sequence bigint not null default 0,
     retained_floor_sequence bigint,
     message_count bigint not null default 0,
@@ -396,10 +402,9 @@ create table sync_chat_streams (
     attachment_bytes bigint not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    primary key (tenant_id, session_id),
-    unique (tenant_id, room_id, session_id),
-    foreign key (tenant_id, room_id, session_id)
-        references room_sessions(tenant_id, room_id, id)
+    primary key (tenant_id, space_id),
+    foreign key (tenant_id, space_id)
+        references spaces(tenant_id, id)
         on delete restrict,
     check (
         head_sequence >= 0
@@ -425,38 +430,38 @@ create table sync_chat_streams (
 
 create table sync_chat_messages (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     sequence bigint not null,
     message_id uuid not null,
-    participant_session_id uuid not null,
-    participant_session_generation bigint not null,
+    participant_id uuid not null,
+    participant_generation bigint not null,
     client_message_id text not null,
     request_fingerprint bytea not null,
     display_name text not null,
     message_text text not null,
     encoded_bytes bigint not null,
     created_at timestamptz not null,
-    primary key (tenant_id, session_id, sequence),
-    unique (tenant_id, session_id, message_id),
+    primary key (tenant_id, space_id, sequence),
+    unique (tenant_id, space_id, message_id),
     unique (
         tenant_id,
-        session_id,
-        participant_session_id,
-        participant_session_generation,
+        space_id,
+        participant_id,
+        participant_generation,
         client_message_id
     ),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_chat_streams(tenant_id, room_id, session_id)
+    foreign key (tenant_id, space_id)
+        references sync_chat_streams(tenant_id, space_id)
         on delete restrict,
     foreign key (
         tenant_id,
-        room_id,
-        session_id,
-        participant_session_id,
-        participant_session_generation
+        space_id,
+        episode_id,
+        participant_id,
+        participant_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (sequence > 0),
     check (octet_length(client_message_id) between 16 and 64),
@@ -468,16 +473,16 @@ create table sync_chat_messages (
     ),
     check (encoded_bytes between 1 and 32768)
 );
-create index sync_chat_messages_session_created_at_idx
-    on sync_chat_messages(tenant_id, session_id, created_at, sequence);
+create index sync_chat_messages_space_created_at_idx
+    on sync_chat_messages(tenant_id, space_id, created_at, sequence);
 
 create table sync_chat_attachments (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     attachment_id uuid not null,
-    participant_session_id uuid not null,
-    participant_session_generation bigint not null,
+    participant_id uuid not null,
+    participant_generation bigint not null,
     client_attachment_id text not null,
     request_fingerprint bytea not null,
     upload_id uuid not null,
@@ -501,37 +506,37 @@ create table sync_chat_attachments (
     attached_at timestamptz,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, attachment_id),
+    primary key (tenant_id, space_id, attachment_id),
     unique (upload_id),
     unique (object_key),
     unique (
         tenant_id,
-        session_id,
-        participant_session_id,
-        participant_session_generation,
+        space_id,
+        participant_id,
+        participant_generation,
         client_attachment_id
     ),
-    unique (tenant_id, session_id, message_sequence, message_ordinal),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_chat_streams(tenant_id, room_id, session_id)
+    unique (tenant_id, space_id, message_sequence, message_ordinal),
+    foreign key (tenant_id, space_id)
+        references sync_chat_streams(tenant_id, space_id)
         on delete restrict,
     foreign key (
         tenant_id,
-        room_id,
-        session_id,
-        participant_session_id,
-        participant_session_generation
+        space_id,
+        episode_id,
+        participant_id,
+        participant_generation
     )
         references participants(
             tenant_id,
-            room_id,
-            session_id,
+            space_id,
+            episode_id,
             id,
             generation
         )
         on delete restrict,
-    foreign key (tenant_id, session_id, message_sequence)
-        references sync_chat_messages(tenant_id, session_id, sequence)
+    foreign key (tenant_id, space_id, message_sequence)
+        references sync_chat_messages(tenant_id, space_id, sequence)
         on delete restrict,
     check (octet_length(client_attachment_id) between 16 and 64),
     check (octet_length(request_fingerprint) = 32),
@@ -611,41 +616,41 @@ create table sync_chat_attachments (
 create index sync_chat_attachments_cleanup_idx
     on sync_chat_attachments(status, expires_at)
     where status <> 'attached';
-create index sync_chat_attachments_session_status_idx
-    on sync_chat_attachments(tenant_id, session_id, status);
+create index sync_chat_attachments_space_status_idx
+    on sync_chat_attachments(tenant_id, space_id, status);
 create index sync_chat_attachments_finalize_lease_idx
     on sync_chat_attachments(finalize_claimed_until)
     where status = 'finalizing';
 
 create table sync_chat_read_receipts (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
-    participant_session_id uuid not null,
-    participant_session_generation bigint not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    participant_generation bigint not null,
     sequence bigint not null,
     read_at timestamptz not null,
     updated_at timestamptz not null default now(),
     primary key (
         tenant_id,
-        session_id,
-        participant_session_id,
-        participant_session_generation
+        space_id,
+        participant_id,
+        participant_generation
     ),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_chat_streams(tenant_id, room_id, session_id)
+    foreign key (tenant_id, space_id)
+        references sync_chat_streams(tenant_id, space_id)
         on delete restrict,
     foreign key (
         tenant_id,
-        room_id,
-        session_id,
-        participant_session_id,
-        participant_session_generation
+        space_id,
+        episode_id,
+        participant_id,
+        participant_generation
     )
         references participants(
             tenant_id,
-            room_id,
-            session_id,
+            space_id,
+            episode_id,
             id,
             generation
         )
@@ -655,8 +660,7 @@ create table sync_chat_read_receipts (
 
 create table sync_whiteboard_scenes (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
     scene_id uuid not null,
     is_current boolean not null default true,
     revision bigint not null default 0,
@@ -665,10 +669,9 @@ create table sync_whiteboard_scenes (
     encoded_bytes bigint not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, scene_id),
-    unique (tenant_id, room_id, session_id, scene_id),
-    foreign key (tenant_id, room_id, session_id)
-        references room_sessions(tenant_id, room_id, id)
+    primary key (tenant_id, space_id, scene_id),
+    foreign key (tenant_id, space_id)
+        references spaces(tenant_id, id)
         on delete cascade,
     check (revision >= 0),
     check (element_count between 0 and 10000),
@@ -684,13 +687,13 @@ create table sync_whiteboard_scenes (
     )
 );
 create unique index sync_whiteboard_scenes_current_idx
-    on sync_whiteboard_scenes(tenant_id, session_id)
+    on sync_whiteboard_scenes(tenant_id, space_id)
     where is_current;
 
 create table sync_whiteboard_elements (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     scene_id uuid not null,
     element_id text not null,
     element_type text not null,
@@ -701,10 +704,13 @@ create table sync_whiteboard_elements (
     payload jsonb not null,
     encoded_bytes integer not null,
     updated_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, scene_id, element_id),
-    foreign key (tenant_id, room_id, session_id, scene_id)
-        references sync_whiteboard_scenes(tenant_id, room_id, session_id, scene_id)
+    primary key (tenant_id, space_id, scene_id, element_id),
+    foreign key (tenant_id, space_id, scene_id)
+        references sync_whiteboard_scenes(tenant_id, space_id, scene_id)
         on delete cascade,
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id)
+        on delete restrict,
     check (octet_length(element_id) between 1 and 128),
     check (octet_length(element_type) between 1 and 64),
     check (octet_length(element_index) between 1 and 64),
@@ -713,30 +719,30 @@ create table sync_whiteboard_elements (
     check (encoded_bytes between 2 and 16384)
 );
 create index sync_whiteboard_elements_snapshot_idx
-    on sync_whiteboard_elements(tenant_id, session_id, scene_id, element_index, element_id);
+    on sync_whiteboard_elements(tenant_id, space_id, scene_id, element_index, element_id);
 
 create table sync_whiteboard_permissions (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
-    participant_session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
     can_draw boolean not null,
-    granted_by_participant_session_id uuid not null,
+    granted_by_participant_id uuid not null,
     updated_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, participant_session_id),
-    foreign key (tenant_id, room_id, session_id, participant_session_id)
-        references participants(tenant_id, room_id, session_id, id)
+    primary key (tenant_id, space_id, participant_id),
+    foreign key (tenant_id, space_id, episode_id, participant_id)
+        references participants(tenant_id, space_id, episode_id, id)
         on delete cascade,
-    foreign key (tenant_id, room_id, session_id, granted_by_participant_session_id)
-        references participants(tenant_id, room_id, session_id, id)
+    foreign key (tenant_id, space_id, episode_id, granted_by_participant_id)
+        references participants(tenant_id, space_id, episode_id, id)
         on delete restrict
 );
 
 create table sync_whiteboard_operation_receipts (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
-    participant_session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
     submitted_generation bigint not null,
     operation_id text not null,
     request_fingerprint bytea not null,
@@ -747,15 +753,15 @@ create table sync_whiteboard_operation_receipts (
     event_elements jsonb,
     event_encoded_bytes integer not null default 0,
     completed_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, participant_session_id, operation_id),
+    primary key (tenant_id, space_id, participant_id, operation_id),
     foreign key (
         tenant_id,
-        room_id,
-        session_id,
-        participant_session_id,
+        space_id,
+        episode_id,
+        participant_id,
         submitted_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (octet_length(operation_id) between 16 and 64),
     check (octet_length(request_fingerprint) = 32),
@@ -776,15 +782,15 @@ create table sync_whiteboard_operation_receipts (
     )
 );
 create index sync_whiteboard_operation_receipts_retention_idx
-    on sync_whiteboard_operation_receipts(tenant_id, session_id, completed_at);
+    on sync_whiteboard_operation_receipts(tenant_id, space_id, completed_at);
 
 create table sync_whiteboard_files (
     upload_id uuid primary key,
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     scene_id uuid not null,
-    participant_session_id uuid not null,
+    participant_id uuid not null,
     participant_generation bigint not null,
     file_id text not null,
     object_key text not null unique,
@@ -800,18 +806,18 @@ create table sync_whiteboard_files (
     cleanup_attempts integer not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    unique (tenant_id, session_id, scene_id, file_id),
-    foreign key (tenant_id, room_id, session_id, scene_id)
-        references sync_whiteboard_scenes(tenant_id, room_id, session_id, scene_id)
+    unique (tenant_id, space_id, scene_id, file_id),
+    foreign key (tenant_id, space_id, scene_id)
+        references sync_whiteboard_scenes(tenant_id, space_id, scene_id)
         on delete cascade,
     foreign key (
         tenant_id,
-        room_id,
-        session_id,
-        participant_session_id,
+        space_id,
+        episode_id,
+        participant_id,
         participant_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (octet_length(file_id) between 1 and 128),
     check (octet_length(object_key) between 1 and 1024),
@@ -829,16 +835,15 @@ create table sync_whiteboard_files (
     )
 );
 create index sync_whiteboard_files_pending_cleanup_idx
-    on sync_whiteboard_files(expires_at, cleanup_claimed_until, tenant_id, session_id)
+    on sync_whiteboard_files(expires_at, cleanup_claimed_until, tenant_id, space_id)
     where status in ('pending', 'finalizing', 'failed');
-create index sync_whiteboard_files_session_cleanup_idx
-    on sync_whiteboard_files(tenant_id, session_id, cleanup_claimed_until);
+create index sync_whiteboard_files_space_cleanup_idx
+    on sync_whiteboard_files(tenant_id, space_id, cleanup_claimed_until);
 
-create table sync_session_control (
+create table sync_episode_control (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
-    host_participant_session_id uuid,
+    space_id uuid not null,
+    episode_id uuid not null,
     control_revision bigint not null default 0,
     folded_state jsonb not null,
     state_schema_version integer not null check (state_schema_version > 0),
@@ -881,15 +886,11 @@ create table sync_session_control (
     retention_deleted_publication_grant_reservation_bytes bigint not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    primary key (tenant_id, session_id),
-    unique (tenant_id, room_id, session_id),
-    foreign key (tenant_id, room_id, session_id)
-        references room_sessions(tenant_id, room_id, id)
+    primary key (tenant_id, episode_id),
+    unique (tenant_id, space_id, episode_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id)
         on delete restrict,
-    foreign key (tenant_id, room_id, session_id, host_participant_session_id)
-        references participants(tenant_id, room_id, session_id, id)
-        on delete restrict
-        deferrable initially deferred,
     check (
         control_revision >= 0
         and snapshot_bytes >= 0
@@ -969,14 +970,14 @@ create table sync_session_control (
 
 create table sync_lifecycle_intents (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     lifecycle_intent_id uuid primary key,
     request_key text not null check (request_key ~ '^[A-Za-z0-9_-]{16,128}$'),
     request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
     intent_name text not null,
-    participant_session_id uuid,
-    participant_session_generation bigint,
+    participant_id uuid,
+    participant_generation bigint,
     payload jsonb not null check (octet_length(payload::text) <= 16384),
     status text not null,
     terminal_reason text,
@@ -987,30 +988,30 @@ create table sync_lifecycle_intents (
     next_attempt_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
     completed_at timestamptz,
-    unique (tenant_id, room_id, session_id, lifecycle_intent_id),
-    unique (tenant_id, session_id, intent_name, request_key),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_session_control(tenant_id, room_id, session_id)
+    unique (tenant_id, space_id, episode_id, lifecycle_intent_id),
+    unique (tenant_id, episode_id, intent_name, request_key),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
         on delete restrict,
-    foreign key (tenant_id, room_id, session_id, participant_session_id)
-        references participants(tenant_id, room_id, session_id, id)
+    foreign key (tenant_id, space_id, episode_id, participant_id)
+        references participants(tenant_id, space_id, episode_id, id)
         on delete restrict,
     foreign key (
-        tenant_id, room_id, session_id,
-        participant_session_id, participant_session_generation
+        tenant_id, space_id, episode_id,
+        participant_id, participant_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (
         (
             intent_name in ('participant_joined', 'participant_left')
-            and participant_session_id is not null
-            and participant_session_generation > 0
+            and participant_id is not null
+            and participant_generation > 0
         )
         or (
-            intent_name in ('session_ended', 'admission_requested')
-            and participant_session_id is null
-            and participant_session_generation is null
+            intent_name in ('episode_ended', 'admission_requested')
+            and participant_id is null
+            and participant_generation is null
         )
     ),
     check (
@@ -1031,7 +1032,7 @@ create table sync_lifecycle_intents (
         or (
             status = 'superseded'
             and terminal_reason in (
-                'superseded_by_session_end',
+                'superseded_by_episode_end',
                 'participant_already_terminal',
                 'participant_generation_replaced'
             )
@@ -1041,35 +1042,35 @@ create table sync_lifecycle_intents (
         )
     )
 );
-create unique index sync_lifecycle_intents_session_end_key
-    on sync_lifecycle_intents(tenant_id, session_id)
-    where intent_name = 'session_ended';
+create unique index sync_lifecycle_intents_episode_end_key
+    on sync_lifecycle_intents(tenant_id, episode_id)
+    where intent_name = 'episode_ended';
 create unique index sync_lifecycle_intents_participant_transition_key
     on sync_lifecycle_intents(
         tenant_id,
-        session_id,
+        episode_id,
         intent_name,
-        participant_session_id,
-        participant_session_generation
+        participant_id,
+        participant_generation
     )
     where intent_name in ('participant_joined', 'participant_left');
 create index sync_lifecycle_intents_pending_attempt_idx
     on sync_lifecycle_intents(next_attempt_at, attempt_count, created_at, lifecycle_intent_id)
     where status = 'pending';
-create index sync_lifecycle_intents_session_pending_idx
-    on sync_lifecycle_intents(tenant_id, session_id)
+create index sync_lifecycle_intents_episode_pending_idx
+    on sync_lifecycle_intents(tenant_id, episode_id)
     where status = 'pending';
 
 create table sync_control_events (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     event_id uuid not null unique,
     base_revision bigint not null,
     revision bigint not null,
     event_name text not null,
     payload jsonb not null,
-    actor_participant_session_id uuid,
+    actor_participant_id uuid,
     actor_generation bigint,
     command_id text,
     lifecycle_intent_id uuid,
@@ -1078,30 +1079,30 @@ create table sync_control_events (
     resulting_state_digest bytea not null check (octet_length(resulting_state_digest) = 32),
     encoded_bytes integer not null check (encoded_bytes between 1 and 32768),
     created_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, revision),
-    unique (tenant_id, session_id, lifecycle_intent_id, event_id, revision),
-    unique (tenant_id, session_id, external_operation_id, event_id, revision),
-    unique (tenant_id, session_id, event_id, revision),
+    primary key (tenant_id, episode_id, revision),
+    unique (tenant_id, episode_id, lifecycle_intent_id, event_id, revision),
+    unique (tenant_id, episode_id, external_operation_id, event_id, revision),
+    unique (tenant_id, episode_id, event_id, revision),
     unique (
         tenant_id,
-        session_id,
-        actor_participant_session_id,
+        episode_id,
+        actor_participant_id,
         actor_generation,
         command_id,
         event_id,
         revision
     ),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_session_control(tenant_id, room_id, session_id)
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
         on delete restrict,
-    foreign key (tenant_id, room_id, session_id, actor_participant_session_id)
-        references participants(tenant_id, room_id, session_id, id)
+    foreign key (tenant_id, space_id, episode_id, actor_participant_id)
+        references participants(tenant_id, space_id, episode_id, id)
         on delete restrict,
     foreign key (
-        tenant_id, room_id, session_id,
-        actor_participant_session_id, actor_generation
+        tenant_id, space_id, episode_id,
+        actor_participant_id, actor_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (base_revision >= 0 and revision = base_revision + 1),
     check (
@@ -1110,17 +1111,17 @@ create table sync_control_events (
             (
                 command_id is not null
                 and command_id ~ '^[A-Za-z0-9_-]{16,64}$'
-                and actor_participant_session_id is not null
+                and actor_participant_id is not null
                 and actor_generation > 0
             )
             or (
                 lifecycle_intent_id is not null
-                and actor_participant_session_id is null
+                and actor_participant_id is null
                 and actor_generation is null
             )
             or (
                 external_operation_id is not null
-                and (actor_participant_session_id is null) = (actor_generation is null)
+                and (actor_participant_id is null) = (actor_generation is null)
                 and (actor_generation is null or actor_generation > 0)
             )
         )
@@ -1129,18 +1130,18 @@ create table sync_control_events (
 create unique index sync_control_events_command_origin_key
     on sync_control_events(
         tenant_id,
-        session_id,
-        actor_participant_session_id,
+        episode_id,
+        actor_participant_id,
         command_id
     )
     where command_id is not null;
 create unique index sync_control_events_lifecycle_origin_key
-    on sync_control_events(tenant_id, session_id, lifecycle_intent_id)
+    on sync_control_events(tenant_id, episode_id, lifecycle_intent_id)
     where lifecycle_intent_id is not null;
 create table sync_command_receipts (
     tenant_id uuid not null,
-    session_id uuid not null,
-    participant_session_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
     submitted_generation bigint not null check (submitted_generation > 0),
     command_id text not null check (command_id ~ '^[A-Za-z0-9_-]{16,64}$'),
     request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
@@ -1151,7 +1152,7 @@ create table sync_command_receipts (
         'set_display_name',
         'set_admission_policy',
         'set_participant_role',
-        'transfer_host',
+        'assign_roles',
         'admit_participant',
         'deny_admission',
         'mute_participant',
@@ -1161,7 +1162,7 @@ create table sync_command_receipts (
         'start_recording',
         'stop_recording',
         'participant_leave',
-        'end_session'
+        'end_episode'
     )),
     outcome text not null,
     rejection_reason text,
@@ -1171,15 +1172,15 @@ create table sync_command_receipts (
     external_operation_id uuid,
     completed_at timestamptz,
     created_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, participant_session_id, command_id),
-    foreign key (tenant_id, session_id)
-        references sync_session_control(tenant_id, session_id)
+    primary key (tenant_id, episode_id, participant_id, command_id),
+    foreign key (tenant_id, episode_id)
+        references sync_episode_control(tenant_id, episode_id)
         on delete restrict,
-    constraint sync_command_receipts_sync_v3_event_fkey foreign key (
-        tenant_id, session_id, event_id, resulting_revision
+    constraint sync_command_receipts_sync_event_fkey foreign key (
+        tenant_id, episode_id, event_id, resulting_revision
     )
     references sync_control_events(
-        tenant_id, session_id, event_id, revision
+        tenant_id, episode_id, event_id, revision
     )
     on delete restrict
     deferrable initially deferred,
@@ -1199,7 +1200,7 @@ create table sync_command_receipts (
                 or (
                     outcome = 'rejected'
                     and rejection_reason in (
-                        'session_ended',
+                        'episode_ended',
                         'participant_inactive',
                         'stale_participant_generation',
                         'capability_denied',
@@ -1217,7 +1218,7 @@ create table sync_command_receipts (
                 'set_display_name',
                 'set_admission_policy',
                 'set_participant_role',
-                'transfer_host',
+                'assign_roles',
                 'admit_participant',
                 'deny_admission',
                 'mute_participant',
@@ -1227,7 +1228,7 @@ create table sync_command_receipts (
                 'start_recording',
                 'stop_recording',
                 'participant_leave',
-                'end_session'
+                'end_episode'
             )
             and (
                 (
@@ -1254,13 +1255,13 @@ create table sync_command_receipts (
                     and completed_at is null
                     and (
                         (
-                            command_name in ('set_participant_role', 'transfer_host')
+                            command_name in ('set_participant_role', 'assign_roles')
                             and event_id is not null
                             and resulting_revision > 0
                             and octet_length(resulting_state_digest) = 32
                         )
                         or (
-                            command_name not in ('set_participant_role', 'transfer_host')
+                            command_name not in ('set_participant_role', 'assign_roles')
                             and event_id is null
                             and resulting_revision is null
                             and resulting_state_digest is null
@@ -1270,14 +1271,14 @@ create table sync_command_receipts (
                 or (
                     outcome = 'rejected'
                     and rejection_reason in (
-                        'session_ended',
+                        'episode_ended',
                         'participant_inactive',
                         'stale_participant_generation',
                         'capability_denied',
                         'invalid_state',
                         'invalid_target',
                         'role_not_eligible',
-                        'host_transfer_required',
+                        'role_assignment_required',
                         'screen_share_in_use',
                         'recording_in_progress',
                         'external_operation_failed'
@@ -1285,14 +1286,14 @@ create table sync_command_receipts (
                     and completed_at is not null
                     and (
                         (
-                            command_name in ('set_participant_role', 'transfer_host')
+                            command_name in ('set_participant_role', 'assign_roles')
                             and external_operation_id is not null
                             and event_id is not null
                             and resulting_revision > 0
                             and octet_length(resulting_state_digest) = 32
                         )
                         or (
-                            command_name not in ('set_participant_role', 'transfer_host')
+                            command_name not in ('set_participant_role', 'assign_roles')
                             and event_id is null
                             and resulting_revision is null
                             and resulting_state_digest is null
@@ -1307,14 +1308,14 @@ create table sync_command_receipts (
 alter table sync_lifecycle_intents
     add foreign key (
         tenant_id,
-        session_id,
+        episode_id,
         lifecycle_intent_id,
         applied_event_id,
         applied_revision
     )
     references sync_control_events(
         tenant_id,
-        session_id,
+        episode_id,
         lifecycle_intent_id,
         event_id,
         revision
@@ -1323,16 +1324,16 @@ alter table sync_lifecycle_intents
 
 create table sync_external_operations (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     external_operation_id uuid primary key,
     parent_external_operation_id uuid,
     request_key text not null,
     request_fingerprint bytea not null,
     operation_name text not null,
-    actor_participant_session_id uuid,
+    actor_participant_id uuid,
     actor_generation bigint,
-    target_participant_session_id uuid,
+    target_participant_id uuid,
     target_participant_generation bigint,
     source text,
     recording_id uuid,
@@ -1351,23 +1352,25 @@ create table sync_external_operations (
     applied_revision bigint,
     created_at timestamptz not null default now(),
     completed_at timestamptz,
-    unique (tenant_id, room_id, session_id, external_operation_id),
-    unique (tenant_id, session_id, external_operation_id),
-    unique (tenant_id, session_id, operation_name, request_key),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_session_control(tenant_id, room_id, session_id)
+    producing_traceparent text,
+    producing_tracestate text,
+    unique (tenant_id, space_id, episode_id, external_operation_id),
+    unique (tenant_id, episode_id, external_operation_id),
+    unique (tenant_id, episode_id, operation_name, request_key),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
         on delete restrict,
     foreign key (
-        tenant_id, room_id, session_id,
-        actor_participant_session_id, actor_generation
+        tenant_id, space_id, episode_id,
+        actor_participant_id, actor_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     foreign key (
-        tenant_id, room_id, session_id,
-        target_participant_session_id, target_participant_generation
+        tenant_id, space_id, episode_id,
+        target_participant_id, target_participant_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (request_key ~ '^[A-Za-z0-9_-]{16,128}$'),
     check (octet_length(request_fingerprint) = 32),
@@ -1376,24 +1379,33 @@ create table sync_external_operations (
         'admit_participant', 'deny_admission', 'admission_request_expired', 'mute_participant',
         'stop_participant_camera', 'stop_participant_screen_share',
         'remove_participant', 'start_recording', 'stop_recording',
-        'participant_leave', 'end_session', 'tenant_transfer_host', 'tenant_set_deadline',
-        'tenant_end_session', 'maximum_duration_expired',
+        'participant_leave', 'end_episode', 'tenant_assign_roles', 'tenant_set_deadline',
+        'tenant_end_episode', 'maximum_episode_duration_expired',
         'role_transition_cleanup', 'role_transition_source_stop'
     )),
     check (source is null or source in ('microphone', 'camera', 'screen')),
-    check ((actor_participant_session_id is null) = (actor_generation is null)),
+    check ((actor_participant_id is null) = (actor_generation is null)),
     check (actor_generation is null or actor_generation > 0),
-    check ((target_participant_session_id is null) = (target_participant_generation is null)),
+    check ((target_participant_id is null) = (target_participant_generation is null)),
     check (target_participant_generation is null or target_participant_generation > 0),
     check (deadline_generation is null or deadline_generation > 0),
     check (
-        (operation_name in ('tenant_set_deadline', 'maximum_duration_expired'))
+        (operation_name in ('tenant_set_deadline', 'maximum_episode_duration_expired'))
         = (deadline_generation is not null)
     ),
     check ((journey_id is null) = (parent_journey_event_id is null)),
     check (producing_trace_id is null or producing_trace_id ~ '^[0-9a-f]{32}$'),
     check (producing_span_id is null or producing_span_id ~ '^[0-9a-f]{16}$'),
     check ((producing_trace_id is null) = (producing_span_id is null)),
+    check (
+        producing_traceparent is null
+        or producing_traceparent ~ '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+    ),
+    check (
+        producing_tracestate is null
+        or octet_length(producing_tracestate) between 1 and 512
+    ),
+    check (producing_traceparent is not null or producing_tracestate is null),
     check (attempt_count between 0 and 100),
     check (
         (operation_name = 'role_transition_cleanup' and parent_external_operation_id is null and source is null)
@@ -1424,32 +1436,32 @@ create table sync_external_operations (
     )
 );
 alter table sync_external_operations
-    add foreign key (tenant_id, session_id, parent_external_operation_id)
-    references sync_external_operations(tenant_id, session_id, external_operation_id)
+    add foreign key (tenant_id, episode_id, parent_external_operation_id)
+    references sync_external_operations(tenant_id, episode_id, external_operation_id)
     on delete restrict;
 create unique index sync_external_operations_parent_source_key
-    on sync_external_operations(tenant_id, session_id, parent_external_operation_id, source)
+    on sync_external_operations(tenant_id, episode_id, parent_external_operation_id, source)
     where parent_external_operation_id is not null;
 create index sync_external_operations_pending_idx
     on sync_external_operations(next_attempt_at, external_operation_id)
     where status = 'pending';
 
 alter table sync_control_events
-    add foreign key (tenant_id, session_id, external_operation_id)
-    references sync_external_operations(tenant_id, session_id, external_operation_id)
+    add foreign key (tenant_id, episode_id, external_operation_id)
+    references sync_external_operations(tenant_id, episode_id, external_operation_id)
     on delete restrict;
 
 alter table sync_external_operations
     add foreign key (
         tenant_id,
-        session_id,
+        episode_id,
         external_operation_id,
         applied_event_id,
         applied_revision
     )
     references sync_control_events(
         tenant_id,
-        session_id,
+        episode_id,
         external_operation_id,
         event_id,
         revision
@@ -1457,44 +1469,37 @@ alter table sync_external_operations
     on delete restrict;
 
 alter table sync_command_receipts
-    add foreign key (tenant_id, session_id, external_operation_id)
-    references sync_external_operations(tenant_id, session_id, external_operation_id)
+    add foreign key (tenant_id, episode_id, external_operation_id)
+    references sync_external_operations(tenant_id, episode_id, external_operation_id)
     on delete restrict;
 
 create table sync_admission_requests (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     admission_request_id uuid primary key,
     request_key text not null,
     request_fingerprint bytea not null,
-    participant_session_id uuid not null,
+    participant_id uuid not null,
     display_name text not null,
-    initial_role text not null,
-    eligible_roles text[] not null,
+    role text not null,
     status text not null default 'pending',
     decision_external_operation_id uuid,
     requested_at timestamptz not null default now(),
     expires_at timestamptz not null,
     completed_at timestamptz,
-    unique (tenant_id, room_id, session_id, admission_request_id),
-    unique (tenant_id, session_id, request_key),
-    unique (tenant_id, session_id, participant_session_id),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_session_control(tenant_id, room_id, session_id)
+    unique (tenant_id, space_id, episode_id, admission_request_id),
+    unique (tenant_id, episode_id, request_key),
+    unique (tenant_id, episode_id, participant_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
         on delete restrict,
-    foreign key (tenant_id, session_id, decision_external_operation_id)
-        references sync_external_operations(tenant_id, session_id, external_operation_id)
+    foreign key (tenant_id, episode_id, decision_external_operation_id)
+        references sync_external_operations(tenant_id, episode_id, external_operation_id)
         on delete restrict,
     check (request_key ~ '^[A-Za-z0-9_-]{16,128}$'),
     check (octet_length(request_fingerprint) = 32),
     check (octet_length(display_name) between 1 and 256 and display_name = btrim(display_name)),
-    check (initial_role in ('host', 'cohost', 'participant')),
-    check (
-        sync_v3_valid_eligible_roles(eligible_roles)
-        and initial_role = any(eligible_roles)
-        and (initial_role <> 'host' or 'cohost' = any(eligible_roles))
-    ),
     check (expires_at > requested_at),
     check (
         (status = 'pending' and completed_at is null)
@@ -1507,25 +1512,25 @@ create index sync_admission_requests_pending_idx
 
 create table sync_screen_share_leases (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     lease_id uuid not null unique,
-    owner_participant_session_id uuid not null,
+    owner_participant_id uuid not null,
     owner_generation bigint not null,
     lease_generation bigint not null,
     status text not null,
     acquired_at timestamptz not null,
     renewed_until timestamptz not null,
     hard_expires_at timestamptz not null,
-    primary key (tenant_id, session_id),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_session_control(tenant_id, room_id, session_id)
+    primary key (tenant_id, episode_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
         on delete restrict,
     foreign key (
-        tenant_id, room_id, session_id,
-        owner_participant_session_id, owner_generation
+        tenant_id, space_id, episode_id,
+        owner_participant_id, owner_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (owner_generation > 0 and lease_generation > 0),
     check (status in ('acquiring', 'active')),
@@ -1536,23 +1541,23 @@ create index sync_screen_share_leases_expiry_idx
 
 create table sync_publication_fences (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
-    participant_session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
     participant_generation bigint not null,
     source text not null,
     external_operation_id uuid not null,
     expires_at timestamptz not null,
     created_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, participant_session_id, source),
+    primary key (tenant_id, episode_id, participant_id, source),
     foreign key (
-        tenant_id, room_id, session_id,
-        participant_session_id, participant_generation
+        tenant_id, space_id, episode_id,
+        participant_id, participant_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
-    foreign key (tenant_id, session_id, external_operation_id)
-        references sync_external_operations(tenant_id, session_id, external_operation_id)
+    foreign key (tenant_id, episode_id, external_operation_id)
+        references sync_external_operations(tenant_id, episode_id, external_operation_id)
         on delete restrict,
     check (source in ('microphone', 'camera', 'screen')),
     check (participant_generation > 0),
@@ -1563,11 +1568,11 @@ create index sync_publication_fences_expiry_idx
 
 create table sync_publication_grant_reservations (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     reservation_id uuid primary key,
     operation_id text not null,
-    participant_session_id uuid not null,
+    participant_id uuid not null,
     participant_generation bigint not null,
     source text not null,
     status text not null default 'pending',
@@ -1575,14 +1580,14 @@ create table sync_publication_grant_reservations (
     expires_at timestamptz not null,
     created_at timestamptz not null default now(),
     completed_at timestamptz,
-    unique (tenant_id, session_id, operation_id),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_session_control(tenant_id, room_id, session_id)
+    unique (tenant_id, episode_id, operation_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
         on delete restrict,
     foreign key (
-        tenant_id, room_id, session_id,
-        participant_session_id, participant_generation
-    ) references participants(tenant_id, room_id, session_id, id, generation)
+        tenant_id, space_id, episode_id,
+        participant_id, participant_generation
+    ) references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (operation_id ~ '^[A-Za-z0-9_-]{16,128}$'),
     check (participant_generation > 0),
@@ -1596,20 +1601,20 @@ create table sync_publication_grant_reservations (
     )
 );
 create unique index sync_publication_grant_reservations_active_source_key
-    on sync_publication_grant_reservations(tenant_id, session_id, participant_session_id, source)
+    on sync_publication_grant_reservations(tenant_id, episode_id, participant_id, source)
     where status in ('pending', 'ambiguous');
 create index sync_publication_grant_reservations_expiry_idx
     on sync_publication_grant_reservations(expires_at, reservation_id);
 
 create table sync_recordings (
     tenant_id uuid not null,
-    room_id uuid not null,
-    session_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
     recording_id uuid primary key,
     status text not null,
     generation bigint not null,
     adapter_metadata jsonb not null default '{}'::jsonb,
-    started_by_participant_session_id uuid,
+    started_by_participant_id uuid,
     started_by_generation bigint,
     start_external_operation_id uuid not null,
     stop_external_operation_id uuid,
@@ -1617,25 +1622,25 @@ create table sync_recordings (
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     completed_at timestamptz,
-    unique (tenant_id, room_id, session_id, recording_id),
-    foreign key (tenant_id, room_id, session_id)
-        references sync_session_control(tenant_id, room_id, session_id)
+    unique (tenant_id, space_id, episode_id, recording_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
         on delete restrict,
     foreign key (
-        tenant_id, room_id, session_id,
-        started_by_participant_session_id, started_by_generation
+        tenant_id, space_id, episode_id,
+        started_by_participant_id, started_by_generation
     )
-        references participants(tenant_id, room_id, session_id, id, generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
-    foreign key (tenant_id, session_id, start_external_operation_id)
-        references sync_external_operations(tenant_id, session_id, external_operation_id)
+    foreign key (tenant_id, episode_id, start_external_operation_id)
+        references sync_external_operations(tenant_id, episode_id, external_operation_id)
         on delete restrict,
-    foreign key (tenant_id, session_id, stop_external_operation_id)
-        references sync_external_operations(tenant_id, session_id, external_operation_id)
+    foreign key (tenant_id, episode_id, stop_external_operation_id)
+        references sync_external_operations(tenant_id, episode_id, external_operation_id)
         on delete restrict,
     check (status in ('starting', 'recording', 'stopping', 'stopped', 'failed')),
     check (generation > 0),
-    check ((started_by_participant_session_id is null) = (started_by_generation is null)),
+    check ((started_by_participant_id is null) = (started_by_generation is null)),
     check (started_by_generation is null or started_by_generation > 0),
     check (
         (status in ('starting', 'recording', 'stopping') and completed_at is null and failure_code is null)
@@ -1643,11 +1648,11 @@ create table sync_recordings (
         or (status = 'failed' and completed_at is not null and failure_code is not null)
     )
 );
-create unique index sync_recordings_one_active_per_session_idx
-    on sync_recordings(tenant_id, session_id)
+create unique index sync_recordings_one_active_per_episode_idx
+    on sync_recordings(tenant_id, episode_id)
     where status in ('starting', 'recording', 'stopping');
 
-create function sync_v3_validate_receipt_event_origin()
+create function sync_validate_receipt_event_origin()
 returns trigger
 language plpgsql
 as $$
@@ -1662,7 +1667,7 @@ begin
     into event_row
     from sync_control_events
     where tenant_id = new.tenant_id
-      and session_id = new.session_id
+      and episode_id = new.episode_id
       and event_id = new.event_id
       and revision = new.resulting_revision;
 
@@ -1671,7 +1676,7 @@ begin
     end if;
 
     if event_row.command_id = new.command_id
-        and event_row.actor_participant_session_id = new.participant_session_id
+        and event_row.actor_participant_id = new.participant_id
         and event_row.actor_generation = new.submitted_generation then
         return new;
     end if;
@@ -1689,11 +1694,11 @@ begin
             select 1
             from sync_admission_requests admission
             where admission.tenant_id = new.tenant_id
-              and admission.session_id = new.session_id
+              and admission.episode_id = new.episode_id
               and admission.decision_external_operation_id = new.external_operation_id
               and admission.status = 'admitted'
-              and admission.participant_session_id::text =
-                  event_row.payload ->> 'participant_session_id'
+              and admission.participant_id::text =
+                  event_row.payload ->> 'participant_id'
         ) then
         return new;
     end if;
@@ -1702,16 +1707,16 @@ begin
 end;
 $$;
 
-create constraint trigger sync_command_receipts_sync_v3_event_origin
+create constraint trigger sync_command_receipts_event_origin
 after insert or update on sync_command_receipts
 deferrable initially deferred
-for each row execute function sync_v3_validate_receipt_event_origin();
+for each row execute function sync_validate_receipt_event_origin();
 
 create table recordings (
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
-    room_id uuid not null references rooms(id),
-    session_id uuid not null references room_sessions(id),
+    space_id uuid not null references spaces(id),
+    episode_id uuid not null references episodes(id),
     -- pending (should be rare ideally), processing, completed, failed
     status text not null,
     -- s3, cf, do
@@ -1722,14 +1727,14 @@ create table recordings (
     created_at timestamptz not null default now()
 );
 create index recordings_tenant_created_at_id_idx on recordings(tenant_id, created_at desc, id desc);
-create index recordings_tenant_session_created_at_id_idx on recordings(tenant_id, session_id, created_at desc, id desc);
+create index recordings_tenant_episode_created_at_id_idx on recordings(tenant_id, episode_id, created_at desc, id desc);
 
 create table transcriptions (
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
     recording_id uuid not null references recordings(id),
-    room_id uuid not null references rooms(id),
-    session_id uuid not null references room_sessions(id),
+    space_id uuid not null references spaces(id),
+    episode_id uuid not null references episodes(id),
     -- not_requested, preparing, transcribing, verifying, complete,
     -- retryable_failure, terminal_failure, deleted
     status text not null,
@@ -1811,7 +1816,7 @@ create table artifact_jobs (
     id uuid primary key,
     idempotency_key text not null,
     tenant_id uuid not null references tenants(id),
-    session_id uuid references room_sessions(id),
+    episode_id uuid references episodes(id),
     recording_id uuid references recordings(id),
     transcript_id uuid references transcriptions(id),
     chunk_id uuid,
@@ -1994,7 +1999,7 @@ create index transcription_cleanup_jobs_claim_idx on transcription_cleanup_jobs(
 
 create table recording_capacity (
     id smallint primary key check (id = 1),
-    reserved_meetings integer not null default 0 check (reserved_meetings between 0 and 20),
+    reserved_episodes integer not null default 0 check (reserved_episodes between 0 and 20),
     reserved_participants integer not null default 0 check (reserved_participants between 0 and 100),
     reserved_input_bitrate_bps bigint not null default 0 check (reserved_input_bitrate_bps >= 0),
     updated_at timestamptz not null default now()
@@ -2012,8 +2017,8 @@ create table recording_pool_health (
 create table recording_reservations (
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
-    room_id uuid not null references rooms(id),
-    session_id uuid not null references room_sessions(id),
+    space_id uuid not null references spaces(id),
+    episode_id uuid not null references episodes(id),
     recording_id uuid not null references recordings(id),
     idempotency_key text not null,
     request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
@@ -2053,7 +2058,7 @@ create index recording_pipelines_tenant_state_idx
 create table recording_jobs (
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
-    session_id uuid not null references room_sessions(id),
+    episode_id uuid not null references episodes(id),
     recording_id uuid not null references recordings(id),
     kind text not null check (kind in ('capture', 'render')),
     idempotency_key text not null unique,
@@ -2309,12 +2314,12 @@ create table webhook_endpoint_revisions (
     constraint webhook_endpoint_revisions_event_types_check check (
         cardinality(event_types) between 1 and 14
         and event_types <@ array[
-            'room.created',
-            'room.updated',
-            'room.archived',
-            'room.restored',
-            'session.started',
-            'session.ended',
+            'space.created',
+            'space.updated',
+            'space.archived',
+            'space.restored',
+            'episode.started',
+            'episode.ended',
             'participant.joined',
             'participant.left',
             'recording.started',
@@ -2356,12 +2361,12 @@ create table webhook_events (
     constraint webhook_events_semantic_transition_key
         unique (tenant_id, semantic_transition_key, api_version),
     constraint webhook_events_name_check check (event_name in (
-        'room.created',
-        'room.updated',
-        'room.archived',
-        'room.restored',
-        'session.started',
-        'session.ended',
+        'space.created',
+        'space.updated',
+        'space.archived',
+        'space.restored',
+        'episode.started',
+        'episode.ended',
         'participant.joined',
         'participant.left',
         'recording.started',
@@ -2385,7 +2390,7 @@ create table webhook_events (
     constraint webhook_events_semantic_key_check
         check (octet_length(semantic_transition_key) between 1 and 200),
     constraint webhook_events_resource_type_check check (resource_type in (
-        'room', 'session', 'participant', 'recording', 'transcript', 'webhook_endpoint'
+        'space', 'episode', 'participant', 'recording', 'transcript', 'webhook_endpoint'
     )),
     constraint webhook_events_trace_id_check
         check (producing_trace_id is null or producing_trace_id ~ '^[0-9a-f]{32}$'),
@@ -2564,9 +2569,9 @@ create table provider_operation_receipts (
     operation_id text not null,
     effect text not null,
     tenant_id uuid not null references tenants(id) on delete restrict,
-    session_id uuid not null references room_sessions(id) on delete restrict,
-    participant_session_id uuid,
-    participant_session_generation bigint,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    participant_id uuid,
+    participant_generation bigint,
     publication_source text,
     recording_id uuid references recordings(id) on delete restrict,
     request_fingerprint bytea not null,
@@ -2583,7 +2588,7 @@ create table provider_operation_receipts (
     ),
     constraint provider_operation_receipts_effect_check check (effect in (
         'media.grant_publication', 'media.revoke_publication',
-        'media.remove_participant', 'media.end_session',
+        'media.remove_participant', 'media.end_episode',
         'recording.start', 'recording.stop'
     )),
     constraint provider_operation_receipts_fingerprint_check check (octet_length(request_fingerprint) = 32),
@@ -2594,8 +2599,8 @@ create table provider_operation_receipts (
     )),
     constraint provider_operation_receipts_reason_check check (reason is null or octet_length(reason) between 1 and 256),
     constraint provider_operation_receipts_participant_check check (
-        (participant_session_id is not null or participant_session_generation is null)
-        and (participant_session_generation is null or participant_session_generation > 0)
+        (participant_id is not null or participant_generation is null)
+        and (participant_generation is null or participant_generation > 0)
     ),
     constraint provider_operation_receipts_source_check check (
         publication_source is null or publication_source in ('microphone', 'camera', 'screen')
@@ -2611,45 +2616,45 @@ create table provider_operation_receipts (
     constraint provider_operation_receipts_effect_fields_check check (
         (
             effect in ('media.grant_publication', 'media.revoke_publication')
-            and participant_session_id is not null
+            and participant_id is not null
             and publication_source is not null
             and recording_id is null
         )
         or (
             effect = 'media.remove_participant'
-            and participant_session_id is not null
+            and participant_id is not null
             and publication_source is null
             and recording_id is null
         )
         or (
-            effect = 'media.end_session'
-            and participant_session_id is null
+            effect = 'media.end_episode'
+            and participant_id is null
             and publication_source is null
             and recording_id is null
         )
         or (
             effect in ('recording.start', 'recording.stop')
-            and participant_session_id is null
+            and participant_id is null
             and publication_source is null
             and recording_id is not null
         )
     )
 );
 
-create index provider_operation_receipts_session_idx
-    on provider_operation_receipts(tenant_id, session_id, created_at desc, operation_id, effect);
+create index provider_operation_receipts_episode_idx
+    on provider_operation_receipts(tenant_id, episode_id, created_at desc, operation_id, effect);
 create index provider_operation_receipts_reconciliation_idx
     on provider_operation_receipts(state, created_at, operation_id, effect)
     where state in ('prepared', 'dispatching');
 
 create table provider_operation_observation_heads (
     tenant_id uuid not null references tenants(id) on delete restrict,
-    session_id uuid not null references room_sessions(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
     incarnation bigint not null default 0,
     sequence bigint not null default 0,
     observation_fingerprint bytea not null default decode(repeat('00', 32), 'hex'),
     updated_at timestamptz not null default now(),
-    primary key (tenant_id, session_id),
+    primary key (tenant_id, episode_id),
     constraint provider_operation_observation_heads_cursor_check check (
         incarnation >= 0 and sequence >= 0
     ),
@@ -2658,13 +2663,13 @@ create table provider_operation_observation_heads (
 
 create table provider_operation_observations (
     tenant_id uuid not null references tenants(id) on delete restrict,
-    session_id uuid not null references room_sessions(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
     incarnation bigint not null,
     sequence bigint not null,
     publications jsonb not null,
     observation_fingerprint bytea not null,
     created_at timestamptz not null default now(),
-    primary key (tenant_id, session_id, incarnation, sequence),
+    primary key (tenant_id, episode_id, incarnation, sequence),
     constraint provider_operation_observations_cursor_check check (incarnation >= 0 and sequence >= 0),
     constraint provider_operation_observations_publications_check check (
         jsonb_typeof(publications) = 'array' and octet_length(publications::text) <= 16384
@@ -2672,5 +2677,5 @@ create table provider_operation_observations (
     constraint provider_operation_observations_fingerprint_check check (octet_length(observation_fingerprint) = 32)
 );
 
-create index provider_operation_observations_session_cursor_idx
-    on provider_operation_observations(tenant_id, session_id, incarnation, sequence);
+create index provider_operation_observations_episode_cursor_idx
+    on provider_operation_observations(tenant_id, episode_id, incarnation, sequence);

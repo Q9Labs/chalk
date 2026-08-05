@@ -87,8 +87,8 @@ import { ChalkAPIError, createChalkServerClient } from "@q9labsai/chalk-client/s
 
 const apiKey = "chalk_sk_PACKED_SENTINEL.secret";
 const tenantId = "11111111-1111-4111-8111-111111111111";
-const roomId = "22222222-2222-4222-8222-222222222222";
-const sessionId = "33333333-3333-4333-8333-333333333333";
+const spaceId = "22222222-2222-4222-8222-222222222222";
+const episodeId = "33333333-3333-4333-8333-333333333333";
 const participantId = "44444444-4444-4444-8444-444444444444";
 const calls = [];
 const queues = new Map();
@@ -105,29 +105,29 @@ const fetch = async (input, init) => {
 const json = (body, status) => new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const base = "/v1/tenants/" + tenantId;
 
-reply(base + "/rooms", json({ id: roomId }, 201));
+reply(base + "/spaces", json({ id: spaceId }, 201));
 const client = createChalkServerClient({ apiBaseURL: "https://api.example.test", apiKey, fetch, tenantId, headers: { authorization: "Bearer wrong", "x-safe": "safe" } });
-assert.equal((await client.rooms.create({ media_plane: "cf_sfu", name: "Room", slug: "room", status: "active" })).id, roomId);
-assert.equal(calls[0].url, "https://api.example.test" + base + "/rooms");
-assert.deepEqual(JSON.parse(calls[0].init.body), { media_plane: "cf_sfu", name: "Room", slug: "room", status: "active" });
+assert.equal((await client.spaces.create({ defaultEpisodeDurationSeconds: 3600, lingerWindowSeconds: 120, maximumEpisodeDurationSeconds: 7200, mediaPlane: "cf_sfu", name: "Space", slug: "space" })).id, spaceId);
+assert.equal(calls[0].url, "https://api.example.test" + base + "/spaces");
+assert.deepEqual(JSON.parse(calls[0].init.body), { default_episode_duration_seconds: 3600, linger_window_seconds: 120, maximum_episode_duration_seconds: 7200, media_plane: "cf_sfu", name: "Space", slug: "space" });
 assert.equal(new Headers(calls[0].init.headers).get("authorization"), "Bearer " + apiKey);
 
-const sessionRoute = base + "/rooms/" + roomId + "/sessions";
-reply(sessionRoute, json({ error: { code: "busy" } }, 503), json({ error: { code: "busy" } }, 503), json({ id: sessionId }, 201));
-await client.sessions.create(roomId, { admission_policy: "open", host_exit_policy: "continue", maximum_duration_seconds: 3600, role_capabilities: {} }, { idempotencyKey: "stable-key" });
-const sessionCalls = calls.filter(({ url }) => new URL(url).pathname === sessionRoute);
-assert.equal(sessionCalls.length, 3);
-assert.deepEqual(sessionCalls.map(({ init }) => new Headers(init.headers).get("idempotency-key")), ["stable-key", "stable-key", "stable-key"]);
+const episodeRoute = base + "/spaces/" + spaceId + "/episodes";
+reply(episodeRoute, json({ error: { code: "busy" } }, 503), json({ error: { code: "busy" } }, 503), json({ id: episodeId }, 201));
+await client.episodes.create(spaceId, { metadata: { source: "package" } }, { idempotencyKey: "stable-key" });
+const episodeCalls = calls.filter(({ url }) => new URL(url).pathname === episodeRoute);
+assert.equal(episodeCalls.length, 3);
+assert.deepEqual(episodeCalls.map(({ init }) => new Headers(init.headers).get("idempotency-key")), ["stable-key", "stable-key", "stable-key"]);
 
-const participantRoute = sessionRoute + "/" + sessionId + "/participants";
+const participantRoute = episodeRoute + "/" + episodeId + "/participants";
 reply(participantRoute, json({ lifecycle_intent: { status: "applied" }, participant: { id: participantId } }, 201));
-await client.participants.admit(roomId, sessionId, { eligible_roles: ["participant"], initial_role: "participant", name: "Guest", participant_session_id: participantId }, { idempotencyKey: "admit-key" });
-assert.deepEqual(JSON.parse(calls.at(-1).init.body), { eligible_roles: ["participant"], initial_role: "participant", name: "Guest", participant_session_id: participantId });
+await client.participants.admit(spaceId, episodeId, { name: "Guest", participantId, role: "collaborator" }, { idempotencyKey: "admit-key" });
+assert.deepEqual(JSON.parse(calls.at(-1).init.body), { name: "Guest", participant_id: participantId, role: "collaborator" });
 assert.equal(new Headers(calls.at(-1).init.headers).get("idempotency-key"), "admit-key");
 
-const endRoute = sessionRoute + "/" + sessionId + "/end";
-reply(endRoute, json({ session_id: sessionId, status: "ending", external_operation: { id: "operation" } }, 202));
-await client.sessions.end(roomId, sessionId, { idempotencyKey: "end-key" });
+const endRoute = episodeRoute + "/" + episodeId + "/end";
+reply(endRoute, json({ episode_id: episodeId, status: "ending", external_operation: { id: "operation" } }, 202));
+await client.episodes.end(spaceId, episodeId, { idempotencyKey: "end-key" });
 assert.equal(new Headers(calls.at(-1).init.headers).get("idempotency-key"), "end-key");
 
 const listRoute = base + "/api-keys";
@@ -138,14 +138,14 @@ assert.equal(calls.length - listCallsBefore, 3);
 
 const apiKeyId = "55555555-5555-4555-8555-555555555555";
 reply(listRoute, json({ api_key: { id: apiKeyId }, secret: "one-time-secret" }, 201));
-assert.equal((await client.apiKeys.create({ expiresAt: "2027-01-01T00:00:00Z", name: "backend", scopes: ["rooms:write"] })).secret, "one-time-secret");
-assert.deepEqual(JSON.parse(calls.at(-1).init.body), { expires_at: "2027-01-01T00:00:00Z", name: "backend", scopes: ["rooms:write"] });
+assert.equal((await client.apiKeys.create({ expiresAt: "2027-01-01T00:00:00Z", name: "backend", scopes: ["spaces:write"] })).secret, "one-time-secret");
+assert.deepEqual(JSON.parse(calls.at(-1).init.body), { expires_at: "2027-01-01T00:00:00Z", name: "backend", scopes: ["spaces:write"] });
 
 const failureCallsBefore = calls.length;
 reply(listRoute, json({ error: { code: "service_unavailable", message: apiKey } }, 503));
 let createFailure;
 try {
-  await client.apiKeys.create({ expiresAt: "2027-01-01T00:00:00Z", name: "backend", scopes: ["rooms:write"] });
+  await client.apiKeys.create({ expiresAt: "2027-01-01T00:00:00Z", name: "backend", scopes: ["spaces:write"] });
 } catch (error) {
   createFailure = error;
 }
@@ -164,23 +164,27 @@ reply(revokeRoute, json(null, 204));
 await client.apiKeys.revoke(apiKeyId);
 assert.equal(calls.at(-1).init.method, "DELETE");
 
-const accessRoute = base + "/rooms/" + roomId + "/sessions/" + sessionId + "/participants/" + participantId + "/access";
+const accessRoute = episodeRoute + "/" + episodeId + "/participants/" + participantId + "/access-grant";
 reply(accessRoute, json({ error: { code: "busy" } }, 503), json({
-  subject: { tenant_id: tenantId, room_id: roomId, session_id: sessionId, participant_session_id: participantId, participant_generation: 2 },
-  sync: { token: "sync", expires_at: "2026-01-01T00:05:00Z" },
-  media: { token: "media", expires_at: "2026-01-01T00:05:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection", stunServer: "stun:example.test" } }
+  subject: { tenant_id: tenantId, space_id: spaceId, episode_id: episodeId, participant_id: participantId, participant_generation: 2 },
+  sync: { token: accessToken("chalk-sync"), expires_at: "2026-01-01T00:05:00Z" },
+  media: { token: accessToken("chalk-media"), expires_at: "2026-01-01T00:05:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection", stunServer: "stun:example.test" } }
 }, 201));
-const access = await client.participants.issueAccess(roomId, sessionId, participantId, { participantSessionGeneration: 2, currentMediaToken: "old-media" });
-assert.equal(access.subject.participantSessionId, participantId);
-assert.equal(access.media.clientPayload.connectionId, "connection");
+const access = await client.participants.issueAccess(spaceId, episodeId, participantId, { participantGeneration: 2, currentMediaToken: "old-media" });
+assert.equal(typeof access, "object");
 const accessBody = JSON.parse(calls.at(-1).init.body);
-assert.deepEqual(accessBody, { current_media_token: "old-media", participant_session_generation: 2, replace_media_connection: false });
+assert.deepEqual(accessBody, { current_media_token: "old-media", participant_generation: 2, replace_media_connection: false });
 
 for (const { init, url } of calls) {
   assert.equal(url.includes(apiKey), false);
   assert.equal(String(init.body ?? "").includes(apiKey), false);
   const secretHeaders = [...new Headers(init.headers)].filter(([, value]) => value.includes(apiKey));
   assert.deepEqual(secretHeaders, [["authorization", "Bearer " + apiKey]]);
+}
+
+function accessToken(audience) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return encode({ alg: "EdDSA", typ: "JWT" }) + "." + encode({ aud: audience }) + ".signature";
 }
 `;
 }

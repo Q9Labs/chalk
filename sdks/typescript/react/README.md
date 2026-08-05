@@ -1,95 +1,99 @@
 # @q9labsai/chalk-react
 
-Turnkey React conference experience and composable UI components for Chalk.
-
-`VideoConference` owns the embedded lifecycle from pre-join through the active
-conference and end state. Applications provide credentials and a
-`createSession` function; the component owns the session store after the user
-joins.
+`@q9labsai/chalk-react` provides the React surface for a Chalk Space. Use
+`<Chalk />` for the complete embedded experience, or share a `SpaceClient`
+with `<ChalkProvider>` and the snapshot hooks when building custom UI.
 
 ## Installation
 
 ```bash
-pnpm add @q9labsai/chalk-client @q9labsai/chalk-react @q9labsai/chalk-ui
+pnpm add @q9labsai/chalk-client @q9labsai/chalk-react
 ```
 
-## Turnkey conference
+## Turnkey UI
+
+Provide a Space slug and a `getAccess` callback. Chalk creates and owns the
+client, renders the Entrance by default, and releases its owned client when it
+unmounts.
 
 ```tsx
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
-import type { PreJoinSettings } from "@q9labsai/chalk-react";
-import { VideoConference } from "@q9labsai/chalk-react";
+import { Chalk } from "@q9labsai/chalk-react";
+import type { AccessGrant } from "@q9labsai/chalk-client";
 
-export function App({ createSession }: { createSession: (settings: PreJoinSettings) => Promise<ChalkSessionStore> }) {
-  return <VideoConference roomId="design-review" roomName="Design review" createSession={createSession} chatEnabled participantsEnabled screenShareEnabled />;
+export function SpacePage() {
+  return (
+    <Chalk
+      space="design-review"
+      getAccess={async ({ space, reason }): Promise<AccessGrant> => fetchAccess({ space, reason })}
+      defaults={{ microphone: true, camera: true }}
+      features={{ chat: true, screenShare: true, reactions: true }}
+      spaceName="Design review"
+      onEpisodeEnded={({ episode }) => console.log(episode?.id)}
+    />
+  );
 }
 ```
 
-`createSession` is called with the settings selected in `PreJoinScreen`. Set
-`autoJoin` when the application has already collected identity and device
-settings. Use `phase`/`onPhaseChange` and `layout`/`onLayoutChange` for
-controlled observability. Feature availability uses props such as
-`chatEnabled`; capability overrides use props such as `canShareScreen`.
-
-## Composable session bindings
-
-The provider and hooks project an existing `ChalkSessionStore` from
-`@q9labsai/chalk-client` into React. They never join a room or open network
-connections on their own; the application creates and owns the session store.
+Pass an existing client when its lifecycle belongs to the embedding
+application. Chalk will use it without disposing it.
 
 ```tsx
-import "@q9labsai/chalk-ui/styles.css";
+<Chalk client={spaceClient} entrance={false} />
 ```
 
-Wrap the part of the application that consumes session state:
+`theme` is the only styling door. It accepts a closed token-key set, which
+Chalk emits as CSS custom properties scoped to its root. Size and place Chalk
+with its parent element.
+
+`colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows
+the browser preference while keeping explicit token overrides in place.
 
 ```tsx
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
-import { ChalkProvider, useChalkActions, useParticipants } from "@q9labsai/chalk-react";
+<Chalk
+  client={spaceClient}
+  theme={{
+    colorScheme: "dark",
+    accent: "#4b9bb8",
+    tokens: { canvas: "#152127", surface: "#1d2b31" },
+  }}
+/>
+```
 
-function Meeting() {
-  const participants = useParticipants();
-  const actions = useChalkActions();
+## Custom UI
+
+`ChalkProvider` only shares a `SpaceClient` with React. It does not join,
+leave, refresh access, or own the client’s lifetime.
+
+```tsx
+import type { SpaceClient } from "@q9labsai/chalk-client";
+import { ChalkProvider, useCan, useParticipants, useSpaceClient } from "@q9labsai/chalk-react";
+
+function ParticipantPanel() {
+  const client = useSpaceClient();
+  const { roster } = useParticipants();
+  const canRaiseHand = useCan("raiseHand");
 
   return (
     <>
-      <p>{participants.length} participants</p>
-      <button onClick={() => void actions.leave()}>Leave</button>
+      <p>{roster.length} participants</p>
+      {canRaiseHand ? <button onClick={() => void client.participants.raiseHand()}>Raise hand</button> : null}
     </>
   );
 }
 
-export function App({ session }: { session: ChalkSessionStore }) {
+export function SpacePanel({ client }: { readonly client: SpaceClient }) {
   return (
-    <ChalkProvider session={session}>
-      <Meeting />
+    <ChalkProvider client={client}>
+      <ParticipantPanel />
     </ChalkProvider>
   );
 }
 ```
 
-`useChalkSnapshot` returns the complete immutable snapshot.
-`useChalkSelector` limits rerenders to the selected value, while
-`useParticipants`, `useLocalMedia`, and `useRemoteMedia` expose the common
-collections. `useChalkActions` delegates commands to the provided store and
-returns each command's original promise.
+The public hook set is closed: `useSpaceClient`, `useConnection`, `useSelf`,
+`useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and
+`useCan`. Each snapshot hook returns its stable `SpaceSnapshot` slice; use the
+client hook for commands.
 
-## Import Surface
-
-Use the narrowest import that matches the UI layer you need:
-
-```tsx
-import { Avatar, ParticipantTile, ChatPanel, ControlBar, EndScreen, JoiningScreen, ConferenceView } from "@q9labsai/chalk-react/components";
-```
-
-The package root exports `VideoConference`, `ChalkProvider`, and the canonical
-session hooks. Active composition components such as `ConferenceView` are
-available only from `/components`.
-
-## Ownership Boundary
-
-The hooks own React subscriptions only. Joining, transport, permissions,
-diagnostics, and recovery stay in `@q9labsai/chalk-client`. Recording and
-transcription are not part of this launch surface. The styled `WhiteboardView`
-is backed by `@q9labsai/chalk-whiteboard`; callers still own its room state and
-transport wiring.
+`AccessGrant` remains opaque. The application backend creates it, `getAccess`
+returns it unchanged, and `SpaceClient` handles refresh and recovery.

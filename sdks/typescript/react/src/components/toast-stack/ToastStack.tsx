@@ -114,22 +114,22 @@ export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, posi
       closeButton
       icons={{
         info: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#e6f3f8] text-[#315f72]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]">
             <InformationCircleIcon size={18} />
           </div>
         ),
         success: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#e8f1e4] text-[#49645d]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-app-control-active-line)]/20 text-[var(--chalk-app-control-active-text)]">
             <CheckmarkCircle02Icon size={18} />
           </div>
         ),
         warning: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#fdf2cf] text-[#9a7314]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-app-control-group)] text-[var(--chalk-app-text)]">
             <Alert02Icon size={18} />
           </div>
         ),
         error: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#f8e4e4] text-[#9f3f3f]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-app-danger)]/10 text-[var(--chalk-app-danger)]">
             <CancelCircleIcon size={18} />
           </div>
         ),

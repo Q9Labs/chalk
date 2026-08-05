@@ -137,7 +137,7 @@ func newService(repository *repository, telemetry apikeys.Telemetry) apikeys.Ser
 func createKey(t testing.TB, service apikeys.Service, expiresAt time.Time) apikeys.CreateResult {
 	t.Helper()
 	result, err := service.Create(context.Background(), apikeys.CreateInput{
-		TenantID: tenantID, Name: "Backend", Scopes: []authentication.Scope{authentication.ScopeRoomsRead}, ExpiresAt: expiresAt,
+		TenantID: tenantID, Name: "Backend", Scopes: []authentication.Scope{authentication.ScopeSpacesRead}, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		t.Fatalf("create key: %v", err)

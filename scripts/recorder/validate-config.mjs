@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import process from "node:process";
 
 export const CAPTURE_LIMITS = Object.freeze({
-  maxMeetings: 20,
+  maxEpisodes: 20,
   maxParticipants: 100,
   maxNodes: 11,
 });
@@ -28,22 +28,22 @@ function assertNonNegative(name, value) {
 }
 
 // fallow-ignore-next-line complexity
-export function desiredCaptureNodes({ meetings, participants, inputMbps, meetingsPerNode = 4, participantsPerNode = 40, inputMbpsPerNode = 16, readySpare = 0 }) {
-  assertInteger("meetings", meetings, 0, CAPTURE_LIMITS.maxMeetings);
+export function desiredCaptureNodes({ episodes, participants, inputMbps, episodesPerNode = 4, participantsPerNode = 40, inputMbpsPerNode = 16, readySpare = 0 }) {
+  assertInteger("episodes", episodes, 0, CAPTURE_LIMITS.maxEpisodes);
   assertInteger("participants", participants, 0, CAPTURE_LIMITS.maxParticipants);
   assertNonNegative("inputMbps", inputMbps);
-  assertNonNegative("meetingsPerNode", meetingsPerNode);
+  assertNonNegative("episodesPerNode", episodesPerNode);
   assertNonNegative("participantsPerNode", participantsPerNode);
   assertNonNegative("inputMbpsPerNode", inputMbpsPerNode);
   assertInteger("readySpare", readySpare, 0, 1);
-  if (meetingsPerNode === 0 || participantsPerNode === 0 || inputMbpsPerNode === 0) {
+  if (episodesPerNode === 0 || participantsPerNode === 0 || inputMbpsPerNode === 0) {
     throw new Error("capture density must be positive");
   }
 
-  const meetingNodes = Math.ceil(meetings / meetingsPerNode);
+  const episodeNodes = Math.ceil(episodes / episodesPerNode);
   const participantNodes = Math.ceil(participants / participantsPerNode);
   const bitrateNodes = Math.ceil(inputMbps / inputMbpsPerNode);
-  const desired = Math.max(meetingNodes, participantNodes, bitrateNodes) + readySpare;
+  const desired = Math.max(episodeNodes, participantNodes, bitrateNodes) + readySpare;
   if (desired > CAPTURE_LIMITS.maxNodes) {
     throw new Error(`capture demand requires ${desired} nodes, above the qualified ${CAPTURE_LIMITS.maxNodes}-node bound`);
   }

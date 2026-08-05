@@ -1,5 +1,5 @@
-import "../../../tools/contract-codegen/src/typespec-proof/main.tsp";
-import "../../../tools/contract-codegen/node_modules/@typespec/http/lib/main.tsp";
+import "../../../tools/contract-fixture-proof/src/typespec-proof/main.tsp";
+import "../../../tools/contract-fixture-proof/node_modules/@typespec/http/lib/main.tsp";
 
 using Chalk.Proof;
 using TypeSpec.Http;
@@ -21,7 +21,7 @@ scalar UserId extends string;
 @minLength(1)
 @maxLength(80)
 @pattern("^[a-z0-9][a-z0-9_-]*$")
-scalar RoomId extends string;
+scalar SpaceId extends string;
 
 @minLength(1)
 @maxLength(80)
@@ -32,8 +32,8 @@ scalar ParticipantId extends string;
 model OpaqueJson is Record<unknown>;
 
 enum UserRole {
-  admin: "admin",
-  member: "member",
+  collaborator: "collaborator",
+  observer: "observer",
   owner: "owner",
 }
 
@@ -78,8 +78,8 @@ model User {
   provider: ProviderConfig;
 }
 
-model Room {
-  id: RoomId;
+model Space {
+  id: SpaceId;
   tenantId: TenantId;
   ownerId: UserId;
   participants: User[];
@@ -95,7 +95,7 @@ model Room {
   metadata: OpaqueJson;
 }
 
-model CreateRoomRequest {
+model CreateSpaceRequest {
   @minLength(1)
   @maxLength(120)
   title: string;
@@ -107,12 +107,12 @@ model TenantResponse {
   tenant: Tenant;
 }
 
-model RoomResponse {
-  room: Room;
+model SpaceResponse {
+  space: Space;
 }
 
-model RoomListResponse {
-  rooms: Room[];
+model SpaceListResponse {
+  spaces: Space[];
   nextCursor?: string;
 }
 
@@ -154,18 +154,18 @@ model GetTenantOk {
   @body body: TenantResponse;
 }
 
-model ListRoomsOk {
+model ListSpacesOk {
   @statusCode statusCode: 200;
   @header etag: string;
   @header("x-request-id") requestId: string;
-  @body body: RoomListResponse;
+  @body body: SpaceListResponse;
 }
 
-model CreateRoomCreated {
+model CreateSpaceCreated {
   @statusCode statusCode: 201;
   @header etag: string;
   @header("x-request-id") requestId: string;
-  @body body: RoomResponse;
+  @body body: SpaceResponse;
 }
 
 model UnauthorizedResponse {
@@ -206,23 +206,23 @@ interface Tenants {
     @query expand?: "users",
   ): GetTenantOk | UnauthorizedResponse | NotFoundResponse;
 
-  @operationId("rooms.list")
+  @operationId("spaces.list")
   @get
-  @route("/{tenantId}/rooms")
-  op listRooms(
+  @route("/{tenantId}/spaces")
+  op listSpaces(
     @path tenantId: TenantId,
     @query pageSize: int32,
     @query cursor?: string,
-  ): ListRoomsOk | UnauthorizedResponse | ValidationErrorResponse | RateLimitedResponse;
+  ): ListSpacesOk | UnauthorizedResponse | ValidationErrorResponse | RateLimitedResponse;
 
-  @operationId("rooms.create")
+  @operationId("spaces.create")
   @post
-  @route("/{tenantId}/rooms")
-  op createRoom(
+  @route("/{tenantId}/spaces")
+  op createSpace(
     @path tenantId: TenantId,
     @header("idempotency-key") idempotencyKey: string,
-    @body body: CreateRoomRequest,
-  ): CreateRoomCreated | UnauthorizedResponse | ValidationErrorResponse | RateLimitedResponse;
+    @body body: CreateSpaceRequest,
+  ): CreateSpaceCreated | UnauthorizedResponse | ValidationErrorResponse | RateLimitedResponse;
 }
 
 model SyncControlCursor {
@@ -449,16 +449,16 @@ model SyncUnauthorizedClose {
 
 @error
 @wireError("SERVER_FAILURE", "sync", "connection")
-@closeCode(1011, "room server failure")
+@closeCode(1011, "space server failure")
 model SyncServerFailureClose {
   code: string;
   message: string;
 }
 
 @error
-@wireError("ROOM_RESTARTING", "sync", "connection")
-@closeCode(1012, "room restarting; reconnect and re-snapshot")
-model SyncRoomRestartClose {
+@wireError("SPACE_RESTARTING", "sync", "connection")
+@closeCode(1012, "space restarting; reconnect and re-snapshot")
+model SyncSpaceRestartClose {
   code: string;
   message: string;
 }

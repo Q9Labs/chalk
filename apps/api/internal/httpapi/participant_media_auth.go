@@ -5,16 +5,16 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type ParticipantMediaVerifier interface {
-	Verify(context.Context, string) (participantaccess.Subject, error)
+	Verify(context.Context, string) (accessgrants.Subject, error)
 }
 
 type ActiveParticipantAuthorizer interface {
-	AuthorizeActiveParticipant(context.Context, participantaccess.Subject) (bool, error)
+	AuthorizeActiveParticipant(context.Context, accessgrants.Subject) (bool, error)
 }
 
 func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer ActiveParticipantAuthorizer) func(http.Handler) http.Handler {
@@ -51,7 +51,7 @@ func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer Activ
 				return
 			}
 
-			ctx := participantaccess.WithSubject(r.Context(), subject)
+			ctx := accessgrants.WithSubject(r.Context(), subject)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -60,23 +60,23 @@ func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer Activ
 func requireParticipantMediaRoute(
 	ctx context.Context,
 	tenantID utilities.ID,
-	roomID utilities.ID,
-	sessionID utilities.ID,
-	participantSessionID utilities.ID,
+	spaceID utilities.ID,
+	episodeID utilities.ID,
+	participantID utilities.ID,
 	participantGeneration int64,
 	provider string,
 	connectionID string,
 ) error {
-	subject, ok := participantaccess.SubjectFromContext(ctx)
+	subject, ok := accessgrants.SubjectFromContext(ctx)
 	if !ok {
 		return apiErrorUnauthenticated
 	}
 
-	err := participantaccess.RequireRouteSubject(subject, participantaccess.RouteSubject{
+	err := accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
 		TenantID:               tenantID,
-		RoomID:                 roomID,
-		SessionID:              sessionID,
-		ParticipantSessionID:   participantSessionID,
+		SpaceID:                spaceID,
+		EpisodeID:              episodeID,
+		ParticipantID:          participantID,
 		ParticipantGeneration:  participantGeneration,
 		Provider:               provider,
 		CloudflareConnectionID: connectionID,
@@ -88,15 +88,15 @@ func requireParticipantMediaRoute(
 }
 
 func isParticipantMediaCredentialRejection(err error) bool {
-	return errors.Is(err, participantaccess.ErrMalformedCredential) ||
-		errors.Is(err, participantaccess.ErrInvalidHeader) ||
-		errors.Is(err, participantaccess.ErrUnknownKey) ||
-		errors.Is(err, participantaccess.ErrInvalidSignature) ||
-		errors.Is(err, participantaccess.ErrInvalidIssuer) ||
-		errors.Is(err, participantaccess.ErrInvalidAudience) ||
-		errors.Is(err, participantaccess.ErrInvalidTimeClaims) ||
-		errors.Is(err, participantaccess.ErrNotYetValid) ||
-		errors.Is(err, participantaccess.ErrExpired) ||
-		errors.Is(err, participantaccess.ErrLifetimeExceeded) ||
-		errors.Is(err, participantaccess.ErrInvalidSubject)
+	return errors.Is(err, accessgrants.ErrMalformedCredential) ||
+		errors.Is(err, accessgrants.ErrInvalidHeader) ||
+		errors.Is(err, accessgrants.ErrUnknownKey) ||
+		errors.Is(err, accessgrants.ErrInvalidSignature) ||
+		errors.Is(err, accessgrants.ErrInvalidIssuer) ||
+		errors.Is(err, accessgrants.ErrInvalidAudience) ||
+		errors.Is(err, accessgrants.ErrInvalidTimeClaims) ||
+		errors.Is(err, accessgrants.ErrNotYetValid) ||
+		errors.Is(err, accessgrants.ErrExpired) ||
+		errors.Is(err, accessgrants.ErrLifetimeExceeded) ||
+		errors.Is(err, accessgrants.ErrInvalidSubject)
 }

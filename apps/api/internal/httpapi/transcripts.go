@@ -25,11 +25,11 @@ import (
 var (
 	readTranscriptsPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeTranscriptionsRead,
-		MinimumRole: memberships.RoleViewer,
+		MinimumRole: memberships.RoleObserver,
 	}
 	writeTranscriptsPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeTranscriptionsWrite,
-		MinimumRole: memberships.RoleMember,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 )
 
@@ -52,8 +52,8 @@ type transcriptResponse struct {
 	ID          string   `json:"id"`
 	TenantID    string   `json:"tenant_id"`
 	RecordingID string   `json:"recording_id"`
-	RoomID      string   `json:"room_id"`
-	SessionID   string   `json:"session_id"`
+	SpaceID     string   `json:"space_id"`
+	EpisodeID   string   `json:"episode_id"`
 	Status      string   `json:"status"`
 	Provider    string   `json:"provider"`
 	Model       string   `json:"model"`
@@ -71,8 +71,8 @@ type transcriptListResponse struct {
 }
 
 type createTranscriptRequest struct {
-	RoomID      string                 `json:"room_id"`
-	SessionID   string                 `json:"session_id"`
+	SpaceID     string                 `json:"space_id"`
+	EpisodeID   string                 `json:"episode_id"`
 	Status      string                 `json:"status"`
 	Provider    string                 `json:"provider"`
 	Model       string                 `json:"model"`
@@ -166,7 +166,7 @@ func createTranscriptEndpoint(service TranscriptService, authorizer TenantAuthor
 		Parameters(tenantIDParameter(), recordingIDParameter()).
 		RequestBody("CreateTranscriptRequest", createTranscriptRequest{}).
 		Responds(http.StatusCreated, "Transcript", transcriptResponse{}).
-		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidTranscriptStatus, apiErrorInvalidTranscriptProvider, apiErrorInvalidTranscriptModel, apiErrorInvalidTranscriptLanguages, apiErrorInvalidTranscriptField, apiErrorRecordingNotFound, apiErrorRateLimited)...).
+		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidTranscriptStatus, apiErrorInvalidTranscriptProvider, apiErrorInvalidTranscriptModel, apiErrorInvalidTranscriptLanguages, apiErrorInvalidTranscriptField, apiErrorRecordingNotFound, apiErrorRateLimited)...).
 		MapErrors(transcriptEndpointAPIError)
 }
 
@@ -234,8 +234,8 @@ func transcribeRecordingEndpoint(service TranscriptService, recordingService Rec
 		input := transcripts.CreateInput{
 			TenantID:    request.TenantID,
 			RecordingID: request.RecordingID,
-			RoomID:      recording.RoomID,
-			SessionID:   recording.SessionID,
+			SpaceID:     recording.SpaceID,
+			EpisodeID:   recording.EpisodeID,
 			Status:      transcripts.StatusCompleted,
 			Provider:    ai.ProviderOpenRouter,
 			Model:       result.Model,
@@ -451,10 +451,10 @@ func transcriptServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTranscriptID, true
 	case errors.Is(err, transcripts.ErrInvalidRecordingID):
 		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, transcripts.ErrInvalidRoomID):
-		return apiErrorInvalidRoomID, true
-	case errors.Is(err, transcripts.ErrInvalidSessionID):
-		return apiErrorInvalidSessionID, true
+	case errors.Is(err, transcripts.ErrInvalidSpaceID):
+		return apiErrorInvalidSpaceID, true
+	case errors.Is(err, transcripts.ErrInvalidEpisodeID):
+		return apiErrorInvalidEpisodeID, true
 	case errors.Is(err, transcripts.ErrInvalidTranscriptStatus):
 		return apiErrorInvalidTranscriptStatus, true
 	case errors.Is(err, transcripts.ErrInvalidProvider):
@@ -521,8 +521,8 @@ func newTranscriptResponse(transcript transcripts.Transcript) transcriptResponse
 		ID:          transcript.ID.String(),
 		TenantID:    transcript.TenantID.String(),
 		RecordingID: transcript.RecordingID.String(),
-		RoomID:      transcript.RoomID.String(),
-		SessionID:   transcript.SessionID.String(),
+		SpaceID:     transcript.SpaceID.String(),
+		EpisodeID:   transcript.EpisodeID.String(),
 		Status:      transcript.Status,
 		Provider:    transcript.Provider,
 		Model:       transcript.Model,
@@ -605,20 +605,20 @@ func optionalRequestString(value utilities.OptionalString, allowNull bool) (stri
 }
 
 func (r createTranscriptRequest) toCreateInputValue(tenantID utilities.ID, recordingID utilities.ID) (transcripts.CreateInput, error) {
-	roomID, err := utilities.ParseID(r.RoomID)
+	spaceID, err := utilities.ParseID(r.SpaceID)
 	if err != nil {
-		return transcripts.CreateInput{}, apiErrorInvalidRoomID
+		return transcripts.CreateInput{}, apiErrorInvalidSpaceID
 	}
-	sessionID, err := utilities.ParseID(r.SessionID)
+	episodeID, err := utilities.ParseID(r.EpisodeID)
 	if err != nil {
-		return transcripts.CreateInput{}, apiErrorInvalidSessionID
+		return transcripts.CreateInput{}, apiErrorInvalidEpisodeID
 	}
 
 	return transcripts.CreateInput{
 		TenantID:    tenantID,
 		RecordingID: recordingID,
-		RoomID:      roomID,
-		SessionID:   sessionID,
+		SpaceID:     spaceID,
+		EpisodeID:   episodeID,
 		Status:      r.Status,
 		Provider:    r.Provider,
 		Model:       r.Model,

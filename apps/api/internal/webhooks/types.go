@@ -43,8 +43,8 @@ var (
 )
 
 var CoreEventTypes = []string{
-	"participant.joined", "participant.left", "room.archived", "room.created",
-	"room.restored", "room.updated", "session.ended", "session.started",
+	"episode.ended", "episode.started", "participant.joined", "participant.left",
+	"space.created", "space.updated",
 }
 
 var reservedEventTypes = map[string]struct{}{

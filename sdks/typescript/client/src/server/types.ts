@@ -1,3 +1,7 @@
+import type { AccessGrant } from "../access/grant.js";
+
+export type { AccessGrant } from "../access/grant.js";
+
 export type ChalkServerHeaders = Readonly<Record<string, string>>;
 
 export type ChalkServerTelemetry = {
@@ -18,47 +22,57 @@ export type ChalkServerClientOptions = {
 
 export type ChalkIdempotencyOptions = { readonly idempotencyKey?: string };
 
-export type CreateRoomInput = {
-  readonly media_plane: string;
+export type CreateSpaceInput = {
+  readonly admissionPolicy?: unknown;
+  readonly defaultEpisodeDurationSeconds: number;
+  readonly lingerWindowSeconds: number;
+  readonly maximumEpisodeDurationSeconds: number;
+  readonly mediaPlane: string;
   readonly metadata?: unknown;
   readonly name: string;
-  readonly recurring_policy?: unknown;
+  readonly recurringPolicy?: unknown;
   readonly slug: string;
-  readonly status: "active" | "archived" | "ended";
 };
 
-export type Room = {
+export type Space = {
+  readonly admission_policy: unknown;
   readonly created_at: string;
   readonly created_by_user_id: string | null;
+  readonly default_episode_duration_seconds: number;
   readonly id: string;
+  readonly linger_window_seconds: number;
+  readonly maximum_episode_duration_seconds: number;
   readonly media_plane: string;
   readonly metadata: unknown;
   readonly name: string;
   readonly recurring_policy: unknown;
+  readonly roles: readonly {
+    readonly capabilities: readonly string[];
+    readonly id: string;
+    readonly name: string;
+  }[];
   readonly slug: string;
-  readonly status: "active" | "archived" | "ended";
   readonly tenant_id: string;
   readonly updated_at: string;
 };
 
-export type CreateSessionInput = {
-  readonly admission_policy: string;
-  readonly host_exit_policy: string;
-  readonly maximum_duration_seconds: number;
+export type CreateEpisodeInput = {
   readonly metadata?: unknown;
-  readonly role_capabilities: Readonly<Record<string, readonly string[]>>;
-  readonly started_at?: string | null;
+  readonly startedAt?: string | null;
 };
 
-export type RoomSession = {
+export type Episode = {
+  readonly config_snapshot: unknown;
   readonly created_at: string;
-  readonly created_by_user_id: string | null;
-  readonly ended_at: string | null;
+  readonly deadline_at: string;
+  readonly deadline_generation: number;
+  readonly end_reason?: string | null;
+  readonly ended_at?: string;
   readonly id: string;
   readonly metadata: unknown;
-  readonly room_id: string;
-  readonly started_at: string | null;
-  readonly status: "pending" | "active" | "ended" | "failed";
+  readonly space_id: string;
+  readonly started_at: string;
+  readonly status: "active" | "ending" | "ended";
   readonly tenant_id: string;
   readonly updated_at: string;
 };
@@ -70,85 +84,72 @@ type ExternalOperation = {
   readonly operation_name: string;
   readonly request_key: string;
   readonly status: string;
-  readonly target_participant_session_generation?: number | null;
-  readonly target_participant_session_id?: string | null;
+  readonly target_participant_generation?: number | null;
+  readonly target_participant_id?: string | null;
 };
 
-export type EndSessionResult = { readonly external_operation: ExternalOperation; readonly session_id: string; readonly status: string };
+export type EpisodeEnd = {
+  readonly episode_id: string;
+  readonly external_operation: ExternalOperation;
+  readonly status: string;
+};
 
 export type AdmitParticipantInput = {
-  readonly eligible_roles: readonly string[];
-  readonly initial_role: string;
+  readonly identityId?: string;
   readonly metadata?: unknown;
   readonly name: string;
-  readonly participant_session_id: string;
+  readonly participantId?: string;
+  readonly role: string;
 };
 
-export type ParticipantAccess = {
-  readonly subject: {
-    readonly tenantId: string;
-    readonly roomId: string;
-    readonly sessionId: string;
-    readonly participantSessionId: string;
-    readonly participantGeneration: number;
-  };
-  readonly sync: { readonly token: string; readonly expiresAt: string };
-  readonly media: {
-    readonly token: string;
-    readonly expiresAt: string;
-    readonly provider: "cloudflare_sfu";
-    readonly clientPayload: { readonly connectionId: string; readonly stunServer: string };
-  };
+type Participant = {
+  readonly capabilities: readonly string[];
+  readonly episode_id: string;
+  readonly generation: number;
+  readonly id: string;
+  readonly identity_id?: string | null;
+  readonly role: string;
+  readonly space_id: string;
+  readonly status: string;
+  readonly tenant_id: string;
 };
 
-export type ParticipantAdmission = {
-  readonly access?: ParticipantAccess | null;
+export type ParticipantLifecycle = {
+  readonly access?: AccessGrant | null;
   readonly admission_request?: { readonly expires_at: string; readonly id: string; readonly status: string } | null;
   readonly expires_at?: string;
   readonly lifecycle_intent: {
     readonly created_at: string;
     readonly id: string;
     readonly intent_name: string;
-    readonly participant_session_generation: number | null;
-    readonly participant_session_id: string | null;
+    readonly participant_generation?: number | null;
+    readonly participant_id?: string | null;
     readonly request_key: string;
     readonly status: string;
   };
   readonly media_plane?: { readonly client_payload: Readonly<Record<string, unknown>>; readonly provider: string } | null;
-  readonly participant: {
-    readonly generation: number;
-    readonly id: string;
-    readonly room_id: string;
-    readonly session_id: string;
-    readonly status: string;
-    readonly tenant_id: string;
-  };
+  readonly participant: Participant;
   readonly sync_token?: string;
 };
 
-export type RemoveParticipantInput = { readonly participantSessionGeneration: number };
+export type RemoveParticipantInput = { readonly participantGeneration: number };
 
 export type ParticipantRemoval = {
-  readonly lifecycle_intent: {
-    readonly created_at: string;
-    readonly id: string;
-    readonly intent_name: string;
-    readonly participant_session_generation: number | null;
-    readonly participant_session_id: string | null;
-    readonly request_key: string;
-    readonly status: string;
-  };
-  readonly participant: {
-    readonly generation: number;
-    readonly id: string;
-    readonly room_id: string;
-    readonly session_id: string;
-    readonly status: string;
-    readonly tenant_id: string;
-  };
+  readonly external_operation: ExternalOperation;
+  readonly participant: Participant;
 };
 
-export type IssueParticipantAccessInput = { readonly participantSessionGeneration: number; readonly currentMediaToken: string; readonly replaceMediaConnection?: false } | { readonly participantSessionGeneration: number; readonly currentMediaToken?: never; readonly replaceMediaConnection: true };
+export type IssueAccessGrantInput =
+  | {
+      readonly participantGeneration: number;
+      readonly currentMediaToken: string;
+      readonly replaceMediaConnection?: false;
+    }
+  | {
+      readonly participantGeneration: number;
+      readonly currentMediaToken?: never;
+      readonly replaceMediaConnection: true;
+    };
 
 export type APIKey = {
   readonly created_at: string;
@@ -175,15 +176,15 @@ export type ListAPIKeysInput = { readonly cursor?: string; readonly pageSize?: n
 export type RotateAPIKeyInput = { readonly expiresAt?: string | null };
 
 export type ChalkServerClient = {
-  readonly rooms: { create(input: CreateRoomInput): Promise<Room> };
-  readonly sessions: {
-    create(roomId: string, input: CreateSessionInput, options?: ChalkIdempotencyOptions): Promise<RoomSession>;
-    end(roomId: string, sessionId: string, options?: ChalkIdempotencyOptions): Promise<EndSessionResult>;
+  readonly spaces: { create(input: CreateSpaceInput): Promise<Space> };
+  readonly episodes: {
+    create(spaceId: string, input: CreateEpisodeInput, options?: ChalkIdempotencyOptions): Promise<Episode>;
+    end(spaceId: string, episodeId: string, options?: ChalkIdempotencyOptions): Promise<EpisodeEnd>;
   };
   readonly participants: {
-    admit(roomId: string, sessionId: string, input: AdmitParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantAdmission>;
-    issueAccess(roomId: string, sessionId: string, participantSessionId: string, input: IssueParticipantAccessInput): Promise<ParticipantAccess>;
-    remove(roomId: string, sessionId: string, participantSessionId: string, input: RemoveParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantRemoval>;
+    admit(spaceId: string, episodeId: string, input: AdmitParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantLifecycle>;
+    issueAccess(spaceId: string, episodeId: string, participantId: string, input: IssueAccessGrantInput): Promise<AccessGrant>;
+    remove(spaceId: string, episodeId: string, participantId: string, input: RemoveParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantRemoval>;
   };
   readonly apiKeys: {
     create(input: CreateAPIKeyInput): Promise<APIKeyWithSecret>;

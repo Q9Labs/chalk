@@ -3,10 +3,10 @@ locals {
   # provider can propose creating a replacement bucket.
   bucket_name = var.recording_bucket_name != null ? var.recording_bucket_name : (var.environment == "staging" ? "chalk-recorder-staging" : "")
 
-  capture_meeting_nodes      = var.reserved_capture_meetings == 0 ? 0 : ceil(var.reserved_capture_meetings / var.capture_meetings_per_node)
+  capture_episode_nodes      = var.reserved_capture_episodes == 0 ? 0 : ceil(var.reserved_capture_episodes / var.capture_episodes_per_node)
   capture_participant_nodes  = var.reserved_capture_participants == 0 ? 0 : ceil(var.reserved_capture_participants / var.capture_participants_per_node)
   capture_bitrate_nodes      = var.reserved_capture_input_mbps == 0 ? 0 : ceil(var.reserved_capture_input_mbps / var.capture_input_mbps_per_node)
-  desired_capture_nodes_raw  = max(local.capture_meeting_nodes, local.capture_participant_nodes, local.capture_bitrate_nodes) + var.ready_spare
+  desired_capture_nodes_raw  = max(local.capture_episode_nodes, local.capture_participant_nodes, local.capture_bitrate_nodes) + var.ready_spare
   desired_capture_nodes      = min(local.desired_capture_nodes_raw, 11)
   desired_render_nodes       = var.render_desired_nodes
   global_compute_nodes       = local.desired_capture_nodes + local.desired_render_nodes
@@ -27,8 +27,8 @@ locals {
 
 check "capture_admission_ceiling" {
   assert {
-    condition     = var.reserved_capture_meetings >= 0 && var.reserved_capture_meetings <= 20 && floor(var.reserved_capture_meetings) == var.reserved_capture_meetings
-    error_message = "capture reservations must contain an integer number of meetings from zero through twenty."
+    condition     = var.reserved_capture_episodes >= 0 && var.reserved_capture_episodes <= 20 && floor(var.reserved_capture_episodes) == var.reserved_capture_episodes
+    error_message = "capture reservations must contain an integer number of Episodes from zero through twenty."
   }
 
   assert {
@@ -42,7 +42,7 @@ check "capture_admission_ceiling" {
   }
 
   assert {
-    condition     = var.capture_meetings_per_node > 0 && var.capture_participants_per_node > 0 && var.capture_input_mbps_per_node > 0
+    condition     = var.capture_episodes_per_node > 0 && var.capture_participants_per_node > 0 && var.capture_input_mbps_per_node > 0
     error_message = "capture density inputs must be positive."
   }
 
@@ -73,6 +73,28 @@ check "whiteboard_cors_contract" {
   assert {
     condition     = contains(local.whiteboard_cors_allowed_headers, "x-amz-meta-chalk-attachment-id")
     error_message = "R2 CORS must allow the signed chat attachment identity metadata header."
+  }
+}
+
+resource "terraform_data" "production_cutover_gate" {
+  count = var.environment == "production" ? 1 : 0
+
+  input = {
+    capacity_inputs_migrated                 = var.capture_capacity_inputs_migrated
+    episode_kms_context_cutover_complete     = var.episode_kms_context_cutover_complete
+    legacy_kms_context_decrypt_policy_active = var.legacy_kms_context_key != null
+  }
+
+  lifecycle {
+    precondition {
+      condition     = (var.legacy_kms_context_key != null && !var.episode_kms_context_cutover_complete) || (var.legacy_kms_context_key == null && var.episode_kms_context_cutover_complete)
+      error_message = "production planning requires exactly one KMS cutover state: a legacy context key with completion false, or completion true with no legacy context key."
+    }
+
+    precondition {
+      condition     = var.capture_capacity_inputs_migrated
+      error_message = "production planning requires acknowledgment that callers and private tfvars use the renamed Episode capacity inputs."
+    }
   }
 }
 

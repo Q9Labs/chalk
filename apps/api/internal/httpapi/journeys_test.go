@@ -28,11 +28,11 @@ type journeyMetrics struct {
 	rejected int
 }
 
-type meetingCredentialVerifier struct {
+type episodeCredentialVerifier struct {
 	verify func(context.Context, string) error
 }
 
-func (v meetingCredentialVerifier) Verify(ctx context.Context, credential string) error {
+func (v episodeCredentialVerifier) Verify(ctx context.Context, credential string) error {
 	return v.verify(ctx, credential)
 }
 
@@ -63,12 +63,12 @@ func TestJourneyEventIntakeRequiresAuthentication(t *testing.T) {
 	}
 }
 
-func TestJourneyEventIntakeAcceptsValidMeetingBearer(t *testing.T) {
+func TestJourneyEventIntakeAcceptsValidEpisodeBearer(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Options{
-		MeetingCredentials: meetingCredentialVerifier{
+		EpisodeCredentials: episodeCredentialVerifier{
 			verify: func(_ context.Context, token string) error {
-				if token != "meeting-access-token" {
-					t.Fatalf("token = %q, want meeting access token", token)
+				if token != "episode-access-token" {
+					t.Fatalf("token = %q, want Episode access token", token)
 				}
 				return nil
 			},
@@ -81,12 +81,12 @@ func TestJourneyEventIntakeAcceptsValidMeetingBearer(t *testing.T) {
 				return journeys.IntakeResult{}, nil
 			},
 			get: func(context.Context, utilities.ID) (journeys.Ledger, error) {
-				t.Fatal("meeting bearer must not query the journey ledger")
+				t.Fatal("Episode bearer must not query the journey ledger")
 				return journeys.Ledger{}, nil
 			},
 		},
 	})
-	request := bearerRequestWithBody(http.MethodPost, "/v1/telemetry/journey-events", "meeting-access-token", `{"events":[]}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/telemetry/journey-events", "episode-access-token", `{"events":[]}`)
 	response := httptest.NewRecorder()
 
 	handler.ServeHTTP(response, request)
@@ -124,20 +124,20 @@ func TestJourneyEventIntakeRejectsArbitraryBearer(t *testing.T) {
 	}
 }
 
-func TestJourneyEventIntakeRejectsInvalidMeetingBearer(t *testing.T) {
+func TestJourneyEventIntakeRejectsInvalidEpisodeBearer(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Options{
-		MeetingCredentials: meetingCredentialVerifier{
+		EpisodeCredentials: episodeCredentialVerifier{
 			verify: func(context.Context, string) error { return mediaplane.ErrInvalidCredential },
 		},
 		Journeys: journeyService{
 			intake: func(context.Context, journeys.IntakeInput) (journeys.IntakeResult, error) {
-				t.Fatal("invalid meeting bearer must not reach intake")
+				t.Fatal("invalid Episode bearer must not reach intake")
 				return journeys.IntakeResult{}, nil
 			},
 			get: func(context.Context, utilities.ID) (journeys.Ledger, error) { return journeys.Ledger{}, nil },
 		},
 	})
-	request := bearerRequestWithBody(http.MethodPost, "/v1/telemetry/journey-events", "invalid-meeting-token", `{"events":[]}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/telemetry/journey-events", "invalid-episode-token", `{"events":[]}`)
 	response := httptest.NewRecorder()
 
 	handler.ServeHTTP(response, request)
@@ -146,9 +146,9 @@ func TestJourneyEventIntakeRejectsInvalidMeetingBearer(t *testing.T) {
 	}
 }
 
-func TestJourneyEventIntakeAcceptsBearerSessionWithMeetingVerifier(t *testing.T) {
+func TestJourneyEventIntakeAcceptsBearerSessionWithEpisodeVerifier(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Options{
-		MeetingCredentials: meetingCredentialVerifier{
+		EpisodeCredentials: episodeCredentialVerifier{
 			verify: func(context.Context, string) error { return mediaplane.ErrCredentialNotApplicable },
 		},
 		Authentication: authenticationService{
@@ -175,9 +175,9 @@ func TestJourneyEventIntakeAcceptsBearerSessionWithMeetingVerifier(t *testing.T)
 	}
 }
 
-func TestJourneyEventIntakeMapsMeetingVerifierFailureSafely(t *testing.T) {
+func TestJourneyEventIntakeMapsEpisodeVerifierFailureSafely(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Options{
-		MeetingCredentials: meetingCredentialVerifier{
+		EpisodeCredentials: episodeCredentialVerifier{
 			verify: func(context.Context, string) error { return mediaplane.ErrPlaneUnavailable },
 		},
 		Journeys: journeyService{
@@ -188,7 +188,7 @@ func TestJourneyEventIntakeMapsMeetingVerifierFailureSafely(t *testing.T) {
 			get: func(context.Context, utilities.ID) (journeys.Ledger, error) { return journeys.Ledger{}, nil },
 		},
 	})
-	request := bearerRequestWithBody(http.MethodPost, "/v1/telemetry/journey-events", "meeting-access-token", `{"events":[]}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/telemetry/journey-events", "episode-access-token", `{"events":[]}`)
 	response := httptest.NewRecorder()
 
 	handler.ServeHTTP(response, request)
@@ -366,7 +366,7 @@ func TestJourneyEventIntakeReportsUnavailableLedger(t *testing.T) {
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusServiceUnavailable, response.Body.String())
 	}
-	if !bytes.Contains(response.Body.Bytes(), []byte(`"journey_ledger_unavailable"`)) {
+	if !bytes.Contains(response.Body.Bytes(), []byte(`"journey.ledger_unavailable"`)) {
 		t.Fatalf("response = %s", response.Body.String())
 	}
 }

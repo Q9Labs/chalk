@@ -20,24 +20,24 @@ import (
 var (
 	readAPIKeysPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeAPIKeysRead,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	writeAPIKeysPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeAPIKeysWrite,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	deleteAPIKeysPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeAPIKeysDelete,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	apiErrorInvalidAPIKeyID = APIError{
-		Status: http.StatusBadRequest, Code: "invalid_api_key_id", Message: "Invalid API key id",
+		Status: http.StatusBadRequest, Code: "api_key.invalid_id", Message: "Invalid API key id",
 	}
 	apiErrorAPIKeyNotFound = APIError{
-		Status: http.StatusNotFound, Code: "not_found", Message: "API key not found",
+		Status: http.StatusNotFound, Code: "api_key.not_found", Message: "API key not found",
 	}
 	apiErrorAPIKeyInactive = APIError{
-		Status: http.StatusConflict, Code: "api_key_inactive", Message: "API key is not active",
+		Status: http.StatusConflict, Code: "api_key.inactive", Message: "API key is not active",
 	}
 )
 

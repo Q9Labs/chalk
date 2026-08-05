@@ -72,7 +72,7 @@ await waitFor("Tempo trace containing API and sync services", async () => {
   const response = await fetch(`${tempoBaseUrl}/api/traces/${exportedEvents[0].trace_id}`);
   if (!response.ok) return false;
   const body = await response.text();
-  return body.includes("chalk-api") && body.includes("chalk-sync") && body.includes("db.observability_journey_events.append") && body.includes("sync.room.event.committed") && body.includes(journey.context.journeyId);
+  return body.includes("chalk-api") && body.includes("chalk-sync") && body.includes("db.observability_journey_events.append") && body.includes("sync.episode.event.committed") && body.includes(journey.context.journeyId);
 });
 
 await waitFor("correlated API log in Loki", async () => {
@@ -112,40 +112,189 @@ console.log(
 );
 
 async function exerciseSync(activeJourney) {
-  const claims = {
-    tenant_id: "observability-local",
-    room_id: `room-${activeJourney.context.journeyId}`,
-    participant_id: "participant-local",
-    display_name: "Local E2E",
-  };
-  const devToken = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const fixture = await createEpisodeFixture(activeJourney);
   const socket = new WebSocket(syncUrl);
   await once(socket, "open");
   socket.send(
     JSON.stringify({
       type: "hello",
       protocol: 1,
-      token: devToken,
+      token: fixture.syncToken,
+      streams: {
+        control: { cursor: null },
+        media: { cursor: null },
+        presence: { cursor: null },
+        requests: { cursor: null },
+      },
       ...syncCorrelation(activeJourney),
     }),
   );
   const welcome = await nextMessage(socket, (message) => message.type === "welcome");
   socket.send(
     JSON.stringify({
-      type: "command",
-      command_id: crypto.randomUUID(),
-      name: "raise_hand",
-      ...syncCorrelation(activeJourney),
+      type: "recovery_ack",
+      recovery_id: welcome.recovery_id,
+      revision: welcome.head.revision,
+      state_digest: welcome.head.state_digest,
     }),
   );
-  const ack = await nextMessage(socket, (message) => message.type === "ack");
+  await nextMessage(socket, (message) => message.type === "recovery_complete");
+  await nextMessage(socket, (message) => message.type === "projection_snapshot" && message.stream === "media");
+  await nextMessage(socket, (message) => message.type === "projection_snapshot" && message.stream === "presence");
+  const commandId = crypto.randomUUID();
+  const commit = waitForHandCommit(socket, commandId, fixture.participantId);
+  socket.send(
+    JSON.stringify({
+      type: "command",
+      command_id: commandId,
+      name: "set_hand_raised",
+      payload: { raised: true },
+    }),
+  );
+  const { ack, event } = await commit;
+  socket.send(JSON.stringify({ type: "delivery_ack", stream: "control", revision: event.revision, state_digest: event.resulting_state_digest }));
   socket.close(1000, "local proof complete");
   await once(socket, "close");
 
-  if (welcome.journey_id !== activeJourney.context.journeyId || ack.journey_id !== activeJourney.context.journeyId) {
-    throw new Error("Sync did not propagate the journey ID through welcome and ack frames");
+  return {
+    tenant_id: fixture.tenantId,
+    space_id: fixture.spaceId,
+    episode_id: fixture.episodeId,
+    participant_id: fixture.participantId,
+    participant_generation: fixture.participantGeneration,
+    role: fixture.role,
+    capabilities: fixture.capabilities,
+    welcome_mode: welcome.mode,
+    ack_outcome: ack.outcome,
+    event_name: event.name,
+    event_revision: event.revision,
+  };
+}
+
+function waitForHandCommit(socket, commandId, participantId) {
+  return new Promise((resolve, reject) => {
+    let ack;
+    let event;
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out waiting for hand command commit: command_id=${commandId} participant_id=${participantId}`));
+    }, 5_000);
+    const onMessage = (messageEvent) => {
+      const message = JSON.parse(String(messageEvent.data));
+      if (message.type === "ack" && message.command_id === commandId) {
+        ack = message;
+      } else if (message.type === "event" && message.stream === "control" && message.command_id === commandId && message.name === "hand_raised") {
+        event = message;
+      }
+      if (!ack || !event) return;
+      cleanup();
+      if (ack.outcome !== "committed") {
+        reject(new Error(`Sync hand command was not committed: command_id=${commandId} outcome=${String(ack.outcome).slice(0, 64)}`));
+        return;
+      }
+      if (
+        !Number.isSafeInteger(ack.revision) ||
+        !Number.isSafeInteger(event.revision) ||
+        !Number.isSafeInteger(event.base_revision) ||
+        typeof ack.state_digest !== "string" ||
+        typeof event.resulting_state_digest !== "string" ||
+        event.payload?.participant_id !== participantId ||
+        event.revision !== ack.revision ||
+        event.resulting_state_digest !== ack.state_digest ||
+        event.base_revision !== event.revision - 1
+      ) {
+        reject(new Error(`Sync hand commit mismatch: command_id=${commandId} participant_id=${participantId} event_revision=${String(event.revision)} ack_revision=${String(ack.revision)}`));
+        return;
+      }
+      resolve({ ack, event });
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error(`WebSocket failed while waiting for hand command commit: command_id=${commandId}`));
+    };
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.removeEventListener("message", onMessage);
+      socket.removeEventListener("error", onError);
+    };
+    socket.addEventListener("message", onMessage);
+    socket.addEventListener("error", onError, { once: true });
+  });
+}
+
+async function createEpisodeFixture(activeJourney) {
+  const tenant = await apiRequest("/v1/tenants", activeJourney, {
+    method: "POST",
+    payload: { name: `Observability Journey ${activeJourney.context.journeyId}`, media_plane_provider_config: { enabled: false } },
+  });
+  const space = await apiRequest(`/v1/tenants/${tenant.id}/spaces`, activeJourney, {
+    method: "POST",
+    payload: {
+      name: "Observability journey source",
+      slug: `journey-${activeJourney.context.journeyId}`,
+      media_plane: "cf_sfu",
+      admission_policy: { mode: "open" },
+      default_episode_duration_seconds: 3600,
+      linger_window_seconds: 120,
+      maximum_episode_duration_seconds: 3600,
+    },
+  });
+  const episode = await apiRequest(`/v1/tenants/${tenant.id}/spaces/${space.id}/episodes`, activeJourney, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey("episode") },
+    payload: { started_at: new Date().toISOString(), metadata: { source: "observability-journey" } },
+  });
+  const participantId = crypto.randomUUID();
+  let admission;
+  try {
+    admission = await apiRequest(`/v1/tenants/${tenant.id}/spaces/${space.id}/episodes/${episode.id}/participants`, activeJourney, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey("participant") },
+      payload: { participant_id: participantId, name: "Observability journey participant", role: "owner" },
+    });
+  } catch {
+    throw new Error(`Episode admission request failed: tenant_id=${tenant.id} space_id=${space.id} episode_id=${episode.id} participant_id=${participantId}`);
   }
-  return { welcome_mode: welcome.mode, ack_result: ack.result };
+  if (
+    !admission?.sync_token ||
+    admission.participant?.id !== participantId ||
+    !Number.isSafeInteger(admission.participant?.generation) ||
+    admission.participant.generation < 1 ||
+    admission.participant?.role !== "owner" ||
+    !Array.isArray(admission.participant?.capabilities) ||
+    admission.participant.capabilities.length === 0
+  ) {
+    const participant = admission?.participant;
+    const generation = Number.isSafeInteger(participant?.generation) ? participant.generation : "invalid";
+    const role = typeof participant?.role === "string" ? participant.role.slice(0, 64) : "missing";
+    const capabilityCount = Array.isArray(participant?.capabilities) ? participant.capabilities.length : 0;
+    throw new Error(`Episode admission fixture invalid: tenant_id=${tenant.id} space_id=${space.id} episode_id=${episode.id} participant_id=${participantId} generation=${generation} role=${role} capability_count=${capabilityCount}`);
+  }
+  return {
+    tenantId: tenant.id,
+    spaceId: space.id,
+    episodeId: episode.id,
+    participantId: admission.participant.id,
+    participantGeneration: admission.participant.generation,
+    role: admission.participant.role,
+    capabilities: admission.participant.capabilities,
+    syncToken: admission.sync_token,
+  };
+}
+
+async function apiRequest(path, activeJourney, { method = "GET", headers = {}, payload } = {}) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...activeJourney.headers,
+      ...(payload === undefined ? {} : { "content-type": "application/json" }),
+      ...headers,
+    },
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+  });
+  if (!response.ok) throw new Error(`${path} returned ${response.status}: ${await response.text()}`);
+  return response.json();
 }
 
 function syncCorrelation(activeJourney) {
@@ -154,6 +303,10 @@ function syncCorrelation(activeJourney) {
     traceparent: activeJourney.context.traceparent,
     ...(activeJourney.context.tracestate ? { tracestate: activeJourney.context.tracestate } : {}),
   };
+}
+
+function idempotencyKey(scope) {
+  return `observability-journey-${scope}-${crypto.randomUUID()}`;
 }
 
 function once(target, eventName) {

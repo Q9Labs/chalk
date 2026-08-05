@@ -2,7 +2,7 @@
 
 const FUNNEL = [
   { stage: "Token", ms: 90, stick: "var(--chalk-blue)" },
-  { stage: "Session", ms: 140, stick: "var(--chalk-green)" },
+  { stage: "Episode", ms: 140, stick: "var(--chalk-green)" },
   { stage: "ICE", ms: 260, stick: "var(--chalk-yellow)" },
   { stage: "First frame", ms: 420, stick: "var(--chalk-pink)" },
 ];
@@ -65,7 +65,7 @@ export function LatencyVisual() {
 }
 
 const LAYERS = [
-  { tier: "Front doors", nodes: ["Meeting app", "SDK"], tone: "plain" },
+  { tier: "Front doors", nodes: ["Chalk app", "SDK"], tone: "plain" },
   { tier: "Portable core", nodes: ["sync", "api", "identity"], tone: "core" },
   { tier: "Contracts", nodes: ["MediaPlane", "TokenSigner"], tone: "seam" },
   { tier: "Your infra", nodes: ["any SFU", "postgres", "redis"], tone: "plain" },

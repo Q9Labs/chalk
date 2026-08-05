@@ -84,7 +84,7 @@ data "aws_iam_policy_document" "recording_kms" {
     resources = ["*"]
 
     # Every data-key operation must carry the same authenticated context. The
-    # control plane supplies tenant/session/job values at runtime; their
+    # control plane supplies tenant/episode/job values at runtime; their
     # presence is required here without ever putting those values in state.
     condition {
       test     = "StringEquals"
@@ -98,7 +98,7 @@ data "aws_iam_policy_document" "recording_kms" {
       values = [
         "chalk.environment",
         "chalk.tenant",
-        "chalk.session",
+        "chalk.episode",
         "chalk.recording_job",
         "chalk.bundle_schema",
       ]
@@ -118,7 +118,7 @@ data "aws_iam_policy_document" "recording_kms" {
 
     condition {
       test     = "Null"
-      variable = "kms:EncryptionContext:chalk.session"
+      variable = "kms:EncryptionContext:chalk.episode"
       values   = ["false"]
     }
 
@@ -132,6 +132,75 @@ data "aws_iam_policy_document" "recording_kms" {
       test     = "Null"
       variable = "kms:EncryptionContext:chalk.bundle_schema"
       values   = ["false"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.legacy_kms_context_key == null ? [] : [var.legacy_kms_context_key]
+
+    content {
+      sid    = "ControlPlaneDecryptLegacyRecordingCiphertext"
+      effect = "Allow"
+
+      principals {
+        type        = "AWS"
+        identifiers = [local.control_plane_role]
+      }
+
+      actions = [
+        "kms:Decrypt",
+        "kms:DescribeKey",
+      ]
+
+      resources = ["*"]
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:chalk.environment"
+        values   = [var.environment]
+      }
+
+      condition {
+        test     = "ForAllValues:StringEquals"
+        variable = "kms:EncryptionContextKeys"
+        values = [
+          "chalk.environment",
+          "chalk.tenant",
+          statement.value,
+          "chalk.recording_job",
+          "chalk.bundle_schema",
+        ]
+      }
+
+      condition {
+        test     = "Null"
+        variable = "kms:EncryptionContext:chalk.environment"
+        values   = ["false"]
+      }
+
+      condition {
+        test     = "Null"
+        variable = "kms:EncryptionContext:chalk.tenant"
+        values   = ["false"]
+      }
+
+      condition {
+        test     = "Null"
+        variable = "kms:EncryptionContext:${statement.value}"
+        values   = ["false"]
+      }
+
+      condition {
+        test     = "Null"
+        variable = "kms:EncryptionContext:chalk.recording_job"
+        values   = ["false"]
+      }
+
+      condition {
+        test     = "Null"
+        variable = "kms:EncryptionContext:chalk.bundle_schema"
+        values   = ["false"]
+      }
     }
   }
 

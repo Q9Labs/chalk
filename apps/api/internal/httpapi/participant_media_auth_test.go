@@ -8,21 +8,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 const participantMediaCredential = "media.header.signature"
 
 type participantMediaVerifierStub struct {
-	subject participantaccess.Subject
+	subject accessgrants.Subject
 	err     error
 	called  int
 	token   string
 }
 
-func (v *participantMediaVerifierStub) Verify(_ context.Context, token string) (participantaccess.Subject, error) {
+func (v *participantMediaVerifierStub) Verify(_ context.Context, token string) (accessgrants.Subject, error) {
 	v.called++
 	v.token = token
 	return v.subject, v.err
@@ -33,10 +33,10 @@ type activeParticipantAuthorizerStub struct {
 	requiredGeneration int64
 	err                error
 	called             int
-	subject            participantaccess.Subject
+	subject            accessgrants.Subject
 }
 
-func (a *activeParticipantAuthorizerStub) AuthorizeActiveParticipant(_ context.Context, subject participantaccess.Subject) (bool, error) {
+func (a *activeParticipantAuthorizerStub) AuthorizeActiveParticipant(_ context.Context, subject accessgrants.Subject) (bool, error) {
 	a.called++
 	a.subject = subject
 	if a.requiredGeneration > 0 && subject.ParticipantGeneration != a.requiredGeneration {
@@ -52,7 +52,7 @@ func TestRequireParticipantMediaInstallsOnlyParticipantSubject(t *testing.T) {
 	downstreamCalls := 0
 	handler := requireParticipantMedia(verifier, authorizer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		downstreamCalls++
-		got, ok := participantaccess.SubjectFromContext(r.Context())
+		got, ok := accessgrants.SubjectFromContext(r.Context())
 		if !ok || got != subject {
 			t.Fatalf("participant subject = %#v, present = %t", got, ok)
 		}
@@ -85,12 +85,12 @@ func TestRequireParticipantMediaRejectsMissingAndInvalidCredentials(t *testing.T
 	}{
 		{name: "missing"},
 		{name: "wrong scheme", authorization: "Basic " + participantMediaCredential},
-		{name: "malformed", authorization: "Bearer " + participantMediaCredential, verifyErr: participantaccess.ErrMalformedCredential},
-		{name: "wrong audience", authorization: "Bearer " + participantMediaCredential, verifyErr: participantaccess.ErrInvalidAudience},
-		{name: "invalid signature", authorization: "Bearer " + participantMediaCredential, verifyErr: participantaccess.ErrInvalidSignature},
-		{name: "expired", authorization: "Bearer " + participantMediaCredential, verifyErr: participantaccess.ErrExpired},
-		{name: "not yet valid", authorization: "Bearer " + participantMediaCredential, verifyErr: participantaccess.ErrNotYetValid},
-		{name: "invalid subject", authorization: "Bearer " + participantMediaCredential, verifyErr: participantaccess.ErrInvalidSubject},
+		{name: "malformed", authorization: "Bearer " + participantMediaCredential, verifyErr: accessgrants.ErrMalformedCredential},
+		{name: "wrong audience", authorization: "Bearer " + participantMediaCredential, verifyErr: accessgrants.ErrInvalidAudience},
+		{name: "invalid signature", authorization: "Bearer " + participantMediaCredential, verifyErr: accessgrants.ErrInvalidSignature},
+		{name: "expired", authorization: "Bearer " + participantMediaCredential, verifyErr: accessgrants.ErrExpired},
+		{name: "not yet valid", authorization: "Bearer " + participantMediaCredential, verifyErr: accessgrants.ErrNotYetValid},
+		{name: "invalid subject", authorization: "Bearer " + participantMediaCredential, verifyErr: accessgrants.ErrInvalidSubject},
 	}
 
 	for _, test := range tests {
@@ -103,7 +103,7 @@ func TestRequireParticipantMediaRejectsMissingAndInvalidCredentials(t *testing.T
 			}))
 
 			response := executeParticipantMediaRequest(handler, test.authorization)
-			assertParticipantMediaError(t, response, http.StatusUnauthorized, "unauthenticated", "Authentication required")
+			assertParticipantMediaError(t, response, http.StatusUnauthorized, "access.unauthenticated", "Authentication required")
 			if downstreamCalls != 0 || authorizer.called != 0 {
 				t.Fatalf("calls after rejection: downstream=%d authorizer=%d", downstreamCalls, authorizer.called)
 			}
@@ -124,7 +124,7 @@ func TestRequireParticipantMediaRejectsInactiveAndStaleParticipants(t *testing.T
 	staleSubject.ParticipantGeneration--
 	tests := []struct {
 		name       string
-		subject    participantaccess.Subject
+		subject    accessgrants.Subject
 		authorizer *activeParticipantAuthorizerStub
 	}{
 		{name: "inactive", subject: activeSubject, authorizer: &activeParticipantAuthorizerStub{active: false}},
@@ -140,7 +140,7 @@ func TestRequireParticipantMediaRejectsInactiveAndStaleParticipants(t *testing.T
 			}))
 
 			response := executeParticipantMediaRequest(handler, "Bearer "+participantMediaCredential)
-			assertParticipantMediaError(t, response, http.StatusForbidden, "forbidden", "Access denied")
+			assertParticipantMediaError(t, response, http.StatusForbidden, "access.forbidden", "Access denied")
 			if verifier.called != 1 || test.authorizer.called != 1 || downstreamCalls != 0 {
 				t.Fatalf("calls: verifier=%d authorizer=%d downstream=%d", verifier.called, test.authorizer.called, downstreamCalls)
 			}
@@ -168,7 +168,7 @@ func TestRequireParticipantMediaMapsDependencyFailuresToServiceUnavailable(t *te
 			}))
 
 			response := executeParticipantMediaRequest(handler, "Bearer "+participantMediaCredential)
-			assertParticipantMediaError(t, response, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
+			assertParticipantMediaError(t, response, http.StatusServiceUnavailable, "service.unavailable", "Service is not ready")
 			if downstreamCalls != 0 {
 				t.Fatalf("downstream calls = %d, want 0", downstreamCalls)
 			}
@@ -178,7 +178,7 @@ func TestRequireParticipantMediaMapsDependencyFailuresToServiceUnavailable(t *te
 
 func TestRequireParticipantMediaDoesNotUseOtherCredentialFamilies(t *testing.T) {
 	principal := authentication.Principal{Kind: authentication.PrincipalSystem}
-	verifier := &participantMediaVerifierStub{err: participantaccess.ErrInvalidAudience}
+	verifier := &participantMediaVerifierStub{err: accessgrants.ErrInvalidAudience}
 	authorizer := &activeParticipantAuthorizerStub{active: true}
 	downstreamCalls := 0
 	handler := requireParticipantMedia(verifier, authorizer)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -191,7 +191,7 @@ func TestRequireParticipantMediaDoesNotUseOtherCredentialFamilies(t *testing.T) 
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 
-	assertParticipantMediaError(t, response, http.StatusUnauthorized, "unauthenticated", "Authentication required")
+	assertParticipantMediaError(t, response, http.StatusUnauthorized, "access.unauthenticated", "Authentication required")
 	if downstreamCalls != 0 || authorizer.called != 0 {
 		t.Fatalf("calls after wrong credential family: downstream=%d authorizer=%d", downstreamCalls, authorizer.called)
 	}
@@ -199,29 +199,29 @@ func TestRequireParticipantMediaDoesNotUseOtherCredentialFamilies(t *testing.T) 
 
 func TestRequireParticipantMediaRouteRequiresExactBinding(t *testing.T) {
 	subject := participantMediaSubject(t)
-	base := participantaccess.RouteSubject(subject)
+	base := accessgrants.RouteSubject(subject)
 	tests := []struct {
 		name   string
-		change func(*participantaccess.RouteSubject)
+		change func(*accessgrants.RouteSubject)
 	}{
-		{name: "tenant", change: func(route *participantaccess.RouteSubject) {
+		{name: "tenant", change: func(route *accessgrants.RouteSubject) {
 			route.TenantID = participantMediaID(t, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 		}},
-		{name: "room", change: func(route *participantaccess.RouteSubject) {
-			route.RoomID = participantMediaID(t, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+		{name: "space", change: func(route *accessgrants.RouteSubject) {
+			route.SpaceID = participantMediaID(t, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
 		}},
-		{name: "session", change: func(route *participantaccess.RouteSubject) {
-			route.SessionID = participantMediaID(t, "cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+		{name: "episode", change: func(route *accessgrants.RouteSubject) {
+			route.EpisodeID = participantMediaID(t, "cccccccc-cccc-4ccc-8ccc-cccccccccccc")
 		}},
-		{name: "participant", change: func(route *participantaccess.RouteSubject) {
-			route.ParticipantSessionID = participantMediaID(t, "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+		{name: "participant", change: func(route *accessgrants.RouteSubject) {
+			route.ParticipantID = participantMediaID(t, "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
 		}},
-		{name: "generation", change: func(route *participantaccess.RouteSubject) { route.ParticipantGeneration++ }},
-		{name: "provider", change: func(route *participantaccess.RouteSubject) { route.Provider = "other_sfu" }},
-		{name: "body connection", change: func(route *participantaccess.RouteSubject) { route.CloudflareConnectionID = "connection-other" }},
+		{name: "generation", change: func(route *accessgrants.RouteSubject) { route.ParticipantGeneration++ }},
+		{name: "provider", change: func(route *accessgrants.RouteSubject) { route.Provider = "other_sfu" }},
+		{name: "body connection", change: func(route *accessgrants.RouteSubject) { route.CloudflareConnectionID = "connection-other" }},
 	}
 
-	ctx := participantaccess.WithSubject(context.Background(), subject)
+	ctx := accessgrants.WithSubject(context.Background(), subject)
 	if err := requireParticipantMediaRouteBinding(ctx, base); err != nil {
 		t.Fatalf("exact route binding: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestRequireParticipantMediaRouteRequiresExactBinding(t *testing.T) {
 }
 
 func TestRequireParticipantMediaRouteRejectsMissingContext(t *testing.T) {
-	err := requireParticipantMediaRouteBinding(context.Background(), participantaccess.RouteSubject(participantMediaSubject(t)))
+	err := requireParticipantMediaRouteBinding(context.Background(), accessgrants.RouteSubject(participantMediaSubject(t)))
 	if !errors.Is(err, apiErrorUnauthenticated) {
 		t.Fatalf("error = %v, want unauthenticated", err)
 	}
@@ -250,7 +250,7 @@ func TestParticipantMediaRouteMismatchPreventsProviderCall(t *testing.T) {
 	authorizer := &activeParticipantAuthorizerStub{active: true}
 	providerCalls := 0
 	handler := requireParticipantMedia(verifier, authorizer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		route := participantaccess.RouteSubject(subject)
+		route := accessgrants.RouteSubject(subject)
 		route.CloudflareConnectionID = "another-connection"
 		if err := requireParticipantMediaRouteBinding(r.Context(), route); err != nil {
 			apiErr, ok := errorAsAPIError(err)
@@ -265,19 +265,19 @@ func TestParticipantMediaRouteMismatchPreventsProviderCall(t *testing.T) {
 	}))
 
 	response := executeParticipantMediaRequest(handler, "Bearer "+participantMediaCredential)
-	assertParticipantMediaError(t, response, http.StatusForbidden, "forbidden", "Access denied")
+	assertParticipantMediaError(t, response, http.StatusForbidden, "access.forbidden", "Access denied")
 	if providerCalls != 0 {
 		t.Fatalf("provider calls = %d, want 0", providerCalls)
 	}
 }
 
-func requireParticipantMediaRouteBinding(ctx context.Context, route participantaccess.RouteSubject) error {
+func requireParticipantMediaRouteBinding(ctx context.Context, route accessgrants.RouteSubject) error {
 	return requireParticipantMediaRoute(
 		ctx,
 		route.TenantID,
-		route.RoomID,
-		route.SessionID,
-		route.ParticipantSessionID,
+		route.SpaceID,
+		route.EpisodeID,
+		route.ParticipantID,
 		route.ParticipantGeneration,
 		route.Provider,
 		route.CloudflareConnectionID,
@@ -305,15 +305,15 @@ func assertParticipantMediaError(t *testing.T, response *httptest.ResponseRecord
 	}
 }
 
-func participantMediaSubject(t *testing.T) participantaccess.Subject {
+func participantMediaSubject(t *testing.T) accessgrants.Subject {
 	t.Helper()
-	return participantaccess.Subject{
+	return accessgrants.Subject{
 		TenantID:               participantMediaID(t, "11111111-1111-4111-8111-111111111111"),
-		RoomID:                 participantMediaID(t, "22222222-2222-4222-8222-222222222222"),
-		SessionID:              participantMediaID(t, "33333333-3333-4333-8333-333333333333"),
-		ParticipantSessionID:   participantMediaID(t, "44444444-4444-4444-8444-444444444444"),
+		SpaceID:                participantMediaID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID:              participantMediaID(t, "33333333-3333-4333-8333-333333333333"),
+		ParticipantID:          participantMediaID(t, "44444444-4444-4444-8444-444444444444"),
 		ParticipantGeneration:  7,
-		Provider:               participantaccess.ProviderCloudflareSFU,
+		Provider:               accessgrants.ProviderCloudflareSFU,
 		CloudflareConnectionID: "connection-123",
 	}
 }

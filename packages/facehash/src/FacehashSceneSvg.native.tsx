@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Svg, { Defs, G, Path, RadialGradient, Rect, Stop, Text as SvgText } from "react-native-svg";
-import type { FacehashScene, Variant } from "./core/index.js";
-import { useBlinkTransform } from "./native-blink.js";
+import type { FacehashScene, Variant } from "./core/index";
+import { useBlinkTransform } from "./native-blink";
 
 type FacehashSceneSvgNativeProps = {
   backgroundColor: string;

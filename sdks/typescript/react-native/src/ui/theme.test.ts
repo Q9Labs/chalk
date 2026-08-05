@@ -1,25 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { Theme } from "./theme";
+import { createNativeTheme, Theme } from "./theme";
 
-describe("Chalk Light theme", () => {
-  it("exposes the warm-light foundation tokens", () => {
-    expect(Theme.colors.paper).toBe("#F7F6F2");
-    expect(Theme.colors.paper2).toBe("#F1F0EB");
-    expect(Theme.colors.surface).toBe("#FFFFFF");
-    expect(Theme.colors.surfaceMuted).toBe("#FBFAF7");
-    expect(Theme.colors.ink).toBe("#0C0E12");
-    expect(Theme.colors.ink2).toBe("#555B65");
-    expect(Theme.colors.ink3).toBe("#858A92");
-    expect(Theme.colors.line).toBe("#DEDDD7");
-    expect(Theme.colors.lineStrong).toBe("#C9C8C2");
+describe("native theme aliases", () => {
+  it("keeps progressive surfaces on the active token set", () => {
+    expect(Theme.colors.paper).toBe(Theme.colors.background);
+    expect(Theme.colors.ink).toBe(Theme.colors.foreground);
+    expect(Theme.colors.lineStrong).toBe(Theme.colors.border);
+    expect(Theme.colors.chalkGreen).toBe(Theme.colors.success);
   });
 
-  it("keeps existing semantic names readable while making primary decisive", () => {
-    expect(Theme.colors.background).toBe(Theme.colors.paper);
-    expect(Theme.colors.foreground).toBe(Theme.colors.ink);
-    expect(Theme.colors.primary).toBe(Theme.colors.ink);
-    expect(Theme.colors.primary).not.toBe(Theme.colors.brandTeal);
-    expect(Theme.colors.card).toBe(Theme.colors.surface);
-    expect(Theme.colors.border).toBe(Theme.colors.line);
+  it("resolves the same aliases for light mode", () => {
+    const light = createNativeTheme(
+      {
+        canvas: "#f8fafc",
+        chrome: "#ffffff",
+        surface: "#f1f5f9",
+        stage: "#e2e8f0",
+        text: "#0f172a",
+        mutedText: "#475569",
+        line: "#cbd5e1",
+        accent: "#0f766e",
+        accentText: "#ffffff",
+        positive: "#15803d",
+        danger: "#b91c1c",
+        dangerSurface: "#fee2e2",
+        focus: "#0f766e",
+        shadow: "#0f172a",
+      },
+      "light",
+    );
+    expect(light.colors.paper).toBe(light.colors.background);
+    expect(light.colors.ink).toBe(light.colors.foreground);
+    expect(light.colors.primary).toBe("#0f766e");
   });
 });

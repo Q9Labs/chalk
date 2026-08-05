@@ -12,7 +12,7 @@ export function ScreenShareMock() {
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-1 bg-[#fbfaf7] sm:grid-cols-[150px_minmax(0,1fr)]">
         <aside className="hidden border-r border-[#deddd7] p-4 sm:block">
-          <p className="text-sm font-semibold">Workspace</p>
+          <p className="text-sm font-semibold">Space</p>
           <div className="mt-5 space-y-2 text-xs text-[#6d727b]">
             <p className="rounded-[6px] bg-[#eaf7fb] px-2.5 py-2 font-medium text-[#315f72]">Product review</p>
             <p className="px-2.5 py-2">Research</p>

@@ -1,13 +1,13 @@
 defmodule ChalkSync.Webhooks.Producer do
   @moduledoc false
 
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
   alias ChalkSync.Webhooks.Event
   alias ChalkSync.Webhooks.SQL
 
-  @spec produce(term(), SessionKey.t(), map(), map()) :: :ok
-  def produce(connection, %SessionKey{} = session, intent, object) do
+  @spec produce(term(), EpisodeKey.t(), map(), map()) :: :ok
+  def produce(connection, %EpisodeKey{} = episode, intent, object) do
     source = %{
       transition_key: "sync_lifecycle:#{intent.id}:#{webhook_event_name(intent.name)}",
       event_name: webhook_event_name(intent.name),
@@ -17,12 +17,12 @@ defmodule ChalkSync.Webhooks.Producer do
       producing_span_id: intent.producing_span_id
     }
 
-    produce_source(connection, session, source, object)
+    produce_source(connection, episode, source, object)
   end
 
-  @spec produce_external(term(), SessionKey.t(), map(), map(), map()) :: :ok
-  def produce_external(connection, %SessionKey{} = session, external, event, object)
-      when event.name in ["participant_left", "host_left_and_transferred", "session_ended"] do
+  @spec produce_external(term(), EpisodeKey.t(), map(), map(), map()) :: :ok
+  def produce_external(connection, %EpisodeKey{} = episode, external, event, object)
+      when event.name in ["participant_left", "episode_ended"] do
     event_name = webhook_event_name(event.name)
 
     source = %{
@@ -34,30 +34,30 @@ defmodule ChalkSync.Webhooks.Producer do
       producing_span_id: Map.get(external, :producing_span_id)
     }
 
-    produce_source(connection, session, source, object)
+    produce_source(connection, episode, source, object)
   end
 
-  def produce_external(_connection, %SessionKey{}, _external, _event, _object), do: :ok
+  def produce_external(_connection, %EpisodeKey{}, _external, _event, _object), do: :ok
 
-  defp produce_source(connection, session, source, object) do
+  defp produce_source(connection, episode, source, object) do
     event_name = source.event_name
-    tenant_id = UUID.dump!(session.tenant_id)
+    tenant_id = UUID.dump!(episode.tenant_id)
     Postgrex.query!(connection, SQL.ensure_tenant_state(), [tenant_id])
     [[^tenant_id]] = Postgrex.query!(connection, SQL.lock_tenant_state(), [tenant_id]).rows
 
     revisions =
       Postgrex.query!(connection, SQL.matching_revisions(), [tenant_id, event_name]).rows
 
-    produce_versions(connection, session, source, object, event_name, revisions)
+    produce_versions(connection, episode, source, object, event_name, revisions)
   end
 
-  defp produce_versions(connection, session, intent, object, event_name, revisions) do
+  defp produce_versions(connection, episode, intent, object, event_name, revisions) do
     revisions
     |> Enum.group_by(fn [_revision_id, _endpoint_id, _revision, api_version] -> api_version end)
     |> Enum.each(fn {api_version, version_revisions} ->
       produce_version(
         connection,
-        session,
+        episode,
         intent,
         object,
         event_name,
@@ -67,17 +67,17 @@ defmodule ChalkSync.Webhooks.Producer do
     end)
   end
 
-  defp produce_version(connection, session, intent, object, event_name, 1, revisions) do
+  defp produce_version(connection, episode, intent, object, event_name, 1, revisions) do
     event_id = UUID.generate()
     occurred_at = event_name |> occurred_at(object) |> Event.normalize_timestamp!()
-    body = Event.encode!(event_id, event_name, session.tenant_id, occurred_at, object)
+    body = Event.encode!(event_id, event_name, episode.tenant_id, occurred_at, object)
     journey_id = intent.journey_id || UUID.generate()
     event_journey_id = UUID.generate()
     transition_key = intent.transition_key
 
     params = [
       UUID.dump!(event_id),
-      UUID.dump!(session.tenant_id),
+      UUID.dump!(episode.tenant_id),
       event_name,
       1,
       occurred_at,
@@ -115,7 +115,7 @@ defmodule ChalkSync.Webhooks.Producer do
 
         insert_deliveries(
           connection,
-          session,
+          episode,
           revisions,
           event_id,
           %{
@@ -134,7 +134,7 @@ defmodule ChalkSync.Webhooks.Producer do
 
   defp insert_deliveries(
          connection,
-         session,
+         episode,
          revisions,
          event_id,
          context
@@ -147,7 +147,7 @@ defmodule ChalkSync.Webhooks.Producer do
 
       Postgrex.query!(connection, SQL.insert_delivery(), [
         UUID.dump!(delivery_id),
-        UUID.dump!(session.tenant_id),
+        UUID.dump!(episode.tenant_id),
         UUID.dump!(event_id),
         endpoint_id,
         revision_id,
@@ -201,17 +201,16 @@ defmodule ChalkSync.Webhooks.Producer do
 
   defp webhook_event_name("participant_joined"), do: "participant.joined"
   defp webhook_event_name("participant_left"), do: "participant.left"
-  defp webhook_event_name("host_left_and_transferred"), do: "participant.left"
-  defp webhook_event_name("session_ended"), do: "session.ended"
+  defp webhook_event_name("episode_ended"), do: "episode.ended"
 
   defp occurred_at("participant.joined", object), do: object.joined_at
   defp occurred_at("participant.left", object), do: object.left_at
-  defp occurred_at("session.ended", object), do: object.ended_at
+  defp occurred_at("episode.ended", object), do: object.ended_at
 
   defp resource_type(event_name) when event_name in ["participant.joined", "participant.left"],
     do: "participant"
 
-  defp resource_type("session.ended"), do: "session"
+  defp resource_type("episode.ended"), do: "episode"
 
   defp upstream_visibility(%{journey_id: nil}), do: "unknown"
   defp upstream_visibility(_intent), do: "visible"

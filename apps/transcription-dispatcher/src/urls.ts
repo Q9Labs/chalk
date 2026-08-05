@@ -104,10 +104,10 @@ export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_
   if (!inputContentType.startsWith("audio/")) throw new AssignmentError("chunk content type must be audio");
   const inputSizeBytes = integer(chunkRow.inputSizeBytes, "chunk size");
   if (inputSizeBytes === 0) throw new AssignmentError("chunk size is invalid");
-  const meetingStartMs = nonnegative(chunkRow.meetingStartMs, "chunk meeting start");
-  const meetingEndMs = nonnegative(chunkRow.meetingEndMs, "chunk meeting end");
-  if (!Number.isInteger(meetingStartMs) || !Number.isInteger(meetingEndMs)) throw new AssignmentError("chunk meeting timing is invalid");
-  if (meetingEndMs <= meetingStartMs) throw new AssignmentError("chunk meeting timing is invalid");
+  const episodeStartMs = nonnegative(chunkRow.episodeStartMs, "chunk episode start");
+  const episodeEndMs = nonnegative(chunkRow.episodeEndMs, "chunk episode end");
+  if (!Number.isInteger(episodeStartMs) || !Number.isInteger(episodeEndMs)) throw new AssignmentError("chunk episode timing is invalid");
+  if (episodeEndMs <= episodeStartMs) throw new AssignmentError("chunk episode timing is invalid");
   const sourceIdentityRow = row(chunkRow.sourceIdentity ?? chunkRow.source_identity, "chunk source identity");
   const sourceKind = sourceIdentityRow.kind;
   if (sourceKind !== "participant" && sourceKind !== "shared" && sourceKind !== "unknown") throw new AssignmentError("chunk source identity is invalid");
@@ -126,8 +126,8 @@ export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_
     inputContentType,
     inputSizeBytes,
     inputSha256,
-    meetingStartMs,
-    meetingEndMs,
+    episodeStartMs,
+    episodeEndMs,
     sourceIdentity: {
       kind: sourceKind,
       ...(sourceParticipantId === undefined ? {} : { participantId: text(sourceParticipantId, "chunk participant", 256) }),
@@ -148,7 +148,7 @@ export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_
   if (outputContentType !== "application/json") throw new AssignmentError("result content type is invalid");
   return {
     jobId: text(assignment.jobId, "job ID"),
-    sessionId: text(assignment.sessionId, "session ID"),
+    episodeId: text(assignment.episodeId, "episode ID"),
     attempt: integer(assignment.attempt, "attempt"),
     leaseToken: text(assignment.leaseToken, "lease token", 2_048),
     leaseExpiresAt: isoDate(assignment.leaseExpiresAt, "lease expiry"),
@@ -199,9 +199,9 @@ export function validateFinalizeAssignment(value: unknown, configuredMaxTtlMs = 
     if (inputSizeBytes === 0 || !Number.isSafeInteger(inputSizeBytes)) throw new AssignmentError("finalize result size is invalid");
     const inputSha256 = text(source.inputSha256 ?? source.input_sha256 ?? source.resultSha256 ?? source.result_sha256, "finalize result checksum", 128);
     if (!/^[a-f0-9]{64}$/i.test(inputSha256)) throw new AssignmentError("finalize result checksum is invalid");
-    const meetingStartMs = integer(source.meetingStartMs ?? source.meeting_start_ms, "finalize chunk meeting start");
-    const meetingEndMs = integer(source.meetingEndMs ?? source.meeting_end_ms, "finalize chunk meeting end");
-    if (!Number.isSafeInteger(meetingStartMs) || !Number.isSafeInteger(meetingEndMs) || meetingEndMs <= meetingStartMs) throw new AssignmentError("finalize chunk meeting timing is invalid");
+    const episodeStartMs = integer(source.episodeStartMs, "finalize chunk episode start");
+    const episodeEndMs = integer(source.episodeEndMs, "finalize chunk episode end");
+    if (!Number.isSafeInteger(episodeStartMs) || !Number.isSafeInteger(episodeEndMs) || episodeEndMs <= episodeStartMs) throw new AssignmentError("finalize chunk episode timing is invalid");
     const chunk: FinalizeChunkAssignment = {
       chunkId,
       inputUrl,
@@ -209,8 +209,8 @@ export function validateFinalizeAssignment(value: unknown, configuredMaxTtlMs = 
       inputContentType: "application/json",
       inputSizeBytes,
       inputSha256,
-      meetingStartMs,
-      meetingEndMs,
+      episodeStartMs,
+      episodeEndMs,
     };
     return chunk;
   });
@@ -218,13 +218,12 @@ export function validateFinalizeAssignment(value: unknown, configuredMaxTtlMs = 
   const outputPutUrlExpiresAt = isoDate(assignment.outputPutUrlExpiresAt ?? assignment.output_put_url_expires_at ?? assignment.finalPutUrlExpiresAt ?? assignment.final_put_url_expires_at, "final result upload expiry");
   const outputContentType = assignment.outputContentType ?? assignment.output_content_type;
   if (outputContentType !== "application/json") throw new AssignmentError("final result content type is invalid");
-  const sessionValue = assignment.sessionId ?? assignment.session_id;
   const attempt = integer(assignment.attempt, "finalize attempt");
   if (!Number.isSafeInteger(attempt)) throw new AssignmentError("finalize attempt is invalid");
   return {
     jobId: text(assignment.jobId ?? assignment.job_id, "finalize job ID"),
     transcriptId: text(assignment.transcriptId ?? assignment.transcript_id, "transcript ID"),
-    ...(sessionValue === undefined ? {} : { sessionId: text(sessionValue, "session ID") }),
+    episodeId: text(assignment.episodeId, "episode ID"),
     attempt,
     leaseToken: text(assignment.leaseToken ?? assignment.lease_token, "finalize lease token", 2_048),
     leaseExpiresAt: isoDate(assignment.leaseExpiresAt ?? assignment.lease_expires_at, "finalize lease expiry"),

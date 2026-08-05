@@ -8,7 +8,7 @@ defmodule ChalkSync.Operations.Probe do
   alias ChalkSync.ProviderBridge.Client, as: ProviderBridgeClient
   alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
   alias ChalkSync.Retention.Scheduler, as: RetentionScheduler
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
 
   @query_timeout_ms 1_000
   @external_operation_staleness_floor_ms 2_000
@@ -86,7 +86,7 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp database_observations do
-    connection = Database.connection(readiness_session())
+    connection = Database.connection(readiness_episode())
 
     with {:ok,
           %{
@@ -223,9 +223,9 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp process_observations(boot?) do
-    with true <- alive?(ChalkSync.Sessions.Supervisor),
+    with true <- alive?(ChalkSync.Episodes.Supervisor),
          true <- alive?(ChalkSync.CommandTaskSupervisor),
-         true <- alive?(ChalkSync.Sessions.CommandAdmission),
+         true <- alive?(ChalkSync.Episodes.CommandIntake),
          true <- alive?(PostgresNotifications),
          true <- alive?(LifecycleConsumer),
          true <- alive?(ExternalOperationConsumer),
@@ -239,7 +239,7 @@ defmodule ChalkSync.Operations.Probe do
       {:ok,
        %{
          coordinator_supervisor: "ok",
-         command_admission: "ok",
+         command_intake: "ok",
          notification_listener: "ok",
          notification_count: fanout.received_count,
          lifecycle_consumer: "ok",
@@ -342,8 +342,8 @@ defmodule ChalkSync.Operations.Probe do
 
   defp alive?(name) when is_atom(name), do: is_pid(Process.whereis(name))
 
-  defp readiness_session do
-    %SessionKey{tenant_id: "readiness", room_id: "readiness", session_id: "readiness"}
+  defp readiness_episode do
+    %EpisodeKey{tenant_id: "readiness", space_id: "readiness", episode_id: "readiness"}
   end
 
   defp role_query do
@@ -384,16 +384,16 @@ defmodule ChalkSync.Operations.Probe do
       ),
       (
         select coalesce(
-          (extract(epoch from (now() - min(session.ended_at) - interval '7 days')) * 1000)::bigint,
+          (extract(epoch from (now() - min(episode.ended_at) - interval '7 days')) * 1000)::bigint,
           0
         )
-        from room_sessions session
-        join sync_session_control control
-          on control.tenant_id = session.tenant_id
-          and control.room_id = session.room_id
-          and control.session_id = session.id
-        where session.status = 'ended'
-          and session.ended_at <= now() - interval '7 days'
+        from episodes episode
+        join sync_episode_control control
+          on control.tenant_id = episode.tenant_id
+          and control.space_id = episode.space_id
+          and control.episode_id = episode.id
+        where episode.status = 'ended'
+          and episode.ended_at <= now() - interval '7 days'
           and control.retention_cleaned_at is null
       )
     """

@@ -18,8 +18,8 @@ flowchart LR
   subgraph Chalk["Chalk-controlled request and media path"]
     SDK["Client SDK: lifecycle, HTTP, sync, RTC summaries"]
     Edge["API edge: request, auth, rate limit"]
-    Control["Go control plane: rooms, tokens, provider adapter"]
-    Sync["Elixir sync: WebSocket, protocol, room state, OTP"]
+    Control["Go control plane: Spaces, Episodes, tokens, provider adapter"]
+    Sync["Elixir sync: WebSocket, protocol, Space/Episode state, OTP"]
     Dispatcher["Go webhook dispatcher"]
     Media["Browser or native WebRTC engine"]
     DB[("Postgres journey ledger")]
@@ -93,8 +93,8 @@ The terminal journey result is derived from the highest ordered terminal event.
 Late retries and lower sequence numbers cannot rewrite the final result.
 
 Outbound webhooks continue the same internal journey without exposing its
-identifier to the receiver. The authoritative Room or Session transaction, or
-the Sync transaction that applies a Participant or Session-end fact, stores the
+identifier to the receiver. The authoritative Space or Episode transaction, or
+the Sync transaction that applies a Participant or Episode-end fact, stores the
 producing journey and trace reference with the immutable webhook Event. It also
 appends one queued branch per Delivery. Each Attempt starts a fresh client trace
 linked to the producer and terminates its durable branch as succeeded,
@@ -112,11 +112,13 @@ Normal client events share a short, bounded batching window and a request holds
 at most 100 events. An explicit flush and a page-unload keepalive flush send
 without waiting for that window.
 
-The append-only intake accepts verified Chalk meeting and API session
-credentials. The isolated, rate-limited intake route verifies bearer and cookie
-credentials through the same revoked-session and expiry checks as the rest of
-the API. Tenant attribution and related governance controls are deferred beyond
-v1.
+The append-only intake rejects tenant API keys before authentication. It accepts
+either a verified RealtimeKit/provider participant bearer or an authenticated
+User credential presented as a bearer or cookie. Chalk-signed media-grant
+credentials and `AccessGrant` envelopes are not accepted by this route. The
+isolated, rate-limited route applies the same revocation and expiry checks to
+the accepted credentials before writing events. Tenant attribution and related
+governance controls are deferred beyond v1.
 
 ## Coverage
 
@@ -124,7 +126,7 @@ v1.
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | TypeScript client      | lifecycle, fan-out, diagnostics, HTTP, sync frames, bounded aggregate RTC statistics, exporter health and drops      | journey ID, W3C trace context, parent event IDs     |
 | Go API                 | edge requests, authentication, rate limits, business phases, provider calls, errors, runtime signals, ledger intake  | propagated context and durable ledger               |
-| Elixir sync            | upgrade, protocol frames, room/state operations, OTP handoffs, connection terminal paths, BEAM health                | propagated frame/header context and span links      |
+| Elixir sync            | upgrade, protocol frames, Space/Episode operations, OTP handoffs, connection terminal paths, BEAM health             | propagated frame/header context and span links      |
 | Webhook dispatcher     | Event commit and fanout, queue age, claim and lease recovery, signed HTTP Attempts, retries, terminal state, cleanup | durable branch Events and producer-linked traces    |
 | Cloudflare SFU         | Chalk adapter calls and endpoint RTC summaries; provider analytics, logs, and webhooks are deployment inputs         | provider IDs mapped to journey and trace attributes |
 | Cloudflare RealtimeKit | the same adapter-boundary and endpoint coverage on the uncommon path                                                 | provider IDs mapped to journey and trace attributes |
@@ -162,7 +164,7 @@ Cloudflare's private SFU implementation is outside Chalk's process and account
 boundary. Chalk can observe every request it sends, every response and webhook
 it receives, provider analytics made available to the account, and both WebRTC
 endpoints. It cannot instrument Cloudflare's internal packet scheduler,
-host-to-host routing, queues, kernel state, or proprietary decision logic.
+node-to-node routing, queues, kernel state, or proprietary decision logic.
 Cloudflare telemetry narrows that gap but does not remove it. Closing it fully
 would require Cloudflare to expose those internal signals or run Chalk-owned
 media infrastructure.
@@ -182,8 +184,8 @@ The following remain unknowable or lossy in v1:
   beyond the events and aggregate statistics their public APIs expose;
 - React Native peer connections that RealtimeKit never registers as a client-owned
   send or receive transport, including opaque SDK background work outside its
-  call-stats boundary; registered transports remain attributable across
-  asynchronous initialization and overlapping sessions, while unregistered
+  RTC-statistics boundary; registered transports remain attributable across
+  asynchronous initialization and overlapping connection runs, while unregistered
   connections remain unassigned instead of being attached to the wrong journey;
 - encrypted media contents and exact per-packet media payloads; v1 records
   connection and quality metadata instead;

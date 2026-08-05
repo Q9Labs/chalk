@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { ChalkChatMessage } from "@q9labsai/chalk-client";
+import type { ChatMessage, ChatUploadFile } from "@q9labsai/chalk-client";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,13 +9,30 @@ import { ChatPanel } from "./ChatPanel";
 afterEach(cleanup);
 
 describe("ChatPanel", () => {
+  it("uses app appearance tokens for the panel and composer", () => {
+    render(<ChatPanel messages={[]} onSendMessage={async () => undefined} />);
+
+    expect(screen.getByRole("complementary", { name: "Chat panel" })).toHaveClass("text-[var(--chalk-app-text)]");
+    expect(screen.getByLabelText("Chat messages")).toHaveClass("bg-[var(--chalk-app-panel)]");
+    expect(screen.getByLabelText("Message")).toHaveClass("bg-[var(--chalk-app-input)]", "border-[var(--chalk-app-line)]", "text-[var(--chalk-app-text)]");
+  });
+
   it("uploads and sends an attachment without requiring text", async () => {
-    const onUploadAttachment = vi.fn(async (file: File) => ({ attachmentId: "attachment-1", fileName: file.name, mimeType: file.type, byteLength: file.size }));
+    const onUploadAttachment = vi.fn(async (file: ChatUploadFile) => {
+      if ("bytes" in file) return { attachmentId: "attachment-1", fileName: file.fileName, mimeType: file.mimeType as "text/plain", byteLength: file.bytes.byteLength };
+      return { attachmentId: "attachment-1", fileName: file.name, mimeType: file.type as "text/plain", byteLength: file.size };
+    });
     const onSendMessage = vi.fn(async () => undefined);
     render(<ChatPanel messages={[]} onSendMessage={onSendMessage} onUploadAttachment={onUploadAttachment} />);
 
+    const fileInput = screen.getByLabelText("Choose attachments");
+    const nativeClick = vi.spyOn(fileInput, "click");
+    fireEvent.click(screen.getByRole("button", { name: "Attach files" }));
+    expect(nativeClick).toHaveBeenCalledOnce();
+    nativeClick.mockRestore();
+
     const file = new File(["hello"], "note.txt", { type: "text/plain" });
-    fireEvent.change(screen.getByLabelText("Choose attachments"), { target: { files: [file] } });
+    fireEvent.change(fileInput, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
 
     await waitFor(() => expect(onUploadAttachment).toHaveBeenCalledWith(file));
@@ -23,6 +40,33 @@ describe("ChatPanel", () => {
       text: "",
       attachments: [{ attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 }],
     });
+  });
+
+  it("uses a custom raw-file picker and keeps attachment-only staging removable", async () => {
+    const rawFile: ChatUploadFile = { fileName: "note.txt", mimeType: "text/plain", bytes: new TextEncoder().encode("hello").buffer as ArrayBuffer };
+    const pickChatFiles = vi.fn(async () => [rawFile] as const);
+    const onUploadAttachment = vi.fn(async (file: ChatUploadFile) => {
+      if ("bytes" in file) return { attachmentId: "attachment-raw", fileName: file.fileName, mimeType: file.mimeType as "text/plain", byteLength: file.bytes.byteLength };
+      return { attachmentId: "attachment-raw", fileName: file.name, mimeType: file.type as "text/plain", byteLength: file.size };
+    });
+    const onSendMessage = vi.fn(async () => undefined);
+    render(<ChatPanel messages={[]} onSendMessage={onSendMessage} onUploadAttachment={onUploadAttachment} pickChatFiles={pickChatFiles} />);
+
+    expect(screen.queryByLabelText("Choose attachments")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Attach files" }));
+    await waitFor(() => expect(pickChatFiles).toHaveBeenCalledOnce());
+    expect(screen.getByLabelText("Attachments")).toHaveTextContent("note.txt");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove note.txt" }));
+    expect(screen.queryByLabelText("Attachments")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach files" }));
+    await waitFor(() => expect(screen.getByLabelText("Attachments")).toHaveTextContent("note.txt"));
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(onUploadAttachment).toHaveBeenCalledWith(rawFile));
+    expect(onSendMessage).toHaveBeenCalledWith({ text: "", attachments: [{ attachmentId: "attachment-raw", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 }] });
   });
 
   it("rejects a selection that would exceed five attachments", () => {
@@ -82,12 +126,12 @@ describe("ChatPanel", () => {
   });
 });
 
-function message(sequence: string): ChalkChatMessage {
+function message(sequence: string): ChatMessage {
   return {
     messageId: `message-${sequence}`,
     clientMessageId: `client-${sequence}`,
     sequence,
-    participantSessionId: "remote",
+    participantId: "remote",
     displayName: "Grace",
     text: `Message ${sequence}`,
     attachments: [],

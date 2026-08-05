@@ -235,7 +235,7 @@ function canonicalAssignment(value: unknown): unknown {
   const source = chunk as Record<string, unknown>;
   return {
     ...assignment,
-    sessionId: assignment.sessionId ?? assignment.session_id,
+    episodeId: assignment.episodeId ?? assignment.episode_id,
     leaseToken: assignment.leaseToken ?? assignment.lease_token,
     leaseExpiresAt: assignment.leaseExpiresAt ?? assignment.lease_expires_at,
     outputPutUrl: assignment.outputPutUrl ?? assignment.output_put_url ?? assignment.result_put_url,
@@ -250,8 +250,8 @@ function canonicalAssignment(value: unknown): unknown {
       inputContentType: source.inputContentType ?? source.input_content_type,
       inputSizeBytes: source.inputSizeBytes ?? source.input_size_bytes,
       inputSha256: source.inputSha256 ?? source.input_sha256,
-      meetingStartMs: source.meetingStartMs ?? source.meeting_start_ms,
-      meetingEndMs: source.meetingEndMs ?? source.meeting_end_ms,
+      episodeStartMs: source.episodeStartMs ?? source.episode_start_ms,
+      episodeEndMs: source.episodeEndMs ?? source.episode_end_ms,
       sourceIdentity: source.sourceIdentity ?? source.source_identity,
       sourceTrackClass: source.sourceTrackClass ?? source.source_track_class,
     },
@@ -267,7 +267,7 @@ function canonicalFinalizeAssignment(value: unknown): unknown {
     ...assignment,
     jobId: assignment.jobId ?? assignment.job_id,
     transcriptId: assignment.transcriptId ?? assignment.transcript_id,
-    sessionId: assignment.sessionId ?? assignment.session_id,
+    episodeId: assignment.episodeId ?? assignment.episode_id,
     leaseToken: assignment.leaseToken ?? assignment.lease_token,
     leaseExpiresAt: assignment.leaseExpiresAt ?? assignment.lease_expires_at,
     outputPutUrl: assignment.outputPutUrl ?? assignment.output_put_url ?? assignment.finalPutUrl ?? assignment.final_put_url,
@@ -284,8 +284,8 @@ function canonicalFinalizeAssignment(value: unknown): unknown {
         inputContentType: chunk.inputContentType ?? chunk.input_content_type,
         inputSizeBytes: chunk.inputSizeBytes ?? chunk.input_size_bytes ?? chunk.resultSizeBytes ?? chunk.result_size_bytes,
         inputSha256: chunk.inputSha256 ?? chunk.input_sha256 ?? chunk.resultSha256 ?? chunk.result_sha256,
-        meetingStartMs: chunk.meetingStartMs ?? chunk.meeting_start_ms,
-        meetingEndMs: chunk.meetingEndMs ?? chunk.meeting_end_ms,
+        episodeStartMs: chunk.episodeStartMs ?? chunk.episode_start_ms,
+        episodeEndMs: chunk.episodeEndMs ?? chunk.episode_end_ms,
       };
     }),
   };

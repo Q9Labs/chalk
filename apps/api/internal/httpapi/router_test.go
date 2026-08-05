@@ -16,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -24,7 +25,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
-	"github.com/q9labs/chalk/apps/api/internal/rooms"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/users"
@@ -88,12 +89,12 @@ type membershipService struct {
 	updateTenantMembership func(context.Context, utilities.ID, utilities.ID, memberships.UpdateMembershipInput) (memberships.Membership, error)
 }
 
-type guardedRoomService struct{}
+type guardedSpaceService struct{}
 
-type roomService struct {
-	guardedRoomService
-	createRoom func(context.Context, rooms.CreateRoomInput) (rooms.Room, error)
-	getSession func(context.Context, utilities.ID, utilities.ID, utilities.ID) (rooms.Session, error)
+type spaceService struct {
+	guardedSpaceService
+	createSpace func(context.Context, spaces.CreateSpaceInput) (spaces.Space, error)
+	getEpisode  func(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error)
 }
 
 type guardedRecordingService struct{}
@@ -250,50 +251,62 @@ func (s membershipService) UpdateTenantMembership(ctx context.Context, tenantID 
 	return s.updateTenantMembership(ctx, tenantID, membershipID, input)
 }
 
-func (guardedRoomService) CreateRoom(context.Context, rooms.CreateRoomInput) (rooms.Room, error) {
-	return rooms.Room{}, errors.New("unexpected create room call")
+func (guardedSpaceService) CreateSpace(context.Context, spaces.CreateSpaceInput) (spaces.Space, error) {
+	return spaces.Space{}, errors.New("unexpected create space call")
 }
 
-func (s roomService) CreateRoom(ctx context.Context, input rooms.CreateRoomInput) (rooms.Room, error) {
-	if s.createRoom == nil {
-		return rooms.Room{}, errors.New("unexpected create room call")
+func (s spaceService) CreateSpace(ctx context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
+	if s.createSpace == nil {
+		return spaces.Space{}, errors.New("unexpected create space call")
 	}
-	return s.createRoom(ctx, input)
+	return s.createSpace(ctx, input)
 }
 
-func (s roomService) GetSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
-	if s.getSession == nil {
-		return rooms.Session{}, errors.New("unexpected get room session call")
+func (guardedSpaceService) GetSpace(context.Context, utilities.ID, utilities.ID) (spaces.Space, error) {
+	return spaces.Space{}, errors.New("unexpected get space call")
+}
+
+func (guardedSpaceService) ListSpaces(context.Context, utilities.ID, pagination.PageRequest) (spaces.SpaceList, error) {
+	return spaces.SpaceList{}, errors.New("unexpected list spaces call")
+}
+
+func (guardedSpaceService) UpdateSpace(context.Context, utilities.ID, utilities.ID, spaces.UpdateSpaceInput) (spaces.Space, error) {
+	return spaces.Space{}, errors.New("unexpected update space call")
+}
+
+func (guardedSpaceService) GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error) {
+	return episodes.Episode{}, errors.New("unexpected get episode call")
+}
+
+func (s spaceService) GetEpisode(ctx context.Context, tenantID, spaceID, episodeID utilities.ID) (episodes.Episode, error) {
+	if s.getEpisode == nil {
+		return episodes.Episode{}, errors.New("unexpected get episode call")
 	}
-	return s.getSession(ctx, tenantID, roomID, sessionID)
+	return s.getEpisode(ctx, tenantID, spaceID, episodeID)
 }
 
-func (guardedRoomService) GetRoom(context.Context, utilities.ID, utilities.ID) (rooms.Room, error) {
-	return rooms.Room{}, errors.New("unexpected get room call")
+func (guardedSpaceService) CreateEpisode(context.Context, episodes.CreateEpisodeInput) (episodes.Episode, error) {
+	return episodes.Episode{}, errors.New("unexpected create episode call")
 }
 
-func (guardedRoomService) ListRooms(context.Context, utilities.ID, pagination.PageRequest) (rooms.RoomList, error) {
-	return rooms.RoomList{}, errors.New("unexpected list rooms call")
+func (guardedSpaceService) ListEpisodes(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (episodes.EpisodeList, error) {
+	return episodes.EpisodeList{}, errors.New("unexpected list episodes call")
 }
 
-func (guardedRoomService) UpdateRoom(context.Context, utilities.ID, utilities.ID, rooms.UpdateRoomInput) (rooms.Room, error) {
-	return rooms.Room{}, errors.New("unexpected update room call")
+func (guardedSpaceService) AdmitParticipant(context.Context, episodes.AdmitParticipantInput) (episodes.Admission, error) {
+	return episodes.Admission{}, errors.New("unexpected admit participant call")
 }
 
-func (guardedRoomService) CreateSession(context.Context, rooms.CreateSessionInput) (rooms.Session, error) {
-	return rooms.Session{}, errors.New("unexpected create room session call")
+func (guardedSpaceService) RequestParticipantRemoval(context.Context, episodes.RequestParticipantRemovalInput) (episodes.Removal, error) {
+	return episodes.Removal{}, errors.New("unexpected remove participant call")
 }
 
-func (guardedRoomService) GetSession(context.Context, utilities.ID, utilities.ID, utilities.ID) (rooms.Session, error) {
-	return rooms.Session{}, errors.New("unexpected get room session call")
+func (guardedSpaceService) RequestEpisodeEnd(context.Context, episodes.RequestEpisodeEndInput) (episodes.EndRequest, error) {
+	return episodes.EndRequest{}, errors.New("unexpected end episode call")
 }
 
-func (guardedRoomService) ListSessions(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (rooms.SessionList, error) {
-	return rooms.SessionList{}, errors.New("unexpected list room sessions call")
-}
-
-func (guardedRoomService) UpdateSession(context.Context, utilities.ID, utilities.ID, utilities.ID, rooms.UpdateSessionInput) (rooms.Session, error) {
-	return rooms.Session{}, errors.New("unexpected update room session call")
+func (guardedSpaceService) SetDeadline(context.Context, episodes.SetDeadlineInput) (episodes.ControlRequest, error) {
+	return episodes.ControlRequest{}, errors.New("unexpected set deadline call")
 }
 
 func (guardedRecordingService) Create(context.Context, recordings.CreateInput) (recordings.Recording, error) {
@@ -348,11 +361,11 @@ func (s recordingService) Get(ctx context.Context, tenantID utilities.ID, record
 	return s.get(ctx, tenantID, recordingID)
 }
 
-func (s recordingService) List(ctx context.Context, tenantID utilities.ID, sessionID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error) {
+func (s recordingService) List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error) {
 	if s.list == nil {
 		return recordings.RecordingList{}, errors.New("unexpected list recordings call")
 	}
-	return s.list(ctx, tenantID, sessionID, page)
+	return s.list(ctx, tenantID, episodeID, page)
 }
 
 func (s recordingService) Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input recordings.UpdateInput) (recordings.Recording, error) {
@@ -634,7 +647,7 @@ func TestUnknownRoute(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusNotFound)
 	}
 
-	assertErrorCode(t, res, "not_found")
+	assertErrorCode(t, res, "route.not_found")
 }
 
 func TestMethodNotAllowed(t *testing.T) {
@@ -644,7 +657,7 @@ func TestMethodNotAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusMethodNotAllowed)
 	}
 
-	assertErrorCode(t, res, "method_not_allowed")
+	assertErrorCode(t, res, "route.method_not_allowed")
 }
 
 func TestRegister(t *testing.T) {
@@ -710,7 +723,7 @@ func TestRegisterDuplicateEmail(t *testing.T) {
 	if res.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
 	}
-	assertErrorCode(t, res, "email_already_registered")
+	assertErrorCode(t, res, "identity.email_registered")
 }
 
 func TestLogin(t *testing.T) {
@@ -746,7 +759,7 @@ func TestLoginWrongPassword(t *testing.T) {
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusUnauthorized)
 	}
-	assertErrorCode(t, res, "invalid_credentials")
+	assertErrorCode(t, res, "access.invalid_credentials")
 }
 
 func TestMeAcceptsBearerSession(t *testing.T) {
@@ -896,7 +909,7 @@ func TestGoogleCallbackRejectsUnverifiedEmail(t *testing.T) {
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusUnauthorized)
 	}
-	assertErrorCode(t, res, "oauth_email_not_verified")
+	assertErrorCode(t, res, "oauth.email_not_verified")
 }
 
 func TestRegisterRateLimitBlocksBeforeService(t *testing.T) {
@@ -930,7 +943,7 @@ func TestRegisterRateLimitBlocksBeforeService(t *testing.T) {
 	if res.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusTooManyRequests)
 	}
-	assertErrorCode(t, res, "rate_limited")
+	assertErrorCode(t, res, "request.rate_limited")
 	if res.Header().Get("Retry-After") == "" {
 		t.Fatal("retry-after header was empty")
 	}
@@ -1071,7 +1084,7 @@ func TestAuthenticatedWriteRateLimitUsesPrincipal(t *testing.T) {
 	if res.Code != http.StatusTooManyRequests {
 		t.Fatalf("second status = %d, want %d", res.Code, http.StatusTooManyRequests)
 	}
-	assertErrorCode(t, res, "rate_limited")
+	assertErrorCode(t, res, "request.rate_limited")
 
 	third := bearerRequestWithBody(http.MethodPost, "/v1/tenants", "second-session-token", `{"name":"Acme"}`)
 	third.RemoteAddr = "203.0.113.10:44102"
@@ -1210,7 +1223,7 @@ func TestCORSPreflightRejectsUnknownOrigin(t *testing.T) {
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
 	}
-	assertErrorCode(t, res, "cors_origin_forbidden")
+	assertErrorCode(t, res, "cors.origin_forbidden")
 }
 
 func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
@@ -1235,26 +1248,26 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/33333333-3333-3333-3333-333333333333/actions", body: `{"action":"send_message","arguments":{}}`},
 		{method: http.MethodDelete, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/33333333-3333-3333-3333-333333333333"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships"},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", body: `{"user_id":"22222222-2222-2222-2222-222222222222","role":"admin"}`},
-		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships/33333333-3333-3333-3333-333333333333", body: `{"role":"member"}`},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms", body: `{"name":"Daily","status":"active","slug":"daily","media_plane":"cf_rtk"}`},
-		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms"},
-		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222"},
-		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222", body: `{"status":"ended"}`},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions", body: `{"status":"active"}`},
-		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions"},
-		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333"},
-		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333", body: `{"status":"ended"}`},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants", body: `{"participant_session_id":"44444444-4444-4444-8444-444444444444","name":"Ada"}`},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove", body: `{"participant_session_generation":1}`},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/sync-token"},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/end"},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/recordings", body: `{"status":"ready","storage_provider":"r2"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", body: `{"user_id":"22222222-2222-2222-2222-222222222222","role":"collaborator"}`},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships/33333333-3333-3333-3333-333333333333", body: `{"role":"collaborator"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces", body: `{"name":"Daily","slug":"daily","media_plane":"cf_rtk"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222", body: `{"name":"Updated"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes", body: `{}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333"},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants", body: `{"participant_episode_id":"44444444-4444-4444-8444-444444444444","name":"Ada"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove", body: `{"participant_generation":1}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/access-grant", body: `{"participant_generation":1,"current_media_token":"token"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/sync-token"},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/end"},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/recordings", body: `{"status":"ready","storage_provider":"r2"}`},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444"},
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444", body: `{"status":"failed"}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"space_id":"22222222-2222-2222-2222-222222222222","episode_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","language":"en"}`},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts/55555555-5555-5555-5555-555555555555"},
@@ -1275,7 +1288,7 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		if res.Code != http.StatusUnauthorized {
 			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusUnauthorized)
 		}
-		assertErrorCode(t, res, "unauthenticated")
+		assertErrorCode(t, res, "access.unauthenticated")
 	}
 }
 
@@ -1286,12 +1299,12 @@ func TestTenantScopedMediaRoutesRejectForbiddenPrincipal(t *testing.T) {
 		body    string
 		options httpapi.Options
 	}{
-		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms", options: httpapi.Options{Rooms: guardedRoomService{}}},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms", body: `{"name":"Daily","status":"active","slug":"daily","media_plane":"cf_rtk"}`, options: httpapi.Options{Rooms: guardedRoomService{}}},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces", options: httpapi.Options{Spaces: guardedSpaceService{}}},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces", body: `{"name":"Daily","slug":"daily","media_plane":"cf_rtk"}`, options: httpapi.Options{Spaces: guardedSpaceService{}}},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings", options: httpapi.Options{Recordings: guardedRecordingService{}}},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`, options: httpapi.Options{Recordings: guardedRecordingService{}}},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts", options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"space_id":"22222222-2222-2222-2222-222222222222","episode_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","language":"en"}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}, Recordings: guardedRecordingService{}, RecordingObjects: guardedRecordingObjectService{}, Tenants: tenantService{getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
 			return tenants.Tenant{}, errors.New("unexpected get tenant call")
 		}}, AITranscriptions: guardedAITranscriptionService{}}},
@@ -1309,11 +1322,11 @@ func TestTenantScopedMediaRoutesRejectForbiddenPrincipal(t *testing.T) {
 		if res.Code != http.StatusForbidden {
 			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusForbidden)
 		}
-		assertErrorCode(t, res, "forbidden")
+		assertErrorCode(t, res, "access.forbidden")
 	}
 }
 
-func TestRoomSessionRoutesUseSessionPermissions(t *testing.T) {
+func TestSpaceEpisodeRoutesUseEpisodePermissions(t *testing.T) {
 	routes := []struct {
 		method string
 		path   string
@@ -1322,54 +1335,55 @@ func TestRoomSessionRoutesUseSessionPermissions(t *testing.T) {
 	}{
 		{
 			method: http.MethodPost,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions",
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes",
 			body:   `{}`,
-			scope:  authentication.ScopeSessionsWrite,
+			scope:  authentication.ScopeEpisodesWrite,
 		},
 		{
 			method: http.MethodGet,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions",
-			scope:  authentication.ScopeSessionsRead,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes",
+			scope:  authentication.ScopeEpisodesRead,
 		},
 		{
 			method: http.MethodGet,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333",
-			scope:  authentication.ScopeSessionsRead,
-		},
-		{
-			method: http.MethodPatch,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333",
-			body:   `{"metadata":{"topic":"planning"}}`,
-			scope:  authentication.ScopeSessionsWrite,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333",
+			scope:  authentication.ScopeEpisodesRead,
 		},
 		{
 			method: http.MethodPost,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants",
-			body:   `{"participant_session_id":"44444444-4444-4444-8444-444444444444","name":"Ada"}`,
-			scope:  authentication.ScopeSessionsWrite,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants",
+			body:   `{"participant_id":"44444444-4444-4444-8444-444444444444","name":"Ada"}`,
+			scope:  authentication.ScopeEpisodesWrite,
 		},
 		{
 			method: http.MethodPost,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove",
-			body:   `{"participant_session_generation":1}`,
-			scope:  authentication.ScopeSessionsWrite,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove",
+			body:   `{"participant_generation":1}`,
+			scope:  authentication.ScopeEpisodesWrite,
 		},
 		{
 			method: http.MethodPost,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/sync-token",
-			scope:  authentication.ScopeSessionsWrite,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/access-grant",
+			body:   `{"participant_generation":1,"current_media_token":"token"}`,
+			scope:  authentication.ScopeEpisodesWrite,
 		},
 		{
 			method: http.MethodPost,
-			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/end",
-			scope:  authentication.ScopeSessionsWrite,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/sync-token",
+			scope:  authentication.ScopeEpisodesWrite,
+		},
+		{
+			method: http.MethodPost,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/end",
+			scope:  authentication.ScopeEpisodesWrite,
 		},
 	}
 
 	for _, route := range routes {
 		called := false
 		res := authenticatedRequestWithOptionsAndBody(t, route.method, route.path, route.body, httpapi.Options{
-			Rooms: guardedRoomService{},
+			Spaces:   guardedSpaceService{},
+			Episodes: guardedSpaceService{},
 			TenantAuthz: tenantAuthorizer{
 				authorizeTenant: func(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
 					called = true
@@ -1387,20 +1401,20 @@ func TestRoomSessionRoutesUseSessionPermissions(t *testing.T) {
 		if res.Code != http.StatusForbidden {
 			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusForbidden)
 		}
-		assertErrorCode(t, res, "forbidden")
+		assertErrorCode(t, res, "access.forbidden")
 	}
 }
 
-func TestCreateRoomMapsDuplicateSlugToConflict(t *testing.T) {
+func TestCreateSpaceMapsDuplicateSlugToConflict(t *testing.T) {
 	res := authenticatedRequestWithOptionsAndBody(
 		t,
 		http.MethodPost,
-		"/v1/tenants/11111111-1111-1111-1111-111111111111/rooms",
-		`{"name":"Daily","status":"active","slug":"daily","media_plane":"cf_rtk"}`,
+		"/v1/tenants/11111111-1111-1111-1111-111111111111/spaces",
+		`{"name":"Daily","slug":"daily","media_plane":"cf_rtk"}`,
 		httpapi.Options{
-			Rooms: roomService{
-				createRoom: func(context.Context, rooms.CreateRoomInput) (rooms.Room, error) {
-					return rooms.Room{}, rooms.ErrRoomSlugAlreadyUsed
+			Spaces: spaceService{
+				createSpace: func(context.Context, spaces.CreateSpaceInput) (spaces.Space, error) {
+					return spaces.Space{}, spaces.ErrSpaceSlugAlreadyUsed
 				},
 			},
 		},
@@ -1409,16 +1423,16 @@ func TestCreateRoomMapsDuplicateSlugToConflict(t *testing.T) {
 	if res.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
 	}
-	assertErrorCode(t, res, "room_slug_already_used")
+	assertErrorCode(t, res, "space.slug_conflict")
 }
 
 func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const recordingID = "44444444-4444-4444-4444-444444444444"
-	const roomID = "22222222-2222-2222-2222-222222222222"
-	const sessionID = "33333333-3333-3333-3333-333333333333"
+	const spaceID = "22222222-2222-2222-2222-222222222222"
+	const episodeID = "33333333-3333-3333-3333-333333333333"
 	const transcriptID = "55555555-5555-5555-5555-555555555555"
-	storageKey := "tenants/" + tenantID + "/recordings/meeting"
+	storageKey := "tenants/" + tenantID + "/recordings/episode"
 	createdAt := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
 
 	res := authenticatedRequestWithOptionsAndBody(
@@ -1450,8 +1464,8 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 					return recordings.Recording{
 						ID:              gotRecordingID,
 						TenantID:        gotTenantID,
-						RoomID:          mustTenantID(t, roomID),
-						SessionID:       mustTenantID(t, sessionID),
+						SpaceID:         mustTenantID(t, spaceID),
+						EpisodeID:       mustTenantID(t, episodeID),
 						Status:          recordings.StatusCompleted,
 						StorageProvider: recordings.StorageProviderR2,
 						StorageKey:      &storageKey,
@@ -1494,7 +1508,7 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 					return ai.Transcription{
 						Gateway: ai.GatewayOpenRouter,
 						Model:   input.Model,
-						Text:    "Hello from the meeting",
+						Text:    "Hello from the episode",
 						Usage:   json.RawMessage(`{"input_tokens":12,"output_tokens":3}`),
 					}, nil
 				},
@@ -1504,8 +1518,8 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 					if input.TenantID.String() != tenantID || input.RecordingID.String() != recordingID {
 						t.Fatalf("ids = %s/%s", input.TenantID, input.RecordingID)
 					}
-					if input.RoomID.String() != roomID || input.SessionID.String() != sessionID {
-						t.Fatalf("room/session = %s/%s", input.RoomID, input.SessionID)
+					if input.SpaceID.String() != spaceID || input.EpisodeID.String() != episodeID {
+						t.Fatalf("space/episode = %s/%s", input.SpaceID, input.EpisodeID)
 					}
 					if input.Status != transcripts.StatusCompleted {
 						t.Fatalf("status = %q, want completed", input.Status)
@@ -1516,7 +1530,7 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 					if len(input.Languages) != 1 || input.Languages[0] != "en" {
 						t.Fatalf("languages = %#v, want en", input.Languages)
 					}
-					if input.Text == nil || *input.Text != "Hello from the meeting" {
+					if input.Text == nil || *input.Text != "Hello from the episode" {
 						t.Fatalf("text = %v, want transcript text", input.Text)
 					}
 					var metadata map[string]any
@@ -1533,8 +1547,8 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 						ID:          mustTenantID(t, transcriptID),
 						TenantID:    input.TenantID,
 						RecordingID: input.RecordingID,
-						RoomID:      input.RoomID,
-						SessionID:   input.SessionID,
+						SpaceID:     input.SpaceID,
+						EpisodeID:   input.EpisodeID,
 						Status:      input.Status,
 						Provider:    input.Provider,
 						Model:       input.Model,
@@ -1560,7 +1574,7 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 		Text     string `json:"text"`
 	}
 	decodeJSON(t, res, &body)
-	if body.ID != transcriptID || body.Provider != ai.ProviderOpenRouter || body.Model != "openai/whisper-1" || body.Text != "Hello from the meeting" {
+	if body.ID != transcriptID || body.Provider != ai.ProviderOpenRouter || body.Model != "openai/whisper-1" || body.Text != "Hello from the episode" {
 		t.Fatalf("transcript response = %#v", body)
 	}
 }
@@ -1568,7 +1582,7 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 func TestTranscribeRecordingRejectsNullModelBeforeFetchingObject(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const recordingID = "44444444-4444-4444-4444-444444444444"
-	storageKey := "tenants/" + tenantID + "/recordings/meeting.wav"
+	storageKey := "tenants/" + tenantID + "/recordings/episode.wav"
 
 	res := authenticatedRequestWithOptionsAndBody(
 		t,
@@ -1590,8 +1604,8 @@ func TestTranscribeRecordingRejectsNullModelBeforeFetchingObject(t *testing.T) {
 					return recordings.Recording{
 						ID:              mustTenantID(t, recordingID),
 						TenantID:        mustTenantID(t, tenantID),
-						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
-						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						SpaceID:         mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						EpisodeID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
 						Status:          recordings.StatusCompleted,
 						StorageProvider: recordings.StorageProviderR2,
 						StorageKey:      &storageKey,
@@ -1607,13 +1621,13 @@ func TestTranscribeRecordingRejectsNullModelBeforeFetchingObject(t *testing.T) {
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
-	assertErrorCode(t, res, "invalid_request")
+	assertErrorCode(t, res, "request.invalid")
 }
 
 func TestTranscribeRecordingMapsProviderUnauthorized(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const recordingID = "44444444-4444-4444-4444-444444444444"
-	storageKey := "tenants/" + tenantID + "/recordings/meeting.wav"
+	storageKey := "tenants/" + tenantID + "/recordings/episode.wav"
 
 	res := authenticatedRequestWithOptionsAndBody(
 		t,
@@ -1635,8 +1649,8 @@ func TestTranscribeRecordingMapsProviderUnauthorized(t *testing.T) {
 					return recordings.Recording{
 						ID:              mustTenantID(t, recordingID),
 						TenantID:        mustTenantID(t, tenantID),
-						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
-						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						SpaceID:         mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						EpisodeID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
 						Status:          recordings.StatusCompleted,
 						StorageProvider: recordings.StorageProviderR2,
 						StorageKey:      &storageKey,
@@ -1663,7 +1677,7 @@ func TestTranscribeRecordingMapsProviderUnauthorized(t *testing.T) {
 	if res.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadGateway)
 	}
-	assertErrorCode(t, res, "ai_provider_unauthorized")
+	assertErrorCode(t, res, "ai.provider_unauthorized")
 }
 
 func TestCreateRecordingDownloadURLRejectsUnsupportedProvider(t *testing.T) {
@@ -1688,8 +1702,8 @@ func TestCreateRecordingDownloadURLRejectsUnsupportedProvider(t *testing.T) {
 					return recordings.Recording{
 						ID:              mustTenantID(t, recordingID),
 						TenantID:        mustTenantID(t, tenantID),
-						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
-						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						SpaceID:         mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						EpisodeID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
 						Status:          recordings.StatusCompleted,
 						StorageProvider: "s3",
 						StorageKey:      &storageKey,
@@ -1703,7 +1717,7 @@ func TestCreateRecordingDownloadURLRejectsUnsupportedProvider(t *testing.T) {
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
-	assertErrorCode(t, res, "invalid_storage_provider")
+	assertErrorCode(t, res, "storage.invalid_provider")
 }
 
 func TestCreateTranscriptDownloadURLMapsInvalidExpiration(t *testing.T) {
@@ -1738,7 +1752,7 @@ func TestCreateTranscriptDownloadURLMapsInvalidExpiration(t *testing.T) {
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
-	assertErrorCode(t, res, "invalid_url_expiration")
+	assertErrorCode(t, res, "url.invalid_expiration")
 }
 
 func TestCreateRecordingDownloadURLRejectsForeignStorageKey(t *testing.T) {
@@ -1763,8 +1777,8 @@ func TestCreateRecordingDownloadURLRejectsForeignStorageKey(t *testing.T) {
 					return recordings.Recording{
 						ID:              mustTenantID(t, recordingID),
 						TenantID:        mustTenantID(t, tenantID),
-						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
-						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						SpaceID:         mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						EpisodeID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
 						Status:          recordings.StatusCompleted,
 						StorageProvider: recordings.StorageProviderR2,
 						StorageKey:      &storageKey,
@@ -1778,7 +1792,7 @@ func TestCreateRecordingDownloadURLRejectsForeignStorageKey(t *testing.T) {
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
-	assertErrorCode(t, res, "invalid_storage_key")
+	assertErrorCode(t, res, "storage.invalid_key")
 }
 
 func TestCreateRecordingDownloadURLRejectsIncompleteRecording(t *testing.T) {
@@ -1803,8 +1817,8 @@ func TestCreateRecordingDownloadURLRejectsIncompleteRecording(t *testing.T) {
 					return recordings.Recording{
 						ID:              mustTenantID(t, recordingID),
 						TenantID:        mustTenantID(t, tenantID),
-						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
-						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						SpaceID:         mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						EpisodeID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
 						Status:          recordings.StatusProcessing,
 						StorageProvider: recordings.StorageProviderR2,
 						StorageKey:      &storageKey,
@@ -1818,7 +1832,7 @@ func TestCreateRecordingDownloadURLRejectsIncompleteRecording(t *testing.T) {
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
-	assertErrorCode(t, res, "recording_not_ready")
+	assertErrorCode(t, res, "recording.not_ready")
 }
 
 func TestLocalSystemTokenAuthenticatesProtectedTenantRoutes(t *testing.T) {
@@ -1933,7 +1947,7 @@ func TestDisabledIntegrationsReturnServiceUnavailable(t *testing.T) {
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusServiceUnavailable)
 	}
-	assertErrorCode(t, res, "service_unavailable")
+	assertErrorCode(t, res, "service.unavailable")
 }
 
 func TestDisabledTranscriptionReturnsServiceUnavailable(t *testing.T) {
@@ -1942,7 +1956,7 @@ func TestDisabledTranscriptionReturnsServiceUnavailable(t *testing.T) {
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusServiceUnavailable)
 	}
-	assertErrorCode(t, res, "service_unavailable")
+	assertErrorCode(t, res, "service.unavailable")
 }
 
 func TestStartIntegrationConnection(t *testing.T) {
@@ -2021,7 +2035,7 @@ func TestStartIntegrationConnectionRejectsUntrustedCallbackURL(t *testing.T) {
 	if called {
 		t.Fatal("integration service was called")
 	}
-	assertErrorCode(t, res, "invalid_callback_url")
+	assertErrorCode(t, res, "integration.invalid_callback_url")
 }
 
 func TestStartIntegrationConnectionAuthorizesBeforeBodyValidation(t *testing.T) {
@@ -2036,7 +2050,7 @@ func TestStartIntegrationConnectionAuthorizesBeforeBodyValidation(t *testing.T) 
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
 	}
-	assertErrorCode(t, res, "forbidden")
+	assertErrorCode(t, res, "access.forbidden")
 }
 
 func TestStartIntegrationConnectionRejectsOversizedBody(t *testing.T) {
@@ -2056,7 +2070,7 @@ func TestStartIntegrationConnectionRejectsOversizedBody(t *testing.T) {
 	if called {
 		t.Fatal("integration service was called")
 	}
-	assertErrorCode(t, res, "payload_too_large")
+	assertErrorCode(t, res, "request.payload_too_large")
 }
 
 func TestStartIntegrationConnectionRejectsWildcardCallbackOrigin(t *testing.T) {
@@ -2082,7 +2096,7 @@ func TestStartIntegrationConnectionRejectsWildcardCallbackOrigin(t *testing.T) {
 	if called {
 		t.Fatal("integration service was called")
 	}
-	assertErrorCode(t, res, "invalid_callback_url")
+	assertErrorCode(t, res, "integration.invalid_callback_url")
 }
 
 func TestStartIntegrationConnectionRejectsSystemPrincipal(t *testing.T) {
@@ -2102,13 +2116,13 @@ func TestStartIntegrationConnectionRejectsSystemPrincipal(t *testing.T) {
 	if called {
 		t.Fatal("integration service was called")
 	}
-	assertErrorCode(t, res, "forbidden")
+	assertErrorCode(t, res, "access.forbidden")
 }
 
 func TestListIntegrationConnectionsFiltersToUserPrincipal(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/integrations/connections?provider=composio&service=slack&status=active&page_size=10", httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			listConnections: func(ctx context.Context, input integrations.ListConnectionsInput) (integrations.ConnectionList, error) {
 				if input.TenantID.String() != tenantID {
@@ -2219,14 +2233,14 @@ func TestListIntegrationConnectionsMasksAdminAuthorizationFailure(t *testing.T) 
 	if called {
 		t.Fatal("integration service was called")
 	}
-	assertErrorCode(t, res, "internal_error")
+	assertErrorCode(t, res, "service.internal_error")
 }
 
 func TestGetIntegrationConnectionPassesActorUserID(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String(), httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			getConnection: func(ctx context.Context, gotTenantID utilities.ID, actorUserID utilities.ID, gotConnectionID utilities.ID) (integrations.Connection, error) {
 				if gotTenantID.String() != tenantID {
@@ -2252,7 +2266,7 @@ func TestRefreshIntegrationConnectionReturnsConnectURL(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	res := authenticatedRequestWithOptions(t, http.MethodPost, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String()+"/refresh", httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			refreshConnection: func(ctx context.Context, gotTenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, actorType string, gotConnectionID utilities.ID) (integrations.RefreshConnectionResult, error) {
 				if gotTenantID.String() != tenantID {
@@ -2352,7 +2366,7 @@ func TestExecuteIntegrationAction(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String()+"/actions", `{"action":"send_message","arguments":{"channel":"C123"}}`, httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			executeAction: func(ctx context.Context, input integrations.ExecuteActionInput) (integrations.ExecuteActionResult, error) {
 				if input.TenantID.String() != tenantID {
@@ -2446,7 +2460,7 @@ func TestExecuteIntegrationActionRejectsSystemPrincipal(t *testing.T) {
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
 	}
-	assertErrorCode(t, res, "forbidden")
+	assertErrorCode(t, res, "access.forbidden")
 }
 
 func TestExecuteIntegrationActionRejectsOversizedBody(t *testing.T) {
@@ -2467,7 +2481,7 @@ func TestExecuteIntegrationActionRejectsOversizedBody(t *testing.T) {
 	if called {
 		t.Fatal("integration service was called")
 	}
-	assertErrorCode(t, res, "payload_too_large")
+	assertErrorCode(t, res, "request.payload_too_large")
 }
 
 func TestDisableIntegrationConnectionUsesDeletePermission(t *testing.T) {
@@ -2485,13 +2499,13 @@ func TestDisableIntegrationConnectionUsesDeletePermission(t *testing.T) {
 				}
 				switch authorizationCalls {
 				case 1:
-					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleMember {
-						t.Fatalf("permission = %s/%s, want integrations:delete/member", permission.Scope, permission.MinimumRole)
+					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleCollaborator {
+						t.Fatalf("permission = %s/%s, want integrations:delete/collaborator", permission.Scope, permission.MinimumRole)
 					}
 					return nil
 				case 2:
-					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleAdmin {
-						t.Fatalf("permission = %s/%s, want integrations:delete/admin", permission.Scope, permission.MinimumRole)
+					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleOwner {
+						t.Fatalf("permission = %s/%s, want integrations:delete/owner", permission.Scope, permission.MinimumRole)
 					}
 					return authorization.ErrForbidden
 				default:
@@ -2592,7 +2606,7 @@ func TestIntegrationRouteRejectsForbiddenTenant(t *testing.T) {
 	if called {
 		t.Fatal("integration service was called")
 	}
-	assertErrorCode(t, res, "forbidden")
+	assertErrorCode(t, res, "access.forbidden")
 }
 
 func TestGetTenant(t *testing.T) {
@@ -2670,7 +2684,7 @@ func TestGetTenantRejectsInvalidID(t *testing.T) {
 	if called {
 		t.Fatal("tenant service was called")
 	}
-	assertErrorCode(t, res, "invalid_tenant_id")
+	assertErrorCode(t, res, "tenant.invalid_id")
 }
 
 func TestGetTenantNotFound(t *testing.T) {
@@ -2685,7 +2699,7 @@ func TestGetTenantNotFound(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusNotFound)
 	}
-	assertErrorCode(t, res, "not_found")
+	assertErrorCode(t, res, "tenant.not_found")
 }
 
 func TestGetTenantRejectsForbiddenPrincipal(t *testing.T) {
@@ -2710,7 +2724,7 @@ func TestGetTenantRejectsForbiddenPrincipal(t *testing.T) {
 	if called {
 		t.Fatal("tenant service was called")
 	}
-	assertErrorCode(t, res, "forbidden")
+	assertErrorCode(t, res, "access.forbidden")
 }
 
 func TestGetTenantWithoutService(t *testing.T) {
@@ -2719,7 +2733,7 @@ func TestGetTenantWithoutService(t *testing.T) {
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusServiceUnavailable)
 	}
-	assertErrorCode(t, res, "service_unavailable")
+	assertErrorCode(t, res, "service.unavailable")
 }
 
 func TestListTenants(t *testing.T) {
@@ -2823,7 +2837,7 @@ func TestListTenantsRejectsUserPrincipal(t *testing.T) {
 	if called {
 		t.Fatal("tenant service was called")
 	}
-	assertErrorCode(t, res, "forbidden")
+	assertErrorCode(t, res, "access.forbidden")
 }
 
 func TestListTenantsParsesPageSize(t *testing.T) {
@@ -2895,7 +2909,7 @@ func TestListTenantsRejectsInvalidPageSize(t *testing.T) {
 	if called {
 		t.Fatal("tenant service was called")
 	}
-	assertErrorCode(t, res, "invalid_page_size")
+	assertErrorCode(t, res, "pagination.invalid_page_size")
 }
 
 func TestListTenantsRejectsInvalidCursor(t *testing.T) {
@@ -2915,7 +2929,7 @@ func TestListTenantsRejectsInvalidCursor(t *testing.T) {
 	if called {
 		t.Fatal("tenant service was called")
 	}
-	assertErrorCode(t, res, "invalid_cursor")
+	assertErrorCode(t, res, "pagination.invalid_cursor")
 }
 
 func TestCreateTenant(t *testing.T) {
@@ -3083,7 +3097,7 @@ func TestCreateTenantRejectsInvalidRegion(t *testing.T) {
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
-	assertErrorCode(t, res, "invalid_tenant_region")
+	assertErrorCode(t, res, "tenant.invalid_region")
 }
 
 func TestCreateTenantRejectsOversizedBody(t *testing.T) {
@@ -3103,7 +3117,7 @@ func TestCreateTenantRejectsOversizedBody(t *testing.T) {
 	if called {
 		t.Fatal("tenant service was called")
 	}
-	assertErrorCode(t, res, "payload_too_large")
+	assertErrorCode(t, res, "request.payload_too_large")
 }
 
 func TestUpdateTenantClearsNullableField(t *testing.T) {
@@ -3239,7 +3253,7 @@ func TestGetUserRejectsInvalidID(t *testing.T) {
 	if called {
 		t.Fatal("user service was called")
 	}
-	assertErrorCode(t, res, "invalid_user_id")
+	assertErrorCode(t, res, "user.invalid_id")
 }
 
 func TestListUsers(t *testing.T) {
@@ -3311,7 +3325,7 @@ func TestListUsersRejectsUserPrincipal(t *testing.T) {
 	if called {
 		t.Fatal("user service was called")
 	}
-	assertErrorCode(t, res, "forbidden")
+	assertErrorCode(t, res, "access.forbidden")
 }
 
 func TestCreateMembership(t *testing.T) {
@@ -3319,7 +3333,7 @@ func TestCreateMembership(t *testing.T) {
 	const userID = "22222222-2222-2222-2222-222222222222"
 	const membershipID = "33333333-3333-3333-3333-333333333333"
 
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/memberships", `{"user_id":"`+userID+`","role":"admin"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/memberships", `{"user_id":"`+userID+`","role":"collaborator"}`, httpapi.Options{
 		Memberships: membershipService{
 			createMembership: func(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
 				if input.TenantID.String() != tenantID {
@@ -3328,8 +3342,8 @@ func TestCreateMembership(t *testing.T) {
 				if input.UserID.String() != userID {
 					t.Fatalf("user id = %q, want %q", input.UserID.String(), userID)
 				}
-				if input.Role != memberships.RoleAdmin {
-					t.Fatalf("role = %q, want admin", input.Role)
+				if input.Role != memberships.RoleCollaborator {
+					t.Fatalf("role = %q, want collaborator", input.Role)
 				}
 
 				return memberships.Membership{
@@ -3357,14 +3371,14 @@ func TestCreateMembership(t *testing.T) {
 	if body.ID != membershipID {
 		t.Fatalf("membership id = %q, want %q", body.ID, membershipID)
 	}
-	if body.Role != "admin" {
-		t.Fatalf("role = %q, want admin", body.Role)
+	if body.Role != "collaborator" {
+		t.Fatalf("role = %q, want collaborator", body.Role)
 	}
 }
 
 func TestCreateMembershipRejectsInvalidUserID(t *testing.T) {
 	called := false
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", `{"user_id":"not-a-uuid","role":"admin"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", `{"user_id":"not-a-uuid","role":"collaborator"}`, httpapi.Options{
 		Memberships: membershipService{
 			createMembership: func(context.Context, memberships.CreateMembershipInput) (memberships.Membership, error) {
 				called = true
@@ -3379,7 +3393,7 @@ func TestCreateMembershipRejectsInvalidUserID(t *testing.T) {
 	if called {
 		t.Fatal("membership service was called")
 	}
-	assertErrorCode(t, res, "invalid_user_id")
+	assertErrorCode(t, res, "user.invalid_id")
 }
 
 func TestListTenantMemberships(t *testing.T) {
@@ -3403,7 +3417,7 @@ func TestListTenantMemberships(t *testing.T) {
 							ID:       mustTenantID(t, membershipID),
 							TenantID: id,
 							UserID:   mustTenantID(t, userID),
-							Role:     memberships.RoleViewer,
+							Role:     memberships.RoleObserver,
 						},
 					},
 					Page: pagination.Page{PageSize: page.Size()},
@@ -3433,8 +3447,8 @@ func TestListTenantMemberships(t *testing.T) {
 	if body.Memberships[0].UserID != userID {
 		t.Fatalf("user id = %q, want %q", body.Memberships[0].UserID, userID)
 	}
-	if body.Memberships[0].Role != "viewer" {
-		t.Fatalf("role = %q, want viewer", body.Memberships[0].Role)
+	if body.Memberships[0].Role != "observer" {
+		t.Fatalf("role = %q, want observer", body.Memberships[0].Role)
 	}
 	if body.Pagination.PageSize != 10 {
 		t.Fatalf("page size = %d, want 10", body.Pagination.PageSize)
@@ -3445,7 +3459,7 @@ func TestUpdateTenantMembership(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const membershipID = "33333333-3333-3333-3333-333333333333"
 
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID+"/memberships/"+membershipID, `{"role":"member"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID+"/memberships/"+membershipID, `{"role":"collaborator"}`, httpapi.Options{
 		Memberships: membershipService{
 			updateTenantMembership: func(ctx context.Context, tenant utilities.ID, membership utilities.ID, input memberships.UpdateMembershipInput) (memberships.Membership, error) {
 				if tenant.String() != tenantID {
@@ -3454,8 +3468,8 @@ func TestUpdateTenantMembership(t *testing.T) {
 				if membership.String() != membershipID {
 					t.Fatalf("membership id = %q, want %q", membership.String(), membershipID)
 				}
-				if input.Role != memberships.RoleMember {
-					t.Fatalf("role = %q, want member", input.Role)
+				if input.Role != memberships.RoleCollaborator {
+					t.Fatalf("role = %q, want collaborator", input.Role)
 				}
 
 				return memberships.Membership{
@@ -3476,8 +3490,8 @@ func TestUpdateTenantMembership(t *testing.T) {
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Role != "member" {
-		t.Fatalf("role = %q, want member", body.Role)
+	if body.Role != "collaborator" {
+		t.Fatalf("role = %q, want collaborator", body.Role)
 	}
 }
 
@@ -3600,10 +3614,10 @@ func assertErrorCode(t *testing.T, res *httptest.ResponseRecorder, want string) 
 	}
 }
 
-func integrationMemberAuthorizer() tenantAuthorizer {
+func integrationCollaboratorAuthorizer() tenantAuthorizer {
 	return tenantAuthorizer{
-		authorizeTenant: func(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
-			if permission.MinimumRole == memberships.RoleAdmin {
+		authorizeTenant: func(_ context.Context, _ authentication.Principal, _ utilities.ID, permission authorization.TenantPermission) error {
+			if permission.MinimumRole == memberships.RoleOwner {
 				return authorization.ErrForbidden
 			}
 			return nil

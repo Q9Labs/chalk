@@ -3,12 +3,12 @@ import { assertOperationalReadiness, assertReplacementWithinCap, desiredCaptureN
 
 describe("recorder capacity contracts", () => {
   it("takes the maximum capture dimension and adds one ready spare", () => {
-    expect(desiredCaptureNodes({ meetings: 20, participants: 100, inputMbps: 80, readySpare: 1 })).toBe(6);
-    expect(desiredCaptureNodes({ meetings: 5, participants: 50, inputMbps: 20, readySpare: 0 })).toBe(2);
+    expect(desiredCaptureNodes({ episodes: 20, participants: 100, inputMbps: 80, readySpare: 1 })).toBe(6);
+    expect(desiredCaptureNodes({ episodes: 5, participants: 50, inputMbps: 20, readySpare: 0 })).toBe(2);
   });
 
   it("rejects capture demand above the eleven-node qualified bound", () => {
-    expect(() => desiredCaptureNodes({ meetings: 20, participants: 100, inputMbps: 80, meetingsPerNode: 1, readySpare: 1 })).toThrow("above the qualified 11-node bound");
+    expect(() => desiredCaptureNodes({ episodes: 20, participants: 100, inputMbps: 80, episodesPerNode: 1, readySpare: 1 })).toThrow("above the qualified 11-node bound");
   });
 
   it("uses discrete job packing rather than aggregate output hours", () => {

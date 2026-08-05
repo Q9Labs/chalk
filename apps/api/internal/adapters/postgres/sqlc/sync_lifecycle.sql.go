@@ -11,57 +11,57 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const claimDueSessionDeadlines = `-- name: ClaimDueSessionDeadlines :many
+const claimDueEpisodeDeadlines = `-- name: ClaimDueEpisodeDeadlines :many
 select
-    sessions.tenant_id,
-    sessions.room_id,
-    sessions.id as session_id,
-    sessions.deadline_at,
-    sessions.deadline_generation
-from room_sessions sessions
-join sync_session_control control on
-    control.tenant_id = sessions.tenant_id
-    and control.room_id = sessions.room_id
-    and control.session_id = sessions.id
+    episodes.tenant_id,
+    episodes.space_id,
+    episodes.id as episode_id,
+    episodes.deadline_at,
+    episodes.deadline_generation
+from episodes episodes
+join sync_episode_control control on
+    control.tenant_id = episodes.tenant_id
+    and control.space_id = episodes.space_id
+    and control.episode_id = episodes.id
 where
-    sessions.status = 'active'
-    and sessions.deadline_at <= now()
+    episodes.status = 'active'
+    and episodes.deadline_at <= now()
     and not exists (
         select 1
         from sync_external_operations operations
         where
-            operations.tenant_id = sessions.tenant_id
-            and operations.room_id = sessions.room_id
-            and operations.session_id = sessions.id
-            and operations.operation_name = 'maximum_duration_expired'
-            and operations.deadline_generation = sessions.deadline_generation
+            operations.tenant_id = episodes.tenant_id
+            and operations.space_id = episodes.space_id
+            and operations.episode_id = episodes.id
+            and operations.operation_name = 'maximum_episode_duration_expired'
+            and operations.deadline_generation = episodes.deadline_generation
     )
-order by sessions.deadline_at, sessions.id
-for update of sessions skip locked
+order by episodes.deadline_at, episodes.id
+for update of episodes skip locked
 limit $1
 `
 
-type ClaimDueSessionDeadlinesRow struct {
+type ClaimDueEpisodeDeadlinesRow struct {
 	TenantID           pgtype.UUID        `json:"tenant_id"`
-	RoomID             pgtype.UUID        `json:"room_id"`
-	SessionID          pgtype.UUID        `json:"session_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	DeadlineAt         pgtype.Timestamptz `json:"deadline_at"`
 	DeadlineGeneration int64              `json:"deadline_generation"`
 }
 
-func (q *Queries) ClaimDueSessionDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueSessionDeadlinesRow, error) {
-	rows, err := q.db.Query(ctx, claimDueSessionDeadlines, batchSize)
+func (q *Queries) ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueEpisodeDeadlinesRow, error) {
+	rows, err := q.db.Query(ctx, claimDueEpisodeDeadlines, batchSize)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ClaimDueSessionDeadlinesRow
+	var items []ClaimDueEpisodeDeadlinesRow
 	for rows.Next() {
-		var i ClaimDueSessionDeadlinesRow
+		var i ClaimDueEpisodeDeadlinesRow
 		if err := rows.Scan(
 			&i.TenantID,
-			&i.RoomID,
-			&i.SessionID,
+			&i.SpaceID,
+			&i.EpisodeID,
 			&i.DeadlineAt,
 			&i.DeadlineGeneration,
 		); err != nil {
@@ -78,15 +78,14 @@ func (q *Queries) ClaimDueSessionDeadlines(ctx context.Context, batchSize int32)
 const createAdmissionRequest = `-- name: CreateAdmissionRequest :one
 insert into sync_admission_requests (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     admission_request_id,
     request_key,
     request_fingerprint,
-    participant_session_id,
+    participant_id,
     display_name,
-    initial_role,
-    eligible_roles,
+    role,
     expires_at
 ) values (
     $1,
@@ -98,52 +97,48 @@ insert into sync_admission_requests (
     $7,
     $8,
     $9,
-    $10,
-    $11
+    $10
 )
-returning tenant_id, room_id, session_id, admission_request_id, request_key, request_fingerprint, participant_session_id, display_name, initial_role, eligible_roles, status, decision_external_operation_id, requested_at, expires_at, completed_at
+returning tenant_id, space_id, episode_id, admission_request_id, request_key, request_fingerprint, participant_id, display_name, role, status, decision_external_operation_id, requested_at, expires_at, completed_at
 `
 
 type CreateAdmissionRequestParams struct {
-	TenantID             pgtype.UUID        `json:"tenant_id"`
-	RoomID               pgtype.UUID        `json:"room_id"`
-	SessionID            pgtype.UUID        `json:"session_id"`
-	AdmissionRequestID   pgtype.UUID        `json:"admission_request_id"`
-	RequestKey           string             `json:"request_key"`
-	RequestFingerprint   []byte             `json:"request_fingerprint"`
-	ParticipantSessionID pgtype.UUID        `json:"participant_session_id"`
-	DisplayName          string             `json:"display_name"`
-	InitialRole          string             `json:"initial_role"`
-	EligibleRoles        []string           `json:"eligible_roles"`
-	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
+	AdmissionRequestID pgtype.UUID        `json:"admission_request_id"`
+	RequestKey         string             `json:"request_key"`
+	RequestFingerprint []byte             `json:"request_fingerprint"`
+	ParticipantID      pgtype.UUID        `json:"participant_id"`
+	DisplayName        string             `json:"display_name"`
+	Role               string             `json:"role"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) CreateAdmissionRequest(ctx context.Context, arg CreateAdmissionRequestParams) (SyncAdmissionRequest, error) {
 	row := q.db.QueryRow(ctx, createAdmissionRequest,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.AdmissionRequestID,
 		arg.RequestKey,
 		arg.RequestFingerprint,
-		arg.ParticipantSessionID,
+		arg.ParticipantID,
 		arg.DisplayName,
-		arg.InitialRole,
-		arg.EligibleRoles,
+		arg.Role,
 		arg.ExpiresAt,
 	)
 	var i SyncAdmissionRequest
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.AdmissionRequestID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
-		&i.ParticipantSessionID,
+		&i.ParticipantID,
 		&i.DisplayName,
-		&i.InitialRole,
-		&i.EligibleRoles,
+		&i.Role,
 		&i.Status,
 		&i.DecisionExternalOperationID,
 		&i.RequestedAt,
@@ -156,14 +151,14 @@ func (q *Queries) CreateAdmissionRequest(ctx context.Context, arg CreateAdmissio
 const createDeferredLifecycleIntent = `-- name: CreateDeferredLifecycleIntent :one
 insert into sync_lifecycle_intents (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     lifecycle_intent_id,
     request_key,
     request_fingerprint,
     intent_name,
-    participant_session_id,
-    participant_session_generation,
+    participant_id,
+    participant_generation,
     payload,
     status,
     next_attempt_at,
@@ -189,37 +184,37 @@ insert into sync_lifecycle_intents (
     $13,
     $14
 )
-returning tenant_id, room_id, session_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_session_id, participant_session_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, created_at, completed_at, next_attempt_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
+returning tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
 `
 
 type CreateDeferredLifecycleIntentParams struct {
-	TenantID                     pgtype.UUID `json:"tenant_id"`
-	RoomID                       pgtype.UUID `json:"room_id"`
-	SessionID                    pgtype.UUID `json:"session_id"`
-	LifecycleIntentID            pgtype.UUID `json:"lifecycle_intent_id"`
-	RequestKey                   string      `json:"request_key"`
-	RequestFingerprint           []byte      `json:"request_fingerprint"`
-	IntentName                   string      `json:"intent_name"`
-	ParticipantSessionID         pgtype.UUID `json:"participant_session_id"`
-	ParticipantSessionGeneration pgtype.Int8 `json:"participant_session_generation"`
-	Payload                      []byte      `json:"payload"`
-	JourneyID                    pgtype.UUID `json:"journey_id"`
-	ParentJourneyEventID         pgtype.UUID `json:"parent_journey_event_id"`
-	ProducingTraceID             pgtype.Text `json:"producing_trace_id"`
-	ProducingSpanID              pgtype.Text `json:"producing_span_id"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	LifecycleIntentID     pgtype.UUID `json:"lifecycle_intent_id"`
+	RequestKey            string      `json:"request_key"`
+	RequestFingerprint    []byte      `json:"request_fingerprint"`
+	IntentName            string      `json:"intent_name"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration pgtype.Int8 `json:"participant_generation"`
+	Payload               []byte      `json:"payload"`
+	JourneyID             pgtype.UUID `json:"journey_id"`
+	ParentJourneyEventID  pgtype.UUID `json:"parent_journey_event_id"`
+	ProducingTraceID      pgtype.Text `json:"producing_trace_id"`
+	ProducingSpanID       pgtype.Text `json:"producing_span_id"`
 }
 
 func (q *Queries) CreateDeferredLifecycleIntent(ctx context.Context, arg CreateDeferredLifecycleIntentParams) (SyncLifecycleIntent, error) {
 	row := q.db.QueryRow(ctx, createDeferredLifecycleIntent,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.LifecycleIntentID,
 		arg.RequestKey,
 		arg.RequestFingerprint,
 		arg.IntentName,
-		arg.ParticipantSessionID,
-		arg.ParticipantSessionGeneration,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
 		arg.Payload,
 		arg.JourneyID,
 		arg.ParentJourneyEventID,
@@ -229,14 +224,14 @@ func (q *Queries) CreateDeferredLifecycleIntent(ctx context.Context, arg CreateD
 	var i SyncLifecycleIntent
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.LifecycleIntentID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.IntentName,
-		&i.ParticipantSessionID,
-		&i.ParticipantSessionGeneration,
+		&i.ParticipantID,
+		&i.ParticipantGeneration,
 		&i.Payload,
 		&i.Status,
 		&i.TerminalReason,
@@ -244,9 +239,9 @@ func (q *Queries) CreateDeferredLifecycleIntent(ctx context.Context, arg CreateD
 		&i.AppliedRevision,
 		&i.AttemptCount,
 		&i.LastErrorCode,
+		&i.NextAttemptAt,
 		&i.CreatedAt,
 		&i.CompletedAt,
-		&i.NextAttemptAt,
 		&i.JourneyID,
 		&i.ParentJourneyEventID,
 		&i.ProducingTraceID,
@@ -255,17 +250,95 @@ func (q *Queries) CreateDeferredLifecycleIntent(ctx context.Context, arg CreateD
 	return i, err
 }
 
+const createLifecycleEpisode = `-- name: CreateLifecycleEpisode :one
+insert into episodes (
+    id,
+    status,
+    metadata,
+    space_id,
+    tenant_id,
+    created_by_user_id,
+    started_at,
+    deadline_at,
+    config_snapshot
+) select
+    $1,
+    'active',
+    $2,
+    spaces.id,
+    spaces.tenant_id,
+    $3,
+    $4,
+    $5,
+    jsonb_build_object(
+        'roles', coalesce((
+            select jsonb_object_agg(role.name, to_jsonb(role.capabilities))
+            from space_roles role
+            where role.tenant_id = spaces.tenant_id and role.space_id = spaces.id
+        ), '{}'::jsonb),
+        'admission_policy', spaces.admission_policy,
+        'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
+        'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
+        'linger_window_seconds', spaces.linger_window_seconds
+    )
+from spaces
+where
+    spaces.tenant_id = $6
+    and spaces.id = $7
+returning id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
+`
+
+type CreateLifecycleEpisodeParams struct {
+	ID              pgtype.UUID        `json:"id"`
+	Metadata        []byte             `json:"metadata"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	DeadlineAt      pgtype.Timestamptz `json:"deadline_at"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	SpaceID         pgtype.UUID        `json:"space_id"`
+}
+
+func (q *Queries) CreateLifecycleEpisode(ctx context.Context, arg CreateLifecycleEpisodeParams) (Episode, error) {
+	row := q.db.QueryRow(ctx, createLifecycleEpisode,
+		arg.ID,
+		arg.Metadata,
+		arg.CreatedByUserID,
+		arg.StartedAt,
+		arg.DeadlineAt,
+		arg.TenantID,
+		arg.SpaceID,
+	)
+	var i Episode
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.Metadata,
+		&i.SpaceID,
+		&i.TenantID,
+		&i.CreatedByUserID,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ConfigSnapshot,
+		&i.EndReason,
+		&i.DeadlineAt,
+		&i.DeadlineGeneration,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createLifecycleIntent = `-- name: CreateLifecycleIntent :one
 insert into sync_lifecycle_intents (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     lifecycle_intent_id,
     request_key,
     request_fingerprint,
     intent_name,
-    participant_session_id,
-    participant_session_generation,
+    participant_id,
+    participant_generation,
     payload,
     status,
     journey_id,
@@ -289,37 +362,37 @@ insert into sync_lifecycle_intents (
     $13,
     $14
 )
-returning tenant_id, room_id, session_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_session_id, participant_session_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, created_at, completed_at, next_attempt_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
+returning tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
 `
 
 type CreateLifecycleIntentParams struct {
-	TenantID                     pgtype.UUID `json:"tenant_id"`
-	RoomID                       pgtype.UUID `json:"room_id"`
-	SessionID                    pgtype.UUID `json:"session_id"`
-	LifecycleIntentID            pgtype.UUID `json:"lifecycle_intent_id"`
-	RequestKey                   string      `json:"request_key"`
-	RequestFingerprint           []byte      `json:"request_fingerprint"`
-	IntentName                   string      `json:"intent_name"`
-	ParticipantSessionID         pgtype.UUID `json:"participant_session_id"`
-	ParticipantSessionGeneration pgtype.Int8 `json:"participant_session_generation"`
-	Payload                      []byte      `json:"payload"`
-	JourneyID                    pgtype.UUID `json:"journey_id"`
-	ParentJourneyEventID         pgtype.UUID `json:"parent_journey_event_id"`
-	ProducingTraceID             pgtype.Text `json:"producing_trace_id"`
-	ProducingSpanID              pgtype.Text `json:"producing_span_id"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	LifecycleIntentID     pgtype.UUID `json:"lifecycle_intent_id"`
+	RequestKey            string      `json:"request_key"`
+	RequestFingerprint    []byte      `json:"request_fingerprint"`
+	IntentName            string      `json:"intent_name"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration pgtype.Int8 `json:"participant_generation"`
+	Payload               []byte      `json:"payload"`
+	JourneyID             pgtype.UUID `json:"journey_id"`
+	ParentJourneyEventID  pgtype.UUID `json:"parent_journey_event_id"`
+	ProducingTraceID      pgtype.Text `json:"producing_trace_id"`
+	ProducingSpanID       pgtype.Text `json:"producing_span_id"`
 }
 
 func (q *Queries) CreateLifecycleIntent(ctx context.Context, arg CreateLifecycleIntentParams) (SyncLifecycleIntent, error) {
 	row := q.db.QueryRow(ctx, createLifecycleIntent,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.LifecycleIntentID,
 		arg.RequestKey,
 		arg.RequestFingerprint,
 		arg.IntentName,
-		arg.ParticipantSessionID,
-		arg.ParticipantSessionGeneration,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
 		arg.Payload,
 		arg.JourneyID,
 		arg.ParentJourneyEventID,
@@ -329,14 +402,14 @@ func (q *Queries) CreateLifecycleIntent(ctx context.Context, arg CreateLifecycle
 	var i SyncLifecycleIntent
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.LifecycleIntentID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.IntentName,
-		&i.ParticipantSessionID,
-		&i.ParticipantSessionGeneration,
+		&i.ParticipantID,
+		&i.ParticipantGeneration,
 		&i.Payload,
 		&i.Status,
 		&i.TerminalReason,
@@ -344,9 +417,9 @@ func (q *Queries) CreateLifecycleIntent(ctx context.Context, arg CreateLifecycle
 		&i.AppliedRevision,
 		&i.AttemptCount,
 		&i.LastErrorCode,
+		&i.NextAttemptAt,
 		&i.CreatedAt,
 		&i.CompletedAt,
-		&i.NextAttemptAt,
 		&i.JourneyID,
 		&i.ParentJourneyEventID,
 		&i.ProducingTraceID,
@@ -362,18 +435,16 @@ insert into participants (
     metadata,
     capabilities,
     role,
-    eligible_roles,
     tenant_id,
-    room_id,
-    session_id,
-    user_id,
+    space_id,
+    episode_id,
+    identity_id,
     generation,
     status
 ) values (
     $1,
     $2,
     $3,
-    array[]::text[],
     $4,
     $5,
     $6,
@@ -383,19 +454,19 @@ insert into participants (
     1,
     'joining'
 )
-returning id, name, metadata, capabilities, tenant_id, room_id, session_id, user_id, updated_at, created_at, generation, status, joined_at, left_at, role, eligible_roles
+returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, identity_id, generation, status, role, joined_at, left_at, updated_at, created_at
 `
 
 type CreateLifecycleParticipantParams struct {
-	ID            pgtype.UUID `json:"id"`
-	Name          pgtype.Text `json:"name"`
-	Metadata      []byte      `json:"metadata"`
-	InitialRole   string      `json:"initial_role"`
-	EligibleRoles []string    `json:"eligible_roles"`
-	TenantID      pgtype.UUID `json:"tenant_id"`
-	RoomID        pgtype.UUID `json:"room_id"`
-	SessionID     pgtype.UUID `json:"session_id"`
-	UserID        pgtype.UUID `json:"user_id"`
+	ID           pgtype.UUID `json:"id"`
+	Name         pgtype.Text `json:"name"`
+	Metadata     []byte      `json:"metadata"`
+	Capabilities []string    `json:"capabilities"`
+	Role         string      `json:"role"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
+	IdentityID   pgtype.UUID `json:"identity_id"`
 }
 
 func (q *Queries) CreateLifecycleParticipant(ctx context.Context, arg CreateLifecycleParticipantParams) (Participant, error) {
@@ -403,12 +474,12 @@ func (q *Queries) CreateLifecycleParticipant(ctx context.Context, arg CreateLife
 		arg.ID,
 		arg.Name,
 		arg.Metadata,
-		arg.InitialRole,
-		arg.EligibleRoles,
+		arg.Capabilities,
+		arg.Role,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.UserID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.IdentityID,
 	)
 	var i Participant
 	err := row.Scan(
@@ -417,112 +488,25 @@ func (q *Queries) CreateLifecycleParticipant(ctx context.Context, arg CreateLife
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
-		&i.UserID,
-		&i.UpdatedAt,
-		&i.CreatedAt,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.IdentityID,
 		&i.Generation,
 		&i.Status,
+		&i.Role,
 		&i.JoinedAt,
 		&i.LeftAt,
-		&i.Role,
-		&i.EligibleRoles,
-	)
-	return i, err
-}
-
-const createLifecycleRoomSession = `-- name: CreateLifecycleRoomSession :one
-insert into room_sessions (
-    id,
-    status,
-    metadata,
-    room_id,
-    tenant_id,
-    created_by_user_id,
-    started_at,
-    host_exit_policy,
-    role_capabilities,
-    maximum_duration_seconds,
-    maximum_duration_ceiling_seconds,
-    deadline_at
-) select
-    $1,
-    'active',
-    $2,
-    rooms.id,
-    rooms.tenant_id,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8,
-    $9
-from rooms
-where
-    rooms.tenant_id = $10
-    and rooms.id = $11
-returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
-`
-
-type CreateLifecycleRoomSessionParams struct {
-	ID                            pgtype.UUID        `json:"id"`
-	Metadata                      []byte             `json:"metadata"`
-	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
-	StartedAt                     pgtype.Timestamptz `json:"started_at"`
-	HostExitPolicy                string             `json:"host_exit_policy"`
-	RoleCapabilities              []byte             `json:"role_capabilities"`
-	MaximumDurationSeconds        int32              `json:"maximum_duration_seconds"`
-	MaximumDurationCeilingSeconds int32              `json:"maximum_duration_ceiling_seconds"`
-	DeadlineAt                    pgtype.Timestamptz `json:"deadline_at"`
-	TenantID                      pgtype.UUID        `json:"tenant_id"`
-	RoomID                        pgtype.UUID        `json:"room_id"`
-}
-
-func (q *Queries) CreateLifecycleRoomSession(ctx context.Context, arg CreateLifecycleRoomSessionParams) (RoomSession, error) {
-	row := q.db.QueryRow(ctx, createLifecycleRoomSession,
-		arg.ID,
-		arg.Metadata,
-		arg.CreatedByUserID,
-		arg.StartedAt,
-		arg.HostExitPolicy,
-		arg.RoleCapabilities,
-		arg.MaximumDurationSeconds,
-		arg.MaximumDurationCeilingSeconds,
-		arg.DeadlineAt,
-		arg.TenantID,
-		arg.RoomID,
-	)
-	var i RoomSession
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.Metadata,
-		&i.RoomID,
-		&i.TenantID,
-		&i.CreatedByUserID,
-		&i.StartedAt,
-		&i.EndedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.HostExitPolicy,
-		&i.RoleCapabilities,
-		&i.MaximumDurationSeconds,
-		&i.MaximumDurationCeilingSeconds,
-		&i.DeadlineAt,
-		&i.DeadlineGeneration,
-		&i.WhiteboardRoleCapabilities,
-		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }
 
-const createSyncSessionControl = `-- name: CreateSyncSessionControl :one
-insert into sync_session_control (
+const createSyncEpisodeControl = `-- name: CreateSyncEpisodeControl :one
+insert into sync_episode_control (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     control_revision,
     folded_state,
     state_schema_version,
@@ -564,34 +548,34 @@ insert into sync_session_control (
     0,
     0
 )
-returning tenant_id, room_id, session_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, created_at, updated_at, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, host_participant_session_id
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
 `
 
-type CreateSyncSessionControlParams struct {
+type CreateSyncEpisodeControlParams struct {
 	TenantID           pgtype.UUID `json:"tenant_id"`
-	RoomID             pgtype.UUID `json:"room_id"`
-	SessionID          pgtype.UUID `json:"session_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	EpisodeID          pgtype.UUID `json:"episode_id"`
 	FoldedState        []byte      `json:"folded_state"`
 	StateSchemaVersion int32       `json:"state_schema_version"`
 	StateDigest        []byte      `json:"state_digest"`
 	SnapshotBytes      int64       `json:"snapshot_bytes"`
 }
 
-func (q *Queries) CreateSyncSessionControl(ctx context.Context, arg CreateSyncSessionControlParams) (SyncSessionControl, error) {
-	row := q.db.QueryRow(ctx, createSyncSessionControl,
+func (q *Queries) CreateSyncEpisodeControl(ctx context.Context, arg CreateSyncEpisodeControlParams) (SyncEpisodeControl, error) {
+	row := q.db.QueryRow(ctx, createSyncEpisodeControl,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.FoldedState,
 		arg.StateSchemaVersion,
 		arg.StateDigest,
 		arg.SnapshotBytes,
 	)
-	var i SyncSessionControl
+	var i SyncEpisodeControl
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ControlRevision,
 		&i.FoldedState,
 		&i.StateSchemaVersion,
@@ -610,8 +594,6 @@ func (q *Queries) CreateSyncSessionControl(ctx context.Context, arg CreateSyncSe
 		&i.LifecycleReservedIntentBytes,
 		&i.ReceiptCount,
 		&i.ReceiptBytes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.RetentionCheckpointRevision,
 		&i.RetentionCheckpointStateDigest,
 		&i.RetentionCheckpointEventCount,
@@ -634,7 +616,8 @@ func (q *Queries) CreateSyncSessionControl(ctx context.Context, arg CreateSyncSe
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
-		&i.HostParticipantSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -642,9 +625,9 @@ func (q *Queries) CreateSyncSessionControl(ctx context.Context, arg CreateSyncSe
 const createTenantEndPublicationFence = `-- name: CreateTenantEndPublicationFence :one
 insert into sync_publication_fences (
     tenant_id,
-    room_id,
-    session_id,
-    participant_session_id,
+    space_id,
+    episode_id,
+    participant_id,
     participant_generation,
     source,
     external_operation_id,
@@ -659,9 +642,9 @@ insert into sync_publication_fences (
     $7,
     now() + interval '5 minutes'
 )
-on conflict (tenant_id, session_id, participant_session_id, source) do update
+on conflict (tenant_id, episode_id, participant_id, source) do update
 set
-    room_id = excluded.room_id,
+    space_id = excluded.space_id,
     participant_generation = excluded.participant_generation,
     external_operation_id = excluded.external_operation_id,
     expires_at = excluded.expires_at,
@@ -672,9 +655,9 @@ returning external_operation_id
 
 type CreateTenantEndPublicationFenceParams struct {
 	TenantID              pgtype.UUID `json:"tenant_id"`
-	RoomID                pgtype.UUID `json:"room_id"`
-	SessionID             pgtype.UUID `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID `json:"participant_session_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
 	ParticipantGeneration int64       `json:"participant_generation"`
 	Source                string      `json:"source"`
 	ExternalOperationID   pgtype.UUID `json:"external_operation_id"`
@@ -683,9 +666,9 @@ type CreateTenantEndPublicationFenceParams struct {
 func (q *Queries) CreateTenantEndPublicationFence(ctx context.Context, arg CreateTenantEndPublicationFenceParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, createTenantEndPublicationFence,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 		arg.Source,
 		arg.ExternalOperationID,
@@ -698,13 +681,13 @@ func (q *Queries) CreateTenantEndPublicationFence(ctx context.Context, arg Creat
 const createTenantExternalOperation = `-- name: CreateTenantExternalOperation :one
 insert into sync_external_operations (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     external_operation_id,
     request_key,
     request_fingerprint,
     operation_name,
-    target_participant_session_id,
+    target_participant_id,
     target_participant_generation,
     recording_id,
     deadline_generation,
@@ -733,18 +716,18 @@ insert into sync_external_operations (
     $16,
     $17
 )
-returning tenant_id, room_id, session_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_session_id, actor_generation, target_participant_session_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at
+returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 `
 
 type CreateTenantExternalOperationParams struct {
 	TenantID                    pgtype.UUID `json:"tenant_id"`
-	RoomID                      pgtype.UUID `json:"room_id"`
-	SessionID                   pgtype.UUID `json:"session_id"`
+	SpaceID                     pgtype.UUID `json:"space_id"`
+	EpisodeID                   pgtype.UUID `json:"episode_id"`
 	ExternalOperationID         pgtype.UUID `json:"external_operation_id"`
 	RequestKey                  string      `json:"request_key"`
 	RequestFingerprint          []byte      `json:"request_fingerprint"`
 	OperationName               string      `json:"operation_name"`
-	TargetParticipantSessionID  pgtype.UUID `json:"target_participant_session_id"`
+	TargetParticipantID         pgtype.UUID `json:"target_participant_id"`
 	TargetParticipantGeneration pgtype.Int8 `json:"target_participant_generation"`
 	RecordingID                 pgtype.UUID `json:"recording_id"`
 	DeadlineGeneration          pgtype.Int8 `json:"deadline_generation"`
@@ -759,13 +742,13 @@ type CreateTenantExternalOperationParams struct {
 func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateTenantExternalOperationParams) (SyncExternalOperation, error) {
 	row := q.db.QueryRow(ctx, createTenantExternalOperation,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.ExternalOperationID,
 		arg.RequestKey,
 		arg.RequestFingerprint,
 		arg.OperationName,
-		arg.TargetParticipantSessionID,
+		arg.TargetParticipantID,
 		arg.TargetParticipantGeneration,
 		arg.RecordingID,
 		arg.DeadlineGeneration,
@@ -779,16 +762,16 @@ func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateT
 	var i SyncExternalOperation
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ExternalOperationID,
 		&i.ParentExternalOperationID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.OperationName,
-		&i.ActorParticipantSessionID,
+		&i.ActorParticipantID,
 		&i.ActorGeneration,
-		&i.TargetParticipantSessionID,
+		&i.TargetParticipantID,
 		&i.TargetParticipantGeneration,
 		&i.Source,
 		&i.RecordingID,
@@ -807,6 +790,8 @@ func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateT
 		&i.AppliedRevision,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
 	)
 	return i, err
 }
@@ -816,54 +801,54 @@ update sync_external_operations
 set
     status = 'failed',
     fence_active = false,
-    last_error_code = 'session_ended',
+    last_error_code = 'episode_ended',
     completed_at = now()
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
-    and operation_name in ('tenant_transfer_host', 'tenant_set_deadline')
+    and space_id = $2
+    and episode_id = $3
+    and operation_name in ('tenant_assign_roles', 'tenant_set_deadline')
     and status = 'pending'
 `
 
 type FailPendingTenantControlOperationsForEndParams struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
 func (q *Queries) FailPendingTenantControlOperationsForEnd(ctx context.Context, arg FailPendingTenantControlOperationsForEndParams) (int64, error) {
-	result, err := q.db.Exec(ctx, failPendingTenantControlOperationsForEnd, arg.TenantID, arg.RoomID, arg.SessionID)
+	result, err := q.db.Exec(ctx, failPendingTenantControlOperationsForEnd, arg.TenantID, arg.SpaceID, arg.EpisodeID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const getSessionCreateRequest = `-- name: GetSessionCreateRequest :one
-select tenant_id, room_id, request_key, request_fingerprint, session_id, created_at
-from session_create_requests
+const getEpisodeCreateRequest = `-- name: GetEpisodeCreateRequest :one
+select tenant_id, space_id, request_key, request_fingerprint, episode_id, created_at
+from episode_create_requests
 where
     tenant_id = $1
-    and room_id = $2
+    and space_id = $2
     and request_key = $3
 `
 
-type GetSessionCreateRequestParams struct {
+type GetEpisodeCreateRequestParams struct {
 	TenantID   pgtype.UUID `json:"tenant_id"`
-	RoomID     pgtype.UUID `json:"room_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
 	RequestKey string      `json:"request_key"`
 }
 
-func (q *Queries) GetSessionCreateRequest(ctx context.Context, arg GetSessionCreateRequestParams) (SessionCreateRequest, error) {
-	row := q.db.QueryRow(ctx, getSessionCreateRequest, arg.TenantID, arg.RoomID, arg.RequestKey)
-	var i SessionCreateRequest
+func (q *Queries) GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error) {
+	row := q.db.QueryRow(ctx, getEpisodeCreateRequest, arg.TenantID, arg.SpaceID, arg.RequestKey)
+	var i EpisodeCreateRequest
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
+		&i.SpaceID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -872,38 +857,38 @@ func (q *Queries) GetSessionCreateRequest(ctx context.Context, arg GetSessionCre
 const getSyncTokenSubject = `-- name: GetSyncTokenSubject :one
 select
     participants.tenant_id,
-    participants.room_id,
-    participants.session_id,
-    participants.id as participant_session_id,
+    participants.space_id,
+    participants.episode_id,
+    participants.id as participant_id,
     participants.generation,
     participants.name,
-    participants.role as initial_role,
-    participants.eligible_roles,
+    participants.role,
+    participants.capabilities,
     sync_lifecycle_intents.lifecycle_intent_id as admission_lifecycle_intent_id
 from participants
-join room_sessions on
-    room_sessions.tenant_id = participants.tenant_id
-    and room_sessions.room_id = participants.room_id
-    and room_sessions.id = participants.session_id
+join episodes on
+    episodes.tenant_id = participants.tenant_id
+    and episodes.space_id = participants.space_id
+    and episodes.id = participants.episode_id
 join sync_lifecycle_intents on
     sync_lifecycle_intents.tenant_id = participants.tenant_id
-    and sync_lifecycle_intents.room_id = participants.room_id
-    and sync_lifecycle_intents.session_id = participants.session_id
-    and sync_lifecycle_intents.participant_session_id = participants.id
-    and sync_lifecycle_intents.participant_session_generation = participants.generation
+    and sync_lifecycle_intents.space_id = participants.space_id
+    and sync_lifecycle_intents.episode_id = participants.episode_id
+    and sync_lifecycle_intents.participant_id = participants.id
+    and sync_lifecycle_intents.participant_generation = participants.generation
     and sync_lifecycle_intents.intent_name = 'participant_joined'
 left join sync_admission_requests on
     sync_admission_requests.tenant_id = participants.tenant_id
-    and sync_admission_requests.room_id = participants.room_id
-    and sync_admission_requests.session_id = participants.session_id
-    and sync_admission_requests.participant_session_id = participants.id
+    and sync_admission_requests.space_id = participants.space_id
+    and sync_admission_requests.episode_id = participants.episode_id
+    and sync_admission_requests.participant_id = participants.id
 where
     participants.tenant_id = $1
-    and participants.room_id = $2
-    and participants.session_id = $3
+    and participants.space_id = $2
+    and participants.episode_id = $3
     and participants.id = $4
     and participants.status = 'active'
-    and room_sessions.status = 'active'
+    and episodes.status = 'active'
     and sync_lifecycle_intents.status = 'applied'
     and sync_lifecycle_intents.applied_event_id is not null
     and (
@@ -915,41 +900,41 @@ limit 1
 `
 
 type GetSyncTokenSubjectParams struct {
-	TenantID             pgtype.UUID `json:"tenant_id"`
-	RoomID               pgtype.UUID `json:"room_id"`
-	SessionID            pgtype.UUID `json:"session_id"`
-	ParticipantSessionID pgtype.UUID `json:"participant_session_id"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
 }
 
 type GetSyncTokenSubjectRow struct {
 	TenantID                   pgtype.UUID `json:"tenant_id"`
-	RoomID                     pgtype.UUID `json:"room_id"`
-	SessionID                  pgtype.UUID `json:"session_id"`
-	ParticipantSessionID       pgtype.UUID `json:"participant_session_id"`
+	SpaceID                    pgtype.UUID `json:"space_id"`
+	EpisodeID                  pgtype.UUID `json:"episode_id"`
+	ParticipantID              pgtype.UUID `json:"participant_id"`
 	Generation                 int64       `json:"generation"`
 	Name                       pgtype.Text `json:"name"`
-	InitialRole                string      `json:"initial_role"`
-	EligibleRoles              []string    `json:"eligible_roles"`
+	Role                       string      `json:"role"`
+	Capabilities               []string    `json:"capabilities"`
 	AdmissionLifecycleIntentID pgtype.UUID `json:"admission_lifecycle_intent_id"`
 }
 
 func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubjectParams) (GetSyncTokenSubjectRow, error) {
 	row := q.db.QueryRow(ctx, getSyncTokenSubject,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 	)
 	var i GetSyncTokenSubjectRow
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
-		&i.ParticipantSessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.ParticipantID,
 		&i.Generation,
 		&i.Name,
-		&i.InitialRole,
-		&i.EligibleRoles,
+		&i.Role,
+		&i.Capabilities,
 		&i.AdmissionLifecycleIntentID,
 	)
 	return i, err
@@ -960,8 +945,8 @@ select participants.id, participants.generation
 from participants
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
+    and space_id = $2
+    and episode_id = $3
     and status in ('active', 'leaving')
 order by participants.id
 for update
@@ -969,8 +954,8 @@ for update
 
 type LockActiveParticipantsForTenantEndParams struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
 type LockActiveParticipantsForTenantEndRow struct {
@@ -979,7 +964,7 @@ type LockActiveParticipantsForTenantEndRow struct {
 }
 
 func (q *Queries) LockActiveParticipantsForTenantEnd(ctx context.Context, arg LockActiveParticipantsForTenantEndParams) ([]LockActiveParticipantsForTenantEndRow, error) {
-	rows, err := q.db.Query(ctx, lockActiveParticipantsForTenantEnd, arg.TenantID, arg.RoomID, arg.SessionID)
+	rows, err := q.db.Query(ctx, lockActiveParticipantsForTenantEnd, arg.TenantID, arg.SpaceID, arg.EpisodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -1003,62 +988,61 @@ select recording_id
 from sync_recordings
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
+    and space_id = $2
+    and episode_id = $3
     and status in ('starting', 'recording', 'stopping')
 for update
 `
 
 type LockActiveRecordingForTenantEndParams struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
 func (q *Queries) LockActiveRecordingForTenantEnd(ctx context.Context, arg LockActiveRecordingForTenantEndParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, lockActiveRecordingForTenantEnd, arg.TenantID, arg.RoomID, arg.SessionID)
+	row := q.db.QueryRow(ctx, lockActiveRecordingForTenantEnd, arg.TenantID, arg.SpaceID, arg.EpisodeID)
 	var recording_id pgtype.UUID
 	err := row.Scan(&recording_id)
 	return recording_id, err
 }
 
 const lockAdmissionRequestForParticipant = `-- name: LockAdmissionRequestForParticipant :one
-select tenant_id, room_id, session_id, admission_request_id, request_key, request_fingerprint, participant_session_id, display_name, initial_role, eligible_roles, status, decision_external_operation_id, requested_at, expires_at, completed_at
+select tenant_id, space_id, episode_id, admission_request_id, request_key, request_fingerprint, participant_id, display_name, role, status, decision_external_operation_id, requested_at, expires_at, completed_at
 from sync_admission_requests
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
-    and participant_session_id = $4
+    and space_id = $2
+    and episode_id = $3
+    and participant_id = $4
 for update
 `
 
 type LockAdmissionRequestForParticipantParams struct {
-	TenantID             pgtype.UUID `json:"tenant_id"`
-	RoomID               pgtype.UUID `json:"room_id"`
-	SessionID            pgtype.UUID `json:"session_id"`
-	ParticipantSessionID pgtype.UUID `json:"participant_session_id"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
 }
 
 func (q *Queries) LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error) {
 	row := q.db.QueryRow(ctx, lockAdmissionRequestForParticipant,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 	)
 	var i SyncAdmissionRequest
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.AdmissionRequestID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
-		&i.ParticipantSessionID,
+		&i.ParticipantID,
 		&i.DisplayName,
-		&i.InitialRole,
-		&i.EligibleRoles,
+		&i.Role,
 		&i.Status,
 		&i.DecisionExternalOperationID,
 		&i.RequestedAt,
@@ -1068,147 +1052,74 @@ func (q *Queries) LockAdmissionRequestForParticipant(ctx context.Context, arg Lo
 	return i, err
 }
 
-const lockDeadlineSessionForUpdate = `-- name: LockDeadlineSessionForUpdate :one
-select id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
-from room_sessions
+const lockDeadlineEpisodeForUpdate = `-- name: LockDeadlineEpisodeForUpdate :one
+select id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
+from episodes
 where
     tenant_id = $1
-    and room_id = $2
+    and space_id = $2
     and id = $3
 for update
 `
 
-type LockDeadlineSessionForUpdateParams struct {
+type LockDeadlineEpisodeForUpdateParams struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) LockDeadlineSessionForUpdate(ctx context.Context, arg LockDeadlineSessionForUpdateParams) (RoomSession, error) {
-	row := q.db.QueryRow(ctx, lockDeadlineSessionForUpdate, arg.TenantID, arg.RoomID, arg.SessionID)
-	var i RoomSession
+func (q *Queries) LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error) {
+	row := q.db.QueryRow(ctx, lockDeadlineEpisodeForUpdate, arg.TenantID, arg.SpaceID, arg.EpisodeID)
+	var i Episode
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
 		&i.Metadata,
-		&i.RoomID,
+		&i.SpaceID,
 		&i.TenantID,
 		&i.CreatedByUserID,
 		&i.StartedAt,
 		&i.EndedAt,
-		&i.UpdatedAt,
-		&i.CreatedAt,
-		&i.HostExitPolicy,
-		&i.RoleCapabilities,
-		&i.MaximumDurationSeconds,
-		&i.MaximumDurationCeilingSeconds,
+		&i.ConfigSnapshot,
+		&i.EndReason,
 		&i.DeadlineAt,
 		&i.DeadlineGeneration,
-		&i.WhiteboardRoleCapabilities,
-		&i.RoomActionRoleCapabilities,
-	)
-	return i, err
-}
-
-const lockHostRecoveryTarget = `-- name: LockHostRecoveryTarget :one
-select participants.id, participants.name, participants.metadata, participants.capabilities, participants.tenant_id, participants.room_id, participants.session_id, participants.user_id, participants.updated_at, participants.created_at, participants.generation, participants.status, participants.joined_at, participants.left_at, participants.role, participants.eligible_roles
-from participants
-join room_sessions on
-    room_sessions.tenant_id = participants.tenant_id
-    and room_sessions.room_id = participants.room_id
-    and room_sessions.id = participants.session_id
-where
-    participants.tenant_id = $1
-    and participants.room_id = $2
-    and participants.session_id = $3
-    and participants.id = $4
-    and participants.generation = $5
-    and participants.status = 'active'
-    and 'host' = any(participants.eligible_roles)
-    and room_sessions.status = 'active'
-for update of participants
-`
-
-type LockHostRecoveryTargetParams struct {
-	TenantID              pgtype.UUID `json:"tenant_id"`
-	RoomID                pgtype.UUID `json:"room_id"`
-	SessionID             pgtype.UUID `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID `json:"participant_session_id"`
-	ParticipantGeneration int64       `json:"participant_generation"`
-}
-
-func (q *Queries) LockHostRecoveryTarget(ctx context.Context, arg LockHostRecoveryTargetParams) (Participant, error) {
-	row := q.db.QueryRow(ctx, lockHostRecoveryTarget,
-		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
-		arg.ParticipantGeneration,
-	)
-	var i Participant
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Metadata,
-		&i.Capabilities,
-		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
-		&i.UserID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.Generation,
-		&i.Status,
-		&i.JoinedAt,
-		&i.LeftAt,
-		&i.Role,
-		&i.EligibleRoles,
 	)
 	return i, err
 }
 
-const lockLifecycleIntentForParticipantTransitionForUpdate = `-- name: LockLifecycleIntentForParticipantTransitionForUpdate :one
-select tenant_id, room_id, session_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_session_id, participant_session_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, created_at, completed_at, next_attempt_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
+const lockEpisodeEndLifecycleIntentForUpdate = `-- name: LockEpisodeEndLifecycleIntentForUpdate :one
+select tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
 from sync_lifecycle_intents
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
-    and intent_name = $4
-    and participant_session_id = $5
-    and participant_session_generation = $6
+    and space_id = $2
+    and episode_id = $3
+    and intent_name = 'episode_ended'
 for update
 `
 
-type LockLifecycleIntentForParticipantTransitionForUpdateParams struct {
-	TenantID                     pgtype.UUID `json:"tenant_id"`
-	RoomID                       pgtype.UUID `json:"room_id"`
-	SessionID                    pgtype.UUID `json:"session_id"`
-	IntentName                   string      `json:"intent_name"`
-	ParticipantSessionID         pgtype.UUID `json:"participant_session_id"`
-	ParticipantSessionGeneration pgtype.Int8 `json:"participant_session_generation"`
+type LockEpisodeEndLifecycleIntentForUpdateParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg LockLifecycleIntentForParticipantTransitionForUpdateParams) (SyncLifecycleIntent, error) {
-	row := q.db.QueryRow(ctx, lockLifecycleIntentForParticipantTransitionForUpdate,
-		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.IntentName,
-		arg.ParticipantSessionID,
-		arg.ParticipantSessionGeneration,
-	)
+func (q *Queries) LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg LockEpisodeEndLifecycleIntentForUpdateParams) (SyncLifecycleIntent, error) {
+	row := q.db.QueryRow(ctx, lockEpisodeEndLifecycleIntentForUpdate, arg.TenantID, arg.SpaceID, arg.EpisodeID)
 	var i SyncLifecycleIntent
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.LifecycleIntentID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.IntentName,
-		&i.ParticipantSessionID,
-		&i.ParticipantSessionGeneration,
+		&i.ParticipantID,
+		&i.ParticipantGeneration,
 		&i.Payload,
 		&i.Status,
 		&i.TerminalReason,
@@ -1216,9 +1127,107 @@ func (q *Queries) LockLifecycleIntentForParticipantTransitionForUpdate(ctx conte
 		&i.AppliedRevision,
 		&i.AttemptCount,
 		&i.LastErrorCode,
+		&i.NextAttemptAt,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.JourneyID,
+		&i.ParentJourneyEventID,
+		&i.ProducingTraceID,
+		&i.ProducingSpanID,
+	)
+	return i, err
+}
+
+const lockLifecycleEpisodeForUpdate = `-- name: LockLifecycleEpisodeForUpdate :one
+select id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
+from episodes
+where
+    tenant_id = $1
+    and space_id = $2
+    and id = $3
+for update
+`
+
+type LockLifecycleEpisodeForUpdateParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+}
+
+func (q *Queries) LockLifecycleEpisodeForUpdate(ctx context.Context, arg LockLifecycleEpisodeForUpdateParams) (Episode, error) {
+	row := q.db.QueryRow(ctx, lockLifecycleEpisodeForUpdate, arg.TenantID, arg.SpaceID, arg.EpisodeID)
+	var i Episode
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.Metadata,
+		&i.SpaceID,
+		&i.TenantID,
+		&i.CreatedByUserID,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ConfigSnapshot,
+		&i.EndReason,
+		&i.DeadlineAt,
+		&i.DeadlineGeneration,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockLifecycleIntentForParticipantTransitionForUpdate = `-- name: LockLifecycleIntentForParticipantTransitionForUpdate :one
+select tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
+from sync_lifecycle_intents
+where
+    tenant_id = $1
+    and space_id = $2
+    and episode_id = $3
+    and intent_name = $4
+    and participant_id = $5
+    and participant_generation = $6
+for update
+`
+
+type LockLifecycleIntentForParticipantTransitionForUpdateParams struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	IntentName            string      `json:"intent_name"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration pgtype.Int8 `json:"participant_generation"`
+}
+
+func (q *Queries) LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg LockLifecycleIntentForParticipantTransitionForUpdateParams) (SyncLifecycleIntent, error) {
+	row := q.db.QueryRow(ctx, lockLifecycleIntentForParticipantTransitionForUpdate,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.IntentName,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+	)
+	var i SyncLifecycleIntent
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.LifecycleIntentID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.IntentName,
+		&i.ParticipantID,
+		&i.ParticipantGeneration,
+		&i.Payload,
+		&i.Status,
+		&i.TerminalReason,
+		&i.AppliedEventID,
+		&i.AppliedRevision,
+		&i.AttemptCount,
+		&i.LastErrorCode,
 		&i.NextAttemptAt,
+		&i.CreatedAt,
+		&i.CompletedAt,
 		&i.JourneyID,
 		&i.ParentJourneyEventID,
 		&i.ProducingTraceID,
@@ -1228,12 +1237,12 @@ func (q *Queries) LockLifecycleIntentForParticipantTransitionForUpdate(ctx conte
 }
 
 const lockLifecycleIntentForRequestForUpdate = `-- name: LockLifecycleIntentForRequestForUpdate :one
-select tenant_id, room_id, session_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_session_id, participant_session_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, created_at, completed_at, next_attempt_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
+select tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
 from sync_lifecycle_intents
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
+    and space_id = $2
+    and episode_id = $3
     and intent_name = $4
     and request_key = $5
 for update
@@ -1241,8 +1250,8 @@ for update
 
 type LockLifecycleIntentForRequestForUpdateParams struct {
 	TenantID   pgtype.UUID `json:"tenant_id"`
-	RoomID     pgtype.UUID `json:"room_id"`
-	SessionID  pgtype.UUID `json:"session_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
+	EpisodeID  pgtype.UUID `json:"episode_id"`
 	IntentName string      `json:"intent_name"`
 	RequestKey string      `json:"request_key"`
 }
@@ -1250,22 +1259,22 @@ type LockLifecycleIntentForRequestForUpdateParams struct {
 func (q *Queries) LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error) {
 	row := q.db.QueryRow(ctx, lockLifecycleIntentForRequestForUpdate,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.IntentName,
 		arg.RequestKey,
 	)
 	var i SyncLifecycleIntent
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.LifecycleIntentID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.IntentName,
-		&i.ParticipantSessionID,
-		&i.ParticipantSessionGeneration,
+		&i.ParticipantID,
+		&i.ParticipantGeneration,
 		&i.Payload,
 		&i.Status,
 		&i.TerminalReason,
@@ -1273,9 +1282,9 @@ func (q *Queries) LockLifecycleIntentForRequestForUpdate(ctx context.Context, ar
 		&i.AppliedRevision,
 		&i.AttemptCount,
 		&i.LastErrorCode,
+		&i.NextAttemptAt,
 		&i.CreatedAt,
 		&i.CompletedAt,
-		&i.NextAttemptAt,
 		&i.JourneyID,
 		&i.ParentJourneyEventID,
 		&i.ProducingTraceID,
@@ -1285,29 +1294,29 @@ func (q *Queries) LockLifecycleIntentForRequestForUpdate(ctx context.Context, ar
 }
 
 const lockLifecycleParticipantForUpdate = `-- name: LockLifecycleParticipantForUpdate :one
-select id, name, metadata, capabilities, tenant_id, room_id, session_id, user_id, updated_at, created_at, generation, status, joined_at, left_at, role, eligible_roles
+select id, name, metadata, capabilities, tenant_id, space_id, episode_id, identity_id, generation, status, role, joined_at, left_at, updated_at, created_at
 from participants
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
+    and space_id = $2
+    and episode_id = $3
     and id = $4
 for update
 `
 
 type LockLifecycleParticipantForUpdateParams struct {
-	TenantID             pgtype.UUID `json:"tenant_id"`
-	RoomID               pgtype.UUID `json:"room_id"`
-	SessionID            pgtype.UUID `json:"session_id"`
-	ParticipantSessionID pgtype.UUID `json:"participant_session_id"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
 }
 
 func (q *Queries) LockLifecycleParticipantForUpdate(ctx context.Context, arg LockLifecycleParticipantForUpdateParams) (Participant, error) {
 	row := q.db.QueryRow(ctx, lockLifecycleParticipantForUpdate,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 	)
 	var i Participant
 	err := row.Scan(
@@ -1316,70 +1325,27 @@ func (q *Queries) LockLifecycleParticipantForUpdate(ctx context.Context, arg Loc
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
-		&i.UserID,
-		&i.UpdatedAt,
-		&i.CreatedAt,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.IdentityID,
 		&i.Generation,
 		&i.Status,
+		&i.Role,
 		&i.JoinedAt,
 		&i.LeftAt,
-		&i.Role,
-		&i.EligibleRoles,
-	)
-	return i, err
-}
-
-const lockLifecycleRoomSessionForUpdate = `-- name: LockLifecycleRoomSessionForUpdate :one
-select id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
-from room_sessions
-where
-    tenant_id = $1
-    and room_id = $2
-    and id = $3
-for update
-`
-
-type LockLifecycleRoomSessionForUpdateParams struct {
-	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
-}
-
-func (q *Queries) LockLifecycleRoomSessionForUpdate(ctx context.Context, arg LockLifecycleRoomSessionForUpdateParams) (RoomSession, error) {
-	row := q.db.QueryRow(ctx, lockLifecycleRoomSessionForUpdate, arg.TenantID, arg.RoomID, arg.SessionID)
-	var i RoomSession
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.Metadata,
-		&i.RoomID,
-		&i.TenantID,
-		&i.CreatedByUserID,
-		&i.StartedAt,
-		&i.EndedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.HostExitPolicy,
-		&i.RoleCapabilities,
-		&i.MaximumDurationSeconds,
-		&i.MaximumDurationCeilingSeconds,
-		&i.DeadlineAt,
-		&i.DeadlineGeneration,
-		&i.WhiteboardRoleCapabilities,
-		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }
 
 const lockPendingDeadlineOperation = `-- name: LockPendingDeadlineOperation :one
-select tenant_id, room_id, session_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_session_id, actor_generation, target_participant_session_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at
+select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 from sync_external_operations
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
+    and space_id = $2
+    and episode_id = $3
     and operation_name = 'tenant_set_deadline'
     and status = 'pending'
 order by created_at, external_operation_id
@@ -1389,25 +1355,25 @@ for update
 
 type LockPendingDeadlineOperationParams struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
 func (q *Queries) LockPendingDeadlineOperation(ctx context.Context, arg LockPendingDeadlineOperationParams) (SyncExternalOperation, error) {
-	row := q.db.QueryRow(ctx, lockPendingDeadlineOperation, arg.TenantID, arg.RoomID, arg.SessionID)
+	row := q.db.QueryRow(ctx, lockPendingDeadlineOperation, arg.TenantID, arg.SpaceID, arg.EpisodeID)
 	var i SyncExternalOperation
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ExternalOperationID,
 		&i.ParentExternalOperationID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.OperationName,
-		&i.ActorParticipantSessionID,
+		&i.ActorParticipantID,
 		&i.ActorGeneration,
-		&i.TargetParticipantSessionID,
+		&i.TargetParticipantID,
 		&i.TargetParticipantGeneration,
 		&i.Source,
 		&i.RecordingID,
@@ -1426,81 +1392,35 @@ func (q *Queries) LockPendingDeadlineOperation(ctx context.Context, arg LockPend
 		&i.AppliedRevision,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
 	)
 	return i, err
 }
 
-const lockSessionEndLifecycleIntentForUpdate = `-- name: LockSessionEndLifecycleIntentForUpdate :one
-select tenant_id, room_id, session_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_session_id, participant_session_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, created_at, completed_at, next_attempt_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
-from sync_lifecycle_intents
+const lockSyncEpisodeControlForUpdate = `-- name: LockSyncEpisodeControlForUpdate :one
+select tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+from sync_episode_control
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
-    and intent_name = 'session_ended'
+    and space_id = $2
+    and episode_id = $3
 for update
 `
 
-type LockSessionEndLifecycleIntentForUpdateParams struct {
+type LockSyncEpisodeControlForUpdateParams struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) LockSessionEndLifecycleIntentForUpdate(ctx context.Context, arg LockSessionEndLifecycleIntentForUpdateParams) (SyncLifecycleIntent, error) {
-	row := q.db.QueryRow(ctx, lockSessionEndLifecycleIntentForUpdate, arg.TenantID, arg.RoomID, arg.SessionID)
-	var i SyncLifecycleIntent
+func (q *Queries) LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockSyncEpisodeControlForUpdateParams) (SyncEpisodeControl, error) {
+	row := q.db.QueryRow(ctx, lockSyncEpisodeControlForUpdate, arg.TenantID, arg.SpaceID, arg.EpisodeID)
+	var i SyncEpisodeControl
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
-		&i.LifecycleIntentID,
-		&i.RequestKey,
-		&i.RequestFingerprint,
-		&i.IntentName,
-		&i.ParticipantSessionID,
-		&i.ParticipantSessionGeneration,
-		&i.Payload,
-		&i.Status,
-		&i.TerminalReason,
-		&i.AppliedEventID,
-		&i.AppliedRevision,
-		&i.AttemptCount,
-		&i.LastErrorCode,
-		&i.CreatedAt,
-		&i.CompletedAt,
-		&i.NextAttemptAt,
-		&i.JourneyID,
-		&i.ParentJourneyEventID,
-		&i.ProducingTraceID,
-		&i.ProducingSpanID,
-	)
-	return i, err
-}
-
-const lockSyncSessionControlForUpdate = `-- name: LockSyncSessionControlForUpdate :one
-select tenant_id, room_id, session_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, created_at, updated_at, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, host_participant_session_id
-from sync_session_control
-where
-    tenant_id = $1
-    and room_id = $2
-    and session_id = $3
-for update
-`
-
-type LockSyncSessionControlForUpdateParams struct {
-	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
-}
-
-func (q *Queries) LockSyncSessionControlForUpdate(ctx context.Context, arg LockSyncSessionControlForUpdateParams) (SyncSessionControl, error) {
-	row := q.db.QueryRow(ctx, lockSyncSessionControlForUpdate, arg.TenantID, arg.RoomID, arg.SessionID)
-	var i SyncSessionControl
-	err := row.Scan(
-		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ControlRevision,
 		&i.FoldedState,
 		&i.StateSchemaVersion,
@@ -1519,8 +1439,6 @@ func (q *Queries) LockSyncSessionControlForUpdate(ctx context.Context, arg LockS
 		&i.LifecycleReservedIntentBytes,
 		&i.ReceiptCount,
 		&i.ReceiptBytes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.RetentionCheckpointRevision,
 		&i.RetentionCheckpointStateDigest,
 		&i.RetentionCheckpointEventCount,
@@ -1543,18 +1461,19 @@ func (q *Queries) LockSyncSessionControlForUpdate(ctx context.Context, arg LockS
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
-		&i.HostParticipantSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const lockTenantExternalOperationForRequest = `-- name: LockTenantExternalOperationForRequest :one
-select tenant_id, room_id, session_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_session_id, actor_generation, target_participant_session_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at
+select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 from sync_external_operations
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
+    and space_id = $2
+    and episode_id = $3
     and operation_name = $4
     and request_key = $5
 for update
@@ -1562,8 +1481,8 @@ for update
 
 type LockTenantExternalOperationForRequestParams struct {
 	TenantID      pgtype.UUID `json:"tenant_id"`
-	RoomID        pgtype.UUID `json:"room_id"`
-	SessionID     pgtype.UUID `json:"session_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
 	OperationName string      `json:"operation_name"`
 	RequestKey    string      `json:"request_key"`
 }
@@ -1571,24 +1490,24 @@ type LockTenantExternalOperationForRequestParams struct {
 func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error) {
 	row := q.db.QueryRow(ctx, lockTenantExternalOperationForRequest,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.OperationName,
 		arg.RequestKey,
 	)
 	var i SyncExternalOperation
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ExternalOperationID,
 		&i.ParentExternalOperationID,
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.OperationName,
-		&i.ActorParticipantSessionID,
+		&i.ActorParticipantID,
 		&i.ActorGeneration,
-		&i.TargetParticipantSessionID,
+		&i.TargetParticipantID,
 		&i.TargetParticipantGeneration,
 		&i.Source,
 		&i.RecordingID,
@@ -1607,6 +1526,49 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 		&i.AppliedRevision,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
+	)
+	return i, err
+}
+
+const markLifecycleEpisodeEnding = `-- name: MarkLifecycleEpisodeEnding :one
+update episodes
+set
+    status = 'ending',
+    updated_at = now()
+where
+    tenant_id = $1
+    and space_id = $2
+    and id = $3
+    and status = 'active'
+returning id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
+`
+
+type MarkLifecycleEpisodeEndingParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+}
+
+func (q *Queries) MarkLifecycleEpisodeEnding(ctx context.Context, arg MarkLifecycleEpisodeEndingParams) (Episode, error) {
+	row := q.db.QueryRow(ctx, markLifecycleEpisodeEnding, arg.TenantID, arg.SpaceID, arg.EpisodeID)
+	var i Episode
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.Metadata,
+		&i.SpaceID,
+		&i.TenantID,
+		&i.CreatedByUserID,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ConfigSnapshot,
+		&i.EndReason,
+		&i.DeadlineAt,
+		&i.DeadlineGeneration,
+		&i.UpdatedAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -1618,29 +1580,29 @@ set
     updated_at = now()
 where
     tenant_id = $1
-    and room_id = $2
-    and session_id = $3
+    and space_id = $2
+    and episode_id = $3
     and id = $4
     and generation = $5
     and status = 'active'
-returning id, name, metadata, capabilities, tenant_id, room_id, session_id, user_id, updated_at, created_at, generation, status, joined_at, left_at, role, eligible_roles
+returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, identity_id, generation, status, role, joined_at, left_at, updated_at, created_at
 `
 
 type MarkLifecycleParticipantLeavingParams struct {
-	TenantID                     pgtype.UUID `json:"tenant_id"`
-	RoomID                       pgtype.UUID `json:"room_id"`
-	SessionID                    pgtype.UUID `json:"session_id"`
-	ParticipantSessionID         pgtype.UUID `json:"participant_session_id"`
-	ParticipantSessionGeneration int64       `json:"participant_session_generation"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
 }
 
 func (q *Queries) MarkLifecycleParticipantLeaving(ctx context.Context, arg MarkLifecycleParticipantLeavingParams) (Participant, error) {
 	row := q.db.QueryRow(ctx, markLifecycleParticipantLeaving,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
-		arg.ParticipantSessionGeneration,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
 	)
 	var i Participant
 	err := row.Scan(
@@ -1649,111 +1611,193 @@ func (q *Queries) MarkLifecycleParticipantLeaving(ctx context.Context, arg MarkL
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
-		&i.UserID,
-		&i.UpdatedAt,
-		&i.CreatedAt,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.IdentityID,
 		&i.Generation,
 		&i.Status,
+		&i.Role,
 		&i.JoinedAt,
 		&i.LeftAt,
-		&i.Role,
-		&i.EligibleRoles,
-	)
-	return i, err
-}
-
-const markLifecycleSessionEnding = `-- name: MarkLifecycleSessionEnding :one
-update room_sessions
-set
-    status = 'ending',
-    updated_at = now()
-where
-    tenant_id = $1
-    and room_id = $2
-    and id = $3
-    and status = 'active'
-returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
-`
-
-type MarkLifecycleSessionEndingParams struct {
-	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
-}
-
-func (q *Queries) MarkLifecycleSessionEnding(ctx context.Context, arg MarkLifecycleSessionEndingParams) (RoomSession, error) {
-	row := q.db.QueryRow(ctx, markLifecycleSessionEnding, arg.TenantID, arg.RoomID, arg.SessionID)
-	var i RoomSession
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.Metadata,
-		&i.RoomID,
-		&i.TenantID,
-		&i.CreatedByUserID,
-		&i.StartedAt,
-		&i.EndedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.HostExitPolicy,
-		&i.RoleCapabilities,
-		&i.MaximumDurationSeconds,
-		&i.MaximumDurationCeilingSeconds,
-		&i.DeadlineAt,
-		&i.DeadlineGeneration,
-		&i.WhiteboardRoleCapabilities,
-		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }
 
-const markTenantExternalSessionEnding = `-- name: MarkTenantExternalSessionEnding :one
-update room_sessions
+const markTenantExternalEpisodeEnding = `-- name: MarkTenantExternalEpisodeEnding :one
+update episodes
 set status = 'ending', updated_at = now()
 where
     tenant_id = $1
-    and room_id = $2
+    and space_id = $2
     and id = $3
     and status = 'active'
-returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
+returning id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
 `
 
-type MarkTenantExternalSessionEndingParams struct {
+type MarkTenantExternalEpisodeEndingParams struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
-	RoomID    pgtype.UUID `json:"room_id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) MarkTenantExternalSessionEnding(ctx context.Context, arg MarkTenantExternalSessionEndingParams) (RoomSession, error) {
-	row := q.db.QueryRow(ctx, markTenantExternalSessionEnding, arg.TenantID, arg.RoomID, arg.SessionID)
-	var i RoomSession
+func (q *Queries) MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkTenantExternalEpisodeEndingParams) (Episode, error) {
+	row := q.db.QueryRow(ctx, markTenantExternalEpisodeEnding, arg.TenantID, arg.SpaceID, arg.EpisodeID)
+	var i Episode
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
 		&i.Metadata,
-		&i.RoomID,
+		&i.SpaceID,
 		&i.TenantID,
 		&i.CreatedByUserID,
 		&i.StartedAt,
 		&i.EndedAt,
-		&i.UpdatedAt,
-		&i.CreatedAt,
-		&i.HostExitPolicy,
-		&i.RoleCapabilities,
-		&i.MaximumDurationSeconds,
-		&i.MaximumDurationCeilingSeconds,
+		&i.ConfigSnapshot,
+		&i.EndReason,
 		&i.DeadlineAt,
 		&i.DeadlineGeneration,
-		&i.WhiteboardRoleCapabilities,
-		&i.RoomActionRoleCapabilities,
+		&i.UpdatedAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const reserveApprovalAdmission = `-- name: ReserveApprovalAdmission :one
-update sync_session_control
+const reserveEpisodeCreateRequest = `-- name: ReserveEpisodeCreateRequest :one
+insert into episode_create_requests (
+    tenant_id,
+    space_id,
+    request_key,
+    request_fingerprint,
+    episode_id
+) values (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5
+)
+on conflict (tenant_id, space_id, request_key) do nothing
+returning tenant_id, space_id, request_key, request_fingerprint, episode_id, created_at
+`
+
+type ReserveEpisodeCreateRequestParams struct {
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	RequestKey         string      `json:"request_key"`
+	RequestFingerprint []byte      `json:"request_fingerprint"`
+	EpisodeID          pgtype.UUID `json:"episode_id"`
+}
+
+func (q *Queries) ReserveEpisodeCreateRequest(ctx context.Context, arg ReserveEpisodeCreateRequestParams) (EpisodeCreateRequest, error) {
+	row := q.db.QueryRow(ctx, reserveEpisodeCreateRequest,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.RequestKey,
+		arg.RequestFingerprint,
+		arg.EpisodeID,
+	)
+	var i EpisodeCreateRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.EpisodeID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const reserveEpisodeEnd = `-- name: ReserveEpisodeEnd :one
+update sync_episode_control
+set
+    lifecycle_intent_count = lifecycle_intent_count + 1,
+    lifecycle_intent_bytes = lifecycle_intent_bytes + $1,
+    lifecycle_reserved_intents = lifecycle_reserved_intents - 1,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes - $2,
+    updated_at = now()
+where
+    tenant_id = $3
+    and space_id = $4
+    and episode_id = $5
+    and lifecycle_reserved_intents >= 1
+    and lifecycle_reserved_intent_bytes >= $2
+    and lifecycle_intent_count + lifecycle_reserved_intents <= 2048
+    and lifecycle_intent_bytes + lifecycle_reserved_intent_bytes + $1 - $2 <= 33554432
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+`
+
+type ReserveEpisodeEndParams struct {
+	IntentPayloadBytes int64       `json:"intent_payload_bytes"`
+	ReservationBytes   int64       `json:"reservation_bytes"`
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	EpisodeID          pgtype.UUID `json:"episode_id"`
+}
+
+func (q *Queries) ReserveEpisodeEnd(ctx context.Context, arg ReserveEpisodeEndParams) (SyncEpisodeControl, error) {
+	row := q.db.QueryRow(ctx, reserveEpisodeEnd,
+		arg.IntentPayloadBytes,
+		arg.ReservationBytes,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+	)
+	var i SyncEpisodeControl
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.ControlRevision,
+		&i.FoldedState,
+		&i.StateSchemaVersion,
+		&i.StateDigest,
+		&i.SnapshotBytes,
+		&i.SnapshotReservedBytes,
+		&i.ParticipantEventCount,
+		&i.ParticipantEventBytes,
+		&i.LifecycleEventCount,
+		&i.LifecycleEventBytes,
+		&i.LifecycleReservedEvents,
+		&i.LifecycleReservedBytes,
+		&i.LifecycleIntentCount,
+		&i.LifecycleIntentBytes,
+		&i.LifecycleReservedIntents,
+		&i.LifecycleReservedIntentBytes,
+		&i.ReceiptCount,
+		&i.ReceiptBytes,
+		&i.RetentionCheckpointRevision,
+		&i.RetentionCheckpointStateDigest,
+		&i.RetentionCheckpointEventCount,
+		&i.RetentionCleanedAt,
+		&i.RetentionDeletedEventRows,
+		&i.RetentionDeletedEventBytes,
+		&i.RetentionDeletedReceiptRows,
+		&i.RetentionDeletedReceiptBytes,
+		&i.RetentionDeletedLifecycleIntentRows,
+		&i.RetentionDeletedLifecycleIntentBytes,
+		&i.RetentionDeletedExternalOperationRows,
+		&i.RetentionDeletedExternalOperationBytes,
+		&i.RetentionDeletedAdmissionRequestRows,
+		&i.RetentionDeletedAdmissionRequestBytes,
+		&i.RetentionDeletedRecordingRows,
+		&i.RetentionDeletedRecordingBytes,
+		&i.RetentionDeletedScreenShareLeaseRows,
+		&i.RetentionDeletedScreenShareLeaseBytes,
+		&i.RetentionDeletedPublicationFenceRows,
+		&i.RetentionDeletedPublicationFenceBytes,
+		&i.RetentionDeletedPublicationGrantReservationRows,
+		&i.RetentionDeletedPublicationGrantReservationBytes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const reserveKnockAdmission = `-- name: ReserveKnockAdmission :one
+update sync_episode_control
 set
     snapshot_reserved_bytes = snapshot_reserved_bytes + $1,
     lifecycle_reserved_events = lifecycle_reserved_events + 3,
@@ -1764,53 +1808,53 @@ set
     lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + $2::bigint,
     updated_at = now()
 where
-    sync_session_control.tenant_id = $5
-    and sync_session_control.room_id = $6
-    and sync_session_control.session_id = $7
-    and sync_session_control.snapshot_bytes + sync_session_control.snapshot_reserved_bytes + $1 <= 1048576
-    and sync_session_control.lifecycle_event_count + sync_session_control.lifecycle_reserved_events + 3 <= 2048
-    and sync_session_control.lifecycle_event_bytes + sync_session_control.lifecycle_reserved_bytes + 3 * $2::bigint <= 33554432
-    and sync_session_control.lifecycle_intent_count + sync_session_control.lifecycle_reserved_intents + 3 <= 2048
-    and sync_session_control.lifecycle_intent_bytes + sync_session_control.lifecycle_reserved_intent_bytes + $3 + $4 + $2::bigint <= 33554432
+    sync_episode_control.tenant_id = $5
+    and sync_episode_control.space_id = $6
+    and sync_episode_control.episode_id = $7
+    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + $1 <= 1048576
+    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + 3 <= 2048
+    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + 3 * $2::bigint <= 33554432
+    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 3 <= 2048
+    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + $3 + $4 + $2::bigint <= 33554432
     and (
         select count(*)
         from participants
         where
-            participants.tenant_id = sync_session_control.tenant_id
-            and participants.room_id = sync_session_control.room_id
-            and participants.session_id = sync_session_control.session_id
+            participants.tenant_id = sync_episode_control.tenant_id
+            and participants.space_id = sync_episode_control.space_id
+            and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
     ) < $8::bigint
-returning tenant_id, room_id, session_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, created_at, updated_at, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, host_participant_session_id
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
 `
 
-type ReserveApprovalAdmissionParams struct {
+type ReserveKnockAdmissionParams struct {
 	SnapshotReservationBytes int64       `json:"snapshot_reservation_bytes"`
 	ReservationBytes         int64       `json:"reservation_bytes"`
 	RequestedPayloadBytes    int64       `json:"requested_payload_bytes"`
 	JoinPayloadBytes         int64       `json:"join_payload_bytes"`
 	TenantID                 pgtype.UUID `json:"tenant_id"`
-	RoomID                   pgtype.UUID `json:"room_id"`
-	SessionID                pgtype.UUID `json:"session_id"`
+	SpaceID                  pgtype.UUID `json:"space_id"`
+	EpisodeID                pgtype.UUID `json:"episode_id"`
 	MaxActiveParticipants    int64       `json:"max_active_participants"`
 }
 
-func (q *Queries) ReserveApprovalAdmission(ctx context.Context, arg ReserveApprovalAdmissionParams) (SyncSessionControl, error) {
-	row := q.db.QueryRow(ctx, reserveApprovalAdmission,
+func (q *Queries) ReserveKnockAdmission(ctx context.Context, arg ReserveKnockAdmissionParams) (SyncEpisodeControl, error) {
+	row := q.db.QueryRow(ctx, reserveKnockAdmission,
 		arg.SnapshotReservationBytes,
 		arg.ReservationBytes,
 		arg.RequestedPayloadBytes,
 		arg.JoinPayloadBytes,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.MaxActiveParticipants,
 	)
-	var i SyncSessionControl
+	var i SyncEpisodeControl
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ControlRevision,
 		&i.FoldedState,
 		&i.StateSchemaVersion,
@@ -1829,8 +1873,6 @@ func (q *Queries) ReserveApprovalAdmission(ctx context.Context, arg ReserveAppro
 		&i.LifecycleReservedIntentBytes,
 		&i.ReceiptCount,
 		&i.ReceiptBytes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.RetentionCheckpointRevision,
 		&i.RetentionCheckpointStateDigest,
 		&i.RetentionCheckpointEventCount,
@@ -1853,13 +1895,14 @@ func (q *Queries) ReserveApprovalAdmission(ctx context.Context, arg ReserveAppro
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
-		&i.HostParticipantSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const reserveParticipantAdmission = `-- name: ReserveParticipantAdmission :one
-update sync_session_control
+update sync_episode_control
 set
     snapshot_reserved_bytes = snapshot_reserved_bytes + $1,
     lifecycle_reserved_events = lifecycle_reserved_events + 2,
@@ -1870,24 +1913,24 @@ set
     lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + $2::bigint,
     updated_at = now()
 where
-    sync_session_control.tenant_id = $4
-    and sync_session_control.room_id = $5
-    and sync_session_control.session_id = $6
-    and sync_session_control.snapshot_bytes + sync_session_control.snapshot_reserved_bytes + $1 <= 1048576
-    and sync_session_control.lifecycle_event_count + sync_session_control.lifecycle_reserved_events + 2 <= 2048
-    and sync_session_control.lifecycle_event_bytes + sync_session_control.lifecycle_reserved_bytes + 2 * $2::bigint <= 33554432
-    and sync_session_control.lifecycle_intent_count + sync_session_control.lifecycle_reserved_intents + 2 <= 2048
-    and sync_session_control.lifecycle_intent_bytes + sync_session_control.lifecycle_reserved_intent_bytes + $3 + $2::bigint <= 33554432
+    sync_episode_control.tenant_id = $4
+    and sync_episode_control.space_id = $5
+    and sync_episode_control.episode_id = $6
+    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + $1 <= 1048576
+    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + 2 <= 2048
+    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + 2 * $2::bigint <= 33554432
+    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 2 <= 2048
+    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + $3 + $2::bigint <= 33554432
     and (
         select count(*)
         from participants
         where
-            participants.tenant_id = sync_session_control.tenant_id
-            and participants.room_id = sync_session_control.room_id
-            and participants.session_id = sync_session_control.session_id
+            participants.tenant_id = sync_episode_control.tenant_id
+            and participants.space_id = sync_episode_control.space_id
+            and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
     ) < $7::bigint
-returning tenant_id, room_id, session_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, created_at, updated_at, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, host_participant_session_id
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
 `
 
 type ReserveParticipantAdmissionParams struct {
@@ -1895,26 +1938,26 @@ type ReserveParticipantAdmissionParams struct {
 	ReservationBytes         int64       `json:"reservation_bytes"`
 	IntentPayloadBytes       int64       `json:"intent_payload_bytes"`
 	TenantID                 pgtype.UUID `json:"tenant_id"`
-	RoomID                   pgtype.UUID `json:"room_id"`
-	SessionID                pgtype.UUID `json:"session_id"`
+	SpaceID                  pgtype.UUID `json:"space_id"`
+	EpisodeID                pgtype.UUID `json:"episode_id"`
 	MaxActiveParticipants    int64       `json:"max_active_participants"`
 }
 
-func (q *Queries) ReserveParticipantAdmission(ctx context.Context, arg ReserveParticipantAdmissionParams) (SyncSessionControl, error) {
+func (q *Queries) ReserveParticipantAdmission(ctx context.Context, arg ReserveParticipantAdmissionParams) (SyncEpisodeControl, error) {
 	row := q.db.QueryRow(ctx, reserveParticipantAdmission,
 		arg.SnapshotReservationBytes,
 		arg.ReservationBytes,
 		arg.IntentPayloadBytes,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.MaxActiveParticipants,
 	)
-	var i SyncSessionControl
+	var i SyncEpisodeControl
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ControlRevision,
 		&i.FoldedState,
 		&i.StateSchemaVersion,
@@ -1933,8 +1976,6 @@ func (q *Queries) ReserveParticipantAdmission(ctx context.Context, arg ReservePa
 		&i.LifecycleReservedIntentBytes,
 		&i.ReceiptCount,
 		&i.ReceiptBytes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.RetentionCheckpointRevision,
 		&i.RetentionCheckpointStateDigest,
 		&i.RetentionCheckpointEventCount,
@@ -1957,13 +1998,14 @@ func (q *Queries) ReserveParticipantAdmission(ctx context.Context, arg ReservePa
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
-		&i.HostParticipantSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const reserveParticipantRemoval = `-- name: ReserveParticipantRemoval :one
-update sync_session_control
+update sync_episode_control
 set
     lifecycle_intent_count = lifecycle_intent_count + 1,
     lifecycle_intent_bytes = lifecycle_intent_bytes + $1,
@@ -1972,36 +2014,36 @@ set
     updated_at = now()
 where
     tenant_id = $3
-    and room_id = $4
-    and session_id = $5
+    and space_id = $4
+    and episode_id = $5
     and lifecycle_reserved_intents >= 1
     and lifecycle_reserved_intent_bytes >= $2
     and lifecycle_intent_count + lifecycle_reserved_intents <= 2048
     and lifecycle_intent_bytes + lifecycle_reserved_intent_bytes + $1 - $2 <= 33554432
-returning tenant_id, room_id, session_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, created_at, updated_at, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, host_participant_session_id
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
 `
 
 type ReserveParticipantRemovalParams struct {
 	IntentPayloadBytes int64       `json:"intent_payload_bytes"`
 	ReservationBytes   int64       `json:"reservation_bytes"`
 	TenantID           pgtype.UUID `json:"tenant_id"`
-	RoomID             pgtype.UUID `json:"room_id"`
-	SessionID          pgtype.UUID `json:"session_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	EpisodeID          pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) ReserveParticipantRemoval(ctx context.Context, arg ReserveParticipantRemovalParams) (SyncSessionControl, error) {
+func (q *Queries) ReserveParticipantRemoval(ctx context.Context, arg ReserveParticipantRemovalParams) (SyncEpisodeControl, error) {
 	row := q.db.QueryRow(ctx, reserveParticipantRemoval,
 		arg.IntentPayloadBytes,
 		arg.ReservationBytes,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 	)
-	var i SyncSessionControl
+	var i SyncEpisodeControl
 	err := row.Scan(
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.ControlRevision,
 		&i.FoldedState,
 		&i.StateSchemaVersion,
@@ -2020,8 +2062,6 @@ func (q *Queries) ReserveParticipantRemoval(ctx context.Context, arg ReservePart
 		&i.LifecycleReservedIntentBytes,
 		&i.ReceiptCount,
 		&i.ReceiptBytes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.RetentionCheckpointRevision,
 		&i.RetentionCheckpointStateDigest,
 		&i.RetentionCheckpointEventCount,
@@ -2044,140 +2084,8 @@ func (q *Queries) ReserveParticipantRemoval(ctx context.Context, arg ReservePart
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
-		&i.HostParticipantSessionID,
-	)
-	return i, err
-}
-
-const reserveSessionCreateRequest = `-- name: ReserveSessionCreateRequest :one
-insert into session_create_requests (
-    tenant_id,
-    room_id,
-    request_key,
-    request_fingerprint,
-    session_id
-) values (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5
-)
-on conflict (tenant_id, room_id, request_key) do nothing
-returning tenant_id, room_id, request_key, request_fingerprint, session_id, created_at
-`
-
-type ReserveSessionCreateRequestParams struct {
-	TenantID           pgtype.UUID `json:"tenant_id"`
-	RoomID             pgtype.UUID `json:"room_id"`
-	RequestKey         string      `json:"request_key"`
-	RequestFingerprint []byte      `json:"request_fingerprint"`
-	SessionID          pgtype.UUID `json:"session_id"`
-}
-
-func (q *Queries) ReserveSessionCreateRequest(ctx context.Context, arg ReserveSessionCreateRequestParams) (SessionCreateRequest, error) {
-	row := q.db.QueryRow(ctx, reserveSessionCreateRequest,
-		arg.TenantID,
-		arg.RoomID,
-		arg.RequestKey,
-		arg.RequestFingerprint,
-		arg.SessionID,
-	)
-	var i SessionCreateRequest
-	err := row.Scan(
-		&i.TenantID,
-		&i.RoomID,
-		&i.RequestKey,
-		&i.RequestFingerprint,
-		&i.SessionID,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const reserveSessionEnd = `-- name: ReserveSessionEnd :one
-update sync_session_control
-set
-    lifecycle_intent_count = lifecycle_intent_count + 1,
-    lifecycle_intent_bytes = lifecycle_intent_bytes + $1,
-    lifecycle_reserved_intents = lifecycle_reserved_intents - 1,
-    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes - $2,
-    updated_at = now()
-where
-    tenant_id = $3
-    and room_id = $4
-    and session_id = $5
-    and lifecycle_reserved_intents >= 1
-    and lifecycle_reserved_intent_bytes >= $2
-    and lifecycle_intent_count + lifecycle_reserved_intents <= 2048
-    and lifecycle_intent_bytes + lifecycle_reserved_intent_bytes + $1 - $2 <= 33554432
-returning tenant_id, room_id, session_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, created_at, updated_at, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, host_participant_session_id
-`
-
-type ReserveSessionEndParams struct {
-	IntentPayloadBytes int64       `json:"intent_payload_bytes"`
-	ReservationBytes   int64       `json:"reservation_bytes"`
-	TenantID           pgtype.UUID `json:"tenant_id"`
-	RoomID             pgtype.UUID `json:"room_id"`
-	SessionID          pgtype.UUID `json:"session_id"`
-}
-
-func (q *Queries) ReserveSessionEnd(ctx context.Context, arg ReserveSessionEndParams) (SyncSessionControl, error) {
-	row := q.db.QueryRow(ctx, reserveSessionEnd,
-		arg.IntentPayloadBytes,
-		arg.ReservationBytes,
-		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-	)
-	var i SyncSessionControl
-	err := row.Scan(
-		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
-		&i.ControlRevision,
-		&i.FoldedState,
-		&i.StateSchemaVersion,
-		&i.StateDigest,
-		&i.SnapshotBytes,
-		&i.SnapshotReservedBytes,
-		&i.ParticipantEventCount,
-		&i.ParticipantEventBytes,
-		&i.LifecycleEventCount,
-		&i.LifecycleEventBytes,
-		&i.LifecycleReservedEvents,
-		&i.LifecycleReservedBytes,
-		&i.LifecycleIntentCount,
-		&i.LifecycleIntentBytes,
-		&i.LifecycleReservedIntents,
-		&i.LifecycleReservedIntentBytes,
-		&i.ReceiptCount,
-		&i.ReceiptBytes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.RetentionCheckpointRevision,
-		&i.RetentionCheckpointStateDigest,
-		&i.RetentionCheckpointEventCount,
-		&i.RetentionCleanedAt,
-		&i.RetentionDeletedEventRows,
-		&i.RetentionDeletedEventBytes,
-		&i.RetentionDeletedReceiptRows,
-		&i.RetentionDeletedReceiptBytes,
-		&i.RetentionDeletedLifecycleIntentRows,
-		&i.RetentionDeletedLifecycleIntentBytes,
-		&i.RetentionDeletedExternalOperationRows,
-		&i.RetentionDeletedExternalOperationBytes,
-		&i.RetentionDeletedAdmissionRequestRows,
-		&i.RetentionDeletedAdmissionRequestBytes,
-		&i.RetentionDeletedRecordingRows,
-		&i.RetentionDeletedRecordingBytes,
-		&i.RetentionDeletedScreenShareLeaseRows,
-		&i.RetentionDeletedScreenShareLeaseBytes,
-		&i.RetentionDeletedPublicationFenceRows,
-		&i.RetentionDeletedPublicationFenceBytes,
-		&i.RetentionDeletedPublicationGrantReservationRows,
-		&i.RetentionDeletedPublicationGrantReservationBytes,
-		&i.HostParticipantSessionID,
 	)
 	return i, err
 }

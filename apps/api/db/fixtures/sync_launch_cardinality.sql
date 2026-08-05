@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 \set tenant_id '10000000-0000-4000-8000-000000000001'
-\set room_id '10000000-0000-4000-8000-000000000002'
-\set session_id '10000000-0000-4000-8000-000000000003'
+\set space_id '10000000-0000-4000-8000-000000000002'
+\set episode_id '10000000-0000-4000-8000-000000000003'
 
 begin;
 set local synchronous_commit = off;
@@ -9,39 +9,46 @@ set local synchronous_commit = off;
 insert into tenants (id, name)
 values (:'tenant_id', 'Sync launch-cardinality fixture');
 
-insert into rooms (id, name, tenant_id, status, slug, media_plane)
-values (:'room_id', 'Sync launch-cardinality fixture', :'tenant_id', 'active', 'sync-launch-cardinality-fixture', 'cf_rtk');
+insert into spaces (id, name, tenant_id, slug, media_plane)
+values (:'space_id', 'Sync launch-cardinality fixture', :'tenant_id', 'sync-launch-cardinality-fixture', 'cf_rtk');
 
-insert into room_sessions (id, status, room_id, tenant_id, started_at)
-values (:'session_id', 'active', :'room_id', :'tenant_id', now());
+insert into episodes (
+    id, status, space_id, tenant_id, started_at, config_snapshot
+)
+values (
+    :'episode_id', 'active', :'space_id', :'tenant_id', now(),
+    '{"roles":{"collaborator":["raiseHand"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb
+);
 
 insert into participants (
     id,
     name,
     capabilities,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     generation,
     status,
+    role,
     joined_at
 )
 select
     md5('sync-launch-participant:' || ordinal::text)::uuid,
     'Launch participant ' || ordinal::text,
-    array['control:hand'],
+    array['raiseHand'],
     :'tenant_id',
-    :'room_id',
-    :'session_id',
+    :'space_id',
+    :'episode_id',
     1,
     'active',
+    'collaborator',
     now()
 from generate_series(1, :participant_count) as ordinal;
 
-insert into sync_session_control (
+insert into sync_episode_control (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     control_revision,
     folded_state,
     state_schema_version,
@@ -53,8 +60,8 @@ insert into sync_session_control (
     receipt_bytes
 ) values (
     :'tenant_id',
-    :'room_id',
-    :'session_id',
+    :'space_id',
+    :'episode_id',
     :event_count,
     jsonb_build_object(
         'control_revision', :event_count,
@@ -73,14 +80,14 @@ insert into sync_session_control (
 
 insert into sync_control_events (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     event_id,
     base_revision,
     revision,
     event_name,
     payload,
-    actor_participant_session_id,
+    actor_participant_id,
     actor_generation,
     command_id,
     event_schema_version,
@@ -89,14 +96,14 @@ insert into sync_control_events (
 )
 select
     :'tenant_id',
-    :'room_id',
-    :'session_id',
+    :'space_id',
+    :'episode_id',
     md5('sync-launch-event:' || revision::text)::uuid,
     revision - 1,
     revision,
     case when revision % 2 = 0 then 'hand_lowered' else 'hand_raised' end,
     jsonb_build_object(
-        'participant_session_id',
+        'participant_id',
         md5('sync-launch-participant:' || (((revision - 1) % :participant_count) + 1)::text)::uuid::text
     ),
     md5('sync-launch-participant:' || (((revision - 1) % :participant_count) + 1)::text)::uuid,
@@ -109,8 +116,8 @@ from generate_series(1, :event_count) as revision;
 
 insert into sync_command_receipts (
     tenant_id,
-    session_id,
-    participant_session_id,
+    episode_id,
+    participant_id,
     submitted_generation,
     command_id,
     request_fingerprint,
@@ -121,7 +128,7 @@ insert into sync_command_receipts (
 )
 select
     :'tenant_id',
-    :'session_id',
+    :'episode_id',
     md5('sync-launch-participant:' || (((revision - 1) % :participant_count) + 1)::text)::uuid,
     1,
     'command_' || lpad(revision::text, 16, '0'),
@@ -134,8 +141,8 @@ from generate_series(1, :event_count) as revision;
 
 insert into sync_command_receipts (
     tenant_id,
-    session_id,
-    participant_session_id,
+    episode_id,
+    participant_id,
     submitted_generation,
     command_id,
     request_fingerprint,
@@ -145,7 +152,7 @@ insert into sync_command_receipts (
 )
 select
     :'tenant_id',
-    :'session_id',
+    :'episode_id',
     md5('sync-launch-participant:' || (((ordinal - 1) % :participant_count) + 1)::text)::uuid,
     1,
     'rejected_' || lpad(ordinal::text, 16, '0'),
@@ -156,9 +163,10 @@ select
 from generate_series(1, :receipt_count - :event_count) as ordinal;
 
 analyze participants;
-analyze sync_session_control;
+analyze sync_episode_control;
 analyze sync_control_events;
 analyze sync_command_receipts;
+set local enable_seqscan = off;
 
 create function pg_temp.assert_index(query text, expected_index text)
 returns void
@@ -178,13 +186,13 @@ select pg_temp.assert_index(
     $query$
     select receipt.outcome, receipt.event_id, receipt.resulting_revision
     from sync_command_receipts receipt
-    join sync_session_control control
+    join sync_episode_control control
       on control.tenant_id = receipt.tenant_id
-      and control.session_id = receipt.session_id
+      and control.episode_id = receipt.episode_id
     where receipt.tenant_id = '10000000-0000-4000-8000-000000000001'
-      and control.room_id = '10000000-0000-4000-8000-000000000002'
-      and receipt.session_id = '10000000-0000-4000-8000-000000000003'
-      and receipt.participant_session_id = md5('sync-launch-participant:1')::uuid
+      and control.space_id = '10000000-0000-4000-8000-000000000002'
+      and receipt.episode_id = '10000000-0000-4000-8000-000000000003'
+      and receipt.participant_id = md5('sync-launch-participant:1')::uuid
       and receipt.command_id = 'command_0000000000000001'
     $query$,
     'sync_command_receipts_pkey'
@@ -195,7 +203,7 @@ select pg_temp.assert_index(
     select revision, event_name, payload, resulting_state_digest
     from sync_control_events
     where tenant_id = '10000000-0000-4000-8000-000000000001'
-      and session_id = '10000000-0000-4000-8000-000000000003'
+      and episode_id = '10000000-0000-4000-8000-000000000003'
       and revision > 247951
     order by revision
     limit 2049
@@ -207,13 +215,13 @@ select pg_temp.assert_index(
 explain (analyze, buffers, costs off, timing off)
 select receipt.outcome, receipt.event_id, receipt.resulting_revision
 from sync_command_receipts receipt
-join sync_session_control control
+join sync_episode_control control
   on control.tenant_id = receipt.tenant_id
-  and control.session_id = receipt.session_id
+  and control.episode_id = receipt.episode_id
 where receipt.tenant_id = :'tenant_id'
-  and control.room_id = :'room_id'
-  and receipt.session_id = :'session_id'
-  and receipt.participant_session_id = md5('sync-launch-participant:1')::uuid
+  and control.space_id = :'space_id'
+  and receipt.episode_id = :'episode_id'
+  and receipt.participant_id = md5('sync-launch-participant:1')::uuid
   and receipt.command_id = 'command_0000000000000001';
 
 \echo 'Recovery suffix plan'
@@ -221,7 +229,7 @@ explain (analyze, buffers, costs off, timing off)
 select revision, event_name, payload, resulting_state_digest
 from sync_control_events
 where tenant_id = :'tenant_id'
-  and session_id = :'session_id'
+  and episode_id = :'episode_id'
   and revision > :event_count - 2049
 order by revision
 limit 2049;

@@ -16,7 +16,7 @@ import (
 var (
 	readMembershipsPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeMembershipsRead,
-		MinimumRole: memberships.RoleViewer,
+		MinimumRole: memberships.RoleObserver,
 	}
 	writeMembershipsPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeMembershipsWrite,

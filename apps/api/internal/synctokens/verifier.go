@@ -27,9 +27,9 @@ type VerifierConfig struct {
 
 type Subject struct {
 	TenantID              utilities.ID
-	RoomID                utilities.ID
-	SessionID             utilities.ID
-	ParticipantSessionID  utilities.ID
+	SpaceID               utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 }
 
@@ -47,23 +47,22 @@ type verifierHeader struct {
 }
 
 type verifierClaims struct {
-	Issuer                       string          `json:"iss"`
-	Audience                     json.RawMessage `json:"aud"`
-	Subject                      string          `json:"sub"`
-	TokenID                      string          `json:"jti"`
-	IssuedAt                     int64           `json:"iat"`
-	NotBefore                    int64           `json:"nbf"`
-	ExpiresAt                    int64           `json:"exp"`
-	TenantID                     string          `json:"tenant_id"`
-	RoomID                       string          `json:"room_id"`
-	SessionID                    string          `json:"session_id"`
-	ParticipantID                string          `json:"participant_id"`
-	ParticipantSessionID         string          `json:"participant_session_id"`
-	ParticipantSessionGeneration int64           `json:"participant_session_generation"`
-	AdmissionLifecycleIntentID   string          `json:"admission_lifecycle_intent_id"`
-	DisplayName                  string          `json:"display_name"`
-	InitialRole                  string          `json:"initial_role"`
-	EligibleRoles                []string        `json:"eligible_roles"`
+	Issuer                     string          `json:"iss"`
+	Audience                   json.RawMessage `json:"aud"`
+	Subject                    string          `json:"sub"`
+	TokenID                    string          `json:"jti"`
+	IssuedAt                   int64           `json:"iat"`
+	NotBefore                  int64           `json:"nbf"`
+	ExpiresAt                  int64           `json:"exp"`
+	TenantID                   string          `json:"tenant_id"`
+	SpaceID                    string          `json:"space_id"`
+	EpisodeID                  string          `json:"episode_id"`
+	ParticipantID              string          `json:"participant_id"`
+	ParticipantGeneration      int64           `json:"participant_generation"`
+	AdmissionLifecycleIntentID string          `json:"admission_lifecycle_intent_id"`
+	DisplayName                string          `json:"display_name"`
+	Role                       string          `json:"role"`
+	Capabilities               []string        `json:"capabilities"`
 }
 
 func NewVerifier(config VerifierConfig) (Verifier, error) {
@@ -119,24 +118,25 @@ func (v Verifier) validClaims(claims verifierClaims) bool {
 		claims.ExpiresAt-claims.IssuedAt <= int64(Lifetime/time.Second) &&
 		claims.IssuedAt <= now+30 &&
 		claims.NotBefore <= now+30 &&
-		claims.ExpiresAt > now-30
+		claims.ExpiresAt > now-30 &&
+		validRole(claims.Role) && validCapabilities(claims.Capabilities)
 }
 
 func syncSubject(claims verifierClaims) (Subject, error) {
 	tenantID, tenantErr := utilities.ParseID(claims.TenantID)
-	roomID, roomErr := utilities.ParseID(claims.RoomID)
-	sessionID, sessionErr := utilities.ParseID(claims.SessionID)
-	participantID, participantErr := utilities.ParseID(claims.ParticipantSessionID)
+	spaceID, spaceErr := utilities.ParseID(claims.SpaceID)
+	episodeID, episodeErr := utilities.ParseID(claims.EpisodeID)
+	participantID, participantErr := utilities.ParseID(claims.ParticipantID)
 	tokenID, tokenErr := base64.RawURLEncoding.DecodeString(claims.TokenID)
-	if tenantErr != nil || roomErr != nil || sessionErr != nil || participantErr != nil ||
-		tokenErr != nil || len(tokenID) != 16 || claims.Subject != claims.ParticipantSessionID ||
-		claims.ParticipantID != claims.ParticipantSessionID || claims.ParticipantSessionGeneration <= 0 {
+	if tenantErr != nil || spaceErr != nil || episodeErr != nil || participantErr != nil ||
+		tokenErr != nil || len(tokenID) != 16 || claims.Subject != claims.ParticipantID ||
+		claims.ParticipantGeneration <= 0 {
 		return Subject{}, ErrInvalidCredential
 	}
 	return Subject{
-		TenantID: tenantID, RoomID: roomID, SessionID: sessionID,
-		ParticipantSessionID:  participantID,
-		ParticipantGeneration: claims.ParticipantSessionGeneration,
+		TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
+		ParticipantID:         participantID,
+		ParticipantGeneration: claims.ParticipantGeneration,
 	}, nil
 }
 

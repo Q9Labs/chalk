@@ -1,4 +1,4 @@
-import type { WhiteboardWireElement } from "./wire.js";
+import type { WhiteboardWireElement } from "./wire";
 
 export function mergeWhiteboardElements(current: readonly WhiteboardWireElement[], incoming: readonly WhiteboardWireElement[]): readonly WhiteboardWireElement[] {
   const merged = new Map(current.map((element) => [element.id, element]));

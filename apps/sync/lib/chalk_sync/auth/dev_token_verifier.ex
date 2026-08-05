@@ -17,24 +17,23 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
   def verify(token) when is_binary(token) do
     with {:ok, json} <- Base.url_decode64(token, padding: false),
          {:ok, %{} = claims} <- decode_json(json),
-         %{"tenant_id" => tenant_id, "room_id" => room_id, "participant_id" => participant_id}
-         when is_binary(tenant_id) and is_binary(room_id) and is_binary(participant_id) <-
+         %{"tenant_id" => tenant_id, "space_id" => space_id, "participant_id" => participant_id}
+         when is_binary(tenant_id) and is_binary(space_id) and is_binary(participant_id) <-
            claims,
          {:ok, authorization} <- authorization_envelope(claims) do
       {:ok,
        %Claims{
          tenant_id: tenant_id,
-         room_id: room_id,
+         space_id: space_id,
          participant_id: participant_id,
-         session_id: Map.get(claims, "session_id"),
-         participant_session_id: Map.get(claims, "participant_session_id"),
-         participant_session_generation: Map.get(claims, "participant_session_generation"),
+         episode_id: Map.get(claims, "episode_id"),
+         participant_generation: Map.get(claims, "participant_generation"),
          admission_lifecycle_intent_id: Map.get(claims, "admission_lifecycle_intent_id"),
          issued_at: Map.get(claims, "issued_at"),
          expires_at: Map.get(claims, "expires_at"),
          display_name: Map.get(claims, "display_name", "Guest"),
-         initial_role: authorization.initial_role,
-         eligible_roles: authorization.eligible_roles
+         role: authorization.role,
+         capabilities: authorization.capabilities
        }}
     else
       _ -> {:error, :invalid_token}
@@ -56,11 +55,10 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
   end
 
   defp authorization_envelope(claims) do
-    if not Map.has_key?(claims, "capabilities") and
-         Claims.valid_role_envelope?(claims["initial_role"], claims["eligible_roles"]) do
-      {:ok, %{initial_role: claims["initial_role"], eligible_roles: claims["eligible_roles"]}}
+    if Claims.valid_authorization?(claims["role"], claims["capabilities"]) do
+      {:ok, %{role: claims["role"], capabilities: claims["capabilities"]}}
     else
-      {:error, :invalid_role_envelope}
+      {:error, :invalid_authorization}
     end
   end
 end

@@ -26,7 +26,7 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
     standby_port: standby_port
   } do
     [seed_connection] = SyncPostgres.start_connections(@database_url, 1)
-    fixture = SyncPostgres.seed_session(seed_connection, 2)
+    fixture = SyncPostgres.seed_episode(seed_connection, 2)
     [identity_a, identity_b] = fixture.identities
     initial_revision = fixture.state.revision
     stop_connection(seed_connection)
@@ -64,7 +64,7 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
     assert welcome["head"]["revision"] == initial_revision + 1
     Client.close(client_a)
 
-    cleanup_after_failover(fixture.session, proxy_database_url)
+    cleanup_after_failover(fixture.episode, proxy_database_url)
     write_result()
   end
 
@@ -148,9 +148,9 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
     end
   end
 
-  defp cleanup_after_failover(session, database_url) do
+  defp cleanup_after_failover(episode, database_url) do
     [connection] = SyncPostgres.start_connections(database_url, 1)
-    SyncPostgres.cleanup(connection, session)
+    SyncPostgres.cleanup(connection, episode)
     stop_connection(connection)
   end
 

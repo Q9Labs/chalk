@@ -12,7 +12,7 @@ export function ClipboardInviteSuggestion({ isLoading, onPress }: { isLoading: b
       <View style={styles.copy}>
         <Text style={styles.title}>Join from clipboard</Text>
         <Text style={styles.subtitle} numberOfLines={1}>
-          Invite link found in your clipboard
+          Space link found in your clipboard
         </Text>
       </View>
       <View style={[styles.actionButton, isLoading && styles.actionButtonLoading]}>{isLoading ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.actionText}>Join</Text>}</View>

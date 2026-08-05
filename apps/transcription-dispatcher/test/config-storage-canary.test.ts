@@ -86,13 +86,13 @@ describe("release, storage, and canary gates", () => {
       input_content_type: "application/json",
       input_size_bytes: 1,
       input_sha256: "a".repeat(64),
-      meeting_start_ms: 0,
-      meeting_end_ms: 1,
+      episodeStartMs: 0,
+      episodeEndMs: 1,
     };
     const assignment = {
       job_id: "job",
       transcript_id: "transcript",
-      session_id: "session",
+      episodeId: "episode",
       attempt: 1,
       lease_token: "lease",
       lease_expires_at: future,

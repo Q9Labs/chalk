@@ -13,21 +13,21 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestRoomUpdatedEncoderMatchesGoldenBytes(t *testing.T) {
-	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000002", "room.updated", "2026-07-12T18:01:00.000Z")
-	body, _, err := EncodeRoomEvent(metadata, RoomSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "Design review – 東京", Slug: "weekly-design-review", Status: "active", MediaPlane: "cf_rtk", CreatedAt: mustTime(t, "2026-07-01T08:00:00.000Z"), UpdatedAt: mustTime(t, "2026-07-12T18:01:00.000Z")}, []string{"name", "metadata"})
+func TestSpaceUpdatedEncoderMatchesGoldenBytes(t *testing.T) {
+	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000002", "space.updated", "2026-07-12T18:01:00.000Z")
+	body, _, err := EncodeSpaceEvent(metadata, SpaceSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "Design review – 東京", Slug: "weekly-design-review", MediaPlane: "cf_rtk", CreatedAt: mustTime(t, "2026-07-01T08:00:00.000Z"), UpdatedAt: mustTime(t, "2026-07-12T18:01:00.000Z")}, []string{"name", "metadata"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := `{"id":"00000000-0000-4000-8000-000000000002","event":"room.updated","api_version":1,"occurred_at":"2026-07-12T18:01:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"20000000-0000-4000-8000-000000000001","name":"Design review – 東京","slug":"weekly-design-review","status":"active","media_plane":"cf_rtk","created_at":"2026-07-01T08:00:00.000Z","updated_at":"2026-07-12T18:01:00.000Z"},"changed_fields":["metadata","name"]}}`
+	expected := `{"id":"00000000-0000-4000-8000-000000000002","event":"space.updated","api_version":1,"occurred_at":"2026-07-12T18:01:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"20000000-0000-4000-8000-000000000001","name":"Design review – 東京","slug":"weekly-design-review","media_plane":"cf_rtk","created_at":"2026-07-01T08:00:00.000Z","updated_at":"2026-07-12T18:01:00.000Z"},"changed_fields":["metadata","name"]}}`
 	if string(body) != expected {
 		t.Fatalf("body mismatch\nwant %s\n got %s", expected, body)
 	}
 }
 
 func TestEventEncoderUsesCrossRuntimeStringEscaping(t *testing.T) {
-	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "room.created", "2026-07-12T18:01:00.000Z")
-	body, _, err := EncodeRoomEvent(metadata, RoomSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "<tag>& \\\"quote\\\" \\\\ tab\t newline\n", Slug: "hostile", Status: "active", MediaPlane: "cf_rtk", CreatedAt: metadata.OccurredAt, UpdatedAt: metadata.OccurredAt}, nil)
+	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "space.created", "2026-07-12T18:01:00.000Z")
+	body, _, err := EncodeSpaceEvent(metadata, SpaceSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "<tag>& \\\"quote\\\" \\\\ tab\t newline\n", Slug: "hostile", MediaPlane: "cf_rtk", CreatedAt: metadata.OccurredAt, UpdatedAt: metadata.OccurredAt}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,14 +40,14 @@ func TestEventEncoderUsesCrossRuntimeStringEscaping(t *testing.T) {
 }
 
 func TestEventEncodersRejectImpossibleTransitions(t *testing.T) {
-	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "room.updated", "2026-07-12T18:01:00.000Z")
-	if _, _, err := EncodeRoomEvent(metadata, RoomSnapshot{Status: "active"}, nil); err == nil {
-		t.Fatal("room.updated without changed_fields accepted")
+	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "space.updated", "2026-07-12T18:01:00.000Z")
+	if _, _, err := EncodeSpaceEvent(metadata, SpaceSnapshot{}, nil); err == nil {
+		t.Fatal("space.updated without changed_fields accepted")
 	}
-	metadata.Name = "session.ended"
+	metadata.Name = "episode.ended"
 	started := metadata.OccurredAt.Add(-time.Hour)
-	if _, _, err := EncodeSessionEvent(metadata, SessionSnapshot{Status: "ended", StartedAt: &started}); err == nil {
-		t.Fatal("session.ended without ended_at accepted")
+	if _, _, err := EncodeEpisodeEvent(metadata, EpisodeSnapshot{Status: "ended", StartedAt: &started}); err == nil {
+		t.Fatal("episode.ended without ended_at accepted")
 	}
 	metadata.Name = "participant.left"
 	if _, _, err := EncodeParticipantEvent(metadata, ParticipantSnapshot{Status: "left", JoinedAt: started}); err == nil {
@@ -55,20 +55,19 @@ func TestEventEncodersRejectImpossibleTransitions(t *testing.T) {
 	}
 }
 
-func TestRoomEncoderAcceptsArchivedCreationAndDoesNotMutateChangedFields(t *testing.T) {
+func TestSpaceEncoderDoesNotMutateChangedFields(t *testing.T) {
 	t.Parallel()
-	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "room.created", "2026-07-12T18:01:00.000Z")
-	snapshot := RoomSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "Archived import", Slug: "archived-import", Status: "archived", MediaPlane: "cf_rtk", CreatedAt: metadata.OccurredAt, UpdatedAt: metadata.OccurredAt}
-	if _, _, err := EncodeRoomEvent(metadata, snapshot, nil); err != nil {
-		t.Fatalf("archived room.created rejected: %v", err)
+	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "space.created", "2026-07-12T18:01:00.000Z")
+	snapshot := SpaceSnapshot{ID: "20000000-0000-4000-8000-000000000001", Name: "Design import", Slug: "design-import", MediaPlane: "cf_rtk", CreatedAt: metadata.OccurredAt, UpdatedAt: metadata.OccurredAt}
+	if _, _, err := EncodeSpaceEvent(metadata, snapshot, nil); err != nil {
+		t.Fatalf("space.created rejected: %v", err)
 	}
-	if _, _, err := EncodeRoomEvent(metadata, snapshot, []string{"name"}); err == nil {
-		t.Fatal("room.created accepted changed_fields")
+	if _, _, err := EncodeSpaceEvent(metadata, snapshot, []string{"name"}); err == nil {
+		t.Fatal("space.created accepted changed_fields")
 	}
-	metadata.Name = "room.updated"
-	snapshot.Status = "active"
+	metadata.Name = "space.updated"
 	fields := []string{"slug", "name"}
-	if _, _, err := EncodeRoomEvent(metadata, snapshot, fields); err != nil {
+	if _, _, err := EncodeSpaceEvent(metadata, snapshot, fields); err != nil {
 		t.Fatal(err)
 	}
 	if fields[0] != "slug" || fields[1] != "name" {
@@ -78,7 +77,7 @@ func TestRoomEncoderAcceptsArchivedCreationAndDoesNotMutateChangedFields(t *test
 
 func TestEventEncodersRejectNonCanonicalIDsAndZeroPointerTimestamps(t *testing.T) {
 	t.Parallel()
-	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "session.started", "2026-07-12T18:01:00.000Z")
+	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000012", "episode.started", "2026-07-12T18:01:00.000Z")
 	zero := time.Time{}
 	created := metadata.OccurredAt
 	tests := []struct {
@@ -88,14 +87,14 @@ func TestEventEncodersRejectNonCanonicalIDsAndZeroPointerTimestamps(t *testing.T
 		{
 			name: "uppercase snapshot uuid",
 			run: func() error {
-				_, _, err := EncodeSessionEvent(metadata, SessionSnapshot{ID: "20000000-0000-4000-8000-00000000000A", RoomID: "30000000-0000-4000-8000-000000000001", Status: "active", StartedAt: &created, CreatedAt: created, UpdatedAt: created})
+				_, _, err := EncodeEpisodeEvent(metadata, EpisodeSnapshot{ID: "20000000-0000-4000-8000-00000000000A", SpaceID: "30000000-0000-4000-8000-000000000001", Status: "active", StartedAt: &created, CreatedAt: created, UpdatedAt: created})
 				return err
 			},
 		},
 		{
-			name: "zero session started_at",
+			name: "zero episode started_at",
 			run: func() error {
-				_, _, err := EncodeSessionEvent(metadata, SessionSnapshot{ID: "20000000-0000-4000-8000-000000000001", RoomID: "30000000-0000-4000-8000-000000000001", Status: "active", StartedAt: &zero, CreatedAt: created, UpdatedAt: created})
+				_, _, err := EncodeEpisodeEvent(metadata, EpisodeSnapshot{ID: "20000000-0000-4000-8000-000000000001", SpaceID: "30000000-0000-4000-8000-000000000001", Status: "active", StartedAt: &zero, CreatedAt: created, UpdatedAt: created})
 				return err
 			},
 		},
@@ -104,7 +103,7 @@ func TestEventEncodersRejectNonCanonicalIDsAndZeroPointerTimestamps(t *testing.T
 			run: func() error {
 				leftMetadata := metadata
 				leftMetadata.Name = "participant.left"
-				_, _, err := EncodeParticipantEvent(leftMetadata, ParticipantSnapshot{ID: "20000000-0000-4000-8000-000000000001", RoomID: "30000000-0000-4000-8000-000000000001", SessionID: "40000000-0000-4000-8000-000000000001", Status: "left", JoinedAt: created, LeftAt: &zero})
+				_, _, err := EncodeParticipantEvent(leftMetadata, ParticipantSnapshot{ID: "20000000-0000-4000-8000-000000000001", SpaceID: "30000000-0000-4000-8000-000000000001", EpisodeID: "40000000-0000-4000-8000-000000000001", Status: "left", JoinedAt: created, LeftAt: &zero})
 				return err
 			},
 		},
@@ -113,7 +112,7 @@ func TestEventEncodersRejectNonCanonicalIDsAndZeroPointerTimestamps(t *testing.T
 			run: func() error {
 				artifactMetadata := metadata
 				artifactMetadata.Name = "recording.completed"
-				_, _, err := EncodeRecordingEvent(artifactMetadata, RecordingSnapshot{ID: "20000000-0000-4000-8000-000000000001", RoomID: "30000000-0000-4000-8000-000000000001", SessionID: "40000000-0000-4000-8000-000000000001", Status: "completed", StartedAt: &created, CompletedAt: &zero, CreatedAt: created, UpdatedAt: created})
+				_, _, err := EncodeRecordingEvent(artifactMetadata, RecordingSnapshot{ID: "20000000-0000-4000-8000-000000000001", SpaceID: "30000000-0000-4000-8000-000000000001", EpisodeID: "40000000-0000-4000-8000-000000000001", Status: "completed", StartedAt: &created, CompletedAt: &zero, CreatedAt: created, UpdatedAt: created})
 				return err
 			},
 		},
@@ -171,9 +170,9 @@ func TestParticipantEncoderMatchesHostileGoldenBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := fixtureMetadata(t, "00000000-0000-4000-8000-000000000007", "participant.joined", "2026-07-12T18:05:00.000Z")
-	userID := "50000000-0000-4000-8000-000000000001"
+	identityID := "50000000-0000-4000-8000-000000000001"
 	name := `Ada – <&> "東京" \`
-	encoded, _, err := EncodeParticipantEvent(metadata, ParticipantSnapshot{ID: "40000000-0000-4000-8000-000000000001", UserID: &userID, RoomID: "20000000-0000-4000-8000-000000000001", SessionID: "30000000-0000-4000-8000-000000000001", Name: &name, Status: "active", JoinedAt: mustTime(t, "2026-07-12T18:05:00.000Z")})
+	encoded, _, err := EncodeParticipantEvent(metadata, ParticipantSnapshot{ID: "40000000-0000-4000-8000-000000000001", IdentityID: &identityID, SpaceID: "20000000-0000-4000-8000-000000000001", EpisodeID: "30000000-0000-4000-8000-000000000001", Name: &name, Status: "active", JoinedAt: mustTime(t, "2026-07-12T18:05:00.000Z")})
 	if err != nil {
 		t.Fatal(err)
 	}

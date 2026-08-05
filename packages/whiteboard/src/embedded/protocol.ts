@@ -1,4 +1,4 @@
-import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire.js";
+import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire";
 
 export const CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION = 1 as const;
 export const CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION = "0.18.1" as const;
@@ -46,7 +46,7 @@ export type ChalkEmbeddedWhiteboardHostMessage =
   | {
       readonly type: "apply_cursor";
       readonly payload: {
-        readonly participantSessionId: string;
+        readonly participantId: string;
         readonly displayName: string;
         readonly x: number;
         readonly y: number;

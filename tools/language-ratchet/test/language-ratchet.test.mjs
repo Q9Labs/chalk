@@ -14,7 +14,7 @@ function countsForSurface(surface, text) {
 }
 
 test("counts banned terms across prose and identifier boundaries", () => {
-  const counts = countText("RoomSession roomId room_sessions waiting-room waiting_room waitingroom VideoConference videoconference");
+  const counts = countText("RoomSession roomId room_sessions Lobby waiting-room waiting_room waitingroom VideoConference videoconference");
 
   assert.equal(counts.room, 5);
   assert.equal(counts.session, 1);
@@ -24,6 +24,7 @@ test("counts banned terms across prose and identifier boundaries", () => {
   assert.equal(counts.conference, 1);
   assert.equal(counts.videoconference, 2);
   assert.equal(counts.meeting, 0);
+  assert.equal(counts.lobby, 1);
   assert.deepEqual(Object.keys(counts), TERMS);
 });
 
@@ -69,6 +70,9 @@ test("tracked-file changes return failure for increases and decreases", async ()
     await writeFile(fixturePath, "Space\n");
     assert.equal(await runRatchet({ repositoryRoot, baselinePath }), 1);
     assert.match(errors.join("\n"), /Run pnpm run language:ratchet:update/);
+
+    await rm(fixturePath);
+    assert.equal(await runRatchet({ repositoryRoot, baselinePath, update: true }), 0);
   } finally {
     console.error = originalError;
     await rm(repositoryRoot, { recursive: true, force: true });

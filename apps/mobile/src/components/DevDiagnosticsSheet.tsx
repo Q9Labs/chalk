@@ -14,12 +14,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 interface DevDiagnosticsSheetProps {
   readonly visible: boolean;
   readonly onClose: () => void;
-  readonly onForceDisconnect: () => Promise<void>;
-  readonly onClearClientSession: () => Promise<void>;
+  readonly onClearSpaceContext: () => Promise<void>;
   readonly onResetDiagnostics: () => Promise<void> | void;
 }
 
-export function DevDiagnosticsSheet({ visible, onClose, onForceDisconnect, onClearClientSession, onResetDiagnostics }: DevDiagnosticsSheetProps): React.JSX.Element {
+export function DevDiagnosticsSheet({ visible, onClose, onClearSpaceContext, onResetDiagnostics }: DevDiagnosticsSheetProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const diagnostics = useSyncExternalStore(subscribeDevDiagnostics, getDevDiagnosticsState);
   const [copied, setCopied] = useState(false);
@@ -51,8 +50,7 @@ export function DevDiagnosticsSheet({ visible, onClose, onForceDisconnect, onCle
         </View>
         <ScrollView contentContainerStyle={styles.actions} horizontal showsHorizontalScrollIndicator={false}>
           <Action label={copied ? "Copied" : "Copy"} onPress={() => void copy()} />
-          <Action label="Disconnect" onPress={() => void onForceDisconnect()} />
-          <Action label="Clear session" onPress={() => void onClearClientSession()} />
+          <Action label="Clear access" onPress={() => void onClearSpaceContext()} />
           <Action label="Clear timeline" onPress={clearDevDiagnosticsLogs} />
           <Action label="Reset" onPress={() => void onResetDiagnostics()} />
         </ScrollView>
@@ -63,18 +61,16 @@ export function DevDiagnosticsSheet({ visible, onClose, onForceDisconnect, onCle
               <Row label="Message" value={diagnostics.lastFailure.message} />
             </Section>
           ) : null}
-          <Section icon={ActivityIcon} title="Session">
-            <Row label="Phase" value={diagnostics.session?.phase} />
-            <Row label="Sync" value={diagnostics.session?.connectionStatus} />
-            <Row label="Room" value={diagnostics.session?.roomName} />
-            <Row label="Failure" value={diagnostics.session?.session.failure?.message} />
+          <Section icon={ActivityIcon} title="Connection">
+            <Row label="Status" value={diagnostics.connection?.status} />
+            <Row label="Failure" value={diagnostics.connection?.lastError?.message} />
           </Section>
           <Section icon={Navigation03Icon} title="Environment">
             <Row label="Target" value={diagnostics.environment.target} />
             <Row label="Build" value={diagnostics.environment.buildProfile} />
             <Row label="Route" value={diagnostics.environment.routeKind} />
             <Row label="Broker" value={diagnostics.environment.brokerUrl} />
-            <Row label="Invite" value={diagnostics.clientSession.inviteTokenPreview} />
+            <Row label="Space" value={diagnostics.environment.routeSpaceId} />
           </Section>
           <Section icon={SmartPhone01Icon} title="Device">
             <Row label="Platform" value={diagnostics.device?.platform} />

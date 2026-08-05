@@ -115,7 +115,7 @@ function isPendingTarget(value: unknown): value is V1PendingTarget {
 }
 
 function isTargetCommand(value: unknown): value is V1TargetCommand {
-  return isRecord(value) && typeof value.name === "string" && isRecord(value.payload) && ["set_hand_raised", "set_display_name", "set_admission_policy", "set_participant_role", "transfer_host"].includes(value.name);
+  return isRecord(value) && typeof value.name === "string" && isRecord(value.payload) && ["set_hand_raised", "set_display_name", "set_admission_policy", "assign_roles"].includes(value.name);
 }
 
 function copyPendingTarget(command: V1PendingTarget): V1PendingTarget {

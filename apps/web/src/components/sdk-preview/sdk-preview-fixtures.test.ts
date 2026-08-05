@@ -12,8 +12,8 @@ describe("SDK preview fixtures", () => {
   });
 
   it("projects pending and failed chat messages", () => {
-    expect(chatPending({ ...DEFAULT_PREVIEW_SEARCH, chat: "pending" })).toMatchObject([{ state: "sending" }]);
-    expect(chatPending({ ...DEFAULT_PREVIEW_SEARCH, chat: "failure" })).toMatchObject([{ state: "failed", error: { code: "internal_error", recoverable: true } }]);
+    expect(chatPending({ ...DEFAULT_PREVIEW_SEARCH, chat: "pending" })).toMatchObject([{ status: "sending" }]);
+    expect(chatPending({ ...DEFAULT_PREVIEW_SEARCH, chat: "failure" })).toMatchObject([{ status: "failed", error: { code: "client.internal_error", recoverable: true } }]);
     expect(chatPending(DEFAULT_PREVIEW_SEARCH)).toEqual([]);
   });
 
@@ -29,6 +29,6 @@ describe("SDK preview fixtures", () => {
     const onBack = vi.fn();
     const overlay = statusOverlay({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "timeout" }, onRetry, onBack);
 
-    expect(overlay).toMatchObject({ isVisible: true, status: "failed", supportCode: "space-timeout-408", onRetry, onLeave: onBack });
+    expect(overlay).toMatchObject({ isVisible: true, status: "failed", supportCode: "space-timeout-408", onRetry, onLeft: onBack });
   });
 });

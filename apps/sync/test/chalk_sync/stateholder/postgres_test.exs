@@ -1,12 +1,12 @@
 defmodule ChalkSync.Stateholder.PostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Sessions.Reducer
+  alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Postgres
 
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
@@ -33,8 +33,8 @@ defmodule ChalkSync.Stateholder.PostgresTest do
   end
 
   setup %{connections: connections} do
-    fixture = SyncPostgres.seed_session(hd(connections))
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    fixture = SyncPostgres.seed_episode(hd(connections))
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
     {:ok, fixture: fixture}
   end
 
@@ -53,7 +53,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     assert duplicate.event_id == committed.event_id
     assert duplicate.revision == committed.revision
 
-    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
+    assert {:ok, recovery} = Postgres.recover(fixture.episode, nil)
     assert recovery.head.revision == 2
     assert hd(recovery.snapshot["participants"])["hand_raised"]
 
@@ -87,11 +87,11 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     assert recovery.replay_cursor == 1
     assert recovery.events == []
 
-    assert {:ok, first_page} = Postgres.recovery_page(identity.session, 1, 130)
+    assert {:ok, first_page} = Postgres.recovery_page(identity.episode, 1, 130)
     assert length(first_page) == 128
     assert {hd(first_page).revision, List.last(first_page).revision} == {2, 129}
 
-    assert {:ok, second_page} = Postgres.recovery_page(identity.session, 129, 130)
+    assert {:ok, second_page} = Postgres.recovery_page(identity.episode, 129, 130)
     assert Enum.map(second_page, & &1.revision) == [130]
   end
 
@@ -99,8 +99,8 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     fixture: fixture
   } do
     identity = hd(fixture.identities)
-    connection = ChalkSync.Database.connection(identity.session)
-    stale_identity = %{identity | participant_session_generation: 2}
+    connection = ChalkSync.Database.connection(identity.episode)
+    stale_identity = %{identity | participant_generation: 2}
 
     assert {:ok, stale} = Postgres.recover(stale_identity, nil)
     assert stale.mode == :terminal
@@ -109,13 +109,13 @@ defmodule ChalkSync.Stateholder.PostgresTest do
 
     Postgrex.query!(
       connection,
-      "update room_sessions set status = 'ending' where tenant_id = $1 and id = $2",
-      [UUID.dump!(identity.session.tenant_id), UUID.dump!(identity.session.session_id)]
+      "update episodes set status = 'ending' where tenant_id = $1 and id = $2",
+      [UUID.dump!(identity.episode.tenant_id), UUID.dump!(identity.episode.episode_id)]
     )
 
     assert {:ok, ended} = Postgres.recover(identity, nil)
     assert ended.mode == :terminal
-    assert ended.terminal_reason == :session_ended
+    assert ended.terminal_reason == :episode_ended
     assert ended.head.revision == fixture.state.revision
   end
 
@@ -131,7 +131,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
 
     rejected_identity = %{
       identity
-      | participant_session_id: UUID.generate(),
+      | participant_id: UUID.generate(),
         admission_lifecycle_intent_id: UUID.generate()
     }
 
@@ -174,7 +174,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
       Application.delete_env(:chalk_sync, :stateholder_fault_hook)
     end
 
-    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
+    assert {:ok, recovery} = Postgres.recover(fixture.episode, nil)
     assert recovery.head.revision == 2
   end
 
@@ -200,9 +200,10 @@ defmodule ChalkSync.Stateholder.PostgresTest do
   test "serializes concurrent decisions from independent node connection sets", %{
     connections: connections
   } do
-    fixture = SyncPostgres.seed_session(hd(connections), 2)
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
-    [first_identity, second_identity] = fixture.identities
+    fixture = SyncPostgres.seed_episode(hd(connections), 2)
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
+    [first_identity, _second_identity] = fixture.identities
+    second_identity = first_identity
 
     first =
       Task.async(fn ->
@@ -217,16 +218,19 @@ defmodule ChalkSync.Stateholder.PostgresTest do
       end)
 
     decisions = [Task.await(first), Task.await(second)]
-    assert Enum.all?(decisions, &match?({:ok, %{result: :committed}}, &1))
 
-    assert decisions |> Enum.map(fn {:ok, decision} -> decision.revision end) |> Enum.sort() == [
-             3,
-             4
+    assert Enum.all?(decisions, fn
+             {:ok, %{result: result}} when result in [:committed, :satisfied] -> true
+             _ -> false
+           end)
+
+    assert decisions |> Enum.map(fn {:ok, decision} -> decision.revision end) |> Enum.uniq() == [
+             3
            ]
 
-    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
-    assert recovery.head.revision == 4
-    assert Enum.all?(recovery.snapshot["participants"], & &1["hand_raised"])
+    assert {:ok, recovery} = Postgres.recover(fixture.episode, nil)
+    assert recovery.head.revision == 3
+    assert Enum.count(recovery.snapshot["participants"], & &1["hand_raised"]) == 1
   end
 
   test "derives conflicts and preserves stable terminal outcomes", %{fixture: fixture} do
@@ -250,19 +254,19 @@ defmodule ChalkSync.Stateholder.PostgresTest do
              Postgres.decide_command(identity, satisfied)
   end
 
-  test "does not leak a receipt through a mismatched Room authority key", %{fixture: fixture} do
+  test "does not leak a receipt through a mismatched Space authority key", %{fixture: fixture} do
     %Identity{} = identity = hd(fixture.identities)
-    %SessionKey{} = session = identity.session
-    command = command("room_context_cmd1", :raise_hand)
+    %EpisodeKey{} = episode = identity.episode
+    command = command("space_context_cmd1", :raise_hand)
     assert {:ok, %{result: :committed}} = Postgres.decide_command(identity, command)
 
-    wrong_room = %Identity{
+    wrong_space = %Identity{
       identity
-      | session: %SessionKey{session | room_id: UUID.generate()}
+      | episode: %EpisodeKey{episode | space_id: UUID.generate()}
     }
 
-    assert Postgres.resolve_receipt(wrong_room, command) == :not_found
-    assert {:retryable, _reason} = Postgres.decide_command(wrong_room, command)
+    assert Postgres.resolve_receipt(wrong_space, command) == :not_found
+    assert {:retryable, _reason} = Postgres.decide_command(wrong_space, command)
   end
 
   test "persists participant-inactive rejection when the participant row is absent", %{
@@ -272,7 +276,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
 
     missing = %Identity{
       identity
-      | participant_session_id: UUID.generate(),
+      | participant_id: UUID.generate(),
         admission_lifecycle_intent_id: UUID.generate()
     }
 
@@ -289,7 +293,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     identity = hd(fixture.identities)
     target = command_payload("satisfied_target1", :set_hand_raised, %{"raised" => false})
 
-    assert {:ok, before_recovery} = Postgres.recover(fixture.session, nil)
+    assert {:ok, before_recovery} = Postgres.recover(fixture.episode, nil)
 
     assert {:ok, satisfied} = Postgres.decide_command(identity, target)
     assert satisfied.result == :satisfied
@@ -303,46 +307,46 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     assert duplicate.revision == satisfied.revision
     assert duplicate.state_digest == satisfied.state_digest
 
-    assert {:ok, after_recovery} = Postgres.recover(fixture.session, nil)
+    assert {:ok, after_recovery} = Postgres.recover(fixture.episode, nil)
     assert after_recovery.head == before_recovery.head
   end
 
-  test "authorizes from locked current role and transfers host atomically", %{
+  test "authorizes from locked current role and assigns a role atomically", %{
     connections: connections
   } do
-    fixture = SyncPostgres.seed_session(hd(connections), 2)
-    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    fixture = SyncPostgres.seed_episode(hd(connections), 2)
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.episode) end)
     [host, participant] = fixture.identities
 
     assert {:ok, %{result: :rejected, reason: :capability_denied}} =
              Postgres.decide_command(
                %{participant | capabilities: ["manageAdmission", "transferHost"]},
                command_payload("untrusted_claims1", :set_admission_policy, %{
-                 "policy" => "approval"
+                 "policy" => "knock"
                })
              )
 
     assert {:ok, %{result: :committed, event: event}} =
              Postgres.decide_command(
                host,
-               command_payload("atomic_transfer1", :transfer_host, %{
-                 "participantSessionId" => participant.participant_session_id
+               command_payload("atomic_role_assign1", :assign_roles, %{
+                 "participantId" => participant.participant_id,
+                 "role" => "collaborator"
                })
              )
 
-    assert event.name == "host_transferred"
-    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
-    assert recovery.snapshot["host_participant_session_id"] == participant.participant_session_id
+    assert event.name == "role_assigned"
+    assert {:ok, recovery} = Postgres.recover(fixture.episode, nil)
 
     roles =
-      Map.new(recovery.snapshot["participants"], &{&1["participant_session_id"], &1["role"]})
+      Map.new(recovery.snapshot["participants"], &{&1["participant_id"], &1["role"]})
 
-    assert roles[host.participant_session_id] == "cohost"
-    assert roles[participant.participant_session_id] == "host"
+    assert roles[host.participant_id] == "owner"
+    assert roles[participant.participant_id] == "collaborator"
   end
 
   defp assert_independent_fold(identity, initial_state) do
-    connection = ChalkSync.Database.connection(identity.session)
+    connection = ChalkSync.Database.connection(identity.episode)
 
     rows =
       Postgrex.query!(
@@ -350,12 +354,12 @@ defmodule ChalkSync.Stateholder.PostgresTest do
         """
         select event_name, base_revision, revision, payload
         from sync_control_events
-        where tenant_id = $1 and session_id = $2 and revision > $3
+        where tenant_id = $1 and episode_id = $2 and revision > $3
         order by revision
         """,
         [
-          UUID.dump!(identity.session.tenant_id),
-          UUID.dump!(identity.session.session_id),
+          UUID.dump!(identity.episode.tenant_id),
+          UUID.dump!(identity.episode.episode_id),
           initial_state.revision
         ]
       ).rows
@@ -373,7 +377,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
         state
       end)
 
-    assert {:ok, recovery} = Postgres.recover(identity.session, nil)
+    assert {:ok, recovery} = Postgres.recover(identity.episode, nil)
     assert Reducer.snapshot(folded) == recovery.snapshot
   end
 

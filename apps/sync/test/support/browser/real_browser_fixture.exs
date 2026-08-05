@@ -12,14 +12,14 @@ defmodule ChalkSync.RealBrowserFixture do
       Bandit.start_link(plug: ChalkSync.Transport.Router, ip: {127, 0, 0, 1}, port: 0)
 
     {:ok, {_ip, port}} = ThousandIsland.listener_info(listener)
-    fixture = SyncPostgres.seed_pending_join(Database.connection(browser_session()))
+    fixture = SyncPostgres.seed_pending_join(Database.connection(browser_episode()))
 
     try do
       emit_fixture(port, fixture)
       IO.gets("")
     after
       if Process.alive?(listener), do: GenServer.stop(listener)
-      SyncPostgres.cleanup(Database.connection(fixture.session), fixture.session)
+      SyncPostgres.cleanup(Database.connection(fixture.episode), fixture.episode)
       Application.stop(:chalk_sync)
     end
   end
@@ -37,11 +37,11 @@ defmodule ChalkSync.RealBrowserFixture do
       raise "CHALK_SYNC_TEST_DATABASE_URL must be set"
   end
 
-  defp browser_session do
-    %ChalkSync.Stateholder.SessionKey{
+  defp browser_episode do
+    %ChalkSync.Stateholder.EpisodeKey{
       tenant_id: "browser",
-      room_id: "browser",
-      session_id: "browser"
+      space_id: "browser",
+      episode_id: "browser"
     }
   end
 
@@ -50,15 +50,14 @@ defmodule ChalkSync.RealBrowserFixture do
 
     token =
       DevTokenVerifier.token(%{
-        "tenant_id" => identity.session.tenant_id,
-        "room_id" => identity.session.room_id,
-        "session_id" => identity.session.session_id,
-        "participant_id" => identity.participant_session_id,
-        "participant_session_id" => identity.participant_session_id,
-        "participant_session_generation" => identity.participant_session_generation,
+        "tenant_id" => identity.episode.tenant_id,
+        "space_id" => identity.episode.space_id,
+        "episode_id" => identity.episode.episode_id,
+        "participant_id" => identity.participant_id,
+        "participant_generation" => identity.participant_generation,
         "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
-        "initial_role" => identity.role,
-        "eligible_roles" => identity.eligible_roles,
+        "role" => identity.role,
+        "capabilities" => identity.capabilities,
         "issued_at" => 1,
         "expires_at" => 4_102_444_800
       })

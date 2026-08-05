@@ -132,7 +132,7 @@ describe("ExcalidrawCollabEngine", () => {
     engine.dispose();
   });
 
-  it("routes subscribed transport snapshots and resets into the engine", () => {
+  it("routes subscribed transport snapshots, cursors, and resets into the engine", () => {
     const api = createAPI(() => []);
     const requestSnapshot = vi.fn().mockResolvedValue(undefined);
     const unsubscribe = vi.fn();
@@ -154,6 +154,23 @@ describe("ExcalidrawCollabEngine", () => {
       appState: { viewBackgroundColor: "#fff" },
     });
     expect(api.updateScene).toHaveBeenCalledWith(expect.objectContaining({ elements: remote }));
+
+    const handleRemoteCursor = vi.spyOn(engine, "handleRemoteCursor");
+    listener?.({
+      type: "cursor",
+      participantId: "participant-1",
+      displayName: "Grace",
+      x: 24,
+      y: 48,
+      occurredAt: "2026-08-04T08:00:00.000Z",
+    });
+    expect(handleRemoteCursor).toHaveBeenCalledWith({
+      participantId: "participant-1",
+      displayName: "Grace",
+      x: 24,
+      y: 48,
+      timestamp: new Date("2026-08-04T08:00:00.000Z"),
+    });
 
     listener?.({
       type: "reset_required",

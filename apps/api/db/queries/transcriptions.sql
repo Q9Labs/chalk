@@ -1,30 +1,30 @@
 -- name: CreateTranscription :one
 insert into transcriptions (
-    id, tenant_id, recording_id, room_id, session_id, status, provider, model,
+    id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
     languages, metadata, source_manifest_key, source_manifest_sha256,
     source_manifest_size, source_manifest_content_type, generation
 ) select
-    sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.room_id,
-    recordings.session_id, sqlc.arg(status), sqlc.narg(provider), sqlc.narg(model),
+    sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.space_id,
+    recordings.episode_id, sqlc.arg(status), sqlc.narg(provider), sqlc.narg(model),
     sqlc.arg(languages), sqlc.narg(metadata), sqlc.arg(source_manifest_key),
     sqlc.arg(source_manifest_sha256), sqlc.arg(source_manifest_size),
     sqlc.arg(source_manifest_content_type), sqlc.arg(generation)
 from recordings
 where recordings.tenant_id = sqlc.arg(tenant_id)
   and recordings.id = sqlc.arg(recording_id)
-  and recordings.room_id = sqlc.arg(room_id)
-  and recordings.session_id = sqlc.arg(session_id)
+  and recordings.space_id = sqlc.arg(space_id)
+  and recordings.episode_id = sqlc.arg(episode_id)
   and recordings.status = 'completed'
 returning *;
 
 -- name: CreateRequestedTranscription :one
 insert into transcriptions (
-    id, tenant_id, recording_id, room_id, session_id, status, provider, model,
+    id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
     languages, metadata, source_manifest_key, source_manifest_sha256,
     source_manifest_size, source_manifest_content_type, generation
 ) select
-    sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.room_id,
-    recordings.session_id, sqlc.arg(status), null, null,
+    sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.space_id,
+    recordings.episode_id, sqlc.arg(status), null, null,
     sqlc.arg(languages), sqlc.narg(metadata), sqlc.narg(source_manifest_key),
     sqlc.narg(source_manifest_sha256), sqlc.narg(source_manifest_size),
     sqlc.narg(source_manifest_content_type), sqlc.arg(generation)

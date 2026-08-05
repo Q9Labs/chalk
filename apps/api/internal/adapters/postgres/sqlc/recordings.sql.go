@@ -15,31 +15,31 @@ const createRecording = `-- name: CreateRecording :one
 insert into recordings (
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
     metadata
 ) select
     $1,
-    room_sessions.tenant_id,
-    room_sessions.room_id,
-    room_sessions.id,
+    episodes.tenant_id,
+    episodes.space_id,
+    episodes.id,
     $2,
     $3,
     $4,
     $5
-from room_sessions
+from episodes
 where
-    room_sessions.tenant_id = $6
-    and room_sessions.room_id = $7
-    and room_sessions.id = $8
+    episodes.tenant_id = $6
+    and episodes.space_id = $7
+    and episodes.id = $8
 returning
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
@@ -55,8 +55,8 @@ type CreateRecordingParams struct {
 	StorageKey      pgtype.Text `json:"storage_key"`
 	Metadata        []byte      `json:"metadata"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
-	RoomID          pgtype.UUID `json:"room_id"`
-	SessionID       pgtype.UUID `json:"session_id"`
+	SpaceID         pgtype.UUID `json:"space_id"`
+	EpisodeID       pgtype.UUID `json:"episode_id"`
 }
 
 func (q *Queries) CreateRecording(ctx context.Context, arg CreateRecordingParams) (Recording, error) {
@@ -67,15 +67,15 @@ func (q *Queries) CreateRecording(ctx context.Context, arg CreateRecordingParams
 		arg.StorageKey,
 		arg.Metadata,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 	)
 	var i Recording
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.Status,
 		&i.StorageProvider,
 		&i.StorageKey,
@@ -90,8 +90,8 @@ const getTenantRecording = `-- name: GetTenantRecording :one
 select
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
@@ -115,8 +115,8 @@ func (q *Queries) GetTenantRecording(ctx context.Context, arg GetTenantRecording
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.Status,
 		&i.StorageProvider,
 		&i.StorageKey,
@@ -131,8 +131,8 @@ const listTenantRecordings = `-- name: ListTenantRecordings :many
 select
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
@@ -144,7 +144,7 @@ where
     tenant_id = $1
     and (
         $2::uuid is null
-        or session_id = $2::uuid
+        or episode_id = $2::uuid
     )
     and (
         not $3::boolean
@@ -159,7 +159,7 @@ limit $6::integer
 
 type ListTenantRecordingsParams struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
-	SessionID       pgtype.UUID        `json:"session_id"`
+	EpisodeID       pgtype.UUID        `json:"episode_id"`
 	CursorSet       bool               `json:"cursor_set"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        pgtype.UUID        `json:"cursor_id"`
@@ -169,7 +169,7 @@ type ListTenantRecordingsParams struct {
 func (q *Queries) ListTenantRecordings(ctx context.Context, arg ListTenantRecordingsParams) ([]Recording, error) {
 	rows, err := q.db.Query(ctx, listTenantRecordings,
 		arg.TenantID,
-		arg.SessionID,
+		arg.EpisodeID,
 		arg.CursorSet,
 		arg.CursorCreatedAt,
 		arg.CursorID,
@@ -185,8 +185,8 @@ func (q *Queries) ListTenantRecordings(ctx context.Context, arg ListTenantRecord
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
-			&i.RoomID,
-			&i.SessionID,
+			&i.SpaceID,
+			&i.EpisodeID,
 			&i.Status,
 			&i.StorageProvider,
 			&i.StorageKey,
@@ -230,8 +230,8 @@ where
 returning
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
@@ -270,8 +270,8 @@ func (q *Queries) UpdateTenantRecording(ctx context.Context, arg UpdateTenantRec
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.Status,
 		&i.StorageProvider,
 		&i.StorageKey,

@@ -97,6 +97,35 @@ defmodule ChalkSync.ObservabilityTest do
     assert fields["tracestate"] == "acme=first"
   end
 
+  test "preserves unsampled trace flags and tracestate through durable context reconstruction" do
+    traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+    tracestate = "acme=first"
+
+    observed =
+      Observability.context(%{
+        "journey_id" => @journey_id,
+        "traceparent" => traceparent,
+        "tracestate" => tracestate
+      })
+      |> Observability.observed_operation_context()
+
+    assert observed.producing_traceparent == traceparent
+    assert observed.producing_tracestate == tracestate
+
+    persisted =
+      Observability.persisted_context(
+        observed.journey_id,
+        observed.producing_trace_id,
+        observed.producing_span_id,
+        observed.producing_traceparent,
+        observed.producing_tracestate
+      )
+
+    fields = Observability.frame_fields(persisted)
+    assert fields["traceparent"] == traceparent
+    assert fields["tracestate"] == tracestate
+  end
+
   test "emits stable root and phase telemetry with journey correlation" do
     context = Observability.context(%{"journey_id" => @journey_id})
     context = Observability.root(context, "sync.test.root", %{transport: "websocket"})
@@ -104,6 +133,22 @@ defmodule ChalkSync.ObservabilityTest do
 
     assert_event("sync.test.root", @journey_id, "root")
     assert_event("sync.test.phase", @journey_id, "phase")
+  end
+
+  test "emits a bounded Episode event phase using the canonical subject" do
+    context = Observability.context(%{"journey_id" => @journey_id})
+    _context = Observability.episode_event(context, %{name: "participant_joined"})
+
+    assert %{attributes: %{event_name: "participant_joined"}} =
+             assert_event("sync.episode.event.committed", @journey_id, "phase")
+  end
+
+  test "does not retain unbounded Episode event names" do
+    context = Observability.context(%{"journey_id" => @journey_id})
+    _context = Observability.episode_event(context, %{name: "unexpected_event"})
+
+    assert %{attributes: %{event_name: "other"}} =
+             assert_event("sync.episode.event.committed", @journey_id, "phase")
   end
 
   test "replaces invalid incoming journey ids with API-compatible UUIDs" do

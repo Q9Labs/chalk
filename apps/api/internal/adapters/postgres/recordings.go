@@ -32,15 +32,15 @@ func (r RecordingRepository) Create(ctx context.Context, input recordings.Create
 	recording, err := r.queries.CreateRecording(ctx, sqlc.CreateRecordingParams{
 		ID:              uuid(input.ID),
 		TenantID:        uuid(input.TenantID),
-		RoomID:          uuid(input.RoomID),
-		SessionID:       uuid(input.SessionID),
+		SpaceID:         uuid(input.SpaceID),
+		EpisodeID:       uuid(input.EpisodeID),
 		Status:          input.Status,
 		StorageProvider: input.StorageProvider,
 		StorageKey:      text(input.StorageKey),
 		Metadata:        jsonBytes(input.Metadata),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return recordings.Recording{}, recordings.ErrSessionNotFound
+		return recordings.Recording{}, recordings.ErrEpisodeNotFound
 	}
 	if err != nil {
 		return recordings.Recording{}, fmt.Errorf("create recording: %w", err)
@@ -64,8 +64,8 @@ func (r RecordingRepository) Get(ctx context.Context, tenantID utilities.ID, rec
 	return mapRecording(recording), nil
 }
 
-func (r RecordingRepository) List(ctx context.Context, tenantID utilities.ID, sessionID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error) {
-	rows, err := r.queries.ListTenantRecordings(ctx, listTenantRecordingsParams(tenantID, sessionID, page))
+func (r RecordingRepository) List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error) {
+	rows, err := r.queries.ListTenantRecordings(ctx, listTenantRecordingsParams(tenantID, episodeID, page))
 	if err != nil {
 		return recordings.RecordingList{}, fmt.Errorf("list recordings: %w", err)
 	}
@@ -114,11 +114,11 @@ func (r RecordingRepository) Update(ctx context.Context, tenantID utilities.ID, 
 	return mapRecording(recording), nil
 }
 
-func listTenantRecordingsParams(tenantID utilities.ID, sessionID utilities.ID, page pagination.PageRequest) sqlc.ListTenantRecordingsParams {
+func listTenantRecordingsParams(tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) sqlc.ListTenantRecordingsParams {
 	cursor := page.Cursor()
 	params := sqlc.ListTenantRecordingsParams{
 		TenantID:  uuid(tenantID),
-		SessionID: uuid(sessionID),
+		EpisodeID: uuid(episodeID),
 		PageSize:  int32(page.Size() + 1),
 	}
 	if cursor == nil {
@@ -135,8 +135,8 @@ func mapRecording(recording sqlc.Recording) recordings.Recording {
 	return recordings.Recording{
 		ID:              utilities.IDFromBytes(recording.ID.Bytes),
 		TenantID:        utilities.IDFromBytes(recording.TenantID.Bytes),
-		RoomID:          utilities.IDFromBytes(recording.RoomID.Bytes),
-		SessionID:       utilities.IDFromBytes(recording.SessionID.Bytes),
+		SpaceID:         utilities.IDFromBytes(recording.SpaceID.Bytes),
+		EpisodeID:       utilities.IDFromBytes(recording.EpisodeID.Bytes),
 		Status:          recording.Status,
 		StorageProvider: recording.StorageProvider,
 		StorageKey:      nullableText(recording.StorageKey),

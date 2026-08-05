@@ -14,11 +14,8 @@ vi.mock("react-native", () => ({
   View: "View",
 }));
 vi.mock("@q9labsai/chalk-react-native", () => ({
-  ChalkProvider: (props: Record<string, unknown>) => createElement("ChalkProvider", props, props.children as ReactNode),
-  EndScreen: (props: Record<string, unknown>) => createElement("EndScreen", props),
-  JoinFailedScreen: (props: Record<string, unknown>) => createElement("JoinFailedScreen", props),
-  JoiningScreen: "JoiningScreen",
-  PreJoinScreen: "PreJoinScreen",
+  Chalk: (props: Record<string, unknown>) => createElement("Chalk", props),
+  Entrance: (props: Record<string, unknown>) => createElement("Entrance", props),
 }));
 vi.mock("@q9labsai/chalk-react-native/theme", () => ({ Theme: { spacing: { md: 12 } } }));
 

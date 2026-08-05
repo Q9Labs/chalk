@@ -3,7 +3,7 @@ defmodule ChalkSync.LifecycleConsumer do
   Bounded, idempotent delivery loop for API-created lifecycle intents.
 
   Discovery holds no row locks. Each returned ID is applied by the Stateholder
-  through the same Session control lock used by commands. Concurrent nodes may
+  through the same Episode control lock used by commands. Concurrent nodes may
   discover the same ID; the durable intent status makes the result idempotent.
   """
 
@@ -11,7 +11,7 @@ defmodule ChalkSync.LifecycleConsumer do
 
   require Logger
 
-  alias ChalkSync.Sessions.Coordinator
+  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Stateholder
   alias ChalkSync.Telemetry
 
@@ -80,21 +80,21 @@ defmodule ChalkSync.LifecycleConsumer do
   end
 
   defp apply_page(intents) do
-    Enum.reduce(intents, {0, 0, 0}, fn {session, intent_id},
+    Enum.reduce(intents, {0, 0, 0}, fn {episode, intent_id},
                                        {applied, failures, recording_failures} ->
-      case Stateholder.apply_lifecycle_intent(session, intent_id) do
+      case Stateholder.apply_lifecycle_intent(episode, intent_id) do
         {:ok, %{result: result} = decision}
         when result in [:applied, :already_applied, :superseded] ->
-          publish_lifecycle_event(session, decision)
+          publish_lifecycle_event(episode, decision)
           {applied + 1, failures, recording_failures}
 
         {:retryable, reason} ->
           Logger.warning(
-            "sync lifecycle intent retryable: session_id=#{session.session_id} intent_id=#{intent_id} reason=#{reason}"
+            "sync lifecycle intent retryable: episode_id=#{episode.episode_id} intent_id=#{intent_id} reason=#{reason}"
           )
 
           record_lifecycle_failure(
-            session,
+            episode,
             intent_id,
             reason,
             applied,
@@ -104,11 +104,11 @@ defmodule ChalkSync.LifecycleConsumer do
 
         {:error, reason} ->
           Logger.error(
-            "sync lifecycle intent invalid: session_id=#{session.session_id} intent_id=#{intent_id} reason=#{reason}"
+            "sync lifecycle intent invalid: episode_id=#{episode.episode_id} intent_id=#{intent_id} reason=#{reason}"
           )
 
           record_lifecycle_failure(
-            session,
+            episode,
             intent_id,
             reason,
             applied,
@@ -119,14 +119,14 @@ defmodule ChalkSync.LifecycleConsumer do
     end)
   end
 
-  defp record_lifecycle_failure(session, intent_id, reason, applied, failures, recording_failures) do
-    case Stateholder.record_lifecycle_failure(session, intent_id, reason) do
+  defp record_lifecycle_failure(episode, intent_id, reason, applied, failures, recording_failures) do
+    case Stateholder.record_lifecycle_failure(episode, intent_id, reason) do
       :ok ->
         {applied, failures + 1, recording_failures}
 
       {:retryable, recording_reason} ->
         Logger.warning(
-          "sync lifecycle failure record unavailable: session_id=#{session.session_id} intent_id=#{intent_id} reason=#{recording_reason}"
+          "sync lifecycle failure record unavailable: episode_id=#{episode.episode_id} intent_id=#{intent_id} reason=#{recording_reason}"
         )
 
         {applied, failures + 1, recording_failures + 1}
@@ -137,10 +137,10 @@ defmodule ChalkSync.LifecycleConsumer do
   defp poll_outcome(_failures, 0), do: :intent_failure
   defp poll_outcome(_failures, _recording_failures), do: :failure
 
-  defp publish_lifecycle_event(session, %{event: event}) when is_map(event),
-    do: Coordinator.publish(session, event)
+  defp publish_lifecycle_event(episode, %{event: event}) when is_map(event),
+    do: Coordinator.publish(episode, event)
 
-  defp publish_lifecycle_event(_session, _decision), do: :ok
+  defp publish_lifecycle_event(_episode, _decision), do: :ok
 
   @doc false
   @spec poll_delay(non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer()) ::

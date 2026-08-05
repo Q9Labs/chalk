@@ -1,5 +1,5 @@
 import type { AndroidConnectionServiceCall, AndroidConnectionServiceDisconnectReason } from "../android/connection-service";
-import type { VideoConferencePhase } from "./VideoConference";
+import type { SpaceLifecyclePhase } from "./space-lifecycle";
 
 export interface AndroidConnectionServiceControllerInput {
   readonly displayName: string;
@@ -7,9 +7,9 @@ export interface AndroidConnectionServiceControllerInput {
   readonly hasVideo: boolean;
   readonly joinNonce: number;
   readonly onDisconnectRequest: () => void;
-  readonly phase: VideoConferencePhase;
-  readonly roomId: string;
-  readonly roomName: string;
+  readonly phase: SpaceLifecyclePhase;
+  readonly spaceId: string;
+  readonly spaceName: string;
 }
 
 export interface AndroidConnectionServiceControllerDependencies {
@@ -78,7 +78,7 @@ export class AndroidConnectionServiceController {
     this.#startResources();
 
     if (input.phase === "joining" && this.#currentJoinNonce !== input.joinNonce) {
-      const callId = `${input.roomId}:${input.joinNonce}`;
+      const callId = `${input.spaceId}:${input.joinNonce}`;
       this.#currentJoinNonce = input.joinNonce;
       this.#currentCallId = callId;
       this.#activatedCallId = null;
@@ -86,12 +86,12 @@ export class AndroidConnectionServiceController {
         callId,
         displayName: input.displayName,
         hasVideo: input.hasVideo,
-        roomId: input.roomId,
-        roomName: input.roomName,
+        spaceId: input.spaceId,
+        spaceName: input.spaceName,
       });
     }
 
-    if (input.phase === "meeting") {
+    if (input.phase === "live") {
       const callId = this.#currentCallId;
       if (callId && this.#activatedCallId !== callId) {
         this.#activatedCallId = callId;
@@ -99,13 +99,13 @@ export class AndroidConnectionServiceController {
       }
     }
 
-    if (input.phase !== "lobby" && input.phase !== "end") return;
+    if (input.phase !== "entrance" && input.phase !== "left") return;
     const callId = this.#currentCallId;
     if (!callId) return;
 
     this.#currentCallId = null;
     this.#activatedCallId = null;
-    void this.#dependencies.endCall(callId, { reason: input.phase === "lobby" ? "canceled" : "local" });
+    void this.#dependencies.endCall(callId, { reason: input.phase === "entrance" ? "canceled" : "local" });
   }
 
   #startResources(): void {

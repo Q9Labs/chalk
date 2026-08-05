@@ -1,4 +1,4 @@
-import type { V1MediaSource } from "../sync/v1-types";
+import type { MediaSource } from "./plane";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
 
@@ -6,7 +6,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const fetch = options.fetch ?? globalThis.fetch;
   const credential = requireCredential(options);
   const base = options.apiBaseURL.replace(/\/$/, "");
-  const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/rooms/${encodeURIComponent(options.roomId)}/sessions/${encodeURIComponent(options.sessionId)}/participants/${encodeURIComponent(options.participantSessionId)}/media/sfu`;
+  const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const token = await credential();
     if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
@@ -52,13 +52,13 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       const response = await request<{
         incarnation: number;
         sequence: number;
-        publications: readonly { participant_session_id: string; source: V1MediaSource; publication_id: string }[];
+        publications: readonly { participant_id?: string; participant_session_id?: string; source: MediaSource; publication_id: string }[];
       }>("publications");
       return {
         incarnation: response.incarnation,
         sequence: response.sequence,
         publications: response.publications.map((publication) => ({
-          participantSessionId: publication.participant_session_id,
+          participantId: publication.participant_id ?? publication.participant_session_id ?? "",
           source: publication.source,
           publicationId: publication.publication_id,
         })),

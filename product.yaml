@@ -16,46 +16,46 @@ domains:
       evidence: ["apps/api", "apps/sync", "infrastructure"]
     - capability: "App-tier self-hosting has a documented, repeatable production deployment qualification"
       done: true
-      evidence: ["infrastructure/managed-meeting/README.md", "infrastructure/managed-meeting/scripts/validate-runtime", "scratchpad/ship-restored-meeting-ui-session-log-2026-07-22.md"]
+      evidence: ["infrastructure/managed-episode/README.md", "infrastructure/managed-episode/scripts/validate-runtime"]
     - capability: "Cloudflare-free media self-hosting"
       done: false
       evidence: ["docs/redesign/north-star.md"]
     - capability: "Managed production deployment is qualified in this repository"
       done: true
-      evidence: ["infrastructure/managed-meeting", "infrastructure/meeting-broker", "scratchpad/ship-restored-meeting-ui-session-log-2026-07-22.md"]
+      evidence: ["infrastructure/managed-episode", "infrastructure/episode-broker"]
     - capability: "Public product documentation app"
       done: false
       evidence: ["AGENTS.md"]
 
-  meeting_core:
-    - capability: "Room create, read, update, list, and lifecycle API"
+  episode_core:
+    - capability: "Space create, read, update, list, and lifecycle API"
       done: true
-      evidence: ["apps/api/internal/httpapi/rooms.go", "apps/api/internal/httpapi/router.go"]
-    - capability: "Room, session, and participant-session separation"
+      evidence: ["apps/api/internal/httpapi/spaces.go", "apps/api/internal/httpapi/router.go"]
+    - capability: "Space, Episode, and Participant separation"
       done: true
-      evidence: ["apps/api/internal/sessionlifecycle", "apps/api/db"]
-    - capability: "Anonymous and token-based participant admission"
+      evidence: ["apps/api/internal/episodes", "apps/api/db"]
+    - capability: "Anonymous and token-based Participant admission"
       done: true
-      evidence: ["apps/api/internal/httpapi/session_lifecycle.go"]
-    - capability: "Lobby, admission, role, host-succession, and screen-share control semantics"
+      evidence: ["apps/api/internal/httpapi/episode_lifecycle.go"]
+    - capability: "Entrance, admission, role, capability handoff, and screen-share control semantics"
       done: true
       evidence: ["apps/sync", "sdks/typescript/client/src/sync"]
-    - capability: "Local web room proof with camera, microphone, SFU media, and Sync v1"
+    - capability: "Local web Space proof with camera, microphone, SFU media, and Sync v1"
       done: true
-      evidence: ["apps/web/src/routes/room.tsx"]
-    - capability: "Public web create-room flow"
+      evidence: ["apps/web/src/routes/space.tsx"]
+    - capability: "Public web create-Space flow"
       done: true
-      evidence: ["apps/web/src/routes/room.tsx", "infrastructure/meeting-broker/src/meeting-session.ts"]
-    - capability: "Production-ready hosted web meeting experience"
+      evidence: ["apps/web/src/routes/space.tsx", "infrastructure/episode-broker/src/episode-lease.ts"]
+    - capability: "Production-ready hosted web Space experience"
       done: true
-      evidence: ["apps/web/src/routes/room.tsx", "infrastructure/meeting-broker", "scratchpad/ship-restored-meeting-ui-session-log-2026-07-22.md"]
+      evidence: ["apps/web/src/routes/space.tsx", "infrastructure/episode-broker"]
     - capability: "Mobile invite-link join flow"
       done: true
       evidence: ["apps/mobile/App.tsx", "apps/mobile/src/screens/HomeScreen.shared.tsx"]
-    - capability: "Mobile meeting creation is enabled consistently in release builds"
+    - capability: "Mobile Space creation is enabled consistently in release builds"
       done: false
       evidence: ["apps/mobile/src/screens/HomeScreen.shared.tsx"]
-    - capability: "Iframe meeting embed"
+    - capability: "Iframe Space embed"
       done: false
       evidence: ["apps/web/src/routes", "docs/redesign/north-star.md"]
     - capability: "Public status page"
@@ -77,8 +77,8 @@ domains:
       evidence: ["apps/api/internal/httpapi", "apps/api/internal/authentication"]
     - capability: "Tenant-scoped API-key creation, authentication, rotation, redacted listing, and revocation"
       done: true
-      evidence: ["apps/api/internal/apikeys", "apps/api/internal/httpapi/api_keys.go", "sdks/typescript/client/src/server"]
-    - capability: "Complete first-party tenant administration UI"
+      evidence: ["apps/api/internal/adapters/postgres/api_keys.go", "apps/api/internal/httpapi/api_keys.go", "sdks/typescript/client/src/server"]
+    - capability: "Complete first-party tenant management UI"
       done: false
       evidence: ["apps/web/src/routes"]
     - capability: "SSO, SAML, or OIDC"
@@ -94,7 +94,7 @@ domains:
       evidence: ["apps/api/internal/httpapi/sfu_signaling.go", "sdks/typescript/client/src/media/cloudflare-sfu.ts"]
     - capability: "Short-lived participant media credentials with exact route, generation, provider, and connection binding"
       done: true
-      evidence: ["apps/api/internal/participantaccess", "apps/api/internal/httpapi/participant_media_auth.go"]
+      evidence: ["apps/api/internal/httpapi/access_grants.go", "apps/api/internal/httpapi/participant_media_auth.go"]
     - capability: "React Native RealtimeKit media adapter and lifecycle"
       done: true
       evidence: ["sdks/typescript/react-native/src/media/realtimekit"]
@@ -123,7 +123,7 @@ domains:
       evidence: ["apps/sync/README.md", "architecture.html"]
 
   collaboration:
-    - capability: "React chat, reaction, participant, and waiting-room UI components"
+    - capability: "React chat, reaction, Participant, and Entrance UI components"
       done: true
       evidence: ["sdks/typescript/react/src/components"]
     - capability: "Durable server-owned chat stream, delivery acknowledgements, and retention"
@@ -143,7 +143,7 @@ domains:
       evidence: ["apps/web/src/routes/whiteboard.tsx"]
     - capability: "Native mobile whiteboard rendering"
       done: false
-      evidence: ["sdks/typescript/react-native/src/components/native-meeting-room/NativeMeetingStage.ios-phone.tsx"]
+      evidence: ["sdks/typescript/react-native/src/components/SpaceView.ios-phone.tsx"]
     - capability: "Live multi-client whiteboard browser test"
       done: false
       evidence: ["packages/whiteboard"]
@@ -164,7 +164,7 @@ domains:
     - capability: "End-to-end recording to downloadable artifact proof"
       done: false
       evidence: ["architecture.html"]
-    - capability: "Meeting recording is wired into the first-party mobile flow"
+    - capability: "Episode recording is wired into the first-party mobile flow"
       done: false
       evidence: ["apps/mobile/src"]
 
@@ -181,10 +181,10 @@ domains:
     - capability: "End-to-end managed recording-to-provider-to-final-transcript proof"
       done: false
       evidence: ["architecture.html"]
-    - capability: "Live in-room captions with consent and privacy lifecycle"
+    - capability: "Live in-Space captions with consent and privacy lifecycle"
       done: false
       evidence: ["architecture.html"]
-    - capability: "Meeting transcripts are wired into the first-party mobile flow"
+    - capability: "Episode transcripts are wired into the first-party mobile flow"
       done: false
       evidence: ["apps/mobile/src"]
     - capability: "Standalone mobile dictation and transcription flow"
@@ -198,16 +198,16 @@ domains:
     - capability: "TypeScript media, sync, and telemetry client"
       done: true
       evidence: ["sdks/typescript/client/src"]
-    - capability: "Layered React meeting components"
+    - capability: "Layered React Space components"
       done: true
       evidence: ["sdks/typescript/react/src/components"]
-    - capability: "React Native provider, hooks, meeting surfaces, and platform bridges"
+    - capability: "React Native provider, hooks, Space surfaces, and platform bridges"
       done: true
       evidence: ["sdks/typescript/react-native/src"]
     - capability: "Turnkey React web provider, hooks, and join flow"
       done: true
-      evidence: ["sdks/typescript/client/src/session", "sdks/typescript/react/src/session", "tools/sdk-web-consumer-e2e"]
-    - capability: "Server-only Promise SDK for rooms, sessions, participant access, and API keys"
+      evidence: ["sdks/typescript/client/src/space-client", "sdks/typescript/react/src/components", "tools/sdk-web-consumer-e2e"]
+    - capability: "Server-only Promise SDK for Spaces, Episodes, AccessGrants, and API keys"
       done: true
       evidence: ["sdks/typescript/client/src/server", "sdks/typescript/client/scripts/check-server-package.mjs"]
     - capability: "All public API routes are represented in OpenAPI and generated SDKs"
@@ -296,13 +296,13 @@ domains:
       evidence: ["docs/redesign/north-star.md"]
 
   deferred_product_surface:
-    - capability: "Webinar and viewer roles"
+    - capability: "Webinar and observer roles"
       done: false
       evidence: ["docs/redesign/north-star.md"]
     - capability: "Desktop application"
       done: false
       evidence: ["docs/redesign/north-star.md"]
-    - capability: "AI tutoring assistant product"
+    - capability: "Agent tutoring product"
       done: false
       evidence: ["README.md", "architecture.html"]
     - capability: "Tenant-selectable multi-pack sound system"

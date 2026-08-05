@@ -34,7 +34,7 @@ insert into tenants (
     $9
 )
 returning
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,
@@ -104,7 +104,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 
 const getTenant = `-- name: GetTenant :one
 select
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,
@@ -154,7 +154,7 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 
 const listTenants = `-- name: ListTenants :many
 select
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,
@@ -274,7 +274,7 @@ set
     updated_at = now()
 where id = $17
 returning
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,

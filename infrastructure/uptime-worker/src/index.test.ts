@@ -19,6 +19,61 @@ function createEnv(overrides: Partial<Env> = {}): Env {
   };
 }
 
+const INGEST_PATH = "/api/v1/ops/ingest/monitor-results";
+const TWILIO_PATH = "api.twilio.com/2010-04-01/Accounts";
+type FetchInput = string | URL | Request;
+type FetchResponder = (url: string, init?: RequestInit) => Response | Promise<Response>;
+
+function requestURL(input: FetchInput): string {
+  return typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+}
+
+function stubFetch(responder: FetchResponder) {
+  const fetchMock = vi.fn(async (input: FetchInput, init?: RequestInit) => responder(requestURL(input), init));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function stubHealthyFetch() {
+  return stubFetch((url) => (url.includes(INGEST_PATH) ? createResponse(202, JSON.stringify({ ok: true })) : createResponse(200, "ok")));
+}
+
+function stubFailedIngestFetch() {
+  return stubFetch((url) => (url.includes(INGEST_PATH) ? createResponse(503, "ingest unavailable") : createResponse(200, "ok")));
+}
+
+function stubTwilioFallbackFetch(checkStatus: number): () => number {
+  let twilioCallCount = 0;
+  stubFetch((url) => {
+    if (url.includes(TWILIO_PATH)) {
+      twilioCallCount += 1;
+      return createResponse(201, JSON.stringify({ sid: "SM123" }));
+    }
+    if (url.includes(INGEST_PATH)) return createResponse(503, "ingest unavailable");
+    return createResponse(checkStatus, checkStatus === 200 ? "ok" : "check failed");
+  });
+  return () => twilioCallCount;
+}
+
+type FailureBucketMode = "replay" | "buffer" | "critical";
+
+function createFailureBucket(mode: FailureBucketMode): R2Bucket {
+  return {
+    async get() {
+      if (mode === "critical") throw new Error("r2 get unavailable");
+      return null;
+    },
+    async put() {
+      if (mode !== "replay") throw new Error("r2 put unavailable");
+    },
+    async delete() {},
+    async list() {
+      if (mode === "replay") throw new Error("r2 list unavailable");
+      return { objects: [], truncated: false };
+    },
+  };
+}
+
 function createInMemoryBucket(): { bucket: R2Bucket; stored: Map<string, string> } {
   const stored = new Map<string, string>();
   const bucket: R2Bucket = {
@@ -62,17 +117,7 @@ describe("chalk ops monitor worker", () => {
   });
 
   it("runs all default checks and ingests their results", async () => {
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-        return createResponse(202, JSON.stringify({ ok: true }), {
-          "content-type": "application/json",
-        });
-      }
-      return createResponse(200, "ok");
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubFetch((url) => (url.includes(INGEST_PATH) ? createResponse(202, JSON.stringify({ ok: true }), { "content-type": "application/json" }) : createResponse(200, "ok")));
 
     const summary = await runMonitorCycle(createEnv(), new Date("2026-04-14T12:00:00Z"));
 
@@ -87,7 +132,7 @@ describe("chalk ops monitor worker", () => {
 
   it("checks the launch surfaces and supports environment-specific target overrides", () => {
     expect(__internal.DEFAULT_MONITORS).toEqual([
-      expect.objectContaining({ key: "web.room", url: "https://chalkmeet.com/room", method: "GET" }),
+      expect.objectContaining({ key: "web.space", url: "https://chalkmeet.com/space", method: "GET" }),
       expect.objectContaining({ key: "web.account_boundary", url: "https://chalkmeet.com/api/healthz", method: "GET" }),
       expect.objectContaining({ key: "api.health", url: "https://api.chalkmeet.com/healthz", method: "GET" }),
       expect.objectContaining({ key: "api.readiness", url: "https://api.chalkmeet.com/readyz", method: "GET" }),
@@ -103,7 +148,7 @@ describe("chalk ops monitor worker", () => {
       WEB_BASE_URL: "https://web.staging.example/ignored",
     });
     expect(overridden.map(({ key, url }) => ({ key, url }))).toEqual([
-      { key: "web.room", url: "https://web.staging.example/room" },
+      { key: "web.space", url: "https://web.staging.example/space" },
       { key: "web.account_boundary", url: "https://web.staging.example/api/healthz" },
       { key: "api.health", url: "https://api.staging.example/healthz" },
       { key: "api.readiness", url: "https://api.staging.example/readyz" },
@@ -116,9 +161,8 @@ describe("chalk ops monitor worker", () => {
   it("ingests failed and recovered component status without exposing it from the public worker response", async () => {
     let syncReady = false;
     const ingestedStatuses: Array<{ monitor_key: string; status: string; error_code?: string }> = [];
-    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
+    stubFetch((url, init) => {
+      if (url.includes(INGEST_PATH)) {
         ingestedStatuses.push(JSON.parse(String(init?.body)) as { monitor_key: string; status: string; error_code?: string });
         return createResponse(202, JSON.stringify({ ok: true }));
       }
@@ -127,7 +171,6 @@ describe("chalk ops monitor worker", () => {
       }
       return createResponse(200, "ok");
     });
-    vi.stubGlobal("fetch", fetchMock);
 
     const env = createEnv({ CHECK_RETRIES: "0" });
     const failed = await runMonitorCycle(env, new Date("2026-04-14T12:00:00Z"));
@@ -146,16 +189,7 @@ describe("chalk ops monitor worker", () => {
 
   it("buffers failed ingests when an R2 bucket binding is present", async () => {
     const { bucket, stored } = createInMemoryBucket();
-
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-        return createResponse(503, "temporary failure");
-      }
-      return createResponse(200, "ok");
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
+    stubFetch((url) => (url.includes(INGEST_PATH) ? createResponse(503, "temporary failure") : createResponse(200, "ok")));
 
     const summary = await runMonitorCycle(
       createEnv({
@@ -194,14 +228,7 @@ describe("chalk ops monitor worker", () => {
       }),
     );
 
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-        return createResponse(202, JSON.stringify({ ok: true }));
-      }
-      return createResponse(200, "ok");
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubHealthyFetch();
 
     await runMonitorCycle(
       createEnv({
@@ -216,20 +243,7 @@ describe("chalk ops monitor worker", () => {
 
   it("sends a narrow twilio fallback alert after two consecutive critical ingest impairments", async () => {
     const { bucket } = createInMemoryBucket();
-    let twilioCalls = 0;
-
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("api.twilio.com/2010-04-01/Accounts")) {
-        twilioCalls += 1;
-        return createResponse(201, JSON.stringify({ sid: "SM123" }));
-      }
-      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-        return createResponse(503, "ingest unavailable");
-      }
-      return createResponse(503, "check failed");
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    const twilioCallCount = stubTwilioFallbackFetch(503);
 
     const env = createEnv({
       OPS_FALLBACK_BUFFER_BUCKET: bucket,
@@ -243,28 +257,15 @@ describe("chalk ops monitor worker", () => {
     });
 
     await runMonitorCycle(env, new Date("2026-04-14T12:03:00Z"));
-    expect(twilioCalls).toBe(0);
+    expect(twilioCallCount()).toBe(0);
 
     await runMonitorCycle(env, new Date("2026-04-14T12:04:00Z"));
-    expect(twilioCalls).toBe(1);
+    expect(twilioCallCount()).toBe(1);
   });
 
   it("sends a twilio fallback alert when critical checks are healthy but ingest is impaired", async () => {
     const { bucket } = createInMemoryBucket();
-    let twilioCalls = 0;
-
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("api.twilio.com/2010-04-01/Accounts")) {
-        twilioCalls += 1;
-        return createResponse(201, JSON.stringify({ sid: "SM123" }));
-      }
-      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-        return createResponse(503, "ingest unavailable");
-      }
-      return createResponse(200, "ok");
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    const twilioCallCount = stubTwilioFallbackFetch(200);
 
     const env = createEnv({
       OPS_FALLBACK_BUFFER_BUCKET: bucket,
@@ -278,36 +279,17 @@ describe("chalk ops monitor worker", () => {
 
     const firstSummary = await runMonitorCycle(env, new Date("2026-04-14T12:05:00Z"));
     expect(firstSummary.failed_count).toBe(0);
-    expect(twilioCalls).toBe(0);
+    expect(twilioCallCount()).toBe(0);
 
     const secondSummary = await runMonitorCycle(env, new Date("2026-04-14T12:06:00Z"));
     expect(secondSummary.failed_count).toBe(0);
     expect(secondSummary.twilio_alert_sent).toBe(true);
-    expect(twilioCalls).toBe(1);
+    expect(twilioCallCount()).toBe(1);
   });
 
   it("keeps running current checks when replay storage fails", async () => {
-    const bucket: R2Bucket = {
-      async get() {
-        return null;
-      },
-      async put() {},
-      async delete() {},
-      async list() {
-        throw new Error("r2 list unavailable");
-      },
-    };
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-        if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-          return createResponse(202, JSON.stringify({ ok: true }));
-        }
-        return createResponse(200, "ok");
-      }),
-    );
+    const bucket = createFailureBucket("replay");
+    stubHealthyFetch();
 
     const summary = await runMonitorCycle(
       createEnv({
@@ -322,29 +304,8 @@ describe("chalk ops monitor worker", () => {
   });
 
   it("keeps the run alive when buffering failed ingests fails", async () => {
-    const bucket: R2Bucket = {
-      async get() {
-        return null;
-      },
-      async put() {
-        throw new Error("r2 put unavailable");
-      },
-      async delete() {},
-      async list() {
-        return { objects: [], truncated: false };
-      },
-    };
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-        if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-          return createResponse(503, "ingest unavailable");
-        }
-        return createResponse(200, "ok");
-      }),
-    );
+    const bucket = createFailureBucket("buffer");
+    stubFailedIngestFetch();
 
     const summary = await runMonitorCycle(
       createEnv({
@@ -359,29 +320,8 @@ describe("chalk ops monitor worker", () => {
   });
 
   it("keeps the run alive when critical state storage fails", async () => {
-    const bucket: R2Bucket = {
-      async get() {
-        throw new Error("r2 get unavailable");
-      },
-      async put() {
-        throw new Error("r2 put unavailable");
-      },
-      async delete() {},
-      async list() {
-        return { objects: [], truncated: false };
-      },
-    };
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-        if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-          return createResponse(202, JSON.stringify({ ok: true }));
-        }
-        return createResponse(200, "ok");
-      }),
-    );
+    const bucket = createFailureBucket("critical");
+    stubHealthyFetch();
 
     const summary = await runMonitorCycle(
       createEnv({
@@ -405,16 +345,7 @@ describe("chalk ops monitor worker", () => {
   });
 
   it("supports authorized manual fetch-triggered runs", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-        if (url.includes("/api/v1/ops/ingest/monitor-results")) {
-          return createResponse(202, JSON.stringify({ ok: true }));
-        }
-        return createResponse(200, "ok");
-      }),
-    );
+    stubHealthyFetch();
 
     const response = await worker.fetch(
       new Request("https://chalk-uptime-worker.example/run", {

@@ -1,5 +1,5 @@
 const FEATURES = [
-  { title: "Meeting core", body: "Room, session, admission, roles, and lifecycle boundaries.", tone: "green" },
+  { title: "Space core", body: "Space, Episode, admission, roles, and lifecycle boundaries.", tone: "green" },
   { title: "Realtime sync", body: "Durable control state, bounded recovery, and reconnect semantics.", tone: "yellow" },
   { title: "Media adapters", body: "Cloudflare web and React Native RealtimeKit adapters.", tone: "blue" },
   { title: "Whiteboard", body: "A shared React collaboration package with app rendering still in progress.", tone: "pink" },
@@ -14,7 +14,7 @@ export function FeatureGrid() {
     <section className="section features" id="features">
       <div className="container features-layout">
         <header className="section-head">
-          <h2>The parts that make a call product.</h2>
+          <h2>The parts that make a real-time product.</h2>
           <p>Chalk has substantial SDK and infrastructure coverage. Hosted-product completeness is tracked separately from the existence of a component or API.</p>
         </header>
         <div className="feature-list">
@@ -38,7 +38,7 @@ export function Closing() {
       <section className="closing">
         <div className="container closing-inner">
           <div>
-            <h2>Build the room your product needs.</h2>
+            <h2>Build the Space your product needs.</h2>
             <p>Explore the current React surface and the architecture around it.</p>
           </div>
           <div className="closing-actions">

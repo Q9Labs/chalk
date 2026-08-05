@@ -73,7 +73,7 @@ export interface ControlBarProps {
   isHandRaised?: boolean;
   isWhiteboardOpen?: boolean;
   isPictureInPictureActive?: boolean;
-  meetingDuration?: number;
+  duration?: number;
   unreadChatCount?: number;
   audioInputDevices?: readonly MediaDevice[];
   audioOutputDevices?: readonly MediaDevice[];
@@ -100,7 +100,7 @@ export interface ControlBarProps {
   onOpenDiagnostics?: () => void;
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
-  onLeave?: () => void;
+  onLeft?: () => void;
 
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
@@ -152,7 +152,7 @@ export const ControlBar = React.memo(
     isHandRaised = false,
     isWhiteboardOpen = false,
     isPictureInPictureActive = false,
-    meetingDuration = 0,
+    duration = 0,
     unreadChatCount = 0,
     audioInputDevices,
     audioOutputDevices,
@@ -183,7 +183,7 @@ export const ControlBar = React.memo(
     onOpenDiagnostics,
     onOpenMore,
     onOpenInfo,
-    onLeave,
+    onLeft,
     participantColorSeed,
     participantGradientPreference,
 
@@ -352,7 +352,7 @@ export const ControlBar = React.memo(
         case "info":
           return <ControlBarButton key="info" icon={<InformationCircleIcon size={20} />} label="Info" onClick={onOpenInfo} noBorder />;
         case "thumbsup":
-          return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[#FFD700]" />} label="Reactions" onClick={onOpenReactions} />;
+          return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[var(--chalk-app-control-active-text)]" />} label="Reactions" onClick={onOpenReactions} />;
         default:
           return null;
       }
@@ -368,7 +368,7 @@ export const ControlBar = React.memo(
             paddingBottom: "max(12px, env(safe-area-inset-bottom))",
           }}
           role="toolbar"
-          aria-label="Meeting controls"
+          aria-label="Space controls"
         >
           <div className="flex items-center justify-center gap-1.5 min-w-min mx-auto">
             {/* Group 1: Media Controls */}
@@ -376,7 +376,7 @@ export const ControlBar = React.memo(
               <button
                 type="button"
                 onClick={onToggleMute}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-white" : "!text-[#f3a0a0]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-white" : "!text-[var(--chalk-app-danger)]")}
                 aria-label={isMuted ? "Unmute" : "Mute"}
                 aria-pressed={!isMuted}
               >
@@ -386,7 +386,7 @@ export const ControlBar = React.memo(
               <button
                 type="button"
                 onClick={onToggleVideo}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-white" : "!text-[#f3a0a0]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-white" : "!text-[var(--chalk-app-danger)]")}
                 aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
                 aria-pressed={isVideoEnabled}
               >
@@ -400,7 +400,7 @@ export const ControlBar = React.memo(
                 <button
                   type="button"
                   onClick={onToggleHandRaise}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[#fceab3]" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[var(--chalk-app-control-active)]" : "")}
                   aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
                   aria-pressed={isHandRaised}
                 >
@@ -408,7 +408,7 @@ export const ControlBar = React.memo(
                 </button>
               )}
               {buttonsToRender.includes("reactions") && onOpenReactions && (
-                <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#b18f22] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
+                <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
                   <ThumbsUpIcon className="w-5 h-5" />
                 </button>
               )}
@@ -459,9 +459,9 @@ export const ControlBar = React.memo(
               )}
               <button
                 type="button"
-                onClick={onLeave}
+                onClick={onLeft}
                 className="flex h-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] px-4 text-white transition active:scale-95 hover:bg-[var(--chalk-app-danger-hover)] sm:h-[46px]"
-                aria-label="Leave meeting"
+                aria-label="Leave space"
               >
                 <CallEnd01Icon className="w-5 h-5" />
               </button>
@@ -512,7 +512,7 @@ export const ControlBar = React.memo(
 
       return (
         <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
-          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
+          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
             {buttonsToRender.includes("mic") ? (
               <DevicePopover
                 type="mic"
@@ -533,19 +533,19 @@ export const ControlBar = React.memo(
               <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
             ) : null}
             {buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}
-            {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeave} danger /> : null}
+            {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger /> : null}
           </div>
         </div>
       );
     }
 
     return (
-      <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
+      <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
         {/* Left: Timer section */}
         <div className="flex items-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-2.5 shadow-[var(--chalk-app-shadow-xs)]">
           <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.4)]" />
-            <span className="text-[var(--chalk-app-text)] text-[14px] font-semibold tracking-wide tabular-nums">{formatDuration(meetingDuration)}</span>
+            <div className="w-2.5 h-2.5 rounded-full bg-[var(--chalk-positive)] shadow-[0_0_14px_var(--chalk-positive)]" />
+            <span className="text-[var(--chalk-app-text)] text-[14px] font-semibold tracking-wide tabular-nums">{formatDuration(duration)}</span>
           </div>
         </div>
 
@@ -554,7 +554,7 @@ export const ControlBar = React.memo(
           {mediaButtons.map(renderButton)}
           {showLeave && (
             <div className="ml-2">
-              <ControlBarButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeave} danger data-tour="controls-leave" />
+              <ControlBarButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeft} danger data-tour="controls-leave" />
             </div>
           )}
         </div>

@@ -11,7 +11,7 @@ const wireElement: WhiteboardWireElement = {
   version_nonce: 8,
   index: "a1",
   is_deleted: false,
-  payload: { text: "Hello", x: 12, tags: ["meeting"] },
+  payload: { text: "Hello", x: 12, tags: ["space"] },
 };
 
 const clientElement: ChalkWhiteboardV1Element = {
@@ -21,7 +21,7 @@ const clientElement: ChalkWhiteboardV1Element = {
   versionNonce: 8,
   index: "a1",
   isDeleted: false,
-  payload: { text: "Hello", x: 12, tags: ["meeting"] },
+  payload: { text: "Hello", x: 12, tags: ["space"] },
 };
 
 describe("whiteboard wire adapters", () => {
@@ -45,7 +45,7 @@ describe("whiteboard wire adapters", () => {
   it("passes cursor events through with their presence coordinates", () => {
     const cursor: ChalkWhiteboardV1Event = {
       type: "cursor",
-      participantSessionId: "participant-1",
+      participantId: "participant-1",
       displayName: "Grace",
       x: 24,
       y: 48,

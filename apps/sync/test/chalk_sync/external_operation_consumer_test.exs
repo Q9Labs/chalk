@@ -6,8 +6,8 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
   alias ChalkSync.ProviderBridge.Client
   alias ChalkSync.ProviderBridge.MediaPlane
   alias ChalkSync.RecordingPlaneTestAdapter
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
-  alias ChalkSync.Stateholder.SessionKey
 
   @operation_id "00000000-0000-4000-8000-000000000010"
   @participant_id "00000000-0000-4000-8000-000000000011"
@@ -15,13 +15,14 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
   @journey_id "00000000-0000-4000-8000-000000000013"
   @trace_id "4bf92f3577b34da6a3ce929d0e0e4736"
   @span_id "00f067aa0ba902b7"
+  @traceparent "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+  @tracestate "acme=deferred"
 
   test "dispatches every local operation through authoritative local confirmation" do
     for name <- [
           :admit_participant,
           :deny_admission,
           :admission_request_expired,
-          :tenant_transfer_host,
           :tenant_set_deadline
         ] do
       assert :confirmed = execute(operation(name), nil, nil)
@@ -40,9 +41,9 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       {:role_transition_source_stop, :revoke_publication, :camera},
       {:remove_participant, :remove_participant, nil},
       {:participant_leave, :remove_participant, nil},
-      {:end_session, :end_session, nil},
-      {:tenant_end_session, :end_session, nil},
-      {:maximum_duration_expired, :end_session, nil}
+      {:end_episode, :end_episode, nil},
+      {:tenant_end_episode, :end_episode, nil},
+      {:maximum_duration_expired, :end_episode, nil}
     ]
 
     for {name, callback, source} <- cases do
@@ -94,7 +95,9 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       operation(:participant_leave)
       | journey_id: @journey_id,
         producing_trace_id: @trace_id,
-        producing_span_id: @span_id
+        producing_span_id: @span_id,
+        producing_traceparent: @traceparent,
+        producing_tracestate: @tracestate
     }
 
     assert :confirmed = execute(traced, {MediaPlane, adapter}, nil)
@@ -102,8 +105,9 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
     assert {"x-chalk-journey-id", @journey_id} in headers
     {"traceparent", traceparent} = List.keyfind!(headers, "traceparent", 0)
     assert traceparent =~ "00-#{@trace_id}-"
-    refute traceparent == "00-#{@trace_id}-#{@span_id}-01"
-    assert payload["participant_session_generation"] == 1
+    assert String.ends_with?(traceparent, "-00")
+    assert {"tracestate", @tracestate} in headers
+    assert payload["participant_generation"] == 1
     refute inspect(headers) =~ @operation_id
 
     assert_receive {:bridge_span,
@@ -115,6 +119,57 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
                     }}
   end
 
+  test "retries preserve unsampled flags and tracestate from the durable carrier" do
+    test = self()
+    calls = :counters.new(1, [:atomics])
+    previous_observability = Application.get_env(:chalk_sync, :observability)
+    Application.put_env(:chalk_sync, :observability, enabled: true)
+
+    on_exit(fn -> Application.put_env(:chalk_sync, :observability, previous_observability) end)
+
+    transport = fn _method, _url, headers, body, _options ->
+      :counters.add(calls, 1, 1)
+      call = :counters.get(calls, 1)
+      payload = JSON.decode!(body)
+      send(test, {:retry_bridge_request, headers, payload})
+
+      if call == 1 do
+        {:ok, 503, [], "{}"}
+      else
+        {:ok, 200, [],
+         JSON.encode!(%{
+           "operation_id" => @operation_id,
+           "effect" => payload["effect"],
+           "outcome" => "confirmed"
+         })}
+      end
+    end
+
+    adapter =
+      MediaPlane.new!(Client.new!(base_url: "http://localhost:4101", transport: transport))
+
+    traced = %{
+      operation(:participant_leave)
+      | journey_id: @journey_id,
+        producing_trace_id: @trace_id,
+        producing_span_id: @span_id,
+        producing_traceparent: @traceparent,
+        producing_tracestate: @tracestate
+    }
+
+    assert :pending = execute(traced, {MediaPlane, adapter}, nil)
+    assert :confirmed = execute(traced, {MediaPlane, adapter}, nil)
+    assert_received {:finalize, @operation_id, {:confirmed, :provider}}
+
+    for _ <- 1..2 do
+      assert_receive {:retry_bridge_request, headers, _payload}
+      {"traceparent", traceparent} = List.keyfind!(headers, "traceparent", 0)
+      assert traceparent =~ "00-#{@trace_id}-"
+      assert String.ends_with?(traceparent, "-00")
+      assert {"tracestate", @tracestate} in headers
+    end
+  end
+
   test "dispatches recording operations through the recording port" do
     {:ok, adapter} = RecordingPlaneTestAdapter.start_link()
     recording_plane = {RecordingPlaneTestAdapter, adapter}
@@ -123,7 +178,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       assert :confirmed = execute(operation(name), nil, recording_plane)
       assert_received {:finalize, @operation_id, {:confirmed, :recording}}
 
-      assert {^name, @operation_id, [_session, @recording_id]} =
+      assert {^name, @operation_id, [_episode, @recording_id]} =
                List.last(RecordingPlaneTestAdapter.calls(adapter))
     end
   end
@@ -132,7 +187,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
     {:ok, media_adapter} = MediaPlaneTestAdapter.start_link()
     {:ok, recording_adapter} = RecordingPlaneTestAdapter.start_link()
 
-    for name <- [:end_session, :tenant_end_session, :maximum_duration_expired] do
+    for name <- [:end_episode, :tenant_end_episode, :maximum_duration_expired] do
       assert :confirmed =
                execute(
                  operation(name, recording_id: @recording_id),
@@ -142,10 +197,10 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
       assert_received {:finalize, @operation_id, {:confirmed, :provider}}
 
-      assert {:end_session, @operation_id, [_session]} =
+      assert {:end_episode, @operation_id, [_episode]} =
                List.last(MediaPlaneTestAdapter.calls(media_adapter))
 
-      assert {:stop_recording, @operation_id, [_session, @recording_id]} =
+      assert {:stop_recording, @operation_id, [_episode, @recording_id]} =
                List.last(RecordingPlaneTestAdapter.calls(recording_adapter))
     end
   end
@@ -155,14 +210,14 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
     assert :confirmed =
              execute(
-               operation(:end_session),
+               operation(:end_episode),
                {MediaPlaneTestAdapter, media_adapter},
                nil
              )
 
     assert_received {:finalize, @operation_id, {:confirmed, :provider}}
 
-    assert [{:end_session, @operation_id, [_session]}] =
+    assert [{:end_episode, @operation_id, [_episode]}] =
              MediaPlaneTestAdapter.calls(media_adapter)
   end
 
@@ -174,7 +229,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
     for {media_outcome, recording_outcome} <- cases do
       {:ok, media_adapter} =
-        MediaPlaneTestAdapter.start_link(outcomes: %{end_session: media_outcome})
+        MediaPlaneTestAdapter.start_link(outcomes: %{end_episode: media_outcome})
 
       {:ok, recording_adapter} =
         RecordingPlaneTestAdapter.start_link(
@@ -183,12 +238,12 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
       assert :pending =
                execute(
-                 operation(:end_session, recording_id: @recording_id),
+                 operation(:end_episode, recording_id: @recording_id),
                  {MediaPlaneTestAdapter, media_adapter},
                  {RecordingPlaneTestAdapter, recording_adapter}
                )
 
-      assert [{:end_session, @operation_id, _arguments}] =
+      assert [{:end_episode, @operation_id, _arguments}] =
                MediaPlaneTestAdapter.calls(media_adapter)
 
       assert [{:stop_recording, @operation_id, _arguments}] =
@@ -203,12 +258,12 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
     assert :pending =
              execute(
-               operation(:end_session, recording_id: @recording_id),
+               operation(:end_episode, recording_id: @recording_id),
                {MediaPlaneTestAdapter, media_adapter},
                nil
              )
 
-    assert [{:end_session, @operation_id, _arguments}] =
+    assert [{:end_episode, @operation_id, _arguments}] =
              MediaPlaneTestAdapter.calls(media_adapter)
 
     refute_received {:finalize, _, _}
@@ -222,7 +277,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
     for {media_outcome, recording_outcome, reason} <- cases do
       {:ok, media_adapter} =
-        MediaPlaneTestAdapter.start_link(outcomes: %{end_session: media_outcome})
+        MediaPlaneTestAdapter.start_link(outcomes: %{end_episode: media_outcome})
 
       {:ok, recording_adapter} =
         RecordingPlaneTestAdapter.start_link(
@@ -231,7 +286,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
       assert :terminal_failure =
                execute(
-                 operation(:end_session, recording_id: @recording_id),
+                 operation(:end_episode, recording_id: @recording_id),
                  {MediaPlaneTestAdapter, media_adapter},
                  {RecordingPlaneTestAdapter, recording_adapter}
                )
@@ -245,7 +300,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
     assert :pending =
              execute(
-               operation(:end_session, recording_id: @recording_id),
+               operation(:end_episode, recording_id: @recording_id),
                {MediaPlaneTestAdapter, media_adapter},
                {__MODULE__.BlockingRecordingPlane, self()},
                {:ok, %{result: :applied}},
@@ -265,7 +320,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       )
 
     exhausted = %{
-      operation(:end_session, recording_id: @recording_id)
+      operation(:end_episode, recording_id: @recording_id)
       | attempt_count: 100
     }
 
@@ -395,7 +450,7 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
 
     claim_operations = fn _page_size ->
       send(test, {:claim_started, self()})
-      {:ok, [{session(), operation(:remove_participant)}]}
+      {:ok, [{episode(), operation(:remove_participant)}]}
     end
 
     name = unique_consumer_name()
@@ -481,11 +536,11 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
     test = self()
 
     ExternalOperationConsumer.execute_operation(
-      session(),
+      episode(),
       operation,
       media_plane,
       recording_plane,
-      fn _session, operation_id, outcome ->
+      fn _episode, operation_id, outcome ->
         send(test, {:finalize, operation_id, outcome})
         finalization
       end,
@@ -507,18 +562,18 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       payload: %{},
       status: :pending,
       attempt_count: 1,
-      target_participant_session_id: @participant_id,
+      target_participant_id: @participant_id,
       target_participant_generation: 1,
       source: Keyword.get(options, :source),
       recording_id: recording_id
     }
   end
 
-  defp session do
-    %SessionKey{
+  defp episode do
+    %EpisodeKey{
       tenant_id: "00000000-0000-4000-8000-000000000001",
-      room_id: "00000000-0000-4000-8000-000000000002",
-      session_id: "00000000-0000-4000-8000-000000000003"
+      space_id: "00000000-0000-4000-8000-000000000002",
+      episode_id: "00000000-0000-4000-8000-000000000003"
     }
   end
 
@@ -539,19 +594,19 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
   defp eventually(assertion, 0), do: assertion.()
 
   defmodule RaisingMediaPlane do
-    def remove_participant(_adapter, _operation_id, _session, _participant_id),
+    def remove_participant(_adapter, _operation_id, _episode, _participant_id),
       do: raise("provider failed before confirmation")
   end
 
   defmodule BlockingMediaPlane do
-    def remove_participant(test, _operation_id, _session, _participant_id) do
+    def remove_participant(test, _operation_id, _episode, _participant_id) do
       send(test, :adapter_started)
       Process.sleep(:infinity)
     end
   end
 
   defmodule BlockingRecordingPlane do
-    def stop_recording(test, _operation_id, _session, _recording_id) do
+    def stop_recording(test, _operation_id, _episode, _recording_id) do
       send(test, :recording_cleanup_started)
       Process.sleep(:infinity)
     end

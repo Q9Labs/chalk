@@ -39,7 +39,7 @@ var (
 
 type CleanupClaim struct {
 	TenantID     utilities.ID
-	SessionID    utilities.ID
+	EpisodeID    utilities.ID
 	AttachmentID utilities.ID
 	ObjectKey    string
 	Token        utilities.ID

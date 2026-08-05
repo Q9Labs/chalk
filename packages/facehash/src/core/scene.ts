@@ -1,6 +1,6 @@
-import type { FaceGeometry } from "./face-geometry.js";
-import { FACE_GEOMETRIES } from "./face-geometry.js";
-import { computeFacehash, type FacehashData } from "./facehash-data.js";
+import type { FaceGeometry } from "./face-geometry";
+import { FACE_GEOMETRIES } from "./face-geometry";
+import { computeFacehash, type FacehashData } from "./facehash-data";
 
 export type Intensity3D = "none" | "subtle" | "medium" | "dramatic";
 

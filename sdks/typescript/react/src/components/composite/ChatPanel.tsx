@@ -1,5 +1,5 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
-import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkPendingChatMessage, ChalkSendChatMessageInput } from "@q9labsai/chalk-client";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, SpaceSnapshot } from "@q9labsai/chalk-client";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "../../utils/cn";
@@ -12,13 +12,14 @@ export type { ChatMessage } from "./chat-types";
 
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
 export interface ChatPanelProps {
-  readonly messages: readonly ChalkChatMessage[];
-  readonly pendingMessages?: readonly ChalkPendingChatMessage[];
-  readonly readReceipts?: readonly ChalkChatReadReceipt[];
+  readonly messages: readonly ChatMessage[];
+  readonly pendingMessages?: SpaceSnapshot["chat"]["pendingSends"];
+  readonly readReceipts?: readonly ChatReadReceipt[];
   readonly localReadThroughSequence?: string | null;
   readonly participantNames?: Readonly<Record<string, string>>;
-  readonly onSendMessage: (input: Pick<ChalkSendChatMessageInput, "text" | "attachments">) => Promise<void>;
-  readonly onUploadAttachment?: (file: File) => Promise<ChalkChatAttachment>;
+  readonly onSendMessage: (input: Pick<ChatSendInput, "text" | "attachments">) => Promise<void>;
+  readonly onUploadAttachment?: (file: ChatUploadFile) => Promise<ChatAttachment>;
+  readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
   readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
   readonly onRetryMessage?: (id: string) => Promise<void>;
@@ -44,6 +45,7 @@ export const ChatPanel = React.memo(
     participantNames = {},
     onSendMessage,
     onUploadAttachment,
+    pickChatFiles,
     onResolveAttachmentUrl,
     onMarkRead,
     onRetryMessage,
@@ -60,8 +62,9 @@ export const ChatPanel = React.memo(
     className,
   }: ChatPanelProps) => {
     const [draft, setDraft] = useState("");
-    const [stagedFiles, setStagedFiles] = useState<readonly File[]>([]);
+    const [stagedFiles, setStagedFiles] = useState<readonly ChatUploadFile[]>([]);
     const [sending, setSending] = useState(false);
+    const [pickingFiles, setPickingFiles] = useState(false);
     const [composerError, setComposerError] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
@@ -112,7 +115,7 @@ export const ChatPanel = React.memo(
 
     const send = async () => {
       const text = draft.trim();
-      if ((!text && stagedFiles.length === 0) || disabled || sending) return;
+      if ((!text && stagedFiles.length === 0) || disabled || sending || pickingFiles) return;
       setSending(true);
       setComposerError(null);
       try {
@@ -128,23 +131,44 @@ export const ChatPanel = React.memo(
       }
     };
 
-    const selectFiles = (files: FileList | null) => {
+    const selectFiles = (files: FileList | readonly ChatUploadFile[] | null) => {
       if (!files) return;
-      const selected = Array.from(files);
+      const selected = Array.from(files) as ChatUploadFile[];
       if (stagedFiles.length + selected.length > CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage) {
         setComposerError(`You can attach up to ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files.`);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-      const invalid = selected.find((file) => !ALLOWED_ATTACHMENT_MIME_TYPES.has(file.type) || file.size > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength || new TextEncoder().encode(file.name).byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes);
+      const invalid = selected.find((file) => {
+        const { fileName, mimeType, byteLength } = describeChatUploadFile(file);
+        const fileNameBytes = new TextEncoder().encode(fileName).byteLength;
+        return !fileName || !Number.isSafeInteger(byteLength) || byteLength < 1 || byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength || fileNameBytes > CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes || !ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType);
+      });
       if (invalid) {
-        setComposerError(`${invalid.name} is not a supported chat attachment.`);
+        setComposerError(`${describeChatUploadFile(invalid).fileName} is not a supported chat attachment.`);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
       setStagedFiles((current) => [...current, ...selected]);
       setComposerError(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const chooseFiles = async () => {
+      if (disabled || sending || pickingFiles) return;
+      if (!pickChatFiles) {
+        fileInputRef.current?.click();
+        return;
+      }
+      setPickingFiles(true);
+      setComposerError(null);
+      try {
+        selectFiles(await pickChatFiles());
+      } catch (cause) {
+        setComposerError(cause instanceof Error ? cause.message : "Could not read the selected files.");
+      } finally {
+        setPickingFiles(false);
+      }
     };
 
     const loadOlder = async () => {
@@ -172,7 +196,7 @@ export const ChatPanel = React.memo(
     };
 
     return (
-      <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-card-foreground", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
+      <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
         {variant === "sidebar" ? (
           <header className="chalk-textured-surface flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-[18px]">
             <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
@@ -197,17 +221,17 @@ export const ChatPanel = React.memo(
           ) : null}
           {messages.length === 0 && pendingMessages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]">
                 <Message01Icon className="h-8 w-8" />
               </div>
               <h3 className="mb-1 font-medium">No messages yet</h3>
-              <p className="max-w-[220px] text-sm text-muted-foreground">Send a message to start the conversation.</p>
+              <p className="max-w-[220px] text-sm text-[var(--chalk-app-text-muted)]">Send a message to start the conversation.</p>
             </div>
           ) : (
             grouped.map((group) => (
-              <div key={`${group.participantSessionId}-${group.firstMessageId}`}>
+              <div key={`${group.participantId}-${group.firstMessageId}`}>
                 {group.messages.map((message, index) => {
-                  const isLocal = localParticipantId !== undefined && message.participantSessionId === localParticipantId;
+                  const isLocal = localParticipantId !== undefined && message.participantId === localParticipantId;
                   const readBy = isLocal ? receiptsForChatMessage(message.sequence, readReceipts, localParticipantId) : [];
                   return (
                     <div key={message.messageId} data-chat-sequence={message.sequence}>
@@ -236,11 +260,11 @@ export const ChatPanel = React.memo(
           {pendingMessages.map((pending) => (
             <div key={pending.clientMessageId} className="my-2">
               <MessageBubble content={pending.text} senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"} timestamp={new Date().toISOString()} isLocal status="pending" attachments={pending.attachments} onResolveAttachmentUrl={onResolveAttachmentUrl} />
-              {pending.state === "failed" ? (
-                <div className="mr-14 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+              {pending.status === "failed" ? (
+                <div className="mr-14 flex items-center justify-end gap-2 text-xs text-[var(--chalk-app-text-muted)]">
                   <span>{pending.error?.message || "Not sent"}</span>
                   {onRetryMessage ? (
-                    <button type="button" className="font-medium text-primary hover:underline" onClick={() => void onRetryMessage(pending.clientMessageId)}>
+                    <button type="button" className="font-medium text-[var(--chalk-app-control-active-line)] hover:underline" onClick={() => void onRetryMessage(pending.clientMessageId)}>
                       Retry
                     </button>
                   ) : null}
@@ -252,27 +276,27 @@ export const ChatPanel = React.memo(
         </div>
 
         {(error || composerError) && (
-          <p role="alert" className="mx-4 mb-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="mx-4 mb-2 rounded-lg bg-[var(--chalk-app-danger)]/10 px-3 py-2 text-sm text-[var(--chalk-app-danger)]">
             {composerError || error}
           </p>
         )}
         {stagedFiles.length > 0 ? (
-          <div className="flex flex-wrap gap-2 border-t border-border/30 px-4 pt-3" aria-label="Attachments">
+          <div className="flex flex-wrap gap-2 border-t border-[var(--chalk-app-line)] px-4 pt-3" aria-label="Attachments">
             {stagedFiles.map((file, index) => (
-              <div key={`${file.name}-${file.size}-${file.lastModified}-${index}`} className="flex max-w-full items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs">
-                <span className="max-w-52 truncate">{file.name}</span>
-                <button type="button" disabled={sending} aria-label={`Remove ${file.name}`} onClick={() => setStagedFiles((current) => current.filter((_, candidate) => candidate !== index))}>
+              <div key={`${describeChatUploadFile(file).fileName}-${describeChatUploadFile(file).byteLength}-${index}`} className="flex max-w-full items-center gap-2 rounded-full bg-[var(--chalk-app-control-group)] px-3 py-1.5 text-xs">
+                <span className="max-w-52 truncate">{describeChatUploadFile(file).fileName}</span>
+                <button type="button" disabled={sending || pickingFiles} aria-label={`Remove ${describeChatUploadFile(file).fileName}`} onClick={() => setStagedFiles((current) => current.filter((_, candidate) => candidate !== index))}>
                   <Cancel01Icon className="h-3.5 w-3.5" />
                 </button>
               </div>
             ))}
           </div>
         ) : null}
-        <div className="chalk-textured-surface flex items-end gap-2 border-t border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-4 py-4">
+        <div className="chalk-textured-surface flex items-end gap-2 border-t border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-4 py-4">
           {onUploadAttachment ? (
             <>
-              <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} />
-              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={disabled || sending || stagedFiles.length >= CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} onClick={() => fileInputRef.current?.click()} aria-label="Attach files">
+              {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} /> : null}
+              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={disabled || sending || pickingFiles || stagedFiles.length >= CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} onClick={() => void chooseFiles()} aria-label="Attach files">
                 <Upload01Icon className="h-5 w-5" />
               </Button>
             </>
@@ -296,7 +320,7 @@ export const ChatPanel = React.memo(
             type="button"
             size="icon"
             className="h-11 w-11 shrink-0 rounded-[8px] bg-[var(--chalk-app-control-primary)] !text-white hover:bg-[var(--chalk-app-control-primary-hover)]"
-            disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending}
+            disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
             onClick={() => void send()}
             aria-label="Send message"
           >
@@ -309,3 +333,8 @@ export const ChatPanel = React.memo(
 );
 
 ChatPanel.displayName = "ChatPanel";
+
+function describeChatUploadFile(file: ChatUploadFile): { readonly fileName: string; readonly mimeType: string; readonly byteLength: number } {
+  if ("bytes" in file) return { fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };
+  return { fileName: file.name, mimeType: file.type, byteLength: file.size };
+}

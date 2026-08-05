@@ -37,27 +37,27 @@ type providerOperationQuerier interface {
 }
 
 type providerOperationReceiptRow struct {
-	OperationID                  string
-	Effect                       string
-	TenantID                     pgtype.UUID
-	SessionID                    pgtype.UUID
-	ParticipantSessionID         pgtype.UUID
-	ParticipantSessionGeneration pgtype.Int8
-	PublicationSource            pgtype.Text
-	RecordingID                  pgtype.UUID
-	RequestFingerprint           []byte
-	RequestPayload               []byte
-	State                        string
-	Outcome                      pgtype.Text
-	Reason                       pgtype.Text
-	CreatedAt                    pgtype.Timestamptz
-	DispatchingAt                pgtype.Timestamptz
-	CompletedAt                  pgtype.Timestamptz
+	OperationID           string
+	Effect                string
+	TenantID              pgtype.UUID
+	EpisodeID             pgtype.UUID
+	ParticipantID         pgtype.UUID
+	ParticipantGeneration pgtype.Int8
+	PublicationSource     pgtype.Text
+	RecordingID           pgtype.UUID
+	RequestFingerprint    []byte
+	RequestPayload        []byte
+	State                 string
+	Outcome               pgtype.Text
+	Reason                pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	DispatchingAt         pgtype.Timestamptz
+	CompletedAt           pgtype.Timestamptz
 }
 
 type providerOperationObservationRow struct {
 	TenantID               pgtype.UUID
-	SessionID              pgtype.UUID
+	EpisodeID              pgtype.UUID
 	Incarnation            int64
 	Sequence               int64
 	Publications           []byte
@@ -67,7 +67,7 @@ type providerOperationObservationRow struct {
 
 type providerOperationObservationHeadRow struct {
 	TenantID               pgtype.UUID
-	SessionID              pgtype.UUID
+	EpisodeID              pgtype.UUID
 	Incarnation            int64
 	Sequence               int64
 	ObservationFingerprint []byte
@@ -84,9 +84,9 @@ func scanProviderOperationReceipt(scanner providerOperationScanner) (providerOpe
 		&row.OperationID,
 		&row.Effect,
 		&row.TenantID,
-		&row.SessionID,
-		&row.ParticipantSessionID,
-		&row.ParticipantSessionGeneration,
+		&row.EpisodeID,
+		&row.ParticipantID,
+		&row.ParticipantGeneration,
 		&row.PublicationSource,
 		&row.RecordingID,
 		&row.RequestFingerprint,
@@ -105,7 +105,7 @@ func scanProviderObservation(scanner providerOperationScanner) (providerOperatio
 	var row providerOperationObservationRow
 	err := scanner.Scan(
 		&row.TenantID,
-		&row.SessionID,
+		&row.EpisodeID,
 		&row.Incarnation,
 		&row.Sequence,
 		&row.Publications,
@@ -119,7 +119,7 @@ func scanProviderObservationHead(scanner providerOperationScanner) (providerOper
 	var row providerOperationObservationHeadRow
 	err := scanner.Scan(
 		&row.TenantID,
-		&row.SessionID,
+		&row.EpisodeID,
 		&row.Incarnation,
 		&row.Sequence,
 		&row.ObservationFingerprint,

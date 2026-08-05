@@ -61,7 +61,7 @@ describe("createChalkEffectClient", () => {
 
   it("decodes generated tagged API errors", async () => {
     const fetchMock = vi.fn(async () => {
-      return new Response(JSON.stringify({ error: { code: "rate_limited", message: "Too many requests" } }), {
+      return new Response(JSON.stringify({ error: { code: "request.rate_limited", message: "Too many requests" } }), {
         status: 429,
         headers: {
           "Content-Type": "application/json",
@@ -74,16 +74,16 @@ describe("createChalkEffectClient", () => {
     const client = await Effect.runPromise(createChalkEffectClient({ baseUrl: "https://api.chalk.test", fetch: fetchMock as typeof fetch }));
 
     await expect(Effect.runPromise(client.auth.login({ payload: { email, password: "secret" } }))).rejects.toMatchObject({
-      _tag: "RateLimitedError",
+      _tag: "RequestRateLimitedError",
       error: {
-        code: "rate_limited",
+        code: "request.rate_limited",
         message: "Too many requests",
       },
     });
   }, 20_000);
 
   it("exposes generated request body and rate-limit policy metadata", () => {
-    expect(ChalkOperationPolicies.createRoom).toEqual({
+    expect(ChalkOperationPolicies.createSpace).toEqual({
       maxBodyBytes: 1_048_576,
       rateLimit: {
         limit: 60,

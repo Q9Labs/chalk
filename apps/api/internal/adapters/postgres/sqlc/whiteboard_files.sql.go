@@ -15,10 +15,10 @@ const claimWhiteboardFileCleanup = `-- name: ClaimWhiteboardFileCleanup :many
 with candidates as (
     select file.upload_id
     from sync_whiteboard_files file
-    join room_sessions session
-        on session.tenant_id = file.tenant_id
-        and session.room_id = file.room_id
-        and session.id = file.session_id
+    join episodes episode
+        on episode.tenant_id = file.tenant_id
+        and episode.space_id = file.space_id
+        and episode.id = file.episode_id
     where (
         file.cleanup_claimed_until is null
         or file.cleanup_claimed_until <= $3
@@ -29,14 +29,14 @@ with candidates as (
                 and file.expires_at <= $3
             )
             or (
-                session.status = 'ended'
-                and session.ended_at <= $4
+                episode.status = 'ended'
+                and episode.ended_at <= $4
             )
         )
     order by
         case
-            when session.status = 'ended' and session.ended_at <= $4
-                then session.ended_at
+            when episode.status = 'ended' and episode.ended_at <= $4
+                then episode.ended_at
             else file.expires_at
         end,
         file.upload_id
@@ -99,30 +99,29 @@ set status = 'finalizing', updated_at = now()
 from participants participant, sync_whiteboard_scenes scene
 where file.upload_id = $1
     and file.tenant_id = $2
-    and file.room_id = $3
-    and file.session_id = $4
-    and file.participant_session_id = $5
+    and file.space_id = $3
+    and file.episode_id = $4
+    and file.participant_id = $5
     and file.participant_generation = $6
     and file.status = 'pending'
     and file.expires_at > $7
     and participant.tenant_id = file.tenant_id
-    and participant.room_id = file.room_id
-    and participant.session_id = file.session_id
-    and participant.id = file.participant_session_id
+    and participant.space_id = file.space_id
+    and participant.episode_id = file.episode_id
+    and participant.id = file.participant_id
     and participant.generation = file.participant_generation
     and participant.status = 'active'
     and scene.tenant_id = file.tenant_id
-    and scene.room_id = file.room_id
-    and scene.session_id = file.session_id
+    and scene.space_id = file.space_id
     and scene.scene_id = file.scene_id
     and scene.is_current
 returning
     file.upload_id,
     file.tenant_id,
-    file.room_id,
-    file.session_id,
+    file.space_id,
+    file.episode_id,
     file.scene_id,
-    file.participant_session_id,
+    file.participant_id,
     file.participant_generation,
     file.file_id,
     file.object_key,
@@ -135,9 +134,9 @@ returning
 type ClaimWhiteboardFileUploadFinalizeParams struct {
 	UploadID              pgtype.UUID        `json:"upload_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
-	RoomID                pgtype.UUID        `json:"room_id"`
-	SessionID             pgtype.UUID        `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration int64              `json:"participant_generation"`
 	NowAt                 pgtype.Timestamptz `json:"now_at"`
 }
@@ -145,10 +144,10 @@ type ClaimWhiteboardFileUploadFinalizeParams struct {
 type ClaimWhiteboardFileUploadFinalizeRow struct {
 	UploadID              pgtype.UUID        `json:"upload_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
-	RoomID                pgtype.UUID        `json:"room_id"`
-	SessionID             pgtype.UUID        `json:"session_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
 	SceneID               pgtype.UUID        `json:"scene_id"`
-	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration int64              `json:"participant_generation"`
 	FileID                string             `json:"file_id"`
 	ObjectKey             string             `json:"object_key"`
@@ -162,9 +161,9 @@ func (q *Queries) ClaimWhiteboardFileUploadFinalize(ctx context.Context, arg Cla
 	row := q.db.QueryRow(ctx, claimWhiteboardFileUploadFinalize,
 		arg.UploadID,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 		arg.NowAt,
 	)
@@ -172,10 +171,10 @@ func (q *Queries) ClaimWhiteboardFileUploadFinalize(ctx context.Context, arg Cla
 	err := row.Scan(
 		&i.UploadID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.SceneID,
-		&i.ParticipantSessionID,
+		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.FileID,
 		&i.ObjectKey,
@@ -249,10 +248,10 @@ const getReadyWhiteboardFile = `-- name: GetReadyWhiteboardFile :one
 select
     file.upload_id,
     file.tenant_id,
-    file.room_id,
-    file.session_id,
+    file.space_id,
+    file.episode_id,
     file.scene_id,
-    file.participant_session_id,
+    file.participant_id,
     file.participant_generation,
     file.file_id,
     file.object_key,
@@ -263,45 +262,44 @@ select
 from sync_whiteboard_files file
 join participants participant
     on participant.tenant_id = file.tenant_id
-    and participant.room_id = file.room_id
-    and participant.session_id = file.session_id
+    and participant.space_id = file.space_id
+    and participant.episode_id = file.episode_id
     and participant.id = $1
     and participant.generation = $2
-join room_sessions session
-    on session.tenant_id = file.tenant_id
-    and session.room_id = file.room_id
-    and session.id = file.session_id
+join episodes episode
+    on episode.tenant_id = file.tenant_id
+    and episode.space_id = file.space_id
+    and episode.id = file.episode_id
 join sync_whiteboard_scenes scene
     on scene.tenant_id = file.tenant_id
-    and scene.room_id = file.room_id
-    and scene.session_id = file.session_id
+    and scene.space_id = file.space_id
     and scene.scene_id = file.scene_id
 where file.tenant_id = $3
-    and file.room_id = $4
-    and file.session_id = $5
+    and file.space_id = $4
+    and file.episode_id = $5
     and file.file_id = $6
     and file.status = 'ready'
     and participant.status = 'active'
-    and session.status = 'active'
+    and episode.status = 'active'
     and scene.is_current
 `
 
 type GetReadyWhiteboardFileParams struct {
-	ParticipantSessionID  pgtype.UUID `json:"participant_session_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
 	ParticipantGeneration int64       `json:"participant_generation"`
 	TenantID              pgtype.UUID `json:"tenant_id"`
-	RoomID                pgtype.UUID `json:"room_id"`
-	SessionID             pgtype.UUID `json:"session_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
 	FileID                string      `json:"file_id"`
 }
 
 type GetReadyWhiteboardFileRow struct {
 	UploadID              pgtype.UUID        `json:"upload_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
-	RoomID                pgtype.UUID        `json:"room_id"`
-	SessionID             pgtype.UUID        `json:"session_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
 	SceneID               pgtype.UUID        `json:"scene_id"`
-	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration int64              `json:"participant_generation"`
 	FileID                string             `json:"file_id"`
 	ObjectKey             string             `json:"object_key"`
@@ -313,21 +311,21 @@ type GetReadyWhiteboardFileRow struct {
 
 func (q *Queries) GetReadyWhiteboardFile(ctx context.Context, arg GetReadyWhiteboardFileParams) (GetReadyWhiteboardFileRow, error) {
 	row := q.db.QueryRow(ctx, getReadyWhiteboardFile,
-		arg.ParticipantSessionID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.FileID,
 	)
 	var i GetReadyWhiteboardFileRow
 	err := row.Scan(
 		&i.UploadID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.SceneID,
-		&i.ParticipantSessionID,
+		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.FileID,
 		&i.ObjectKey,
@@ -343,10 +341,10 @@ const reserveWhiteboardFileUpload = `-- name: ReserveWhiteboardFileUpload :execr
 insert into sync_whiteboard_files (
     upload_id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     scene_id,
-    participant_session_id,
+    participant_id,
     participant_generation,
     file_id,
     object_key,
@@ -358,8 +356,8 @@ insert into sync_whiteboard_files (
 select
     $1,
     participant.tenant_id,
-    participant.room_id,
-    participant.session_id,
+    participant.space_id,
+    participant.episode_id,
     scene.scene_id,
     participant.id,
     participant.generation,
@@ -370,30 +368,30 @@ select
     $6,
     $7
 from participants participant
-join room_sessions session
-    on session.tenant_id = participant.tenant_id
-    and session.room_id = participant.room_id
-    and session.id = participant.session_id
+join episodes episode
+    on episode.tenant_id = participant.tenant_id
+    and episode.space_id = participant.space_id
+    and episode.id = participant.episode_id
 join sync_whiteboard_scenes scene
     on scene.tenant_id = participant.tenant_id
-    and scene.room_id = participant.room_id
-    and scene.session_id = participant.session_id
+    and scene.space_id = participant.space_id
     and scene.scene_id = $8
     and scene.is_current
 left join sync_whiteboard_permissions permission
     on permission.tenant_id = participant.tenant_id
-    and permission.session_id = participant.session_id
-    and permission.participant_session_id = participant.id
+    and permission.space_id = participant.space_id
+    and permission.episode_id = participant.episode_id
+    and permission.participant_id = participant.id
 where participant.tenant_id = $9
-    and participant.room_id = $10
-    and participant.session_id = $11
+    and participant.space_id = $10
+    and participant.episode_id = $11
     and participant.id = $12
     and participant.generation = $13
     and participant.status = 'active'
-    and session.status = 'active'
+    and episode.status = 'active'
     and coalesce(
         permission.can_draw,
-        (session.whiteboard_role_capabilities -> participant.role) ? 'drawWhiteboard'
+        participant.capabilities @> array['drawWhiteboard']::text[]
     )
 `
 
@@ -407,9 +405,9 @@ type ReserveWhiteboardFileUploadParams struct {
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
 	SceneID               pgtype.UUID        `json:"scene_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
-	RoomID                pgtype.UUID        `json:"room_id"`
-	SessionID             pgtype.UUID        `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration int64              `json:"participant_generation"`
 }
 
@@ -424,9 +422,9 @@ func (q *Queries) ReserveWhiteboardFileUpload(ctx context.Context, arg ReserveWh
 		arg.ExpiresAt,
 		arg.SceneID,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 	)
 	if err != nil {

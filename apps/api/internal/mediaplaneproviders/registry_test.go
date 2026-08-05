@@ -8,16 +8,16 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/rooms"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 )
 
-func TestRegistryResolvesRoomProvider(t *testing.T) {
+func TestRegistryResolvesSpaceProvider(t *testing.T) {
 	registry := NewRegistry(testProcessConfig())
-	room := rooms.Room{MediaPlane: RoomProviderCloudflareRTK}
+	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"chalk_managed"}`)}
 
-	service, err := registry.Resolve(context.Background(), tenant, room)
+	service, err := registry.Resolve(context.Background(), tenant, space)
 	if err != nil {
 		t.Fatalf("resolve = %v", err)
 	}
@@ -30,15 +30,15 @@ func TestRegistryResolvesRoomProvider(t *testing.T) {
 }
 
 func TestRegistryFallsBackToTenantProvider(t *testing.T) {
-	defaultProvider := RoomProviderCloudflareSFU
+	defaultProvider := SpaceProviderCloudflareSFU
 	registry := NewRegistry(testProcessConfig())
-	room := rooms.Room{}
+	space := spaces.Space{}
 	tenant := tenants.Tenant{
 		DefaultMediaPlane:        &defaultProvider,
 		MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_sfu","mode":"chalk_managed"}`),
 	}
 
-	service, err := registry.Resolve(context.Background(), tenant, room)
+	service, err := registry.Resolve(context.Background(), tenant, space)
 	if err != nil {
 		t.Fatalf("resolve = %v", err)
 	}
@@ -52,10 +52,10 @@ func TestRegistryFallsBackToTenantProvider(t *testing.T) {
 
 func TestRegistryDisabledProviderReturnsNoService(t *testing.T) {
 	registry := NewRegistry(config.CloudflareRealtimeConfig{})
-	room := rooms.Room{MediaPlane: RoomProviderCloudflareRTK}
+	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":false}`)}
 
-	service, err := registry.Resolve(context.Background(), tenant, room)
+	service, err := registry.Resolve(context.Background(), tenant, space)
 	if err != nil {
 		t.Fatalf("resolve = %v", err)
 	}
@@ -66,10 +66,10 @@ func TestRegistryDisabledProviderReturnsNoService(t *testing.T) {
 
 func TestRegistryResolvesTenantManagedConfig(t *testing.T) {
 	registry := NewRegistry(testProcessConfig())
-	room := rooms.Room{MediaPlane: RoomProviderCloudflareRTK}
+	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"tenant_managed","cloudflare":{"account_id":"tenant-account","api_token":"tenant-token","rtk":{"app_id":"tenant-app","host_preset":"host","participant_preset":"participant"}}}`)}
 
-	service, err := registry.Resolve(context.Background(), tenant, room)
+	service, err := registry.Resolve(context.Background(), tenant, space)
 	if err != nil {
 		t.Fatalf("resolve = %v", err)
 	}
@@ -83,10 +83,10 @@ func TestRegistryResolvesTenantManagedConfig(t *testing.T) {
 
 func TestRegistryRejectsUnknownProvider(t *testing.T) {
 	registry := NewRegistry(testProcessConfig())
-	room := rooms.Room{MediaPlane: "mediasoup"}
+	space := spaces.Space{MediaPlane: "mediasoup"}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"mode":"chalk_managed"}`)}
 
-	_, err := registry.Resolve(context.Background(), tenant, room)
+	_, err := registry.Resolve(context.Background(), tenant, space)
 	if !errors.Is(err, ErrUnknownProvider) {
 		t.Fatalf("error = %v, want ErrUnknownProvider", err)
 	}
@@ -94,10 +94,10 @@ func TestRegistryRejectsUnknownProvider(t *testing.T) {
 
 func TestRegistryRejectsMissingTenantManagedConfig(t *testing.T) {
 	registry := NewRegistry(testProcessConfig())
-	room := rooms.Room{MediaPlane: RoomProviderCloudflareRTK}
+	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"tenant_managed"}`)}
 
-	_, err := registry.Resolve(context.Background(), tenant, room)
+	_, err := registry.Resolve(context.Background(), tenant, space)
 	if !errors.Is(err, ErrMissingProviderConfig) {
 		t.Fatalf("error = %v, want ErrMissingProviderConfig", err)
 	}
@@ -105,10 +105,10 @@ func TestRegistryRejectsMissingTenantManagedConfig(t *testing.T) {
 
 func TestRegistryRejectsUnconstructableAdapter(t *testing.T) {
 	registry := NewRegistry(config.CloudflareRealtimeConfig{})
-	room := rooms.Room{MediaPlane: RoomProviderCloudflareRTK}
+	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"chalk_managed"}`)}
 
-	_, err := registry.Resolve(context.Background(), tenant, room)
+	_, err := registry.Resolve(context.Background(), tenant, space)
 	if !errors.Is(err, ErrAdapterUnavailable) {
 		t.Fatalf("error = %v, want ErrAdapterUnavailable", err)
 	}

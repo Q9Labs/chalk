@@ -108,7 +108,7 @@ func (s Service) Execute(ctx context.Context, input provideroperations.Operation
 func (s Service) ListObservations(
 	ctx context.Context,
 	tenantID utilities.ID,
-	sessionID utilities.ID,
+	episodeID utilities.ID,
 	after *provideroperations.Cursor,
 	limit int,
 ) (provideroperations.ObservationPage, error) {
@@ -116,7 +116,7 @@ func (s Service) ListObservations(
 		return provideroperations.ObservationPage{}, ErrUnavailable
 	}
 
-	page, err := s.repository.ListObservations(ctx, tenantID, sessionID, after, limit)
+	page, err := s.repository.ListObservations(ctx, tenantID, episodeID, after, limit)
 	if err != nil {
 		return provideroperations.ObservationPage{}, fmt.Errorf("list provider observations: %w", err)
 	}
@@ -229,14 +229,14 @@ func ambiguousResult(receipt provideroperations.Receipt, reason string) Result {
 
 func receiptInput(receipt provideroperations.Receipt) provideroperations.OperationInput {
 	return provideroperations.OperationInput{
-		OperationID:                  receipt.OperationID,
-		Effect:                       receipt.Effect,
-		TenantID:                     receipt.TenantID,
-		SessionID:                    receipt.SessionID,
-		ParticipantSessionID:         receipt.ParticipantSessionID,
-		ParticipantSessionGeneration: receipt.ParticipantSessionGeneration,
-		PublicationSource:            receipt.PublicationSource,
-		RecordingID:                  receipt.RecordingID,
+		OperationID:           receipt.OperationID,
+		Effect:                receipt.Effect,
+		TenantID:              receipt.TenantID,
+		EpisodeID:             receipt.EpisodeID,
+		ParticipantID:         receipt.ParticipantID,
+		ParticipantGeneration: receipt.ParticipantGeneration,
+		PublicationSource:     receipt.PublicationSource,
+		RecordingID:           receipt.RecordingID,
 	}
 }
 

@@ -13,15 +13,15 @@ import (
 )
 
 var (
-	apiErrorChatAttachmentInvalid       = APIError{Status: http.StatusBadRequest, Code: "invalid_chat_attachment", Message: "Invalid chat attachment request"}
-	apiErrorChatAttachmentIDConflict    = APIError{Status: http.StatusConflict, Code: "client_attachment_id_conflict", Message: "Client attachment id conflicts with an earlier upload"}
-	apiErrorChatAttachmentQuota         = APIError{Status: http.StatusConflict, Code: "chat_attachment_quota_exceeded", Message: "Chat attachment quota exceeded"}
-	apiErrorChatAttachmentUploadMissing = APIError{Status: http.StatusNotFound, Code: "chat_attachment_upload_not_found", Message: "Chat attachment upload not found"}
-	apiErrorChatAttachmentUploadExpired = APIError{Status: http.StatusGone, Code: "chat_attachment_upload_expired", Message: "Chat attachment upload expired"}
-	apiErrorChatAttachmentUploadPending = APIError{Status: http.StatusConflict, Code: "chat_attachment_upload_not_ready", Message: "Chat attachment upload is not ready"}
-	apiErrorChatAttachmentMissing       = APIError{Status: http.StatusNotFound, Code: "chat_attachment_not_found", Message: "Chat attachment not found"}
-	apiErrorChatAttachmentTransfer      = APIError{Status: http.StatusBadGateway, Code: "chat_attachment_transfer_failed", Message: "Chat attachment transfer failed"}
-	apiErrorChatAttachmentStorage       = APIError{Status: http.StatusServiceUnavailable, Code: "chat_attachment_storage_unavailable", Message: "Chat attachment storage unavailable"}
+	apiErrorChatAttachmentInvalid       = APIError{Status: http.StatusBadRequest, Code: "chat.invalid_attachment", Message: "Invalid chat attachment request"}
+	apiErrorChatAttachmentIDConflict    = APIError{Status: http.StatusConflict, Code: "chat.attachment_id_conflict", Message: "Client attachment id conflicts with an earlier upload"}
+	apiErrorChatAttachmentQuota         = APIError{Status: http.StatusConflict, Code: "chat.attachment_quota_exceeded", Message: "Chat attachment quota exceeded"}
+	apiErrorChatAttachmentUploadMissing = APIError{Status: http.StatusNotFound, Code: "chat.upload_not_found", Message: "Chat attachment upload not found"}
+	apiErrorChatAttachmentUploadExpired = APIError{Status: http.StatusGone, Code: "chat.upload_expired", Message: "Chat attachment upload expired"}
+	apiErrorChatAttachmentUploadPending = APIError{Status: http.StatusConflict, Code: "chat.upload_not_ready", Message: "Chat attachment upload is not ready"}
+	apiErrorChatAttachmentMissing       = APIError{Status: http.StatusNotFound, Code: "chat.attachment_not_found", Message: "Chat attachment not found"}
+	apiErrorChatAttachmentTransfer      = APIError{Status: http.StatusBadGateway, Code: "chat.attachment_transfer_failed", Message: "Chat attachment transfer failed"}
+	apiErrorChatAttachmentStorage       = APIError{Status: http.StatusServiceUnavailable, Code: "chat.storage_unavailable", Message: "Chat attachment storage unavailable"}
 )
 
 type ChatAttachmentService interface {

@@ -1,0 +1,79 @@
+import { describe, expect, it, vi } from "vitest";
+import type { NativeMediaStream, NativeMediaStreamTrack } from "../media/native-webrtc";
+import { createEntrancePreviewStore } from "./entrance-preview-store";
+
+function createStream(withVideoTrack: boolean): { stream: NativeMediaStream; wasStopped: () => boolean } {
+  let stopped = false;
+  const track: NativeMediaStreamTrack = {
+    id: "camera-track",
+    kind: "video",
+    enabled: true,
+    muted: false,
+    readyState: "live",
+    stop: () => {
+      stopped = true;
+    },
+  };
+  const stream: NativeMediaStream = {
+    toURL: () => "camera-stream",
+    getTracks: () => (withVideoTrack ? [track] : []),
+    getVideoTracks: () => (withVideoTrack ? [track] : []),
+    getAudioTracks: () => [],
+  };
+
+  return { stream, wasStopped: () => stopped };
+}
+
+describe("createEntrancePreviewStore", () => {
+  it("starts the camera on subscription and stops it on cleanup", async () => {
+    const camera = createStream(true);
+    const getUserMedia = vi.fn(async () => camera.stream);
+    const store = createEntrancePreviewStore({
+      enabled: true,
+      simulatorVideoDisabled: false,
+      simulatorVideoMessage: "simulator",
+      getUserMedia,
+    });
+
+    const unsubscribe = store.subscribe(() => {});
+    await Promise.resolve();
+
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: false, video: { facingMode: "user" } });
+    expect(store.getSnapshot()).toEqual({ previewStream: camera.stream, previewError: null });
+
+    unsubscribe();
+    expect(camera.wasStopped()).toBe(true);
+  });
+
+  it("reports simulator video as unavailable without opening the camera", () => {
+    const getUserMedia = vi.fn(async () => createStream(true).stream);
+    const store = createEntrancePreviewStore({
+      enabled: true,
+      simulatorVideoDisabled: true,
+      simulatorVideoMessage: "Video is unavailable in the iOS simulator",
+      getUserMedia,
+    });
+
+    const unsubscribe = store.subscribe(() => {});
+
+    expect(store.getSnapshot()).toEqual({ previewStream: null, previewError: "Video is unavailable in the iOS simulator" });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("keeps the preview disabled when Entrance disables preview", () => {
+    const getUserMedia = vi.fn(async () => createStream(true).stream);
+    const store = createEntrancePreviewStore({
+      enabled: false,
+      simulatorVideoDisabled: false,
+      simulatorVideoMessage: "simulator",
+      getUserMedia,
+    });
+
+    const unsubscribe = store.subscribe(() => {});
+
+    expect(store.getSnapshot()).toEqual({ previewStream: null, previewError: null });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+});

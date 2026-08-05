@@ -15,14 +15,14 @@ import (
 
 type clientStub struct {
 	create func(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error)
-	verify func(context.Context, string) (sfuadapter.SessionMetadata, error)
+	verify func(context.Context, string) (sfuadapter.ConnectionMetadata, error)
 }
 
 func (s clientStub) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	return s.create(ctx, input)
 }
 
-func (s clientStub) VerifySessionMetadata(ctx context.Context, connectionID string) (sfuadapter.SessionMetadata, error) {
+func (s clientStub) VerifyConnectionMetadata(ctx context.Context, connectionID string) (sfuadapter.ConnectionMetadata, error) {
 	return s.verify(ctx, connectionID)
 }
 
@@ -34,9 +34,9 @@ func TestProbeCreatesAndVerifiesNoTrackConnectionWithoutReturningIdentifiers(t *
 			createInput = input
 			return mediaplane.Join{ClientPayload: map[string]any{"connectionId": "connection-secret"}}, nil
 		},
-		verify: func(_ context.Context, connectionID string) (sfuadapter.SessionMetadata, error) {
+		verify: func(_ context.Context, connectionID string) (sfuadapter.ConnectionMetadata, error) {
 			verifiedConnectionID = connectionID
-			return sfuadapter.SessionMetadata{Provider: mediaplane.ProviderCloudflareSFU, Ref: connectionID}, nil
+			return sfuadapter.ConnectionMetadata{Provider: mediaplane.ProviderCloudflareSFU, Ref: connectionID}, nil
 		},
 	})
 
@@ -44,7 +44,7 @@ func TestProbeCreatesAndVerifiesNoTrackConnectionWithoutReturningIdentifiers(t *
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	if createInput.Provider != mediaplane.ProviderCloudflareSFU || createInput.Session.Ref == "" || createInput.ParticipantPreset == "" {
+	if createInput.Provider != mediaplane.ProviderCloudflareSFU || createInput.Episode.Ref == "" || createInput.ParticipantPreset == "" {
 		t.Fatalf("create input = %+v", createInput)
 	}
 	if verifiedConnectionID != "connection-secret" {
@@ -69,9 +69,9 @@ func TestProbeClassifiesAuthenticationFailureWithoutProviderPayload(t *testing.T
 		create: func(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 			return mediaplane.Join{}, fmt.Errorf("provider body %s: %w", secret, mediaplane.ErrProviderUnauthorized)
 		},
-		verify: func(context.Context, string) (sfuadapter.SessionMetadata, error) {
+		verify: func(context.Context, string) (sfuadapter.ConnectionMetadata, error) {
 			t.Fatal("verify should not run after create failure")
-			return sfuadapter.SessionMetadata{}, nil
+			return sfuadapter.ConnectionMetadata{}, nil
 		},
 	})
 
@@ -95,9 +95,9 @@ func TestProbeClassifiesTimeoutWithoutProviderPayload(t *testing.T) {
 			<-ctx.Done()
 			return mediaplane.Join{}, fmt.Errorf("%s: %w", secret, ctx.Err())
 		},
-		verify: func(context.Context, string) (sfuadapter.SessionMetadata, error) {
+		verify: func(context.Context, string) (sfuadapter.ConnectionMetadata, error) {
 			t.Fatal("verify should not run after timeout")
-			return sfuadapter.SessionMetadata{}, nil
+			return sfuadapter.ConnectionMetadata{}, nil
 		},
 	})
 
@@ -121,9 +121,9 @@ func TestProbeClassifiesAdapterTimeoutWithoutProviderPayload(t *testing.T) {
 		create: func(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 			return mediaplane.Join{}, fmt.Errorf("provider_code=timeout")
 		},
-		verify: func(context.Context, string) (sfuadapter.SessionMetadata, error) {
+		verify: func(context.Context, string) (sfuadapter.ConnectionMetadata, error) {
 			t.Fatal("verify should not run after timeout")
-			return sfuadapter.SessionMetadata{}, nil
+			return sfuadapter.ConnectionMetadata{}, nil
 		},
 	})
 
@@ -143,9 +143,9 @@ func TestProbeRejectsEmptyConnectionIDWithoutReturningPayload(t *testing.T) {
 		create: func(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 			return mediaplane.Join{ClientPayload: map[string]any{"connectionId": payload[:0]}}, nil
 		},
-		verify: func(context.Context, string) (sfuadapter.SessionMetadata, error) {
+		verify: func(context.Context, string) (sfuadapter.ConnectionMetadata, error) {
 			t.Fatal("verify should not run with an empty connection id")
-			return sfuadapter.SessionMetadata{}, nil
+			return sfuadapter.ConnectionMetadata{}, nil
 		},
 	})
 

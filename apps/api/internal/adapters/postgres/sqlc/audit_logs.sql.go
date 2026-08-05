@@ -49,17 +49,17 @@ returning
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
     after,
+    external_request_id,
     updated_at,
-    created_at,
-    resource_type,
-    resource_id,
-    external_request_id
+    created_at
 `
 
 type CreateAuditLogParams struct {
@@ -103,17 +103,17 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		&i.ActorUserID,
 		&i.ActorType,
 		&i.Action,
+		&i.ResourceType,
+		&i.ResourceID,
 		&i.Details,
 		&i.Outcome,
 		&i.ErrorCode,
 		&i.ErrorMessage,
 		&i.Before,
 		&i.After,
+		&i.ExternalRequestID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.ResourceType,
-		&i.ResourceID,
-		&i.ExternalRequestID,
 	)
 	return i, err
 }
@@ -125,17 +125,17 @@ select
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
     after,
+    external_request_id,
     updated_at,
-    created_at,
-    resource_type,
-    resource_id,
-    external_request_id
+    created_at
 from audit_logs
 where
     tenant_id = $1
@@ -156,17 +156,17 @@ func (q *Queries) GetTenantAuditLog(ctx context.Context, arg GetTenantAuditLogPa
 		&i.ActorUserID,
 		&i.ActorType,
 		&i.Action,
+		&i.ResourceType,
+		&i.ResourceID,
 		&i.Details,
 		&i.Outcome,
 		&i.ErrorCode,
 		&i.ErrorMessage,
 		&i.Before,
 		&i.After,
+		&i.ExternalRequestID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.ResourceType,
-		&i.ResourceID,
-		&i.ExternalRequestID,
 	)
 	return i, err
 }
@@ -178,17 +178,17 @@ select
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
     after,
+    external_request_id,
     updated_at,
-    created_at,
-    resource_type,
-    resource_id,
-    external_request_id
+    created_at
 from audit_logs
 where
     tenant_id = $1
@@ -232,17 +232,17 @@ func (q *Queries) ListTenantAuditLogs(ctx context.Context, arg ListTenantAuditLo
 			&i.ActorUserID,
 			&i.ActorType,
 			&i.Action,
+			&i.ResourceType,
+			&i.ResourceID,
 			&i.Details,
 			&i.Outcome,
 			&i.ErrorCode,
 			&i.ErrorMessage,
 			&i.Before,
 			&i.After,
+			&i.ExternalRequestID,
 			&i.UpdatedAt,
 			&i.CreatedAt,
-			&i.ResourceType,
-			&i.ResourceID,
-			&i.ExternalRequestID,
 		); err != nil {
 			return nil, err
 		}

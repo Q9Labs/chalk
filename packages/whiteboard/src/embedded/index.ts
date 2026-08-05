@@ -1,6 +1,6 @@
-export { ChalkWhiteboardController } from "./controller.js";
-export type { ChalkEmbeddedWhiteboardControllerOptions, ChalkEmbeddedWhiteboardFileTransport, ChalkEmbeddedWhiteboardRendererPort, ChalkEmbeddedWhiteboardTransport, ChalkEmbeddedWhiteboardTransportEvent } from "./controller.js";
-export { chalkEmbeddedWhiteboardManifest } from "./manifest.js";
+export { ChalkWhiteboardController } from "./controller";
+export type { ChalkEmbeddedWhiteboardControllerOptions, ChalkEmbeddedWhiteboardFileTransport, ChalkEmbeddedWhiteboardRendererPort, ChalkEmbeddedWhiteboardTransport, ChalkEmbeddedWhiteboardTransportEvent } from "./controller";
+export { chalkEmbeddedWhiteboardManifest } from "./manifest";
 export {
   CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION,
   CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION,
@@ -9,7 +9,7 @@ export {
   decodeEmbeddedWhiteboardHostMessage,
   decodeEmbeddedWhiteboardRendererMessage,
   encodeEmbeddedWhiteboardMessage,
-} from "./protocol.js";
+} from "./protocol";
 export type {
   ChalkEmbeddedWhiteboardBridgeEnvelope,
   ChalkEmbeddedWhiteboardHostEnvelope,
@@ -20,4 +20,4 @@ export type {
   ChalkEmbeddedWhiteboardRendererMessage,
   ChalkEmbeddedWhiteboardTheme,
   ChalkEmbeddedWhiteboardViewport,
-} from "./protocol.js";
+} from "./protocol";

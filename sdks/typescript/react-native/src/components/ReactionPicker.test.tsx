@@ -9,4 +9,11 @@ describe("ReactionPicker", () => {
     expect(source).not.toContain("paddingBottom: 110");
     expect(source).not.toContain("bottom: 94");
   });
+
+  it("keeps close-button press feedback defined", () => {
+    expect(source).toContain("pressed && styles.pressed");
+    expect(source).toContain("pressed: {");
+    expect(source).toContain("opacity: 0.72");
+    expect(source).toContain("transform: [{ scale: 0.96 }]");
+  });
 });

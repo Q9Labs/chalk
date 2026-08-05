@@ -12,15 +12,15 @@ func TestPrincipalHasScope(t *testing.T) {
 		Kind: authentication.PrincipalAPIKey,
 		Scopes: []authentication.Scope{
 			authentication.ScopeTenantsRead,
-			authentication.ScopeRoomsWrite,
+			authentication.ScopeSpacesWrite,
 		},
 	}
 
-	if !principal.HasScope(authentication.ScopeRoomsWrite) {
-		t.Fatal("principal missing rooms write scope")
+	if !principal.HasScope(authentication.ScopeSpacesWrite) {
+		t.Fatal("principal missing spaces write scope")
 	}
-	if principal.HasScope(authentication.ScopeRoomsDelete) {
-		t.Fatal("principal unexpectedly has rooms delete scope")
+	if principal.HasScope(authentication.ScopeSpacesDelete) {
+		t.Fatal("principal unexpectedly has spaces delete scope")
 	}
 }
 

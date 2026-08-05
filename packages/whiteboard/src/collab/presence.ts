@@ -1,4 +1,4 @@
-import type { Collaborator, ExcalidrawImperativeAPI, SocketId } from "./types.js";
+import type { Collaborator, ExcalidrawImperativeAPI, SocketId } from "./types";
 
 const CURSOR_COLORS = [
   { stroke: "#FF5D5D", background: "rgba(255, 93, 93, 0.2)" },

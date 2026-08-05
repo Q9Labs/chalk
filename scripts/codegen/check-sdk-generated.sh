@@ -18,25 +18,25 @@ mkdir -p "$tmpdir"
 
 CODEGEN_OPENAPI_PATH="$tmpdir/openapi.json" \
 CODEGEN_EFFECT_OUTPUT_PATH="$tmpdir/schemas.ts" \
-  node tools/contract-codegen/src/emitters/effect-schemas.mjs
+  node tools/contract-fixture-proof/src/emitters/effect-schemas.mjs
 
 CODEGEN_OPENAPI_PATH="$tmpdir/openapi.json" \
 CODEGEN_HTTP_API_OUTPUT_PATH="$tmpdir/http-api.ts" \
-  node tools/contract-codegen/src/emitters/effect-http-api.mjs
+  node tools/contract-fixture-proof/src/emitters/effect-http-api.mjs
 
 CODEGEN_SYNC_PROTOCOL_VERSION=1 \
 CODEGEN_SYNC_TYPESCRIPT_OUTPUT_PATH="$tmpdir/sync.ts" \
-  node tools/contract-codegen/src/emitters/sync-typescript.mjs
+  node tools/contract-fixture-proof/src/emitters/sync-typescript.mjs
 
 CODEGEN_SYNC_PROTOCOL_VERSION=1 \
 CODEGEN_SYNC_ELIXIR_OUTPUT_PATH="$tmpdir/generated.ex" \
-  node tools/contract-codegen/src/emitters/sync-elixir.mjs
+  node tools/contract-fixture-proof/src/emitters/sync-elixir.mjs
 
 CODEGEN_WHITEBOARD_TYPESCRIPT_OUTPUT_PATH="$tmpdir/whiteboard-v1.ts" \
-  node tools/contract-codegen/src/emitters/whiteboard-typescript.mjs
+  node tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs
 
 CODEGEN_WHITEBOARD_ELIXIR_OUTPUT_PATH="$tmpdir/generated_whiteboard_v1.ex" \
-  node tools/contract-codegen/src/emitters/whiteboard-elixir.mjs
+  node tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs
 
 (cd apps/sync && mix format "$tmpdir/generated_whiteboard_v1.ex")
 

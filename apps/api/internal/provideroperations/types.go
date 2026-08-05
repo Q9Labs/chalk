@@ -20,7 +20,7 @@ const (
 	EffectGrantPublication  Effect = "media.grant_publication"
 	EffectRevokePublication Effect = "media.revoke_publication"
 	EffectRemoveParticipant Effect = "media.remove_participant"
-	EffectEndSession        Effect = "media.end_session"
+	EffectEndEpisode        Effect = "media.end_episode"
 	EffectStartRecording    Effect = "recording.start"
 	EffectStopRecording     Effect = "recording.stop"
 )
@@ -47,7 +47,7 @@ var (
 	ErrInvalidOperationID           = errors.New("invalid provider operation id")
 	ErrInvalidEffect                = errors.New("invalid provider operation effect")
 	ErrInvalidTenantID              = errors.New("invalid provider operation tenant id")
-	ErrInvalidSessionID             = errors.New("invalid provider operation session id")
+	ErrInvalidEpisodeID             = errors.New("invalid provider operation episode id")
 	ErrInvalidParticipantID         = errors.New("invalid provider operation participant id")
 	ErrInvalidParticipantGeneration = errors.New("invalid provider operation participant generation")
 	ErrInvalidPublicationSource     = errors.New("invalid provider publication source")
@@ -75,14 +75,14 @@ const (
 )
 
 type OperationInput struct {
-	OperationID                  string
-	Effect                       Effect
-	TenantID                     utilities.ID
-	SessionID                    utilities.ID
-	ParticipantSessionID         utilities.ID
-	ParticipantSessionGeneration int64
-	PublicationSource            string
-	RecordingID                  utilities.ID
+	OperationID           string
+	Effect                Effect
+	TenantID              utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
+	ParticipantGeneration int64
+	PublicationSource     string
+	RecordingID           utilities.ID
 }
 
 type CanonicalOperation struct {
@@ -97,22 +97,22 @@ type Completion struct {
 }
 
 type Receipt struct {
-	OperationID                  string
-	Effect                       Effect
-	TenantID                     utilities.ID
-	SessionID                    utilities.ID
-	ParticipantSessionID         utilities.ID
-	ParticipantSessionGeneration int64
-	PublicationSource            string
-	RecordingID                  utilities.ID
-	Fingerprint                  [32]byte
-	Payload                      json.RawMessage
-	State                        ReceiptState
-	Outcome                      *Outcome
-	Reason                       *string
-	CreatedAt                    time.Time
-	DispatchingAt                *time.Time
-	CompletedAt                  *time.Time
+	OperationID           string
+	Effect                Effect
+	TenantID              utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
+	ParticipantGeneration int64
+	PublicationSource     string
+	RecordingID           utilities.ID
+	Fingerprint           [32]byte
+	Payload               json.RawMessage
+	State                 ReceiptState
+	Outcome               *Outcome
+	Reason                *string
+	CreatedAt             time.Time
+	DispatchingAt         *time.Time
+	CompletedAt           *time.Time
 }
 
 type PrepareResult struct {
@@ -121,15 +121,15 @@ type PrepareResult struct {
 }
 
 type Publication struct {
-	ParticipantSessionID utilities.ID
-	Source               string
-	Enabled              bool
-	PublicationID        string
+	ParticipantID utilities.ID
+	Source        string
+	Enabled       bool
+	PublicationID string
 }
 
 type ObservationInput struct {
 	TenantID     utilities.ID
-	SessionID    utilities.ID
+	EpisodeID    utilities.ID
 	Incarnation  int64
 	Sequence     int64
 	Publications []Publication
@@ -142,7 +142,7 @@ type Cursor struct {
 
 type Observation struct {
 	TenantID     utilities.ID
-	SessionID    utilities.ID
+	EpisodeID    utilities.ID
 	Incarnation  int64
 	Sequence     int64
 	Publications []Publication
@@ -166,20 +166,20 @@ type Repository interface {
 }
 
 type canonicalPayload struct {
-	Effect                       Effect  `json:"effect"`
-	TenantID                     string  `json:"tenant_id"`
-	SessionID                    string  `json:"session_id"`
-	ParticipantSessionID         *string `json:"participant_session_id,omitempty"`
-	ParticipantSessionGeneration *int64  `json:"participant_session_generation,omitempty"`
-	PublicationSource            *string `json:"publication_source,omitempty"`
-	RecordingID                  *string `json:"recording_id,omitempty"`
+	Effect                Effect  `json:"effect"`
+	TenantID              string  `json:"tenant_id"`
+	EpisodeID             string  `json:"episode_id"`
+	ParticipantID         *string `json:"participant_id,omitempty"`
+	ParticipantGeneration *int64  `json:"participant_generation,omitempty"`
+	PublicationSource     *string `json:"publication_source,omitempty"`
+	RecordingID           *string `json:"recording_id,omitempty"`
 }
 
 type canonicalPublication struct {
-	ParticipantSessionID string  `json:"participant_session_id"`
-	Source               string  `json:"source"`
-	Enabled              bool    `json:"enabled"`
-	PublicationID        *string `json:"publication_id"`
+	ParticipantID string  `json:"participant_id"`
+	Source        string  `json:"source"`
+	Enabled       bool    `json:"enabled"`
+	PublicationID *string `json:"publication_id"`
 }
 
 func Canonicalize(input OperationInput) (CanonicalOperation, error) {
@@ -190,15 +190,15 @@ func Canonicalize(input OperationInput) (CanonicalOperation, error) {
 	if input.TenantID.IsZero() {
 		return CanonicalOperation{}, ErrInvalidTenantID
 	}
-	if input.SessionID.IsZero() {
-		return CanonicalOperation{}, ErrInvalidSessionID
+	if input.EpisodeID.IsZero() {
+		return CanonicalOperation{}, ErrInvalidEpisodeID
 	}
 
-	participantPresent := !input.ParticipantSessionID.IsZero()
-	if !participantPresent && input.ParticipantSessionGeneration != 0 {
+	participantPresent := !input.ParticipantID.IsZero()
+	if !participantPresent && input.ParticipantGeneration != 0 {
 		return CanonicalOperation{}, ErrInvalidParticipantGeneration
 	}
-	if participantPresent && input.ParticipantSessionGeneration < 0 {
+	if participantPresent && input.ParticipantGeneration < 0 {
 		return CanonicalOperation{}, ErrInvalidParticipantGeneration
 	}
 
@@ -211,13 +211,13 @@ func Canonicalize(input OperationInput) (CanonicalOperation, error) {
 		return CanonicalOperation{}, err
 	}
 
-	payload := canonicalPayload{Effect: input.Effect, TenantID: input.TenantID.String(), SessionID: input.SessionID.String()}
+	payload := canonicalPayload{Effect: input.Effect, TenantID: input.TenantID.String(), EpisodeID: input.EpisodeID.String()}
 	if participantPresent {
-		id := input.ParticipantSessionID.String()
-		payload.ParticipantSessionID = &id
-		if input.ParticipantSessionGeneration > 0 {
-			generation := input.ParticipantSessionGeneration
-			payload.ParticipantSessionGeneration = &generation
+		id := input.ParticipantID.String()
+		payload.ParticipantID = &id
+		if input.ParticipantGeneration > 0 {
+			generation := input.ParticipantGeneration
+			payload.ParticipantGeneration = &generation
 		}
 	}
 	if input.PublicationSource != "" {
@@ -280,8 +280,8 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 	if input.TenantID.IsZero() {
 		return ObservationInput{}, [32]byte{}, nil, ErrInvalidTenantID
 	}
-	if input.SessionID.IsZero() {
-		return ObservationInput{}, [32]byte{}, nil, ErrInvalidSessionID
+	if input.EpisodeID.IsZero() {
+		return ObservationInput{}, [32]byte{}, nil, ErrInvalidEpisodeID
 	}
 	if input.Incarnation < 0 || input.Sequence < 0 {
 		return ObservationInput{}, [32]byte{}, nil, ErrInvalidObservationCursor
@@ -293,7 +293,7 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 	seen := make(map[string]struct{}, len(input.Publications))
 	for index := range input.Publications {
 		publication := &input.Publications[index]
-		if publication.ParticipantSessionID.IsZero() {
+		if publication.ParticipantID.IsZero() {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidParticipantID
 		}
 		publication.Source = strings.ToLower(strings.TrimSpace(publication.Source))
@@ -304,21 +304,21 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 		if len(publication.PublicationID) > 256 || publication.Enabled != (publication.PublicationID != "") {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationID
 		}
-		key := publication.ParticipantSessionID.String() + "\x00" + publication.Source
+		key := publication.ParticipantID.String() + "\x00" + publication.Source
 		if _, exists := seen[key]; exists {
 			return ObservationInput{}, [32]byte{}, nil, ErrObservationConflict
 		}
 		seen[key] = struct{}{}
 	}
 	sort.Slice(input.Publications, func(left, right int) bool {
-		if input.Publications[left].ParticipantSessionID.String() == input.Publications[right].ParticipantSessionID.String() {
+		if input.Publications[left].ParticipantID.String() == input.Publications[right].ParticipantID.String() {
 			return input.Publications[left].Source < input.Publications[right].Source
 		}
-		return input.Publications[left].ParticipantSessionID.String() < input.Publications[right].ParticipantSessionID.String()
+		return input.Publications[left].ParticipantID.String() < input.Publications[right].ParticipantID.String()
 	})
 	publications := make([]canonicalPublication, len(input.Publications))
 	for index, publication := range input.Publications {
-		canonical := canonicalPublication{ParticipantSessionID: publication.ParticipantSessionID.String(), Source: publication.Source, Enabled: publication.Enabled}
+		canonical := canonicalPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, Enabled: publication.Enabled}
 		if publication.PublicationID != "" {
 			canonical.PublicationID = &publication.PublicationID
 		}
@@ -348,7 +348,7 @@ func FingerprintHex(value [32]byte) string {
 
 func validateEffectFields(input OperationInput) error {
 	participantRequired := input.Effect == EffectGrantPublication || input.Effect == EffectRevokePublication || input.Effect == EffectRemoveParticipant
-	if participantRequired && input.ParticipantSessionID.IsZero() {
+	if participantRequired && input.ParticipantID.IsZero() {
 		return ErrInvalidParticipantID
 	}
 	publicationRequired := input.Effect == EffectGrantPublication || input.Effect == EffectRevokePublication
@@ -365,7 +365,7 @@ func validateEffectFields(input OperationInput) error {
 	if !recordingRequired && !input.RecordingID.IsZero() {
 		return ErrInvalidRecordingID
 	}
-	if !participantRequired && !input.ParticipantSessionID.IsZero() {
+	if !participantRequired && !input.ParticipantID.IsZero() {
 		return ErrInvalidParticipantID
 	}
 	return nil
@@ -382,7 +382,7 @@ func validOperationID(value string) bool {
 
 func validEffect(value Effect) bool {
 	switch value {
-	case EffectGrantPublication, EffectRevokePublication, EffectRemoveParticipant, EffectEndSession, EffectStartRecording, EffectStopRecording:
+	case EffectGrantPublication, EffectRevokePublication, EffectRemoveParticipant, EffectEndEpisode, EffectStartRecording, EffectStopRecording:
 		return true
 	default:
 		return false

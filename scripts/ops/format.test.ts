@@ -5,7 +5,7 @@ import type { OpsIncident } from "./types";
 const incident: OpsIncident = {
   incident_code: "INC-20260513-01",
   title: "Realtime join failures",
-  summary: "Elevated room join failures",
+  summary: "Elevated Space join failures",
   severity: "critical",
   status: "investigating",
   visibility: "internal",

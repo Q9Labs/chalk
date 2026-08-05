@@ -13,12 +13,12 @@ import (
 
 const claimChatAttachmentCleanup = `-- name: ClaimChatAttachmentCleanup :many
 with candidates as (
-    select attachment.tenant_id, attachment.session_id, attachment.attachment_id
+    select attachment.tenant_id, attachment.space_id, attachment.episode_id, attachment.attachment_id
     from sync_chat_attachments attachment
-    join room_sessions session
-        on session.tenant_id = attachment.tenant_id
-        and session.room_id = attachment.room_id
-        and session.id = attachment.session_id
+    join episodes episode
+        on episode.tenant_id = attachment.tenant_id
+        and episode.space_id = attachment.space_id
+        and episode.id = attachment.episode_id
     where (
         attachment.cleanup_claimed_until is null
         or attachment.cleanup_claimed_until <= $3
@@ -33,14 +33,14 @@ with candidates as (
                 and attachment.expires_at <= $3
             )
             or (
-                session.status = 'ended'
-                and session.ended_at <= $4
+                episode.status = 'ended'
+                and episode.ended_at <= $4
             )
         )
     order by
         case
-            when session.status = 'ended' and session.ended_at <= $4
-                then session.ended_at
+            when episode.status = 'ended' and episode.ended_at <= $4
+                then episode.ended_at
             else attachment.expires_at
         end,
         attachment.attachment_id
@@ -54,12 +54,14 @@ set
     cleanup_attempts = cleanup_attempts + 1,
     updated_at = now()
 from candidates
-where attachment.tenant_id = candidates.tenant_id
-    and attachment.session_id = candidates.session_id
+    where attachment.tenant_id = candidates.tenant_id
+    and attachment.space_id = candidates.space_id
+    and attachment.episode_id = candidates.episode_id
     and attachment.attachment_id = candidates.attachment_id
 returning
     attachment.tenant_id,
-    attachment.session_id,
+    attachment.space_id,
+    attachment.episode_id,
     attachment.attachment_id,
     attachment.object_key,
     attachment.byte_length
@@ -75,7 +77,8 @@ type ClaimChatAttachmentCleanupParams struct {
 
 type ClaimChatAttachmentCleanupRow struct {
 	TenantID     pgtype.UUID `json:"tenant_id"`
-	SessionID    pgtype.UUID `json:"session_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
 	AttachmentID pgtype.UUID `json:"attachment_id"`
 	ObjectKey    string      `json:"object_key"`
 	ByteLength   int64       `json:"byte_length"`
@@ -98,7 +101,8 @@ func (q *Queries) ClaimChatAttachmentCleanup(ctx context.Context, arg ClaimChatA
 		var i ClaimChatAttachmentCleanupRow
 		if err := rows.Scan(
 			&i.TenantID,
-			&i.SessionID,
+			&i.SpaceID,
+			&i.EpisodeID,
 			&i.AttachmentID,
 			&i.ObjectKey,
 			&i.ByteLength,
@@ -121,13 +125,13 @@ set
     finalize_claimed_until = $2,
     finalize_attempts = finalize_attempts + 1,
     updated_at = now()
-from participants participant, room_sessions session
+from participants participant, episodes episode
 where attachment.upload_id = $3
     and attachment.tenant_id = $4
-    and attachment.room_id = $5
-    and attachment.session_id = $6
-    and attachment.participant_session_id = $7
-    and attachment.participant_session_generation = $8
+    and attachment.space_id = $5
+    and attachment.episode_id = $6
+    and attachment.participant_id = $7
+    and attachment.participant_generation = $8
     and (
         attachment.status = 'pending'
         or (
@@ -137,16 +141,16 @@ where attachment.upload_id = $3
     )
     and attachment.expires_at > $9
     and participant.tenant_id = attachment.tenant_id
-    and participant.room_id = attachment.room_id
-    and participant.session_id = attachment.session_id
-    and participant.id = attachment.participant_session_id
-    and participant.generation = attachment.participant_session_generation
+    and participant.space_id = attachment.space_id
+    and participant.episode_id = attachment.episode_id
+    and participant.id = attachment.participant_id
+    and participant.generation = attachment.participant_generation
     and participant.status = 'active'
-    and session.tenant_id = attachment.tenant_id
-    and session.room_id = attachment.room_id
-    and session.id = attachment.session_id
-    and session.status = 'active'
-    and (session.room_action_role_capabilities -> participant.role) ? 'sendChat'
+    and episode.tenant_id = attachment.tenant_id
+    and episode.space_id = attachment.space_id
+    and episode.id = attachment.episode_id
+    and episode.status = 'active'
+    and participant.capabilities @> array['sendChat']::text[]
 returning
     attachment.attachment_id,
     attachment.upload_id,
@@ -167,9 +171,9 @@ type ClaimChatAttachmentUploadFinalizeParams struct {
 	FinalizeClaimedUntil  pgtype.Timestamptz `json:"finalize_claimed_until"`
 	UploadID              pgtype.UUID        `json:"upload_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
-	RoomID                pgtype.UUID        `json:"room_id"`
-	SessionID             pgtype.UUID        `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration int64              `json:"participant_generation"`
 	NowAt                 pgtype.Timestamptz `json:"now_at"`
 }
@@ -195,9 +199,9 @@ func (q *Queries) ClaimChatAttachmentUploadFinalize(ctx context.Context, arg Cla
 		arg.FinalizeClaimedUntil,
 		arg.UploadID,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 		arg.NowAt,
 	)
@@ -223,10 +227,10 @@ const completeChatAttachmentCleanup = `-- name: CompleteChatAttachmentCleanup :o
 with removed as (
     delete from sync_chat_attachments attachment
     where attachment.tenant_id = $1
-        and attachment.session_id = $2
+        and attachment.episode_id = $2
         and attachment.attachment_id = $3
         and attachment.cleanup_claim_token = $4
-    returning attachment.tenant_id, attachment.session_id, attachment.byte_length
+    returning attachment.tenant_id, attachment.space_id, attachment.episode_id, attachment.byte_length
 ),
 released as (
     update sync_chat_streams stream
@@ -236,7 +240,7 @@ released as (
         updated_at = now()
     from removed
     where stream.tenant_id = removed.tenant_id
-        and stream.session_id = removed.session_id
+        and stream.space_id = removed.space_id
     returning 1
 )
 select count(*) from released
@@ -244,7 +248,7 @@ select count(*) from released
 
 type CompleteChatAttachmentCleanupParams struct {
 	TenantID     pgtype.UUID `json:"tenant_id"`
-	SessionID    pgtype.UUID `json:"session_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
 	AttachmentID pgtype.UUID `json:"attachment_id"`
 	ClaimToken   pgtype.UUID `json:"claim_token"`
 }
@@ -252,7 +256,7 @@ type CompleteChatAttachmentCleanupParams struct {
 func (q *Queries) CompleteChatAttachmentCleanup(ctx context.Context, arg CompleteChatAttachmentCleanupParams) (int64, error) {
 	row := q.db.QueryRow(ctx, completeChatAttachmentCleanup,
 		arg.TenantID,
-		arg.SessionID,
+		arg.EpisodeID,
 		arg.AttachmentID,
 		arg.ClaimToken,
 	)
@@ -344,36 +348,36 @@ select
 from sync_chat_attachments attachment
 join participants participant
     on participant.tenant_id = attachment.tenant_id
-    and participant.room_id = attachment.room_id
-    and participant.session_id = attachment.session_id
-join room_sessions session
-    on session.tenant_id = attachment.tenant_id
-    and session.room_id = attachment.room_id
-    and session.id = attachment.session_id
+    and participant.space_id = attachment.space_id
+    and participant.episode_id = attachment.episode_id
+join episodes episode
+    on episode.tenant_id = attachment.tenant_id
+    and episode.space_id = attachment.space_id
+    and episode.id = attachment.episode_id
 where attachment.tenant_id = $1
-    and attachment.room_id = $2
-    and attachment.session_id = $3
+    and attachment.space_id = $2
+    and attachment.episode_id = $3
     and attachment.attachment_id = $4
     and participant.id = $5
     and participant.generation = $6
     and participant.status = 'active'
-    and session.status = 'active'
+    and episode.status = 'active'
     and (
         attachment.status = 'attached'
         or (
             attachment.status = 'ready'
-            and attachment.participant_session_id = participant.id
-            and attachment.participant_session_generation = participant.generation
+            and attachment.participant_id = participant.id
+            and attachment.participant_generation = participant.generation
         )
     )
 `
 
 type GetAuthorizedChatAttachmentDownloadParams struct {
 	TenantID              pgtype.UUID `json:"tenant_id"`
-	RoomID                pgtype.UUID `json:"room_id"`
-	SessionID             pgtype.UUID `json:"session_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
 	AttachmentID          pgtype.UUID `json:"attachment_id"`
-	ParticipantSessionID  pgtype.UUID `json:"participant_session_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
 	ParticipantGeneration int64       `json:"participant_generation"`
 }
 
@@ -393,10 +397,10 @@ type GetAuthorizedChatAttachmentDownloadRow struct {
 func (q *Queries) GetAuthorizedChatAttachmentDownload(ctx context.Context, arg GetAuthorizedChatAttachmentDownloadParams) (GetAuthorizedChatAttachmentDownloadRow, error) {
 	row := q.db.QueryRow(ctx, getAuthorizedChatAttachmentDownload,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.AttachmentID,
-		arg.ParticipantSessionID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 	)
 	var i GetAuthorizedChatAttachmentDownloadRow
@@ -429,18 +433,18 @@ select
     expires_at
 from sync_chat_attachments
 where tenant_id = $1
-    and room_id = $2
-    and session_id = $3
-    and participant_session_id = $4
-    and participant_session_generation = $5
+    and space_id = $2
+    and episode_id = $3
+    and participant_id = $4
+    and participant_generation = $5
     and client_attachment_id = $6
 `
 
 type GetChatAttachmentByClientIDParams struct {
 	TenantID              pgtype.UUID `json:"tenant_id"`
-	RoomID                pgtype.UUID `json:"room_id"`
-	SessionID             pgtype.UUID `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID `json:"participant_session_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
 	ParticipantGeneration int64       `json:"participant_generation"`
 	ClientAttachmentID    string      `json:"client_attachment_id"`
 }
@@ -461,9 +465,9 @@ type GetChatAttachmentByClientIDRow struct {
 func (q *Queries) GetChatAttachmentByClientID(ctx context.Context, arg GetChatAttachmentByClientIDParams) (GetChatAttachmentByClientIDRow, error) {
 	row := q.db.QueryRow(ctx, getChatAttachmentByClientID,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 		arg.ClientAttachmentID,
 	)
@@ -498,18 +502,18 @@ select
 from sync_chat_attachments
 where upload_id = $1
     and tenant_id = $2
-    and room_id = $3
-    and session_id = $4
-    and participant_session_id = $5
-    and participant_session_generation = $6
+    and space_id = $3
+    and episode_id = $4
+    and participant_id = $5
+    and participant_generation = $6
 `
 
 type GetChatAttachmentByUploadIDParams struct {
 	UploadID              pgtype.UUID `json:"upload_id"`
 	TenantID              pgtype.UUID `json:"tenant_id"`
-	RoomID                pgtype.UUID `json:"room_id"`
-	SessionID             pgtype.UUID `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID `json:"participant_session_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
 	ParticipantGeneration int64       `json:"participant_generation"`
 }
 
@@ -530,9 +534,9 @@ func (q *Queries) GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAt
 	row := q.db.QueryRow(ctx, getChatAttachmentByUploadID,
 		arg.UploadID,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 	)
 	var i GetChatAttachmentByUploadIDRow
@@ -580,58 +584,55 @@ const reserveChatAttachmentUpload = `-- name: ReserveChatAttachmentUpload :one
 with authority as materialized (
     select
         participant.tenant_id,
-        participant.room_id,
-        participant.session_id,
+        participant.space_id,
+        participant.episode_id,
         participant.id,
         participant.generation
     from participants participant
-    join room_sessions session
-        on session.tenant_id = participant.tenant_id
-        and session.room_id = participant.room_id
-        and session.id = participant.session_id
+    join episodes episode
+        on episode.tenant_id = participant.tenant_id
+        and episode.space_id = participant.space_id
+        and episode.id = participant.episode_id
     where participant.tenant_id = $11
-        and participant.room_id = $12
-        and participant.session_id = $13
+        and participant.space_id = $12
+        and participant.episode_id = $13
         and participant.id = $14
         and participant.generation = $15
         and participant.status = 'active'
-        and session.status = 'active'
-        and (session.room_action_role_capabilities -> participant.role) ? 'sendChat'
+        and episode.status = 'active'
+        and participant.capabilities @> array['sendChat']::text[]
 ),
 reservation as (
     insert into sync_chat_streams (
         tenant_id,
-        room_id,
-        session_id,
+        space_id,
         attachment_count,
         attachment_bytes
     )
     select
         tenant_id,
-        room_id,
-        session_id,
+        space_id,
         1,
         $8
     from authority
-    on conflict (tenant_id, session_id) do update set
+    on conflict (tenant_id, space_id) do update set
         attachment_count = sync_chat_streams.attachment_count + 1,
         attachment_bytes = sync_chat_streams.attachment_bytes + $8,
         updated_at = now()
-    where sync_chat_streams.room_id = excluded.room_id
+    where sync_chat_streams.space_id = excluded.space_id
         and sync_chat_streams.attachment_count < 1000
         and sync_chat_streams.attachment_bytes + $8 <= 5368709120
     returning
         sync_chat_streams.tenant_id,
-        sync_chat_streams.room_id,
-        sync_chat_streams.session_id
+        sync_chat_streams.space_id
 )
 insert into sync_chat_attachments (
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     attachment_id,
-    participant_session_id,
-    participant_session_generation,
+    participant_id,
+    participant_generation,
     client_attachment_id,
     request_fingerprint,
     upload_id,
@@ -645,8 +646,8 @@ insert into sync_chat_attachments (
 )
 select
     reservation.tenant_id,
-    reservation.room_id,
-    reservation.session_id,
+    reservation.space_id,
+    reservation.episode_id,
     $1,
     authority.id,
     authority.generation,
@@ -687,9 +688,9 @@ type ReserveChatAttachmentUploadParams struct {
 	Sha256                []byte             `json:"sha256"`
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
-	RoomID                pgtype.UUID        `json:"room_id"`
-	SessionID             pgtype.UUID        `json:"session_id"`
-	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration int64              `json:"participant_generation"`
 }
 
@@ -719,9 +720,9 @@ func (q *Queries) ReserveChatAttachmentUpload(ctx context.Context, arg ReserveCh
 		arg.Sha256,
 		arg.ExpiresAt,
 		arg.TenantID,
-		arg.RoomID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
 		arg.ParticipantGeneration,
 	)
 	var i ReserveChatAttachmentUploadRow

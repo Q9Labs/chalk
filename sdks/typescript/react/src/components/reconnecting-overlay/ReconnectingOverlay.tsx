@@ -7,30 +7,25 @@ export interface ReconnectingOverlayProps {
   isVisible: boolean;
   status: "connecting" | "reconnecting" | "failed";
   onRetry?: () => void;
-  onLeave?: () => void;
+  onLeft?: () => void;
   message?: string;
   supportCode?: string;
   className?: string;
 }
 
-export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeave, message, supportCode, className }) => {
+export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeft, message, supportCode, className }) => {
   if (!isVisible) return null;
 
   const defaultMessages = {
-    connecting: "Joining meeting...",
+    connecting: "Joining space...",
     reconnecting: "Connection lost. Reconnecting...",
     failed: "Unable to connect to the server.",
   };
 
   return (
-    <div
-      className={cn("absolute inset-0 z-50 flex items-center justify-center bg-[var(--chalk-app-canvas)]/90 p-4 backdrop-blur-[2px] transition-opacity duration-300", className)}
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="connection-status-title"
-      aria-describedby="connection-status-desc"
-    >
-      <div className="chalk-textured-surface flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-8 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
+    <div className={cn("absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
+      <div aria-hidden="true" className="absolute inset-0 bg-[var(--chalk-app-canvas)] opacity-90 backdrop-blur-[2px]" />
+      <div className="chalk-textured-surface relative flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-8 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
         {status === "failed" ? (
           <div className="mb-6 rounded-full bg-[var(--chalk-app-danger)]/10 p-4 text-[var(--chalk-app-danger)]">
             <WifiOffIcon size={48} strokeWidth={1.5} />
@@ -67,13 +62,13 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
                 Try Again
               </button>
             )}
-            {onLeave && (
+            {onLeft && (
               <button
                 type="button"
-                onClick={onLeave}
+                onClick={onLeft}
                 className="w-full rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] px-4 py-2.5 font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2"
               >
-                Leave Meeting
+                Leave Space
               </button>
             )}
           </div>

@@ -36,7 +36,7 @@ async function run() {
   socket.receive(ackBeforeFrame);
   await settle();
   const pendingAtAck = client.getSnapshot().pendingCommandCount;
-  const ackBeforeEventFrame = event("hand_raised", commandIds[0], current, ackBefore, { participant_session_id: ids.participant });
+  const ackBeforeEventFrame = event("hand_raised", commandIds[0], current, ackBefore, { participant_id: ids.participant });
   socket.receive(ackBeforeEventFrame);
   await settle();
   await ackBeforeEvent;
@@ -44,10 +44,10 @@ async function run() {
   evidence.ack_before_event = { ack_seen_before_event: pendingAtAck === 1, settled_after_event: client.getSnapshot().pendingCommandCount === 0 };
   observations.push({ name: "ack_before_event", pending_at_ack: pendingAtAck });
 
-  const eventBeforeAck = client.setAdmissionPolicy("approval", { commandId: commandIds[1] });
+  const eventBeforeAck = client.setAdmissionPolicy("knock", { commandId: commandIds[1] });
   await settle();
-  const eventBefore = await nextState(current, { admissionPolicy: "approval" });
-  socket.receive(event("admission_policy_changed", commandIds[1], current, eventBefore, { policy: "approval" }));
+  const eventBefore = await nextState(current, { admissionPolicy: "knock" });
+  socket.receive(event("admission_policy_changed", commandIds[1], current, eventBefore, { policy: "knock" }));
   await settle();
   const pendingAtEvent = client.getSnapshot().pendingCommandCount;
   socket.receive(committedAck(commandIds[1], eventBefore, "original"));
@@ -65,7 +65,7 @@ async function run() {
   socket.receive(committedAck(commandIds[2], committed, "original"));
   await settle();
   const pendingAtDuplicate = client.getSnapshot().pendingCommandCount;
-  socket.receive(event("participant_display_name_changed", commandIds[2], current, committed, { participant_session_id: ids.participant, display_name: "Committed" }));
+  socket.receive(event("participant_display_name_changed", commandIds[2], current, committed, { participant_id: ids.participant, display_name: "Committed" }));
   await settle();
   await committedDuplicate;
   current = committed;
@@ -84,8 +84,8 @@ async function run() {
 
   const rejected = client.setDisplayName("Rejected", { commandId: commandIds[4] }).catch((error) => error);
   await settle();
-  const rebased = await nextState(current, { admissionPolicy: "closed" });
-  socket.receive(event("admission_policy_changed", "wire-sdk-event-005", current, rebased, { policy: "closed" }));
+  const rebased = await nextState(current, { admissionPolicy: "members_only" });
+  socket.receive(event("admission_policy_changed", "wire-sdk-event-005", current, rebased, { policy: "members_only" }));
   await settle();
   socket.receive({ type: "ack", command_id: commandIds[4], delivery: "original", outcome: "rejected", reason: "capability_denied" });
   const rejection = await rejected;
@@ -104,7 +104,7 @@ async function run() {
     stream: "media",
     projection_id: ids.projection,
     sequence: 1,
-    item: { participant_session_id: ids.participant, source: "camera", enabled: true, publication_id: "wire-sdk-camera" },
+    item: { participant_id: ids.participant, source: "camera", enabled: true, publication_id: "wire-sdk-camera" },
   };
   socket.receive(projectionEvent);
   await settle();
@@ -196,7 +196,7 @@ async function liveHarness(options = {}) {
   await settle();
   const state = await baseState();
   const snapshot = snapshotFor(state);
-  socket.receive({ type: "welcome", protocol: 1, participant_session_id: ids.participant, participant_session_generation: 1, recovery_id: ids.recovery, head: head(state), mode: "snapshot", snapshot });
+  socket.receive({ type: "welcome", protocol: 1, participant_id: ids.participant, participant_generation: 1, recovery_id: ids.recovery, head: head(state), mode: "snapshot", snapshot });
   await settle();
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: ids.projection, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: ids.projection, sequence: 0, items: [] });
@@ -242,7 +242,35 @@ async function pendingHarness(store) {
 }
 
 async function baseState() {
-  const roleCapabilities = { host: ["subscribe"], cohost: ["subscribe"], participant: ["subscribe"] };
+  const roleCapabilities = {
+    owner: [
+      "publishAudio",
+      "publishVideo",
+      "publishScreen",
+      "subscribe",
+      "raiseHand",
+      "renameSelf",
+      "sendChat",
+      "sendReaction",
+      "drawWhiteboard",
+      "manageWhiteboard",
+      "manageAdmission",
+      "assignRoles",
+      "muteOthers",
+      "stopVideoOthers",
+      "stopScreenOthers",
+      "requestMediaOthers",
+      "removeParticipant",
+      "manageRecording",
+      "startEpisode",
+      "extendEpisode",
+      "endEpisode",
+      "manageMembers",
+      "clearSpaceContent",
+    ],
+    collaborator: ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf", "sendChat", "sendReaction", "drawWhiteboard"],
+    observer: ["subscribe", "sendReaction"],
+  };
   const state = {
     revision: 1,
     stateSchemaVersion: 1,
@@ -250,12 +278,12 @@ async function baseState() {
     status: "active",
     admissionPolicy: "open",
     hostExitPolicy: "require_transfer",
-    hostParticipantSessionId: ids.participant,
+    hostParticipantId: null,
     deadlineAtMs: 900_000,
     deadlineGeneration: 1,
     roleCapabilities,
     recording: null,
-    participants: [{ participantSessionId: ids.participant, displayName: "Host", handRaised: false, admissionRevision: 1, role: "host", eligibleRoles: ["host", "cohost"], capabilities: ["subscribe"] }],
+    participants: [{ participantId: ids.participant, displayName: "Owner", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: roleCapabilities.owner }],
     admissionRequests: [],
   };
   return { ...state, stateDigest: await computeV1StateDigest(state) };
@@ -273,19 +301,16 @@ function snapshotFor(state) {
     state_digest: state.stateDigest,
     status: state.status,
     admission_policy: state.admissionPolicy,
-    host_exit_policy: state.hostExitPolicy,
-    host_participant_session_id: state.hostParticipantSessionId,
     deadline_at_ms: state.deadlineAtMs,
     deadline_generation: state.deadlineGeneration,
     role_capabilities: state.roleCapabilities,
     recording: null,
     participants: state.participants.map((participant) => ({
-      participant_session_id: participant.participantSessionId,
+      participant_id: participant.participantId,
       display_name: participant.displayName,
       hand_raised: participant.handRaised,
       admission_revision: participant.admissionRevision,
       role: participant.role,
-      eligible_roles: participant.eligibleRoles,
       capabilities: participant.capabilities,
     })),
     admission_requests: [],

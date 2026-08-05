@@ -108,7 +108,7 @@ export function createGatePlan(files, options = {}) {
   const selectedNames = selectedWorkspaces.map((workspace) => workspace.name).join(", ");
   const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api"]));
   const sync = full || nonDocumentationFiles.some(isSyncReliabilityInput);
-  const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-codegen", "sdks/typescript/client/src/generated"]));
+  const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   const architecture = full || nonDocumentationFiles.some((file) => file === "architecture.html" || startsWithAny(file, ["infrastructure/architecture-worker", "packages/assets/src/logos", "scripts/architecture-worker"]));
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder"]));
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file));
@@ -136,7 +136,7 @@ export function createGatePlan(files, options = {}) {
     task("contracts", "Contract and generated SDK drift", contracts, contracts ? "contract producers or consumers changed" : "contracts are unaffected", ["pnpm", "run", "contract:check"]),
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("test-presence", "Test presence", full || sourceFiles.some((file) => [".ts", ".tsx"].includes(path.extname(file))), "TypeScript source files changed", ["pnpm", "run", "test:presence"], { TEST_PRESENCE_FILES: testPresenceFiles, TEST_PRESENCE_BASE_REF: base }),
-    task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types")),
+    task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], ["--workspace-concurrency=1", "--sort"])),
     task("tests", "Affected workspace tests with coverage", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "test", ["--coverage"])),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "build", [], ["--workspace-concurrency=1", "--sort"])),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),

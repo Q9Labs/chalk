@@ -1,11 +1,11 @@
 import { CaptureUpdateAction, hashElementsVersion, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
-import { WhiteboardFilesSync } from "./files.js";
-import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files.js";
-import { WhiteboardPresence } from "./presence.js";
-import { filterSyncableElements } from "./syncable.js";
-import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types.js";
-import { fromWireElement, toWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire.js";
+import { WhiteboardFilesSync } from "./files";
+import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
+import { WhiteboardPresence } from "./presence";
+import { filterSyncableElements } from "./syncable";
+import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
+import { fromWireElement, toWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire";
 
 const FULL_SYNC_INTERVAL_MS = 20_000;
 const CHANGE_DEBOUNCE_MS = 150;
@@ -39,7 +39,7 @@ export type WhiteboardCollaborationEvent =
     }
   | {
       readonly type: "cursor";
-      readonly participantSessionId: string;
+      readonly participantId: string;
       readonly displayName: string;
       readonly x: number;
       readonly y: number;
@@ -176,7 +176,7 @@ export class ExcalidrawCollabEngine {
         return;
       case "cursor":
         this.handleRemoteCursor({
-          participantId: event.participantSessionId,
+          participantId: event.participantId,
           displayName: event.displayName,
           x: event.x,
           y: event.y,

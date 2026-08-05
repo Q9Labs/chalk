@@ -16,7 +16,7 @@ describe("ScreenShareMock", () => {
     expect(screen.getByText("42 ms")).toBeTruthy();
   });
 
-  it("collapses the workspace rail on narrow screens", () => {
+  it("collapses the Space rail on narrow screens", () => {
     const { container } = render(<ScreenShareMock />);
 
     const stage = container.querySelector(".grid-cols-1.sm\\:grid-cols-\\[150px_minmax\\(0\\,1fr\\)\\]");

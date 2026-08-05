@@ -238,13 +238,13 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
         {pages.length > 1 && (
           <div className="flex justify-center gap-1.5 py-2">
             {pages.map((_, i) => (
-              <button key={i} type="button" onClick={() => goToPage(i)} className={cn("w-2 h-2 rounded-full transition-all", i === carouselIndex ? "bg-white w-4" : "bg-white/40")} aria-label={`Go to page ${i + 1}`} />
+              <button key={i} type="button" onClick={() => goToPage(i)} className={cn("h-2 w-2 rounded-full bg-[var(--chalk-app-control)] transition-all", i === carouselIndex && "w-4")} aria-label={`Go to page ${i + 1}`} />
             ))}
           </div>
         )}
 
         {/* Overflow indicator */}
-        {overflowCount > 0 && <div className="text-center text-xs text-white/60 pb-1">+{overflowCount} more</div>}
+        {overflowCount > 0 && <div className="pb-1 text-center text-xs text-[var(--chalk-app-text)]">+{overflowCount} more</div>}
       </div>
     );
   }

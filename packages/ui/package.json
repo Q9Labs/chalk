@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-ui",
-  "version": "0.0.85",
+  "version": "4.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -113,14 +113,14 @@
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
     "build:logos": "mkdir -p ./dist && cp -R ../assets/src/logos ./dist/",
     "dev": "pnpm run build:css && pnpm run build:logos && tsup ./src/index.ts ./src/assets.ts ./src/badge.tsx ./src/button.tsx ./src/card.tsx ./src/input.tsx ./src/lib/utils.ts ./src/reactions.ts ./src/toggle.tsx ./src/toggle-group.tsx ./src/tooltip.tsx --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge --watch",
-    "test": "pnpm exec vitest run",
-    "check-types": "tsc --noEmit",
-    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
+    "test": "pnpm exec vitest run --config ./vitest.config.ts",
+    "check-types": "tsc --project tsconfig.check-types.json --noEmit",
+    "lint": "pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
-    "@q9labsai/chalk-assets": "workspace:^",
+    "@q9labsai/chalk-assets": "workspace:^4.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.6.0"

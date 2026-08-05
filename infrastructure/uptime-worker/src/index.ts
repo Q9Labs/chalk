@@ -181,9 +181,9 @@ function serviceMonitorDefinitions(env: Env): readonly MonitorDefinition[] {
 
   return [
     {
-      key: "web.room",
+      key: "web.space",
       method: "GET",
-      url: monitorURL(webBaseURL, "/room", "WEB_BASE_URL"),
+      url: monitorURL(webBaseURL, "/space", "WEB_BASE_URL"),
       severity: "critical",
       expectedStatusCodes: [200],
     },

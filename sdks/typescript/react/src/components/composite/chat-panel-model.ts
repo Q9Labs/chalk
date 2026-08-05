@@ -1,25 +1,25 @@
-import type { ChalkChatMessage, ChalkChatReadReceipt } from "@q9labsai/chalk-client";
+import type { ChatMessage, ChatReadReceipt } from "@q9labsai/chalk-client";
 import type React from "react";
 
 const BOTTOM_THRESHOLD_PX = 24;
 
-export function groupChatMessages(messages: readonly ChalkChatMessage[]) {
-  const groups: { readonly participantSessionId: string; readonly firstMessageId: string; readonly messages: ChalkChatMessage[] }[] = [];
+export function groupChatMessages(messages: readonly ChatMessage[]) {
+  const groups: { readonly participantId: string; readonly firstMessageId: string; readonly messages: ChatMessage[] }[] = [];
   for (const message of messages) {
     const group = groups.at(-1);
     const previous = group?.messages.at(-1);
     const withinWindow = previous && new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() < 120_000;
-    if (group && group.participantSessionId === message.participantSessionId && withinWindow) {
+    if (group && group.participantId === message.participantId && withinWindow) {
       group.messages.push(message);
     } else {
-      groups.push({ participantSessionId: message.participantSessionId, firstMessageId: message.messageId, messages: [message] });
+      groups.push({ participantId: message.participantId, firstMessageId: message.messageId, messages: [message] });
     }
   }
   return groups;
 }
 
-export function receiptsForChatMessage(sequence: string, receipts: readonly ChalkChatReadReceipt[], localParticipantId: string | undefined) {
-  return receipts.filter((receipt) => receipt.participantSessionId !== localParticipantId && compareChatSequence(receipt.readThroughSequence, sequence) >= 0);
+export function receiptsForChatMessage(sequence: string, receipts: readonly ChatReadReceipt[], localParticipantId: string | undefined) {
+  return receipts.filter((receipt) => receipt.participantId !== localParticipantId && compareChatSequence(receipt.readThroughSequence, sequence) >= 0);
 }
 
 export function compareChatSequence(left: string, right: string): number {

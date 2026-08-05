@@ -1,0 +1,51 @@
+import type { ChatUploadFile, ClientEventMap } from "@q9labsai/chalk-client";
+
+import type { ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
+import type { ChalkThemeTokens } from "./theme";
+import * as bindings from "./index";
+
+type Assert<TCondition extends true> = TCondition;
+type Equal<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <T>() => T extends TRight ? 1 : 2 ? true : false;
+
+type PublicHooks = Extract<keyof typeof bindings, `use${string}`>;
+type ExpectedHooks = "useSpaceClient" | "useConnection" | "useSelf" | "useParticipants" | "useMedia" | "useChat" | "useReactions" | "useWhiteboard" | "useCan";
+type ExpectedLayout = "focus" | "grid" | "presentation";
+type ExpectedTokenKeys = "canvas" | "chrome" | "surface" | "stage" | "text" | "mutedText" | "line" | "accent" | "accentText" | "positive" | "danger" | "dangerSurface" | "focus" | "shadow";
+type ExpectedChalkProps =
+  | "client"
+  | "space"
+  | "getAccess"
+  | "entrance"
+  | "defaults"
+  | "displayName"
+  | "features"
+  | "theme"
+  | "initialPalette"
+  | "initialTexture"
+  | "onAppearanceChange"
+  | "pickChatFiles"
+  | "logoUrl"
+  | "spaceName"
+  | "inviteLink"
+  | "layout"
+  | "onLayoutChange"
+  | "onJoined"
+  | "onLeft"
+  | "onEpisodeEnded"
+  | "onParticipantJoined"
+  | "onParticipantLeft"
+  | "onScreenShareStarted"
+  | "onScreenShareStopped"
+  | "onError";
+
+type HooksAreClosed = Assert<Equal<PublicHooks, ExpectedHooks>>;
+type LayoutIsCanonical = Assert<Equal<SpaceLayout, ExpectedLayout>>;
+type TokensAreClosed = Assert<Equal<keyof ChalkThemeTokens, ExpectedTokenKeys>>;
+type ErrorMirrorsClientEvent = Assert<Equal<NonNullable<ChalkProps["onError"]>, (event: ClientEventMap["error"]) => void>>;
+type ChatFilePickerMirrorsClientType = Assert<Equal<NonNullable<ChalkProps["pickChatFiles"]>, () => Promise<readonly ChatUploadFile[]>>>;
+type NoLegacyStylingProp = Assert<Equal<Extract<keyof ChalkProps, "className" | "containerClassName">, never>>;
+type ChalkPropsAreClosed = Assert<Equal<keyof ChalkProps, ExpectedChalkProps>>;
+
+export type PublicSurfaceContract = [HooksAreClosed, LayoutIsCanonical, TokensAreClosed, ErrorMirrorsClientEvent, ChatFilePickerMirrorsClientType, NoLegacyStylingProp, ChalkPropsAreClosed];
+
+export {};

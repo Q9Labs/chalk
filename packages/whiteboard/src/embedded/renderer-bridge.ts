@@ -1,5 +1,5 @@
-import type { WhiteboardCommit } from "../collab/wire.js";
-import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, decodeEmbeddedWhiteboardHostMessage, encodeEmbeddedWhiteboardMessage, type ChalkEmbeddedWhiteboardHostEnvelope, type ChalkEmbeddedWhiteboardRendererMessage } from "./protocol.js";
+import type { WhiteboardCommit } from "../collab/wire";
+import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, decodeEmbeddedWhiteboardHostMessage, encodeEmbeddedWhiteboardMessage, type ChalkEmbeddedWhiteboardHostEnvelope, type ChalkEmbeddedWhiteboardRendererMessage } from "./protocol";
 
 declare global {
   interface Window {
@@ -62,7 +62,7 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     webView.postMessage(encodeEmbeddedWhiteboardMessage(message, this.#context));
   }
 
-  submitUpdate(input: { readonly sceneId: string; readonly sceneGeneration?: string; readonly syncAll: boolean; readonly elements: readonly import("../collab/wire.js").WhiteboardWireElement[] }): Promise<WhiteboardCommit> {
+  submitUpdate(input: { readonly sceneId: string; readonly sceneGeneration?: string; readonly syncAll: boolean; readonly elements: readonly import("../collab/wire").WhiteboardWireElement[] }): Promise<WhiteboardCommit> {
     if (!input.sceneGeneration) return Promise.reject(new Error("embedded whiteboard scene generation is unavailable"));
     return this.#request<WhiteboardCommit>("local_update", input);
   }

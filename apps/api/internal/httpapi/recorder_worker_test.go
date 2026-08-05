@@ -19,7 +19,7 @@ import (
 const (
 	workerTestID      = "11111111-1111-4111-8111-111111111111"
 	workerTestTenant  = "22222222-2222-4222-8222-222222222222"
-	workerTestSession = "33333333-3333-4333-8333-333333333333"
+	workerTestEpisode = "33333333-3333-4333-8333-333333333333"
 	workerTestRecord  = "44444444-4444-4444-8444-444444444444"
 	workerTestJob     = "55555555-5555-4555-8555-555555555555"
 )
@@ -94,7 +94,7 @@ func mustRecorderWorkerID(t *testing.T, value string) utilities.ID {
 func recorderWorkerJobFixture(t *testing.T, kind recordingpipeline.JobKind) recordingpipeline.Job {
 	t.Helper()
 	now := time.Date(2026, 7, 13, 5, 0, 0, 0, time.UTC)
-	return recordingpipeline.Job{ID: mustRecorderWorkerID(t, workerTestJob), TenantID: mustRecorderWorkerID(t, workerTestTenant), SessionID: mustRecorderWorkerID(t, workerTestSession), RecordingID: mustRecorderWorkerID(t, workerTestRecord), Kind: kind, State: recordingpipeline.JobStateLeased, AttemptCount: 1, AttemptLimit: 5, FencingGeneration: 2, LeaseExpiresAt: ptrTime(now.Add(30 * time.Minute)), AvailableAt: now, UpdatedAt: now, CreatedAt: now}
+	return recordingpipeline.Job{ID: mustRecorderWorkerID(t, workerTestJob), TenantID: mustRecorderWorkerID(t, workerTestTenant), EpisodeID: mustRecorderWorkerID(t, workerTestEpisode), RecordingID: mustRecorderWorkerID(t, workerTestRecord), Kind: kind, State: recordingpipeline.JobStateLeased, AttemptCount: 1, AttemptLimit: 5, FencingGeneration: 2, LeaseExpiresAt: ptrTime(now.Add(30 * time.Minute)), AvailableAt: now, UpdatedAt: now, CreatedAt: now}
 }
 
 func ptrTime(value time.Time) *time.Time { return &value }

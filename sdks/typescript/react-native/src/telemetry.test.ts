@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTelemetry, syncTransportCloseDiagnostic, type RtcPeerConnection, type TelemetryJourney } from "./telemetry";
+import { createTelemetry, getNativeJourneyContext, registerNativeJourneyContext, syncTransportCloseDiagnostic, type RtcPeerConnection, type TelemetryJourney } from "./telemetry";
 
 describe("createTelemetry", () => {
   it("bounds Sync transport close diagnostics without recording raw reasons", () => {
@@ -17,7 +17,7 @@ describe("createTelemetry", () => {
     const journey = createJourney();
     const telemetry = createTelemetry(journey);
 
-    expect(telemetry.session).toEqual({
+    expect(telemetry.connection).toEqual({
       apiHeaders: journey.headers,
       context: journey.context,
       syncCorrelation: {
@@ -27,8 +27,8 @@ describe("createTelemetry", () => {
       },
     });
 
-    telemetry.recordSyncFrame({ direction: "client_to_server", frameType: "room.join" });
-    expect(journey.recordSyncFrame).toHaveBeenCalledWith({ direction: "client_to_server", frameType: "room.join" });
+    telemetry.recordSyncFrame({ direction: "client_to_server", frameType: "space.join" });
+    expect(journey.recordSyncFrame).toHaveBeenCalledWith({ direction: "client_to_server", frameType: "space.join" });
   });
 
   it("records production whiteboard metrics without forwarding renderer attributes", () => {
@@ -48,6 +48,28 @@ describe("createTelemetry", () => {
       phase: "media",
       state: "failed",
     });
+  });
+
+  it("keeps the native client journey seam private and exact-client scoped", () => {
+    const journey = createJourney();
+    const telemetry = createTelemetry(journey);
+    const client = {};
+    registerNativeJourneyContext(client, journey, telemetry);
+
+    expect(getNativeJourneyContext(client)).toMatchObject({
+      journeyId: journey.context.journeyId,
+      traceparent: journey.context.traceparent,
+      tracestate: journey.context.tracestate,
+    });
+    getNativeJourneyContext(client)?.recordWhiteboardMetric({ name: "whiteboard.renderer.ready", value: 1 });
+    expect(journey.recordDiagnostic).toHaveBeenCalledWith({
+      category: "whiteboard_renderer",
+      code: "whiteboard.renderer.ready",
+      metricValue: 1,
+      phase: "media",
+      state: "observed",
+    });
+    expect(getNativeJourneyContext({})).toBeUndefined();
   });
 
   it("records aggregate RTC summaries from native peer-connection stats", async () => {

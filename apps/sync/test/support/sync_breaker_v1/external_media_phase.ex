@@ -2,7 +2,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
   @moduledoc false
 
   alias ChalkSync.ExternalOperationConsumer
-  alias ChalkSync.Live.Session, as: LiveSession
+  alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
@@ -32,12 +32,12 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     previous = install(connections)
 
     try do
-      fixture = SyncPostgres.seed_session(hd(connections), 3)
+      fixture = SyncPostgres.seed_episode(hd(connections), 3)
 
       try do
         execute(fixture, seed)
       after
-        SyncPostgres.cleanup(hd(connections), fixture.session)
+        SyncPostgres.cleanup(hd(connections), fixture.episode)
       end
     after
       restore(previous)
@@ -62,7 +62,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
       {:stop_recording, :confirmed},
       {:revoke_publication, {:hold_before_effect, :role_moderation}},
       {:grant_publication, {:hold_after_effect, :screen_start}},
-      {:observe_session_publications, :observe}
+      {:observe_episode_publications, :observe}
     ]
 
     {:ok, controller} = ScriptedMediaPlane.start_controller(actions)
@@ -81,7 +81,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
 
     :pending = execute_claim(ambiguous_claim, media, recording)
     :confirmed = execute_claim(ambiguous_claim, media, recording)
-    crash_retry = crash_after_confirmation(host, contender, media, recording, fixture.session)
+    crash_retry = crash_after_confirmation(host, contender, media, recording, fixture.episode)
 
     {remove_id, remove_claim, _remove_receipt} =
       begin_and_claim!(host, :remove_participant, guest, "breaker_media_remove1")
@@ -114,12 +114,12 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
 
     role_race = role_moderation_barrier(host, contender, media, recording)
     screen = screen_race(fixture, host, contender, controller, adapter)
-    stale_observation = stale_observation_probe(fixture.session, host)
-    restart_reconciliation = restart_reconciliation_probe(fixture.session, host)
+    stale_observation = stale_observation_probe(fixture.episode, host)
+    restart_reconciliation = restart_reconciliation_probe(fixture.episode, host)
 
     states =
       [confirmed.id, failed.id, ambiguous_id, remove_id, recording_start.id, recording_stop.id]
-      |> Enum.map(&operation_state(fixture.session, &1))
+      |> Enum.map(&operation_state(fixture.episode, &1))
 
     effects = ScriptedMediaPlane.effects(controller)
     calls = ScriptedMediaPlane.calls(controller)
@@ -130,7 +130,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
       "stable_external_operation_deduplication" =>
         effect_count(effects, :remove_participant, remove_id) == 1,
       "pending_ambiguity_reconciled" =>
-        operation_state(fixture.session, ambiguous_id)["status"] == "applied",
+        operation_state(fixture.episode, ambiguous_id)["status"] == "applied",
       "confirmation_crash_retry_deduplicated" => crash_retry["effect_count"] == 1,
       "single_screen_lease" => screen["lease_count_during_race"] == 1,
       "publication_loss_releases_lease" => screen["lease_count_after_loss"] == 0,
@@ -182,22 +182,22 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
 
   defp begin_and_claim!(actor, name, target, key) do
     {:ok, operation} =
-      Operation.new(key, name, %{"participantSessionId" => target.participant_session_id})
+      Operation.new(key, name, %{"participantId" => target.participant_id})
 
     {:ok, decision} = Postgres.begin_operation(actor, operation)
     {:ok, claimed} = Postgres.claim_operations(64)
 
-    {session, claim} =
-      Enum.find(claimed, fn {_session, item} ->
+    {episode, claim} =
+      Enum.find(claimed, fn {_episode, item} ->
         item.external_operation_id == decision.external_operation_id
       end)
 
-    {decision.external_operation_id, {session, claim}, decision}
+    {decision.external_operation_id, {episode, claim}, decision}
   end
 
-  defp execute_claim({session, claim}, media, recording) do
+  defp execute_claim({episode, claim}, media, recording) do
     ExternalOperationConsumer.execute_operation(
-      session,
+      episode,
       claim,
       media,
       recording,
@@ -210,7 +210,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     {:ok, claimed} = Postgres.claim_operations(64)
 
     pair =
-      Enum.find(claimed, fn {_session, item} ->
+      Enum.find(claimed, fn {_episode, item} ->
         item.external_operation_id == decision.external_operation_id
       end)
 
@@ -225,9 +225,9 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
 
   defp role_moderation_barrier(host, target, media, recording) do
     {:ok, promote} =
-      Command.new("breaker_role_promote1", :set_participant_role, %{
-        "participantSessionId" => target.participant_session_id,
-        "role" => "cohost"
+      Command.new("breaker_role_promote1", :assign_roles, %{
+        "participantId" => target.participant_id,
+        "role" => "collaborator"
       })
 
     {:ok, %{result: :committed}} = Postgres.begin_role_transition(host, promote, [])
@@ -239,9 +239,9 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     assert_barrier!(:role_moderation, :before_effect)
 
     {:ok, command} =
-      Command.new("breaker_role_change01", :set_participant_role, %{
-        "participantSessionId" => target.participant_session_id,
-        "role" => "participant"
+      Command.new("breaker_role_change01", :assign_roles, %{
+        "participantId" => target.participant_id,
+        "role" => "observer"
       })
 
     {:ok, role_decision} = Postgres.begin_role_transition(host, command, [])
@@ -249,7 +249,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     moderation_result = Task.await(task)
 
     %{
-      "initial_role" => "cohost",
+      "assigned_role" => "collaborator",
       "locked_order" => [
         "moderation_accepted",
         "provider_held",
@@ -259,11 +259,11 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
       "moderation_result" => Atom.to_string(moderation_result),
       "moderation_status" => operation_state(elem(claim, 0), id)["status"],
       "role_result" => Atom.to_string(role_decision.result),
-      "final_role" => "participant"
+      "final_role" => "observer"
     }
   end
 
-  defp crash_after_confirmation(host, target, media, recording, session) do
+  defp crash_after_confirmation(host, target, media, recording, episode) do
     {id, claim, _receipt} =
       begin_and_claim!(host, :mute_participant, target, "breaker_confirm_crash1")
 
@@ -279,14 +279,14 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
         RuntimeError -> :crashed
       end
 
-      pending = operation_state(session, id)
+      pending = operation_state(episode, id)
       Application.delete_env(:chalk_sync, :external_operation_fault_hook)
       :confirmed = execute_claim(claim, media, recording)
       effects = ScriptedMediaPlane.effects(elem(media, 1).controller)
 
       %{
         "pending_after_crash" => pending["status"] == "pending",
-        "final_status" => operation_state(session, id)["status"],
+        "final_status" => operation_state(episode, id)["status"],
         "effect_count" => effect_count(effects, :revoke_publication, id)
       }
     after
@@ -303,31 +303,31 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
 
       one =
         Task.async(fn ->
-          LiveSession.live_target(LiveSession.new(fixture.session), first, target)
+          LiveEpisode.live_target(LiveEpisode.new(fixture.episode), first, target)
         end)
 
       assert_barrier!(:screen_start, :after_effect)
 
       {_state, second_result} =
-        LiveSession.live_target(LiveSession.new(fixture.session), second, %{
+        LiveEpisode.live_target(LiveEpisode.new(fixture.episode), second, %{
           target
           | operation_id: UUID.generate()
         })
 
       :ok = ScriptedMediaPlane.release(controller, :screen_start)
       {state, first_result} = Task.await(one)
-      {:ok, state, _projection} = LiveSession.reconcile(state)
+      {:ok, state, _projection} = LiveEpisode.reconcile(state)
       lease_count = map_size(state.screen_leases)
 
       :applied =
         ScriptedMediaPlane.confirmed_publication_loss(
           controller,
-          fixture.session,
-          first.participant_session_id,
+          fixture.episode,
+          first.participant_id,
           :screen
         )
 
-      {:ok, state, _loss_projection} = LiveSession.reconcile(state)
+      {:ok, state, _loss_projection} = LiveEpisode.reconcile(state)
 
       %{
         "first" => first_result["outcome"],
@@ -340,10 +340,10 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     end
   end
 
-  defp stale_observation_probe(session, identity) do
+  defp stale_observation_probe(episode, identity) do
     actions = [
-      {:observe_session_publications, :observe},
-      {:observe_session_publications, {:stale_observation, 1}}
+      {:observe_episode_publications, :observe},
+      {:observe_episode_publications, {:stale_observation, 1}}
     ]
 
     {:ok, controller} = ScriptedMediaPlane.start_controller(actions)
@@ -353,8 +353,8 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
       ScriptedMediaPlane.grant_publication(
         adapter,
         "stale-probe-camera",
-        session,
-        identity.participant_session_id,
+        episode,
+        identity.participant_id,
         :camera
       )
 
@@ -362,8 +362,8 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
       ScriptedMediaPlane.grant_publication(
         adapter,
         "stale-probe-screen",
-        session,
-        identity.participant_session_id,
+        episode,
+        identity.participant_id,
         :screen
       )
 
@@ -372,9 +372,9 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
 
     try do
       {:ok, newer, [%{"items" => newer_items}]} =
-        LiveSession.reconcile(LiveSession.new(session))
+        LiveEpisode.reconcile(LiveEpisode.new(episode))
 
-      {:ok, preserved, []} = LiveSession.reconcile(newer)
+      {:ok, preserved, []} = LiveEpisode.reconcile(newer)
 
       %{
         "newer_projection_item_count" => length(newer_items),
@@ -389,7 +389,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     end
   end
 
-  defp restart_reconciliation_probe(session, identity) do
+  defp restart_reconciliation_probe(episode, identity) do
     {:ok, original} = ScriptedMediaPlane.start_controller()
     original_adapter = ScriptedMediaPlane.adapter(original)
 
@@ -397,8 +397,8 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
       ScriptedMediaPlane.grant_publication(
         original_adapter,
         "restart-probe-camera",
-        session,
-        identity.participant_session_id,
+        episode,
+        identity.participant_id,
         :camera
       )
 
@@ -410,7 +410,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     Application.put_env(:chalk_sync, :media_plane, {ScriptedMediaPlane, restarted_adapter})
 
     try do
-      {:ok, live, [%{"items" => items}]} = LiveSession.reconcile(LiveSession.new(session))
+      {:ok, live, [%{"items" => items}]} = LiveEpisode.reconcile(LiveEpisode.new(episode))
 
       %{
         "original_controller_stopped" => not Process.alive?(original),
@@ -434,8 +434,8 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
     end
   end
 
-  defp operation_state(session, id) do
-    {:ok, operation} = Postgres.read_operation(session, id)
+  defp operation_state(episode, id) do
+    {:ok, operation} = Postgres.read_operation(episode, id)
 
     %{
       "status" => Atom.to_string(operation.status),

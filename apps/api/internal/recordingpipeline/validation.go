@@ -12,11 +12,11 @@ import (
 func ReservationFingerprint(input ReservationInput) [32]byte {
 	h := sha256.New()
 	tenantID := input.TenantID.Bytes()
-	roomID := input.RoomID.Bytes()
-	sessionID := input.SessionID.Bytes()
+	spaceID := input.SpaceID.Bytes()
+	episodeID := input.EpisodeID.Bytes()
 	h.Write(tenantID[:])
-	h.Write(roomID[:])
-	h.Write(sessionID[:])
+	h.Write(spaceID[:])
+	h.Write(episodeID[:])
 	var number [8]byte
 	binary.BigEndian.PutUint64(number[:], uint64(input.ParticipantCount))
 	h.Write(number[:])
@@ -36,16 +36,16 @@ func ValidateReservationInput(input ReservationInput) error {
 	if input.TenantID.IsZero() {
 		return ErrInvalidTenantID
 	}
-	if input.RoomID.IsZero() {
-		return ErrInvalidRoomID
+	if input.SpaceID.IsZero() {
+		return ErrInvalidSpaceID
 	}
-	if input.SessionID.IsZero() {
-		return ErrInvalidSessionID
+	if input.EpisodeID.IsZero() {
+		return ErrInvalidEpisodeID
 	}
 	if strings.TrimSpace(input.IdempotencyKey) == "" || len(input.IdempotencyKey) > 128 {
 		return ErrInvalidIdempotencyKey
 	}
-	if input.ParticipantCount < MinimumMeetingParticipants || input.ParticipantCount > MaximumMeetingParticipants {
+	if input.ParticipantCount < MinimumEpisodeParticipants || input.ParticipantCount > MaximumEpisodeParticipants {
 		return ErrInvalidParticipantCount
 	}
 	if input.MaxDuration <= 0 || input.MaxDuration > MaximumRecordingDuration {

@@ -40,27 +40,27 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
     connection: connection,
     port: port
   } do
-    leave_seed = SyncPostgres.seed_session(connection, 2)
-    end_seed = SyncPostgres.seed_session(connection)
-    provider_seed = SyncPostgres.seed_session(connection, 2)
+    leave_seed = SyncPostgres.seed_episode(connection, 2)
+    end_seed = SyncPostgres.seed_episode(connection)
+    provider_seed = SyncPostgres.seed_episode(connection, 2)
 
     leave_fixture =
-      %{session: leave_seed.session, identity: Enum.at(leave_seed.identities, 1)}
+      %{episode: leave_seed.episode, identity: Enum.at(leave_seed.identities, 1)}
       |> SyncPostgres.seed_webhook_endpoint(connection, ["participant.left"])
 
     end_fixture =
-      %{session: end_seed.session, identity: hd(end_seed.identities)}
-      |> SyncPostgres.seed_webhook_endpoint(connection, ["session.ended"])
+      %{episode: end_seed.episode, identity: hd(end_seed.identities)}
+      |> SyncPostgres.seed_webhook_endpoint(connection, ["episode.ended"])
 
     provider_fixture = %{
-      session: provider_seed.session,
+      episode: provider_seed.episode,
       identity: hd(provider_seed.identities),
       target: Enum.at(provider_seed.identities, 1)
     }
 
-    on_exit(fn -> SyncPostgres.cleanup(connection, leave_fixture.session) end)
-    on_exit(fn -> SyncPostgres.cleanup(connection, end_fixture.session) end)
-    on_exit(fn -> SyncPostgres.cleanup(connection, provider_fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, leave_fixture.episode) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, end_fixture.episode) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, provider_fixture.episode) end)
 
     {:ok, media_plane} =
       MediaPlaneTestAdapter.start_link(outcomes: %{revoke_publication: :ambiguous})
@@ -83,7 +83,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
       provider_fixture.identity,
       "ws_provider_operation01",
       "mute_participant",
-      %{"participant_session_id" => provider_fixture.target.participant_session_id},
+      %{"participant_id" => provider_fixture.target.participant_id},
       context(3)
     )
 
@@ -100,7 +100,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
       port,
       end_fixture.identity,
       "ws_end_operation_0001",
-      "end_session",
+      "end_episode",
       %{},
       end_context
     )
@@ -117,7 +117,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
       connection,
       end_fixture,
       "ws_end_operation_0001",
-      "session.ended",
+      "episode.ended",
       end_context
     )
 
@@ -163,7 +163,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
   end
 
   defp assert_webhook_chain(connection, fixture, request_key, event_name, context) do
-    tenant_id = UUID.dump!(fixture.session.tenant_id)
+    tenant_id = UUID.dump!(fixture.episode.tenant_id)
 
     assert [
              [
@@ -244,7 +244,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
                from sync_external_operations
                where tenant_id = $1 and request_key = $2
                """,
-               [UUID.dump!(fixture.session.tenant_id), request_key]
+               [UUID.dump!(fixture.episode.tenant_id), request_key]
              ).rows
 
     assert attempt_count >= 1
@@ -253,7 +253,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
   defp assert_webhook_metrics(before) do
     snapshot = Metrics.snapshot().metrics
 
-    for event_name <- ["participant_left", "session_ended"],
+    for event_name <- ["participant_left", "episode_ended"],
         phase <- ["production.committed", "fanout.queued"] do
       metric = "chalk.sync.webhook.#{phase}.#{event_name}.v1"
       before_count = get_in(before, [metric, :count]) || 0
@@ -278,16 +278,14 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
   defp hello(identity) do
     token =
       DevTokenVerifier.token(%{
-        "tenant_id" => identity.session.tenant_id,
-        "room_id" => identity.session.room_id,
-        "session_id" => identity.session.session_id,
-        "participant_id" => identity.participant_session_id,
-        "participant_session_id" => identity.participant_session_id,
-        "participant_session_generation" => identity.participant_session_generation,
+        "tenant_id" => identity.episode.tenant_id,
+        "space_id" => identity.episode.space_id,
+        "episode_id" => identity.episode.episode_id,
+        "participant_id" => identity.participant_id,
+        "participant_generation" => identity.participant_generation,
         "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
-        "initial_role" => identity.role || "participant",
-        "eligible_roles" =>
-          if(identity.eligible_roles == [], do: ["participant"], else: identity.eligible_roles),
+        "role" => identity.role || "owner",
+        "capabilities" => identity.capabilities,
         "issued_at" => 1,
         "expires_at" => 4_102_444_800
       })
@@ -320,5 +318,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
 
   defp stop_connection(connection) do
     if Process.alive?(connection), do: GenServer.stop(connection)
+  catch
+    :exit, {:noproc, _details} -> :ok
   end
 end

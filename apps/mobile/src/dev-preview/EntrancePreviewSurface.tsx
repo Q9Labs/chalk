@@ -1,5 +1,5 @@
-import { JoinFailedScreen, JoiningScreen, PreJoinScreen } from "@q9labsai/chalk-react-native";
-
+import { EntrancePreviewFixture } from "./EntrancePreviewFixture";
+import { PreviewStatus } from "./PreviewStatus";
 import type { PreviewSearch, PreviewSearchPatch } from "./preview-state";
 import { PREVIEW_DISPLAY_NAME, PREVIEW_SPACE_NAME } from "./sdk-preview-fixtures";
 
@@ -11,47 +11,41 @@ export interface EntrancePreviewSurfaceProps {
 
 export function EntrancePreviewSurface({ search, onClose, onSearchChange }: EntrancePreviewSurfaceProps): React.JSX.Element {
   if (search.state === "joining") {
-    return <JoiningScreen displayName={PREVIEW_DISPLAY_NAME} message={`Preparing to enter ${PREVIEW_SPACE_NAME}`} supportingMessages={["Checking your AccessGrant", "Starting the Episode"]} />;
+    return <PreviewStatus message={`Preparing to enter ${PREVIEW_SPACE_NAME}`} onBack={onClose} title="Entering Space" />;
   }
 
   if (search.state === "waiting") {
-    return <JoiningScreen displayName={PREVIEW_DISPLAY_NAME} message={`Waiting for admission to ${PREVIEW_SPACE_NAME}`} supportingMessages={["Your request is with a Space collaborator"]} />;
+    return <PreviewStatus message={`Waiting for admission to ${PREVIEW_SPACE_NAME}`} onBack={onClose} title="Waiting for admission" />;
   }
 
   if (search.state === "timeout" || search.state === "failure") {
     const timedOut = search.state === "timeout";
     return (
-      <JoinFailedScreen
-        title={timedOut ? "Entrance timed out" : "Could not enter the Space"}
+      <PreviewStatus
         message={timedOut ? "The Entrance took too long to prepare. Try again when you’re ready." : "We could not prepare your Entrance for this Space."}
-        supportCode={timedOut ? "entrance-timeout-408" : "entrance-failure-403"}
-        onRetry={() => onSearchChange({ view: "entrance", state: "ready" })}
         onBack={() => onSearchChange({ view: "entrance", state: "ready" })}
+        onRetry={() => onSearchChange({ view: "entrance", state: "ready" })}
+        title={timedOut ? "Entrance timed out" : "Could not enter the Space"}
       />
     );
   }
 
   const warning = search.state === "warning";
   return (
-    <PreJoinScreen
-      error={warning ? "Device access needs attention." : null}
-      initialAudioEnabled={search.mic}
-      initialVideoEnabled={search.camera}
-      key={`${search.mic}-${search.camera}`}
+    <EntrancePreviewFixture
+      defaultDisplayName={PREVIEW_DISPLAY_NAME}
+      defaults={{ camera: search.camera, microphone: search.mic }}
+      error={warning ? "Device access needs attention." : undefined}
       onCancel={onClose}
       onJoin={(settings) =>
         onSearchChange({
-          camera: settings.cameraEnabled,
-          dialog: "none",
-          mic: settings.microphoneEnabled,
-          panel: "none",
+          camera: settings.camera,
+          mic: settings.microphone,
           state: "happy",
           view: "space",
         })
       }
-      previewMode="disabled"
-      roomName={PREVIEW_SPACE_NAME}
-      userName={PREVIEW_DISPLAY_NAME}
+      spaceName={PREVIEW_SPACE_NAME}
     />
   );
 }

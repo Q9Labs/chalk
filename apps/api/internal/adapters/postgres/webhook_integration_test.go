@@ -120,7 +120,7 @@ func TestWebhookPatchWithIdenticalTargetDoesNotReplaceRevisionOrCancelDelivery(t
 		t.Fatal(err)
 	}
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Target", URL: "https://example.com/hook?token=secret", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-request-0001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Target", URL: "https://example.com/hook?token=secret", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-request-0001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,9 +130,9 @@ func TestWebhookPatchWithIdenticalTargetDoesNotReplaceRevisionOrCancelDelivery(t
 	}
 	revisionID := id(revisionUUID)
 	eventID, deliveryID, queuedID, journeyID, resourceID := webhookIntegrationID(t), webhookIntegrationID(t), webhookIntegrationID(t), webhookIntegrationID(t), webhookIntegrationID(t)
-	body := []byte(`{"event":"room.created"}`)
+	body := []byte(`{"event":"space.created"}`)
 	digest := sha256.Sum256(body)
-	if _, err := pool.Exec(ctx, `insert into webhook_events(id,tenant_id,event_name,api_version,occurred_at,body,body_sha256,semantic_transition_key,resource_type,resource_id,journey_id) values($1,$2,'room.created',1,now(),$3,$4,$5,'room',$6,$7)`, uuid(eventID), uuid(tenantID), body, digest[:], "patch:"+eventID.String(), uuid(resourceID), uuid(journeyID)); err != nil {
+	if _, err := pool.Exec(ctx, `insert into webhook_events(id,tenant_id,event_name,api_version,occurred_at,body,body_sha256,semantic_transition_key,resource_type,resource_id,journey_id) values($1,$2,'space.created',1,now(),$3,$4,$5,'space',$6,$7)`, uuid(eventID), uuid(tenantID), body, digest[:], "patch:"+eventID.String(), uuid(resourceID), uuid(journeyID)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `insert into webhook_deliveries(id,tenant_id,event_id,endpoint_id,endpoint_revision_id,endpoint_revision,state,next_attempt_at,queued_journey_event_id) values($1,$2,$3,$4,$5,1,'pending',now(),$6)`, uuid(deliveryID), uuid(tenantID), uuid(eventID), uuid(created.Endpoint.ID), uuid(revisionID), uuid(queuedID)); err != nil {
@@ -152,7 +152,7 @@ func TestWebhookPatchWithIdenticalTargetDoesNotReplaceRevisionOrCancelDelivery(t
 	name := "Renamed only"
 	url := "https://EXAMPLE.com/hook?token=secret"
 	apiVersion := 1
-	eventTypes := []string{"room.created"}
+	eventTypes := []string{"space.created"}
 	updated, err := repository.Patch(ctx, tenantID, created.Endpoint.ID, webhooks.PatchInput{Name: &name, URL: &url, APIVersion: &apiVersion, EventTypes: &eventTypes, ExpectedRevision: 1, IdempotencyKey: "patch-request-0001"}, "https://example.com/hook?token=secret", "https://example.com/hook?REDACTED")
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +186,7 @@ func TestWebhookDisableHasDistinctContentFreeAuditAction(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Audited", URL: "https://example.com/private-hook", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-audit-0001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Audited", URL: "https://example.com/private-hook", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-audit-0001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestWebhookDeleteDistinguishesAbsentEndpointFromStaleRevision(t *testing.T)
 		t.Fatal(err)
 	}
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Delete", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-delete-0001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Delete", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-delete-0001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestWebhookConcurrentFirstEndpointCreatesSerializeTenantState(t *testing.T)
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			_, createErr := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: fmt.Sprintf("Endpoint %d", index), URL: fmt.Sprintf("https://example.com/hook/%d", index), Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: fmt.Sprintf("first-create-%04d", index)})
+			_, createErr := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: fmt.Sprintf("Endpoint %d", index), URL: fmt.Sprintf("https://example.com/hook/%d", index), Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: fmt.Sprintf("first-create-%04d", index)})
 			errorsByCreate <- createErr
 		}()
 	}
@@ -291,7 +291,7 @@ func TestWebhookDispatchClaimRetryCompleteAndLeaseRecovery(t *testing.T) {
 	cleanupWebhookTenant(t, pool, tenantID)
 	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Dispatch", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-dispatch-0001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Dispatch", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-dispatch-0001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +368,7 @@ func TestWebhookSecretRotationOverlapImmediateRevocationAndMutationFencing(t *te
 	cleanupWebhookTenant(t, pool, tenantID)
 	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Rotate", URL: "https://example.com/old", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-rotation-0001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Rotate", URL: "https://example.com/old", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-rotation-0001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,8 +459,8 @@ func TestWebhookProducerNoBackfillRollbackAndAtomicFanout(t *testing.T) {
 	}
 	cleanupWebhookTenant(t, pool, tenantID)
 	production := func(key string) webhookProduction {
-		return webhookProduction{TenantID: tenantID, EventName: "room.created", SemanticKey: key, ResourceType: "room", ResourceID: resourceID, OccurredAt: time.Now().UTC(), Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
-			body := []byte(`{"event":"room.created"}`)
+		return webhookProduction{TenantID: tenantID, EventName: "space.created", SemanticKey: key, ResourceType: "space", ResourceID: resourceID, OccurredAt: time.Now().UTC(), Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+			body := []byte(`{"event":"space.created"}`)
 			return body, sha256.Sum256(body), nil
 		}}
 	}
@@ -477,7 +477,7 @@ func TestWebhookProducerNoBackfillRollbackAndAtomicFanout(t *testing.T) {
 	}
 	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
 	repository := NewWebhookRepository(pool, protector)
-	if _, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Producer", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-producer-0001"}); err != nil {
+	if _, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Producer", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-producer-0001"}); err != nil {
 		t.Fatal(err)
 	}
 	var count int
@@ -522,7 +522,7 @@ func TestWebhookCleanupEnforcesRetentionAndDestroysExpiredSecrets(t *testing.T) 
 	cleanupWebhookTenant(t, pool, tenantID)
 	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Cleanup", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-cleanup-0001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Cleanup", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-cleanup-0001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,7 +583,7 @@ func TestWebhookRedeliveryRejectsEventsJustBeyondRetentionBeforeCleanup(t *testi
 	cleanupWebhookTenant(t, pool, tenantID)
 	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Redelivery retention", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-redelivery-retention-1"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Redelivery retention", URL: "https://example.com/hook", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-redelivery-retention-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -591,8 +591,8 @@ func TestWebhookRedeliveryRejectsEventsJustBeyondRetentionBeforeCleanup(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: "room.created", SemanticKey: "redelivery-retention", ResourceType: "room", ResourceID: resourceID, OccurredAt: time.Now().UTC(), Body: func(webhooks.EventMetadata) ([]byte, [32]byte, error) {
-		body := []byte(`{"event":"room.created"}`)
+	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: "space.created", SemanticKey: "redelivery-retention", ResourceType: "space", ResourceID: resourceID, OccurredAt: time.Now().UTC(), Body: func(webhooks.EventMetadata) ([]byte, [32]byte, error) {
+		body := []byte(`{"event":"space.created"}`)
 		return body, sha256.Sum256(body), nil
 	}})
 	if err != nil || metric.Fanout != 1 {
@@ -642,7 +642,7 @@ func TestWebhookClaimFairnessCapsBusyEndpointsAcrossTenants(t *testing.T) {
 			endpointCount = 5
 		}
 		for endpointIndex := 0; endpointIndex < endpointCount; endpointIndex++ {
-			created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: fmt.Sprintf("Busy %d", endpointIndex), URL: fmt.Sprintf("https://example.com/hook/%d", endpointIndex), Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: fmt.Sprintf("fair-create-%02d-%02d-0001", tenantIndex, endpointIndex)})
+			created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: fmt.Sprintf("Busy %d", endpointIndex), URL: fmt.Sprintf("https://example.com/hook/%d", endpointIndex), Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: fmt.Sprintf("fair-create-%02d-%02d-0001", tenantIndex, endpointIndex)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -698,7 +698,7 @@ func TestWebhookClaimFairnessRotatesAcrossMoreTenantsThanDefaultBatch(t *testing
 			t.Fatal(err)
 		}
 		cleanupWebhookTenant(t, pool, tenantID)
-		created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Rotation", URL: fmt.Sprintf("https://example.com/rotate/%02d", index), Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: fmt.Sprintf("rotate-create-%02d-0001", index)})
+		created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Rotation", URL: fmt.Sprintf("https://example.com/rotate/%02d", index), Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: fmt.Sprintf("rotate-create-%02d-0001", index)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -752,7 +752,7 @@ func TestWebhookTargetReplacementAndDeleteFenceQueuedDeliveries(t *testing.T) {
 	cleanupWebhookTenant(t, pool, tenantID)
 	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Fence", URL: "https://example.com/old", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "create-fence-00001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Fence", URL: "https://example.com/old", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "create-fence-00001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -799,7 +799,7 @@ func TestWebhookOperationAuditsCoverSuccessAndBoundedFailureOutcomes(t *testing.
 	cleanupWebhookTenant(t, pool, tenantID)
 	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
 	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Audit", URL: "https://example.com/private", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "audit-create-0001"})
+	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Audit", URL: "https://example.com/private", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "audit-create-0001"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -820,15 +820,15 @@ func TestWebhookOperationAuditsCoverSuccessAndBoundedFailureOutcomes(t *testing.
 	}
 	resourceID := webhookIntegrationID(t)
 	tx, _ := pool.Begin(ctx)
-	body := []byte(`{"event":"room.created"}`)
-	if _, err := fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: "room.created", SemanticKey: "audit-room-created", ResourceType: "room", ResourceID: resourceID, OccurredAt: time.Now().UTC(), Body: func(webhooks.EventMetadata) ([]byte, [32]byte, error) { return body, sha256.Sum256(body), nil }}); err != nil {
+	body := []byte(`{"event":"space.created"}`)
+	if _, err := fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: "space.created", SemanticKey: "audit-space-created", ResourceType: "space", ResourceID: resourceID, OccurredAt: time.Now().UTC(), Body: func(webhooks.EventMetadata) ([]byte, [32]byte, error) { return body, sha256.Sum256(body), nil }}); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
 	var deliveryUUID pgtype.UUID
-	if err := pool.QueryRow(ctx, `select d.id from webhook_deliveries d join webhook_events e on e.tenant_id=d.tenant_id and e.id=d.event_id where d.tenant_id=$1 and e.semantic_transition_key='audit-room-created'`, uuid(tenantID)).Scan(&deliveryUUID); err != nil {
+	if err := pool.QueryRow(ctx, `select d.id from webhook_deliveries d join webhook_events e on e.tenant_id=d.tenant_id and e.id=d.event_id where d.tenant_id=$1 and e.semantic_transition_key='audit-space-created'`, uuid(tenantID)).Scan(&deliveryUUID); err != nil {
 		t.Fatal(err)
 	}
 	deliveryID := id(deliveryUUID)
@@ -857,7 +857,7 @@ func TestWebhookOperationAuditsCoverSuccessAndBoundedFailureOutcomes(t *testing.
 	service := webhooks.NewService(repository, protector)
 	invalidName := ""
 	disableAgain := false
-	_, _ = service.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "", URL: "https://example.com/failure", Enabled: true, APIVersion: 1, EventTypes: []string{"room.created"}, IdempotencyKey: "audit-fail-create-01"})
+	_, _ = service.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "", URL: "https://example.com/failure", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "audit-fail-create-01"})
 	_, _ = service.Patch(ctx, tenantID, created.Endpoint.ID, webhooks.PatchInput{Name: &invalidName, ExpectedRevision: 0, IdempotencyKey: "audit-fail-update-01"})
 	_, _ = service.Patch(ctx, tenantID, created.Endpoint.ID, webhooks.PatchInput{Enabled: &disableAgain, ExpectedRevision: 0, IdempotencyKey: "audit-fail-disable-1"})
 	_ = service.Delete(ctx, tenantID, created.Endpoint.ID, 0, "audit-fail-delete-01")

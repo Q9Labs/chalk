@@ -2,31 +2,31 @@
 insert into recordings (
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
     metadata
 ) select
     sqlc.arg(id),
-    room_sessions.tenant_id,
-    room_sessions.room_id,
-    room_sessions.id,
+    episodes.tenant_id,
+    episodes.space_id,
+    episodes.id,
     sqlc.arg(status),
     sqlc.arg(storage_provider),
     sqlc.narg(storage_key),
     sqlc.narg(metadata)
-from room_sessions
+from episodes
 where
-    room_sessions.tenant_id = sqlc.arg(tenant_id)
-    and room_sessions.room_id = sqlc.arg(room_id)
-    and room_sessions.id = sqlc.arg(session_id)
+    episodes.tenant_id = sqlc.arg(tenant_id)
+    and episodes.space_id = sqlc.arg(space_id)
+    and episodes.id = sqlc.arg(episode_id)
 returning
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
@@ -38,8 +38,8 @@ returning
 select
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
@@ -55,8 +55,8 @@ where
 select
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,
@@ -67,8 +67,8 @@ from recordings
 where
     tenant_id = sqlc.arg(tenant_id)
     and (
-        sqlc.narg(session_id)::uuid is null
-        or session_id = sqlc.narg(session_id)::uuid
+        sqlc.narg(episode_id)::uuid is null
+        or episode_id = sqlc.narg(episode_id)::uuid
     )
     and (
         not sqlc.arg(cursor_set)::boolean
@@ -106,8 +106,8 @@ where
 returning
     id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     status,
     storage_provider,
     storage_key,

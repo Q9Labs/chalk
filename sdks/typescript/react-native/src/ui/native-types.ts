@@ -1,10 +1,10 @@
-import type { ChalkChatAttachment, ChalkChatReadReceipt, ChalkParticipant, ChalkReaction } from "@q9labsai/chalk-client";
+import type { ChatAttachment, ChatReadReceipt, Participant, Reaction } from "@q9labsai/chalk-client";
 
 export type Layout = "grid" | "focus" | "presentation";
 export type NativePanel = "chat" | "participants" | "whiteboard" | null;
 export type ParticipantGradientPreference = "auto" | "subtle" | "vivid" | "mono";
 
-export type NativeParticipant = ChalkParticipant & {
+export type NativeParticipant = Participant & {
   readonly id: string;
   readonly audioEnabled: boolean;
   readonly videoEnabled: boolean;
@@ -27,14 +27,14 @@ export type NativeChatMessage = {
   readonly senderName: string;
   readonly text: string;
   readonly content: string;
-  readonly attachments: readonly ChalkChatAttachment[];
-  readonly readBy: readonly (ChalkChatReadReceipt & { readonly displayName: string })[];
+  readonly attachments: readonly ChatAttachment[];
+  readonly readBy: readonly (ChatReadReceipt & { readonly displayName: string })[];
   readonly timestamp: number;
 };
 
 export type NativeReaction = {
   readonly id: string;
-  readonly emoji: ChalkReaction;
+  readonly emoji: Reaction;
   readonly participantId: string;
   readonly participantName: string;
 };

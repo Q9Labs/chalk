@@ -59,12 +59,12 @@ type cleanupAssignment struct {
 func cleanupClaimHandler(service CleanupWorkerService, auth WorkloadAuthorizer, authority CleanupDeleteAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		var body cleanupClaimBody
 		if err := decodeJSON(r, &body); err != nil || body.BatchSize < 1 || body.BatchSize > 100 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid cleanup batch size")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid cleanup batch size")
 			return
 		}
 		assignments := make([]cleanupAssignment, 0, body.BatchSize)
@@ -81,7 +81,7 @@ func cleanupClaimHandler(service CleanupWorkerService, auth WorkloadAuthorizer, 
 			const ttl = 5 * time.Minute
 			deleteURL, err := authority.CreateDeleteURL(r.Context(), CleanupDeleteURLInput{JobID: job.ID, Attempt: job.Attempt, Key: job.ObjectKey, ExpiresIn: ttl})
 			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "cleanup_authority_unavailable", "Cleanup authority unavailable")
+				writeError(w, http.StatusServiceUnavailable, "cleanup.unavailable", "Cleanup authority unavailable")
 				return
 			}
 			assignments = append(assignments, cleanupAssignment{JobID: job.ID.String(), Attempt: job.Attempt, LeaseToken: token, LeaseExpiresAt: utilities.FormatTimestamp(*job.LeaseExpiresAt), DeleteURL: deleteURL, DeleteURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano)})
@@ -111,12 +111,12 @@ func decodeCleanupLease(r *http.Request) (transcripts.CleanupLeaseInput, error) 
 func cleanupCompleteHandler(service CleanupWorkerService, auth WorkloadAuthorizer, authority CleanupDeleteAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		lease, err := decodeCleanupLease(r)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid cleanup lease")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid cleanup lease")
 			return
 		}
 		key, err := service.CleanupKey(r.Context(), lease)
@@ -125,7 +125,7 @@ func cleanupCompleteHandler(service CleanupWorkerService, auth WorkloadAuthorize
 			return
 		}
 		if err := authority.VerifyAbsent(r.Context(), key); err != nil {
-			writeError(w, http.StatusBadGateway, "cleanup_verification_failed", "Object absence verification failed")
+			writeError(w, http.StatusBadGateway, "cleanup.verification_failed", "Object absence verification failed")
 			return
 		}
 		job, err := service.CompleteCleanup(r.Context(), lease)
@@ -147,24 +147,24 @@ type cleanupRetryBody struct {
 func cleanupRetryHandler(service CleanupWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		var body cleanupRetryBody
 		if err := decodeJSON(r, &body); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid cleanup retry")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid cleanup retry")
 			return
 		}
 		id, err := utilities.ParseID(body.JobID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid cleanup job id")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid cleanup job id")
 			return
 		}
 		dueAt := time.Now()
 		if body.RetryAt != "" {
 			dueAt, err = time.Parse(time.RFC3339Nano, body.RetryAt)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", "Invalid cleanup retry time")
+				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid cleanup retry time")
 				return
 			}
 		}

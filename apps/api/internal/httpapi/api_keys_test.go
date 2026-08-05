@@ -121,7 +121,7 @@ func TestAPIKeyRouteContractsDeclareProtectedBoundedLifecycle(t *testing.T) {
 		if (contract.RateLimit.Name == authenticatedWriteRateLimit.Name) != expected.write {
 			t.Fatalf("%s write rate limit = %#v", contract.OperationID, contract.RateLimit)
 		}
-		if !apiKeyContractHasError(contract, "unauthenticated") || !apiKeyContractHasError(contract, "forbidden") {
+		if !apiKeyContractHasError(contract, "access.unauthenticated") || !apiKeyContractHasError(contract, "access.forbidden") {
 			t.Fatalf("%s omits auth errors", contract.OperationID)
 		}
 	}
@@ -132,37 +132,37 @@ func TestAPIKeyRoutesRejectAnonymousAndInsufficientCallers(t *testing.T) {
 		t.Fatal("create should not be called")
 		return apikeys.CreateResult{}, nil
 	}}
-	body := `{"name":"backend","scopes":["rooms:read"],"expires_at":"2026-08-01T00:00:00Z"}`
+	body := `{"name":"backend","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`
 
 	anonymous := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(nil), authentication.Principal{}, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
-	assertAPIKeyError(t, anonymous, http.StatusUnauthorized, "unauthenticated")
+	assertAPIKeyError(t, anonymous, http.StatusUnauthorized, "access.unauthenticated")
 
 	member := apiKeyUserPrincipal()
-	weakRole := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleMember}), member, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
-	assertAPIKeyError(t, weakRole, http.StatusForbidden, "forbidden")
+	weakRole := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleObserver}), member, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
+	assertAPIKeyError(t, weakRole, http.StatusForbidden, "access.forbidden")
 
 	wrongScope := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysRead)
 	insufficient := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(nil), wrongScope, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
-	assertAPIKeyError(t, insufficient, http.StatusForbidden, "forbidden")
+	assertAPIKeyError(t, insufficient, http.StatusForbidden, "access.forbidden")
 
 	crossTenant := apiKeyPrincipal(apiKeyTestOtherID, authentication.ScopeAPIKeysWrite)
 	crossTenantResponse := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(nil), crossTenant, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
-	assertAPIKeyError(t, crossTenantResponse, http.StatusForbidden, "forbidden")
+	assertAPIKeyError(t, crossTenantResponse, http.StatusForbidden, "access.forbidden")
 }
 
 func TestAPIKeyCreateAllowsOwnerAndAdminAndReturnsSecretOnce(t *testing.T) {
-	for _, role := range []memberships.Role{memberships.RoleOwner, memberships.RoleAdmin} {
+	for _, role := range []memberships.Role{memberships.RoleOwner, memberships.RoleCollaborator} {
 		t.Run(string(role), func(t *testing.T) {
 			service := apiKeyServiceStub{create: func(_ context.Context, input apikeys.CreateInput) (apikeys.CreateResult, error) {
 				if input.TenantID != apiKeyTestTenantID || input.CreatedByUserID != apiKeyTestUserID || input.Name != "backend" {
 					t.Fatalf("create input = %+v", input)
 				}
-				if len(input.Scopes) != 1 || input.Scopes[0] != authentication.ScopeRoomsRead || !input.ExpiresAt.Equal(apiKeyTestNow.Add(time.Hour)) {
+				if len(input.Scopes) != 1 || input.Scopes[0] != authentication.ScopeSpacesRead || !input.ExpiresAt.Equal(apiKeyTestNow.Add(time.Hour)) {
 					t.Fatalf("create scopes/expiry = %v / %v", input.Scopes, input.ExpiresAt)
 				}
 				return apikeys.CreateResult{Key: apiKeyFixture(input.Scopes), RawKey: "chalk_sk_new.once"}, nil
 			}}
-			body := `{"name":"backend","scopes":["rooms:read"],"expires_at":"2026-07-21T13:00:00Z"}`
+			body := `{"name":"backend","scopes":["spaces:read"],"expires_at":"2026-07-21T13:00:00Z"}`
 			response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: role}), apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
 			if response.Code != http.StatusCreated {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
@@ -175,14 +175,14 @@ func TestAPIKeyCreateAllowsOwnerAndAdminAndReturnsSecretOnce(t *testing.T) {
 }
 
 func TestAPIKeyCallerCannotGrantOrMutateBroaderScopes(t *testing.T) {
-	caller := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeAPIKeysDelete, authentication.ScopeRoomsRead)
+	caller := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeAPIKeysDelete, authentication.ScopeSpacesRead)
 	authorizer := authorization.NewTenantPolicy(nil)
 	createService := apiKeyServiceStub{create: func(context.Context, apikeys.CreateInput) (apikeys.CreateResult, error) {
 		t.Fatal("create should not be called")
 		return apikeys.CreateResult{}, nil
 	}}
-	create := serveAPIKeyRequest(t, createService, authorizer, caller, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"elevated","scopes":["rooms:write"],"expires_at":"2026-08-01T00:00:00Z"}`)
-	assertAPIKeyError(t, create, http.StatusForbidden, "forbidden")
+	create := serveAPIKeyRequest(t, createService, authorizer, caller, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"elevated","scopes":["spaces:write"],"expires_at":"2026-08-01T00:00:00Z"}`)
+	assertAPIKeyError(t, create, http.StatusForbidden, "access.forbidden")
 
 	for _, test := range []struct {
 		name, method, suffix, body string
@@ -196,7 +196,7 @@ func TestAPIKeyCallerCannotGrantOrMutateBroaderScopes(t *testing.T) {
 					if tenantID != apiKeyTestTenantID || id != apiKeyTestKeyID {
 						t.Fatalf("target lookup = %s / %s", tenantID, id)
 					}
-					return apiKeyFixture([]authentication.Scope{authentication.ScopeRoomsWrite}), nil
+					return apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesWrite}), nil
 				},
 				rotate: func(context.Context, utilities.ID, utilities.ID, apikeys.RotateInput) (apikeys.RotateResult, error) {
 					t.Fatal("rotate should not be called")
@@ -209,20 +209,20 @@ func TestAPIKeyCallerCannotGrantOrMutateBroaderScopes(t *testing.T) {
 			}
 			path := apiKeyItemPath(apiKeyTestTenantID, apiKeyTestKeyID) + test.suffix
 			response := serveAPIKeyRequest(t, service, authorizer, caller, test.method, path, test.body)
-			assertAPIKeyError(t, response, http.StatusForbidden, "forbidden")
+			assertAPIKeyError(t, response, http.StatusForbidden, "access.forbidden")
 		})
 	}
 }
 
 func TestAPIKeyCallerCanCreateKeyWithinOwnScopes(t *testing.T) {
 	service := apiKeyServiceStub{create: func(_ context.Context, input apikeys.CreateInput) (apikeys.CreateResult, error) {
-		if !input.CreatedByUserID.IsZero() || len(input.Scopes) != 1 || input.Scopes[0] != authentication.ScopeRoomsRead {
+		if !input.CreatedByUserID.IsZero() || len(input.Scopes) != 1 || input.Scopes[0] != authentication.ScopeSpacesRead {
 			t.Fatalf("create input = %+v", input)
 		}
 		return apikeys.CreateResult{Key: apiKeyFixture(input.Scopes), RawKey: "chalk_sk_delegated.once"}, nil
 	}}
-	caller := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeRoomsRead)
-	response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(nil), caller, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"delegated","scopes":["rooms:read"],"expires_at":"2026-08-01T00:00:00Z"}`)
+	caller := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeSpacesRead)
+	response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(nil), caller, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"delegated","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`)
 	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), "chalk_sk_delegated.once") {
 		t.Fatalf("response = %d %s", response.Code, response.Body.String())
 	}
@@ -234,29 +234,29 @@ func TestAPIKeyAuthorizationFailureAuditIsBoundedAndBestEffort(t *testing.T) {
 		t.Fatal("create should not be called")
 		return apikeys.CreateResult{}, nil
 	}}
-	caller := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeRoomsRead)
-	body := `{"name":"must-not-appear","scopes":["rooms:write"],"expires_at":"2026-08-01T00:00:00Z"}`
+	caller := apiKeyPrincipal(apiKeyTestTenantID, authentication.ScopeAPIKeysWrite, authentication.ScopeSpacesRead)
+	body := `{"name":"must-not-appear","scopes":["spaces:write"],"expires_at":"2026-08-01T00:00:00Z"}`
 	response := serveAPIKeyRequestWithAudit(t, service, authorization.NewTenantPolicy(nil), audits, caller, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), body)
-	assertAPIKeyError(t, response, http.StatusForbidden, "forbidden")
+	assertAPIKeyError(t, response, http.StatusForbidden, "access.forbidden")
 
 	if len(audits.inputs) != 1 {
 		t.Fatalf("audit inputs = %d, want 1", len(audits.inputs))
 	}
 	input := audits.inputs[0]
-	if input.TenantID != apiKeyTestTenantID || input.ActorType != auditlogs.ActorAPIKey || !input.ActorUserID.IsZero() || input.Action != "api_key.created" || input.Outcome != auditlogs.OutcomeFailure || input.ErrorCode == nil || *input.ErrorCode != "forbidden" {
+	if input.TenantID != apiKeyTestTenantID || input.ActorType != auditlogs.ActorAPIKey || !input.ActorUserID.IsZero() || input.Action != "api_key.created" || input.Outcome != auditlogs.OutcomeFailure || input.ErrorCode == nil || *input.ErrorCode != "access.forbidden" {
 		t.Fatalf("audit input = %+v", input)
 	}
 	if input.ResourceType == nil || *input.ResourceType != "api_key" || !input.ResourceID.IsZero() {
 		t.Fatalf("audit resource = %v / %s", input.ResourceType, input.ResourceID)
 	}
 	details := string(input.Details)
-	if !strings.Contains(details, apiKeyTestCallerKey.String()) || strings.Contains(details, "must-not-appear") || strings.Contains(details, "rooms:write") || strings.Contains(details, "chalk_sk_") || strings.Contains(details, "prefix") || strings.Contains(details, "hash") {
+	if !strings.Contains(details, apiKeyTestCallerKey.String()) || strings.Contains(details, "must-not-appear") || strings.Contains(details, "spaces:write") || strings.Contains(details, "chalk_sk_") || strings.Contains(details, "prefix") || strings.Contains(details, "hash") {
 		t.Fatalf("audit details = %s", details)
 	}
 
 	audits.inputs = nil
-	userResponse := serveAPIKeyRequestWithAudit(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleMember}), audits, apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"backend","scopes":["rooms:read"],"expires_at":"2026-08-01T00:00:00Z"}`)
-	assertAPIKeyError(t, userResponse, http.StatusForbidden, "forbidden")
+	userResponse := serveAPIKeyRequestWithAudit(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleObserver}), audits, apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"backend","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`)
+	assertAPIKeyError(t, userResponse, http.StatusForbidden, "access.forbidden")
 	if len(audits.inputs) != 1 || audits.inputs[0].ActorType != auditlogs.ActorUser || audits.inputs[0].ActorUserID != apiKeyTestUserID || string(audits.inputs[0].Details) != `{}` {
 		t.Fatalf("user audit input = %+v", audits.inputs)
 	}
@@ -272,7 +272,7 @@ func TestAPIKeyListPaginatesWithoutSecrets(t *testing.T) {
 		if tenantID != apiKeyTestTenantID || page.Size() != 7 || page.Cursor() == nil || page.Cursor().ID != apiKeyTestKeyID {
 			t.Fatalf("list input = %s / size %d / cursor %#v", tenantID, page.Size(), page.Cursor())
 		}
-		key := apiKeyFixture([]authentication.Scope{authentication.ScopeRoomsRead})
+		key := apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesRead})
 		revokedAt := apiKeyTestNow.Add(-time.Minute)
 		key.RevokedAt = &revokedAt
 		return apikeys.KeyList{Keys: []apikeys.Key{key}, Page: pagination.Page{PageSize: 7, NextCursor: &next, HasMore: true}}, nil
@@ -300,12 +300,12 @@ func TestAPIKeyRotatePreservesScopesAndReturnsOnlyNewSecret(t *testing.T) {
 		if tenantID != apiKeyTestTenantID || id != apiKeyTestKeyID || input.ExpiresAt == nil || !input.ExpiresAt.Equal(newExpiry) {
 			t.Fatalf("rotate input = %s / %s / %+v", tenantID, id, input)
 		}
-		key := apiKeyFixture([]authentication.Scope{authentication.ScopeRoomsRead})
+		key := apiKeyFixture([]authentication.Scope{authentication.ScopeSpacesRead})
 		key.ExpiresAt = newExpiry
 		return apikeys.RotateResult{Key: key, RawKey: "chalk_sk_rotated.once"}, nil
 	}}
 	body := `{"expires_at":"2026-07-21T14:00:00Z"}`
-	response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleAdmin}), apiKeyUserPrincipal(), http.MethodPost, apiKeyItemPath(apiKeyTestTenantID, apiKeyTestKeyID)+"/rotate", body)
+	response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleCollaborator}), apiKeyUserPrincipal(), http.MethodPost, apiKeyItemPath(apiKeyTestTenantID, apiKeyTestKeyID)+"/rotate", body)
 	if response.Code != http.StatusOK || strings.Count(response.Body.String(), "chalk_sk_rotated.once") != 1 || strings.Contains(response.Body.String(), "chalk_sk_old") {
 		t.Fatalf("rotate response = %d %s", response.Code, response.Body.String())
 	}
@@ -330,19 +330,19 @@ func TestAPIKeyExpiryAndServiceErrorsUseStableResponses(t *testing.T) {
 	service := apiKeyServiceStub{create: func(context.Context, apikeys.CreateInput) (apikeys.CreateResult, error) {
 		return apikeys.CreateResult{}, apikeys.ErrInvalidExpiry
 	}}
-	response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleAdmin}), apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"backend","scopes":["rooms:read"],"expires_at":"2020-01-01T00:00:00Z"}`)
-	assertAPIKeyError(t, response, http.StatusBadRequest, "invalid_request")
+	response := serveAPIKeyRequest(t, service, authorization.NewTenantPolicy(apiKeyMembershipReader{role: memberships.RoleCollaborator}), apiKeyUserPrincipal(), http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"backend","scopes":["spaces:read"],"expires_at":"2020-01-01T00:00:00Z"}`)
+	assertAPIKeyError(t, response, http.StatusBadRequest, "request.invalid")
 
 	tests := []struct {
 		err    error
 		status int
 		code   string
 	}{
-		{apikeys.ErrInvalidAPIKeyID, http.StatusBadRequest, "invalid_api_key_id"},
-		{apikeys.ErrAPIKeyNotFound, http.StatusNotFound, "not_found"},
-		{apikeys.ErrAPIKeyExpired, http.StatusConflict, "api_key_inactive"},
-		{apikeys.ErrAPIKeyRevoked, http.StatusConflict, "api_key_inactive"},
-		{errors.New("database unavailable"), http.StatusInternalServerError, "internal_error"},
+		{apikeys.ErrInvalidAPIKeyID, http.StatusBadRequest, "api_key.invalid_id"},
+		{apikeys.ErrAPIKeyNotFound, http.StatusNotFound, "api_key.not_found"},
+		{apikeys.ErrAPIKeyExpired, http.StatusConflict, "api_key.inactive"},
+		{apikeys.ErrAPIKeyRevoked, http.StatusConflict, "api_key.inactive"},
+		{errors.New("database unavailable"), http.StatusInternalServerError, "service.internal_error"},
 	}
 	for _, test := range tests {
 		apiErr, ok := apiKeyAPIError(test.err)

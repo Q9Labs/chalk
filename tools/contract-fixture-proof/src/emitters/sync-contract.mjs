@@ -1,0 +1,561 @@
+// @ts-check
+
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { JsonSourceDiagnostic, LocationPreservingJsonParser } from "../json-parser.mjs";
+
+const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = path.resolve(sourceDirectory, "../../../..");
+const supportedFieldKinds = new Set(["array", "boolean", "integer", "object", "string"]);
+
+/** @typedef {Record<string, unknown>} JsonObject */
+
+/**
+ * @param {string} environmentVariable
+ * @param {string} fallback
+ */
+export function codegenPath(environmentVariable, fallback) {
+  return path.resolve(process.env[environmentVariable] ?? path.resolve(repositoryRoot, fallback));
+}
+
+/**
+ * @param {string | undefined} value
+ */
+export function syncProtocolVersion(value = process.env.CODEGEN_SYNC_PROTOCOL_VERSION) {
+  if (value === undefined || value === "1") return 1;
+  throw new Error(`Unsupported sync protocol version ${JSON.stringify(value)}; expected "1"`);
+}
+
+/**
+ * @param {number} _version
+ */
+export function syncContractPath(_version = 1) {
+  return codegenPath("CODEGEN_SYNC_CONTRACT_PATH", "contract/schema/sync-v1.json");
+}
+
+/**
+ * @param {string} inputPath
+ * @param {number} version
+ */
+export async function loadSyncContract(inputPath = syncContractPath(syncProtocolVersion()), version = syncProtocolVersion()) {
+  const source = await readFile(inputPath, "utf8");
+
+  try {
+    const parsed = new LocationPreservingJsonParser(source).parse();
+    validateSyncContract(parsed.value, version);
+    return /** @type {JsonObject} */ (parsed.value);
+  } catch (error) {
+    if (error instanceof JsonSourceDiagnostic) {
+      throw new Error(`${inputPath}:${error.location.line}:${error.location.column}: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} message
+ * @returns {asserts value is JsonObject}
+ */
+function assertObject(value, message) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`Invalid sync v1 contract: ${message}`);
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} message
+ * @returns {asserts value is unknown[]}
+ */
+function assertArray(value, message) {
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid sync v1 contract: ${message}`);
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} message
+ * @returns {asserts value is string}
+ */
+function assertString(value, message) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Invalid sync v1 contract: ${message}`);
+  }
+}
+
+/**
+ * @param {unknown} value
+ */
+function validateField(value) {
+  assertObject(value, "field definitions must be objects");
+  assertString(value.kind, "field definitions require a kind");
+  if (!supportedFieldKinds.has(value.kind)) {
+    throw new Error(`Invalid sync v1 contract: unsupported field kind ${JSON.stringify(value.kind)}`);
+  }
+  if (value.kind === "integer") {
+    const minimum = value.minimum;
+    if (typeof minimum !== "number" || !Number.isInteger(minimum) || minimum < 0) {
+      throw new Error("Invalid sync v1 contract: integer fields require a nonnegative integer minimum");
+    }
+  }
+  if (value.kind === "array") {
+    if (value.items !== undefined) {
+      assertObject(value.items, "array field items must be an object");
+    } else {
+      assertString(value.of, "array fields require items or an of reference");
+    }
+  }
+  if (value.kind === "object" && value.additionalProperties !== true) {
+    throw new Error("Invalid sync v1 contract: object fields must explicitly allow additional properties");
+  }
+}
+
+/**
+ * @param {unknown} value
+ */
+/**
+ * @param {unknown} value
+ * @param {string} message
+ */
+function validateFieldMap(value, message) {
+  assertObject(value, message);
+  Object.values(value).forEach((field) => {
+    if (field === "uuid") return;
+    if (Array.isArray(field)) {
+      if (field.length === 0 || !field.every((item) => typeof item === "string") || new Set(field).size !== field.length) {
+        throw new Error("Invalid sync v1 contract: enum shorthand fields must contain unique strings");
+      }
+      return;
+    }
+    validateField(field);
+  });
+}
+
+/**
+ * @param {unknown} value
+ */
+function validateCorrelationDefinition(value) {
+  assertObject(value, "correlation must be an object");
+  const fields = requireObjectProperty(value, "optionalTopLevelFields", "correlation fields are required");
+  const expectedFieldNames = ["journey_id", "traceparent", "tracestate"];
+  if (JSON.stringify(Object.keys(fields)) !== JSON.stringify(expectedFieldNames)) {
+    throw new Error("Invalid sync v1 contract: correlation fields must be journey_id, traceparent, and tracestate");
+  }
+
+  const expectedFormats = /** @type {Record<string, string>} */ ({
+    journey_id: "chalk-journey-id",
+    traceparent: "w3c-traceparent",
+    tracestate: "w3c-tracestate",
+  });
+  const expectedBounds = /** @type {Record<string, [number, number]>} */ ({
+    journey_id: [36, 36],
+    traceparent: [55, 55],
+    tracestate: [1, 512],
+  });
+  for (const fieldName of expectedFieldNames) {
+    const field = /** @type {JsonObject} */ (fields[fieldName]);
+    validateField(field);
+    if (field.kind !== "string" || field.format !== expectedFormats[fieldName]) {
+      throw new Error(`Invalid sync v1 contract: correlation.${fieldName} must declare ${expectedFormats[fieldName]}`);
+    }
+    const bounds = expectedBounds[fieldName];
+    if (!bounds) throw new Error(`Invalid sync v1 contract: correlation.${fieldName} bounds are missing`);
+    const [minimum, maximum] = bounds;
+    if (field.minBytes !== minimum || field.maxBytes !== maximum || typeof field.pattern !== "string") {
+      throw new Error(`Invalid sync v1 contract: correlation.${fieldName} must declare its exact byte bounds and pattern`);
+    }
+    try {
+      new RegExp(field.pattern, "u");
+    } catch {
+      throw new Error(`Invalid sync v1 contract: correlation.${fieldName} pattern must be a valid regular expression`);
+    }
+  }
+
+  const acceptedOn = requireObjectProperty(value, "acceptedOn", "correlation acceptedOn is required");
+  if (acceptedOn.hello !== "client-to-server" || acceptedOn.serverFrames !== "server-to-client") {
+    throw new Error("Invalid sync v1 contract: correlation acceptedOn directions are invalid");
+  }
+  if (JSON.stringify(value.upgradeHeaders) !== JSON.stringify(["x-chalk-journey-id", "traceparent", "tracestate"])) {
+    throw new Error("Invalid sync v1 contract: correlation upgrade headers must be exhaustive");
+  }
+  if (value.rule !== "propagate_from_first_observed_layer_to_every_downstream_frame") {
+    throw new Error("Invalid sync v1 contract: correlation propagation rule is invalid");
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} version
+ */
+function validateSyncContract(value, version) {
+  if (version !== 1) throw new Error(`Unsupported sync protocol version ${JSON.stringify(version)}`);
+  validateSyncContractDocument(value);
+}
+
+/**
+ * @param {JsonObject} value
+ * @param {string} property
+ * @param {string} message
+ */
+function requireObjectProperty(value, property, message) {
+  assertObject(value[property], message);
+  return /** @type {JsonObject} */ (value[property]);
+}
+
+/**
+ * @param {JsonObject} value
+ * @param {string} property
+ * @param {string} message
+ */
+function requireArrayProperty(value, property, message) {
+  assertArray(value[property], message);
+  return /** @type {unknown[]} */ (value[property]);
+}
+
+/**
+ * @param {JsonObject} value
+ * @param {string} property
+ * @param {string} message
+ */
+function requireStringProperty(value, property, message) {
+  assertString(value[property], message);
+  return /** @type {string} */ (value[property]);
+}
+
+/**
+ * @param {unknown} value
+ */
+function validateSyncContractDocument(value) {
+  assertObject(value, "the root must be an object");
+  if (value.$schema !== "chalk.sync.v1" || value.version !== 1) {
+    throw new Error("Invalid sync v1 contract: expected chalk.sync.v1 version 1");
+  }
+
+  const protocol = requireObjectProperty(value, "protocol", "protocol is required");
+  if (protocol.value !== 1 || protocol.transport !== "websocket-json-text" || protocol.route !== "/v1/sync") {
+    throw new Error("Invalid sync v1 contract: protocol must describe version 1 JSON text frames at /v1/sync");
+  }
+
+  const limits = requireObjectProperty(value, "limits", "limits are required");
+  // Reserve the standalone JSON object size for the three optional correlation fields:
+  // 1,160 bytes at their declared maxima (36-byte journey ID, 55-byte traceparent,
+  // and a 512-byte W3C tracestate whose JSON-special characters may escape),
+  // conservatively covering the 1,159-byte merge delta.
+  const expectedLimits = {
+    decodedInboundFrameBytes: 65_536,
+    correlationReservedBytes: 1_160,
+    tokenBytes: 8_192,
+    commandIdMinBytes: 16,
+    commandIdMaxBytes: 64,
+    requestIdMinBytes: 16,
+    requestIdMaxBytes: 64,
+    decodedCommandPayloadBytes: 16_384,
+    encodedLiveEventBytes: 32_768,
+    replayPageMaxEvents: 128,
+    replayPageEncodedBytes: 262_144,
+    completeReplayMaxEvents: 2_048,
+    completeReplayEncodedBytes: 2_097_152,
+    snapshotEncodedBytes: 1_048_576,
+    projectionSnapshotEncodedBytes: 1_048_576,
+    projectionMaxItems: 1_500,
+    directedRequestTtlMs: 30_000,
+    directedRequestsPerActorTarget: 4,
+    collaborationFrameBytes: 32_768,
+    collaborationQueueMaxFrames: 256,
+    collaborationBurstMax: 8,
+    chatMessageUtf8Bytes: 16_384,
+    chatMessageUnicodeScalars: 4_000,
+    chatAttachmentMaxItems: 5,
+    chatAttachmentFileNameUtf8Bytes: 255,
+    chatAttachmentMaxBytes: 26_214_400,
+    chatPageMaxMessages: 100,
+    chatPageEncodedBytes: 131_072,
+    reactionTtlMs: 5_000,
+    reactionRateWindowMs: 10_000,
+    reactionRateMax: 10,
+    protocolErrorDetailBytes: 1_024,
+  };
+  for (const [property, expected] of Object.entries(expectedLimits)) {
+    const actual = limits[property];
+    if (typeof actual !== "number" || !Number.isInteger(actual) || actual !== expected) {
+      throw new Error(`Invalid sync v1 contract: limits.${property} must equal ${expected}`);
+    }
+  }
+
+  const digest = requireObjectProperty(value, "stateDigest", "state digest is required");
+  if (digest.algorithm !== "sha256" || digest.prefix !== "chalk-sync-state-v1" || digest.versionEncoding !== "uint32-big-endian" || digest.projectionEncoding !== "rfc8785-json" || digest.wireEncoding !== "hex-lowercase") {
+    throw new Error("Invalid sync v1 contract: state digest must declare the approved v1 SHA-256 encoding");
+  }
+
+  const expectedCapabilities = [
+    "publishAudio",
+    "publishVideo",
+    "publishScreen",
+    "subscribe",
+    "raiseHand",
+    "renameSelf",
+    "sendChat",
+    "sendReaction",
+    "drawWhiteboard",
+    "manageWhiteboard",
+    "manageAdmission",
+    "assignRoles",
+    "muteOthers",
+    "stopVideoOthers",
+    "stopScreenOthers",
+    "requestMediaOthers",
+    "removeParticipant",
+    "manageRecording",
+    "startEpisode",
+    "extendEpisode",
+    "endEpisode",
+    "manageMembers",
+    "clearSpaceContent",
+  ];
+  const capabilities = requireArrayProperty(value, "capabilities", "capabilities are required");
+  if (JSON.stringify(capabilities) !== JSON.stringify(expectedCapabilities)) {
+    throw new Error("Invalid sync v1 contract: capability namespace must be the closed Wave 1 set");
+  }
+  const policy = requireObjectProperty(value, "policy", "policy is required");
+  if (JSON.stringify(policy.defaultRoles) !== JSON.stringify(["owner", "collaborator", "observer"])) {
+    throw new Error("Invalid sync v1 contract: default roles must be owner, collaborator, and observer");
+  }
+  const defaultRoleCapabilities = requireObjectProperty(policy, "defaultRoleCapabilities", "default role capabilities are required");
+  if (JSON.stringify(Object.keys(defaultRoleCapabilities)) !== JSON.stringify(["owner", "collaborator", "observer"])) {
+    throw new Error("Invalid sync v1 contract: default role capability bundles must be exhaustive");
+  }
+  if (JSON.stringify(policy.admissionPolicy) !== JSON.stringify(["open", "knock", "members_only"])) {
+    throw new Error("Invalid sync v1 contract: admission policy values must be open, knock, and members_only");
+  }
+  for (const [role, roleCapabilities] of Object.entries(defaultRoleCapabilities)) {
+    assertArray(roleCapabilities, `default role ${role} capabilities must be an array`);
+    if (roleCapabilities.some((capability) => typeof capability !== "string" || !expectedCapabilities.includes(capability))) {
+      throw new Error(`Invalid sync v1 contract: default role ${role} contains an unknown capability`);
+    }
+  }
+
+  const streams = requireObjectProperty(value, "streams", "streams are required");
+  if (JSON.stringify(Object.keys(streams)) !== JSON.stringify(["control", "media", "presence", "requests"])) {
+    throw new Error("Invalid sync v1 contract: streams must declare control, media, presence, and requests");
+  }
+
+  const hello = requireObjectProperty(value, "hello", "hello is required");
+  const helloStreams = requireObjectProperty(hello, "streams", "hello streams are required");
+  if (hello.type !== "hello" || JSON.stringify(Object.keys(helloStreams)) !== JSON.stringify(Object.keys(streams))) {
+    throw new Error("Invalid sync v1 contract: hello must declare exactly the four protocol streams");
+  }
+  validateField(hello.token);
+
+  const correlation = requireObjectProperty(value, "correlation", "correlation is required");
+  validateCorrelationDefinition(correlation);
+
+  const commands = requireArrayProperty(value, "commands", "commands are required");
+  const commandNames = commands.map((command) => {
+    assertObject(command, "commands must be objects");
+    const name = requireStringProperty(command, "name", "commands require a name");
+    if (command.type !== "command") {
+      throw new Error("Invalid sync v1 contract: command type must equal command");
+    }
+    validateFieldMap(command.payload, `command ${name} payload is required`);
+    return name;
+  });
+  if (JSON.stringify(commandNames) !== JSON.stringify(["set_hand_raised", "set_display_name", "set_admission_policy", "assign_roles"])) {
+    throw new Error("Invalid sync v1 contract: durable target command set must be exhaustive");
+  }
+
+  const operations = requireArrayProperty(value, "operations", "operations are required");
+  const operationNames = operations.map((operation) => {
+    assertObject(operation, "operations must be objects");
+    const name = requireStringProperty(operation, "name", "operations require a name");
+    if (operation.type !== "operation") {
+      throw new Error("Invalid sync v1 contract: operation type must equal operation");
+    }
+    validateFieldMap(operation.payload, `operation ${name} payload is required`);
+    return name;
+  });
+  const expectedOperations = ["admit_participant", "deny_admission", "mute_participant", "stop_participant_camera", "stop_participant_screen_share", "remove_participant", "start_recording", "stop_recording", "participant_leave", "start_episode", "extend_episode", "end_episode"];
+  if (JSON.stringify(operationNames) !== JSON.stringify(expectedOperations)) {
+    throw new Error("Invalid sync v1 contract: durable operation set must be exhaustive");
+  }
+
+  const expectedEvents = [
+    ["participant_joined", "lifecycle"],
+    ["participant_left", "external"],
+    ["episode_started", "lifecycle"],
+    ["episode_ended", "external"],
+    ["hand_raised", "command"],
+    ["hand_lowered", "command"],
+    ["participant_display_name_changed", "command"],
+    ["admission_policy_changed", "command"],
+    ["role_assigned", "command"],
+    ["deadline_changed", "external"],
+    ["admission_requested", "lifecycle"],
+    ["admission_denied", "external"],
+    ["admission_expired", "external"],
+    ["participant_microphone_stopped", "external"],
+    ["participant_camera_stopped", "external"],
+    ["participant_screen_share_stopped", "external"],
+    ["recording_status_changed", "external"],
+  ];
+  const events = requireArrayProperty(value, "events", "events are required");
+  const eventDefinitions = events.map((event) => {
+    assertObject(event, "events must be objects");
+    const name = requireStringProperty(event, "name", "events require a name");
+    const origin = requireStringProperty(event, "origin", "events require an origin");
+    if (!["command", "lifecycle", "external", "command_or_external"].includes(origin)) {
+      throw new Error("Invalid sync v1 contract: event origin is invalid");
+    }
+    validateFieldMap(event.payload, `event ${name} payload is required`);
+    return [name, origin];
+  });
+  if (JSON.stringify(eventDefinitions) !== JSON.stringify(expectedEvents)) {
+    throw new Error("Invalid sync v1 contract: durable event set and origins must be exhaustive");
+  }
+
+  const externalIntents = requireArrayProperty(value, "externalIntents", "external intents are required");
+  const expectedExternalIntents = [
+    "admit_participant",
+    "deny_admission",
+    "admission_request_expired",
+    "mute_participant",
+    "stop_participant_camera",
+    "stop_participant_screen_share",
+    "remove_participant",
+    "start_recording",
+    "stop_recording",
+    "participant_leave",
+    "start_episode",
+    "extend_episode",
+    "end_episode",
+    "tenant_set_deadline",
+    "tenant_end_episode",
+    "maximum_duration_expired",
+  ];
+  if (JSON.stringify(externalIntents) !== JSON.stringify(expectedExternalIntents)) {
+    throw new Error("Invalid sync v1 contract: external intent set must be exhaustive");
+  }
+
+  const eventFrame = requireObjectProperty(value, "eventFrame", "event frame is required");
+  if (
+    eventFrame.direction !== "server-to-client" ||
+    eventFrame.type !== "event" ||
+    eventFrame.stream !== "control" ||
+    JSON.stringify(eventFrame.commonExactFields) !== JSON.stringify(["type", "stream", "name", "event_id", "base_revision", "revision", "schema_version", "resulting_state_digest", "payload"]) ||
+    eventFrame.commandOriginField !== "command_id" ||
+    eventFrame.lifecycleOriginField !== "lifecycle_intent_id" ||
+    eventFrame.externalOriginField !== "external_operation_id" ||
+    eventFrame.originInvariant !== "exactly_one_origin_field"
+  ) {
+    throw new Error("Invalid sync v1 contract: event frame exact fields and origin fields must be exhaustive");
+  }
+
+  for (const property of ["liveTargets", "directedRequests", "rejectionReasons", "closeCodes"]) {
+    requireArrayProperty(value, property, `${property} are required`);
+  }
+  for (const property of [
+    "controlCursor",
+    "snapshot",
+    "deliveryAck",
+    "recoveryAck",
+    "welcome",
+    "replayPage",
+    "recoveryComplete",
+    "projections",
+    "operationFrame",
+    "liveTargetFrames",
+    "directedRequestFrames",
+    "projectionFrames",
+    "acks",
+    "terminal",
+    "retryableError",
+    "error",
+    "continuity",
+    "idempotency",
+  ]) {
+    requireObjectProperty(value, property, `${property} is required`);
+  }
+  const idempotency = /** @type {JsonObject} */ (value.idempotency);
+  if (idempotency.scope !== "participant") {
+    throw new Error("Invalid sync v1 contract: idempotency scope must be participant");
+  }
+
+  const liveTargetFrames = /** @type {JsonObject} */ (value.liveTargetFrames);
+  for (const property of ["request", "result"]) {
+    const frame = requireObjectProperty(liveTargetFrames, property, `liveTargetFrames.${property} is required`);
+    requireArrayProperty(frame, "exactFields", `liveTargetFrames.${property}.exactFields are required`);
+  }
+  const directedRequestFrames = /** @type {JsonObject} */ (value.directedRequestFrames);
+  for (const property of ["send", "deliver", "acknowledge", "result"]) {
+    const frame = requireObjectProperty(directedRequestFrames, property, `directedRequestFrames.${property} is required`);
+    requireArrayProperty(frame, "exactFields", `directedRequestFrames.${property}.exactFields are required`);
+  }
+  const collaboration = requireObjectProperty(value, "collaboration", "collaboration are required");
+  if (collaboration.extension !== "collaboration_v1" || JSON.stringify(collaboration.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) || JSON.stringify(collaboration.reactions) !== JSON.stringify(["👍", "❤️", "😂", "😮", "😢", "🎉"])) {
+    throw new Error("Invalid sync v1 contract: collaboration negotiation, capabilities, and reactions must be exhaustive");
+  }
+  const attachmentMimeTypes = requireArrayProperty(collaboration, "attachmentMimeTypes", "collaboration.attachmentMimeTypes are required");
+  if (attachmentMimeTypes.length === 0 || !attachmentMimeTypes.every((value) => typeof value === "string") || new Set(attachmentMimeTypes).size !== attachmentMimeTypes.length) {
+    throw new Error("Invalid sync v1 contract: collaboration attachment MIME types must be unique strings");
+  }
+  const chatCursor = requireObjectProperty(collaboration, "chatCursor", "collaboration.chatCursor is required");
+  if (JSON.stringify(chatCursor.exactFields) !== JSON.stringify(["after_sequence", "retained_floor_sequence"])) {
+    throw new Error("Invalid sync v1 contract: collaboration chat cursor fields must be exact");
+  }
+  const helloExtension = requireObjectProperty(collaboration, "helloExtension", "collaboration.helloExtension is required");
+  const welcomeExtension = requireObjectProperty(collaboration, "welcomeExtension", "collaboration.welcomeExtension is required");
+  requireArrayProperty(helloExtension, "exactFields", "collaboration.helloExtension exact fields are required");
+  requireArrayProperty(welcomeExtension, "exactFields", "collaboration.welcomeExtension exact fields are required");
+  const collaborationClientFrames = requireObjectProperty(collaboration, "clientFrames", "collaboration.clientFrames are required");
+  for (const property of ["sendReaction", "sendChat", "readChatPage", "setChatRead"]) {
+    const frame = requireObjectProperty(collaborationClientFrames, property, `collaboration.clientFrames.${property} is required`);
+    requireStringProperty(frame, "type", `collaboration.clientFrames.${property}.type is required`);
+    requireArrayProperty(frame, "exactFields", `collaboration.clientFrames.${property}.exactFields are required`);
+  }
+  const collaborationServerFrames = requireObjectProperty(collaboration, "serverFrames", "collaboration.serverFrames are required");
+  for (const property of ["reaction", "reactionResult", "chatMessage", "chatSendResult", "chatPage", "chatHead", "chatReadReceipt", "chatReadResult"]) {
+    const frame = requireObjectProperty(collaborationServerFrames, property, `collaboration.serverFrames.${property} is required`);
+    requireStringProperty(frame, "type", `collaboration.serverFrames.${property}.type is required`);
+  }
+  requireArrayProperty(collaboration, "errorCodes", "collaboration.errorCodes are required");
+  const projectionFrames = /** @type {JsonObject} */ (value.projectionFrames);
+  for (const property of ["mediaSnapshot", "mediaEvent", "presenceSnapshot", "presenceEvent"]) {
+    const frame = requireObjectProperty(projectionFrames, property, `projectionFrames.${property} is required`);
+    requireArrayProperty(frame, "exactFields", `projectionFrames.${property}.exactFields are required`);
+  }
+
+  const acknowledgements = /** @type {JsonObject} */ (value.acks);
+  if (JSON.stringify(acknowledgements.delivery) !== JSON.stringify(["original", "duplicate"]) || JSON.stringify(acknowledgements.outcomes) !== JSON.stringify(["committed", "satisfied", "rejected", "command_id_conflict"])) {
+    throw new Error("Invalid sync v1 contract: acknowledgement delivery and outcomes must be exhaustive");
+  }
+  const retryableError = /** @type {JsonObject} */ (value.retryableError);
+  const retryableCodes = requireArrayProperty(retryableError, "codes", "retryable error codes are required");
+  if (JSON.stringify(retryableCodes) !== JSON.stringify(["overloaded", "server_draining", "dependency_unavailable", "decision_unavailable", "external_operation_pending"])) {
+    throw new Error("Invalid sync v1 contract: retryable error codes must be exhaustive");
+  }
+  const error = /** @type {JsonObject} */ (value.error);
+  if (JSON.stringify(error.code) !== JSON.stringify(["protocol_error", "invalid_frame", "unsupported_protocol"])) {
+    throw new Error("Invalid sync v1 contract: protocol error codes must be exhaustive");
+  }
+  validateField(error.detail);
+}
+
+/**
+ * @param {string} value
+ */
+export function pascalCase(value) {
+  return value
+    .split(/[^a-zA-Z0-9]+/u)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join("");
+}
+
+/**
+ * @param {unknown} value
+ */
+export function stableJson(value) {
+  return JSON.stringify(value, null, 2);
+}

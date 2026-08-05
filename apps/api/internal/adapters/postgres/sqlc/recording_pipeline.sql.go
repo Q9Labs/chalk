@@ -36,7 +36,7 @@ with candidate as (
         updated_at = now()
     from candidate
     where recording_jobs.id = candidate.id
-    returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.session_id,
+    returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id,
         recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key,
         recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority,
         recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit,
@@ -53,7 +53,7 @@ with candidate as (
         or ($1 = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
     returning recording_pipelines.recording_id
 )
-select leased.id, leased.tenant_id, leased.session_id, leased.recording_id, leased.kind,
+select leased.id, leased.tenant_id, leased.episode_id, leased.recording_id, leased.kind,
     leased.idempotency_key, leased.payload_schema_version, leased.state, leased.priority,
     leased.available_at, leased.attempt_count, leased.attempt_limit, leased.lease_token,
     leased.lease_owner, leased.lease_expires_at, leased.fencing_generation, leased.error_code,
@@ -71,7 +71,7 @@ type ClaimRecordingJobParams struct {
 type ClaimRecordingJobRow struct {
 	ID                   pgtype.UUID        `json:"id"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
-	SessionID            pgtype.UUID        `json:"session_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
 	RecordingID          pgtype.UUID        `json:"recording_id"`
 	Kind                 string             `json:"kind"`
 	IdempotencyKey       string             `json:"idempotency_key"`
@@ -103,7 +103,7 @@ func (q *Queries) ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobPa
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.Kind,
 		&i.IdempotencyKey,
@@ -244,7 +244,7 @@ with completed as (
       and recording_jobs.fencing_generation = $3
       and recording_jobs.lease_token = $4
       and recording_jobs.lease_owner = $5
-    returning id, tenant_id, session_id, recording_id, attempt_count, fencing_generation
+    returning id, tenant_id, episode_id, recording_id, attempt_count, fencing_generation
 ), pipeline as (
     update recording_pipelines
     set state = 'render_queued', capture_completed_at = now(), updated_at = now()
@@ -260,7 +260,7 @@ with completed as (
     where recording_reservations.state = 'reserved'
 ), capacity_release as (
     update recording_capacity
-    set reserved_meetings = reserved_meetings - (select count(*) from reservation),
+    set reserved_episodes = reserved_episodes - (select count(*) from reservation),
         reserved_participants = reserved_participants - coalesce((select sum(participant_count) from reservation), 0),
         reserved_input_bitrate_bps = reserved_input_bitrate_bps - coalesce((select sum(input_bitrate_bps) from reservation), 0),
         updated_at = now()
@@ -274,17 +274,17 @@ with completed as (
     returning id
 ), render_job as (
     insert into recording_jobs (
-        id, tenant_id, session_id, recording_id, kind, idempotency_key,
+        id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select $6, tenant_id, session_id, recording_id, 'render',
+    select $6, tenant_id, episode_id, recording_id, 'render',
         'render:' || recording_id::text, $7, 'pending',
         $8, now(), $9
     from completed
     where exists (select 1 from reservation_release)
     on conflict (recording_id, kind) do nothing
 )
-select recording_jobs.id, recording_jobs.tenant_id, recording_jobs.session_id,
+select recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id,
     recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key,
     recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority,
     recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit,
@@ -322,7 +322,7 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.Kind,
 		&i.IdempotencyKey,
@@ -355,7 +355,7 @@ where id = $1
   and fencing_generation = $3
   and lease_token = $4
   and lease_owner = $5
-returning id, tenant_id, session_id, recording_id, kind, idempotency_key,
+returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
     error_code, error_detail, terminal_at, updated_at, created_at
@@ -381,7 +381,7 @@ func (q *Queries) CompleteRecordingJob(ctx context.Context, arg CompleteRecordin
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.Kind,
 		&i.IdempotencyKey,
@@ -406,14 +406,14 @@ func (q *Queries) CompleteRecordingJob(ctx context.Context, arg CompleteRecordin
 
 const createRecordingReservation = `-- name: CreateRecordingReservation :one
 with existing as (
-    select id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    select id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at, request_fingerprint
     from recording_reservations
     where recording_reservations.tenant_id = $1
       and recording_reservations.idempotency_key = $2
 ), locked_capacity as (
-    select reserved_meetings, reserved_participants, reserved_input_bitrate_bps
+    select reserved_episodes, reserved_participants, reserved_input_bitrate_bps
     from recording_capacity
     where id = 1
       and not exists (select 1 from existing)
@@ -426,35 +426,35 @@ with existing as (
     for update
 ), capacity_update as (
     update recording_capacity
-    set reserved_meetings = recording_capacity.reserved_meetings + $3::integer,
+    set reserved_episodes = recording_capacity.reserved_episodes + $3::integer,
         reserved_participants = recording_capacity.reserved_participants + $4::integer,
         reserved_input_bitrate_bps = recording_capacity.reserved_input_bitrate_bps + $5::bigint,
         updated_at = now()
     from locked_capacity
     where recording_capacity.id = 1
-      and locked_capacity.reserved_meetings + $3::integer <= 20
+      and locked_capacity.reserved_episodes + $3::integer <= 20
       and locked_capacity.reserved_participants + $4::integer <= 100
       and locked_capacity.reserved_input_bitrate_bps + $5::bigint <= 80000000
       and exists (
-          select 1 from room_sessions
-          where room_sessions.tenant_id = $1
-            and room_sessions.room_id = $6
-            and room_sessions.id = $7
+          select 1 from episodes
+          where episodes.tenant_id = $1
+            and episodes.space_id = $6
+            and episodes.id = $7
       )
     returning recording_capacity.id
 ), legacy_recording as (
-    insert into recordings (id, tenant_id, room_id, session_id, status, storage_provider)
+    insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
     select $8, $1, $6, $7, 'pending', 'r2'
     from capacity_update
-    join room_sessions on room_sessions.tenant_id = $1
-        and room_sessions.room_id = $6
-        and room_sessions.id = $7
+    join episodes on episodes.tenant_id = $1
+        and episodes.space_id = $6
+        and episodes.id = $7
     where not exists (select 1 from existing)
     on conflict (id) do nothing
     returning id
 ), reservation as (
     insert into recording_reservations (
-        id, tenant_id, room_id, session_id, recording_id, idempotency_key, request_fingerprint,
+        id, tenant_id, space_id, episode_id, recording_id, idempotency_key, request_fingerprint,
         participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at
     )
@@ -464,7 +464,7 @@ with existing as (
         $5, 'reserved', $12, $13
     from capacity_update join legacy_recording on true
     where not exists (select 1 from existing)
-    returning id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
 ), pipeline as (
@@ -473,28 +473,28 @@ with existing as (
     from reservation
 ), capture_job as (
     insert into recording_jobs (
-        id, tenant_id, session_id, recording_id, kind, idempotency_key,
+        id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
     select
-        $14, tenant_id, session_id, recording_id, 'capture',
+        $14, tenant_id, episode_id, recording_id, 'capture',
         'capture:' || recording_id::text, $15, 'pending',
         $16, $17, $18
     from reservation
 ), replay as (
-    select id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    select id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
     from existing
     where request_fingerprint = $10
 )
-select reservation.id, reservation.tenant_id, reservation.room_id, reservation.session_id,
+select reservation.id, reservation.tenant_id, reservation.space_id, reservation.episode_id,
     reservation.recording_id, reservation.idempotency_key, reservation.participant_count,
     reservation.max_duration_seconds, reservation.input_bitrate_bps, reservation.state,
     reservation.starts_at, reservation.ends_at, reservation.updated_at, reservation.created_at
 from reservation
 union all
-select replay.id, replay.tenant_id, replay.room_id, replay.session_id,
+select replay.id, replay.tenant_id, replay.space_id, replay.episode_id,
     replay.recording_id, replay.idempotency_key, replay.participant_count,
     replay.max_duration_seconds, replay.input_bitrate_bps, replay.state,
     replay.starts_at, replay.ends_at, replay.updated_at, replay.created_at
@@ -504,11 +504,11 @@ from replay
 type CreateRecordingReservationParams struct {
 	TenantID             pgtype.UUID        `json:"tenant_id"`
 	IdempotencyKey       string             `json:"idempotency_key"`
-	ParticipantMeetings  int32              `json:"participant_meetings"`
+	EpisodeCount         int32              `json:"episode_count"`
 	ParticipantCount     int32              `json:"participant_count"`
 	InputBitrateBps      int64              `json:"input_bitrate_bps"`
-	RoomID               pgtype.UUID        `json:"room_id"`
-	SessionID            pgtype.UUID        `json:"session_id"`
+	SpaceID              pgtype.UUID        `json:"space_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
 	RecordingID          pgtype.UUID        `json:"recording_id"`
 	ID                   pgtype.UUID        `json:"id"`
 	RequestFingerprint   []byte             `json:"request_fingerprint"`
@@ -525,8 +525,8 @@ type CreateRecordingReservationParams struct {
 type CreateRecordingReservationRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
-	RoomID             pgtype.UUID        `json:"room_id"`
-	SessionID          pgtype.UUID        `json:"session_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	RecordingID        pgtype.UUID        `json:"recording_id"`
 	IdempotencyKey     string             `json:"idempotency_key"`
 	ParticipantCount   int32              `json:"participant_count"`
@@ -543,11 +543,11 @@ func (q *Queries) CreateRecordingReservation(ctx context.Context, arg CreateReco
 	row := q.db.QueryRow(ctx, createRecordingReservation,
 		arg.TenantID,
 		arg.IdempotencyKey,
-		arg.ParticipantMeetings,
+		arg.EpisodeCount,
 		arg.ParticipantCount,
 		arg.InputBitrateBps,
-		arg.RoomID,
-		arg.SessionID,
+		arg.SpaceID,
+		arg.EpisodeID,
 		arg.RecordingID,
 		arg.ID,
 		arg.RequestFingerprint,
@@ -564,8 +564,8 @@ func (q *Queries) CreateRecordingReservation(ctx context.Context, arg CreateReco
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.IdempotencyKey,
 		&i.ParticipantCount,
@@ -596,7 +596,7 @@ with expired as (
     for update of recording_reservations, recording_jobs skip locked
 ), capacity_update as (
     update recording_capacity
-    set reserved_meetings = reserved_meetings - (select count(*) from expired),
+    set reserved_episodes = reserved_episodes - (select count(*) from expired),
         reserved_participants = reserved_participants - coalesce((select sum(participant_count) from expired), 0),
         reserved_input_bitrate_bps = reserved_input_bitrate_bps - coalesce((select sum(input_bitrate_bps) from expired), 0),
         updated_at = now()
@@ -606,7 +606,7 @@ with expired as (
     update recording_reservations
     set state = 'expired', updated_at = now()
     where id in (select id from expired)
-    returning id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
 ), pipelines as (
@@ -617,7 +617,7 @@ with expired as (
       and recording_pipelines.state in ('requested', 'reserved', 'retryable_failure')
     returning recording_pipelines.recording_id
 )
-select reservations.id, reservations.tenant_id, reservations.room_id, reservations.session_id,
+select reservations.id, reservations.tenant_id, reservations.space_id, reservations.episode_id,
     reservations.recording_id, reservations.idempotency_key, reservations.participant_count,
     reservations.max_duration_seconds, reservations.input_bitrate_bps, reservations.state,
     reservations.starts_at, reservations.ends_at, reservations.updated_at, reservations.created_at
@@ -627,8 +627,8 @@ from reservations join pipelines on pipelines.recording_id = reservations.record
 type ExpireRecordingReservationsRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
-	RoomID             pgtype.UUID        `json:"room_id"`
-	SessionID          pgtype.UUID        `json:"session_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	RecordingID        pgtype.UUID        `json:"recording_id"`
 	IdempotencyKey     string             `json:"idempotency_key"`
 	ParticipantCount   int32              `json:"participant_count"`
@@ -653,8 +653,8 @@ func (q *Queries) ExpireRecordingReservations(ctx context.Context, now pgtype.Ti
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
-			&i.RoomID,
-			&i.SessionID,
+			&i.SpaceID,
+			&i.EpisodeID,
 			&i.RecordingID,
 			&i.IdempotencyKey,
 			&i.ParticipantCount,
@@ -685,7 +685,7 @@ where tenant_id = $3
   and id = $4
   and state = 'reserved'
   and $1::integer between max_duration_seconds and 7200
-returning id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
     participant_count, max_duration_seconds, input_bitrate_bps, state,
     starts_at, ends_at, updated_at, created_at
 `
@@ -700,8 +700,8 @@ type ExtendRecordingReservationParams struct {
 type ExtendRecordingReservationRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
-	RoomID             pgtype.UUID        `json:"room_id"`
-	SessionID          pgtype.UUID        `json:"session_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	RecordingID        pgtype.UUID        `json:"recording_id"`
 	IdempotencyKey     string             `json:"idempotency_key"`
 	ParticipantCount   int32              `json:"participant_count"`
@@ -725,8 +725,8 @@ func (q *Queries) ExtendRecordingReservation(ctx context.Context, arg ExtendReco
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.IdempotencyKey,
 		&i.ParticipantCount,
@@ -756,7 +756,7 @@ with failed as (
       and fencing_generation = $6
       and lease_token = $7
       and lease_owner = $8
-    returning id, tenant_id, session_id, recording_id, kind, idempotency_key,
+    returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
         error_code, error_detail, terminal_at, updated_at, created_at
@@ -776,7 +776,7 @@ with failed as (
       and recording_reservations.state = 'reserved'
 ), capacity_release as (
     update recording_capacity
-    set reserved_meetings = reserved_meetings - (select count(*) from reservation),
+    set reserved_episodes = reserved_episodes - (select count(*) from reservation),
         reserved_participants = reserved_participants - coalesce((select sum(participant_count) from reservation), 0),
         reserved_input_bitrate_bps = reserved_input_bitrate_bps - coalesce((select sum(input_bitrate_bps) from reservation), 0),
         updated_at = now()
@@ -789,7 +789,7 @@ with failed as (
       and exists (select 1 from capacity_release)
     returning id
 )
-select failed.id, failed.tenant_id, failed.session_id, failed.recording_id, failed.kind, failed.idempotency_key,
+select failed.id, failed.tenant_id, failed.episode_id, failed.recording_id, failed.kind, failed.idempotency_key,
     failed.payload_schema_version, failed.state, failed.priority, failed.available_at, failed.attempt_count,
     failed.attempt_limit, failed.lease_token, failed.lease_owner, failed.lease_expires_at, failed.fencing_generation,
     failed.error_code, failed.error_detail, failed.terminal_at, failed.updated_at, failed.created_at
@@ -810,7 +810,7 @@ type FailRecordingJobParams struct {
 type FailRecordingJobRow struct {
 	ID                   pgtype.UUID        `json:"id"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
-	SessionID            pgtype.UUID        `json:"session_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
 	RecordingID          pgtype.UUID        `json:"recording_id"`
 	Kind                 string             `json:"kind"`
 	IdempotencyKey       string             `json:"idempotency_key"`
@@ -846,7 +846,7 @@ func (q *Queries) FailRecordingJob(ctx context.Context, arg FailRecordingJobPara
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.Kind,
 		&i.IdempotencyKey,
@@ -948,7 +948,7 @@ func (q *Queries) GetRecordingPoolHealth(ctx context.Context, role string) (Reco
 
 const getRecordingReservation = `-- name: GetRecordingReservation :one
 select
-    id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
     participant_count, max_duration_seconds, input_bitrate_bps, state,
     starts_at, ends_at, updated_at, created_at
 from recording_reservations
@@ -963,8 +963,8 @@ type GetRecordingReservationParams struct {
 type GetRecordingReservationRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
-	RoomID             pgtype.UUID        `json:"room_id"`
-	SessionID          pgtype.UUID        `json:"session_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	RecordingID        pgtype.UUID        `json:"recording_id"`
 	IdempotencyKey     string             `json:"idempotency_key"`
 	ParticipantCount   int32              `json:"participant_count"`
@@ -983,8 +983,8 @@ func (q *Queries) GetRecordingReservation(ctx context.Context, arg GetRecordingR
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.IdempotencyKey,
 		&i.ParticipantCount,
@@ -1001,7 +1001,7 @@ func (q *Queries) GetRecordingReservation(ctx context.Context, arg GetRecordingR
 
 const getRecordingReservationByKey = `-- name: GetRecordingReservationByKey :one
 select
-    id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
     participant_count, max_duration_seconds, input_bitrate_bps, state,
     starts_at, ends_at, updated_at, created_at
 from recording_reservations
@@ -1018,8 +1018,8 @@ type GetRecordingReservationByKeyParams struct {
 type GetRecordingReservationByKeyRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
-	RoomID             pgtype.UUID        `json:"room_id"`
-	SessionID          pgtype.UUID        `json:"session_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	RecordingID        pgtype.UUID        `json:"recording_id"`
 	IdempotencyKey     string             `json:"idempotency_key"`
 	ParticipantCount   int32              `json:"participant_count"`
@@ -1038,8 +1038,8 @@ func (q *Queries) GetRecordingReservationByKey(ctx context.Context, arg GetRecor
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.IdempotencyKey,
 		&i.ParticipantCount,
@@ -1081,7 +1081,7 @@ where id = $2
   and fencing_generation = $4
   and lease_token = $5
   and lease_owner = $6
-returning id, tenant_id, session_id, recording_id, kind, idempotency_key,
+returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
     error_code, error_detail, terminal_at, updated_at, created_at
@@ -1109,7 +1109,7 @@ func (q *Queries) HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecord
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.Kind,
 		&i.IdempotencyKey,
@@ -1230,7 +1230,7 @@ func (q *Queries) InsertRecordingBundle(ctx context.Context, arg InsertRecording
 }
 
 const listRecordingDeadLetters = `-- name: ListRecordingDeadLetters :many
-select id, tenant_id, session_id, recording_id, kind, idempotency_key,
+select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
     error_code, error_detail, terminal_at, updated_at, created_at
@@ -1257,7 +1257,7 @@ func (q *Queries) ListRecordingDeadLetters(ctx context.Context, arg ListRecordin
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
-			&i.SessionID,
+			&i.EpisodeID,
 			&i.RecordingID,
 			&i.Kind,
 			&i.IdempotencyKey,
@@ -1288,7 +1288,7 @@ func (q *Queries) ListRecordingDeadLetters(ctx context.Context, arg ListRecordin
 }
 
 const listRecordingJobsForReconciliation = `-- name: ListRecordingJobsForReconciliation :many
-select id, tenant_id, session_id, recording_id, kind, idempotency_key,
+select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
     error_code, error_detail, terminal_at, updated_at, created_at
@@ -1318,7 +1318,7 @@ func (q *Queries) ListRecordingJobsForReconciliation(ctx context.Context, arg Li
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
-			&i.SessionID,
+			&i.EpisodeID,
 			&i.RecordingID,
 			&i.Kind,
 			&i.IdempotencyKey,
@@ -1357,7 +1357,7 @@ with recovered as (
         error_code = coalesce(error_code, 'lease_expired'),
         updated_at = now()
     where state = 'leased' and lease_expires_at <= now()
-    returning id, tenant_id, session_id, recording_id, kind, idempotency_key,
+    returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
         error_code, error_detail, terminal_at, updated_at, created_at
@@ -1376,7 +1376,7 @@ with recovered as (
     where pipeline.job_state = 'terminal_failure' and recording_reservations.state = 'reserved'
 ), capacity_release as (
     update recording_capacity
-    set reserved_meetings = reserved_meetings - (select count(*) from reservation),
+    set reserved_episodes = reserved_episodes - (select count(*) from reservation),
         reserved_participants = reserved_participants - coalesce((select sum(participant_count) from reservation), 0),
         reserved_input_bitrate_bps = reserved_input_bitrate_bps - coalesce((select sum(input_bitrate_bps) from reservation), 0),
         updated_at = now()
@@ -1389,7 +1389,7 @@ with recovered as (
       and exists (select 1 from capacity_release)
     returning id
 )
-select recovered.id, recovered.tenant_id, recovered.session_id, recovered.recording_id, recovered.kind,
+select recovered.id, recovered.tenant_id, recovered.episode_id, recovered.recording_id, recovered.kind,
     recovered.idempotency_key, recovered.payload_schema_version, recovered.state, recovered.priority,
     recovered.available_at, recovered.attempt_count, recovered.attempt_limit, recovered.lease_token,
     recovered.lease_owner, recovered.lease_expires_at, recovered.fencing_generation, recovered.error_code,
@@ -1400,7 +1400,7 @@ from recovered cross join (select count(*) from reservation_release) released
 type RecoverExpiredRecordingJobsRow struct {
 	ID                   pgtype.UUID        `json:"id"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
-	SessionID            pgtype.UUID        `json:"session_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
 	RecordingID          pgtype.UUID        `json:"recording_id"`
 	Kind                 string             `json:"kind"`
 	IdempotencyKey       string             `json:"idempotency_key"`
@@ -1433,7 +1433,7 @@ func (q *Queries) RecoverExpiredRecordingJobs(ctx context.Context) ([]RecoverExp
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
-			&i.SessionID,
+			&i.EpisodeID,
 			&i.RecordingID,
 			&i.Kind,
 			&i.IdempotencyKey,
@@ -1479,7 +1479,7 @@ with locked as (
     for update
 ), capacity_update as (
     update recording_capacity
-    set reserved_meetings = reserved_meetings - 1,
+    set reserved_episodes = reserved_episodes - 1,
         reserved_participants = reserved_participants - (select participant_count from locked),
         reserved_input_bitrate_bps = reserved_input_bitrate_bps - (select input_bitrate_bps from locked),
         updated_at = now()
@@ -1488,7 +1488,7 @@ with locked as (
     update recording_reservations
     set state = $3, updated_at = now()
     where id = (select id from locked)
-    returning id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
 ), cancelled_job as (
@@ -1504,7 +1504,7 @@ with locked as (
       and state = 'reserved'
     returning recording_id
 )
-select released.id, released.tenant_id, released.room_id, released.session_id,
+select released.id, released.tenant_id, released.space_id, released.episode_id,
     released.recording_id, released.idempotency_key, released.participant_count,
     released.max_duration_seconds, released.input_bitrate_bps, released.state,
     released.starts_at, released.ends_at, released.updated_at, released.created_at
@@ -1520,8 +1520,8 @@ type ReleaseRecordingReservationParams struct {
 type ReleaseRecordingReservationRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
-	RoomID             pgtype.UUID        `json:"room_id"`
-	SessionID          pgtype.UUID        `json:"session_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	RecordingID        pgtype.UUID        `json:"recording_id"`
 	IdempotencyKey     string             `json:"idempotency_key"`
 	ParticipantCount   int32              `json:"participant_count"`
@@ -1540,8 +1540,8 @@ func (q *Queries) ReleaseRecordingReservation(ctx context.Context, arg ReleaseRe
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.RoomID,
-		&i.SessionID,
+		&i.SpaceID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.IdempotencyKey,
 		&i.ParticipantCount,

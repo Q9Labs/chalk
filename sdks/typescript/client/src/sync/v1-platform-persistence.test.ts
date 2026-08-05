@@ -3,23 +3,23 @@ import type { ReactNativeAsyncStorage } from "./react-native";
 import { AsyncStorageV1PendingTargetStore, IndexedDbV1PendingTargetStore } from "./v1-platform-persistence";
 import type { V1PendingTarget } from "./v1-types";
 
-const storageKey = "chalk-sync-v1:pending-targets:tenant/session";
+const storageKey = "chalk-sync-v1:pending-targets:space/episode";
 
 describe("platform v1 pending-target persistence", () => {
   it("isolates AsyncStorage scopes, validates restored targets, and removes empty namespaces", async () => {
     const storage = new MemoryAsyncStorage();
-    const sessionStore = new AsyncStorageV1PendingTargetStore({ scope: "tenant/session", storage });
-    const otherStore = new AsyncStorageV1PendingTargetStore({ scope: "tenant/other", storage });
+    const episodeStore = new AsyncStorageV1PendingTargetStore({ scope: "space/episode", storage });
+    const otherStore = new AsyncStorageV1PendingTargetStore({ scope: "space/other-episode", storage });
     const target = pendingTarget();
 
-    await sessionStore.put(target);
+    await episodeStore.put(target);
     expect(await otherStore.load()).toEqual([]);
-    expect(await new AsyncStorageV1PendingTargetStore({ scope: "tenant/session", storage }).load()).toEqual([target]);
+    expect(await new AsyncStorageV1PendingTargetStore({ scope: "space/episode", storage }).load()).toEqual([target]);
 
     storage.values.set(storageKey, JSON.stringify([target, { ...target, bytes: 0 }]));
-    expect(await sessionStore.load()).toEqual([target]);
+    expect(await episodeStore.load()).toEqual([target]);
 
-    await sessionStore.remove(target.commandId);
+    await episodeStore.remove(target.commandId);
     expect(storage.values.has(storageKey)).toBe(false);
   });
 
@@ -29,8 +29,8 @@ describe("platform v1 pending-target persistence", () => {
     expect(() => new IndexedDbV1PendingTargetStore({ scope: "", indexedDb: undefined })).toThrow("scope");
 
     storage.values.set(storageKey, "not-json");
-    await expect(new AsyncStorageV1PendingTargetStore({ scope: "tenant/session", storage }).load()).rejects.toBeInstanceOf(SyntaxError);
-    await expect(new IndexedDbV1PendingTargetStore({ scope: "tenant/session", indexedDb: undefined }).load()).rejects.toThrow("IndexedDB is unavailable");
+    await expect(new AsyncStorageV1PendingTargetStore({ scope: "space/episode", storage }).load()).rejects.toBeInstanceOf(SyntaxError);
+    await expect(new IndexedDbV1PendingTargetStore({ scope: "space/episode", indexedDb: undefined }).load()).rejects.toThrow("IndexedDB is unavailable");
   });
 });
 

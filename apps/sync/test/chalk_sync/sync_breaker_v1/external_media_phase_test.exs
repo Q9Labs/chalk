@@ -40,8 +40,8 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhaseTest do
              "restarted_incarnation" => 2
            }
 
-    assert first["observations"]["role_moderation"]["initial_role"] == "cohost"
-    assert first["observations"]["role_moderation"]["final_role"] == "participant"
+    assert first["observations"]["role_moderation"]["assigned_role"] == "collaborator"
+    assert first["observations"]["role_moderation"]["final_role"] == "observer"
     assert first["observations"]["role_moderation"]["moderation_status"] == "applied"
 
     assert first == second

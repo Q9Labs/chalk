@@ -5,17 +5,17 @@ defmodule ChalkSync.Webhooks.EventTest do
 
   @fixture_path Path.expand("../../../../../contract/webhooks/v1/fixtures.json", __DIR__)
   @tenant_id "10000000-0000-4000-8000-000000000001"
-  @room_id "20000000-0000-4000-8000-000000000001"
-  @session_id "30000000-0000-4000-8000-000000000001"
+  @space_id "20000000-0000-4000-8000-000000000001"
+  @episode_id "30000000-0000-4000-8000-000000000001"
   @participant_id "40000000-0000-4000-8000-000000000001"
-  @user_id "50000000-0000-4000-8000-000000000001"
+  @identity_id "50000000-0000-4000-8000-000000000001"
 
   test "participant joined matches the shared Unicode fixture byte for byte" do
     object = %{
       id: @participant_id,
-      user_id: @user_id,
-      room_id: @room_id,
-      session_id: @session_id,
+      identity_id: @identity_id,
+      space_id: @space_id,
+      episode_id: @episode_id,
       name: "Ada – <&> \"東京\" \\",
       status: "active",
       joined_at: datetime("2026-07-12T18:05:00.000999Z"),
@@ -35,9 +35,9 @@ defmodule ChalkSync.Webhooks.EventTest do
   test "participant left matches the shared fixture byte for byte" do
     object = %{
       id: @participant_id,
-      user_id: @user_id,
-      room_id: @room_id,
-      session_id: @session_id,
+      identity_id: @identity_id,
+      space_id: @space_id,
+      episode_id: @episode_id,
       name: "Ada – 東京",
       status: "left",
       joined_at: datetime("2026-07-12T18:05:00.000Z"),
@@ -54,10 +54,10 @@ defmodule ChalkSync.Webhooks.EventTest do
            ) == fixture("participant.left")
   end
 
-  test "session ended matches the shared fixture byte for byte" do
+  test "episode ended matches the shared fixture byte for byte" do
     object = %{
-      id: @session_id,
-      room_id: @room_id,
+      id: @episode_id,
+      space_id: @space_id,
       status: "ended",
       started_at: datetime("2026-07-12T18:04:00.000Z"),
       ended_at: datetime("2026-07-12T19:04:00.000Z"),
@@ -67,17 +67,17 @@ defmodule ChalkSync.Webhooks.EventTest do
 
     assert Event.encode!(
              "00000000-0000-4000-8000-000000000006",
-             "session.ended",
+             "episode.ended",
              @tenant_id,
              object.updated_at,
              object
-           ) == fixture("session.ended")
+           ) == fixture("episode.ended")
   end
 
   test "rejects snapshots outside the v1 event-specific contract" do
     joined = participant_object("active", nil)
     left = participant_object("left", datetime("2026-07-12T19:00:00.000Z"))
-    session = session_object()
+    episode = episode_object()
 
     invalid = [
       {"participant.joined", %{joined | id: nil}, joined.joined_at},
@@ -88,9 +88,9 @@ defmodule ChalkSync.Webhooks.EventTest do
       {"participant.joined", %{joined | left_at: left.left_at}, joined.joined_at},
       {"participant.left", %{left | status: "active"}, left.left_at},
       {"participant.left", %{left | left_at: nil}, left.left_at},
-      {"session.ended", %{session | status: "active"}, session.ended_at},
-      {"session.ended", %{session | ended_at: nil}, session.ended_at},
-      {"session.ended", %{session | created_at: nil}, session.ended_at}
+      {"episode.ended", %{episode | status: "active"}, episode.ended_at},
+      {"episode.ended", %{episode | ended_at: nil}, episode.ended_at},
+      {"episode.ended", %{episode | created_at: nil}, episode.ended_at}
     ]
 
     Enum.each(invalid, fn {event_name, object, occurred_at} ->
@@ -119,9 +119,9 @@ defmodule ChalkSync.Webhooks.EventTest do
   defp participant_object(status, left_at) do
     %{
       id: @participant_id,
-      user_id: @user_id,
-      room_id: @room_id,
-      session_id: @session_id,
+      identity_id: @identity_id,
+      space_id: @space_id,
+      episode_id: @episode_id,
       name: "Ada",
       status: status,
       joined_at: datetime("2026-07-12T18:05:00.000Z"),
@@ -130,10 +130,10 @@ defmodule ChalkSync.Webhooks.EventTest do
     }
   end
 
-  defp session_object do
+  defp episode_object do
     %{
-      id: @session_id,
-      room_id: @room_id,
+      id: @episode_id,
+      space_id: @space_id,
       status: "ended",
       started_at: datetime("2026-07-12T18:04:00.000Z"),
       ended_at: datetime("2026-07-12T19:04:00.000Z"),

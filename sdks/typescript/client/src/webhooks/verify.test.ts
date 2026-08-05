@@ -197,11 +197,11 @@ describe("verifyWebhook", () => {
   it("acknowledges an authenticated unknown Event after envelope validation", async () => {
     const fixture = getTestOnlyWebhookFixture("endpoint.test");
     const body = JSON.parse(new TextDecoder().decode(fixture.rawBody)) as Record<string, unknown>;
-    body.event = "room.future_state";
+    body.event = "space.future_state";
     const rawBody = encoder.encode(JSON.stringify(body));
     const secret = vectors.secrets[0]!.value;
     const signed = await signTestOnlyWebhook({ rawBody, webhookId: String(body.id), timestamp: Number(vectors.webhook_timestamp), secrets: [secret] });
     const event = await verifyWebhook({ rawBody, headers: signed, secrets: [secret], now });
-    expect(event.event).toBe("room.future_state");
+    expect(event.event).toBe("space.future_state");
   });
 });

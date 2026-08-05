@@ -7,8 +7,8 @@ import (
 )
 
 const providerOperationReceiptColumns = `
-    operation_id, effect, tenant_id, session_id, participant_session_id,
-    participant_session_generation, publication_source, recording_id,
+    operation_id, effect, tenant_id, episode_id, participant_id,
+    participant_generation, publication_source, recording_id,
     request_fingerprint, request_payload, state, outcome, reason,
     created_at, dispatching_at, completed_at`
 
@@ -20,16 +20,16 @@ type providerOperationIdentityParams struct {
 type getProviderOperationReceiptParams = providerOperationIdentityParams
 
 type insertProviderOperationReceiptParams struct {
-	OperationID                  string
-	Effect                       string
-	TenantID                     pgtype.UUID
-	SessionID                    pgtype.UUID
-	ParticipantSessionID         pgtype.UUID
-	ParticipantSessionGeneration pgtype.Int8
-	PublicationSource            pgtype.Text
-	RecordingID                  pgtype.UUID
-	RequestFingerprint           []byte
-	RequestPayload               []byte
+	OperationID           string
+	Effect                string
+	TenantID              pgtype.UUID
+	EpisodeID             pgtype.UUID
+	ParticipantID         pgtype.UUID
+	ParticipantGeneration pgtype.Int8
+	PublicationSource     pgtype.Text
+	RecordingID           pgtype.UUID
+	RequestFingerprint    []byte
+	RequestPayload        []byte
 }
 
 type completeProviderOperationParams struct {
@@ -48,8 +48,8 @@ where operation_id = $1 and effect = $2`
 
 func (q *providerOperationQueries) InsertProviderOperationReceipt(ctx context.Context, arg insertProviderOperationReceiptParams) (providerOperationReceiptRow, error) {
 	query := `insert into provider_operation_receipts (
-    operation_id, effect, tenant_id, session_id, participant_session_id,
-    participant_session_generation, publication_source, recording_id,
+    operation_id, effect, tenant_id, episode_id, participant_id,
+    participant_generation, publication_source, recording_id,
     request_fingerprint, request_payload
 )
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -61,9 +61,9 @@ returning ` + providerOperationReceiptColumns
 		arg.OperationID,
 		arg.Effect,
 		arg.TenantID,
-		arg.SessionID,
-		arg.ParticipantSessionID,
-		arg.ParticipantSessionGeneration,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
 		arg.PublicationSource,
 		arg.RecordingID,
 		arg.RequestFingerprint,

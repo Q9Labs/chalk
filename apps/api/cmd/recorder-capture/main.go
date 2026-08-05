@@ -68,7 +68,7 @@ func run(dir string) error {
 	if err != nil {
 		return err
 	}
-	job := recorderworker.Job{ProtocolVersion: recorderworker.ProtocolVersion, JobID: "job-local-1", TenantID: bundle.TenantID, SessionID: "session-local-1", Attempt: 1, FencingGeneration: 1, Role: recorderworker.RoleCapture, ArtifactClass: "capture_bundle", Authorization: recorderworker.JobAuthorization{IssuedAt: now, Scope: "fixture", ExpiresAt: now.Add(30 * time.Minute)}, ObjectIntents: []recorderworker.ObjectIntent{{Key: bundle.ObjectKey, URL: "https://objects.invalid/" + bundle.ObjectKey, Method: "PUT", Conditional: "if-none-match:*", MaxBytes: int64(len(plaintext)), ExpiresAt: now.Add(30 * time.Minute), OwnerReference: bundle.RecordingID}}}
+	job := recorderworker.Job{ProtocolVersion: recorderworker.ProtocolVersion, JobID: "job-local-1", TenantID: bundle.TenantID, EpisodeID: "episode-local-1", Attempt: 1, FencingGeneration: 1, Role: recorderworker.RoleCapture, ArtifactClass: "capture_bundle", Authorization: recorderworker.JobAuthorization{IssuedAt: now, Scope: "fixture", ExpiresAt: now.Add(30 * time.Minute)}, ObjectIntents: []recorderworker.ObjectIntent{{Key: bundle.ObjectKey, URL: "https://objects.invalid/" + bundle.ObjectKey, Method: "PUT", Conditional: "if-none-match:*", MaxBytes: int64(len(plaintext)), ExpiresAt: now.Add(30 * time.Minute), OwnerReference: bundle.RecordingID}}}
 	if err := job.Validate(now); err != nil {
 		return err
 	}

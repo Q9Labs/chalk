@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../../../",
+    "paths": {
+      "@q9labsai/chalk-client": ["../client/src/index.ts"],
+      "@q9labsai/chalk-client/effect": ["../client/src/effect.ts"],
+      "@q9labsai/chalk-client/telemetry": ["../client/src/telemetry/index.ts"],
+      "@q9labsai/chalk-whiteboard/embedded": ["../../../packages/whiteboard/src/embedded/index.ts"],
+      "@q9labsai/facehash": ["../../../packages/facehash/src/index.native.ts"],
+      "@q9labsai/facehash/react-native": ["../../../packages/facehash/src/index.native.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
+}

@@ -77,14 +77,18 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteMembershipListViewer(ctx)
 	case RouteMembershipUpdateOwnerScenario:
 		return runRouteMembershipUpdateOwner(ctx)
-	case RouteRoomCreateMemberScenario:
-		return runRouteRoomCreateMember(ctx)
-	case RouteSessionCreateMemberScenario:
-		return runRouteSessionCreateMember(ctx)
-	case RouteSessionEndMemberScenario:
-		return runRouteSessionEndMember(ctx)
-	case RouteSessionSyncTokenScenario:
-		return runRouteSessionSyncToken(ctx)
+	case RouteSpaceCreateMemberScenario:
+		return runRouteSpaceCreateMember(ctx)
+	case RouteEpisodeCreateMemberScenario:
+		return runRouteEpisodeCreateMember(ctx)
+	case RouteEpisodeAdmitMemberScenario:
+		return runRouteEpisodeAdmitMember(ctx)
+	case RouteEpisodeRemoveParticipantScenario:
+		return runRouteEpisodeRemoveParticipant(ctx)
+	case RouteEpisodeEndScenario:
+		return runRouteEpisodeEnd(ctx)
+	case RouteEpisodeDeadlineScenario:
+		return runRouteEpisodeDeadline(ctx)
 	case RouteRecordingTranscribeScenario:
 		return runRouteRecordingTranscribe(ctx)
 	case RouteJourneyEventIntakeScenario:
@@ -435,8 +439,8 @@ type tracedTenantAuthorizer struct {
 func (a tracedTenantAuthorizer) AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
 	decision := "allow"
 	var err error
-	if permission.MinimumRole == memberships.RoleAdmin {
-		decision = "deny_admin_check"
+	if permission.MinimumRole == memberships.RoleOwner {
+		decision = "deny_owner_check"
 		err = authorization.ErrForbidden
 	}
 	a.recorder.Add("authorization", "AuthorizeTenant", "evaluate tenant permission", map[string]any{

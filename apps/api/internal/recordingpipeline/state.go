@@ -71,24 +71,24 @@ func ValidateTransition(from, to State) error {
 }
 
 type CapturePlacement struct {
-	MeetingsPerNode     int
+	EpisodesPerNode     int
 	ParticipantsPerNode int
 	InputMbpsPerNode    int
 	ReadySpare          int
 }
 
-func DesiredCaptureNodes(meetings, participants int, inputBitrateBPS int64, placement CapturePlacement) int {
-	if meetings <= 0 && participants <= 0 && inputBitrateBPS <= 0 {
+func DesiredCaptureNodes(episodes, participants int, inputBitrateBPS int64, placement CapturePlacement) int {
+	if episodes <= 0 && participants <= 0 && inputBitrateBPS <= 0 {
 		return 0
 	}
-	if placement.MeetingsPerNode <= 0 || placement.ParticipantsPerNode <= 0 || placement.InputMbpsPerNode <= 0 {
+	if placement.EpisodesPerNode <= 0 || placement.ParticipantsPerNode <= 0 || placement.InputMbpsPerNode <= 0 {
 		return 0
 	}
-	meetingNodes := ceilDiv(meetings, placement.MeetingsPerNode)
+	episodeNodes := ceilDiv(episodes, placement.EpisodesPerNode)
 	participantNodes := ceilDiv(participants, placement.ParticipantsPerNode)
 	bitrateMbps := int((inputBitrateBPS + 999_999) / 1_000_000)
 	bitrateNodes := ceilDiv(bitrateMbps, placement.InputMbpsPerNode)
-	nodes := meetingNodes
+	nodes := episodeNodes
 	if participantNodes > nodes {
 		nodes = participantNodes
 	}
@@ -98,8 +98,8 @@ func DesiredCaptureNodes(meetings, participants int, inputBitrateBPS int64, plac
 	return nodes + placement.ReadySpare
 }
 
-func CanAdmit(meetings, participants int, inputBitrateBPS int64) bool {
-	return meetings >= 0 && meetings <= MaximumMeetings &&
+func CanAdmit(episodes, participants int, inputBitrateBPS int64) bool {
+	return episodes >= 0 && episodes <= MaximumEpisodes &&
 		participants >= 0 && participants <= MaximumParticipants &&
 		inputBitrateBPS >= 0 && inputBitrateBPS <= MaximumInputBitrateTotalBPS
 }

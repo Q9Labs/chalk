@@ -152,8 +152,8 @@ type signalingPlaneStub struct {
 	closeResponse CloseTracksResponse
 }
 
-func (s *signalingPlaneStub) EnsureSession(context.Context, EnsureSessionInput) (Session, error) {
-	return Session{}, nil
+func (s *signalingPlaneStub) EnsureEpisode(context.Context, EnsureEpisodeInput) (Episode, error) {
+	return Episode{}, nil
 }
 
 func (s *signalingPlaneStub) CreateJoin(context.Context, CreateJoinInput) (Join, error) {
@@ -164,11 +164,11 @@ func (s *signalingPlaneStub) RemoveParticipant(context.Context, RemoveParticipan
 	return nil
 }
 
-func (s *signalingPlaneStub) EndSession(context.Context, EndSessionInput) error {
+func (s *signalingPlaneStub) EndEpisode(context.Context, EndEpisodeInput) error {
 	return nil
 }
 
-func (s *signalingPlaneStub) SessionUsage(context.Context, SessionUsageInput) (Usage, error) {
+func (s *signalingPlaneStub) EpisodeUsage(context.Context, EpisodeUsageInput) (Usage, error) {
 	return Usage{}, nil
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CHALK_CHAT_ATTACHMENT_LIMITS } from "../room-actions/types";
+import { CHALK_CHAT_ATTACHMENT_LIMITS } from "../collaboration/types";
 import { createChalkChatFileHttpTransport } from "./http-transport";
 
 describe("chat attachment HTTP transport", () => {
@@ -93,13 +93,18 @@ describe("chat attachment HTTP transport", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed and denied responses with typed failures", async () => {
+  it("rejects malformed, stale-access, and permission-denied responses with typed failures", async () => {
     const malformed = createChalkChatFileHttpTransport({
       baseUrl: "https://api.chalk.test",
       token: async () => "token",
       fetch: async () => Response.json({ attachmentId: "attachment-only" }),
     });
-    const denied = createChalkChatFileHttpTransport({
+    const unauthenticated = createChalkChatFileHttpTransport({
+      baseUrl: "https://api.chalk.test",
+      token: async () => "token",
+      fetch: async () => Response.json({ error: { code: "access.unauthenticated", message: "Authentication required" } }, { status: 401 }),
+    });
+    const forbidden = createChalkChatFileHttpTransport({
       baseUrl: "https://api.chalk.test",
       token: async () => "token",
       fetch: async () => Response.json({}, { status: 403 }),
@@ -114,6 +119,7 @@ describe("chat attachment HTTP transport", () => {
         sha256: "a".repeat(64),
       }),
     ).rejects.toMatchObject({ code: "file_transfer_failed" });
-    await expect(denied.getDownloadUrl("attachment-1")).rejects.toMatchObject({ code: "permission_denied", recoverable: false });
+    await expect(unauthenticated.getDownloadUrl("attachment-1")).rejects.toMatchObject({ code: "access.invalid", recoverable: false });
+    await expect(forbidden.getDownloadUrl("attachment-1")).rejects.toMatchObject({ code: "permission_denied", recoverable: false });
   });
 });

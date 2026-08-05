@@ -46,6 +46,18 @@ describe("ChalkWhiteboardController", () => {
     expect(renderer.sent.join(" ")).not.toContain("token");
     expect(renderer.sent.join(" ")).not.toContain("uploadUrl");
 
+    transport.emit({
+      type: "cursor",
+      participantId: "participant-1",
+      displayName: "Grace",
+      x: 24,
+      y: 48,
+      occurredAt: "2026-08-04T08:00:00.000Z",
+    });
+    const cursor = hostMessages(renderer).at(-1);
+    if (!cursor || cursor.type !== "apply_cursor") throw new Error("expected a renderer cursor");
+    expect(cursor.payload).toEqual({ type: "cursor", participantId: "participant-1", displayName: "Grace", x: 24, y: 48, occurredAt: "2026-08-04T08:00:00.000Z" });
+
     controller.stop();
     expect(transport.stopSceneSubscription).toHaveBeenCalledOnce();
   });

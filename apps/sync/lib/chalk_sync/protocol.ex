@@ -12,6 +12,8 @@ defmodule ChalkSync.ProtocolV1 do
   @inbound_frame_bytes @limits["decodedInboundFrameBytes"]
   @replay_page_events @limits["replayPageMaxEvents"]
   @replay_page_bytes @limits["replayPageEncodedBytes"]
+  @correlation_reserved_bytes @limits["correlationReservedBytes"]
+  @replay_page_producer_bytes @replay_page_bytes - @correlation_reserved_bytes
   @error_detail_bytes @limits["protocolErrorDetailBytes"]
 
   def decode(text)
@@ -46,8 +48,8 @@ defmodule ChalkSync.ProtocolV1 do
     base = %{
       "type" => "welcome",
       "protocol" => 1,
-      "participant_session_id" => identity.participant_session_id,
-      "participant_session_generation" => identity.participant_session_generation,
+      "participant_id" => identity.participant_id,
+      "participant_generation" => identity.participant_generation,
       "recovery_id" => recovery_id,
       "head" => head(recovery.head),
       "mode" => Atom.to_string(recovery.mode)
@@ -63,7 +65,7 @@ defmodule ChalkSync.ProtocolV1 do
           )
 
         :terminal ->
-          Map.put(base, "reason", Atom.to_string(recovery.terminal_reason || :session_ended))
+          Map.put(base, "reason", Atom.to_string(recovery.terminal_reason || :episode_ended))
 
         mode when mode in [:replay, :up_to_date] ->
           base
@@ -71,7 +73,7 @@ defmodule ChalkSync.ProtocolV1 do
 
     frame =
       case options do
-        %{room_actions_extension: extension} when is_map(extension) ->
+        %{collaboration_extension: extension} when is_map(extension) ->
           Map.put(frame, "extensions", [extension])
 
         _options ->
@@ -93,7 +95,7 @@ defmodule ChalkSync.ProtocolV1 do
       "events" => frames
     }
 
-    if frame |> JSON.encode!() |> byte_size() <= @replay_page_bytes,
+    if frame |> JSON.encode!() |> byte_size() <= @replay_page_producer_bytes,
       do: {:ok, encode!(frame), List.last(frames)["revision"]},
       else: {:error, :replay_page_too_large}
   end
@@ -214,6 +216,7 @@ defmodule ChalkSync.ProtocolV1 do
           %{
             token: token,
             streams: streams,
+            correlation: correlation,
             extensions: [
               %{
                 "name" => extension,
@@ -225,15 +228,23 @@ defmodule ChalkSync.ProtocolV1 do
             ]
           }}
        ) do
-    normalize_hello(token, streams, %{
-      extension: extension,
-      after_sequence: after_sequence,
-      retained_floor_sequence: retained_floor_sequence
-    })
+    normalize_hello(
+      token,
+      streams,
+      correlation,
+      %{
+        extension: extension,
+        after_sequence: after_sequence,
+        retained_floor_sequence: retained_floor_sequence
+      }
+    )
   end
 
+  defp normalize({:hello, %{token: token, streams: streams, correlation: correlation}}),
+    do: normalize_hello(token, streams, correlation, nil)
+
   defp normalize({:hello, %{token: token, streams: streams}}),
-    do: normalize_hello(token, streams, nil)
+    do: normalize_hello(token, streams, %{}, nil)
 
   defp normalize({:operation, operation}) do
     {:ok,
@@ -248,12 +259,12 @@ defmodule ChalkSync.ProtocolV1 do
 
   defp normalize(frame), do: {:ok, frame}
 
-  defp normalize_hello(token, streams, room_actions) do
+  defp normalize_hello(token, streams, correlation, collaboration) do
     cursor = streams["control"]["cursor"]
 
     case cursor do
       nil ->
-        {:ok, {:hello, hello(token, nil, room_actions)}}
+        {:ok, {:hello, hello(token, nil, correlation, collaboration)}}
 
       cursor ->
         with {:ok, decoded} <- Base.decode16(cursor["state_digest"], case: :lower) do
@@ -263,24 +274,25 @@ defmodule ChalkSync.ProtocolV1 do
             digest: decoded
           }
 
-          {:ok, {:hello, hello(token, normalized_cursor, room_actions)}}
+          {:ok, {:hello, hello(token, normalized_cursor, correlation, collaboration)}}
         end
     end
   end
 
-  defp hello(token, cursor, nil), do: %{token: token, cursor: cursor}
+  defp hello(token, cursor, correlation, nil),
+    do: %{token: token, cursor: cursor, correlation: correlation}
 
-  defp hello(token, cursor, room_actions),
-    do: %{token: token, cursor: cursor, room_actions: room_actions}
+  defp hello(token, cursor, correlation, collaboration),
+    do: %{token: token, cursor: cursor, correlation: correlation, collaboration: collaboration}
 
-  defp normalize_operation_payload(name, %{"participant_session_id" => id})
+  defp normalize_operation_payload(name, %{"participant_id" => id})
        when name in [
               :mute_participant,
               :stop_participant_camera,
               :stop_participant_screen_share,
               :remove_participant
             ],
-       do: %{"participantSessionId" => id}
+       do: %{"participantId" => id}
 
   defp normalize_operation_payload(name, %{"admission_request_id" => id})
        when name in [:admit_participant, :deny_admission],
@@ -290,20 +302,20 @@ defmodule ChalkSync.ProtocolV1 do
        when name in [:start_recording, :stop_recording],
        do: %{"recordingId" => id}
 
+  defp normalize_operation_payload(:extend_episode, %{"extension_seconds" => seconds}),
+    do: %{"extensionSeconds" => seconds}
+
   defp normalize_operation_payload(_name, payload), do: payload
 
   defp normalize_command_payload(:set_display_name, %{"display_name" => display_name}),
     do: %{"displayName" => display_name}
 
-  defp normalize_command_payload(:set_participant_role, payload) do
+  defp normalize_command_payload(:assign_roles, payload) do
     %{
-      "participantSessionId" => payload["participant_session_id"],
+      "participantId" => payload["participant_id"],
       "role" => payload["role"]
     }
   end
-
-  defp normalize_command_payload(:transfer_host, %{"participant_session_id" => participant_id}),
-    do: %{"participantSessionId" => participant_id}
 
   defp normalize_command_payload(_name, payload), do: payload
 

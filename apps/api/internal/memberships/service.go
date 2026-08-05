@@ -20,10 +20,9 @@ var (
 type Role string
 
 const (
-	RoleOwner  Role = "owner"
-	RoleAdmin  Role = "admin"
-	RoleMember Role = "member"
-	RoleViewer Role = "viewer"
+	RoleOwner        Role = "owner"
+	RoleCollaborator Role = "collaborator"
+	RoleObserver     Role = "observer"
 )
 
 type Membership struct {
@@ -129,7 +128,7 @@ func prepareCreateMembershipInput(input *CreateMembershipInput) error {
 
 func validRole(role Role) bool {
 	switch role {
-	case RoleOwner, RoleAdmin, RoleMember, RoleViewer:
+	case RoleOwner, RoleCollaborator, RoleObserver:
 		return true
 	default:
 		return false

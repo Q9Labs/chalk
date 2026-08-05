@@ -26,10 +26,10 @@ func TestIssueCreatesVerifiableBoundToken(t *testing.T) {
 	}
 
 	token, err := service.Issue(context.Background(), synctokens.Input{
-		TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), RoomID: mustID(t, "22222222-2222-4222-8222-222222222222"),
-		SessionID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444"),
+		TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), SpaceID: mustID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444"),
 		ParticipantGeneration: 1, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Ada",
-		InitialRole: "host", EligibleRoles: []string{"participant", "cohost", "host"},
+		Role: "host", Capabilities: []string{"publishAudio", "subscribe"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,15 +54,18 @@ func TestIssueCreatesVerifiableBoundToken(t *testing.T) {
 	if claims["iss"] != "https://api.chalk.test" || claims["aud"] != "chalk-sync" || claims["display_name"] != "Ada" {
 		t.Fatalf("claims = %#v", claims)
 	}
-	if claims["initial_role"] != "host" {
-		t.Fatalf("initial_role = %#v", claims["initial_role"])
+	if claims["role"] != "host" {
+		t.Fatalf("role = %#v", claims["role"])
 	}
-	eligible, ok := claims["eligible_roles"].([]any)
-	if !ok || len(eligible) != 3 || eligible[0] != "host" || eligible[1] != "cohost" || eligible[2] != "participant" {
-		t.Fatalf("eligible_roles = %#v", claims["eligible_roles"])
+	capabilities, ok := claims["capabilities"].([]any)
+	if !ok || len(capabilities) != 2 || capabilities[0] != "publishAudio" || capabilities[1] != "subscribe" {
+		t.Fatalf("capabilities = %#v", claims["capabilities"])
 	}
-	if _, exists := claims["capabilities"]; exists {
-		t.Fatalf("token contains forbidden capabilities claim: %#v", claims)
+	if _, exists := claims["initial_role"]; exists {
+		t.Fatalf("token contains legacy initial_role claim: %#v", claims)
+	}
+	if _, exists := claims["eligible_roles"]; exists {
+		t.Fatalf("token contains legacy eligible_roles claim: %#v", claims)
 	}
 	if token.ExpiresAt.Sub(now) != synctokens.Lifetime {
 		t.Fatalf("lifetime = %s", token.ExpiresAt.Sub(now))
@@ -84,12 +87,12 @@ func TestBrokerRefreshesFromPersistedSubject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := synctokens.SubjectKey{TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), RoomID: mustID(t, "22222222-2222-4222-8222-222222222222"), SessionID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444")}
+	key := synctokens.SubjectKey{TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), SpaceID: mustID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444")}
 	repository := subjectRepositoryFunc(func(_ context.Context, got synctokens.SubjectKey) (synctokens.Input, error) {
 		if got != key {
 			t.Fatalf("subject key = %#v", got)
 		}
-		return synctokens.Input{TenantID: key.TenantID, RoomID: key.RoomID, SessionID: key.SessionID, ParticipantID: key.ParticipantID, ParticipantGeneration: 2, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Persisted", InitialRole: "cohost", EligibleRoles: []string{"cohost", "participant"}}, nil
+		return synctokens.Input{TenantID: key.TenantID, SpaceID: key.SpaceID, EpisodeID: key.EpisodeID, ParticipantID: key.ParticipantID, ParticipantGeneration: 2, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Persisted", Role: "cohost", Capabilities: []string{"sendChat", "subscribe"}}, nil
 	})
 
 	token, err := synctokens.NewBroker(repository, signer).IssueForParticipant(context.Background(), key)
@@ -105,15 +108,22 @@ func TestBrokerRefreshesFromPersistedSubject(t *testing.T) {
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		t.Fatal(err)
 	}
-	if claims["initial_role"] != "cohost" || claims["participant_session_generation"] != float64(2) || claims["admission_lifecycle_intent_id"] != "55555555-5555-4555-8555-555555555555" {
+	if claims["role"] != "cohost" || claims["participant_generation"] != float64(2) || claims["admission_lifecycle_intent_id"] != "55555555-5555-4555-8555-555555555555" {
 		t.Fatalf("refreshed claims = %#v", claims)
 	}
-	if _, exists := claims["capabilities"]; exists {
-		t.Fatalf("refreshed token contains forbidden capabilities claim: %#v", claims)
+	capabilities, ok := claims["capabilities"].([]any)
+	if !ok || len(capabilities) != 2 || capabilities[0] != "sendChat" || capabilities[1] != "subscribe" {
+		t.Fatalf("refreshed capabilities = %#v", claims["capabilities"])
+	}
+	if _, exists := claims["initial_role"]; exists {
+		t.Fatalf("refreshed token contains legacy initial_role claim: %#v", claims)
+	}
+	if _, exists := claims["eligible_roles"]; exists {
+		t.Fatalf("refreshed token contains legacy eligible_roles claim: %#v", claims)
 	}
 }
 
-func TestIssueRejectsMalformedAuthorityEnvelope(t *testing.T) {
+func TestIssueRejectsMalformedRoleOrCapabilities(t *testing.T) {
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -123,26 +133,26 @@ func TestIssueRejectsMalformedAuthorityEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := synctokens.Input{
-		TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), RoomID: mustID(t, "22222222-2222-4222-8222-222222222222"),
-		SessionID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444"),
+		TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), SpaceID: mustID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444"),
 		ParticipantGeneration: 1, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Ada",
 	}
 	tests := []struct {
-		role     string
-		eligible []string
+		role         string
+		capabilities []string
 	}{
-		{role: "moderator", eligible: []string{"participant"}},
-		{role: "participant", eligible: nil},
-		{role: "participant", eligible: []string{"cohost"}},
-		{role: "participant", eligible: []string{"participant", "participant"}},
-		{role: "host", eligible: []string{"host"}},
+		{role: "", capabilities: []string{"subscribe"}},
+		{role: " role ", capabilities: []string{"subscribe"}},
+		{role: "participant", capabilities: []string{"unknownCapability"}},
+		{role: "participant", capabilities: []string{"subscribe", "subscribe"}},
+		{role: "participant", capabilities: []string{" sendChat"}},
 	}
 	for _, test := range tests {
 		input := base
-		input.InitialRole = test.role
-		input.EligibleRoles = test.eligible
+		input.Role = test.role
+		input.Capabilities = test.capabilities
 		if _, err := service.Issue(context.Background(), input); err != synctokens.ErrInvalidInput {
-			t.Fatalf("role %q eligible %#v error = %v", test.role, test.eligible, err)
+			t.Fatalf("role %q capabilities %#v error = %v", test.role, test.capabilities, err)
 		}
 	}
 }

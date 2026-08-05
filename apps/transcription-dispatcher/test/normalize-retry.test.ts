@@ -31,9 +31,9 @@ describe("normalization and fallback", () => {
   it("maps one source epoch once and marks overlap without borrowing another track", () => {
     const document = normalizeTranscriptChunk({
       jobId: "job",
-      sessionId: "session",
-      meetingStartMs: 0,
-      meetingEndMs: 2_000,
+      episodeId: "episode",
+      episodeStartMs: 0,
+      episodeEndMs: 2_000,
       manifest: {
         schemaVersion: "manifest.v1",
         turns: [
@@ -47,13 +47,14 @@ describe("normalization and fallback", () => {
       sourceIdentity: { kind: "participant", participantId: "p", trackEpoch: "epoch-1" },
       sourceTrackClass: "microphone",
     });
+    expect(document.episodeId).toBe("episode");
     expect(document.cues.map((cue) => cue.identity)).toEqual([{ kind: "participant", participantId: "p", trackEpoch: "epoch-1" }]);
     expect(document.cues[0]?.overlap).toBe(true);
     const reconnect = normalizeTranscriptChunk({
       jobId: "job",
-      sessionId: "session",
-      meetingStartMs: 1_000,
-      meetingEndMs: 2_000,
+      episodeId: "episode",
+      episodeStartMs: 1_000,
+      episodeEndMs: 2_000,
       manifest: { schemaVersion: "manifest.v1", turns: [{ startMs: 1_000, endMs: 2_000, identity: { kind: "participant", participantId: "p", trackEpoch: "epoch-2" }, trackClass: "microphone", displayNameSnapshot: "Local", overlap: false }] },
       provider: { ...result, segments: [{ startSeconds: 0, endSeconds: 1, text: "reconnected" }] },
       attempt: 2,
@@ -67,9 +68,9 @@ describe("normalization and fallback", () => {
   it("preserves every provider word once across a cue", () => {
     const document = normalizeTranscriptChunk({
       jobId: "job",
-      sessionId: "session",
-      meetingStartMs: 0,
-      meetingEndMs: 1_000,
+      episodeId: "episode",
+      episodeStartMs: 0,
+      episodeEndMs: 1_000,
       manifest: { schemaVersion: "manifest.v1", turns: [{ startMs: 0, endMs: 1_000, identity: { kind: "participant", participantId: "p", trackEpoch: "epoch-1" }, trackClass: "microphone", overlap: false }] },
       provider: {
         ...result,
@@ -92,9 +93,9 @@ describe("normalization and fallback", () => {
   it("preserves segments with mixed provider word coverage", () => {
     const document = normalizeTranscriptChunk({
       jobId: "job",
-      sessionId: "session",
-      meetingStartMs: 0,
-      meetingEndMs: 1_000,
+      episodeId: "episode",
+      episodeStartMs: 0,
+      episodeEndMs: 1_000,
       manifest: { schemaVersion: "manifest.v1", turns: [{ startMs: 0, endMs: 1_000, identity: { kind: "unknown" }, trackClass: "unknown", overlap: false }] },
       provider: {
         ...result,

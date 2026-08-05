@@ -7,26 +7,26 @@ import (
 	"time"
 )
 
-func TestServiceEnsureSessionValidatesAndDelegates(t *testing.T) {
+func TestServiceEnsureEpisodeValidatesAndDelegates(t *testing.T) {
 	plane := &planeStub{
-		session: Session{Provider: ProviderCloudflareRTK, Ref: "meeting_123"},
+		episode: Episode{Provider: ProviderCloudflareRTK, Ref: "episode_123"},
 	}
 	service := NewService(plane)
 
-	session, err := service.EnsureSession(context.Background(), EnsureSessionInput{
+	episode, err := service.EnsureEpisode(context.Background(), EnsureEpisodeInput{
 		Provider:   ProviderCloudflareRTK,
-		SessionKey: " session_123 ",
+		EpisodeKey: " episode_123 ",
 		Title:      " Weekly sync ",
 	})
 	if err != nil {
-		t.Fatalf("ensure session: %v", err)
+		t.Fatalf("ensure episode: %v", err)
 	}
 
-	if session.Ref != "meeting_123" {
-		t.Fatalf("session ref = %q, want meeting_123", session.Ref)
+	if episode.Ref != "episode_123" {
+		t.Fatalf("episode ref = %q, want episode_123", episode.Ref)
 	}
-	if plane.ensureInput.SessionKey != "session_123" {
-		t.Fatalf("session key = %q, want trimmed value", plane.ensureInput.SessionKey)
+	if plane.ensureInput.EpisodeKey != "episode_123" {
+		t.Fatalf("episode key = %q, want trimmed value", plane.ensureInput.EpisodeKey)
 	}
 	if plane.ensureInput.Title != "Weekly sync" {
 		t.Fatalf("title = %q, want trimmed value", plane.ensureInput.Title)
@@ -46,9 +46,9 @@ func TestServiceCreateJoinValidatesAndDelegates(t *testing.T) {
 
 	join, err := service.CreateJoin(context.Background(), CreateJoinInput{
 		Provider: ProviderCloudflareRTK,
-		Session: Session{
+		Episode: Episode{
 			Provider: ProviderCloudflareRTK,
-			Ref:      " meeting_123 ",
+			Ref:      " episode_123 ",
 		},
 		ParticipantName:       " Ada ",
 		ExternalParticipantID: " user_123 ",
@@ -61,8 +61,8 @@ func TestServiceCreateJoinValidatesAndDelegates(t *testing.T) {
 	if join.ParticipantRef != "participant_123" {
 		t.Fatalf("participant ref = %q, want participant_123", join.ParticipantRef)
 	}
-	if plane.joinInput.Session.Ref != "meeting_123" {
-		t.Fatalf("session ref = %q, want trimmed value", plane.joinInput.Session.Ref)
+	if plane.joinInput.Episode.Ref != "episode_123" {
+		t.Fatalf("episode ref = %q, want trimmed value", plane.joinInput.Episode.Ref)
 	}
 	if plane.joinInput.ParticipantName != "Ada" {
 		t.Fatalf("participant name = %q, want trimmed value", plane.joinInput.ParticipantName)
@@ -88,9 +88,9 @@ func TestServiceResumeJoinValidatesAndDelegates(t *testing.T) {
 
 	join, err := service.ResumeJoin(context.Background(), ResumeJoinInput{
 		Provider: ProviderCloudflareSFU,
-		Session: Session{
+		Episode: Episode{
 			Provider: ProviderCloudflareSFU,
-			Ref:      " session_123 ",
+			Ref:      " episode_123 ",
 		},
 		ExternalParticipantID: " participant_123 ",
 		ConnectionRef:         " connection_123 ",
@@ -101,7 +101,7 @@ func TestServiceResumeJoinValidatesAndDelegates(t *testing.T) {
 	if join.ParticipantRef != "participant_123" {
 		t.Fatalf("participant ref = %q, want participant_123", join.ParticipantRef)
 	}
-	if plane.resumeInput.Session.Ref != "session_123" || plane.resumeInput.ExternalParticipantID != "participant_123" || plane.resumeInput.ConnectionRef != "connection_123" {
+	if plane.resumeInput.Episode.Ref != "episode_123" || plane.resumeInput.ExternalParticipantID != "participant_123" || plane.resumeInput.ConnectionRef != "connection_123" {
 		t.Fatalf("resume input = %#v, want trimmed exact refs", plane.resumeInput)
 	}
 }
@@ -116,37 +116,37 @@ func TestServiceResumeJoinRejectsInvalidInputAndUnsupportedPlane(t *testing.T) {
 			name: "provider mismatch",
 			input: ResumeJoinInput{
 				Provider:              ProviderCloudflareRTK,
-				Session:               Session{Provider: ProviderCloudflareRTK, Ref: "session_123"},
+				Episode:               Episode{Provider: ProviderCloudflareRTK, Ref: "episode_123"},
 				ExternalParticipantID: "participant_123",
 				ConnectionRef:         "connection_123",
 			},
 			want: ErrInvalidProvider,
 		},
 		{
-			name: "session provider mismatch",
+			name: "episode provider mismatch",
 			input: ResumeJoinInput{
 				Provider:              ProviderCloudflareSFU,
-				Session:               Session{Provider: ProviderCloudflareRTK, Ref: "session_123"},
+				Episode:               Episode{Provider: ProviderCloudflareRTK, Ref: "episode_123"},
 				ExternalParticipantID: "participant_123",
 				ConnectionRef:         "connection_123",
 			},
 			want: ErrInvalidProvider,
 		},
 		{
-			name: "missing session",
+			name: "missing episode",
 			input: ResumeJoinInput{
 				Provider:              ProviderCloudflareSFU,
-				Session:               Session{Provider: ProviderCloudflareSFU},
+				Episode:               Episode{Provider: ProviderCloudflareSFU},
 				ExternalParticipantID: "participant_123",
 				ConnectionRef:         "connection_123",
 			},
-			want: ErrInvalidSessionRef,
+			want: ErrInvalidEpisodeRef,
 		},
 		{
 			name: "missing participant",
 			input: ResumeJoinInput{
 				Provider:      ProviderCloudflareSFU,
-				Session:       Session{Provider: ProviderCloudflareSFU, Ref: "session_123"},
+				Episode:       Episode{Provider: ProviderCloudflareSFU, Ref: "episode_123"},
 				ConnectionRef: "connection_123",
 			},
 			want: ErrInvalidParticipantRef,
@@ -155,7 +155,7 @@ func TestServiceResumeJoinRejectsInvalidInputAndUnsupportedPlane(t *testing.T) {
 			name: "missing connection",
 			input: ResumeJoinInput{
 				Provider:              ProviderCloudflareSFU,
-				Session:               Session{Provider: ProviderCloudflareSFU, Ref: "session_123"},
+				Episode:               Episode{Provider: ProviderCloudflareSFU, Ref: "episode_123"},
 				ExternalParticipantID: "participant_123",
 			},
 			want: ErrInvalidConnectionRef,
@@ -189,25 +189,25 @@ func TestServiceRejectsInvalidInputs(t *testing.T) {
 		{
 			name: "ensure invalid provider",
 			run: func() error {
-				_, err := service.EnsureSession(context.Background(), EnsureSessionInput{Provider: "other", SessionKey: "session_123"})
+				_, err := service.EnsureEpisode(context.Background(), EnsureEpisodeInput{Provider: "other", EpisodeKey: "episode_123"})
 				return err
 			},
 			want: ErrInvalidProvider,
 		},
 		{
-			name: "ensure blank session key",
+			name: "ensure blank episode key",
 			run: func() error {
-				_, err := service.EnsureSession(context.Background(), EnsureSessionInput{Provider: ProviderCloudflareRTK})
+				_, err := service.EnsureEpisode(context.Background(), EnsureEpisodeInput{Provider: ProviderCloudflareRTK})
 				return err
 			},
-			want: ErrInvalidSessionKey,
+			want: ErrInvalidEpisodeKey,
 		},
 		{
 			name: "join mismatched provider",
 			run: func() error {
 				_, err := service.CreateJoin(context.Background(), CreateJoinInput{
 					Provider: ProviderCloudflareRTK,
-					Session:  Session{Provider: ProviderCloudflareSFU, Ref: "session_123"},
+					Episode:  Episode{Provider: ProviderCloudflareSFU, Ref: "episode_123"},
 				})
 				return err
 			},
@@ -218,7 +218,7 @@ func TestServiceRejectsInvalidInputs(t *testing.T) {
 			run: func() error {
 				_, err := service.CreateJoin(context.Background(), CreateJoinInput{
 					Provider:          ProviderCloudflareRTK,
-					Session:           Session{Provider: ProviderCloudflareRTK, Ref: "session_123"},
+					Episode:           Episode{Provider: ProviderCloudflareRTK, Ref: "episode_123"},
 					ParticipantPreset: "contributor",
 				})
 				return err
@@ -230,7 +230,7 @@ func TestServiceRejectsInvalidInputs(t *testing.T) {
 			run: func() error {
 				_, err := service.CreateJoin(context.Background(), CreateJoinInput{
 					Provider:        ProviderCloudflareRTK,
-					Session:         Session{Provider: ProviderCloudflareRTK, Ref: "session_123"},
+					Episode:         Episode{Provider: ProviderCloudflareRTK, Ref: "episode_123"},
 					ParticipantName: "Ada",
 				})
 				return err
@@ -242,25 +242,25 @@ func TestServiceRejectsInvalidInputs(t *testing.T) {
 			run: func() error {
 				return service.RemoveParticipant(context.Background(), RemoveParticipantInput{
 					Provider:   ProviderCloudflareRTK,
-					SessionRef: "session_123",
+					EpisodeRef: "episode_123",
 				})
 			},
 			want: ErrInvalidParticipantRef,
 		},
 		{
-			name: "end missing session ref",
+			name: "end missing episode ref",
 			run: func() error {
-				return service.EndSession(context.Background(), EndSessionInput{Provider: ProviderCloudflareRTK})
+				return service.EndEpisode(context.Background(), EndEpisodeInput{Provider: ProviderCloudflareRTK})
 			},
-			want: ErrInvalidSessionRef,
+			want: ErrInvalidEpisodeRef,
 		},
 		{
-			name: "usage missing session ref",
+			name: "usage missing episode ref",
 			run: func() error {
-				_, err := service.SessionUsage(context.Background(), SessionUsageInput{Provider: ProviderCloudflareRTK})
+				_, err := service.EpisodeUsage(context.Background(), EpisodeUsageInput{Provider: ProviderCloudflareRTK})
 				return err
 			},
-			want: ErrInvalidSessionRef,
+			want: ErrInvalidEpisodeRef,
 		},
 	}
 
@@ -276,9 +276,9 @@ func TestServiceRejectsInvalidInputs(t *testing.T) {
 func TestServiceRejectsMissingPlane(t *testing.T) {
 	service := NewService(nil)
 
-	_, err := service.EnsureSession(context.Background(), EnsureSessionInput{
+	_, err := service.EnsureEpisode(context.Background(), EnsureEpisodeInput{
 		Provider:   ProviderCloudflareRTK,
-		SessionKey: "session_123",
+		EpisodeKey: "episode_123",
 	})
 	if !errors.Is(err, ErrPlaneUnavailable) {
 		t.Fatalf("error = %v, want %v", err, ErrPlaneUnavailable)
@@ -286,9 +286,9 @@ func TestServiceRejectsMissingPlane(t *testing.T) {
 }
 
 type planeStub struct {
-	ensureInput EnsureSessionInput
+	ensureInput EnsureEpisodeInput
 	joinInput   CreateJoinInput
-	session     Session
+	episode     Episode
 	join        Join
 }
 
@@ -303,9 +303,9 @@ func (p *resumePlaneStub) ResumeJoin(_ context.Context, input ResumeJoinInput) (
 	return p.join, nil
 }
 
-func (p *planeStub) EnsureSession(_ context.Context, input EnsureSessionInput) (Session, error) {
+func (p *planeStub) EnsureEpisode(_ context.Context, input EnsureEpisodeInput) (Episode, error) {
 	p.ensureInput = input
-	return p.session, nil
+	return p.episode, nil
 }
 
 func (p *planeStub) CreateJoin(_ context.Context, input CreateJoinInput) (Join, error) {
@@ -317,10 +317,10 @@ func (p *planeStub) RemoveParticipant(context.Context, RemoveParticipantInput) e
 	return nil
 }
 
-func (p *planeStub) EndSession(context.Context, EndSessionInput) error {
+func (p *planeStub) EndEpisode(context.Context, EndEpisodeInput) error {
 	return nil
 }
 
-func (p *planeStub) SessionUsage(context.Context, SessionUsageInput) (Usage, error) {
+func (p *planeStub) EpisodeUsage(context.Context, EpisodeUsageInput) (Usage, error) {
 	return Usage{}, nil
 }

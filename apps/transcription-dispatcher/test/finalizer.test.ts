@@ -24,7 +24,7 @@ function chunkDocument(overrides: Partial<NormalizedTranscriptDocument> = {}): N
   return {
     schemaVersion: "transcript.v1",
     jobId: "job",
-    sessionId: "session",
+    episodeId: "episode",
     cues: [{ startMs: 0, endMs: 100, identity: { kind: "unknown" }, trackClass: "unknown", text: "hello", overlap: false, provider: "cloudflare", model: "model", versionContract: "cf-1", attempt: 1 }],
     language: "en",
     provider: "cloudflare",
@@ -40,7 +40,7 @@ function assignment(chunks: Array<{ id: string; start: number; end: number; docu
   return {
     jobId: "job",
     transcriptId: "transcript",
-    sessionId: "session",
+    episodeId: "episode",
     attempt: 1,
     leaseToken: "lease",
     leaseExpiresAt: expiry,
@@ -53,8 +53,8 @@ function assignment(chunks: Array<{ id: string; start: number; end: number; docu
         inputContentType: "application/json",
         inputSizeBytes: bytes.byteLength,
         inputSha256: createHash("sha256").update(bytes).digest("hex"),
-        meetingStartMs: start,
-        meetingEndMs: end,
+        episodeStartMs: start,
+        episodeEndMs: end,
       };
     }),
     outputPutUrl: "https://r2.example/final",
@@ -162,7 +162,7 @@ describe("final transcript artifact dispatcher", () => {
     ]);
     const merged = mergeTranscriptDocuments({
       jobId: current.jobId,
-      sessionId: current.sessionId,
+      episodeId: current.episodeId,
       attempt: current.attempt,
       chunks: current.chunks.map((chunk, index) => ({ assignment: chunk, document: index === 0 ? first : second })),
     });
@@ -193,7 +193,7 @@ describe("final transcript artifact dispatcher", () => {
     const started = performance.now();
     const merged = mergeTranscriptDocuments({
       jobId: current.jobId,
-      sessionId: current.sessionId,
+      episodeId: current.episodeId,
       attempt: current.attempt,
       chunks: current.chunks.map((chunk, index) => ({ assignment: chunk, document: index === 0 ? first : second })),
     });

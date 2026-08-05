@@ -10,19 +10,19 @@ defmodule ChalkSync.Stateholder.Memory do
 
   use GenServer
 
-  @sessions __MODULE__.Sessions
+  @episodes __MODULE__.Episodes
 
+  alias ChalkSync.Episodes.Reducer
   alias ChalkSync.ProtocolV1
-  alias ChalkSync.Sessions.Reducer
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Decision
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.LifecycleDecision
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Recovery
-  alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.UUID
 
   def start_link(opts) do
@@ -45,26 +45,26 @@ defmodule ChalkSync.Stateholder.Memory do
   end
 
   @doc false
-  def recover(%SessionKey{} = session, cursor),
-    do: GenServer.call(__MODULE__, {:recover_session, session, cursor})
+  def recover(%EpisodeKey{} = episode, cursor),
+    do: GenServer.call(__MODULE__, {:recover_episode, episode, cursor})
 
   @impl ChalkSync.Stateholder
-  def recover_session(%SessionKey{} = session, cursor), do: recover(session, cursor)
+  def recover_episode(%EpisodeKey{} = episode, cursor), do: recover(episode, cursor)
 
   @impl ChalkSync.Stateholder
-  def recovery_page(%SessionKey{} = session, after_revision, through_revision) do
+  def recovery_page(%EpisodeKey{} = episode, after_revision, through_revision) do
     GenServer.call(
       __MODULE__,
-      {:recovery_page, session, after_revision, through_revision}
+      {:recovery_page, episode, after_revision, through_revision}
     )
   end
 
   @impl ChalkSync.Stateholder
-  def apply_lifecycle_intent(%SessionKey{} = session, lifecycle_intent_id),
-    do: GenServer.call(__MODULE__, {:apply_lifecycle_intent, session, lifecycle_intent_id})
+  def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id),
+    do: GenServer.call(__MODULE__, {:apply_lifecycle_intent, episode, lifecycle_intent_id})
 
   @impl ChalkSync.Stateholder
-  def record_lifecycle_failure(_session, _lifecycle_intent_id, _reason), do: :ok
+  def record_lifecycle_failure(_episode, _lifecycle_intent_id, _reason), do: :ok
 
   @impl ChalkSync.Stateholder
   def pending_lifecycle_intents(_limit), do: {:ok, []}
@@ -74,8 +74,8 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:begin_operation, identity, operation})
 
   @impl ChalkSync.Stateholder
-  def begin_internal_operation(%SessionKey{} = session, %Operation{} = operation),
-    do: GenServer.call(__MODULE__, {:begin_internal_operation, session, operation})
+  def begin_internal_operation(%EpisodeKey{} = episode, %Operation{} = operation),
+    do: GenServer.call(__MODULE__, {:begin_internal_operation, episode, operation})
 
   @impl ChalkSync.Stateholder
   def claim_operations(limit), do: GenServer.call(__MODULE__, {:claim_operations, limit})
@@ -85,19 +85,19 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:claim_local_operations, limit})
 
   @impl ChalkSync.Stateholder
-  def read_operation(%SessionKey{} = session, external_operation_id),
-    do: GenServer.call(__MODULE__, {:read_operation, session, external_operation_id})
+  def read_operation(%EpisodeKey{} = episode, external_operation_id),
+    do: GenServer.call(__MODULE__, {:read_operation, episode, external_operation_id})
 
   @impl ChalkSync.Stateholder
-  def finalize_operation(%SessionKey{} = session, external_operation_id, outcome),
-    do: GenServer.call(__MODULE__, {:finalize_operation, session, external_operation_id, outcome})
+  def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome),
+    do: GenServer.call(__MODULE__, {:finalize_operation, episode, external_operation_id, outcome})
 
   @impl ChalkSync.Stateholder
-  def participant_authority(%SessionKey{} = session, participant_session_id, expected_generation),
+  def participant_authority(%EpisodeKey{} = episode, participant_id, expected_generation),
     do:
       GenServer.call(
         __MODULE__,
-        {:participant_authority, session, participant_session_id, expected_generation}
+        {:participant_authority, episode, participant_id, expected_generation}
       )
 
   @impl ChalkSync.Stateholder
@@ -105,48 +105,48 @@ defmodule ChalkSync.Stateholder.Memory do
     do: {:retryable, :dependency_unavailable}
 
   @impl ChalkSync.Stateholder
-  def complete_publication_grant(_session, _reservation_id, _outcome),
+  def complete_publication_grant(_episode, _reservation_id, _outcome),
     do: {:retryable, :dependency_unavailable}
 
   @impl ChalkSync.Stateholder
   def begin_role_transition(identity, command, _publications),
     do: decide_command(identity, command)
 
-  @doc "Seeds one deterministic Session for adapter conformance tests."
-  def seed_session(%SessionKey{} = session, participants \\ []) when is_list(participants) do
-    GenServer.call(__MODULE__, {:seed_session, session, participants})
+  @doc "Seeds one deterministic Episode for adapter conformance tests."
+  def seed_episode(%EpisodeKey{} = episode, participants \\ []) when is_list(participants) do
+    GenServer.call(__MODULE__, {:seed_episode, episode, participants})
   end
 
   @doc false
-  def seed_admission_request(%SessionKey{} = session, payload),
-    do: GenServer.call(__MODULE__, {:seed_admission_request, session, payload})
+  def seed_admission_request(%EpisodeKey{} = episode, payload),
+    do: GenServer.call(__MODULE__, {:seed_admission_request, episode, payload})
 
-  @doc "Test helper: drops all in-memory session state."
+  @doc "Test helper: drops all in-memory episode state."
   def reset do
     GenServer.call(__MODULE__, :reset)
   end
 
   @impl GenServer
   def init(_opts) do
-    :ets.new(@sessions, [:named_table, :protected, read_concurrency: true])
+    :ets.new(@episodes, [:named_table, :protected, read_concurrency: true])
     {:ok, %{}}
   end
 
   @impl GenServer
   def handle_call(:reset, _from, s) do
-    :ets.delete_all_objects(@sessions)
+    :ets.delete_all_objects(@episodes)
     {:reply, :ok, s}
   end
 
-  def handle_call({:seed_session, session, participants}, _from, server_state) do
-    authority_key = SessionKey.authority_key(session)
+  def handle_call({:seed_episode, episode, participants}, _from, server_state) do
+    authority_key = EpisodeKey.authority_key(episode)
 
-    if :ets.member(@sessions, authority_key) do
+    if :ets.member(@episodes, authority_key) do
       {:reply, {:error, :already_exists}, server_state}
     else
-      case seeded_session(session, participants) do
+      case seeded_episode(episode, participants) do
         {:ok, state} ->
-          :ets.insert(@sessions, {authority_key, state})
+          :ets.insert(@episodes, {authority_key, state})
           {:reply, :ok, server_state}
 
         {:error, reason} ->
@@ -155,20 +155,20 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  def handle_call({:seed_admission_request, session_key, payload}, _from, server_state) do
-    key = SessionKey.authority_key(session_key)
+  def handle_call({:seed_admission_request, episode_key, payload}, _from, server_state) do
+    key = EpisodeKey.authority_key(episode_key)
 
-    case :ets.lookup(@sessions, key) do
-      [{^key, session}] ->
-        case Reducer.apply_lifecycle(session.state, :admission_requested, payload) do
+    case :ets.lookup(@episodes, key) do
+      [{^key, episode}] ->
+        case Reducer.apply_lifecycle(episode.state, :admission_requested, payload) do
           {:ok, event, state} ->
             next = %{
-              session
+              episode
               | state: state,
-                events: :queue.in(memory_event(event, nil, nil, state), session.events)
+                events: :queue.in(memory_event(event, nil, nil, state), episode.events)
             }
 
-            :ets.insert(@sessions, {key, next})
+            :ets.insert(@episodes, {key, next})
             {:reply, :ok, server_state}
 
           error ->
@@ -176,45 +176,45 @@ defmodule ChalkSync.Stateholder.Memory do
         end
 
       [] ->
-        {:reply, {:error, :session_not_found}, server_state}
+        {:reply, {:error, :episode_not_found}, server_state}
     end
   end
 
   def handle_call(
-        {:participant_authority, session_key, participant_session_id, expected_generation},
+        {:participant_authority, episode_key, participant_id, expected_generation},
         _from,
         server_state
       ) do
-    key = SessionKey.authority_key(session_key)
-    participant_session_id = normalize_id(participant_session_id)
+    key = EpisodeKey.authority_key(episode_key)
+    participant_id = normalize_id(participant_id)
 
     reply =
-      case :ets.lookup(@sessions, key) do
-        [{^key, %{state: %{status: "active"}} = session}] ->
-          memory_participant_authority(session, participant_session_id, expected_generation)
+      case :ets.lookup(@episodes, key) do
+        [{^key, %{state: %{status: "active"}} = episode}] ->
+          memory_participant_authority(episode, participant_id, expected_generation)
 
-        [{^key, _session}] ->
-          {:error, :session_ended}
+        [{^key, _episode}] ->
+          {:error, :episode_ended}
 
         [] ->
-          {:error, :session_not_found}
+          {:error, :episode_not_found}
       end
 
     {:reply, reply, server_state}
   end
 
   def handle_call({:decide_command, identity, command}, _from, server_state) do
-    authority_key = SessionKey.authority_key(identity.session)
+    authority_key = EpisodeKey.authority_key(identity.episode)
 
     reply =
-      case :ets.lookup(@sessions, authority_key) do
-        [{^authority_key, session}] -> decide(session, identity, command)
+      case :ets.lookup(@episodes, authority_key) do
+        [{^authority_key, episode}] -> decide(episode, identity, command)
         [] -> {:retryable, :dependency_unavailable}
       end
 
     case reply do
-      {:ok, decision, session} ->
-        :ets.insert(@sessions, {authority_key, session})
+      {:ok, decision, episode} ->
+        :ets.insert(@episodes, {authority_key, episode})
         {:reply, {:ok, decision}, server_state}
 
       other ->
@@ -223,13 +223,13 @@ defmodule ChalkSync.Stateholder.Memory do
   end
 
   def handle_call({:begin_operation, identity, operation}, _from, server_state) do
-    authority_key = SessionKey.authority_key(identity.session)
+    authority_key = EpisodeKey.authority_key(identity.episode)
 
-    case :ets.lookup(@sessions, authority_key) do
-      [{^authority_key, session}] ->
-        case begin_memory_operation(session, identity, operation) do
+    case :ets.lookup(@episodes, authority_key) do
+      [{^authority_key, episode}] ->
+        case begin_memory_operation(episode, identity, operation) do
           {:ok, decision, next} ->
-            :ets.insert(@sessions, {authority_key, next})
+            :ets.insert(@episodes, {authority_key, next})
             {:reply, {:ok, decision}, server_state}
 
           {:ok, decision} ->
@@ -241,14 +241,14 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  def handle_call({:begin_internal_operation, session_key, operation}, _from, server_state) do
-    authority_key = SessionKey.authority_key(session_key)
+  def handle_call({:begin_internal_operation, episode_key, operation}, _from, server_state) do
+    authority_key = EpisodeKey.authority_key(episode_key)
 
-    case :ets.lookup(@sessions, authority_key) do
-      [{^authority_key, session}] ->
-        case begin_memory_internal_operation(session, operation) do
+    case :ets.lookup(@episodes, authority_key) do
+      [{^authority_key, episode}] ->
+        case begin_memory_internal_operation(episode, operation) do
           {:ok, decision, next} ->
-            :ets.insert(@sessions, {authority_key, next})
+            :ets.insert(@episodes, {authority_key, next})
             {:reply, {:ok, decision}, server_state}
 
           other ->
@@ -256,7 +256,7 @@ defmodule ChalkSync.Stateholder.Memory do
         end
 
       [] ->
-        {:reply, {:error, :session_not_found}, server_state}
+        {:reply, {:error, :episode_not_found}, server_state}
     end
   end
 
@@ -267,19 +267,19 @@ defmodule ChalkSync.Stateholder.Memory do
     claim_memory_operations(server_state, limit, fn operation ->
       operation.name in [
         :participant_leave,
-        :end_session,
-        :tenant_end_session,
+        :end_episode,
+        :tenant_end_episode,
         :maximum_duration_expired
       ]
     end)
   end
 
-  def handle_call({:read_operation, session_key, external_operation_id}, _from, server_state) do
-    key = SessionKey.authority_key(session_key)
+  def handle_call({:read_operation, episode_key, external_operation_id}, _from, server_state) do
+    key = EpisodeKey.authority_key(episode_key)
 
     reply =
-      with [{^key, session}] <- :ets.lookup(@sessions, key),
-           %{^external_operation_id => operation} <- session.operations do
+      with [{^key, episode}] <- :ets.lookup(@episodes, key),
+           %{^external_operation_id => operation} <- episode.operations do
         {:ok, operation}
       else
         _ -> :not_found
@@ -289,17 +289,17 @@ defmodule ChalkSync.Stateholder.Memory do
   end
 
   def handle_call(
-        {:finalize_operation, session_key, external_operation_id, outcome},
+        {:finalize_operation, episode_key, external_operation_id, outcome},
         _from,
         server_state
       ) do
-    key = SessionKey.authority_key(session_key)
+    key = EpisodeKey.authority_key(episode_key)
 
-    case :ets.lookup(@sessions, key) do
-      [{^key, session}] ->
-        case finalize_memory_operation(session, external_operation_id, outcome) do
+    case :ets.lookup(@episodes, key) do
+      [{^key, episode}] ->
+        case finalize_memory_operation(episode, external_operation_id, outcome) do
           {:ok, decision, next} ->
-            :ets.insert(@sessions, {key, next})
+            :ets.insert(@episodes, {key, next})
             {:reply, {:ok, decision}, server_state}
 
           error ->
@@ -307,16 +307,16 @@ defmodule ChalkSync.Stateholder.Memory do
         end
 
       [] ->
-        {:reply, {:error, :session_not_found}, server_state}
+        {:reply, {:error, :episode_not_found}, server_state}
     end
   end
 
   def handle_call({:resolve_receipt, identity, command}, _from, server_state) do
-    authority_key = SessionKey.authority_key(identity.session)
+    authority_key = EpisodeKey.authority_key(identity.episode)
 
     reply =
-      case :ets.lookup(@sessions, authority_key) do
-        [{^authority_key, session}] -> receipt_decision(session, identity, command)
+      case :ets.lookup(@episodes, authority_key) do
+        [{^authority_key, episode}] -> receipt_decision(episode, identity, command)
         [] -> {:retryable, :dependency_unavailable}
       end
 
@@ -324,41 +324,41 @@ defmodule ChalkSync.Stateholder.Memory do
   end
 
   def handle_call({:recover, identity, cursor}, _from, server_state) do
-    authority_key = SessionKey.authority_key(identity.session)
+    authority_key = EpisodeKey.authority_key(identity.episode)
 
     reply =
-      case :ets.lookup(@sessions, authority_key) do
-        [{^authority_key, session}] -> recover_identity(session, identity, cursor)
-        [] -> {:error, :session_not_found}
+      case :ets.lookup(@episodes, authority_key) do
+        [{^authority_key, episode}] -> recover_identity(episode, identity, cursor)
+        [] -> {:error, :episode_not_found}
       end
 
     {:reply, reply, server_state}
   end
 
-  def handle_call({:recover_session, session_key, cursor}, _from, server_state) do
-    authority_key = SessionKey.authority_key(session_key)
+  def handle_call({:recover_episode, episode_key, cursor}, _from, server_state) do
+    authority_key = EpisodeKey.authority_key(episode_key)
 
     reply =
-      case :ets.lookup(@sessions, authority_key) do
-        [{^authority_key, session}] -> {:ok, recovery(session, cursor)}
-        [] -> {:error, :session_not_found}
+      case :ets.lookup(@episodes, authority_key) do
+        [{^authority_key, episode}] -> {:ok, recovery(episode, cursor)}
+        [] -> {:error, :episode_not_found}
       end
 
     {:reply, reply, server_state}
   end
 
   def handle_call(
-        {:recovery_page, session_key, after_revision, through_revision},
+        {:recovery_page, episode_key, after_revision, through_revision},
         _from,
         server_state
       ) do
-    authority_key = SessionKey.authority_key(session_key)
+    authority_key = EpisodeKey.authority_key(episode_key)
 
     reply =
-      case :ets.lookup(@sessions, authority_key) do
-        [{^authority_key, session}] ->
+      case :ets.lookup(@episodes, authority_key) do
+        [{^authority_key, episode}] ->
           events =
-            session.events
+            episode.events
             |> :queue.to_list()
             |> Enum.filter(&(&1.revision > after_revision and &1.revision <= through_revision))
             |> bounded_recovery_page()
@@ -366,26 +366,26 @@ defmodule ChalkSync.Stateholder.Memory do
           {:ok, events}
 
         [] ->
-          {:error, :session_not_found}
+          {:error, :episode_not_found}
       end
 
     {:reply, reply, server_state}
   end
 
   def handle_call(
-        {:apply_lifecycle_intent, session_key, lifecycle_intent_id},
+        {:apply_lifecycle_intent, episode_key, lifecycle_intent_id},
         _from,
         server_state
       ) do
-    authority_key = SessionKey.authority_key(session_key)
+    authority_key = EpisodeKey.authority_key(episode_key)
 
     reply =
-      case :ets.lookup(@sessions, authority_key) do
-        [{^authority_key, session}] ->
-          lifecycle_decision(session, lifecycle_intent_id)
+      case :ets.lookup(@episodes, authority_key) do
+        [{^authority_key, episode}] ->
+          lifecycle_decision(episode, lifecycle_intent_id)
 
         [] ->
-          {:error, :session_not_found}
+          {:error, :episode_not_found}
       end
 
     {:reply, reply, server_state}
@@ -393,24 +393,24 @@ defmodule ChalkSync.Stateholder.Memory do
 
   defp claim_memory_operations(server_state, limit, operation_filter) do
     operations =
-      @sessions
+      @episodes
       |> :ets.tab2list()
-      |> Enum.flat_map(fn {_key, session} ->
-        session.operations
+      |> Enum.flat_map(fn {_key, episode} ->
+        episode.operations
         |> Map.values()
         |> Enum.filter(&(&1.status == :pending and operation_filter.(&1)))
-        |> Enum.map(&{session.session, &1})
+        |> Enum.map(&{episode.episode, &1})
       end)
-      |> Enum.sort_by(fn {_session, operation} -> operation.external_operation_id end)
+      |> Enum.sort_by(fn {_episode, operation} -> operation.external_operation_id end)
       |> Enum.take(limit)
 
     {:reply, {:ok, operations}, server_state}
   end
 
-  defp lifecycle_decision(session, lifecycle_intent_id) do
+  defp lifecycle_decision(episode, lifecycle_intent_id) do
     lifecycle_intent_id = normalize_id(lifecycle_intent_id)
 
-    if lifecycle_intent_applied?(session, lifecycle_intent_id) do
+    if lifecycle_intent_applied?(episode, lifecycle_intent_id) do
       {:ok,
        %LifecycleDecision{
          lifecycle_intent_id: lifecycle_intent_id,
@@ -421,32 +421,32 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp lifecycle_intent_applied?(session, lifecycle_intent_id) do
-    Enum.any?(session.participants, fn {_id, participant} ->
+  defp lifecycle_intent_applied?(episode, lifecycle_intent_id) do
+    Enum.any?(episode.participants, fn {_id, participant} ->
       participant.admission_lifecycle_intent_id == lifecycle_intent_id and
         participant.status == :active
     end)
   end
 
-  defp seeded_session(session_key, participants) do
+  defp seeded_episode(episode_key, participants) do
     initial = %{
-      session: session_key,
-      state: Reducer.new(session_key.session_id),
+      episode: episode_key,
+      state: Reducer.new(episode_key.episode_id),
       participants: %{},
       receipts: %{},
       operations: %{},
       events: :queue.new()
     }
 
-    Enum.reduce_while(participants, {:ok, initial}, fn participant, {:ok, session} ->
-      case seed_participant(session, participant) do
+    Enum.reduce_while(participants, {:ok, initial}, fn participant, {:ok, episode} ->
+      case seed_participant(episode, participant) do
         {:ok, next} -> {:cont, {:ok, next}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
 
-  defp seed_participant(session, participant) do
+  defp seed_participant(episode, participant) do
     with %{id: raw_id, generation: generation, display_name: display_name} <- participant,
          id = normalize_id(raw_id),
          true <- is_binary(id) and is_integer(generation) and generation > 0,
@@ -454,36 +454,28 @@ defmodule ChalkSync.Stateholder.Memory do
            Map.get(
              participant,
              :role,
-             if(map_size(session.participants) == 0, do: "host", else: "participant")
-           ),
-         eligible_roles =
-           Map.get(
-             participant,
-             :eligible_roles,
-             if(role == "host", do: ["host", "cohost", "participant"], else: [role])
+             if(map_size(episode.participants) == 0, do: "owner", else: "observer")
            ),
          {:ok, event, state} <-
-           Reducer.apply_lifecycle(session.state, :participant_joined, %{
-             "participant_session_id" => id,
+           Reducer.apply_lifecycle(episode.state, :participant_joined, %{
+             "participant_id" => id,
              "display_name" => display_name,
              "role" => role,
-             "eligible_roles" => eligible_roles,
-             "admission_revision" => session.state.revision + 1
+             "admission_revision" => episode.state.revision + 1
            }) do
       product = %{
         generation: generation,
         status: :active,
         role: role,
-        eligible_roles: eligible_roles,
         admission_lifecycle_intent_id:
           participant |> Map.get(:admission_lifecycle_intent_id) |> normalize_id()
       }
 
       next = %{
-        session
+        episode
         | state: state,
-          participants: Map.put(session.participants, id, product),
-          events: :queue.in(memory_event(event, nil, nil, state), session.events)
+          participants: Map.put(episode.participants, id, product),
+          events: :queue.in(memory_event(event, nil, nil, state), episode.events)
       }
 
       {:ok, next}
@@ -492,38 +484,38 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp decide(session, identity, command) do
-    case receipt_decision(session, identity, command) do
-      {:ok, decision} -> {:ok, decision, session}
-      :not_found -> decide_new(session, identity, command)
+  defp decide(episode, identity, command) do
+    case receipt_decision(episode, identity, command) do
+      {:ok, decision} -> {:ok, decision, episode}
+      :not_found -> decide_new(episode, identity, command)
     end
   end
 
-  defp decide_new(session, identity, command) do
-    with {:ok, participant} <- active_participant(session, identity),
-         :ok <- capability(session, identity, participant, command.name) do
-      persist_reducer_decision(session, identity, command)
+  defp decide_new(episode, identity, command) do
+    with {:ok, participant} <- active_participant(episode, identity),
+         :ok <- capability(episode, identity, participant, command.name) do
+      persist_reducer_decision(episode, identity, command)
     else
-      {:error, reason} -> persist_rejection(session, identity, command, reason)
+      {:error, reason} -> persist_rejection(episode, identity, command, reason)
     end
   end
 
-  defp persist_reducer_decision(session, identity, command) do
+  defp persist_reducer_decision(episode, identity, command) do
     case Reducer.decide_command(
-           session.state,
-           normalize_id(identity.participant_session_id),
+           episode.state,
+           normalize_id(identity.participant_id),
            command.name,
            command.payload
          ) do
-      {:change, event, state} -> persist_commit(session, identity, command, event, state)
-      {:satisfied, state} -> persist_satisfied(session, identity, command, state)
-      {:error, reason} -> persist_rejection(session, identity, command, normalize_reason(reason))
+      {:change, event, state} -> persist_commit(episode, identity, command, event, state)
+      {:satisfied, state} -> persist_satisfied(episode, identity, command, state)
+      {:error, reason} -> persist_rejection(episode, identity, command, normalize_reason(reason))
     end
   end
 
-  defp begin_memory_operation(session, identity, operation) do
+  defp begin_memory_operation(episode, identity, operation) do
     existing =
-      Enum.find(Map.values(session.operations), fn candidate ->
+      Enum.find(Map.values(episode.operations), fn candidate ->
         candidate.name == operation.name and candidate.request_key == operation.request_key
       end)
 
@@ -540,13 +532,13 @@ defmodule ChalkSync.Stateholder.Memory do
         {:ok, operation_decision(existing, :duplicate)}
 
       true ->
-        begin_new_memory_operation(session, identity, operation)
+        begin_new_memory_operation(episode, identity, operation)
     end
   end
 
-  defp begin_memory_internal_operation(session, operation) do
+  defp begin_memory_internal_operation(episode, operation) do
     existing =
-      Enum.find(Map.values(session.operations), fn candidate ->
+      Enum.find(Map.values(episode.operations), fn candidate ->
         candidate.name == operation.name and candidate.request_key == operation.request_key
       end)
 
@@ -557,16 +549,15 @@ defmodule ChalkSync.Stateholder.Memory do
            request_key: operation.request_key,
            result: :command_id_conflict,
            reason: :command_id_conflict
-         }, session}
+         }, episode}
 
       existing ->
-        {:ok, operation_decision(existing, :duplicate), session}
+        {:ok, operation_decision(existing, :duplicate), episode}
 
       operation.name in [
         :admission_request_expired,
-        :tenant_transfer_host,
         :tenant_set_deadline,
-        :tenant_end_session,
+        :tenant_end_episode,
         :maximum_duration_expired
       ] ->
         external_operation_id = UUID.generate()
@@ -583,8 +574,8 @@ defmodule ChalkSync.Stateholder.Memory do
         }
 
         next = %{
-          session
-          | operations: Map.put(session.operations, external_operation_id, external)
+          episode
+          | operations: Map.put(episode.operations, external_operation_id, external)
         }
 
         {:ok, operation_decision(external, :original), next}
@@ -594,10 +585,10 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp begin_new_memory_operation(session, identity, operation) do
-    with {:ok, participant} <- active_participant(session, identity),
-         :ok <- capability(session, identity, participant, operation.name),
-         {:ok, target} <- operation_target(session, identity, operation) do
+  defp begin_new_memory_operation(episode, identity, operation) do
+    with {:ok, participant} <- active_participant(episode, identity),
+         :ok <- capability(episode, identity, participant, operation.name),
+         {:ok, target} <- operation_target(episode, identity, operation) do
       external_operation_id = UUID.generate()
       observed = operation.observed_context
 
@@ -609,18 +600,20 @@ defmodule ChalkSync.Stateholder.Memory do
         payload: operation.payload,
         status: :pending,
         attempt_count: 0,
-        actor_participant_session_id: normalize_id(identity.participant_session_id),
-        actor_generation: identity.participant_session_generation,
-        target_participant_session_id: target && target.id,
+        actor_participant_id: normalize_id(identity.participant_id),
+        actor_generation: identity.participant_generation,
+        target_participant_id: target && target.id,
         target_participant_generation: target && target.generation,
         recording_id: operation.payload["recordingId"],
         journey_id: observed && observed.journey_id,
         parent_journey_event_id: observed && observed.parent_journey_event_id,
         producing_trace_id: observed && observed.producing_trace_id,
-        producing_span_id: observed && observed.producing_span_id
+        producing_span_id: observed && observed.producing_span_id,
+        producing_traceparent: observed && observed.producing_traceparent,
+        producing_tracestate: observed && observed.producing_tracestate
       }
 
-      next = %{session | operations: Map.put(session.operations, external_operation_id, external)}
+      next = %{episode | operations: Map.put(episode.operations, external_operation_id, external)}
       {:ok, operation_decision(external, :original), next}
     else
       {:error, reason} ->
@@ -633,29 +626,29 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp operation_target(session, identity, %{name: :participant_leave}) do
-    id = normalize_id(identity.participant_session_id)
-    {:ok, Map.put(session.participants[id], :id, id)}
+  defp operation_target(episode, identity, %{name: :participant_leave}) do
+    id = normalize_id(identity.participant_id)
+    {:ok, Map.put(episode.participants[id], :id, id)}
   end
 
-  defp operation_target(session, _identity, %{payload: %{"participantSessionId" => raw_id}}) do
+  defp operation_target(episode, _identity, %{payload: %{"participantId" => raw_id}}) do
     id = normalize_id(raw_id)
 
-    case session.participants do
+    case episode.participants do
       %{^id => %{status: :active} = participant} -> {:ok, Map.put(participant, :id, id)}
       _ -> {:error, :invalid_target}
     end
   end
 
-  defp operation_target(_session, _identity, _operation), do: {:ok, nil}
+  defp operation_target(_episode, _identity, _operation), do: {:ok, nil}
 
-  defp finalize_memory_operation(session, external_operation_id, outcome) do
-    case session.operations do
+  defp finalize_memory_operation(episode, external_operation_id, outcome) do
+    case episode.operations do
       %{^external_operation_id => %{status: status} = operation} when status != :pending ->
-        {:ok, operation_decision(operation, :duplicate), session}
+        {:ok, operation_decision(operation, :duplicate), episode}
 
       %{^external_operation_id => operation} ->
-        do_finalize_memory_operation(session, operation, outcome)
+        do_finalize_memory_operation(episode, operation, outcome)
 
       _ ->
         {:error, :operation_not_found}
@@ -663,35 +656,35 @@ defmodule ChalkSync.Stateholder.Memory do
   end
 
   defp do_finalize_memory_operation(
-         session,
+         episode,
          %{name: name} = operation,
          {:confirmed, :local}
        )
        when name in [
               :participant_leave,
-              :end_session,
-              :tenant_end_session,
+              :end_episode,
+              :tenant_end_episode,
               :maximum_duration_expired
             ] do
-    {event_name, payload} = local_memory_outcome(operation, session.state)
-    do_finalize_memory_operation(session, operation, {:applied, event_name, payload})
+    {event_name, payload} = local_memory_outcome(operation, episode.state)
+    do_finalize_memory_operation(episode, operation, {:applied, event_name, payload})
   end
 
-  defp do_finalize_memory_operation(session, operation, {:failed, reason}) when is_atom(reason) do
+  defp do_finalize_memory_operation(episode, operation, {:failed, reason}) when is_atom(reason) do
     failed = %{operation | status: :failed, last_error_code: reason}
 
     next = %{
-      session
-      | operations: Map.put(session.operations, operation.external_operation_id, failed)
+      episode
+      | operations: Map.put(episode.operations, operation.external_operation_id, failed)
     }
 
     {:ok, operation_decision(failed, :original), next}
   end
 
-  defp do_finalize_memory_operation(session, operation, {:applied, name, payload})
+  defp do_finalize_memory_operation(episode, operation, {:applied, name, payload})
        when is_atom(name) and is_map(payload) do
     with :ok <- valid_operation_fact(operation.name, name),
-         {:ok, event, state} <- apply_operation_fact(session.state, operation, name, payload) do
+         {:ok, event, state} <- apply_operation_fact(episode.state, operation, name, payload) do
       event_id = UUID.generate()
 
       stored_event =
@@ -705,11 +698,11 @@ defmodule ChalkSync.Stateholder.Memory do
       }
 
       next = %{
-        session
+        episode
         | state: state,
-          participants: sync_product_roles(session.participants, state),
-          events: :queue.in(stored_event, session.events),
-          operations: Map.put(session.operations, operation.external_operation_id, applied)
+          participants: sync_product_roles(episode.participants, state),
+          events: :queue.in(stored_event, episode.events),
+          operations: Map.put(episode.operations, operation.external_operation_id, applied)
       }
 
       {:ok, operation_decision(applied, :original, state), next}
@@ -718,7 +711,7 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp do_finalize_memory_operation(_session, _operation, _outcome),
+  defp do_finalize_memory_operation(_episode, _operation, _outcome),
     do: {:error, :invalid_operation_outcome}
 
   defp local_memory_outcome(%{name: :participant_leave} = operation, state) do
@@ -726,25 +719,22 @@ defmodule ChalkSync.Stateholder.Memory do
       Reducer.decide_external(
         state,
         :participant_leave,
-        %{"participant_session_id" => operation.target_participant_session_id, "reason" => "left"}
+        %{"participant_id" => operation.target_participant_id, "reason" => "left"}
       )
 
     {String.to_existing_atom(event.name), event.payload}
   end
 
-  defp local_memory_outcome(%{name: :end_session}, _state),
-    do: {:session_ended, %{"reason" => "ended_by_participant"}}
+  defp local_memory_outcome(%{name: :end_episode}, _state),
+    do: {:episode_ended, %{"reason" => "ended_by_participant"}}
 
-  defp local_memory_outcome(%{name: :tenant_end_session}, _state),
-    do: {:session_ended, %{"reason" => "tenant_recovery"}}
+  defp local_memory_outcome(%{name: :tenant_end_episode}, _state),
+    do: {:episode_ended, %{"reason" => "tenant_recovery"}}
 
   defp local_memory_outcome(%{name: :maximum_duration_expired}, _state),
-    do: {:session_ended, %{"reason" => "maximum_duration"}}
+    do: {:episode_ended, %{"reason" => "maximum_duration"}}
 
   defp apply_operation_fact(state, operation, :participant_left, payload),
-    do: external_leave(state, operation, payload)
-
-  defp apply_operation_fact(state, operation, :host_left_and_transferred, payload),
     do: external_leave(state, operation, payload)
 
   defp apply_operation_fact(state, _operation, name, payload),
@@ -754,7 +744,7 @@ defmodule ChalkSync.Stateholder.Memory do
     case Reducer.decide_external(
            state,
            :participant_leave,
-           %{"participant_session_id" => operation.target_participant_session_id}
+           %{"participant_id" => operation.target_participant_id}
          ) do
       {:change, event, next} -> {:ok, event, next}
       other -> other
@@ -769,18 +759,16 @@ defmodule ChalkSync.Stateholder.Memory do
   defp valid_operation_fact(:stop_participant_screen_share, :participant_screen_share_stopped),
     do: :ok
 
-  defp valid_operation_fact(:remove_participant, name)
-       when name in [:participant_left, :host_left_and_transferred],
-       do: :ok
+  defp valid_operation_fact(:remove_participant, :participant_left),
+    do: :ok
 
-  defp valid_operation_fact(:participant_leave, name)
-       when name in [:participant_left, :host_left_and_transferred],
-       do: :ok
+  defp valid_operation_fact(:participant_leave, :participant_left),
+    do: :ok
 
-  defp valid_operation_fact(:end_session, :session_ended), do: :ok
+  defp valid_operation_fact(:end_episode, :episode_ended), do: :ok
 
-  defp valid_operation_fact(name, :session_ended)
-       when name in [:tenant_end_session, :maximum_duration_expired],
+  defp valid_operation_fact(name, :episode_ended)
+       when name in [:tenant_end_episode, :maximum_duration_expired],
        do: :ok
 
   defp valid_operation_fact(name, :recording_status_changed)
@@ -814,7 +802,7 @@ defmodule ChalkSync.Stateholder.Memory do
     |> Map.put(:resulting_state_digest, Reducer.digest(state))
   end
 
-  defp persist_commit(session, identity, command, event, state) do
+  defp persist_commit(episode, identity, command, event, state) do
     event_id = UUID.generate()
     stored_event = memory_event(event, event_id, command.id, state)
 
@@ -827,12 +815,12 @@ defmodule ChalkSync.Stateholder.Memory do
       reason: nil
     }
 
-    session = %{
-      session
+    episode = %{
+      episode
       | state: state,
-        participants: sync_product_roles(session.participants, state),
-        events: :queue.in(stored_event, session.events),
-        receipts: Map.put(session.receipts, receipt_key(identity, command), receipt)
+        participants: sync_product_roles(episode.participants, state),
+        events: :queue.in(stored_event, episode.events),
+        receipts: Map.put(episode.receipts, receipt_key(identity, command), receipt)
     }
 
     decision = %Decision{
@@ -845,10 +833,10 @@ defmodule ChalkSync.Stateholder.Memory do
       event: stored_event
     }
 
-    {:ok, decision, session}
+    {:ok, decision, episode}
   end
 
-  defp persist_satisfied(session, identity, command, state) do
+  defp persist_satisfied(episode, identity, command, state) do
     receipt = %{
       fingerprint: command.fingerprint,
       outcome: :satisfied,
@@ -858,9 +846,9 @@ defmodule ChalkSync.Stateholder.Memory do
       reason: nil
     }
 
-    session = %{
-      session
-      | receipts: Map.put(session.receipts, receipt_key(identity, command), receipt)
+    episode = %{
+      episode
+      | receipts: Map.put(episode.receipts, receipt_key(identity, command), receipt)
     }
 
     decision = %Decision{
@@ -871,10 +859,10 @@ defmodule ChalkSync.Stateholder.Memory do
       state_digest: receipt.state_digest
     }
 
-    {:ok, decision, session}
+    {:ok, decision, episode}
   end
 
-  defp persist_rejection(session, identity, command, reason) do
+  defp persist_rejection(episode, identity, command, reason) do
     receipt = %{
       fingerprint: command.fingerprint,
       outcome: :rejected,
@@ -883,18 +871,18 @@ defmodule ChalkSync.Stateholder.Memory do
       reason: reason
     }
 
-    session = %{
-      session
-      | receipts: Map.put(session.receipts, receipt_key(identity, command), receipt)
+    episode = %{
+      episode
+      | receipts: Map.put(episode.receipts, receipt_key(identity, command), receipt)
     }
 
-    {:ok, %Decision{command_id: command.id, result: :rejected, reason: reason}, session}
+    {:ok, %Decision{command_id: command.id, result: :rejected, reason: reason}, episode}
   end
 
-  defp receipt_decision(session, identity, command) do
+  defp receipt_decision(episode, identity, command) do
     key = receipt_key(identity, command)
 
-    case session.receipts do
+    case episode.receipts do
       %{^key => receipt} ->
         {:ok, decision_from_receipt(command, receipt)}
 
@@ -937,18 +925,17 @@ defmodule ChalkSync.Stateholder.Memory do
     %Decision{command_id: command.id, result: :rejected, reason: receipt.reason}
   end
 
-  defp active_participant(session, identity) do
-    participant_session_id = normalize_id(identity.participant_session_id)
-    submitted_generation = identity.participant_session_generation
+  defp active_participant(episode, identity) do
+    participant_id = normalize_id(identity.participant_id)
+    submitted_generation = identity.participant_generation
 
-    case session.participants do
+    case episode.participants do
       %{
-        ^participant_session_id =>
-          %{status: :active, generation: ^submitted_generation} = participant
+        ^participant_id => %{status: :active, generation: ^submitted_generation} = participant
       } ->
         validate_memory_admission(participant, identity)
 
-      %{^participant_session_id => %{generation: _generation}} ->
+      %{^participant_id => %{generation: _generation}} ->
         {:error, :stale_participant_generation}
 
       _ ->
@@ -956,25 +943,25 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp memory_participant_authority(session, participant_session_id, expected_generation) do
-    case session.participants do
-      %{^participant_session_id => %{status: :active, generation: generation}}
+  defp memory_participant_authority(episode, participant_id, expected_generation) do
+    case episode.participants do
+      %{^participant_id => %{status: :active, generation: generation}}
       when is_nil(expected_generation) or generation == expected_generation ->
-        case session.state.participants do
-          %{^participant_session_id => folded} ->
+        case episode.state.participants do
+          %{^participant_id => folded} ->
             {:ok,
              %{
-               participant_session_id: participant_session_id,
+               participant_id: participant_id,
                generation: generation,
                role: folded.role,
-               capabilities: Map.fetch!(session.state.role_capabilities, folded.role)
+               capabilities: Map.fetch!(episode.state.role_capabilities, folded.role)
              }}
 
           _ ->
             {:error, :participant_inactive}
         end
 
-      %{^participant_session_id => %{generation: generation}}
+      %{^participant_id => %{generation: generation}}
       when is_integer(expected_generation) and generation != expected_generation ->
         {:error, :stale_participant_generation}
 
@@ -1000,18 +987,15 @@ defmodule ChalkSync.Stateholder.Memory do
   defp validate_memory_admission(_participant, _identity),
     do: {:error, :participant_inactive}
 
-  defp capability(session, identity, _participant, name) do
-    participant_id = normalize_id(identity.participant_session_id)
-    folded_participant = session.state.participants[participant_id]
+  defp capability(episode, identity, _participant, name) do
+    participant_id = normalize_id(identity.participant_id)
+    folded_participant = episode.state.participants[participant_id]
     required = required_capability(name)
-    capabilities = Map.fetch!(session.state.role_capabilities, folded_participant.role)
+    capabilities = Map.fetch!(episode.state.role_capabilities, folded_participant.role)
 
     cond do
       name == :participant_leave ->
         :ok
-
-      name == :transfer_host and session.state.host_participant_session_id != participant_id ->
-        {:error, :capability_denied}
 
       required in capabilities ->
         :ok
@@ -1026,8 +1010,7 @@ defmodule ChalkSync.Stateholder.Memory do
 
   defp required_capability(:set_display_name), do: "renameSelf"
   defp required_capability(:set_admission_policy), do: "manageAdmission"
-  defp required_capability(:set_participant_role), do: "promoteDemote"
-  defp required_capability(:transfer_host), do: "transferHost"
+  defp required_capability(:assign_roles), do: "assignRoles"
 
   defp required_capability(name) when name in [:admit_participant, :deny_admission],
     do: "manageAdmission"
@@ -1041,18 +1024,20 @@ defmodule ChalkSync.Stateholder.Memory do
     do: "manageRecording"
 
   defp required_capability(:participant_leave), do: "self"
-  defp required_capability(:end_session), do: "endMeeting"
+  defp required_capability(:start_episode), do: "startEpisode"
+  defp required_capability(:extend_episode), do: "extendEpisode"
+  defp required_capability(:end_episode), do: "endEpisode"
 
-  defp recovery_for_cursor(session, cursor, head, protocol_version) do
+  defp recovery_for_cursor(episode, cursor, head, protocol_version) do
     cond do
       cursor_matches_head?(cursor, head) ->
         %Recovery{mode: :up_to_date, head: head, snapshot: nil, events: []}
 
-      cursor.revision < head.revision and historical_cursor_matches?(session, cursor) ->
-        replay_recovery(session, cursor.revision, head, protocol_version)
+      cursor.revision < head.revision and historical_cursor_matches?(episode, cursor) ->
+        replay_recovery(episode, cursor.revision, head, protocol_version)
 
       true ->
-        snapshot_recovery(session, protocol_version)
+        snapshot_recovery(episode, protocol_version)
     end
   end
 
@@ -1062,24 +1047,24 @@ defmodule ChalkSync.Stateholder.Memory do
       cursor.digest == head.digest
   end
 
-  defp historical_cursor_matches?(session, cursor) do
+  defp historical_cursor_matches?(episode, cursor) do
     cursor.state_schema_version == Reducer.state_schema_version() and
-      historical_digest(session, cursor.revision) == cursor.digest
+      historical_digest(episode, cursor.revision) == cursor.digest
   end
 
-  defp historical_digest(session, 0),
-    do: session.session.session_id |> Reducer.new() |> Reducer.digest()
+  defp historical_digest(episode, 0),
+    do: episode.episode.episode_id |> Reducer.new() |> Reducer.digest()
 
-  defp historical_digest(session, revision) do
-    session.events
+  defp historical_digest(episode, revision) do
+    episode.events
     |> :queue.to_list()
     |> Enum.find_value(fn event ->
       if event.revision == revision, do: event.resulting_state_digest
     end)
   end
 
-  defp replay_recovery(session, revision, head, protocol_version) do
-    retained = :queue.to_list(session.events)
+  defp replay_recovery(episode, revision, head, protocol_version) do
+    retained = :queue.to_list(episode.events)
     events = Enum.filter(retained, &(&1.revision > revision))
     oldest_revision = if match?([_ | _], retained), do: hd(retained).base_revision, else: 0
 
@@ -1093,7 +1078,7 @@ defmodule ChalkSync.Stateholder.Memory do
         replay_cursor: revision
       }
     else
-      snapshot_recovery(session, protocol_version)
+      snapshot_recovery(episode, protocol_version)
     end
   end
 
@@ -1110,54 +1095,54 @@ defmodule ChalkSync.Stateholder.Memory do
     |> Enum.reverse()
   end
 
-  defp recover_identity(session, identity, cursor) do
-    case active_participant(session, identity) do
-      {:ok, _participant} -> {:ok, recovery(session, cursor, identity.protocol_version)}
-      {:error, reason} -> {:ok, terminal_recovery(session, reason)}
+  defp recover_identity(episode, identity, cursor) do
+    case active_participant(episode, identity) do
+      {:ok, _participant} -> {:ok, recovery(episode, cursor, identity.protocol_version)}
+      {:error, reason} -> {:ok, terminal_recovery(episode, reason)}
     end
   end
 
-  defp recovery(session, cursor), do: recovery(session, cursor, 1)
+  defp recovery(episode, cursor), do: recovery(episode, cursor, 1)
 
-  defp recovery(session, nil, protocol_version),
-    do: snapshot_recovery(session, protocol_version)
+  defp recovery(episode, nil, protocol_version),
+    do: snapshot_recovery(episode, protocol_version)
 
   defp recovery(
-         session,
+         episode,
          %{revision: revision, state_schema_version: schema, digest: digest},
          protocol_version
        )
        when is_integer(revision) and revision >= 0 and is_integer(schema) and is_binary(digest) do
-    head = recovery_head(session.state)
+    head = recovery_head(episode.state)
 
     recovery_for_cursor(
-      session,
+      episode,
       %{revision: revision, state_schema_version: schema, digest: digest},
       head,
       protocol_version
     )
   end
 
-  defp recovery(session, _cursor, protocol_version),
-    do: snapshot_recovery(session, protocol_version)
+  defp recovery(episode, _cursor, protocol_version),
+    do: snapshot_recovery(episode, protocol_version)
 
-  defp snapshot_recovery(session, protocol_version) do
-    mode = if session.state.status == "ended", do: :terminal, else: :snapshot
+  defp snapshot_recovery(episode, protocol_version) do
+    mode = if episode.state.status == "ended", do: :terminal, else: :snapshot
 
     %Recovery{
       mode: mode,
-      head: recovery_head(session.state),
+      head: recovery_head(episode.state),
       snapshot:
-        if(mode == :terminal, do: nil, else: Reducer.snapshot(session.state, protocol_version)),
+        if(mode == :terminal, do: nil, else: Reducer.snapshot(episode.state, protocol_version)),
       events: [],
-      terminal_reason: if(mode == :terminal, do: :session_ended)
+      terminal_reason: if(mode == :terminal, do: :episode_ended)
     }
   end
 
-  defp terminal_recovery(session, reason) do
+  defp terminal_recovery(episode, reason) do
     %Recovery{
       mode: :terminal,
-      head: recovery_head(session.state),
+      head: recovery_head(episode.state),
       snapshot: nil,
       events: [],
       terminal_reason: reason
@@ -1182,12 +1167,11 @@ defmodule ChalkSync.Stateholder.Memory do
   end
 
   defp receipt_key(identity, command),
-    do: {normalize_id(identity.participant_session_id), command.id}
+    do: {normalize_id(identity.participant_id), command.id}
 
   defp normalize_reason(:not_joined), do: :participant_inactive
-  defp normalize_reason(:session_ended), do: :session_ended
+  defp normalize_reason(:episode_ended), do: :episode_ended
   defp normalize_reason(:invalid_target), do: :invalid_target
-  defp normalize_reason(:role_not_eligible), do: :role_not_eligible
   defp normalize_reason(_reason), do: :invalid_state
 
   defp sync_product_roles(participants, state) do

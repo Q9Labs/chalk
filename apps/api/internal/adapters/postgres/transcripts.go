@@ -82,7 +82,7 @@ func NewTranscriptRepositoryWithPool(queries transcriptQuerier, transactor trans
 func (r TranscriptRepository) Create(ctx context.Context, input transcripts.CreateInput) (transcripts.Transcript, error) {
 	transcript, err := r.queries.CreateTranscription(ctx, sqlc.CreateTranscriptionParams{
 		ID: uuid(input.ID), TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID),
-		RoomID: uuid(input.RoomID), SessionID: uuid(input.SessionID), Status: input.Status,
+		SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID), Status: input.Status,
 		Provider: text(inputPtr(input.Provider)), Model: text(inputPtr(input.Model)), Languages: input.Languages,
 		Metadata: jsonBytes(input.Metadata), SourceManifestKey: pgtype.Text{}, SourceManifestSha256: nil,
 		SourceManifestSize: pgtype.Int8{}, SourceManifestContentType: pgtype.Text{}, Generation: 1,
@@ -228,7 +228,7 @@ func (r TranscriptRepository) Request(ctx context.Context, input transcripts.Req
 		if err != nil {
 			return transcripts.Transcript{}, transcripts.Job{}, err
 		}
-		job, err := q.CreateArtifactJob(ctx, sqlc.CreateArtifactJobParams{ID: uuid(jobID), IdempotencyKey: chunkJobKey(input.IdempotencyKey, i), TenantID: uuid(input.TenantID), SessionID: row.SessionID, RecordingID: uuid(input.RecordingID), TranscriptID: uuid(transcriptID), ChunkID: uuid(utilities.IDFromBytes(chunkRow.ID.Bytes)), ArtifactKind: "transcription_chunk", PayloadSchemaVersion: 1, Priority: int32(input.Priority), AvailableAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, AttemptLimit: int32(input.AttemptLimit), JourneyID: uuid(input.JourneyID), Traceparent: text(stringPtr(input.Traceparent)), Tracestate: text(stringPtr(input.Tracestate))})
+		job, err := q.CreateArtifactJob(ctx, sqlc.CreateArtifactJobParams{ID: uuid(jobID), IdempotencyKey: chunkJobKey(input.IdempotencyKey, i), TenantID: uuid(input.TenantID), EpisodeID: row.EpisodeID, RecordingID: uuid(input.RecordingID), TranscriptID: uuid(transcriptID), ChunkID: uuid(utilities.IDFromBytes(chunkRow.ID.Bytes)), ArtifactKind: "transcription_chunk", PayloadSchemaVersion: 1, Priority: int32(input.Priority), AvailableAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, AttemptLimit: int32(input.AttemptLimit), JourneyID: uuid(input.JourneyID), Traceparent: text(stringPtr(input.Traceparent)), Tracestate: text(stringPtr(input.Tracestate))})
 		if err != nil {
 			return transcripts.Transcript{}, transcripts.Job{}, fmt.Errorf("create transcription job: %w", err)
 		}

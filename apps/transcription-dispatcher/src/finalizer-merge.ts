@@ -12,7 +12,7 @@ export interface ChunkDocument {
 
 interface MergeOptions {
   jobId: string;
-  sessionId?: string;
+  episodeId: string;
   attempt: number;
   chunks: readonly ChunkDocument[];
   maxTextChars?: number;
@@ -30,12 +30,12 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
     if (chunkIDs.has(result.assignment.chunkId)) throw new AssignmentError("finalize chunk IDs are duplicated");
     chunkIDs.add(result.assignment.chunkId);
   }
-  const ordered = [...options.chunks].sort((left, right) => left.assignment.meetingStartMs - right.assignment.meetingStartMs || left.assignment.meetingEndMs - right.assignment.meetingEndMs || left.assignment.chunkId.localeCompare(right.assignment.chunkId));
+  const ordered = [...options.chunks].sort((left, right) => left.assignment.episodeStartMs - right.assignment.episodeStartMs || left.assignment.episodeEndMs - right.assignment.episodeEndMs || left.assignment.chunkId.localeCompare(right.assignment.chunkId));
   const providers = new Set<ProviderResult["provider"]>();
   const models = new Set<string>();
   const versionContracts = new Set<string>();
   const maxTextChars = options.maxTextChars ?? MAX_TEXT_CHARS;
-  let sessionId: string | undefined = options.sessionId;
+  const episodeId = options.episodeId;
   const languages = new Set<string>();
   let measuredAudioMs = 0;
   let providerObservedDurationMs = 0;
@@ -50,8 +50,7 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
   };
 
   for (const result of ordered) {
-    const document = validateChunkDocument(result.document, result.assignment, sessionId, MAX_FINAL_CUES, maxTextChars);
-    sessionId ??= document.sessionId;
+    const document = validateChunkDocument(result.document, result.assignment, episodeId, MAX_FINAL_CUES, maxTextChars);
     if (document.provider === "mixed") throw new AssignmentError("finalize chunk provider summary is invalid");
     providers.add(document.provider);
     models.add(document.model);
@@ -74,7 +73,7 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
     }
     for (const cue of document.cues) cues.push({ ...cue, chunkId: result.assignment.chunkId });
   }
-  if (!sessionId || providers.size === 0 || models.size === 0 || versionContracts.size === 0) throw new AssignmentError("finalize metadata is incomplete");
+  if (providers.size === 0 || models.size === 0 || versionContracts.size === 0) throw new AssignmentError("finalize metadata is incomplete");
   if (cues.length > MAX_FINAL_CUES) throw new AssignmentError("finalize cue bound exceeded");
   cues.sort(compareCues);
   markCrossChunkOverlaps(cues);
@@ -90,7 +89,7 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
   return {
     schemaVersion: "transcript.v1",
     jobId: options.jobId,
-    sessionId,
+    episodeId,
     cues: cues.map(({ chunkId: _chunkId, ...cue }) => cue),
     ...(language === undefined ? {} : { language }),
     provider: providers.size === 1 ? ([...providers][0] as ProviderResult["provider"]) : "mixed",
@@ -183,17 +182,17 @@ function nextPowerOfTwo(value: number): number {
   return result;
 }
 
-function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: FinalizeChunkAssignment, expectedSessionId: string | undefined, maxCues: number, maxTextChars: number): NormalizedTranscriptDocument {
+function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: FinalizeChunkAssignment, expectedEpisodeId: string, maxCues: number, maxTextChars: number): NormalizedTranscriptDocument {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AssignmentError("finalize chunk document is invalid");
   if (value.schemaVersion !== "transcript.v1") throw new AssignmentError("finalize schema drift");
   boundedText(value.jobId, "finalize source job ID");
-  if (typeof value.sessionId !== "string" || value.sessionId.length === 0 || (expectedSessionId !== undefined && value.sessionId !== expectedSessionId)) throw new AssignmentError("finalize identity metadata conflicts");
+  if (typeof value.episodeId !== "string" || value.episodeId.length === 0 || value.episodeId !== expectedEpisodeId) throw new AssignmentError("finalize identity metadata conflicts");
   if (value.provider !== "deepinfra" && value.provider !== "cloudflare") throw new AssignmentError("finalize provider is invalid");
   boundedText(value.model, "finalize model");
   boundedText(value.versionContract, "finalize version contract");
   if (!Number.isInteger(value.attempt) || value.attempt < 0) throw new AssignmentError("finalize attempt is invalid");
-  if (!Number.isInteger(value.measuredAudioMs) || value.measuredAudioMs < 0 || value.measuredAudioMs > chunk.meetingEndMs - chunk.meetingStartMs) throw new AssignmentError("finalize measured duration is invalid");
-  if (value.providerObservedDurationMs !== undefined && (!Number.isSafeInteger(value.providerObservedDurationMs) || value.providerObservedDurationMs < 0 || value.providerObservedDurationMs > chunk.meetingEndMs - chunk.meetingStartMs))
+  if (!Number.isInteger(value.measuredAudioMs) || value.measuredAudioMs < 0 || value.measuredAudioMs > chunk.episodeEndMs - chunk.episodeStartMs) throw new AssignmentError("finalize measured duration is invalid");
+  if (value.providerObservedDurationMs !== undefined && (!Number.isSafeInteger(value.providerObservedDurationMs) || value.providerObservedDurationMs < 0 || value.providerObservedDurationMs > chunk.episodeEndMs - chunk.episodeStartMs))
     throw new AssignmentError("finalize provider duration is invalid");
   if (value.billedAudioSeconds !== undefined) throw new AssignmentError("finalize billing claim is not authoritative");
   if (value.language !== undefined) boundedText(value.language, "finalize language", 64);
@@ -213,10 +212,10 @@ function validateCue(cue: NormalizedCue, chunk: FinalizeChunkAssignment, maxText
     Array.isArray(cue) ||
     !Number.isSafeInteger(cue.startMs) ||
     !Number.isSafeInteger(cue.endMs) ||
-    !Number.isSafeInteger(chunk.meetingStartMs) ||
-    !Number.isSafeInteger(chunk.meetingEndMs) ||
-    cue.startMs < chunk.meetingStartMs ||
-    cue.endMs > chunk.meetingEndMs ||
+    !Number.isSafeInteger(chunk.episodeStartMs) ||
+    !Number.isSafeInteger(chunk.episodeEndMs) ||
+    cue.startMs < chunk.episodeStartMs ||
+    cue.endMs > chunk.episodeEndMs ||
     cue.endMs <= cue.startMs
   )
     throw new AssignmentError("finalize cue bounds are invalid");

@@ -38,6 +38,7 @@ describe("whiteboard public types", () => {
 
   it("freezes event discriminants and durable commit values", () => {
     expectTypeOf<ChalkWhiteboardV1Event["type"]>().toEqualTypeOf<"snapshot" | "update" | "cursor" | "reset_required">();
+    expectTypeOf<Extract<ChalkWhiteboardV1Event, { type: "cursor" }>["participantId"]>().toEqualTypeOf<string>();
     expectTypeOf<Extract<ChalkWhiteboardV1Event, { type: "reset_required" }>["reason"]>().toEqualTypeOf<"scene_changed" | "cursor_expired" | "gap">();
     expectTypeOf<Extract<ChalkWhiteboardV1Event, { type: "snapshot" }>["appState"]>().toEqualTypeOf<ChalkSharedWhiteboardAppState | undefined>();
     expectTypeOf<ChalkWhiteboardV1Commit>().toEqualTypeOf<{
@@ -70,6 +71,7 @@ describe("whiteboard public types", () => {
     >();
     expectTypeOf<Parameters<ChalkWhiteboardV1Transport["submitUpdate"]>[0]>().toEqualTypeOf<ChalkWhiteboardV1UpdateInput>();
     expectTypeOf<ReturnType<ChalkWhiteboardV1Transport["clear"]>>().toEqualTypeOf<Promise<ChalkWhiteboardV1Commit>>();
+    expectTypeOf<Parameters<ChalkWhiteboardV1Transport["setDrawPermission"]>>().toEqualTypeOf<[participantId: string, canDraw: boolean]>();
     expectTypeOf<ChalkWhiteboardV1Transport["files"]>().toEqualTypeOf<ChalkWhiteboardV1FileTransport>();
   });
 });

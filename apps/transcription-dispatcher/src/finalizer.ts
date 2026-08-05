@@ -84,7 +84,7 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new AssignmentError("finalize chunk document is invalid");
       documents.push({ assignment: chunk, document: parsed as NormalizedTranscriptDocument });
     }
-    const document = mergeTranscriptDocuments({ jobId: assignment.jobId, ...(assignment.sessionId === undefined ? {} : { sessionId: assignment.sessionId }), attempt: assignment.attempt, chunks: documents, maxTextChars: dependencies.config.provider.maxTextChars });
+    const document = mergeTranscriptDocuments({ jobId: assignment.jobId, episodeId: assignment.episodeId, attempt: assignment.attempt, chunks: documents, maxTextChars: dependencies.config.provider.maxTextChars });
     const languages = [...new Set(documents.flatMap(({ document: chunkDocument }) => (chunkDocument.language === undefined ? [] : [chunkDocument.language])))].sort();
     const body = new TextEncoder().encode(JSON.stringify(document));
     if (body.byteLength > dependencies.config.provider.maxResponseBytes) throw new AssignmentError("final transcript exceeded bound");

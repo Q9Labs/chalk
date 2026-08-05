@@ -10,16 +10,16 @@ defmodule ChalkSync.Application do
     children =
       [
         %{id: :pg, start: {:pg, :start_link, []}},
-        {Registry, keys: :unique, name: ChalkSync.Sessions.Registry},
-        {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Sessions.Supervisor},
+        {Registry, keys: :unique, name: ChalkSync.Episodes.Registry},
+        {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Episodes.Supervisor},
         {ChalkSync.Operations.Metrics, []},
         database_child(),
         stateholder_child(),
         observability_child(),
         {Task.Supervisor, name: ChalkSync.CommandTaskSupervisor},
-        {ChalkSync.Sessions.CommandAdmission, []},
-        {ChalkSync.RoomActions.Admission, []},
-        room_actions_fanout_child(),
+        {ChalkSync.Episodes.CommandIntake, []},
+        {ChalkSync.Admission, []},
+        collaboration_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),
         whiteboard_fanout_child(),
@@ -103,17 +103,17 @@ defmodule ChalkSync.Application do
     end
   end
 
-  defp room_actions_fanout_child do
+  defp collaboration_fanout_child do
     transport =
       case Application.fetch_env!(:chalk_sync, :stateholder) do
         ChalkSync.Stateholder.Postgres ->
-          {ChalkSync.RoomActions.Fanout.PostgresNotifications, nil}
+          {ChalkSync.Fanout.Collaboration.PostgresNotifications, nil}
 
         _adapter ->
           nil
       end
 
-    {ChalkSync.RoomActions.Fanout, transport: transport}
+    {ChalkSync.Fanout.Collaboration, transport: transport}
   end
 
   defp whiteboard_fanout_child do

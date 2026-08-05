@@ -1,6 +1,25 @@
+import { parseAccessGrant } from "../access/grant.js";
 import { ChalkAPIError } from "./errors.js";
 import { createServerRequester } from "./transport.js";
-import type { APIKeyList, APIKeyWithSecret, ChalkServerClient, ChalkServerClientOptions, CreateAPIKeyInput, IssueParticipantAccessInput, ListAPIKeysInput, ParticipantAccess, ParticipantAdmission, ParticipantRemoval } from "./types.js";
+import type {
+  APIKeyList,
+  APIKeyWithSecret,
+  AccessGrant,
+  AdmitParticipantInput,
+  ChalkServerClient,
+  ChalkServerClientOptions,
+  CreateAPIKeyInput,
+  CreateEpisodeInput,
+  CreateSpaceInput,
+  Episode,
+  EpisodeEnd,
+  IssueAccessGrantInput,
+  ListAPIKeysInput,
+  ParticipantLifecycle,
+  ParticipantRemoval,
+  RemoveParticipantInput,
+  Space,
+} from "./types.js";
 
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
   const apiKey = required(options.apiKey, "apiKey");
@@ -13,40 +32,40 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   const request = createServerRequester(options, apiKey, apiBaseURL, fetchImplementation);
 
   return {
-    rooms: {
-      create: (input) => request({ method: "POST", path: `${tenantPath}/rooms`, body: input, expectedStatus: 201, retry: "never" }),
+    spaces: {
+      create: (input) => request<Space>({ method: "POST", path: `${tenantPath}/spaces`, body: createSpaceRequest(input), expectedStatus: 201, retry: "never" }),
     },
-    sessions: {
-      create: (roomId, input, idempotency) => request({ method: "POST", path: `${tenantPath}/rooms/${segment(roomId)}/sessions`, body: input, expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
-      end: (roomId, sessionId, idempotency) => request({ method: "POST", path: `${tenantPath}/rooms/${segment(roomId)}/sessions/${segment(sessionId)}/end`, expectedStatus: 202, idempotency, retry: "caller_idempotency" }),
+    episodes: {
+      create: (spaceId, input, idempotency) => request<Episode>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/episodes`, body: createEpisodeRequest(input), expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
+      end: (spaceId, episodeId, idempotency) => request<EpisodeEnd>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/end`, expectedStatus: 202, idempotency, retry: "caller_idempotency" }),
     },
     participants: {
-      admit: async (roomId, sessionId, input, idempotency) => {
-        const lifecycle = await request<ParticipantAdmissionWire>({
+      admit: async (spaceId, episodeId, input, idempotency) => {
+        const lifecycle = await request<ParticipantLifecycleWire>({
           method: "POST",
-          path: `${tenantPath}/rooms/${segment(roomId)}/sessions/${segment(sessionId)}/participants`,
-          body: input,
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants`,
+          body: participantAdmissionRequest(input),
           expectedStatus: 201,
           idempotency,
           retry: "caller_idempotency",
         });
-        return participantAdmission(lifecycle);
+        return participantLifecycle(lifecycle);
       },
-      issueAccess: async (roomId, sessionId, participantSessionId, input) => {
-        const access = await request<ParticipantAccessWire>({
+      issueAccess: async (spaceId, episodeId, participantId, input) => {
+        const access = await request<AccessGrantWire>({
           method: "POST",
-          path: `${tenantPath}/rooms/${segment(roomId)}/sessions/${segment(sessionId)}/participants/${segment(participantSessionId)}/access`,
-          body: participantAccessRequest(input),
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants/${segment(participantId)}/access-grant`,
+          body: accessGrantRequest(input),
           expectedStatus: 201,
           retry: input.replaceMediaConnection === true ? "never" : "always",
         });
-        return participantAccess(access);
+        return accessGrant(access);
       },
-      remove: (roomId, sessionId, participantSessionId, input, idempotency) =>
+      remove: (spaceId, episodeId, participantId, input, idempotency) =>
         request<ParticipantRemoval>({
           method: "POST",
-          path: `${tenantPath}/rooms/${segment(roomId)}/sessions/${segment(sessionId)}/participants/${segment(participantSessionId)}/remove`,
-          body: { participant_session_generation: input.participantSessionGeneration },
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants/${segment(participantId)}/remove`,
+          body: participantRemovalRequest(input),
           expectedStatus: 202,
           idempotency,
           retry: "caller_idempotency",
@@ -61,12 +80,47 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   };
 }
 
-function participantAccessRequest(input: IssueParticipantAccessInput): Record<string, unknown> {
+function createSpaceRequest(input: CreateSpaceInput): Record<string, unknown> {
   return {
-    participant_session_generation: input.participantSessionGeneration,
+    default_episode_duration_seconds: input.defaultEpisodeDurationSeconds,
+    linger_window_seconds: input.lingerWindowSeconds,
+    maximum_episode_duration_seconds: input.maximumEpisodeDurationSeconds,
+    media_plane: input.mediaPlane,
+    name: input.name,
+    slug: input.slug,
+    ...(input.admissionPolicy === undefined ? {} : { admission_policy: input.admissionPolicy }),
+    ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+    ...(input.recurringPolicy === undefined ? {} : { recurring_policy: input.recurringPolicy }),
+  };
+}
+
+function createEpisodeRequest(input: CreateEpisodeInput): Record<string, unknown> {
+  return {
+    ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+    ...(input.startedAt === undefined ? {} : { started_at: input.startedAt }),
+  };
+}
+
+function participantAdmissionRequest(input: AdmitParticipantInput): Record<string, unknown> {
+  return {
+    name: input.name,
+    role: input.role,
+    ...(input.identityId === undefined ? {} : { identity_id: input.identityId }),
+    ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+    ...(input.participantId === undefined ? {} : { participant_id: input.participantId }),
+  };
+}
+
+function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknown> {
+  return {
+    participant_generation: input.participantGeneration,
     replace_media_connection: input.replaceMediaConnection ?? false,
     ...(input.currentMediaToken ? { current_media_token: input.currentMediaToken } : {}),
   };
+}
+
+function participantRemovalRequest(input: RemoveParticipantInput): Record<string, unknown> {
+  return { participant_generation: input.participantGeneration };
 }
 
 function apiKeyCreateRequest(input: CreateAPIKeyInput): Record<string, unknown> {
@@ -107,12 +161,12 @@ function segment(value: string): string {
   return encodeURIComponent(required(value, "identifier"));
 }
 
-type ParticipantAccessWire = {
+type AccessGrantWire = {
   readonly subject: {
     readonly tenant_id: string;
-    readonly room_id: string;
-    readonly session_id: string;
-    readonly participant_session_id: string;
+    readonly space_id: string;
+    readonly episode_id: string;
+    readonly participant_id: string;
     readonly participant_generation: number;
   };
   readonly sync: { readonly token: string; readonly expires_at: string };
@@ -124,32 +178,47 @@ type ParticipantAccessWire = {
   };
 };
 
-type ParticipantAdmissionWire = Omit<ParticipantAdmission, "access"> & { readonly access?: ParticipantAccessWire | null };
+type ParticipantLifecycleWire = Omit<ParticipantLifecycle, "access"> & { readonly access?: AccessGrantWire | null };
 
-function participantAdmission(value: ParticipantAdmissionWire): ParticipantAdmission {
+function participantLifecycle(value: ParticipantLifecycleWire): ParticipantLifecycle {
   const { access, ...lifecycle } = value;
-  return { ...lifecycle, ...(access === undefined ? {} : { access: access === null ? null : participantAccess(access) }) };
+  if (access === undefined) return lifecycle;
+  return { ...lifecycle, access: access === null ? null : accessGrant(access) };
 }
 
-function participantAccess(value: ParticipantAccessWire): ParticipantAccess {
-  const payload = value.media.client_payload;
-  if (value.media.provider !== "cloudflare_sfu" || typeof payload.connectionId !== "string" || typeof payload.stunServer !== "string") {
-    throw new ChalkAPIError({ code: "invalid_response", retryable: false, status: 201 });
-  }
-  return {
+function accessGrant(value: AccessGrantWire): AccessGrant {
+  const payload = cloudflareClientPayload(value.media);
+  return parseAccessGrant({
     subject: {
-      tenantId: value.subject.tenant_id,
-      roomId: value.subject.room_id,
-      sessionId: value.subject.session_id,
-      participantSessionId: value.subject.participant_session_id,
-      participantGeneration: value.subject.participant_generation,
+      tenant_id: value.subject.tenant_id,
+      space_id: requiredResponseID(value.subject.space_id),
+      episode_id: requiredResponseID(value.subject.episode_id),
+      participant_id: requiredResponseID(value.subject.participant_id),
+      participant_generation: value.subject.participant_generation,
     },
-    sync: { token: value.sync.token, expiresAt: value.sync.expires_at },
+    sync: value.sync,
     media: {
       token: value.media.token,
-      expiresAt: value.media.expires_at,
-      provider: value.media.provider,
-      clientPayload: { connectionId: payload.connectionId, stunServer: payload.stunServer },
+      expires_at: value.media.expires_at,
+      provider: "cloudflare_sfu",
+      client_payload: payload,
     },
-  };
+  });
+}
+
+function cloudflareClientPayload(media: AccessGrantWire["media"]): { readonly connectionId: string; readonly stunServer: string } {
+  const { connectionId, stunServer } = media.client_payload;
+  if (media.provider !== "cloudflare_sfu" || typeof connectionId !== "string" || typeof stunServer !== "string") {
+    throw invalidResponse(201);
+  }
+  return { connectionId, stunServer };
+}
+
+function requiredResponseID(value: string | undefined): string {
+  if (!value) throw invalidResponse(201);
+  return value;
+}
+
+function invalidResponse(status: number): ChalkAPIError {
+  return new ChalkAPIError({ code: "invalid_response", retryable: false, status });
 }

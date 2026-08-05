@@ -2,8 +2,8 @@ import { CaptureUpdateAction, MIME_TYPES, newElementWith } from "@excalidraw/exc
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
-import type { BinaryFileData, BinaryFiles, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types.js";
-import type { WhiteboardUploadInstructions } from "./wire.js";
+import type { BinaryFileData, BinaryFiles, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types";
+import type { WhiteboardUploadInstructions } from "./wire";
 
 export type WhiteboardFileSyncPhase = "idle" | "uploading" | "awaiting_remote_upload" | "downloading" | "error";
 

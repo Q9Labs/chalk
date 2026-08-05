@@ -14,7 +14,7 @@ const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
 const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
 const localWebOrigin = `http://127.0.0.1:${localWebPort}`;
 const localBrokerPort = process.env.CHALK_DEV_BROKER_PORT?.trim();
-const localBrokerTarget = process.env.CHALK_DEV_BROKER_ORIGIN?.trim() || (localBrokerPort ? `http://127.0.0.1:${localBrokerPort}` : "http://127.0.0.1:3071");
+const localBrokerTarget = process.env.CHALK_DEV_BROKER_ORIGIN?.trim() || (localBrokerPort ? `http://127.0.0.1:${localBrokerPort}` : "http://127.0.0.1:8787");
 
 // SPA mode for Cloudflare Pages deployment
 // SSR requires Cloudflare Workers, but our token only has Pages permission
@@ -43,9 +43,16 @@ const config = defineConfig({
   },
   resolve: {
     alias: [
+      { find: /^@q9labsai\/chalk-client\/telemetry$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/telemetry/index.ts", import.meta.url)) },
+      { find: /^@q9labsai\/chalk-client\/effect$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/effect.ts", import.meta.url)) },
       { find: /^@q9labsai\/chalk-client$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/index.ts", import.meta.url)) },
+      { find: /^@q9labsai\/chalk-react\/ui$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/components/ui/index.ts", import.meta.url)) },
+      { find: /^@q9labsai\/chalk-react$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/index.ts", import.meta.url)) },
+      { find: /^@q9labsai\/chalk-ui$/, replacement: fileURLToPath(new URL("../../packages/ui/src/index.ts", import.meta.url)) },
       { find: "@q9labsai/chalk-ui/button", replacement: fileURLToPath(new URL("../../packages/ui/src/button.tsx", import.meta.url)) },
       { find: "@q9labsai/chalk-ui/reactions", replacement: fileURLToPath(new URL("../../packages/ui/src/reactions.ts", import.meta.url)) },
+      { find: /^@q9labsai\/chalk-assets$/, replacement: fileURLToPath(new URL("../../packages/assets/src/index.ts", import.meta.url)) },
+      { find: /^@q9labsai\/chalk-whiteboard\/react$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/react/index.ts", import.meta.url)) },
       { find: "@q9labsai/facehash/react", replacement: fileURLToPath(new URL("../../packages/facehash/src/react.ts", import.meta.url)) },
       { find: "@q9labsai/facehash", replacement: fileURLToPath(new URL("../../packages/facehash/src/index.ts", import.meta.url)) },
     ],

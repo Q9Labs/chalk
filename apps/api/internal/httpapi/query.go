@@ -41,12 +41,25 @@ func membershipIDRequest(r *http.Request) (utilities.ID, error) {
 	return routeID(r, "membership_id", apiErrorInvalidMembershipID)
 }
 
-func roomIDRequest(r *http.Request) (utilities.ID, error) {
-	return routeID(r, "room_id", apiErrorInvalidRoomID)
+func spaceIDRequest(r *http.Request) (utilities.ID, error) {
+	return routeID(r, "space_id", apiErrorInvalidSpaceID)
 }
 
-func sessionIDRequest(r *http.Request) (utilities.ID, error) {
-	return routeID(r, "session_id", apiErrorInvalidSessionID)
+func episodeIDRequest(r *http.Request) (utilities.ID, error) {
+	return routeID(r, "episode_id", apiErrorInvalidEpisodeID)
+}
+
+func tenantSpaceEpisodeIDsRequest(r *http.Request) (utilities.ID, utilities.ID, utilities.ID, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, utilities.ID{}, err
+	}
+	spaceID, err := spaceIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, utilities.ID{}, err
+	}
+	episodeID, err := episodeIDRequest(r)
+	return tenantID, spaceID, episodeID, err
 }
 
 func recordingIDRequest(r *http.Request) (utilities.ID, error) {
@@ -80,12 +93,12 @@ func membershipIDParameter() APIParameterContract {
 	return APIParameterContract{Name: "membership_id", In: "path", Type: "string", Required: true}
 }
 
-func roomIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "room_id", In: "path", Type: "string", Required: true}
+func spaceIDParameter() APIParameterContract {
+	return APIParameterContract{Name: "space_id", In: "path", Type: "string", Required: true}
 }
 
-func sessionIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "session_id", In: "path", Type: "string", Required: true}
+func episodeIDParameter() APIParameterContract {
+	return APIParameterContract{Name: "episode_id", In: "path", Type: "string", Required: true}
 }
 
 func recordingIDParameter() APIParameterContract {
@@ -104,8 +117,8 @@ func recordingIDQueryParameter() APIParameterContract {
 	return APIParameterContract{Name: "recording_id", In: "query", Type: "string", Required: false}
 }
 
-func sessionIDQueryParameter() APIParameterContract {
-	return APIParameterContract{Name: "session_id", In: "query", Type: "string", Required: false}
+func episodeIDQueryParameter() APIParameterContract {
+	return APIParameterContract{Name: "episode_id", In: "query", Type: "string", Required: false}
 }
 
 func optionalRecordingIDQuery(r *http.Request) (utilities.ID, error) {
@@ -116,10 +129,10 @@ func optionalRecordingIDQuery(r *http.Request) (utilities.ID, error) {
 	return id, nil
 }
 
-func optionalSessionIDQuery(r *http.Request) (utilities.ID, error) {
-	id, err := optionalQueryIDValue(r, "session_id")
+func optionalEpisodeIDQuery(r *http.Request) (utilities.ID, error) {
+	id, err := optionalQueryIDValue(r, "episode_id")
 	if err != nil {
-		return utilities.ID{}, apiErrorInvalidSessionID
+		return utilities.ID{}, apiErrorInvalidEpisodeID
 	}
 	return id, nil
 }

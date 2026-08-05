@@ -76,7 +76,7 @@ export const Select = React.memo(
     return (
       <div className={cn("flex flex-col gap-1", fullWidth && "w-full")} ref={containerRef}>
         {label && (
-          <label htmlFor={selectId} className="text-sm font-medium text-muted-foreground">
+          <label htmlFor={selectId} className="text-sm font-medium text-[var(--chalk-muted-text)]">
             {label}
           </label>
         )}
@@ -88,11 +88,11 @@ export const Select = React.memo(
             disabled={disabled}
             onClick={() => !disabled && setIsOpen(!isOpen)}
             className={cn(
-              "flex items-center justify-between gap-2 rounded-xl border border-border bg-card transition-colors",
-              "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
+              "flex items-center justify-between gap-2 rounded-xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-[var(--chalk-focus)] focus:border-transparent",
               "disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap",
-              selectedOption ? "text-foreground" : "text-muted-foreground",
-              error && "border-destructive",
+              selectedOption ? "text-[var(--chalk-text)]" : "text-[var(--chalk-muted-text)]",
+              error && "border-[var(--chalk-danger)]",
               sizeClasses[size],
               fullWidth ? "w-[350px]" : "w-auto",
               className,
@@ -103,13 +103,13 @@ export const Select = React.memo(
             aria-errormessage={error ? `${selectId}-error` : undefined}
           >
             <span className="truncate">{displayText}</span>
-            <ArrowDown01Icon size={iconSizes[size]} className={cn("shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
+            <ArrowDown01Icon size={iconSizes[size]} className={cn("shrink-0 text-[var(--chalk-muted-text)] transition-transform", isOpen && "rotate-180")} />
           </button>
 
           {isOpen && (
-            <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-popover py-1 shadow-lg overflow-hidden" role="listbox" aria-labelledby={selectId}>
+            <div className="absolute z-50 mt-1 w-full rounded-xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] py-1 shadow-lg overflow-hidden" role="listbox" aria-labelledby={selectId}>
               {options.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-muted-foreground">No options available</div>
+                <div className="px-3 py-2 text-sm text-[var(--chalk-muted-text)]">No options available</div>
               ) : (
                 options.map((option) => (
                   <button
@@ -119,10 +119,15 @@ export const Select = React.memo(
                     aria-selected={option.value === value}
                     disabled={option.disabled}
                     onClick={() => !option.disabled && handleSelect(option.value)}
-                    className={cn("flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors whitespace-nowrap overflow-hidden", "hover:bg-accent", "disabled:cursor-not-allowed disabled:opacity-50", option.value === value ? "bg-accent text-primary" : "text-foreground")}
+                    className={cn(
+                      "flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors whitespace-nowrap overflow-hidden",
+                      "hover:bg-[var(--chalk-stage)]",
+                      "disabled:cursor-not-allowed disabled:opacity-50",
+                      option.value === value ? "bg-[var(--chalk-stage)] text-[var(--chalk-accent)]" : "text-[var(--chalk-text)]",
+                    )}
                   >
                     <span className="truncate">{option.label}</span>
-                    {option.value === value && <Tick01Icon size={14} className="shrink-0 text-primary" />}
+                    {option.value === value && <Tick01Icon size={14} className="shrink-0 text-[var(--chalk-accent)]" />}
                   </button>
                 ))
               )}
@@ -130,7 +135,7 @@ export const Select = React.memo(
           )}
         </div>
         {error && (
-          <span id={`${selectId}-error`} className="text-sm text-destructive">
+          <span id={`${selectId}-error`} className="text-sm text-[var(--chalk-danger)]">
             {error}
           </span>
         )}

@@ -1,7 +1,10 @@
 import type { ChalkChatMessage } from "@q9labsai/chalk-client";
-import { CommandErrorAlert, ConferenceView as SpaceView, EndScreen, getThemeMode, JoinFailedScreen, JoiningScreen, LeaveDialog, PreJoinScreen, type ConferenceLayout as SpaceLayout, type SettingsDialogValue, type Toast } from "@q9labsai/chalk-react/components";
 import type React from "react";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+
+import { CommandErrorAlert, JoinFailedScreen, LeaveDialog, PreviewEpisodeEnded, PreviewEntrance, PreviewJoiningScreen, PreviewSpaceView, type SpaceLayout, type ThemePalette, type ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
+import type { SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
+import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
 
 import { PreviewGalleryToolbar } from "./PreviewGalleryToolbar";
 import {
@@ -35,15 +38,25 @@ export interface SdkPreviewGalleryProps {
 export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(DISPLAY_NAME);
   const [chatMessages, setChatMessages] = useState<readonly ChalkChatMessage[]>(INITIAL_CHAT_MESSAGES);
-  const [settings, setSettings] = useState<SettingsDialogValue>(() => ({ ...INITIAL_SETTINGS }));
+  const mappedPalette: ThemePalette = productionPalette(search.palette);
+  const mappedTexture: ThemeTexture = productionTexture(search.texture);
+  const [settings, setSettings] = useState<SettingsDialogValue>(() => ({
+    ...INITIAL_SETTINGS,
+    appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, palette: mappedPalette, texture: mappedTexture },
+  }));
   const fixtureSearch = useMemo<PreviewSearch>(() => (search.state === "empty" ? { ...search, participants: 0 as const, chat: "empty" as const } : search), [search]);
   const participants = useMemo(() => participantsForCount(fixtureSearch.participants, fixtureSearch), [fixtureSearch]);
   const participantList = useMemo(() => toParticipantList(participants), [participants]);
   const panel = panelFor(search);
   const effectiveLayout: SpaceLayout = search.stage === "share" ? "presentation" : search.stage === "whiteboard" ? "focus" : search.layout;
-  const mappedPalette = productionPalette(search.palette);
-  const mappedTexture = productionTexture(search.texture);
   const episodeDuration = 18 * 60 + 42;
+
+  useEffect(() => {
+    setSettings((current) => {
+      if (current.appearance.layout === search.layout && current.appearance.palette === mappedPalette && current.appearance.texture === mappedTexture) return current;
+      return { ...current, appearance: { ...current.appearance, layout: search.layout, palette: mappedPalette, texture: mappedTexture } };
+    });
+  }, [mappedPalette, mappedTexture, search.layout]);
 
   const patch = (updates: PreviewSearchPatch) => onSearchChange(updates);
   const backToEntrance = () => patch({ view: "entrance", state: "ready", panel: "none", dialog: "none" });
@@ -64,22 +77,22 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
       <div data-preview-view="entrance" data-preview-state={search.state} className="relative min-h-screen">
         <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
         {search.state === "ready" || search.state === "warning" ? (
-          <PreJoinScreen
-            roomName={SPACE_NAME}
+          <PreviewEntrance
+            spaceName={SPACE_NAME}
             logoUrl="/brand/chalk/chalk-logo.svg"
             defaultDisplayName={displayName}
-            initialMicrophoneEnabled={search.mic}
-            initialCameraEnabled={search.camera}
+            microphone={search.mic}
+            camera={search.camera}
             error={search.state === "warning" ? "Camera or microphone access failed. Turn both devices off or try again." : undefined}
             onJoin={(nextSettings) => {
               setDisplayName(nextSettings.displayName);
-              patch({ view: "space", state: "happy", mic: nextSettings.microphoneEnabled, camera: nextSettings.cameraEnabled, panel: "none", dialog: "none" });
+              patch({ view: "space", state: "happy", mic: nextSettings.microphone, camera: nextSettings.camera, panel: "none", dialog: "none" });
             }}
           />
         ) : search.state === "joining" ? (
-          <JoiningScreen displayName={displayName} message={`Preparing to enter ${SPACE_NAME}`} supportingMessages={["Checking your AccessGrant", "Starting the Episode"]} />
+          <PreviewJoiningScreen displayName={displayName} message={`Preparing to enter ${SPACE_NAME}`} supportingMessages={["Checking your AccessGrant", "Starting the Episode"]} />
         ) : search.state === "waiting" ? (
-          <JoiningScreen displayName={displayName} message={`Waiting for admission to ${SPACE_NAME}`} supportingMessages={["Your request is with a Space collaborator"]} />
+          <PreviewJoiningScreen displayName={displayName} message={`Waiting for admission to ${SPACE_NAME}`} supportingMessages={["Your request is with a Space collaborator"]} />
         ) : (
           <JoinFailedScreen
             title={search.state === "timeout" ? "Entrance timed out" : "Could not enter the Space"}
@@ -97,17 +110,16 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
     return (
       <div data-preview-view="space" data-preview-state="ended" className="relative min-h-screen">
         <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
-        <EndScreen roomName={SPACE_NAME} duration={episodeDuration} participantCount={search.participants} onRejoin={retrySpace} onNewMeeting={retrySpace} onGoHome={backToEntrance} />
+        <PreviewEpisodeEnded spaceName={SPACE_NAME} duration={episodeDuration} participantCount={search.participants} onRejoin={retrySpace} onGoHome={backToEntrance} />
       </div>
     );
   }
 
   const toast = search.toast === "none" ? [] : ([{ id: `preview-toast-${search.toast}`, message: TOAST_MESSAGES[search.toast], type: search.toast }] satisfies Toast[]);
-  const whiteboard =
-    search.stage === "whiteboard" ? { isOpen: true, props: { canDraw: true, theme: getThemeMode(mappedPalette), localParticipantColor: "#55aac9", excalidrawCssPath: "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css", className: "h-full min-h-0" } } : undefined;
+  const whiteboardFallback = search.stage === "whiteboard" ? <PreviewWhiteboardMock palette={mappedPalette} texture={mappedTexture} /> : null;
   const screenShareFallback =
     search.stage === "share" ? (
-      <div className="absolute inset-3 z-10 overflow-hidden rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-stage)] sm:inset-6">
+      <div className="absolute inset-3 z-10 overflow-hidden rounded-[10px] border border-[var(--chalk-line)] bg-[var(--chalk-stage)] sm:inset-6">
         <ScreenShareMock />
       </div>
     ) : null;
@@ -117,19 +129,17 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   return (
     <div data-preview-view="space" data-preview-state={search.state} className="relative min-h-screen">
       <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
-      <SpaceView
-        roomName={SPACE_NAME}
+      <PreviewSpaceView
+        spaceName={SPACE_NAME}
         displayName={displayName}
         logoUrl="/brand/chalk/chalk-logo.svg"
-        logoUrlOnDark="/brand/chalk/chalk-logo-on-dark.svg"
         palette={mappedPalette}
         texture={mappedTexture}
-        meetingLink={SPACE_LINK}
+        inviteLink={SPACE_LINK}
         duration={episodeDuration}
         layout={effectiveLayout}
         onLayoutChange={(nextLayout) => patch({ layout: nextLayout })}
         participants={participants}
-        whiteboard={whiteboard}
         controls={{
           buttons: ["mic", "video", "screenshare", "whiteboard", "handraise", "participants", "chat", "transcription", "reactions", "more", "info", "leave"],
           isMuted: !search.mic,
@@ -169,7 +179,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
             onSendMessage: async ({ text, attachments }) => {
               setChatMessages((current) => [
                 ...current,
-                { messageId: `preview-message-${current.length + 1}`, clientMessageId: `preview-client-${current.length + 1}`, sequence: String(current.length + 1), participantSessionId: "you", displayName, text, createdAt: new Date().toISOString(), attachments: attachments ?? [] },
+                { messageId: `preview-message-${current.length + 1}`, clientMessageId: `preview-client-${current.length + 1}`, sequence: String(current.length + 1), participantId: "you", displayName, text, createdAt: new Date().toISOString(), attachments: attachments ?? [] },
               ]);
             },
           },
@@ -186,13 +196,13 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         infoDialog={{
           isOpen: search.dialog === "info",
           onOpenChange: (open) => patch({ dialog: open ? "info" : "none" }),
-          roomName: SPACE_NAME,
-          meetingUrl: SPACE_LINK,
+          spaceName: SPACE_NAME,
+          inviteLink: SPACE_LINK,
           onCopyLink: () => {
             void navigator.clipboard?.writeText(SPACE_LINK);
             patch({ toast: "success" });
           },
-          meetingDuration: episodeDuration,
+          duration: episodeDuration,
         }}
         settingsDialog={{
           isOpen: search.dialog === "settings",
@@ -210,7 +220,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
           videoTrack: null,
           participantColorSeed: displayName,
         }}
-        inviteDialog={{ isOpen: search.dialog === "invite", onOpenChange: (open) => patch({ dialog: open ? "invite" : "none" }), meetingLink: SPACE_LINK, onCopyLink: () => patch({ toast: "success" }) }}
+        inviteDialog={{ isOpen: search.dialog === "invite", onOpenChange: (open) => patch({ dialog: open ? "invite" : "none" }), inviteLink: SPACE_LINK, onCopyLink: () => patch({ toast: "success" }) }}
         reactions={{ reactions: REACTIONS, allowedReactions: ["👍", "❤️", "😂", "😮", "😢", "🎉"], onSelect: async () => patch({ toast: "success" }) }}
         toasts={toast}
         onDismissToast={() => patch({ toast: "none" })}
@@ -218,12 +228,43 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         overlay={
           <Fragment>
             {screenShareFallback}
+            {whiteboardFallback}
             {warningOverlay}
             {confirmationOverlay}
           </Fragment>
         }
-        onLeave={backToEntrance}
+        onLeft={backToEntrance}
       />
+    </div>
+  );
+}
+
+function PreviewWhiteboardMock({ palette, texture }: { readonly palette: ThemePalette; readonly texture: ThemeTexture }): React.JSX.Element {
+  return (
+    <div
+      data-testid="preview-whiteboard"
+      data-preview-whiteboard="local"
+      data-preview-palette={palette}
+      data-preview-texture={texture}
+      className="absolute inset-3 z-10 overflow-hidden rounded-[10px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)] sm:inset-6"
+    >
+      <div className="flex items-center justify-between border-b border-[var(--chalk-line)] bg-[var(--chalk-chrome)] px-4 py-3 text-xs text-[var(--chalk-muted-text)]">
+        <span className="font-semibold text-[var(--chalk-text)]">Whiteboard preview</span>
+        <span>Local fixture · {texture}</span>
+      </div>
+      <div
+        className="relative h-[calc(100%-49px)] overflow-hidden bg-[var(--chalk-canvas)]"
+        style={{ backgroundImage: "linear-gradient(90deg, color-mix(in srgb, var(--chalk-line) 35%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--chalk-line) 35%, transparent) 1px, transparent 1px)", backgroundSize: "32px 32px" }}
+      >
+        <div className="absolute left-[18%] top-[22%] h-28 w-48 rotate-[-3deg] rounded-xl border-2 border-[var(--chalk-accent)] bg-[var(--chalk-surface)] p-4 shadow-[var(--chalk-shadow)]">
+          <p className="text-sm font-semibold text-[var(--chalk-text)]">Shared direction</p>
+          <p className="mt-2 text-xs leading-5 text-[var(--chalk-muted-text)]">A calm local canvas for the SDK preview.</p>
+        </div>
+        <div className="absolute right-[18%] top-[42%] h-24 w-40 rotate-[4deg] rounded-xl border-2 border-[var(--chalk-positive)] bg-[var(--chalk-surface)] p-4 shadow-[var(--chalk-shadow)]">
+          <p className="text-sm font-semibold text-[var(--chalk-text)]">Next step</p>
+          <p className="mt-2 text-xs leading-5 text-[var(--chalk-muted-text)]">No network canvas loaded.</p>
+        </div>
+      </div>
     </div>
   );
 }

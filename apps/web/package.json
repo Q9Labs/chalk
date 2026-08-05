@@ -12,12 +12,12 @@
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
     "preview": "vite preview",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --project tsconfig.check-types.json --noEmit"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.43.0",
-    "@q9labsai/chalk-client": "workspace:^",
-    "@q9labsai/chalk-react": "workspace:^",
+    "@q9labsai/chalk-client": "workspace:^4.0.0",
+    "@q9labsai/chalk-react": "workspace:^4.0.0",
     "@tanstack/react-router": "1.170.16",
     "@tanstack/react-start": "1.168.26",
     "@tanstack/router-plugin": "1.168.18",

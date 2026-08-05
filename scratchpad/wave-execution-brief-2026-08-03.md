@@ -28,10 +28,15 @@ sheets the prompts cite are ratified and not open for redesign.
 6. `scratchpad/wave-6-observability-prompt-2026-08-03.md` — telemetry
    vocabulary. After 3; parallel with 5.
 
-Wave 7 (marketing/docs) is Claude's, running alongside: root README,
-`docs/`, store listing, glossary, marketing copy. Per-package READMEs
-belong to their code waves. Docs written from the ratified sheets are
-acceptance canon — waves make the documented code real.
+7. `scratchpad/wave-7-docs-marketing-prompt-2026-08-05.md` — root README,
+   `docs/`, store listings, glossary, and marketing copy. Luna implements the
+   full rename and GPT-5.6 Terra xhigh reviews it. Per-package READMEs belong to
+   their code waves. Runs alongside Wave 6.
+
+8. `scratchpad/wave-8-reconciliation-prompt-2026-08-04.md` — reconcile
+   local `master`, the completed rename tip, the dashboard completion tail,
+   and the dirty live Episode debugger work. After waves 6 and 7. This is an
+   extraction and adaptation wave, not a wholesale merge of stale trees.
 
 ## Rulings: all closed (2026-08-03 night)
 

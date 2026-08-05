@@ -30,13 +30,13 @@ type SyncPeerVerifier interface {
 }
 
 type providerOperationRequest struct {
-	Effect                       provideroperations.Effect `json:"effect"`
-	TenantID                     string                    `json:"tenant_id"`
-	SessionID                    string                    `json:"session_id"`
-	ParticipantSessionID         *string                   `json:"participant_session_id,omitempty"`
-	ParticipantSessionGeneration *int64                    `json:"participant_session_generation,omitempty"`
-	PublicationSource            *string                   `json:"publication_source,omitempty"`
-	RecordingID                  *string                   `json:"recording_id,omitempty"`
+	Effect                provideroperations.Effect `json:"effect"`
+	TenantID              string                    `json:"tenant_id"`
+	EpisodeID             string                    `json:"episode_id"`
+	ParticipantID         *string                   `json:"participant_id,omitempty"`
+	ParticipantGeneration *int64                    `json:"participant_generation,omitempty"`
+	PublicationSource     *string                   `json:"publication_source,omitempty"`
+	RecordingID           *string                   `json:"recording_id,omitempty"`
 }
 
 type providerOperationResponse struct {
@@ -53,10 +53,10 @@ type providerObservationResponse struct {
 }
 
 type providerPublicationResponse struct {
-	ParticipantSessionID string  `json:"participant_session_id"`
-	Source               string  `json:"source"`
-	Enabled              bool    `json:"enabled"`
-	PublicationID        *string `json:"publication_id"`
+	ParticipantID string  `json:"participant_id"`
+	Source        string  `json:"source"`
+	Enabled       bool    `json:"enabled"`
+	PublicationID *string `json:"publication_id"`
 }
 
 type providerObservationCursorResponse struct {
@@ -85,7 +85,7 @@ func NewProviderBridgeHandler(service ProviderBridgeService, verifier SyncPeerVe
 func handleProviderBridgeReadiness(service ProviderBridgeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		if service == nil || service.Ready(request.Context()) != nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 			return
 		}
 		writeJSON(w, http.StatusOK, struct {
@@ -98,11 +98,11 @@ func requireSyncPeer(verifier SyncPeerVerifier) func(http.Handler) http.Handler 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 			if verifier == nil {
-				writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is unavailable")
+				writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 				return
 			}
 			if err := verifier.Verify(request); err != nil {
-				writeError(w, http.StatusUnauthorized, "sync_unauthorized", "Sync authentication required")
+				writeError(w, http.StatusUnauthorized, "sync.unauthorized", "Sync authentication required")
 				return
 			}
 			next.ServeHTTP(w, request)
@@ -113,7 +113,7 @@ func requireSyncPeer(verifier SyncPeerVerifier) func(http.Handler) http.Handler 
 func handleProviderOperation(service ProviderBridgeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 			return
 		}
 
@@ -140,16 +140,16 @@ func handleProviderOperation(service ProviderBridgeService) http.HandlerFunc {
 func handleProviderObservations(service ProviderBridgeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 			return
 		}
 
-		tenantID, sessionID, after, limit, err := providerObservationQuery(request)
+		tenantID, episodeID, after, limit, err := providerObservationQuery(request)
 		if err != nil {
 			writeProviderBridgeError(w, err)
 			return
 		}
-		page, err := service.ListObservations(request.Context(), tenantID, sessionID, after, limit)
+		page, err := service.ListObservations(request.Context(), tenantID, episodeID, after, limit)
 		if err != nil {
 			writeProviderBridgeError(w, err)
 			return
@@ -180,26 +180,26 @@ func providerOperationInput(operationID string, body providerOperationRequest) (
 	if err != nil {
 		return provideroperations.OperationInput{}, provideroperations.ErrInvalidTenantID
 	}
-	sessionID, err := utilities.ParseID(body.SessionID)
+	episodeID, err := utilities.ParseID(body.EpisodeID)
 	if err != nil {
-		return provideroperations.OperationInput{}, provideroperations.ErrInvalidSessionID
+		return provideroperations.OperationInput{}, provideroperations.ErrInvalidEpisodeID
 	}
 
 	input := provideroperations.OperationInput{
 		OperationID: operationID,
 		Effect:      body.Effect,
 		TenantID:    tenantID,
-		SessionID:   sessionID,
+		EpisodeID:   episodeID,
 	}
-	if body.ParticipantSessionID != nil {
-		participantID, parseErr := utilities.ParseID(*body.ParticipantSessionID)
+	if body.ParticipantID != nil {
+		participantID, parseErr := utilities.ParseID(*body.ParticipantID)
 		if parseErr != nil {
 			return provideroperations.OperationInput{}, provideroperations.ErrInvalidParticipantID
 		}
-		input.ParticipantSessionID = participantID
+		input.ParticipantID = participantID
 	}
-	if body.ParticipantSessionGeneration != nil {
-		input.ParticipantSessionGeneration = *body.ParticipantSessionGeneration
+	if body.ParticipantGeneration != nil {
+		input.ParticipantGeneration = *body.ParticipantGeneration
 	}
 	if body.PublicationSource != nil {
 		input.PublicationSource = *body.PublicationSource
@@ -221,9 +221,9 @@ func providerObservationQuery(request *http.Request) (utilities.ID, utilities.ID
 	if err != nil {
 		return utilities.ID{}, utilities.ID{}, nil, 0, provideroperations.ErrInvalidTenantID
 	}
-	sessionID, err := utilities.ParseID(query.Get("session_id"))
+	episodeID, err := utilities.ParseID(query.Get("episode_id"))
 	if err != nil {
-		return utilities.ID{}, utilities.ID{}, nil, 0, provideroperations.ErrInvalidSessionID
+		return utilities.ID{}, utilities.ID{}, nil, 0, provideroperations.ErrInvalidEpisodeID
 	}
 
 	limit := providerObservationLimit
@@ -237,7 +237,7 @@ func providerObservationQuery(request *http.Request) (utilities.ID, utilities.ID
 	afterIncarnation := query.Get("after_incarnation")
 	afterSequence := query.Get("after_sequence")
 	if afterIncarnation == "" && afterSequence == "" {
-		return tenantID, sessionID, nil, limit, nil
+		return tenantID, episodeID, nil, limit, nil
 	}
 	if afterIncarnation == "" || afterSequence == "" {
 		return utilities.ID{}, utilities.ID{}, nil, 0, provideroperations.ErrInvalidObservationCursor
@@ -250,7 +250,7 @@ func providerObservationQuery(request *http.Request) (utilities.ID, utilities.ID
 	if err != nil || sequence < 0 {
 		return utilities.ID{}, utilities.ID{}, nil, 0, provideroperations.ErrInvalidObservationCursor
 	}
-	return tenantID, sessionID, &provideroperations.Cursor{Incarnation: incarnation, Sequence: sequence}, limit, nil
+	return tenantID, episodeID, &provideroperations.Cursor{Incarnation: incarnation, Sequence: sequence}, limit, nil
 }
 
 func newProviderOperationResponse(result providerbridge.Result) providerOperationResponse {
@@ -276,10 +276,10 @@ func newProviderObservationPageResponse(page provideroperations.ObservationPage)
 				publicationID = &value
 			}
 			publications = append(publications, providerPublicationResponse{
-				ParticipantSessionID: publication.ParticipantSessionID.String(),
-				Source:               publication.Source,
-				Enabled:              publication.Enabled,
-				PublicationID:        publicationID,
+				ParticipantID: publication.ParticipantID.String(),
+				Source:        publication.Source,
+				Enabled:       publication.Enabled,
+				PublicationID: publicationID,
 			})
 		}
 		response.Observations = append(response.Observations, providerObservationResponse{
@@ -301,22 +301,22 @@ func writeProviderBridgeError(w http.ResponseWriter, err error) {
 	var maxBytesError *http.MaxBytesError
 	switch {
 	case errors.As(err, &maxBytesError):
-		writeError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "Request body is too large")
+		writeError(w, http.StatusRequestEntityTooLarge, "request.payload_too_large", "Request body is too large")
 	case errors.Is(err, providerbridge.ErrUnavailable):
-		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is unavailable")
+		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 	case errors.Is(err, providerbridge.ErrInvalidProviderResult):
-		writeError(w, http.StatusBadGateway, "provider_unavailable", "Provider result is unavailable")
+		writeError(w, http.StatusBadGateway, "provider.unavailable", "Provider result is unavailable")
 	case errors.Is(err, provideroperations.ErrInvalidOperationID),
 		errors.Is(err, provideroperations.ErrInvalidEffect),
 		errors.Is(err, provideroperations.ErrInvalidTenantID),
-		errors.Is(err, provideroperations.ErrInvalidSessionID),
+		errors.Is(err, provideroperations.ErrInvalidEpisodeID),
 		errors.Is(err, provideroperations.ErrInvalidParticipantID),
 		errors.Is(err, provideroperations.ErrInvalidParticipantGeneration),
 		errors.Is(err, provideroperations.ErrInvalidPublicationSource),
 		errors.Is(err, provideroperations.ErrInvalidRecordingID),
 		errors.Is(err, provideroperations.ErrInvalidObservationCursor):
-		writeError(w, http.StatusBadRequest, "invalid_contract", "Invalid provider bridge request")
+		writeError(w, http.StatusBadRequest, "provider.invalid_contract", "Invalid provider bridge request")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		writeError(w, http.StatusInternalServerError, "internal.error", "Internal server error")
 	}
 }

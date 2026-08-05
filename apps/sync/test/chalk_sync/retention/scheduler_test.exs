@@ -8,7 +8,7 @@ defmodule ChalkSync.Retention.SchedulerTest do
     cleanup = fn ->
       {:ok,
        %Result{
-         sessions: 2,
+         episodes: 2,
          event_rows: 11,
          event_bytes: 110,
          receipt_rows: 7,
@@ -21,13 +21,13 @@ defmodule ChalkSync.Retention.SchedulerTest do
     server =
       start_supervised!({Scheduler, name: nil, auto_run?: false, cleanup_fun: cleanup})
 
-    assert {:ok, %Result{sessions: 2}} = Scheduler.run_now(server)
+    assert {:ok, %Result{episodes: 2}} = Scheduler.run_now(server)
 
     health = Scheduler.health(server)
-    assert health.cleaned_sessions == 2
+    assert health.cleaned_episodes == 2
     assert health.deleted_event_rows == 11
     refute inspect(health) =~ "tenant"
-    refute inspect(health) =~ "session_id"
+    refute inspect(health) =~ "episode_id"
   end
 
   test "reports aggregate cleanup counters and recovers after a failed batch" do
@@ -36,7 +36,7 @@ defmodule ChalkSync.Retention.SchedulerTest do
     cleanup = fn ->
       case Agent.get_and_update(attempts, fn count -> {count, count + 1} end) do
         0 -> {:error, :database_unavailable}
-        _ -> {:ok, %Result{sessions: 1, event_rows: 2, receipt_rows: 3}}
+        _ -> {:ok, %Result{episodes: 1, event_rows: 2, receipt_rows: 3}}
       end
     end
 
@@ -47,12 +47,12 @@ defmodule ChalkSync.Retention.SchedulerTest do
     assert Scheduler.run_now(:retention_scheduler_test) == {:error, :database_unavailable}
     assert Scheduler.health(:retention_scheduler_test).status == "degraded"
 
-    assert {:ok, %Result{sessions: 1}} = Scheduler.run_now(:retention_scheduler_test)
+    assert {:ok, %Result{episodes: 1}} = Scheduler.run_now(:retention_scheduler_test)
 
     assert %{
              status: "ok",
              consecutive_failures: 0,
-             cleaned_sessions: 1,
+             cleaned_episodes: 1,
              deleted_event_rows: 2,
              deleted_receipt_rows: 3,
              deleted_lifecycle_intent_rows: 0

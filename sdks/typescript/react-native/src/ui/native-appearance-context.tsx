@@ -66,9 +66,7 @@ export function NativeTextureOverlay(): React.JSX.Element | null {
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.overlay, { opacity: descriptor.opacity }]}>
       {Array.from({ length: marks }, (_, index) => {
         const size = descriptor.kind === "paper-grain" ? 1 + (index % 2) : 1;
-        return (
-          <View key={index} style={[styles.mark, descriptor.kind === "slate" && styles.slateMark, { backgroundColor: appearance.mode === "dark" ? "#FFFFFF" : "#0C0E12", height: size, left: `${(index * 37) % 97}%`, top: `${(index * 53) % 96}%`, width: descriptor.kind === "slate" ? 38 : size }]} />
-        );
+        return <View key={index} style={[styles.mark, descriptor.kind === "slate" && styles.slateMark, { backgroundColor: appearance.tokens.text, height: size, left: `${(index * 37) % 97}%`, top: `${(index * 53) % 96}%`, width: descriptor.kind === "slate" ? 38 : size }]} />;
       })}
     </View>
   );

@@ -16,13 +16,13 @@ func runAdapterProviderBridgeGrant(ctx context.Context) (ScenarioResult, error) 
 	tracks := &tracedProviderBridgeTrackCloser{recorder: recorder}
 	executor := providerbridge.NewSFUExecutor(publications, tracks)
 	input := provideroperations.OperationInput{
-		OperationID:                  "trace-publication-grant",
-		Effect:                       provideroperations.EffectGrantPublication,
-		TenantID:                     tenantID(),
-		SessionID:                    sessionID(),
-		ParticipantSessionID:         participantID(),
-		ParticipantSessionGeneration: 1,
-		PublicationSource:            "camera",
+		OperationID:           "trace-publication-grant",
+		Effect:                provideroperations.EffectGrantPublication,
+		TenantID:              tenantID(),
+		EpisodeID:             episodeID(),
+		ParticipantID:         participantID(),
+		ParticipantGeneration: 1,
+		PublicationSource:     "camera",
 	}
 
 	span := recorder.Start(
@@ -30,9 +30,9 @@ func runAdapterProviderBridgeGrant(ctx context.Context) (ScenarioResult, error) 
 		"providerbridge.SFUExecutor.Dispatch",
 		"authorize browser-owned publication without calling the provider",
 		map[string]any{
-			"effect":                         input.Effect,
-			"participant_session_generation": input.ParticipantSessionGeneration,
-			"publication_source":             input.PublicationSource,
+			"effect":                 input.Effect,
+			"participant_generation": input.ParticipantGeneration,
+			"publication_source":     input.PublicationSource,
 		},
 	)
 	result := executor.Dispatch(ctx, input)

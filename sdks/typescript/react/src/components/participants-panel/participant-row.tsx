@@ -15,8 +15,6 @@ export interface ParticipantRowProps {
   onStopParticipantCamera?: (id: string) => void;
   onRequestStartCamera?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
-  onMakeHost?: (id: string) => void;
-  onMakeCoHost?: (id: string) => void;
   onUpdateDisplayName?: (name: string) => void;
   participantVolumes?: ReadonlyMap<string, number>;
   onParticipantVolumeChange?: (id: string, volume: number) => void;
@@ -35,8 +33,6 @@ export function ParticipantRow({
   onStopParticipantCamera,
   onRequestStartCamera,
   onRemoveParticipant,
-  onMakeHost,
-  onMakeCoHost,
   onUpdateDisplayName,
   participantVolumes,
   onParticipantVolumeChange,
@@ -100,32 +96,22 @@ export function ParticipantRow({
                 />
               </div>
             ) : (
-              <span
-                className={cn("max-w-[140px] truncate text-sm", variant === "sidebar" ? "font-semibold text-[var(--chalk-app-text)]" : "font-normal text-[var(--chalk-app-text)]")}
-                onClick={() => participant.isLocal && onUpdateDisplayName && setIsEditing(true)}
-                title={participant.isLocal && onUpdateDisplayName ? "Click to edit" : undefined}
-              >
+              <span className="max-w-[140px] truncate text-sm font-semibold text-[var(--chalk-app-text)]" onClick={() => participant.isLocal && onUpdateDisplayName && setIsEditing(true)} title={participant.isLocal && onUpdateDisplayName ? "Click to edit" : undefined}>
                 {participant.displayName}
               </span>
             )}
             {participant.isLocal && !isEditing && (
-              <span className={cn("flex shrink-0 items-center gap-1 text-xs", "text-[var(--chalk-app-text-muted)]")}>
+              <span className="flex shrink-0 items-center gap-1 text-xs text-[var(--chalk-app-text-muted)]">
                 You
                 {onUpdateDisplayName && (
-                  <button type="button" onClick={() => setIsEditing(true)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-primary">
+                  <button type="button" onClick={() => setIsEditing(true)} className="p-0.5 opacity-0 transition-opacity hover:text-[var(--chalk-app-text)] group-hover:opacity-100">
                     <Edit02Icon className="w-3 h-3" />
                   </button>
                 )}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
-            {participant.role && participant.role !== "participant" && (
-              <span className={cn("text-[11px] font-normal tracking-normal", variant === "sidebar" ? "text-[var(--chalk-app-text-muted)]" : "rounded bg-[var(--chalk-app-control-group)] px-1.5 py-0.5 text-[var(--chalk-app-text-muted)]")}>
-                {variant === "sidebar" ? (participant.role === "host" ? "Host" : "Co-host") : participant.role}
-              </span>
-            )}
-          </div>
+          <div className="flex items-center gap-1.5"></div>
         </div>
       </div>
 
@@ -145,7 +131,7 @@ export function ParticipantRow({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className={cn("chalk-textured-surface absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]")}>
+                <div className="chalk-textured-surface absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
                   <ParticipantOptionsMenu
                     participant={participant}
                     variant={variant}
@@ -156,8 +142,6 @@ export function ParticipantRow({
                     onStopParticipantCamera={onStopParticipantCamera}
                     onRequestStartCamera={onRequestStartCamera}
                     onRemoveParticipant={onRemoveParticipant}
-                    onMakeHost={onMakeHost}
-                    onMakeCoHost={onMakeCoHost}
                     onEditName={
                       participant.isLocal
                         ? () => {

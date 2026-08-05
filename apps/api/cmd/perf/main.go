@@ -123,8 +123,8 @@ type runner struct {
 
 type perfTenant struct {
 	ID           string
-	RoomID       string
-	SessionID    string
+	SpaceID      string
+	EpisodeID    string
 	RecordingID  string
 	TranscriptID string
 	AuditLogID   string
@@ -363,7 +363,7 @@ func createPerfSeed(ctx context.Context, pool *pgxpool.Pool, count int) (perfSee
 	if err != nil {
 		return perfSeed{}, err
 	}
-	sessionID, err := newIDString()
+	loginSessionID, err := newIDString()
 	if err != nil {
 		return perfSeed{}, err
 	}
@@ -383,7 +383,7 @@ values ($1::uuid, $2, $3)
 	_, err = tx.Exec(ctx, `
 insert into login_sessions (id, user_id, token_hash, user_agent, expires_at)
 values ($1::uuid, $2::uuid, $3, $4, $5)
-`, sessionID, userID, authentication.SessionTokenHash(sessionToken), "chalk-api-perf", time.Now().Add(time.Hour))
+`, loginSessionID, userID, authentication.SessionTokenHash(sessionToken), "chalk-api-perf", time.Now().Add(time.Hour))
 	if err != nil {
 		return perfSeed{}, fmt.Errorf("insert perf session: %w", err)
 	}
@@ -413,11 +413,11 @@ func createPerfTenantSeed(ctx context.Context, tx pgx.Tx, runID string, index in
 	if err != nil {
 		return perfTenant{}, err
 	}
-	roomID, err := newIDString()
+	spaceID, err := newIDString()
 	if err != nil {
 		return perfTenant{}, err
 	}
-	sessionID, err := newIDString()
+	episodeID, err := newIDString()
 	if err != nil {
 		return perfTenant{}, err
 	}
@@ -451,33 +451,33 @@ values ($1::uuid, $2::uuid, $3::uuid, 'owner')
 	}
 
 	_, err = tx.Exec(ctx, `
-insert into rooms (id, name, tenant_id, status, slug, media_plane, metadata, created_by_user_id)
+insert into spaces (id, name, tenant_id, status, slug, media_plane, metadata, created_by_user_id)
 values ($1::uuid, $2, $3::uuid, 'active', $4, 'cf_sfu', '{"source":"perf"}'::jsonb, $5::uuid)
-`, roomID, fmt.Sprintf("Perf Room %d", index), tenantID, fmt.Sprintf("perf-%s-%d", runID, index), userID)
+`, spaceID, fmt.Sprintf("Perf Space %d", index), tenantID, fmt.Sprintf("perf-%s-%d", runID, index), userID)
 	if err != nil {
-		return perfTenant{}, fmt.Errorf("insert perf room: %w", err)
+		return perfTenant{}, fmt.Errorf("insert perf space: %w", err)
 	}
 
 	_, err = tx.Exec(ctx, `
-insert into room_sessions (id, status, metadata, room_id, tenant_id, created_by_user_id, started_at)
-values ($1::uuid, 'active', '{"source":"perf"}'::jsonb, $2::uuid, $3::uuid, $4::uuid, $5)
-`, sessionID, roomID, tenantID, userID, time.Now())
+insert into episodes (id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, config_snapshot)
+values ($1::uuid, 'active', '{"source":"perf"}'::jsonb, $2::uuid, $3::uuid, $4::uuid, $5, '{"roles":{"owner":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard","manageWhiteboard","manageAdmission","assignRoles","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording","startEpisode","extendEpisode","endEpisode","manageMembers","clearSpaceContent"],"collaborator":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard"],"observer":["subscribe","sendReaction"]},"role_capabilities":{"owner":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard","manageWhiteboard","manageAdmission","assignRoles","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording","startEpisode","extendEpisode","endEpisode","manageMembers","clearSpaceContent"],"collaborator":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","sendChat","sendReaction","drawWhiteboard"],"observer":["subscribe","sendReaction"]},"admission_policy":"open","default_episode_duration_seconds":3600,"maximum_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"maximum_duration_ceiling_seconds":86400,"linger_window_seconds":30}'::jsonb)
+`, episodeID, spaceID, tenantID, userID, time.Now())
 	if err != nil {
-		return perfTenant{}, fmt.Errorf("insert perf room session: %w", err)
+		return perfTenant{}, fmt.Errorf("insert perf episode: %w", err)
 	}
 
 	_, err = tx.Exec(ctx, `
-insert into recordings (id, tenant_id, room_id, session_id, status, storage_provider, storage_key, metadata)
+insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider, storage_key, metadata)
 values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'completed', 'r2', null, '{"source":"perf"}'::jsonb)
-`, recordingID, tenantID, roomID, sessionID)
+`, recordingID, tenantID, spaceID, episodeID)
 	if err != nil {
 		return perfTenant{}, fmt.Errorf("insert perf recording: %w", err)
 	}
 
 	_, err = tx.Exec(ctx, `
-insert into transcriptions (id, tenant_id, recording_id, room_id, session_id, status, provider, model, languages, metadata, completed_at)
+insert into transcriptions (id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, completed_at)
 values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'complete', 'deepgram', 'nova-3', array['en'], '{"source":"perf"}'::jsonb, $6)
-`, transcriptID, tenantID, recordingID, roomID, sessionID, time.Now())
+`, transcriptID, tenantID, recordingID, spaceID, episodeID, time.Now())
 	if err != nil {
 		return perfTenant{}, fmt.Errorf("insert perf transcript: %w", err)
 	}
@@ -492,8 +492,8 @@ values ($1::uuid, $2::uuid, $3::uuid, 'user', 'perf.seed', '{"source":"perf"}'::
 
 	return perfTenant{
 		ID:           tenantID,
-		RoomID:       roomID,
-		SessionID:    sessionID,
+		SpaceID:      spaceID,
+		EpisodeID:    episodeID,
 		RecordingID:  recordingID,
 		TranscriptID: transcriptID,
 		AuditLogID:   auditLogID,
@@ -643,17 +643,17 @@ func (r *runner) workload() []endpoint {
 		{Name: "GET /v1/tenants/{id}", Method: http.MethodGet, Path: r.tenantPath},
 		{Name: "PATCH /v1/tenants/{id}", Method: http.MethodPatch, Path: r.tenantPath, Body: r.patchTenantBody, ExpectedStatuses: writeStatuses},
 		{Name: "POST /v1/tenants", Method: http.MethodPost, Path: literal("/v1/tenants"), Body: r.createTenantBody, ExpectedStatuses: writeStatuses},
-		{Name: "GET /v1/tenants/{id}/rooms", Method: http.MethodGet, Path: r.roomListPath},
-		{Name: "GET /v1/tenants/{id}/rooms/{room_id}", Method: http.MethodGet, Path: r.roomPath},
-		{Name: "POST /v1/tenants/{id}/rooms", Method: http.MethodPost, Request: (*runner).createRoomRequest, ExpectedStatuses: writeStatuses},
-		{Name: "PATCH /v1/tenants/{id}/rooms/{room_id}", Method: http.MethodPatch, Path: r.roomPath, Body: r.patchRoomBody, ExpectedStatuses: writeStatuses},
-		{Name: "GET /v1/tenants/{id}/rooms/{room_id}/sessions", Method: http.MethodGet, Path: r.roomSessionListPath},
-		{Name: "GET /v1/tenants/{id}/rooms/{room_id}/sessions/{session_id}", Method: http.MethodGet, Path: r.roomSessionPath},
-		{Name: "POST /v1/tenants/{id}/rooms/{room_id}/sessions", Method: http.MethodPost, Request: (*runner).createRoomSessionRequest, ExpectedStatuses: writeStatuses},
-		{Name: "PATCH /v1/tenants/{id}/rooms/{room_id}/sessions/{session_id}", Method: http.MethodPatch, Path: r.roomSessionPath, Body: r.patchRoomSessionBody, ExpectedStatuses: writeStatuses},
+		{Name: "GET /v1/tenants/{id}/spaces", Method: http.MethodGet, Path: r.spaceListPath},
+		{Name: "GET /v1/tenants/{id}/spaces/{space_id}", Method: http.MethodGet, Path: r.spacePath},
+		{Name: "POST /v1/tenants/{id}/spaces", Method: http.MethodPost, Request: (*runner).createSpaceRequest, ExpectedStatuses: writeStatuses},
+		{Name: "PATCH /v1/tenants/{id}/spaces/{space_id}", Method: http.MethodPatch, Path: r.spacePath, Body: r.patchSpaceBody, ExpectedStatuses: writeStatuses},
+		{Name: "GET /v1/tenants/{id}/spaces/{space_id}/episodes", Method: http.MethodGet, Path: r.spaceEpisodeListPath},
+		{Name: "GET /v1/tenants/{id}/spaces/{space_id}/episodes/{episode_id}", Method: http.MethodGet, Path: r.spaceEpisodePath},
+		{Name: "POST /v1/tenants/{id}/spaces/{space_id}/episodes", Method: http.MethodPost, Request: (*runner).createEpisodeRequest, ExpectedStatuses: writeStatuses},
+		{Name: "PATCH /v1/tenants/{id}/spaces/{space_id}/episodes/{episode_id}", Method: http.MethodPatch, Path: r.spaceEpisodePath, Body: r.patchEpisodeBody, ExpectedStatuses: writeStatuses},
 		{Name: "GET /v1/tenants/{id}/recordings", Method: http.MethodGet, Path: r.recordingListPath},
 		{Name: "GET /v1/tenants/{id}/recordings/{recording_id}", Method: http.MethodGet, Path: r.recordingPath},
-		{Name: "POST /v1/tenants/{id}/rooms/{room_id}/sessions/{session_id}/recordings", Method: http.MethodPost, Request: (*runner).createRecordingRequest, ExpectedStatuses: writeStatuses},
+		{Name: "POST /v1/tenants/{id}/spaces/{space_id}/episodes/{episode_id}/recordings", Method: http.MethodPost, Request: (*runner).createRecordingRequest, ExpectedStatuses: writeStatuses},
 		{Name: "PATCH /v1/tenants/{id}/recordings/{recording_id}", Method: http.MethodPatch, Path: r.recordingPath, Body: r.patchRecordingBody, ExpectedStatuses: writeStatuses},
 		{Name: "POST /v1/tenants/{id}/recordings/{recording_id}/download-url", Method: http.MethodPost, Path: r.recordingDownloadPath, Body: literal(`{"expires_in_seconds":300}`), ExpectedStatuses: []int{http.StatusOK, http.StatusBadRequest, http.StatusTooManyRequests, http.StatusServiceUnavailable}},
 		{Name: "GET /v1/tenants/{id}/transcripts", Method: http.MethodGet, Path: r.transcriptListPath},
@@ -1036,7 +1036,7 @@ func writeReport(path string, input reportInput) error {
 	b.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().UTC().Format(time.RFC3339)))
 	b.WriteString("## Scope\n\n")
 	b.WriteString(fmt.Sprintf("- Seed tenants: %d\n", input.SeedTenants))
-	b.WriteString("- Endpoints exercised: `/healthz`, `/readyz`, `/v1/me`, tenants, regions, rooms, room sessions, recordings, recording download URL edge, transcripts, and audit logs.\n")
+	b.WriteString("- Endpoints exercised: `/healthz`, `/readyz`, `/v1/me`, tenants, regions, spaces, episodes, recordings, recording download URL edge, transcripts, and audit logs.\n")
 	b.WriteString("- Protected `/v1` requests use a perf-only bearer session seeded directly into the configured local Postgres database.\n")
 	b.WriteString("- Server log: local raw JSONL under `.private/`, not intended for commit.\n\n")
 	b.WriteString("## Lifecycle\n\n")
@@ -1345,28 +1345,28 @@ func (r *runner) tenantPath() string {
 	return "/v1/tenants/" + r.tenant().ID
 }
 
-func (r *runner) roomListPath() string {
-	return fmt.Sprintf("/v1/tenants/%s/rooms?page_size=20", r.tenant().ID)
+func (r *runner) spaceListPath() string {
+	return fmt.Sprintf("/v1/tenants/%s/spaces?page_size=20", r.tenant().ID)
 }
 
-func (r *runner) roomPath() string {
+func (r *runner) spacePath() string {
 	tenant := r.tenant()
-	return fmt.Sprintf("/v1/tenants/%s/rooms/%s", tenant.ID, tenant.RoomID)
+	return fmt.Sprintf("/v1/tenants/%s/spaces/%s", tenant.ID, tenant.SpaceID)
 }
 
-func (r *runner) roomSessionListPath() string {
+func (r *runner) spaceEpisodeListPath() string {
 	tenant := r.tenant()
-	return fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions?page_size=20", tenant.ID, tenant.RoomID)
+	return fmt.Sprintf("/v1/tenants/%s/spaces/%s/episodes?page_size=20", tenant.ID, tenant.SpaceID)
 }
 
-func (r *runner) roomSessionPath() string {
+func (r *runner) spaceEpisodePath() string {
 	tenant := r.tenant()
-	return fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions/%s", tenant.ID, tenant.RoomID, tenant.SessionID)
+	return fmt.Sprintf("/v1/tenants/%s/spaces/%s/episodes/%s", tenant.ID, tenant.SpaceID, tenant.EpisodeID)
 }
 
 func (r *runner) recordingListPath() string {
 	tenant := r.tenant()
-	return fmt.Sprintf("/v1/tenants/%s/recordings?session_id=%s&page_size=20", tenant.ID, tenant.SessionID)
+	return fmt.Sprintf("/v1/tenants/%s/recordings?episode_id=%s&page_size=20", tenant.ID, tenant.EpisodeID)
 }
 
 func (r *runner) recordingPath() string {
@@ -1398,13 +1398,13 @@ func (r *runner) auditLogPath() string {
 	return fmt.Sprintf("/v1/tenants/%s/audit-logs/%s", tenant.ID, tenant.AuditLogID)
 }
 
-func (r *runner) createRoomRequest() endpointRequest {
+func (r *runner) createSpaceRequest() endpointRequest {
 	tenant := r.tenant()
 	iteration := r.iteration()
 	return endpointRequest{
-		Path: fmt.Sprintf("/v1/tenants/%s/rooms", tenant.ID),
+		Path: fmt.Sprintf("/v1/tenants/%s/spaces", tenant.ID),
 		Body: fmt.Sprintf(
-			`{"name":"Perf Created Room %d","status":"active","slug":"perf-created-%d","media_plane":"cf_sfu","metadata":{"source":"perf","iteration":%d}}`,
+			`{"name":"Perf Created Space %d","slug":"perf-created-%d","media_plane":"cf_sfu","metadata":{"source":"perf","iteration":%d}}`,
 			iteration,
 			iteration,
 			iteration,
@@ -1412,12 +1412,12 @@ func (r *runner) createRoomRequest() endpointRequest {
 	}
 }
 
-func (r *runner) createRoomSessionRequest() endpointRequest {
+func (r *runner) createEpisodeRequest() endpointRequest {
 	tenant := r.tenant()
 	iteration := r.iteration()
 	return endpointRequest{
-		Path: fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions", tenant.ID, tenant.RoomID),
-		Body: fmt.Sprintf(`{"status":"active","metadata":{"source":"perf","iteration":%d}}`, iteration),
+		Path: fmt.Sprintf("/v1/tenants/%s/spaces/%s/episodes", tenant.ID, tenant.SpaceID),
+		Body: fmt.Sprintf(`{"metadata":{"source":"perf","iteration":%d}}`, iteration),
 	}
 }
 
@@ -1425,7 +1425,7 @@ func (r *runner) createRecordingRequest() endpointRequest {
 	tenant := r.tenant()
 	iteration := r.iteration()
 	return endpointRequest{
-		Path: fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions/%s/recordings", tenant.ID, tenant.RoomID, tenant.SessionID),
+		Path: fmt.Sprintf("/v1/tenants/%s/spaces/%s/episodes/%s/recordings", tenant.ID, tenant.SpaceID, tenant.EpisodeID),
 		Body: fmt.Sprintf(`{"status":"completed","storage_provider":"r2","metadata":{"source":"perf","iteration":%d}}`, iteration),
 	}
 }
@@ -1436,9 +1436,9 @@ func (r *runner) createTranscriptRequest() endpointRequest {
 	return endpointRequest{
 		Path: fmt.Sprintf("/v1/tenants/%s/recordings/%s/transcripts", tenant.ID, tenant.RecordingID),
 		Body: fmt.Sprintf(
-			`{"room_id":"%s","session_id":"%s","status":"completed","provider":"deepgram","model":"nova-3","languages":["en"],"text":"perf transcript %d","metadata":{"source":"perf","iteration":%d}}`,
-			tenant.RoomID,
-			tenant.SessionID,
+			`{"space_id":"%s","episode_id":"%s","status":"completed","provider":"deepgram","model":"nova-3","languages":["en"],"text":"perf transcript %d","metadata":{"source":"perf","iteration":%d}}`,
+			tenant.SpaceID,
+			tenant.EpisodeID,
 			iteration,
 			iteration,
 		),
@@ -1453,12 +1453,12 @@ func (r *runner) createTenantBody() string {
 	return fmt.Sprintf(`{"name":"Perf Create %d","default_region":"us"}`, r.iteration())
 }
 
-func (r *runner) patchRoomBody() string {
-	return fmt.Sprintf(`{"status":"active","metadata":{"source":"perf","iteration":%d}}`, r.iteration())
+func (r *runner) patchSpaceBody() string {
+	return fmt.Sprintf(`{"metadata":{"source":"perf","iteration":%d}}`, r.iteration())
 }
 
-func (r *runner) patchRoomSessionBody() string {
-	return fmt.Sprintf(`{"status":"active","metadata":{"source":"perf","iteration":%d}}`, r.iteration())
+func (r *runner) patchEpisodeBody() string {
+	return fmt.Sprintf(`{"metadata":{"source":"perf","iteration":%d}}`, r.iteration())
 }
 
 func (r *runner) patchRecordingBody() string {

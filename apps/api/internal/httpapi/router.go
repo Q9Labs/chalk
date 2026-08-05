@@ -26,7 +26,7 @@ type TenantAuthorizer interface {
 	AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error
 }
 
-type MeetingCredentialVerifier interface {
+type EpisodeCredentialVerifier interface {
 	Verify(ctx context.Context, credential string) error
 }
 
@@ -54,7 +54,7 @@ type Options struct {
 	Journeys               JourneyService
 	JourneyMetrics         JourneyMetricRecorder
 	LocalTelemetry         bool
-	MeetingCredentials     MeetingCredentialVerifier
+	EpisodeCredentials     EpisodeCredentialVerifier
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
 	ParticipantMediaIssuer ParticipantMediaIssuer
@@ -68,8 +68,8 @@ type Options struct {
 	Recordings             RecordingService
 	RecordingPipeline      RecordingPipelineService
 	RecorderMetrics        RecordingPipelineMetricRecorder
-	Rooms                  RoomService
-	SessionLifecycle       SessionLifecycleService
+	Spaces                 SpaceService
+	Episodes               EpisodeLifecycleService
 	SyncTokens             SyncTokenIssuer
 	SyncTokenRefresh       SyncTokenRefreshIssuer
 	SessionCookie          SessionCookieOptions
@@ -106,15 +106,13 @@ func NewRouter(options Options) http.Handler {
 	}
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "not_found", "Route not found")
+		writeError(w, http.StatusNotFound, "route.not_found", "Route not found")
 	})
 	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed")
+		writeError(w, http.StatusMethodNotAllowed, "route.method_not_allowed", "Method not allowed")
 	})
 
-	mountTranscriptWorkerRoutes(r, options.TranscriptWorker, options.WorkloadAuthorizer, options.ManifestAuthority, options.ChunkAuthority, options.ResultAuthority)
-	mountTranscriptCleanupRoutes(r, options.CleanupWorker, options.WorkloadAuthorizer, options.CleanupDeleteAuthority)
-	mountTranscriptFinalizeRoutes(r, options.FinalizerWorker, options.WorkloadAuthorizer, options.FinalizerAuthority)
+	mountWorkerRoutes(r, options)
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
@@ -202,62 +200,6 @@ func enabledStatus(enabled bool) string {
 		return "enabled"
 	}
 	return "disabled"
-}
-
-func mountV1Routes(r chi.Router, options Options) {
-	r.Route("/v1", func(r chi.Router) {
-		r.Group(func(r chi.Router) {
-			r.Use(rejectTenantAPIKeyCredential)
-			mountAuthRoutes(r, options.Authentication, options.SessionCookie, options.RateLimit)
-		})
-
-		r.Group(func(r chi.Router) {
-			r.Use(rejectTenantAPIKeyCredential)
-			r.Use(requireTelemetryIntakeCredential(options.Authentication, options.MeetingCredentials))
-			mountJourneyIntakeRoutes(r, options.Journeys, options.JourneyMetrics, options.RateLimit)
-		})
-
-		r.Group(func(r chi.Router) {
-			r.Use(requireSessionAuthentication(options.Authentication))
-			mountMeRoutes(r, options.Authentication, options.RateLimit)
-			mountAccountTenantRoutes(r, options.AccountTenants, options.RateLimit)
-			if options.LocalTelemetry {
-				mountLocalJourneyQueryRoutes(r, options.Journeys, options.RateLimit)
-			}
-		})
-
-		r.Group(func(r chi.Router) {
-			r.Use(rejectTenantAPIKeyOnUnscopedRoute)
-			r.Use(requireTenantAuthentication(options.Authentication, options.APIKeyAuthentication, options.RateLimit.ClientIP))
-			mountIntegrationRoutes(r, options.Integrations, options.TenantAuthz, options.RateLimit, integrationRouteOptions{
-				CallbackAllowedOrigins: options.CORS.AllowedOrigins,
-			})
-			mountAPIKeyRoutes(r, options.APIKeys, options.TenantAuthz, options.APIKeyAudits, options.RateLimit)
-			mountTenantRoutes(r, options.Tenants, options.TenantAuthz, options.RateLimit)
-			mountUserRoutes(r, options.Users, options.RateLimit)
-			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
-			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
-			mountSessionLifecycleRoutes(r, options.Rooms, options.Tenants, options.SessionLifecycle, options.SyncTokens, options.SyncTokenRefresh, options.ParticipantMediaIssuer, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.ParticipantGeneration, options.MediaPlane, options.TenantAuthz, options.RateLimit)
-			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
-			mountRecordingPipelineRoutes(r, options.RecordingPipeline, options.RecorderMetrics, options.TenantAuthz, options.RateLimit)
-			if options.TranscriptArtifacts != nil {
-				mountTranscriptArtifactRoutes(r, options.TranscriptArtifacts, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
-			} else {
-				mountTranscriptRoutes(r, options.Transcripts, options.Recordings, options.RecordingObjects, options.Tenants, options.AITranscriptions, options.TenantAuthz, options.RateLimit)
-			}
-			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)
-			mountWebhookRoutes(r, options.Webhooks, options.TenantAuthz, options.RateLimit)
-		})
-
-		r.Group(func(r chi.Router) {
-			mountParticipantMediaRoutes(r, options.Rooms, options.Tenants, options.MediaPlane, options.MediaPublications, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.RateLimit)
-		})
-
-		r.Group(func(r chi.Router) {
-			mountChatAttachmentRoutes(r, options.ChatAttachments, options.ChatParticipants, options.RateLimit)
-			mountWhiteboardFileRoutes(r, options.WhiteboardFiles, options.WhiteboardParticipants, options.RateLimit)
-		})
-	})
 }
 
 // requireSessionAuthentication keeps tenant API keys out of routes without an

@@ -9,7 +9,7 @@ import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, Arrow
 import { cn } from "../../utils/cn";
 import { ControlBarButton } from "../atomic";
 import { Tooltip } from "../atomic/Tooltip";
-import type { ChalkHapticInput } from "../../internal/useHaptics";
+import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 
 export interface DevicePopoverProps {
@@ -28,7 +28,7 @@ export interface DevicePopoverProps {
   orientation?: "up" | "down";
   className?: string;
   disabled?: boolean;
-  haptic?: ChalkHapticInput | false;
+  haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
   appearance?: "default" | "floating";
 }

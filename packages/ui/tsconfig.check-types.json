@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@q9labsai/chalk-ui": ["./src/index.ts"],
+      "@q9labsai/chalk-assets": ["../assets/src/index.ts"]
+    },
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
+}

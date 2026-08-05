@@ -25,8 +25,8 @@ export function CreateSpaceSheet({ createEnabled, isCreating, isOpen, name, onCh
           <View style={styles.grip} />
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>Create a Space</Text>
-              <Text style={styles.subtitle}>A place for the work that keeps moving.</Text>
+              <Text style={styles.title}>{createEnabled ? "Create a Space" : "Open local Space"}</Text>
+              <Text style={styles.subtitle}>{createEnabled ? "A place for the work that keeps moving." : "A shared local Space for trying Chalk on this device."}</Text>
             </View>
             <Pressable accessibilityLabel="Close" accessibilityRole="button" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
               <HugeiconsIcon color={Theme.colors.ink} icon={Cancel01Icon} size={21} />
@@ -57,7 +57,7 @@ export function CreateSpaceSheet({ createEnabled, isCreating, isOpen, name, onCh
             </View>
           ) : (
             <View style={styles.webNote}>
-              <Text style={styles.webNoteText}>Space creation is currently available on the web. Mobile invite links still open here.</Text>
+              <Text style={styles.webNoteText}>This opens the shared local Space; it does not create or save a new Space.</Text>
             </View>
           )}
           <Pressable accessibilityRole="button" disabled={isCreating} onPress={onCreate} style={({ pressed }) => [styles.action, pressed && styles.actionPressed, isCreating && styles.disabled]}>
@@ -65,7 +65,7 @@ export function CreateSpaceSheet({ createEnabled, isCreating, isOpen, name, onCh
               <ActivityIndicator color={Theme.colors.primaryForeground} />
             ) : (
               <>
-                <Text style={styles.actionText}>{createEnabled ? "Create Space" : "Continue on web"}</Text>
+                <Text style={styles.actionText}>{createEnabled ? "Create Space" : "Open local Space"}</Text>
                 <HugeiconsIcon color={Theme.colors.primaryForeground} icon={ArrowRight02Icon} size={20} />
               </>
             )}

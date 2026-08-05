@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	lambdawaker "github.com/q9labs/chalk/apps/api/internal/adapters/aws/lambdawaker"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	rtkadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk"
@@ -26,6 +27,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
@@ -34,14 +36,12 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridgeserver"
 	"github.com/q9labs/chalk/apps/api/internal/recorderhealth"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
-	"github.com/q9labs/chalk/apps/api/internal/rooms"
-	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -163,17 +163,17 @@ func run() error {
 	userService := users.NewService(userRepository)
 	membershipRepository := postgres.NewMembershipRepository(operationQueries)
 	membershipService := memberships.NewService(membershipRepository)
-	roomRepository := postgres.NewRoomRepository(operationQueries, pool)
-	roomService := rooms.NewService(roomRepository)
-	sessionLifecycleRepository := postgres.NewSessionLifecycleRepository(pool)
-	sessionLifecycleService := sessionlifecycle.NewService(sessionLifecycleRepository)
+	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
+	spaceService := spaces.NewService(spaceRepository)
+	episodeRepository := postgres.NewEpisodeLifecycleRepository(pool)
+	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
 	var syncTokenRefresh httpapi.SyncTokenRefreshIssuer
 	var participantMediaIssuer httpapi.ParticipantMediaIssuer
 	var participantMediaVerifier httpapi.ParticipantMediaVerifier
 	var syncParticipantVerifier synctokens.Verifier
 	var syncParticipantVerifierConfigured bool
-	participantActiveAuthorizer := participantaccess.NewActiveAuthorizer(sessionLifecycleRepository)
+	participantActiveAuthorizer := accessgrants.NewActiveAuthorizer(episodeRepository)
 	if len(cfg.SyncToken.PrivateKey) > 0 {
 		service, err := synctokens.NewService(synctokens.Config{
 			Issuer: cfg.SyncToken.Issuer, Audience: cfg.SyncToken.Audience,
@@ -182,7 +182,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure sync token issuer: %w", err)
 		}
-		broker := synctokens.NewBroker(sessionLifecycleRepository, service)
+		broker := synctokens.NewBroker(episodeRepository, service)
 		syncTokenService = broker
 		syncTokenRefresh = broker
 		syncParticipantVerifier, err = synctokens.NewVerifier(synctokens.VerifierConfig{
@@ -193,19 +193,19 @@ func run() error {
 			return fmt.Errorf("configure Sync participant verifier: %w", err)
 		}
 		syncParticipantVerifierConfigured = true
-		mediaIssuer, err := participantaccess.NewIssuer(participantaccess.IssuerConfig{
+		mediaIssuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{
 			Issuer: cfg.SyncToken.Issuer, KeyID: cfg.SyncToken.KeyID, PrivateKey: cfg.SyncToken.PrivateKey,
 		})
 		if err != nil {
 			return fmt.Errorf("configure participant media issuer: %w", err)
 		}
-		mediaVerifier, err := participantaccess.NewVerifier(participantaccess.VerifierConfig{
+		mediaVerifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{
 			Issuer: cfg.SyncToken.Issuer, VerificationKeys: cfg.SyncToken.VerificationKeys,
 		})
 		if err != nil {
 			return fmt.Errorf("configure participant media verifier: %w", err)
 		}
-		participantMediaIssuer = observability.InstrumentParticipantAccessIssuer(mediaIssuer, launchTelemetry)
+		participantMediaIssuer = observability.InstrumentAccessGrantIssuer(mediaIssuer, launchTelemetry)
 		participantMediaVerifier = observability.InstrumentParticipantMediaVerifier(mediaVerifier, launchTelemetry)
 	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
@@ -218,13 +218,13 @@ func run() error {
 	auditLogService := auditlogs.NewService(auditLogRepository)
 	journeyRepository := postgres.NewJourneyRepository(pool)
 	journeyService := journeys.NewService(journeyRepository)
-	var meetingCredentials httpapi.MeetingCredentialVerifier
+	var episodeCredentials httpapi.EpisodeCredentialVerifier
 	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
 		verifier, err := rtkadapter.NewCredentialVerifier(cfg.CloudflareRealtime)
 		if err != nil {
-			return fmt.Errorf("configure realtimekit meeting credential verifier: %w", err)
+			return fmt.Errorf("configure realtimekit Episode-scoped media credential verifier: %w", err)
 		}
-		meetingCredentials = verifier
+		episodeCredentials = verifier
 	}
 	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(cfg.CloudflareRealtime)
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
@@ -365,7 +365,7 @@ func run() error {
 		Integrations:           integrationService,
 		Journeys:               journeyService,
 		LocalTelemetry:         cfg.Observability.Environment == config.DefaultEnvironment,
-		MeetingCredentials:     meetingCredentials,
+		EpisodeCredentials:     episodeCredentials,
 		MediaPlane:             mediaPlaneRegistry,
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,
@@ -379,8 +379,8 @@ func run() error {
 		RecordingPipeline:      recordingPipelineService,
 		RecorderHealth:         recorderHealthService,
 		Recordings:             recordingService,
-		Rooms:                  roomService,
-		SessionLifecycle:       sessionLifecycleService,
+		Spaces:                 spaceService,
+		Episodes:               episodeService,
 		SyncTokens:             syncTokenService,
 		SyncTokenRefresh:       syncTokenRefresh,
 		SessionCookie: httpapi.SessionCookieOptions{
@@ -434,7 +434,7 @@ func run() error {
 	dispatcher := webhooks.NewDispatcher(postgres.NewWebhookDispatchRepository(pool), webhookProtector, webhooks.NewDeliveryClient(nil), dispatcherOwner.String(), logger)
 	dispatcherErr := make(chan error, 1)
 	go func() { dispatcherErr <- dispatcher.Run(signalCtx) }()
-	deadlineScheduler := sessionlifecycle.NewDeadlineScheduler(sessionLifecycleRepository, cfg.DeadlineScheduler.Interval, cfg.DeadlineScheduler.Batch)
+	deadlineScheduler := episodes.NewDeadlineScheduler(episodeRepository, cfg.DeadlineScheduler.Interval, cfg.DeadlineScheduler.Batch)
 	deadlineSchedulerErr := make(chan error, 1)
 	go func() { deadlineSchedulerErr <- deadlineScheduler.Run(signalCtx) }()
 	var whiteboardCleanupErr <-chan error

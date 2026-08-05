@@ -4,59 +4,58 @@ import { DEFAULT_PREVIEW_SEARCH } from "./preview-state";
 import { createPreviewSnapshot, createPreviewStore } from "./sdk-preview-store";
 
 describe("native SDK preview store", () => {
-  it("projects exact client snapshot participants and local media", () => {
+  it("projects the canonical SpaceSnapshot participants and local media", () => {
     const snapshot = createPreviewSnapshot({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "happy", mic: false, camera: false, hand: true });
 
-    expect(snapshot.participants).toHaveLength(2);
-    expect(snapshot.participants[0]).toMatchObject({ participantSessionId: "you", handRaised: true, role: "host" });
-    expect(snapshot.localMedia).toMatchObject({ microphone: { state: "disabled", track: null }, camera: { state: "disabled", track: null }, screen: { state: "disabled", track: null } });
-    expect(snapshot.participantMedia.you).toMatchObject({ microphone: "inactive", camera: "inactive" });
+    expect(snapshot.participants.roster).toHaveLength(2);
+    expect(snapshot.participants.roster[0]).toMatchObject({ participantId: "you", handRaised: true, role: "owner" });
+    expect(snapshot.media.local).toMatchObject({ microphone: { state: "disabled", track: null }, camera: { state: "disabled", track: null }, screen: { state: "disabled", track: null } });
+    expect(snapshot.participants.roster[0]?.media).toMatchObject({ microphone: "inactive", camera: "inactive" });
   });
 
-  it("keeps empty and failure states in the snapshot contract", () => {
+  it("keeps empty and failure states in the canonical snapshot contract", () => {
     const empty = createPreviewSnapshot({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "empty", participants: 0, chat: "empty" });
     const failed = createPreviewSnapshot({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "failure" });
 
-    expect(empty.participants).toHaveLength(0);
+    expect(empty.participants.roster).toHaveLength(0);
     expect(empty.chat.messages).toHaveLength(0);
-    expect(failed.state).toBe("failed");
-    expect(failed.failure?.code).toBe("sync_start_failed");
+    expect(failed.connection.status).toBe("failed");
+    expect(failed.connection.lastError?.code).toBe("connection.sync_start_failed");
   });
 
-  it("projects nonterminal recovery phases for the production connection banner", () => {
+  it("projects nonterminal recovery phases for the canonical connection slice", () => {
     const reconnecting = createPreviewSnapshot({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "reconnecting" });
     const retry = createPreviewSnapshot({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "retry" });
     const warning = createPreviewSnapshot({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "warning" });
     const timeout = createPreviewSnapshot({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "timeout" });
 
-    expect(reconnecting).toMatchObject({ state: "reconnecting", connection: { sync: "recovering", media: "recovering" }, failure: null });
-    expect(retry).toMatchObject({ state: "live", connection: { sync: "failed", media: "healthy" }, failure: { recoverable: true } });
-    expect(warning).toMatchObject({ state: "live", connection: { sync: "healthy", media: "failed" }, failure: { code: "media_recovery_exhausted", recoverable: true } });
-    expect(timeout.state).toBe("failed");
+    expect(reconnecting).toMatchObject({ connection: { status: "reconnecting", lastError: null } });
+    expect(retry).toMatchObject({ connection: { status: "live", lastError: { recoverable: true } } });
+    expect(warning).toMatchObject({ connection: { status: "live", lastError: { code: "connection.media_recovery_exhausted", recoverable: true } } });
+    expect(timeout.connection.status).toBe("failed");
   });
 
-  it("mutates the Set-subscribed store without creating a transport", async () => {
+  it("mutates the SpaceClient store without creating a transport", async () => {
     const store = createPreviewStore({ ...DEFAULT_PREVIEW_SEARCH, view: "space", state: "happy" });
     let updates = 0;
     store.subscribe(() => {
       updates += 1;
     });
 
-    await store.setMicrophoneEnabled(false);
-    await store.setCameraEnabled(false);
-    await store.setHandRaised(true);
-    await store.sendReaction("👍");
-    await store.sendChatMessage({ text: "Fixture message" });
-    await store.admitParticipant("admission-1");
+    await store.media.setMicrophoneEnabled(false);
+    await store.media.setCameraEnabled(false);
+    await store.participants.raiseHand();
+    await store.reactions.send("👍");
+    await store.chat.send({ text: "Fixture message" });
+    await store.participants.admit("admission-1");
 
     expect(updates).toBe(6);
-    expect(store.getSnapshot().localMedia.microphone.state).toBe("disabled");
-    expect(store.getSnapshot().localMedia.camera.state).toBe("disabled");
-    expect(store.getSnapshot().participants[0]?.handRaised).toBe(true);
-    expect(store.getSnapshot().reactions.at(-1)?.reaction).toBe("👍");
+    expect(store.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(store.getSnapshot().media.local.camera.state).toBe("disabled");
+    expect(store.getSnapshot().self.handRaised).toBe(true);
+    expect(store.getSnapshot().reactions.active.at(-1)?.reaction).toBe("👍");
     expect(store.getSnapshot().chat.messages.at(-1)?.text).toBe("Fixture message");
-    expect(store.getSnapshot().admissionRequests).toHaveLength(1);
-    expect(store.chatFiles).toBeNull();
-    expect(store.whiteboard).not.toBeNull();
+    expect(store.getSnapshot().chat.messages.at(-1)?.clientMessageId).toBe("preview-client-4");
+    expect(store.getSnapshot().participants.admissionQueue).toHaveLength(1);
   });
 });

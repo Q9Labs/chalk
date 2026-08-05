@@ -10,12 +10,12 @@ defmodule ChalkSync.Retention.SQL do
     """
   end
 
-  def claim_eligible_sessions do
+  def claim_eligible_episodes do
     """
     select
       control.tenant_id,
-      control.room_id,
-      control.session_id,
+      control.space_id,
+      control.episode_id,
       control.control_revision,
       control.folded_state,
       control.state_schema_version,
@@ -28,67 +28,67 @@ defmodule ChalkSync.Retention.SQL do
       control.lifecycle_intent_bytes,
       control.receipt_count,
       control.receipt_bytes
-    from room_sessions session
-    join sync_session_control control
-      on control.tenant_id = session.tenant_id
-      and control.room_id = session.room_id
-      and control.session_id = session.id
-    where session.status = 'ended'
-      and session.ended_at <= $1
+    from episodes episode
+    join sync_episode_control control
+      on control.tenant_id = episode.tenant_id
+      and control.space_id = episode.space_id
+      and control.episode_id = episode.id
+    where episode.status = 'ended'
+      and episode.ended_at <= $1
       and control.retention_cleaned_at is null
       and not exists (
         select 1
         from sync_lifecycle_intents intent
         where intent.tenant_id = control.tenant_id
-          and intent.session_id = control.session_id
+          and intent.episode_id = control.episode_id
           and intent.status = 'pending'
       )
       and not exists (
         select 1 from sync_external_operations operation
         where operation.tenant_id = control.tenant_id
-          and operation.session_id = control.session_id
+          and operation.episode_id = control.episode_id
           and operation.status = 'pending'
       )
       and not exists (
         select 1 from sync_admission_requests admission
         where admission.tenant_id = control.tenant_id
-          and admission.session_id = control.session_id
+          and admission.episode_id = control.episode_id
           and admission.status = 'pending'
       )
       and not exists (
         select 1 from sync_recordings recording
         where recording.tenant_id = control.tenant_id
-          and recording.session_id = control.session_id
+          and recording.episode_id = control.episode_id
           and recording.status in ('starting', 'recording', 'stopping')
       )
       and not exists (
         select 1 from sync_screen_share_leases lease
         where lease.tenant_id = control.tenant_id
-          and lease.session_id = control.session_id
+          and lease.episode_id = control.episode_id
       )
       and not exists (
         select 1 from sync_publication_fences fence
         where fence.tenant_id = control.tenant_id
-          and fence.session_id = control.session_id
+          and fence.episode_id = control.episode_id
           and fence.expires_at > $2
       )
       and not exists (
         select 1 from sync_publication_grant_reservations reservation
         where reservation.tenant_id = control.tenant_id
-          and reservation.session_id = control.session_id
+          and reservation.episode_id = control.episode_id
           and reservation.status in ('pending', 'ambiguous')
       )
       and not exists (
         select 1 from sync_whiteboard_files file
         where file.tenant_id = control.tenant_id
-          and file.session_id = control.session_id
+          and file.episode_id = control.episode_id
       )
       and not exists (
         select 1 from sync_chat_attachments attachment
         where attachment.tenant_id = control.tenant_id
-          and attachment.session_id = control.session_id
+          and attachment.episode_id = control.episode_id
       )
-    order by session.ended_at, control.tenant_id, control.session_id
+    order by episode.ended_at, control.tenant_id, control.episode_id
     limit $3
     for update of control skip locked
     """
@@ -106,7 +106,7 @@ defmodule ChalkSync.Retention.SQL do
       encoded_bytes
     from sync_control_events
     where tenant_id = $1
-      and session_id = $2
+      and episode_id = $2
       and revision > $3
     order by revision
     limit $4
@@ -115,7 +115,7 @@ defmodule ChalkSync.Retention.SQL do
 
   def write_checkpoint do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       retention_checkpoint_revision = $3,
       retention_checkpoint_state_digest = $4,
@@ -141,11 +141,11 @@ defmodule ChalkSync.Retention.SQL do
       retention_deleted_publication_grant_reservation_bytes = $23,
       updated_at = $6
     where tenant_id = $1
-      and session_id = $2
+      and episode_id = $2
       and control_revision = $3
       and state_digest = $4
       and retention_cleaned_at is null
-    returning session_id
+    returning episode_id
     """
   end
 
@@ -153,7 +153,7 @@ defmodule ChalkSync.Retention.SQL do
     """
     with deleted as (
       delete from sync_command_receipts
-      where tenant_id = $1 and session_id = $2
+      where tenant_id = $1 and episode_id = $2
       returning 1
     )
     select count(*)::bigint from deleted
@@ -170,20 +170,42 @@ defmodule ChalkSync.Retention.SQL do
 
   def delete_chat_messages, do: delete_rows("sync_chat_messages")
   def delete_chat_read_receipts, do: delete_rows("sync_chat_read_receipts")
-  def delete_chat_streams, do: delete_rows("sync_chat_streams")
+
+  def delete_chat_streams do
+    """
+    with deleted as (
+      delete from sync_chat_streams
+      where tenant_id = $1
+        and space_id = (select space_id from episodes where tenant_id = $1 and id = $2)
+      returning pg_column_size(sync_chat_streams)::bigint as encoded_bytes
+    )
+    select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted
+    """
+  end
 
   def delete_whiteboard_operation_receipts,
     do: delete_rows("sync_whiteboard_operation_receipts")
 
   def delete_whiteboard_permissions, do: delete_rows("sync_whiteboard_permissions")
   def delete_whiteboard_elements, do: delete_rows("sync_whiteboard_elements")
-  def delete_whiteboard_scenes, do: delete_rows("sync_whiteboard_scenes")
+
+  def delete_whiteboard_scenes do
+    """
+    with deleted as (
+      delete from sync_whiteboard_scenes
+      where tenant_id = $1
+        and space_id = (select space_id from episodes where tenant_id = $1 and id = $2)
+      returning pg_column_size(sync_whiteboard_scenes)::bigint as encoded_bytes
+    )
+    select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted
+    """
+  end
 
   def delete_terminal_external_operations do
     """
     with deleted as (
       delete from sync_external_operations
-      where tenant_id = $1 and session_id = $2 and status in ('applied', 'failed')
+      where tenant_id = $1 and episode_id = $2 and status in ('applied', 'failed')
       returning 1
     )
     select count(*)::bigint from deleted
@@ -194,7 +216,7 @@ defmodule ChalkSync.Retention.SQL do
     """
     select count(*)::bigint, coalesce(sum(pg_column_size(sync_external_operations)), 0)::bigint
     from sync_external_operations
-    where tenant_id = $1 and session_id = $2 and status in ('applied', 'failed')
+    where tenant_id = $1 and episode_id = $2 and status in ('applied', 'failed')
     """
   end
 
@@ -202,7 +224,7 @@ defmodule ChalkSync.Retention.SQL do
     """
     with deleted as (
       delete from sync_lifecycle_intents
-      where tenant_id = $1 and session_id = $2 and status != 'pending'
+      where tenant_id = $1 and episode_id = $2 and status != 'pending'
       returning 1
     )
     select count(*)::bigint from deleted
@@ -214,7 +236,7 @@ defmodule ChalkSync.Retention.SQL do
     with cleared as (
       update sync_external_operations
       set applied_event_id = null, applied_revision = null
-      where tenant_id = $1 and session_id = $2
+      where tenant_id = $1 and episode_id = $2
         and status in ('applied', 'failed')
         and applied_event_id is not null
       returning 1
@@ -227,7 +249,7 @@ defmodule ChalkSync.Retention.SQL do
     """
     with deleted as (
       delete from sync_control_events
-      where tenant_id = $1 and session_id = $2
+      where tenant_id = $1 and episode_id = $2
       returning 1
     )
     select count(*)::bigint from deleted
@@ -238,7 +260,7 @@ defmodule ChalkSync.Retention.SQL do
     """
     with deleted as (
       delete from #{table}
-      where tenant_id = $1 and session_id = $2
+      where tenant_id = $1 and episode_id = $2
       returning pg_column_size(#{table})::bigint as encoded_bytes
     )
     select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted

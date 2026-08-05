@@ -1,10 +1,15 @@
 defmodule ChalkSync.Live.Projection do
   @moduledoc "Bounded latest-replace media and presence projections."
 
+  alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.UUID
 
-  @snapshot_byte_limit 1_048_576
-  @event_byte_limit 32_768
+  @protocol_limits GeneratedV1.limits()
+  @snapshot_byte_limit @protocol_limits["projectionSnapshotEncodedBytes"]
+  @event_byte_limit @protocol_limits["encodedLiveEventBytes"]
+  @correlation_reserved_bytes @protocol_limits["correlationReservedBytes"]
+  @snapshot_producer_byte_limit @snapshot_byte_limit - @correlation_reserved_bytes
+  @event_producer_byte_limit @event_byte_limit - @correlation_reserved_bytes
   @default_max_age_ms 30_000
   @limits %{media: 1_500, presence: 500}
 
@@ -32,7 +37,7 @@ defmodule ChalkSync.Live.Projection do
          projection_id = id_generator.(),
          true <- canonical_uuid?(projection_id),
          frame = snapshot_frame(stream, projection_id, items),
-         :ok <- encoded_bound(frame, @snapshot_byte_limit) do
+         :ok <- encoded_bound(frame, @snapshot_producer_byte_limit) do
       projection = %__MODULE__{
         stream: stream,
         projection_id: projection_id,
@@ -57,14 +62,14 @@ defmodule ChalkSync.Live.Projection do
          true <- frame["projection_id"] == projection.projection_id,
          true <- frame["sequence"] == projection.sequence + 1,
          :ok <- validate_items(projection.stream, [frame["item"]]),
-         :ok <- encoded_bound(frame, @event_byte_limit),
+         :ok <- encoded_bound(frame, @event_producer_byte_limit),
          items =
            Map.put(projection.items, item_key(projection.stream, frame["item"]), frame["item"]),
          true <- map_size(items) <= Map.fetch!(@limits, projection.stream),
          :ok <-
            encoded_bound(
              snapshot_frame(projection.stream, projection.projection_id, Map.values(items)),
-             @snapshot_byte_limit
+             @snapshot_producer_byte_limit
            ) do
       {:ok, %{projection | sequence: frame["sequence"], items: items}}
     else
@@ -152,16 +157,16 @@ defmodule ChalkSync.Live.Projection do
   defp validate_items(_stream, _items), do: {:error, :invalid_stream}
 
   defp valid_item?(:media, item) do
-    exact_keys?(item, ["participant_session_id", "source", "enabled", "publication_id"]) and
+    exact_keys?(item, ["participant_id", "source", "enabled", "publication_id"]) and
       item["source"] in ["microphone", "camera", "screen"] and
-      is_boolean(item["enabled"]) and canonical_uuid?(item["participant_session_id"]) and
+      is_boolean(item["enabled"]) and canonical_uuid?(item["participant_id"]) and
       valid_publication(item["enabled"], item["publication_id"])
   end
 
   defp valid_item?(:presence, item) do
-    exact_keys?(item, ["participant_session_id", "state", "speaking", "active_speaker"]) and
+    exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"]) and
       item["state"] in ["connected", "disconnected"] and
-      canonical_uuid?(item["participant_session_id"]) and is_boolean(item["speaking"]) and
+      canonical_uuid?(item["participant_id"]) and is_boolean(item["speaking"]) and
       is_boolean(item["active_speaker"]) and
       (item["state"] == "connected" or (not item["speaking"] and not item["active_speaker"]))
   end
@@ -255,8 +260,8 @@ defmodule ChalkSync.Live.Projection do
 
   defp canonical_uuid?(value), do: match?({:ok, _bytes}, UUID.dump(value))
 
-  defp item_key(:media, item), do: {item["participant_session_id"], item["source"]}
-  defp item_key(:presence, item), do: item["participant_session_id"]
+  defp item_key(:media, item), do: {item["participant_id"], item["source"]}
+  defp item_key(:presence, item), do: item["participant_id"]
 
   defp snapshot_frame(stream, projection_id, items) do
     %{

@@ -17,13 +17,13 @@ const (
 	ScopeUsersWrite  Scope = "users:write"
 	ScopeUsersDelete Scope = "users:delete"
 
-	ScopeRoomsRead   Scope = "rooms:read"
-	ScopeRoomsWrite  Scope = "rooms:write"
-	ScopeRoomsDelete Scope = "rooms:delete"
+	ScopeSpacesRead   Scope = "spaces:read"
+	ScopeSpacesWrite  Scope = "spaces:write"
+	ScopeSpacesDelete Scope = "spaces:delete"
 
-	ScopeSessionsRead   Scope = "sessions:read"
-	ScopeSessionsWrite  Scope = "sessions:write"
-	ScopeSessionsDelete Scope = "sessions:delete"
+	ScopeEpisodesRead   Scope = "episodes:read"
+	ScopeEpisodesWrite  Scope = "episodes:write"
+	ScopeEpisodesDelete Scope = "episodes:delete"
 
 	ScopeRecordingsRead   Scope = "recordings:read"
 	ScopeRecordingsWrite  Scope = "recordings:write"
@@ -64,12 +64,12 @@ var AllScopes = []Scope{
 	ScopeUsersRead,
 	ScopeUsersWrite,
 	ScopeUsersDelete,
-	ScopeRoomsRead,
-	ScopeRoomsWrite,
-	ScopeRoomsDelete,
-	ScopeSessionsRead,
-	ScopeSessionsWrite,
-	ScopeSessionsDelete,
+	ScopeSpacesRead,
+	ScopeSpacesWrite,
+	ScopeSpacesDelete,
+	ScopeEpisodesRead,
+	ScopeEpisodesWrite,
+	ScopeEpisodesDelete,
 	ScopeRecordingsRead,
 	ScopeRecordingsWrite,
 	ScopeRecordingsDelete,

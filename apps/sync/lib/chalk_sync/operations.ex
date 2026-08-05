@@ -10,8 +10,8 @@ defmodule ChalkSync.Operations do
 
   use GenServer
 
-  alias ChalkSync.Sessions.CommandAdmission
-  alias ChalkSync.Sessions.Coordinator
+  alias ChalkSync.Episodes.CommandIntake
+  alias ChalkSync.Episodes.Coordinator
 
   @default_drain_timeout_ms 3_000
   @poll_interval_ms 25
@@ -54,7 +54,7 @@ defmodule ChalkSync.Operations do
        drain_started_at_ms: nil,
        drain_deadline_ms: nil,
        waiters: [],
-       admission: Keyword.get(options, :admission, CommandAdmission),
+       admission: Keyword.get(options, :admission, CommandIntake),
        drain_fun: Keyword.get(options, :drain_fun, &Coordinator.drain_all/0),
        clock: Keyword.get(options, :clock, fn -> System.monotonic_time(:millisecond) end)
      }}
@@ -73,7 +73,7 @@ defmodule ChalkSync.Operations do
   end
 
   def handle_call({:begin_drain, timeout_ms}, from, %{draining?: false} = state) do
-    :ok = CommandAdmission.start_draining(state.admission)
+    :ok = CommandIntake.start_draining(state.admission)
     now = state.clock.()
     send(self(), :drain_poll)
 
@@ -98,7 +98,7 @@ defmodule ChalkSync.Operations do
 
   @impl GenServer
   def handle_info(:drain_poll, state) do
-    stats = CommandAdmission.stats(state.admission)
+    stats = CommandIntake.stats(state.admission)
     now = state.clock.()
 
     cond do

@@ -1,4 +1,4 @@
-import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachmentMimeType } from "../room-actions/types";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachmentMimeType } from "../collaboration/types";
 import { ChalkChatFileError, type ChalkChatFileFailure, type ChalkChatFileOperation, type ChalkChatFileTransport } from "./types";
 
 export type ChalkChatFileHttpTransportOptions = {
@@ -81,7 +81,8 @@ function responseError(response: Response, operation: ChalkChatFileOperation): C
 }
 
 function responseErrorCode(status: number): ChalkChatFileFailure["code"] {
-  if (status === 401 || status === 403) return "permission_denied";
+  if (status === 401) return "access.invalid";
+  if (status === 403) return "permission_denied";
   if (status === 400) return "invalid_payload";
   if (status === 404) return "not_found";
   if (status === 409) return "conflict";

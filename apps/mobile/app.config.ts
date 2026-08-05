@@ -1,5 +1,12 @@
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
 const PUBLIC_WEB_HOSTS = ["chalkmeet.com", "chalk.q9labs.ai"] as const;
+const DEFAULT_BROKER_URL = "https://chalkmeet.com/local-chalk";
+
+export type MobileExpoExtra = {
+  readonly brokerUrl: string;
+  readonly buildProfile: string;
+  readonly telemetryEnabled: boolean;
+};
 
 function isLocalUrl(url: string | undefined): boolean {
   if (!url) {
@@ -13,10 +20,30 @@ function isLocalUrl(url: string | undefined): boolean {
   }
 }
 
+function isSupportedBrokerUrl(url: string | undefined): url is string {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development") {
   const isProductionBuild = buildProfile === "production";
   const configuredBrokerUrl = process.env.EXPO_PUBLIC_CHALK_BROKER_URL?.trim();
-  const brokerUrl = isProductionBuild && isLocalUrl(configuredBrokerUrl) ? "https://chalkmeet.com/local-chalk" : configuredBrokerUrl || "https://chalkmeet.com/local-chalk";
+  const brokerUrl = !isSupportedBrokerUrl(configuredBrokerUrl) || (isProductionBuild && isLocalUrl(configuredBrokerUrl)) ? DEFAULT_BROKER_URL : configuredBrokerUrl;
+  const telemetryEnabled = process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED?.trim().toLowerCase() === "true";
+
+  const extra: MobileExpoExtra = {
+    brokerUrl,
+    buildProfile,
+    telemetryEnabled,
+  };
 
   return {
     expo: {
@@ -45,8 +72,8 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         },
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
-          NSCameraUsageDescription: "Chalk uses your camera so Participants can see you in a Space.",
-          NSMicrophoneUsageDescription: "Chalk uses your microphone so Participants can hear you in a Space.",
+          NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a Space.",
+          NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you in a Space.",
           RTCAppScreenSharingExtension: "ai.q9labs.chalk.mobile.screenshare",
           UIBackgroundModes: ["audio", "voip"],
         },
@@ -63,13 +90,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             action: "VIEW",
             autoVerify: true,
             category: ["BROWSABLE", "DEFAULT"],
-            data: [
-              ...PUBLIC_WEB_HOSTS.flatMap((host) => [
-                { scheme: "https", host, pathPrefix: "/j/" },
-                { scheme: "https", host, path: "/room" },
-                { scheme: "https", host, pathPrefix: "/room/" },
-              ]),
-            ],
+            data: [...PUBLIC_WEB_HOSTS.flatMap((host) => [{ scheme: "https", host, path: "/space" }])],
           },
         ],
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
@@ -88,10 +109,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
           "android.permission.WAKE_LOCK",
         ],
       },
-      extra: {
-        brokerUrl,
-        buildProfile,
-      },
+      extra,
     },
   };
 }

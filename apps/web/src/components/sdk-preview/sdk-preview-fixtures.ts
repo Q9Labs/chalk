@@ -1,5 +1,10 @@
-import type { ChalkChatMessage, ChalkPendingChatMessage, ChalkRoomReaction as ChalkReaction } from "@q9labsai/chalk-client";
-import type { ConferencePanel as SpacePanel, Participant, ParticipantListParticipant, ReconnectingOverlayProps, SettingsDialogValue, ThemePalette, ThemeTexture, TranscriptEntry } from "@q9labsai/chalk-react/components";
+import type { ChalkChatMessage, ChalkReactionEvent, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { SpacePanel, ThemePalette, ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
+import type { Participant } from "../../../../../sdks/typescript/react/src/components/participant-grid/ParticipantGrid";
+import type { ParticipantListParticipant } from "../../../../../sdks/typescript/react/src/components/participants-panel/ParticipantsPanel";
+import type { SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
+import type { ReconnectingOverlayProps } from "../../../../../sdks/typescript/react/src/components/reconnecting-overlay/ReconnectingOverlay";
+import type { TranscriptEntry } from "../../../../../sdks/typescript/react/src/components/transcript-panel/TranscriptPanel";
 
 import type { PreviewSearch } from "./preview-state";
 
@@ -7,7 +12,8 @@ export const SPACE_NAME = "Design review Space";
 export const DISPLAY_NAME = "Hasan";
 export const SPACE_LINK = "https://chalk.example/spaces/design-review";
 
-export type GalleryParticipant = Participant & { readonly role: "host" | "co-host" | "participant" };
+export type GalleryParticipant = Participant;
+type GalleryPendingMessage = SpaceSnapshot["chat"]["pendingSends"][number];
 
 const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
   {
@@ -16,7 +22,6 @@ const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
     isLocal: true,
     isMuted: false,
     isVideoEnabled: true,
-    role: "host",
     connectionQuality: 4,
   },
   {
@@ -25,7 +30,6 @@ const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
     isSpeaking: true,
     isMuted: false,
     isVideoEnabled: true,
-    role: "co-host",
     connectionQuality: 4,
   },
   {
@@ -34,7 +38,6 @@ const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
     isMuted: true,
     isVideoEnabled: false,
     isHandRaised: true,
-    role: "participant",
     connectionQuality: 3,
   },
   {
@@ -42,7 +45,6 @@ const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
     displayName: "Sofia Chen",
     isMuted: false,
     isVideoEnabled: true,
-    role: "participant",
     connectionQuality: 2,
   },
   {
@@ -50,7 +52,6 @@ const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
     displayName: "Malik Brooks",
     isMuted: true,
     isVideoEnabled: true,
-    role: "participant",
     connectionQuality: 4,
   },
 ];
@@ -60,7 +61,7 @@ export const INITIAL_CHAT_MESSAGES: readonly ChalkChatMessage[] = [
     messageId: "preview-message-1",
     clientMessageId: "preview-client-1",
     sequence: "1",
-    participantSessionId: "nora",
+    participantId: "nora",
     displayName: "Nora Williams",
     text: "The new Space direction feels much calmer.",
     createdAt: "2026-08-01T10:12:00.000Z",
@@ -70,7 +71,7 @@ export const INITIAL_CHAT_MESSAGES: readonly ChalkChatMessage[] = [
     messageId: "preview-message-2",
     clientMessageId: "preview-client-2",
     sequence: "2",
-    participantSessionId: "you",
+    participantId: "you",
     displayName: DISPLAY_NAME,
     text: "Agreed. Let’s keep the controls out of the stage.",
     createdAt: "2026-08-01T10:13:00.000Z",
@@ -80,7 +81,7 @@ export const INITIAL_CHAT_MESSAGES: readonly ChalkChatMessage[] = [
     messageId: "preview-message-3",
     clientMessageId: "preview-client-3",
     sequence: "3",
-    participantSessionId: "sofia",
+    participantId: "sofia",
     displayName: "Sofia Chen",
     text: "I’ll share the revised agenda here after the Space.",
     createdAt: "2026-08-01T10:14:00.000Z",
@@ -95,7 +96,6 @@ export const TRANSCRIPT_FIXTURES: readonly TranscriptEntry[] = [
     speakerId: "nora",
     text: "We can ship the first collaborative surface this week.",
     timestamp: new Date("2026-08-01T10:15:00.000Z"),
-    isHost: true,
   },
   {
     id: "transcript-2",
@@ -128,7 +128,7 @@ export const TOAST_MESSAGES: Record<Exclude<PreviewSearch["toast"], "none">, str
   error: "The Space connection is unstable.",
 };
 
-export const REACTIONS: readonly ChalkReaction[] = [{ eventId: "preview-reaction-1", participantSessionId: "nora", displayName: "Nora Williams", reaction: "🎉", occurredAt: "2026-08-01T10:15:00.000Z", expiresAt: "2026-08-01T10:16:00.000Z" }];
+export const REACTIONS: readonly ChalkReactionEvent[] = [{ eventId: "preview-reaction-1", participantId: "nora", displayName: "Nora Williams", reaction: "🎉", occurredAt: "2026-08-01T10:15:00.000Z", expiresAt: "2026-08-01T10:16:00.000Z" }];
 
 export function productionPalette(palette: PreviewSearch["palette"]): ThemePalette {
   switch (palette) {
@@ -196,16 +196,15 @@ export function toParticipantList(participants: readonly GalleryParticipant[]): 
     isMuted: participant.isMuted,
     isVideoEnabled: participant.isVideoEnabled,
     isHandRaised: participant.isHandRaised,
-    role: participant.role,
   }));
 }
 
-export function chatPending(search: PreviewSearch): readonly ChalkPendingChatMessage[] {
+export function chatPending(search: PreviewSearch): readonly GalleryPendingMessage[] {
   if (search.chat === "pending") {
-    return [{ clientMessageId: "preview-pending-1", text: "I’m sending the latest Space notes…", attachments: [], state: "sending", error: null }];
+    return [{ clientMessageId: "preview-pending-1", text: "I’m sending the latest Space notes…", attachments: [], status: "sending", error: null }];
   }
   if (search.chat === "failure") {
-    return [{ clientMessageId: "preview-failed-1", text: "Could not publish this update", attachments: [], state: "failed", error: { code: "internal_error", action: "sendChatMessage", recoverable: true, message: "Chat is temporarily unavailable." } }];
+    return [{ clientMessageId: "preview-failed-1", text: "Could not publish this update", attachments: [], status: "failed", error: { code: "client.internal_error", recoverable: true, message: "Chat is temporarily unavailable." } }];
   }
   return [];
 }
@@ -220,13 +219,13 @@ export function panelFor(search: PreviewSearch): GalleryPanel | null {
 export function statusOverlay(search: PreviewSearch, onRetry: () => void, onBack: () => void): (Omit<ReconnectingOverlayProps, "isVisible"> & { readonly isVisible: true }) | undefined {
   switch (search.state) {
     case "reconnecting":
-      return { isVisible: true, status: "reconnecting" as const, message: "The Space connection was interrupted. Reconnecting now…", onRetry, onLeave: onBack };
+      return { isVisible: true, status: "reconnecting" as const, message: "The Space connection was interrupted. Reconnecting now…", onRetry, onLeft: onBack };
     case "retry":
-      return { isVisible: true, status: "failed" as const, message: "The Space connection needs another try.", supportCode: "space-retry-204", onRetry, onLeave: onBack };
+      return { isVisible: true, status: "failed" as const, message: "The Space connection needs another try.", supportCode: "space-retry-204", onRetry, onLeft: onBack };
     case "timeout":
-      return { isVisible: true, status: "failed" as const, message: "The Space took too long to reconnect.", supportCode: "space-timeout-408", onRetry, onLeave: onBack };
+      return { isVisible: true, status: "failed" as const, message: "The Space took too long to reconnect.", supportCode: "space-timeout-408", onRetry, onLeft: onBack };
     case "failure":
-      return { isVisible: true, status: "failed" as const, message: "The Space connection failed before recovery completed.", supportCode: "space-failure-503", onRetry, onLeave: onBack };
+      return { isVisible: true, status: "failed" as const, message: "The Space connection failed before recovery completed.", supportCode: "space-failure-503", onRetry, onLeft: onBack };
     default:
       return undefined;
   }

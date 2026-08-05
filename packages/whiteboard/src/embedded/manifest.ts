@@ -1,4 +1,4 @@
-import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID } from "./protocol.js";
+import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID } from "./protocol";
 import compatibilityManifest from "./compatibility-manifest.json";
 
 export const chalkEmbeddedWhiteboardManifest = Object.freeze({

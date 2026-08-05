@@ -1,4 +1,4 @@
-import type { OrderedExcalidrawElement } from "./types.js";
+import type { OrderedExcalidrawElement } from "./types";
 
 export type WhiteboardJsonValue = null | boolean | number | string | readonly WhiteboardJsonValue[] | { readonly [key: string]: WhiteboardJsonValue };
 

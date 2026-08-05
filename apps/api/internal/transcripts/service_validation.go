@@ -11,11 +11,11 @@ func prepareCreateInput(input *CreateInput) error {
 	if input.RecordingID.IsZero() {
 		return ErrInvalidRecordingID
 	}
-	if input.RoomID.IsZero() {
-		return ErrInvalidRoomID
+	if input.SpaceID.IsZero() {
+		return ErrInvalidSpaceID
 	}
-	if input.SessionID.IsZero() {
-		return ErrInvalidSessionID
+	if input.EpisodeID.IsZero() {
+		return ErrInvalidEpisodeID
 	}
 
 	status, err := transcriptStatus(input.Status)

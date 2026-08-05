@@ -73,7 +73,7 @@ private canFlush(options?: TelemetryExportOptions): boolean {
 
 Same rule for module helpers: `clockFrom(options)` hiding
 `options.clock ?? systemClock` is noise — write the expression where it's used.
-The test: if inlining a helper makes the caller *easier* to read, inline it.
+The test: if inlining a helper makes the caller _easier_ to read, inline it.
 
 - Early returns over nesting; handle the failure or trivial case first.
 - Flat, explicit data flow — a reader should trace any behavior through at most
@@ -88,7 +88,7 @@ The test: if inlining a helper makes the caller *easier* to read, inline it.
   violated, not the code path.
 - Never silently swallow an error. An intentionally-ignored failure gets a
   comment stating the invariant that makes ignoring safe
-  (e.g. "a consumer callback must not interrupt the meeting path").
+  (e.g. "a consumer callback must not interrupt the Episode path").
 
 ## Effect
 
@@ -125,14 +125,14 @@ The client package is **Effect-native inside, Promise-simple outside**.
 - Function components only; never define a component inside another component.
 - React 19: `ref` is a normal prop — no `forwardRef`.
 - **We do not use `useEffect`.** What looks like an effect is always one of:
-  - *External state* (SyncClient snapshots, telemetry health, media devices):
+  - _External state_ (SyncClient snapshots, telemetry health, media devices):
     subscribe with `useSyncExternalStore(subscribe, getSnapshot)` — our clients
     already expose `subscribe`/`getSnapshot` for exactly this.
-  - *A response to user action*: do the work in the event handler.
-  - *Derived data*: compute during render (memoize only if measured as hot).
-  - *DOM/native node access*: a `ref` callback, which can return a cleanup.
-  If none of these fit, the logic belongs in the framework-free client layer,
-  not in a component.
+  - _A response to user action_: do the work in the event handler.
+  - _Derived data_: compute during render (memoize only if measured as hot).
+  - _DOM/native node access_: a `ref` callback, which can return a cleanup.
+    If none of these fit, the logic belongs in the framework-free client layer,
+    not in a component.
 - Hooks at top level with correct dependency arrays; shared logic becomes a
   custom hook, not a copy.
 - `React.memo` for leaf components in render-heavy trees (video tiles, grids);

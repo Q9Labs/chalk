@@ -24,7 +24,7 @@ const audio = new Uint8Array([1, 2, 3]);
 const manifestBytes = new TextEncoder().encode(JSON.stringify({ schemaVersion: "manifest.v1", turns: [{ startMs: 0, endMs: 1_000, identity: { kind: "unknown" }, trackClass: "unknown", overlap: false }] }));
 const assignment: TranscriptionAssignment = {
   jobId: "job",
-  sessionId: "session",
+  episodeId: "episode",
   attempt: 1,
   leaseToken: "lease",
   leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
@@ -35,8 +35,8 @@ const assignment: TranscriptionAssignment = {
     inputContentType: "audio/mpeg",
     inputSizeBytes: audio.byteLength,
     inputSha256: createHash("sha256").update(audio).digest("hex"),
-    meetingStartMs: 0,
-    meetingEndMs: 1_000,
+    episodeStartMs: 0,
+    episodeEndMs: 1_000,
     sourceIdentity: { kind: "unknown" },
     sourceTrackClass: "unknown",
   },
@@ -178,6 +178,47 @@ describe("dispatcher runtime and control boundary", () => {
     expect(JSON.parse(String(seen[1]?.init?.body))).toMatchObject({ job_id: "job", lease_token: "lease", error_code: "timeout" });
   });
 
+  it("preserves canonical camelCase Episode fields at the control boundary", async () => {
+    const expiry = new Date(Date.now() + 300_000).toISOString();
+    const audioDigest = createHash("sha256").update(audio).digest("hex");
+    const manifestDigest = createHash("sha256")
+      .update(new Uint8Array([1]))
+      .digest("hex");
+    const camelAssignment = {
+      jobId: "job",
+      episodeId: "episode",
+      attempt: 1,
+      leaseToken: "lease",
+      leaseExpiresAt: expiry,
+      chunk: {
+        chunkId: "chunk",
+        inputUrl: "https://r2.example/input?X-Amz-Expires=900",
+        inputUrlExpiresAt: expiry,
+        inputContentType: "audio/mpeg",
+        inputSizeBytes: audio.byteLength,
+        inputSha256: audioDigest,
+        episodeStartMs: 0,
+        episodeEndMs: 1_000,
+        sourceIdentity: { kind: "unknown" },
+        sourceTrackClass: "unknown",
+      },
+      manifest: {
+        inputUrl: "https://r2.example/manifest?X-Amz-Expires=900",
+        expiresAt: expiry,
+        contentType: "application/json",
+        sizeBytes: 1,
+        sha256: manifestDigest,
+      },
+      outputPutUrl: "https://r2.example/output?X-Amz-Expires=900",
+      outputPutUrlExpiresAt: expiry,
+      outputContentType: "application/json",
+    };
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ assignments: [camelAssignment] })));
+    const client = new RecorderControlApiClient({ baseUrl: "https://control.example", signer: new HmacWorkloadSigner({ secret: "workload-secret", environment: "test", releaseId: "release-1", audience: "chalk-control-api", now: () => 1_700_000_000_000, nonce: () => "nonce-123456789012" }), fetch });
+    const claimed = await client.claim({ limit: 1, context: { journeyId: "journey" } });
+    expect(claimed.assignments[0]).toMatchObject({ episodeId: "episode", chunk: { episodeStartMs: 0, episodeEndMs: 1_000 } });
+  });
+
   it("uses the fenced finalization claim, complete, and retry wire", async () => {
     const expiry = new Date(Date.now() + 300_000).toISOString();
     const bytes = new TextEncoder().encode(JSON.stringify({ schemaVersion: "transcript.v1" }));
@@ -191,7 +232,7 @@ describe("dispatcher runtime and control boundary", () => {
               {
                 job_id: "final-job",
                 transcript_id: "transcript",
-                session_id: "session",
+                episode_id: "episode",
                 attempt: 1,
                 lease_token: "lease",
                 lease_expires_at: expiry,
@@ -203,8 +244,8 @@ describe("dispatcher runtime and control boundary", () => {
                     input_content_type: "application/json",
                     input_size_bytes: bytes.byteLength,
                     input_sha256: createHash("sha256").update(bytes).digest("hex"),
-                    meeting_start_ms: 0,
-                    meeting_end_ms: 1_000,
+                    episode_start_ms: 0,
+                    episode_end_ms: 1_000,
                   },
                 ],
                 output_put_url: "https://r2.example/final?X-Amz-Expires=900",
@@ -219,6 +260,7 @@ describe("dispatcher runtime and control boundary", () => {
     const client = new RecorderControlApiClient({ baseUrl: "https://control.example", signer: new HmacWorkloadSigner({ secret: "workload-secret", environment: "test", releaseId: "release-1", audience: "chalk-control-api", now: () => 1_700_000_000_000, nonce: () => "nonce-123456789012" }), fetch });
     const claimed = await client.claimFinalize({ limit: 1, context: { journeyId: "journey" } });
     expect(claimed.assignments[0]?.transcriptId).toBe("transcript");
+    expect(claimed.assignments[0]?.episodeId).toBe("episode");
     await client.completeFinalize({ jobId: "final-job", attempt: 1, leaseToken: "lease", checksumSha256: "a".repeat(64), sizeBytes: 100, contentType: "application/json", provider: "mixed", model: "mixed", versionContract: "mixed", languages: ["en", "fr"], context: { journeyId: "journey" } });
     await client.retryFinalize({ jobId: "final-job", attempt: 1, leaseToken: "lease", errorCode: "assignment_invalid", terminal: true, context: { journeyId: "journey" } });
     expect(seen.map((entry) => entry.url)).toEqual(["https://control.example/internal/v1/transcription/finalize/claim", "https://control.example/internal/v1/transcription/finalize/complete", "https://control.example/internal/v1/transcription/finalize/retry"]);

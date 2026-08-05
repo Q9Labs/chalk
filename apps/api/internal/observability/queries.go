@@ -97,18 +97,18 @@ func (q operationQuerier) CreateRecording(ctx context.Context, arg sqlc.CreateRe
 	return recording, err
 }
 
-func (q operationQuerier) CreateRoom(ctx context.Context, arg sqlc.CreateRoomParams) (sqlc.Room, error) {
+func (q operationQuerier) CreateSpace(ctx context.Context, arg sqlc.CreateSpaceParams) (sqlc.Space, error) {
 	startedAt := time.Now()
-	room, err := q.next.CreateRoom(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateRoom", startedAt, err)
-	return room, err
+	space, err := q.next.CreateSpace(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateSpace", startedAt, err)
+	return space, err
 }
 
-func (q operationQuerier) CreateRoomSession(ctx context.Context, arg sqlc.CreateRoomSessionParams) (sqlc.CreateRoomSessionRow, error) {
+func (q operationQuerier) CreateEpisode(ctx context.Context, arg sqlc.CreateEpisodeParams) (sqlc.Episode, error) {
 	startedAt := time.Now()
-	session, err := q.next.CreateRoomSession(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateRoomSession", startedAt, err)
-	return session, err
+	episode, err := q.next.CreateEpisode(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateEpisode", startedAt, err)
+	return episode, err
 }
 
 func (q operationQuerier) CreateTranscription(ctx context.Context, arg sqlc.CreateTranscriptionParams) (sqlc.Transcription, error) {
@@ -223,18 +223,18 @@ func (q operationQuerier) GetTenantRecording(ctx context.Context, arg sqlc.GetTe
 	return recording, err
 }
 
-func (q operationQuerier) GetTenantRoom(ctx context.Context, arg sqlc.GetTenantRoomParams) (sqlc.Room, error) {
+func (q operationQuerier) GetTenantSpace(ctx context.Context, arg sqlc.GetTenantSpaceParams) (sqlc.Space, error) {
 	startedAt := time.Now()
-	room, err := q.next.GetTenantRoom(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "GetTenantRoom", startedAt, err)
-	return room, err
+	space, err := q.next.GetTenantSpace(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetTenantSpace", startedAt, err)
+	return space, err
 }
 
-func (q operationQuerier) GetTenantRoomSession(ctx context.Context, arg sqlc.GetTenantRoomSessionParams) (sqlc.GetTenantRoomSessionRow, error) {
+func (q operationQuerier) GetTenantEpisode(ctx context.Context, arg sqlc.GetTenantEpisodeParams) (sqlc.Episode, error) {
 	startedAt := time.Now()
-	session, err := q.next.GetTenantRoomSession(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "GetTenantRoomSession", startedAt, err)
-	return session, err
+	episode, err := q.next.GetTenantEpisode(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetTenantEpisode", startedAt, err)
+	return episode, err
 }
 
 func (q operationQuerier) GetTenantTranscription(ctx context.Context, arg sqlc.GetTenantTranscriptionParams) (sqlc.Transcription, error) {
@@ -293,18 +293,18 @@ func (q operationQuerier) ListTenantRecordings(ctx context.Context, arg sqlc.Lis
 	return recordings, err
 }
 
-func (q operationQuerier) ListTenantRoomSessions(ctx context.Context, arg sqlc.ListTenantRoomSessionsParams) ([]sqlc.ListTenantRoomSessionsRow, error) {
+func (q operationQuerier) ListTenantEpisodes(ctx context.Context, arg sqlc.ListTenantEpisodesParams) ([]sqlc.Episode, error) {
 	startedAt := time.Now()
-	sessions, err := q.next.ListTenantRoomSessions(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ListTenantRoomSessions", startedAt, err)
-	return sessions, err
+	episodes, err := q.next.ListTenantEpisodes(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListTenantEpisodes", startedAt, err)
+	return episodes, err
 }
 
-func (q operationQuerier) ListTenantRooms(ctx context.Context, arg sqlc.ListTenantRoomsParams) ([]sqlc.Room, error) {
+func (q operationQuerier) ListTenantSpaces(ctx context.Context, arg sqlc.ListTenantSpacesParams) ([]sqlc.Space, error) {
 	startedAt := time.Now()
-	rooms, err := q.next.ListTenantRooms(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ListTenantRooms", startedAt, err)
-	return rooms, err
+	spaces, err := q.next.ListTenantSpaces(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListTenantSpaces", startedAt, err)
+	return spaces, err
 }
 
 func (q operationQuerier) ListTenantTranscriptions(ctx context.Context, arg sqlc.ListTenantTranscriptionsParams) ([]sqlc.Transcription, error) {
@@ -370,18 +370,18 @@ func (q operationQuerier) UpdateTenantRecording(ctx context.Context, arg sqlc.Up
 	return recording, err
 }
 
-func (q operationQuerier) UpdateTenantRoom(ctx context.Context, arg sqlc.UpdateTenantRoomParams) (sqlc.Room, error) {
+func (q operationQuerier) UpdateTenantSpace(ctx context.Context, arg sqlc.UpdateTenantSpaceParams) (sqlc.Space, error) {
 	startedAt := time.Now()
-	room, err := q.next.UpdateTenantRoom(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "UpdateTenantRoom", startedAt, err)
-	return room, err
+	space, err := q.next.UpdateTenantSpace(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "UpdateTenantSpace", startedAt, err)
+	return space, err
 }
 
-func (q operationQuerier) UpdateTenantRoomSession(ctx context.Context, arg sqlc.UpdateTenantRoomSessionParams) (sqlc.UpdateTenantRoomSessionRow, error) {
+func (q operationQuerier) UpdateTenantEpisode(ctx context.Context, arg sqlc.UpdateTenantEpisodeParams) (sqlc.Episode, error) {
 	startedAt := time.Now()
-	session, err := q.next.UpdateTenantRoomSession(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "UpdateTenantRoomSession", startedAt, err)
-	return session, err
+	episode, err := q.next.UpdateTenantEpisode(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "UpdateTenantEpisode", startedAt, err)
+	return episode, err
 }
 
 func (q operationQuerier) UpdateTenantTranscription(ctx context.Context, arg sqlc.UpdateTenantTranscriptionParams) (sqlc.Transcription, error) {

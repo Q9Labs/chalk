@@ -41,11 +41,6 @@ export function spaceStateCopy(state: PreviewSearch["state"]): string {
   }
 }
 
-export function chatCountFor(search: PreviewSearch): number {
-  if (search.chat === "empty" || search.chat === "loading" || search.chat === "failure") return 0;
-  return PREVIEW_CHAT_LINES.length;
-}
-
 export function productionPalette(palette: PreviewSearch["palette"]): "light" | "warm-charcoal" | "cool-graphite" | "oled-signal" {
   switch (palette) {
     case "midnight":

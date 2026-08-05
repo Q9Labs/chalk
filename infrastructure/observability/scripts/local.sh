@@ -9,6 +9,10 @@ root="$(cd "$(dirname "$0")/../../.." && pwd)"
 compose_file="${root}/infrastructure/observability/compose.yaml"
 command_name="${1:-start}"
 ledger_target="${CHALK_OBSERVABILITY_LEDGER_TARGET:-observability}"
+grafana_port="${CHALK_OBSERVABILITY_GRAFANA_PORT:-3000}"
+collector_port="${CHALK_OBSERVABILITY_COLLECTOR_PORT:-13133}"
+otlp_http_port="${CHALK_OBSERVABILITY_OTLP_HTTP_PORT:-4318}"
+otlp_grpc_port="${CHALK_OBSERVABILITY_OTLP_GRPC_PORT:-4317}"
 
 configure_ledger_datasource() {
   case "${ledger_target}" in
@@ -33,8 +37,8 @@ configure_ledger_datasource() {
 
 wait_for_stack() {
   for _ in {1..90}; do
-    if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1 && \
-      curl -fsS http://127.0.0.1:13133/ready >/dev/null 2>&1; then
+    if curl -fsS "http://127.0.0.1:${grafana_port}/api/health" >/dev/null 2>&1 && \
+      curl -fsS "http://127.0.0.1:${collector_port}/ready" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -51,10 +55,10 @@ case "${command_name}" in
     configure_ledger_datasource
     docker compose -f "${compose_file}" up -d
     wait_for_stack
-    echo "Grafana: http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability"
+    echo "Grafana: http://127.0.0.1:${grafana_port}/d/chalk-observability-v1/chalk-observability"
     echo "Grafana journey ledger: ${CHALK_GRAFANA_LEDGER_DATABASE}@${CHALK_GRAFANA_LEDGER_URL}"
-    echo "OTLP HTTP: http://127.0.0.1:4318"
-    echo "OTLP gRPC: http://127.0.0.1:4317"
+    echo "OTLP HTTP: http://127.0.0.1:${otlp_http_port}"
+    echo "OTLP gRPC: http://127.0.0.1:${otlp_grpc_port}"
     ;;
   stop)
     configure_ledger_datasource

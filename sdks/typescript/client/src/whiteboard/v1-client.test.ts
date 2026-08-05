@@ -105,11 +105,7 @@ describe("ChalkWhiteboardV1Client", () => {
   });
 
   it("sends and receives multipart updates as one logical operation", async () => {
-    const { client, socket, started } = await connectingClient();
-    welcome(socket);
-    await finishInitialSnapshot(socket, started);
-    const events: unknown[] = [];
-    client.subscribe((event) => events.push(event));
+    const { client, socket, events } = await subscribedClient();
     const elements = Array.from({ length: 129 }, (_, index) => publicElement(`element-${index}`));
 
     const committed = client.submitUpdate({ sceneId, syncAll: true, elements });
@@ -195,6 +191,33 @@ describe("ChalkWhiteboardV1Client", () => {
     client.stopSceneSubscription();
     await expect(updatePromise).rejects.toMatchObject({ code: "unavailable", operation: "submit_update" });
   });
+
+  it("uses the canonical participant wire field and public event name", async () => {
+    const { client, socket, events } = await subscribedClient();
+    socket.receive({
+      type: "cursor",
+      participant_id: participantId,
+      display_name: "Ada",
+      x: 1,
+      y: 2,
+      occurred_at: "2026-08-04T12:00:00.000Z",
+    });
+    const permission = client.setDrawPermission(participantId, false);
+    await settle();
+    const permissionFrame = socket.frames().at(-1)!;
+    socket.receive({
+      type: "commit",
+      operation_id: permissionFrame.operation_id,
+      outcome: "committed",
+      scene_id: sceneId,
+      revision: "4",
+    });
+    await permission;
+
+    expect(events).toContainEqual({ type: "cursor", participantId, displayName: "Ada", x: 1, y: 2, occurredAt: "2026-08-04T12:00:00.000Z" });
+    expect(permissionFrame).toEqual(expect.objectContaining({ type: "set_draw_permission", participant_id: participantId, can_draw: false }));
+    client.stopSceneSubscription();
+  });
 });
 
 async function connectingClient(overrides: Partial<ConstructorParameters<typeof ChalkWhiteboardV1Client>[0]> = {}) {
@@ -215,12 +238,21 @@ async function connectingClient(overrides: Partial<ConstructorParameters<typeof 
   return { client, socket, started };
 }
 
+async function subscribedClient(overrides: Partial<ConstructorParameters<typeof ChalkWhiteboardV1Client>[0]> = {}) {
+  const { client, socket, started } = await connectingClient(overrides);
+  welcome(socket);
+  await finishInitialSnapshot(socket, started);
+  const events: unknown[] = [];
+  client.subscribe((event) => events.push(event));
+  return { client, socket, events };
+}
+
 function welcome(socket: TestSocket): void {
   socket.receive({
     type: "welcome",
     protocol: "whiteboard-v1",
-    participant_session_id: participantId,
-    participant_session_generation: 1,
+    participant_id: participantId,
+    participant_generation: 1,
     capabilities: ["drawWhiteboard", "manageWhiteboard"],
     participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
     scene_id: sceneId,

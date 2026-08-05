@@ -7,7 +7,7 @@
           "nullable": false,
           "optional": false,
           "type": {
-            "ref": "chalk.RoomResponse"
+            "ref": "chalk.SpaceResponse"
           }
         },
         {
@@ -36,7 +36,7 @@
           }
         }
       ],
-      "id": "chalk.CreateRoomCreated",
+      "id": "chalk.CreateSpaceCreated",
       "kind": "object"
     },
     {
@@ -70,7 +70,7 @@
           }
         }
       ],
-      "id": "chalk.CreateRoomRequest",
+      "id": "chalk.CreateSpaceRequest",
       "kind": "object"
     },
     {
@@ -233,7 +233,7 @@
           "nullable": false,
           "optional": false,
           "type": {
-            "ref": "chalk.RoomListResponse"
+            "ref": "chalk.SpaceListResponse"
           }
         },
         {
@@ -262,7 +262,7 @@
           }
         }
       ],
-      "id": "chalk.ListRoomsOk",
+      "id": "chalk.ListSpacesOk",
       "kind": "object"
     },
     {
@@ -574,7 +574,7 @@
           "nullable": false,
           "optional": false,
           "type": {
-            "ref": "chalk.RoomId"
+            "ref": "chalk.SpaceId"
           }
         },
         {
@@ -636,17 +636,17 @@
           }
         }
       ],
-      "id": "chalk.Room",
+      "id": "chalk.Space",
       "kind": "object"
     },
     {
-      "brand": "room-id",
+      "brand": "space-id",
       "constraints": {
         "maxLength": 80,
         "minLength": 1,
         "pattern": "^[a-z0-9][a-z0-9_-]*$"
       },
-      "id": "chalk.RoomId",
+      "id": "chalk.SpaceId",
       "kind": "scalar",
       "wireType": "string"
     },
@@ -661,32 +661,32 @@
           }
         },
         {
-          "name": "rooms",
+          "name": "spaces",
           "nullable": false,
           "optional": false,
           "type": {
             "items": {
-              "ref": "chalk.Room"
+              "ref": "chalk.Space"
             },
             "kind": "array"
           }
         }
       ],
-      "id": "chalk.RoomListResponse",
+      "id": "chalk.SpaceListResponse",
       "kind": "object"
     },
     {
       "fields": [
         {
-          "name": "room",
+          "name": "space",
           "nullable": false,
           "optional": false,
           "type": {
-            "ref": "chalk.Room"
+            "ref": "chalk.Space"
           }
         }
       ],
-      "id": "chalk.RoomResponse",
+      "id": "chalk.SpaceResponse",
       "kind": "object"
     },
     {
@@ -1412,11 +1412,11 @@
           }
         }
       ],
-      "id": "chalk.SyncRoomRestartClose",
+      "id": "chalk.SyncSpaceRestartClose",
       "kind": "error",
       "scope": "sync",
       "tags": ["connection"],
-      "wireCode": "ROOM_RESTARTING"
+      "wireCode": "SPACE_RESTARTING"
     },
     {
       "fields": [
@@ -1847,7 +1847,7 @@
     {
       "id": "chalk.UserRole",
       "kind": "enum",
-      "values": ["admin", "member", "owner"]
+      "values": ["collaborator", "observer", "owner"]
     },
     {
       "fields": [
@@ -1931,7 +1931,7 @@
         "operations": [
           {
             "body": {
-              "ref": "chalk.CreateRoomRequest"
+              "ref": "chalk.CreateSpaceRequest"
             },
             "errors": [
               {
@@ -1990,9 +1990,9 @@
                 }
               }
             ],
-            "id": "rooms.create",
+            "id": "spaces.create",
             "method": "POST",
-            "path": "/{tenantId}/rooms",
+            "path": "/{tenantId}/spaces",
             "pathParameters": [
               {
                 "name": "tenantId",
@@ -2007,7 +2007,7 @@
             "successes": [
               {
                 "body": {
-                  "ref": "chalk.RoomResponse"
+                  "ref": "chalk.SpaceResponse"
                 },
                 "headers": [
                   {
@@ -2078,9 +2078,9 @@
               }
             ],
             "headers": [],
-            "id": "rooms.list",
+            "id": "spaces.list",
             "method": "GET",
-            "path": "/{tenantId}/rooms",
+            "path": "/{tenantId}/spaces",
             "pathParameters": [
               {
                 "name": "tenantId",
@@ -2112,7 +2112,7 @@
             "successes": [
               {
                 "body": {
-                  "ref": "chalk.RoomListResponse"
+                  "ref": "chalk.SpaceListResponse"
                 },
                 "headers": [
                   {
@@ -2245,10 +2245,10 @@
       {
         "code": 1012,
         "error": {
-          "ref": "chalk.SyncRoomRestartClose"
+          "ref": "chalk.SyncSpaceRestartClose"
         },
-        "id": "sync-room-restart-close",
-        "reason": "room restarting; reconnect and re-snapshot"
+        "id": "sync-space-restart-close",
+        "reason": "space restarting; reconnect and re-snapshot"
       },
       {
         "code": 1011,
@@ -2256,7 +2256,7 @@
           "ref": "chalk.SyncServerFailureClose"
         },
         "id": "sync-server-failure-close",
-        "reason": "room server failure"
+        "reason": "space server failure"
       },
       {
         "code": 1008,

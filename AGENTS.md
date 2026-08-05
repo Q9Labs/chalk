@@ -65,7 +65,7 @@ documentation. Keep server-only webhook handling out of browser bundles.
 
 Packages are the source of truth; demo apps should stay thin.
 
-- `sdks/typescript/client`: client logic, room management, transport integration,
+- `sdks/typescript/client`: client logic, Space management, transport integration,
   auth helpers, shared types, diagnostics, webhooks.
 - `sdks/typescript/react`: React hooks and components.
 - `sdks/typescript/react-native`: React Native hooks, components, and native

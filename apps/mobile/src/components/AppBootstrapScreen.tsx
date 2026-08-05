@@ -1,13 +1,14 @@
-import { ChalkLogoElements } from "@q9labsai/chalk-react-native";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
 import { StyleSheet, Text, View } from "react-native";
+
+import { BrandMark } from "./BrandMark";
 
 export function AppBootstrapScreen({ label }: { label: string }): React.JSX.Element {
   return (
     <View style={styles.container}>
       <View style={styles.illustrationFrame}>
         <View style={styles.glow} />
-        <ChalkLogoElements size={84} />
+        <BrandMark size={84} />
       </View>
       <Text style={styles.brand}>chalk</Text>
       <Text style={styles.label}>{label}</Text>

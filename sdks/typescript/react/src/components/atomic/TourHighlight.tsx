@@ -58,14 +58,14 @@ export const TourHighlight = React.memo<TourHighlightProps>(({ targetSelector, p
 
   return (
     <div
-      className={cn("fixed ease-out pointer-events-none", !prefersReducedMotion && "transition-all duration-300 chalk-animate-highlight", "border-2 border-accent", className)}
+      className={cn("fixed ease-out pointer-events-none", !prefersReducedMotion && "transition-all duration-300 chalk-animate-highlight", "border-2 border-[var(--chalk-accent)]", className)}
       style={{
         top: rect.top - padding,
         left: rect.left - padding,
         width: rect.width + padding * 2,
         height: rect.height + padding * 2,
         borderRadius,
-        boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.7)",
+        boxShadow: "0 0 0 9999px var(--chalk-shadow)",
         zIndex: 9999,
       }}
       aria-hidden="true"

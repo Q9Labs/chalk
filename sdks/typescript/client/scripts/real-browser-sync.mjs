@@ -316,7 +316,7 @@ function browserPage() {
         await waitFor(() => {
           const snapshot = client.getSnapshot();
           return snapshot.connection.phase === "live" && snapshot.control && snapshot.media && snapshot.presence &&
-            snapshot.presence.items.some((item) => item.participantSessionId === snapshot.participantSessionId);
+            snapshot.presence.items.some((item) => item.participantId === snapshot.participantId);
         }, "client did not reach live after control, media, and presence recovery");
 
         const commandResult = client.setHandRaised(true);
@@ -328,7 +328,7 @@ function browserPage() {
         await commandResult;
         const snapshot = await waitFor(() => {
           const next = client.getSnapshot();
-          const participant = next.control?.participants.find((item) => item.participantSessionId === next.participantSessionId);
+          const participant = next.control?.participants.find((item) => item.participantId === next.participantId);
           return next.pendingCommandCount === 0 && next.control?.revision === 2 && participant?.handRaised ? next : null;
         }, "client did not converge on the committed control event");
         if ((await pendingStore.load()).length !== 0) throw new Error("client did not clear the persisted v1 target");

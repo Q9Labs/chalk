@@ -1,4 +1,4 @@
-import { stringHash } from "../utils/hash.js";
+import { stringHash } from "../utils/hash";
 
 export type Variant = "gradient" | "solid";
 

@@ -6,7 +6,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   require Logger
 
   alias ChalkSync.Database
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
   @head_channel "chalk_whiteboard_v1_heads"
@@ -17,19 +17,19 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
     GenServer.start_link(__MODULE__, options, name: Keyword.get(options, :name, @server))
   end
 
-  def subscribe(%SessionKey{} = session), do: :pg.join(group(session), self())
-  def unsubscribe(%SessionKey{} = session), do: :pg.leave(group(session), self())
+  def subscribe(%EpisodeKey{} = episode), do: :pg.join(group(episode), self())
+  def unsubscribe(%EpisodeKey{} = episode), do: :pg.leave(group(episode), self())
 
-  def broadcast_local(%SessionKey{} = session, frame) do
-    Enum.each(:pg.get_members(group(session)), &send(&1, {:whiteboard_v1_frame, frame}))
+  def broadcast_local(%EpisodeKey{} = episode, frame) do
+    Enum.each(:pg.get_members(group(episode)), &send(&1, {:whiteboard_v1_frame, frame}))
     :ok
   end
 
-  def publish_cursor(%SessionKey{} = session, frame, server \\ @server) do
-    broadcast_local(session, frame)
+  def publish_cursor(%EpisodeKey{} = episode, frame, server \\ @server) do
+    broadcast_local(episode, frame)
 
     if Process.whereis(server),
-      do: GenServer.cast(server, {:publish_cursor, session, frame}),
+      do: GenServer.cast(server, {:publish_cursor, episode, frame}),
       else: :ok
   end
 
@@ -60,11 +60,11 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   end
 
   @impl GenServer
-  def handle_cast({:publish_cursor, session, frame}, state) do
+  def handle_cast({:publish_cursor, episode, frame}, state) do
     payload =
       JSON.encode!(%{
         "source_node" => state.source_id,
-        "session" => session_map(session),
+        "episode" => episode_map(episode),
         "frame" => frame
       })
 
@@ -87,9 +87,9 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
         %{notifications: notifications, head_ref: head_ref} = state
       ) do
     case parse_head(payload) do
-      {:ok, session, scene_id, revision} ->
+      {:ok, episode, scene_id, revision} ->
         Enum.each(
-          :pg.get_members(group(session)),
+          :pg.get_members(group(episode)),
           &send(&1, {:whiteboard_v1_head, scene_id, revision})
         )
 
@@ -107,12 +107,12 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
     with {:ok,
           %{
             "source_node" => source_node,
-            "session" => session,
+            "episode" => episode,
             "frame" => frame
           }} <- JSON.decode(payload),
          false <- source_node == state.source_id,
-         {:ok, session_key} <- session_key(session) do
-      broadcast_local(session_key, frame)
+         {:ok, episode_key} <- episode_key(episode) do
+      broadcast_local(episode_key, frame)
     else
       true -> :ok
       _ -> Logger.warning("discarded malformed whiteboard-v1 cursor notification")
@@ -122,47 +122,47 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   end
 
   defp parse_head(payload) do
-    with [tenant_id, room_id, session_id, scene_id, revision] <- String.split(payload, ":"),
-         {:ok, session} <-
-           session_key(%{
+    with [tenant_id, space_id, episode_id, scene_id, revision] <- String.split(payload, ":"),
+         {:ok, episode} <-
+           episode_key(%{
              "tenant_id" => tenant_id,
-             "room_id" => room_id,
-             "session_id" => session_id
+             "space_id" => space_id,
+             "episode_id" => episode_id
            }),
          {:ok, _scene} <- UUID.dump(scene_id),
          {revision, ""} when revision >= 0 <- Integer.parse(revision) do
-      {:ok, session, String.downcase(scene_id), revision}
+      {:ok, episode, String.downcase(scene_id), revision}
     else
       _ -> :error
     end
   end
 
-  defp session_key(%{
+  defp episode_key(%{
          "tenant_id" => tenant_id,
-         "room_id" => room_id,
-         "session_id" => session_id
+         "space_id" => space_id,
+         "episode_id" => episode_id
        }) do
     with {:ok, _tenant} <- UUID.dump(tenant_id),
-         {:ok, _room} <- UUID.dump(room_id),
-         {:ok, _session} <- UUID.dump(session_id) do
+         {:ok, _space} <- UUID.dump(space_id),
+         {:ok, _episode} <- UUID.dump(episode_id) do
       {:ok,
-       %SessionKey{
+       %EpisodeKey{
          tenant_id: String.downcase(tenant_id),
-         room_id: String.downcase(room_id),
-         session_id: String.downcase(session_id)
+         space_id: String.downcase(space_id),
+         episode_id: String.downcase(episode_id)
        }}
     else
       _ -> :error
     end
   end
 
-  defp session_key(_session), do: :error
+  defp episode_key(_episode), do: :error
 
-  defp session_map(session),
+  defp episode_map(episode),
     do: %{
-      "tenant_id" => session.tenant_id,
-      "room_id" => session.room_id,
-      "session_id" => session.session_id
+      "tenant_id" => episode.tenant_id,
+      "space_id" => episode.space_id,
+      "episode_id" => episode.episode_id
     }
 
   defp source_id(value) when is_binary(value) do
@@ -170,5 +170,5 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
     |> Base.encode16(case: :lower)
   end
 
-  defp group(session), do: {__MODULE__, SessionKey.authority_key(session)}
+  defp group(episode), do: {__MODULE__, EpisodeKey.authority_key(episode)}
 end

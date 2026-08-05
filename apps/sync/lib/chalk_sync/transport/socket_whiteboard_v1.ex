@@ -7,13 +7,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Observability
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.OutboundQueue
   alias ChalkSync.WhiteboardV1.Protocol
-  alias ChalkSync.WhiteboardV1.Session
 
   @hello_timeout_ms 5_000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
@@ -78,9 +78,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info({:whiteboard_multipart_timeout, _operation_id}, state), do: {:ok, state}
 
   def handle_info(
-        {:whiteboard_v1_frame,
-         %{"type" => "cursor", "participant_session_id" => participant_session_id}},
-        %{identity: %Identity{participant_session_id: participant_session_id}} = state
+        {:whiteboard_v1_frame, %{"type" => "cursor", "participant_id" => participant_id}},
+        %{identity: %Identity{participant_id: participant_id}} = state
       ),
       do: {:ok, state}
 
@@ -131,7 +130,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info(:whiteboard_drain, state), do: push_next(state)
 
   defp replay_or_reset(state, identity, scene_id, revision) do
-    case Session.read_after(identity, scene_id, state.revision) do
+    case Episode.read_after(identity, scene_id, state.revision) do
       {:ok, frames} ->
         if frames_reach_revision?(frames, revision),
           do: enqueue_replay(state, scene_id, revision, frames),
@@ -143,8 +142,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   @impl true
-  def terminate(_reason, %{identity: %Identity{session: session}} = state) do
-    Fanout.unsubscribe(session)
+  def terminate(_reason, %{identity: %Identity{episode: episode}} = state) do
+    Fanout.unsubscribe(episode)
     observe_terminal(state)
     :ok
   end
@@ -157,9 +156,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp handle_frame({:hello, %{token: token}}, %{phase: :awaiting_hello} = state) do
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
-         {:ok, welcome} <- Session.connect(identity) do
+         {:ok, welcome} <- Episode.connect(identity) do
       Process.cancel_timer(state.hello_timer)
-      Fanout.subscribe(identity.session)
+      Fanout.subscribe(identity.episode)
 
       {:push, {:text, Protocol.encode!(welcome)},
        %{
@@ -229,9 +228,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_frame({:clear, operation}, %{phase: :live, identity: identity} = state) do
-    case Session.clear(identity, operation) do
+    case Episode.clear(identity, operation) do
       {:ok, commit, reset} ->
-        Fanout.broadcast_local(identity.session, reset)
+        Fanout.broadcast_local(identity.episode, reset)
         state = observe_operation(state, "clear", "committed")
         {:push, {:text, Protocol.encode!(commit)}, state}
 
@@ -244,9 +243,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:set_draw_permission, operation},
          %{phase: :live, identity: identity} = state
        ) do
-    case Session.set_draw_permission(identity, operation) do
+    case Episode.set_draw_permission(identity, operation) do
       {:ok, commit, permission} ->
-        Fanout.broadcast_local(identity.session, permission)
+        Fanout.broadcast_local(identity.episode, permission)
         state = observe_operation(state, "set_draw_permission", "committed")
         {:push, {:text, Protocol.encode!(commit)}, state}
 
@@ -259,7 +258,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:request_snapshot, %{request_id: request_id}},
          %{phase: :live, identity: identity} = state
        ) do
-    case Session.snapshot(identity, request_id) do
+    case Episode.snapshot(identity, request_id) do
       {:ok, [first | remaining]} ->
         snapshot = %{
           request_id: request_id,
@@ -321,7 +320,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       {:ok, next} ->
         frame = %{
           "type" => "cursor",
-          "participant_session_id" => identity.participant_session_id,
+          "participant_id" => identity.participant_id,
           "display_name" => display_name,
           "x" => cursor.x,
           "y" => cursor.y,
@@ -329,7 +328,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
         }
 
-        Fanout.publish_cursor(identity.session, frame)
+        Fanout.publish_cursor(identity.episode, frame)
         {:ok, next}
 
       :rate_limited ->
@@ -344,9 +343,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     do: {:stop, :normal, {1008, "operation not available in this phase"}, state}
 
   defp submit_update(identity, operation, state) do
-    case Session.submit_update(identity, operation) do
+    case Episode.submit_update(identity, operation) do
       {:ok, commit, updates} ->
-        Enum.each(updates, &Fanout.broadcast_local(identity.session, &1))
+        Enum.each(updates, &Fanout.broadcast_local(identity.episode, &1))
         state = observe_operation(state, "submit_update", "committed")
         {:push, {:text, Protocol.encode!(commit)}, state}
 
@@ -434,26 +433,26 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp identity(
          %Claims{
            tenant_id: tenant_id,
-           room_id: room_id,
-           session_id: session_id,
-           participant_session_id: participant_session_id,
-           participant_session_generation: generation
+           space_id: space_id,
+           episode_id: episode_id,
+           participant_id: participant_id,
+           participant_generation: generation
          } = claims
        )
-       when is_binary(tenant_id) and is_binary(room_id) and is_binary(session_id) and
-              is_binary(participant_session_id) and is_integer(generation) and generation > 0 do
+       when is_binary(tenant_id) and is_binary(space_id) and is_binary(episode_id) and
+              is_binary(participant_id) and is_integer(generation) and generation > 0 do
     {:ok,
      %Identity{
-       session: %SessionKey{
+       episode: %EpisodeKey{
          tenant_id: tenant_id,
-         room_id: room_id,
-         session_id: session_id
+         space_id: space_id,
+         episode_id: episode_id
        },
-       participant_session_id: participant_session_id,
-       participant_session_generation: generation,
+       participant_id: participant_id,
+       participant_generation: generation,
        admission_lifecycle_intent_id: claims.admission_lifecycle_intent_id,
-       role: claims.initial_role,
-       eligible_roles: claims.eligible_roles
+       role: claims.role,
+       capabilities: claims.capabilities
      }}
   end
 

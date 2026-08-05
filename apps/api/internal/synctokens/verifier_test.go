@@ -27,9 +27,9 @@ func TestVerifierAcceptsOnlyTheConfiguredSyncAudienceAndSignature(t *testing.T) 
 		t.Fatal(err)
 	}
 	input := synctokens.Input{
-		TenantID: id(t), RoomID: id(t), SessionID: id(t), ParticipantID: id(t),
+		TenantID: id(t), SpaceID: id(t), EpisodeID: id(t), ParticipantID: id(t),
 		ParticipantGeneration: 3, AdmissionLifecycleIntentID: id(t),
-		DisplayName: "Ada", InitialRole: "participant", EligibleRoles: []string{"participant"},
+		DisplayName: "Ada", Role: "participant", Capabilities: []string{"subscribe"},
 	}
 	token, err := signer.Issue(context.Background(), input)
 	if err != nil {
@@ -48,7 +48,7 @@ func TestVerifierAcceptsOnlyTheConfiguredSyncAudienceAndSignature(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subject.TenantID != input.TenantID || subject.ParticipantSessionID != input.ParticipantID ||
+	if subject.TenantID != input.TenantID || subject.ParticipantID != input.ParticipantID ||
 		subject.ParticipantGeneration != input.ParticipantGeneration {
 		t.Fatalf("subject = %#v", subject)
 	}

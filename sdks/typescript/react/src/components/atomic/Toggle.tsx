@@ -44,18 +44,18 @@ export const Toggle = React.memo(
           aria-labelledby={resolvedAriaLabelledby}
           className={cn(
             "relative inline-flex shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out",
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-canvas)]",
             "disabled:cursor-not-allowed",
             isSmall ? "h-5 w-9" : "h-6 w-11",
-            checked ? "bg-primary" : "bg-muted",
+            checked ? "bg-[var(--chalk-accent)]" : "bg-[var(--chalk-stage)]",
           )}
         >
-          <Switch.Thumb className={cn("pointer-events-none inline-block transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out", isSmall ? "h-4 w-4" : "h-5 w-5", checked ? (isSmall ? "translate-x-4" : "translate-x-5") : "translate-x-0.5", "mt-0.5")} />
+          <Switch.Thumb className={cn("pointer-events-none inline-block transform rounded-full bg-[var(--chalk-surface)] shadow ring-0 transition duration-200 ease-in-out", isSmall ? "h-4 w-4" : "h-5 w-5", checked ? (isSmall ? "translate-x-4" : "translate-x-5") : "translate-x-0.5", "mt-0.5")} />
         </Switch.Root>
         {label && (
           <span
             id={labelId}
-            className={cn("text-sm font-medium text-foreground", !disabled && "cursor-pointer")}
+            className={cn("text-sm font-medium text-[var(--chalk-text)]", !disabled && "cursor-pointer")}
             onClick={() => {
               if (!disabled) {
                 switchRef.current?.click();

@@ -89,13 +89,13 @@ export const DeviceSelector = React.memo(({ type, devices, selectedDeviceId, onC
 
   return (
     <div className={cn("flex flex-col gap-2", className)} style={themeVariables as React.CSSProperties}>
-      <div className="flex items-center justify-between">{label && <label className="text-sm font-medium text-muted-foreground">{label}</label>}</div>
+      <div className="flex items-center justify-between">{label && <label className="text-sm font-medium text-[var(--chalk-muted-text)]">{label}</label>}</div>
 
       <div className="flex gap-2">
         <Select options={options} value={selectedDeviceId} onChange={(e) => onChange(e.target.value)} disabled={disabled || devices.length === 0} placeholder={devices.length === 0 ? "No devices found" : "Select device"} fullWidth />
 
         {type === "audioinput" && (
-          <div className="h-10 w-10 flex items-center justify-center rounded-md shrink-0 bg-secondary">
+          <div className="h-10 w-10 flex items-center justify-center rounded-md shrink-0 bg-[var(--chalk-stage)]">
             <AudioIndicator level={audioLevel} size="sm" />
           </div>
         )}
@@ -103,13 +103,13 @@ export const DeviceSelector = React.memo(({ type, devices, selectedDeviceId, onC
         {type === "audiooutput" && (
           <div className="shrink-0">
             <audio ref={audioRef} className="hidden" preload="auto" onEnded={() => setIsPlayingTestSound(false)} onPause={() => setIsPlayingTestSound(false)} />
-            <IconButton icon={<VolumeHighIcon className={cn("w-4 h-4", isPlayingTestSound && "text-primary", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />} onClick={playTestSound} disabled={disabled} size="md" aria-label="Test speakers" />
+            <IconButton icon={<VolumeHighIcon className={cn("w-4 h-4", isPlayingTestSound && "text-[var(--chalk-accent)]", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />} onClick={playTestSound} disabled={disabled} size="md" aria-label="Test speakers" />
           </div>
         )}
       </div>
 
       {type === "videoinput" && previewTrack && (
-        <div className="mt-2 aspect-video w-full overflow-hidden rounded-md bg-black relative">
+        <div className="mt-2 aspect-video w-full overflow-hidden rounded-md bg-[var(--chalk-text)] relative">
           <Thumbnail videoTrack={previewTrack} size="md" className="w-full h-full" />
         </div>
       )}

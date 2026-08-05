@@ -14,24 +14,24 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
     select
       participant.role,
-      session.whiteboard_role_capabilities,
-      coalesce(permission.can_draw, (session.whiteboard_role_capabilities -> participant.role) ? 'drawWhiteboard') as can_draw
+      participant.capabilities,
+      coalesce(permission.can_draw, 'drawWhiteboard' = any(participant.capabilities)) as can_draw
     from participants participant
-    join room_sessions session
-      on session.tenant_id = participant.tenant_id
-      and session.room_id = participant.room_id
-      and session.id = participant.session_id
+    join episodes episode
+      on episode.tenant_id = participant.tenant_id
+      and episode.space_id = participant.space_id
+      and episode.id = participant.episode_id
     left join sync_whiteboard_permissions permission
       on permission.tenant_id = participant.tenant_id
-      and permission.session_id = participant.session_id
-      and permission.participant_session_id = participant.id
+      and permission.episode_id = participant.episode_id
+      and permission.participant_id = participant.id
     where participant.tenant_id = $1
-      and participant.room_id = $2
-      and participant.session_id = $3
+      and participant.space_id = $2
+      and participant.episode_id = $3
       and participant.id = $4
       and participant.generation = $5
       and participant.status = 'active'
-      and session.status = 'active'
+      and episode.status = 'active'
     for update of participant
     """
   end
@@ -39,14 +39,14 @@ defmodule ChalkSync.WhiteboardV1.SQL do
   def ensure_scene do
     """
     insert into sync_whiteboard_scenes (
-      tenant_id, room_id, session_id, scene_id
+      tenant_id, space_id, scene_id
     )
-    select $1, $2, $3, $4
+    select $1, $2, $4
     where not exists (
       select 1
       from sync_whiteboard_scenes
-      where tenant_id = $1 and session_id = $3 and is_current
-    )
+      where tenant_id = $1 and space_id = $2 and is_current
+    ) and $3::uuid is not null
     on conflict do nothing
     """
   end
@@ -55,7 +55,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
     select scene_id, revision, app_state
     from sync_whiteboard_scenes
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and is_current
+    where tenant_id = $1 and space_id = $2 and is_current and $3::uuid is not null
     for update
     """
   end
@@ -64,15 +64,15 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
     select request_fingerprint, scene_id, revision
     from sync_whiteboard_operation_receipts
-    where tenant_id = $1 and session_id = $2
-      and participant_session_id = $3 and operation_id = $4
+    where tenant_id = $1 and space_id = $2
+      and participant_id = $3 and operation_id = $4
     """
   end
 
   def upsert_element do
     """
     insert into sync_whiteboard_elements (
-      tenant_id, room_id, session_id, scene_id,
+      tenant_id, space_id, episode_id, scene_id,
       element_id, element_type, version, version_nonce,
       element_index, is_deleted, payload, encoded_bytes
     ) values (
@@ -80,7 +80,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       $5, $6, $7, $8,
       $9, $10, $11, $12
     )
-    on conflict (tenant_id, session_id, scene_id, element_id)
+    on conflict (tenant_id, space_id, scene_id, element_id)
     do update set
       element_type = excluded.element_type,
       version = excluded.version,
@@ -109,11 +109,11 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     from (
       select count(*)::integer as element_count, coalesce(sum(encoded_bytes), 0)::bigint as encoded_bytes
       from sync_whiteboard_elements
-      where tenant_id = $1 and session_id = $3 and scene_id = $4
+      where tenant_id = $1 and space_id = $2 and scene_id = $4
     ) aggregate
     where scene.tenant_id = $1
-      and scene.room_id = $2
-      and scene.session_id = $3
+      and scene.space_id = $2
+      and $3::uuid is not null
       and scene.scene_id = $4
       and aggregate.element_count <= 10000
       and aggregate.encoded_bytes <= 67108864
@@ -124,8 +124,8 @@ defmodule ChalkSync.WhiteboardV1.SQL do
   def insert_receipt do
     """
     insert into sync_whiteboard_operation_receipts (
-      tenant_id, room_id, session_id,
-      participant_session_id, submitted_generation,
+      tenant_id, space_id, episode_id,
+      participant_id, submitted_generation,
       operation_id, request_fingerprint, operation_name,
       outcome, scene_id, revision, event_elements, event_encoded_bytes
     ) values (
@@ -141,34 +141,34 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
     update sync_whiteboard_scenes
     set is_current = false, updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and scene_id = $4 and is_current
+    where tenant_id = $1 and space_id = $2 and scene_id = $4 and is_current and $3::uuid is not null
     """
   end
 
   def insert_scene do
     """
     insert into sync_whiteboard_scenes (
-      tenant_id, room_id, session_id, scene_id, is_current, revision
-    ) values ($1, $2, $3, $4, true, 0)
+      tenant_id, space_id, scene_id, is_current, revision
+    ) select $1, $2, $4, true, 0 where $3::uuid is not null
     """
   end
 
   def upsert_permission do
     """
     insert into sync_whiteboard_permissions (
-      tenant_id, room_id, session_id,
-      participant_session_id, can_draw, granted_by_participant_session_id
+      tenant_id, space_id, episode_id,
+      participant_id, can_draw, granted_by_participant_id
     )
     select $1, $2, $3, $4, $5, $6
     from participants
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and status = 'active'
-    on conflict (tenant_id, session_id, participant_session_id)
+    on conflict (tenant_id, space_id, participant_id)
     do update set
       can_draw = excluded.can_draw,
-      granted_by_participant_session_id = excluded.granted_by_participant_session_id,
+      granted_by_participant_id = excluded.granted_by_participant_id,
       updated_at = now()
-    returning participant_session_id
+    returning participant_id
     """
   end
 
@@ -178,7 +178,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       element_id, element_type, version, version_nonce,
       element_index, is_deleted, payload
     from sync_whiteboard_elements
-    where tenant_id = $1 and session_id = $2 and scene_id = $3
+    where tenant_id = $1 and space_id = $2 and scene_id = $3
     order by element_index, element_id
     limit 10001
     """
@@ -188,7 +188,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
     select operation_id, scene_id, revision, event_elements
     from sync_whiteboard_operation_receipts
-    where tenant_id = $1 and session_id = $2 and scene_id = $3 and revision > $4
+    where tenant_id = $1 and episode_id = $2 and scene_id = $3 and revision > $4
       and operation_name = 'submit_update'
     order by revision
     limit 129

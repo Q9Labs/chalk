@@ -1,8 +1,8 @@
-import type { ChalkChatAttachment, ChalkChatAttachmentMimeType } from "../room-actions/types";
+import type { ChalkChatAttachment, ChalkChatAttachmentMimeType } from "../collaboration/types";
 
 export type ChalkChatFileOperation = "initiate_upload" | "finalize_upload" | "get_download";
 
-export type ChalkChatFileErrorCode = "unavailable" | "permission_denied" | "invalid_payload" | "conflict" | "not_found" | "expired" | "file_transfer_failed";
+export type ChalkChatFileErrorCode = "access.invalid" | "unavailable" | "permission_denied" | "invalid_payload" | "conflict" | "not_found" | "expired" | "file_transfer_failed";
 
 export type ChalkChatFileFailure = {
   readonly operation: ChalkChatFileOperation;

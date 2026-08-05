@@ -1,25 +1,25 @@
 # Video Background Generation Prompt
 
 Use this prompt pattern when generating Chalk virtual backgrounds. The goal is a
-curated set of video-call-safe images: polished, calm, low-distraction, and
-usable behind a centered speaker.
+curated set of Space-safe camera backgrounds: polished, calm, low-distraction,
+and usable behind a centered Participant.
 
 ## Base Prompt
 
 ```text
 Use case: photorealistic-natural
-Asset type: 16:9 virtual background for video conferencing
-Primary request: <specific room, studio, lounge, terrace, or abstract scene>
+Asset type: 16:9 virtual camera background for a Chalk Space
+Primary request: <specific studio, lounge, terrace, or abstract scene>
 Scene/backdrop: <clear description of the environment and a few tasteful details>
 Subject: no people, no faces, no readable text, no logos
 Style/medium: photorealistic interior or architectural photography
 Composition/framing: wide landscape frame, webcam-friendly, gentle depth of field, clean middle area for a speaker silhouette, visual detail mostly at the sides
 Lighting/mood: soft natural or ambient light, calm, premium, not flashy
 Color palette: restrained, balanced, and low-contrast
-Constraints: must look believable as a video conferencing background; no clutter, no screens with content, no brand marks, no watermark, no text
+Constraints: must look believable behind a Participant in a Chalk Space; no clutter, no screens with content, no brand marks, no watermark, no text
 ```
 
-For a non-room option, switch the use case and style:
+For a non-environment option, switch the use case and style:
 
 ```text
 Use case: stylized-concept

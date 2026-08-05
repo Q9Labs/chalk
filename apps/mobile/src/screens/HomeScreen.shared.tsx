@@ -2,44 +2,43 @@ import ArrowRight02Icon from "@hugeicons/core-free-icons/dist/esm/ArrowRight02Ic
 import CancelCircleIcon from "@hugeicons/core-free-icons/dist/esm/CancelCircleIcon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { ChalkLogoElements } from "@q9labsai/chalk-react-native";
 import { useClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/clipboard";
-import { getClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/invites";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { BrandMark } from "../components/BrandMark";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
-import { canCreateMeeting, createMeetingLobbyRoute, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
+import { enterLocalSpaceRoute, getClipboardSpaceSuggestion, parseSpaceLink, resolveSpaceInvite, type SpaceRoute } from "../lib/spaces";
+import { useReducedMotion } from "./onboarding-motion";
 import { CreateSpaceSheet } from "./CreateSpaceSheet";
 import { CreateSpaceIllustration, SpaceHistoryIllustration } from "./HomeIllustrations";
-import { useReducedMotion } from "./onboarding-motion";
 
 const PUBLIC_SITE_URL = "https://chalkmeet.com";
 const PUBLIC_PRIVACY_URL = "https://chalkmeet.com/privacy";
 
 export interface HomeScreenProps {
-  onNavigate: (route: LobbyRoute) => void;
-  onDiagnosticsFailure?: (source: "resolve-join-link" | "create-meeting", message: string) => void;
+  onNavigate: (route: SpaceRoute) => void;
+  onDiagnosticsFailure?: (source: "resolve-space-link" | "enter-space", message: string) => void;
 }
 
 export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScreenProps): React.JSX.Element {
-  const createEnabled = useMemo(() => canCreateMeeting(), []);
+  const createEnabled = false;
   const [input, setInput] = useState("");
   const [newSpaceName, setNewSpaceName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
-  const [isCreatingSpace, setIsCreatingSpace] = useState(false);
+  const [isOpeningLocalSpace, setIsOpeningLocalSpace] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const reducedMotion = useReducedMotion();
   const entrance = useRef(new Animated.Value(0)).current;
 
-  const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
-  const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
-  const clipboardInviteLink = useClipboardInviteSuggestion(input, { clipboard: Clipboard, getSuggestion: getClipboardInviteSuggestion });
+  const spaceDestination = useMemo(() => parseSpaceLink(input), [input]);
+  const canOpenSpaceLink = Boolean(spaceDestination?.spaceInviteToken);
+  const clipboardSpaceLink = useClipboardInviteSuggestion(input, { clipboard: Clipboard, getSuggestion: getClipboardSpaceSuggestion });
 
   useEffect(() => {
     if (reducedMotion) {
@@ -51,21 +50,21 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
     return () => animation.stop();
   }, [entrance, reducedMotion]);
 
-  const openInviteLink = useCallback(
-    async (inviteLink: string) => {
-      const joinToken = parseInputDestination(inviteLink)?.joinToken;
-      if (!joinToken) {
-        setError("Paste a valid invite link to join this Space.");
+  const openSpaceLink = useCallback(
+    async (spaceLink: string) => {
+      const spaceInviteToken = parseSpaceLink(spaceLink)?.spaceInviteToken;
+      if (!spaceInviteToken) {
+        setError("Paste a valid Space link to join this Space.");
         return;
       }
       setError(null);
       try {
         setIsResolving(true);
-        onNavigate(await resolveJoinToken(joinToken));
+        onNavigate(await resolveSpaceInvite(spaceInviteToken));
       } catch (nextError) {
-        const message = nextError instanceof Error ? nextError.message : "This invite link could not be opened.";
+        const message = nextError instanceof Error ? nextError.message : "This Space link could not be opened.";
         setError(message);
-        onDiagnosticsFailure?.("resolve-join-link", message);
+        onDiagnosticsFailure?.("resolve-space-link", message);
       } finally {
         setIsResolving(false);
       }
@@ -74,30 +73,25 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
   );
 
   const handleClipboardSuggestion = useCallback(async () => {
-    if (!clipboardInviteLink) return;
-    setInput(clipboardInviteLink);
-    await openInviteLink(clipboardInviteLink);
-  }, [clipboardInviteLink, openInviteLink]);
+    if (!clipboardSpaceLink) return;
+    setInput(clipboardSpaceLink);
+    await openSpaceLink(clipboardSpaceLink);
+  }, [clipboardSpaceLink, openSpaceLink]);
 
-  const handleCreateSpace = useCallback(async () => {
-    if (!createEnabled) {
-      setCreateSheetOpen(false);
-      void Linking.openURL(PUBLIC_SITE_URL);
-      return;
-    }
+  const handleEnterSpace = useCallback(async () => {
     try {
       setError(null);
-      setIsCreatingSpace(true);
-      onNavigate(await createMeetingLobbyRoute(newSpaceName.trim() || undefined));
+      setIsOpeningLocalSpace(true);
+      onNavigate(await enterLocalSpaceRoute(newSpaceName.trim() || undefined));
       setCreateSheetOpen(false);
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Unable to create this Space.";
+      const message = nextError instanceof Error ? nextError.message : "Unable to open this Space.";
       setError(message);
-      onDiagnosticsFailure?.("create-meeting", message);
+      onDiagnosticsFailure?.("enter-space", message);
     } finally {
-      setIsCreatingSpace(false);
+      setIsOpeningLocalSpace(false);
     }
-  }, [createEnabled, newSpaceName, onDiagnosticsFailure, onNavigate]);
+  }, [newSpaceName, onDiagnosticsFailure, onNavigate]);
 
   const animatedStyle = {
     opacity: entrance,
@@ -110,7 +104,7 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
         <ScrollView bounces contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Animated.View style={[styles.header, animatedStyle]}>
             <View accessibilityLabel="Chalk" style={styles.wordmark}>
-              <ChalkLogoElements size={34} />
+              <BrandMark size={34} />
               <Text style={styles.wordmarkText}>chalk</Text>
             </View>
           </Animated.View>
@@ -121,12 +115,12 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
           </Animated.View>
 
           <Animated.View style={[styles.content, animatedStyle]}>
-            <Pressable accessibilityLabel="Create a Space" accessibilityRole="button" onPress={() => setCreateSheetOpen(true)} style={({ pressed }) => [styles.createRow, pressed && styles.rowPressed]}>
+            <Pressable accessibilityLabel="Open local Space" accessibilityRole="button" onPress={() => setCreateSheetOpen(true)} style={({ pressed }) => [styles.createRow, pressed && styles.rowPressed]}>
               <View style={styles.createCopy}>
-                <Text style={styles.sectionTitle}>Create a Space</Text>
-                <Text style={styles.sectionDescription}>People, conversation, and shared work in one place.</Text>
+                <Text style={styles.sectionTitle}>Open local Space</Text>
+                <Text style={styles.sectionDescription}>Try the shared local Space on this device.</Text>
                 <View style={styles.textAction}>
-                  <Text style={styles.textActionLabel}>{createEnabled ? "Create" : "Create on web"}</Text>
+                  <Text style={styles.textActionLabel}>{createEnabled ? "Create" : "Open"}</Text>
                   <HugeiconsIcon color={Theme.colors.ink} icon={ArrowRight02Icon} size={18} />
                 </View>
               </View>
@@ -141,7 +135,7 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
               <View style={[styles.joinContainer, isInputFocused && styles.joinContainerFocused]}>
                 <HugeiconsIcon color={isInputFocused ? Theme.colors.ink : Theme.colors.ink3} icon={Link01Icon} size={20} />
                 <TextInput
-                  accessibilityLabel="Invite link"
+                  accessibilityLabel="Space link"
                   autoCapitalize="none"
                   autoCorrect={false}
                   onBlur={() => setIsInputFocused(false)}
@@ -150,24 +144,24 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
                     setError(null);
                   }}
                   onFocus={() => setIsInputFocused(true)}
-                  onSubmitEditing={() => void openInviteLink(input)}
-                  placeholder="Paste invite link"
+                  onSubmitEditing={() => void openSpaceLink(input)}
+                  placeholder="Paste Space link"
                   placeholderTextColor={Theme.colors.placeholder}
                   style={styles.input}
                   value={input}
                 />
                 {input ? (
-                  <Pressable accessibilityLabel="Clear invite link" hitSlop={8} onPress={() => setInput("")}>
+                  <Pressable accessibilityLabel="Clear Space link" hitSlop={8} onPress={() => setInput("")}>
                     <HugeiconsIcon color={Theme.colors.ink3} icon={CancelCircleIcon} size={19} />
                   </Pressable>
                 ) : null}
-                <Pressable accessibilityLabel="Join Space" accessibilityRole="button" disabled={!canOpenInviteLink || isResolving} onPress={() => void openInviteLink(input)} style={({ pressed }) => [styles.joinButton, canOpenInviteLink && styles.joinButtonReady, pressed && styles.rowPressed]}>
-                  {isResolving ? <ActivityIndicator color={Theme.colors.primaryForeground} size="small" /> : <HugeiconsIcon color={canOpenInviteLink ? Theme.colors.primaryForeground : Theme.colors.ink3} icon={ArrowRight02Icon} size={20} />}
+                <Pressable accessibilityLabel="Join Space" accessibilityRole="button" disabled={!canOpenSpaceLink || isResolving} onPress={() => void openSpaceLink(input)} style={({ pressed }) => [styles.joinButton, canOpenSpaceLink && styles.joinButtonReady, pressed && styles.rowPressed]}>
+                  {isResolving ? <ActivityIndicator color={Theme.colors.primaryForeground} size="small" /> : <HugeiconsIcon color={canOpenSpaceLink ? Theme.colors.primaryForeground : Theme.colors.ink3} icon={ArrowRight02Icon} size={20} />}
                 </Pressable>
               </View>
             </View>
 
-            {clipboardInviteLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
+            {clipboardSpaceLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
             {error ? (
               <Text accessibilityLiveRegion="assertive" style={styles.errorText}>
                 {error}
@@ -177,7 +171,7 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
             <View style={styles.historySection}>
               <SpaceHistoryIllustration />
               <Text style={styles.emptyTitle}>Your Spaces will gather here.</Text>
-              <Text style={styles.emptyDescription}>Open an invite or create a Space to begin your history.</Text>
+              <Text style={styles.emptyDescription}>Open an invite or the local Space to begin your history.</Text>
             </View>
           </Animated.View>
         </ScrollView>
@@ -193,7 +187,7 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
           </Pressable>
         </View>
       </KeyboardAvoidingView>
-      <CreateSpaceSheet createEnabled={createEnabled} isCreating={isCreatingSpace} isOpen={createSheetOpen} name={newSpaceName} onChangeName={setNewSpaceName} onClose={() => setCreateSheetOpen(false)} onCreate={() => void handleCreateSpace()} />
+      <CreateSpaceSheet createEnabled={createEnabled} isCreating={isOpeningLocalSpace} isOpen={createSheetOpen} name={newSpaceName} onChangeName={setNewSpaceName} onClose={() => setCreateSheetOpen(false)} onCreate={() => void handleEnterSpace()} />
     </SafeAreaView>
   );
 }

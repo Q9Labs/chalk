@@ -202,7 +202,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
 
   defp decode_publication(
          %{
-           "participant_session_id" => participant,
+           "participant_id" => participant,
            "source" => source,
            "enabled" => enabled,
            "publication_id" => publication_id
@@ -216,7 +216,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
          {:ok, decoded_source} <- decode_source(source) do
       {:ok,
        %{
-         participant_session_id: participant,
+         participant_id: participant,
          source: decoded_source,
          enabled: enabled,
          publication_id: publication_id
@@ -230,7 +230,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
   defp decode_publication(_publication), do: {:error, :malformed_response}
 
   defp validate_publication_fields(publication) do
-    allowed = MapSet.new(["participant_session_id", "source", "enabled", "publication_id"])
+    allowed = MapSet.new(["participant_id", "source", "enabled", "publication_id"])
 
     if MapSet.equal?(MapSet.new(Map.keys(publication)), allowed),
       do: :ok,

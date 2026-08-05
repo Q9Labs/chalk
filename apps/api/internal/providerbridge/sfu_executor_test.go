@@ -15,15 +15,15 @@ import (
 func TestSFUExecutorRevokesExactPublicationAndReconcilesIdempotently(t *testing.T) {
 	participantID := mustID(t, "33333333-3333-4333-8333-333333333333")
 	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{{
-		ParticipantSessionID: participantID, Source: "camera", Enabled: true,
+		ParticipantID: participantID, Source: "camera", Enabled: true,
 		PublicationID: publicationReference("connection-1", "mid-1", "camera-track", 7),
 	}}}}
 	closer := &trackCloserStub{}
 	executor := NewSFUExecutor(registry, closer)
 	input := provideroperations.OperationInput{
 		Effect: provideroperations.EffectRevokePublication, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantSessionID: participantID,
-		ParticipantSessionGeneration: 7, PublicationSource: "camera",
+		EpisodeID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantID: participantID,
+		ParticipantGeneration: 7, PublicationSource: "camera",
 	}
 
 	result := executor.Dispatch(context.Background(), input)
@@ -44,19 +44,36 @@ func TestSFUExecutorRevokesExactPublicationAndReconcilesIdempotently(t *testing.
 func TestSFUExecutorPreservesNewParticipantGeneration(t *testing.T) {
 	participantID := mustID(t, "33333333-3333-4333-8333-333333333333")
 	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{{
-		ParticipantSessionID: participantID, Source: "microphone", Enabled: true,
+		ParticipantID: participantID, Source: "microphone", Enabled: true,
 		PublicationID: publicationReference("connection-new", "mid-new", "microphone-track", 8),
 	}}}}
 	closer := &trackCloserStub{}
 	executor := NewSFUExecutor(registry, closer)
 	result := executor.Dispatch(context.Background(), provideroperations.OperationInput{
 		Effect: provideroperations.EffectRemoveParticipant, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantSessionID: participantID,
-		ParticipantSessionGeneration: 7,
+		EpisodeID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantID: participantID,
+		ParticipantGeneration: 7,
 	})
 
 	if result.Outcome != provideroperations.OutcomeSatisfied || len(closer.inputs) != 0 {
 		t.Fatalf("stale generation result = %#v close calls = %d", result, len(closer.inputs))
+	}
+}
+
+func TestSFUExecutorTreatsMissingConnectionAsIdempotentSuccess(t *testing.T) {
+	participantID := mustID(t, "33333333-3333-4333-8333-333333333333")
+	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{{
+		ParticipantID: participantID, Source: "camera", Enabled: true,
+		PublicationID: publicationReference("connection-missing", "mid-1", "camera-track", 7),
+	}}}}
+	closer := &trackCloserStub{err: mediaplane.ErrConnectionNotFound}
+	result := NewSFUExecutor(registry, closer).Dispatch(context.Background(), provideroperations.OperationInput{
+		Effect: provideroperations.EffectRevokePublication, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
+		EpisodeID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantID: participantID,
+		ParticipantGeneration: 7, PublicationSource: "camera",
+	})
+	if result.Outcome != provideroperations.OutcomeConfirmed || len(closer.inputs) != 1 || len(registry.closed) != 1 {
+		t.Fatalf("missing connection result = %#v close inputs = %#v registry closes = %#v", result, closer.inputs, registry.closed)
 	}
 }
 
@@ -66,9 +83,9 @@ func TestSFUExecutorAuthorizesClientOwnedPublicationGrant(t *testing.T) {
 	executor := NewSFUExecutor(registry, closer)
 	input := provideroperations.OperationInput{
 		Effect: provideroperations.EffectGrantPublication, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID:                    mustID(t, "22222222-2222-4222-8222-222222222222"),
-		ParticipantSessionID:         mustID(t, "33333333-3333-4333-8333-333333333333"),
-		ParticipantSessionGeneration: 1, PublicationSource: "camera",
+		EpisodeID:             mustID(t, "22222222-2222-4222-8222-222222222222"),
+		ParticipantID:         mustID(t, "33333333-3333-4333-8333-333333333333"),
+		ParticipantGeneration: 1, PublicationSource: "camera",
 	}
 
 	result := executor.Dispatch(context.Background(), input)
@@ -79,7 +96,7 @@ func TestSFUExecutorAuthorizesClientOwnedPublicationGrant(t *testing.T) {
 		t.Fatalf("grant touched media state: latest calls = %d closes = %#v tracks = %#v", registry.latestCalls, registry.closed, closer.inputs)
 	}
 
-	input.ParticipantSessionGeneration = 0
+	input.ParticipantGeneration = 0
 	result = executor.Dispatch(context.Background(), input)
 	if result.Outcome != provideroperations.OutcomeTerminalFailure || result.Reason != "participant_generation_required" {
 		t.Fatalf("grant without generation result = %#v", result)
@@ -89,17 +106,17 @@ func TestSFUExecutorAuthorizesClientOwnedPublicationGrant(t *testing.T) {
 	}
 }
 
-func TestSFUExecutorEndsSessionAcrossConnections(t *testing.T) {
+func TestSFUExecutorEndsEpisodeAcrossConnections(t *testing.T) {
 	firstParticipant := mustID(t, "33333333-3333-4333-8333-333333333333")
 	secondParticipant := mustID(t, "44444444-4444-4444-8444-444444444444")
 	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{
-		{ParticipantSessionID: firstParticipant, Source: "camera", Enabled: true, PublicationID: publicationReference("connection-a", "0", "camera", 1)},
-		{ParticipantSessionID: secondParticipant, Source: "screen", Enabled: true, PublicationID: publicationReference("connection-b", "1", "screen", 2)},
+		{ParticipantID: firstParticipant, Source: "camera", Enabled: true, PublicationID: publicationReference("connection-a", "0", "camera", 1)},
+		{ParticipantID: secondParticipant, Source: "screen", Enabled: true, PublicationID: publicationReference("connection-b", "1", "screen", 2)},
 	}}}
 	closer := &trackCloserStub{}
 	result := NewSFUExecutor(registry, closer).Dispatch(context.Background(), provideroperations.OperationInput{
-		Effect: provideroperations.EffectEndSession, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID: mustID(t, "22222222-2222-4222-8222-222222222222"),
+		Effect: provideroperations.EffectEndEpisode, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
+		EpisodeID: mustID(t, "22222222-2222-4222-8222-222222222222"),
 	})
 
 	if result.Outcome != provideroperations.OutcomeConfirmed || len(closer.inputs) != 2 || len(registry.closed) != 2 {
@@ -110,13 +127,13 @@ func TestSFUExecutorEndsSessionAcrossConnections(t *testing.T) {
 func TestSFUExecutorFailsLegacyAndUnsupportedEffectsExplicitly(t *testing.T) {
 	participantID := mustID(t, "33333333-3333-4333-8333-333333333333")
 	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{{
-		ParticipantSessionID: participantID, Source: "camera", Enabled: true, PublicationID: "connection-1|camera-track",
+		ParticipantID: participantID, Source: "camera", Enabled: true, PublicationID: "connection-1|camera-track",
 	}}}}
 	executor := NewSFUExecutor(registry, &trackCloserStub{})
 	legacy := executor.Dispatch(context.Background(), provideroperations.OperationInput{
 		Effect: provideroperations.EffectRemoveParticipant, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantSessionID: participantID,
-		ParticipantSessionGeneration: 1,
+		EpisodeID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantID: participantID,
+		ParticipantGeneration: 1,
 	})
 	if legacy.Outcome != provideroperations.OutcomeTerminalFailure || legacy.Reason != "legacy_publication_reference" {
 		t.Fatalf("legacy result = %#v", legacy)
@@ -130,14 +147,14 @@ func TestSFUExecutorFailsLegacyAndUnsupportedEffectsExplicitly(t *testing.T) {
 func TestSFUExecutorKeepsAmbiguousProviderResultForReconciliation(t *testing.T) {
 	participantID := mustID(t, "33333333-3333-4333-8333-333333333333")
 	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{{
-		ParticipantSessionID: participantID, Source: "camera", Enabled: true,
+		ParticipantID: participantID, Source: "camera", Enabled: true,
 		PublicationID: publicationReference("connection-1", "0", "camera", 1),
 	}}}}
 	closer := &trackCloserStub{err: mediaplane.ErrProviderFailed}
 	result := NewSFUExecutor(registry, closer).Dispatch(context.Background(), provideroperations.OperationInput{
 		Effect: provideroperations.EffectRemoveParticipant, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantSessionID: participantID,
-		ParticipantSessionGeneration: 1,
+		EpisodeID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantID: participantID,
+		ParticipantGeneration: 1,
 	})
 	if result.Outcome != provideroperations.OutcomeAmbiguous || result.Reason != "provider_result_ambiguous" || len(registry.closed) != 0 {
 		t.Fatalf("ambiguous result = %#v closes = %#v", result, registry.closed)
@@ -167,7 +184,7 @@ func (r *publicationRegistryStub) RecordClosedPublication(_ context.Context, inp
 	r.closed = append(r.closed, input)
 	for index := range r.snapshot.Publications {
 		publication := &r.snapshot.Publications[index]
-		if publication.ParticipantSessionID == input.ParticipantSessionID && publication.Source == input.Source && publication.PublicationID == input.PublicationID {
+		if publication.ParticipantID == input.ParticipantID && publication.Source == input.Source && publication.PublicationID == input.PublicationID {
 			publication.Enabled = false
 			publication.PublicationID = ""
 		}

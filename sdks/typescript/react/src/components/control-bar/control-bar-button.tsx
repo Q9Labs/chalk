@@ -1,5 +1,5 @@
 import React from "react";
-import type { ChalkHapticInput } from "../../internal/useHaptics";
+import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 import { cn } from "../../utils/cn";
 import { Tooltip } from "../atomic/Tooltip";
@@ -17,7 +17,7 @@ interface ControlBarButtonProps {
   noBorder?: boolean;
   onClick?: () => void;
   className?: string;
-  haptic?: ChalkHapticInput | false;
+  haptic?: HapticInput | false;
   /** Custom styles when active (overrides default active styles) */
   activeClassName?: string;
   "data-tour"?: string;

@@ -25,11 +25,11 @@ export function isDevPreviewRuntime(isDevRuntime: boolean): boolean {
   return isDevRuntime;
 }
 
-export type PreviewRouteOwner = "home" | "lobby" | "sdk-preview";
+export type PreviewRouteOwner = "home" | "space" | "sdk-preview";
 
 /** Keep an active Space route mounted until its owner performs an explicit leave. */
 export function canOpenDevPreviewFromRoute(routeKind: PreviewRouteOwner): boolean {
-  return routeKind !== "lobby";
+  return routeKind !== "space";
 }
 
 /** The gallery owns its chrome, so global diagnostics stay on app routes only. */

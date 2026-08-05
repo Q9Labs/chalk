@@ -12,10 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WhiteboardRouteImport } from './routes/whiteboard'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatusRouteImport } from './routes/status'
+import { Route as SpaceRouteImport } from './routes/space'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
-import { Route as RoomRouteImport } from './routes/room'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as NewRouteImport } from './routes/new'
@@ -46,6 +46,11 @@ const StatusRoute = StatusRouteImport.update({
   path: '/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpaceRoute = SpaceRouteImport.update({
+  id: '/space',
+  path: '/space',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
   path: '/sign-up',
@@ -61,11 +66,6 @@ const SdkPreviewRoute = SdkPreviewRouteImport.update({
   path: '/sdk-preview',
   getParentRoute: () => rootRouteImport,
 } as any).lazy(() => import('./routes/sdk-preview.lazy').then((d) => d.Route))
-const RoomRoute = RoomRouteImport.update({
-  id: '/room',
-  path: '/room',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -141,10 +141,10 @@ export interface FileRoutesByFullPath {
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
-  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/space': typeof SpaceRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -163,10 +163,10 @@ export interface FileRoutesByTo {
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
-  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/space': typeof SpaceRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -187,10 +187,10 @@ export interface FileRoutesById {
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
-  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/space': typeof SpaceRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -211,10 +211,10 @@ export interface FileRouteTypes {
     | '/new'
     | '/onboarding'
     | '/privacy'
-    | '/room'
     | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
+    | '/space'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -233,10 +233,10 @@ export interface FileRouteTypes {
     | '/new'
     | '/onboarding'
     | '/privacy'
-    | '/room'
     | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
+    | '/space'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -256,10 +256,10 @@ export interface FileRouteTypes {
     | '/new'
     | '/onboarding'
     | '/privacy'
-    | '/room'
     | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
+    | '/space'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -280,10 +280,10 @@ export interface RootRouteChildren {
   NewRoute: typeof NewRoute
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
-  RoomRoute: typeof RoomRoute
   SdkPreviewRoute: typeof SdkPreviewRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
+  SpaceRoute: typeof SpaceRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
   WhiteboardRoute: typeof WhiteboardRoute
@@ -312,6 +312,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/space': {
+      id: '/space'
+      path: '/space'
+      fullPath: '/space'
+      preLoaderRoute: typeof SpaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sign-up': {
       id: '/sign-up'
       path: '/sign-up'
@@ -331,13 +338,6 @@ declare module '@tanstack/react-router' {
       path: '/sdk-preview'
       fullPath: '/sdk-preview'
       preLoaderRoute: typeof SdkPreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/room': {
-      id: '/room'
-      path: '/room'
-      fullPath: '/room'
-      preLoaderRoute: typeof RoomRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -473,10 +473,10 @@ const rootRouteChildren: RootRouteChildren = {
   NewRoute: NewRoute,
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
-  RoomRoute: RoomRoute,
   SdkPreviewRoute: SdkPreviewRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
+  SpaceRoute: SpaceRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
   WhiteboardRoute: WhiteboardRoute,

@@ -11,7 +11,7 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
   alias ChalkSync.UUID
 
   @name "durable_lifecycle_reference"
-  @schedule ~w(command_outcomes before_commit_rollback lost_after_commit_reply opposing_target_barrier duplicate_lifecycle host_transfer_vs_leave_barrier admission_decision_vs_expiry_barrier stale_deadline_generation current_deadline_expiry)
+  @schedule ~w(command_outcomes before_commit_rollback lost_after_commit_reply opposing_target_barrier duplicate_lifecycle admission_decision_vs_expiry_barrier stale_deadline_generation current_deadline_expiry)
 
   def run!(database_url, seed \\ 730_019) do
     connections = SyncPostgres.start_connections(database_url, 6)
@@ -31,7 +31,6 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
   defp execute(connections, seed) do
     command = command_scenarios(connections, seed)
     lifecycle = lifecycle_scenario(connections)
-    host_race = host_transfer_leave_race(connections)
     admission_race = admission_expiry_race(connections)
     deadline = deadline_scenarios(connections)
 
@@ -47,7 +46,7 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
       "seed" => seed,
       "schedule" => @schedule,
       "observations" =>
-        command.observations ++ lifecycle.observations ++ host_race ++ admission_race ++ deadline,
+        command.observations ++ lifecycle.observations ++ admission_race ++ deadline,
       "evidence" => %{
         "postgres" => true,
         "event_names_covered_by_reference" => Oracle.event_names(),
@@ -68,7 +67,7 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
   end
 
   defp command_scenarios(connections, seed) do
-    fixture = SyncPostgres.seed_session(hd(connections), 2, %{}, deterministic_ids(seed))
+    fixture = SyncPostgres.seed_episode(hd(connections), 2, %{}, deterministic_ids(seed))
 
     try do
       [host, guest] = fixture.identities
@@ -94,9 +93,9 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
       Application.delete_env(:chalk_sync, :stateholder_fault_hook)
 
       barrier = opposing_target_barrier(guest)
-      {:ok, recovery} = Postgres.recover(fixture.session, nil)
-      {:ok, events} = Postgres.recovery_page(fixture.session, 0, recovery.head.revision)
-      oracle = Oracle.verify!(fixture.session.session_id, %{}, events, recovery)
+      {:ok, recovery} = Postgres.recover(fixture.episode, nil)
+      {:ok, events} = Postgres.recovery_page(fixture.episode, 0, recovery.head.revision)
+      oracle = Oracle.verify!(fixture.episode.episode_id, %{}, events, recovery)
 
       %{
         observations: [
@@ -122,12 +121,12 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
             ],
             &receipt/1
           ),
-        digest_sequence: digest_sequence(fixture.session, events),
+        digest_sequence: digest_sequence(fixture.episode, events),
         folded_snapshot: oracle.snapshot
       }
     after
       Application.delete_env(:chalk_sync, :stateholder_fault_hook)
-      SyncPostgres.cleanup(hd(connections), fixture.session)
+      SyncPostgres.cleanup(hd(connections), fixture.episode)
     end
   end
 
@@ -159,85 +158,30 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
 
     try do
       {:ok, applied} =
-        Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+        Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
       {:ok, duplicate} =
-        Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+        Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
       %{
         observations: [observation("duplicate_lifecycle", [applied.result, duplicate.result])],
-        intent_states: intent_states(fixture.session)
+        intent_states: intent_states(fixture.episode)
       }
     after
-      SyncPostgres.cleanup(hd(connections), fixture.session)
-    end
-  end
-
-  defp host_transfer_leave_race(connections) do
-    fixture = SyncPostgres.seed_session(hd(connections), 2)
-
-    try do
-      [host, guest] = fixture.identities
-
-      transfer =
-        operation("phase_host_transfer1", :tenant_transfer_host, %{
-          "participantSessionId" => guest.participant_session_id
-        })
-
-      leave = operation("phase_host_leave_001", :participant_leave, %{})
-
-      {results, order} =
-        ordered_external_race(
-          transfer.request_key,
-          fn -> Postgres.begin_internal_operation(fixture.session, transfer) end,
-          leave.request_key,
-          fn -> Postgres.begin_operation(host, leave) end
-        )
-
-      [transfer_result, leave_result] = results
-
-      finalized =
-        maybe_finalize(transfer_result, fn operation_id ->
-          Postgres.finalize_operation(fixture.session, operation_id, {
-            :applied,
-            :host_transferred,
-            %{
-              "previous_host_participant_session_id" => host.participant_session_id,
-              "new_host_participant_session_id" => guest.participant_session_id
-            }
-          })
-        end) ++
-          maybe_finalize(leave_result, fn operation_id ->
-            Postgres.finalize_operation(fixture.session, operation_id, {
-              :applied,
-              :participant_left,
-              %{"participant_session_id" => host.participant_session_id, "reason" => "left"}
-            })
-          end)
-
-      [
-        observation(
-          "host_transfer_vs_leave_barrier",
-          outcome_atoms(results ++ finalized),
-          order
-        )
-      ]
-    after
-      Application.delete_env(:chalk_sync, :external_operation_fault_hook)
-      SyncPostgres.cleanup(hd(connections), fixture.session)
+      SyncPostgres.cleanup(hd(connections), fixture.episode)
     end
   end
 
   defp admission_expiry_race(connections) do
-    base = SyncPostgres.seed_session(hd(connections))
+    base = SyncPostgres.seed_episode(hd(connections))
     fixture = SyncPostgres.seed_admission_request(hd(connections), base)
 
     try do
-      query(fixture.session, """
+      query(fixture.episode, """
       update sync_admission_requests
       set requested_at = now() - interval '2 seconds',
           expires_at = now() - interval '1 second'
-      where tenant_id = $1 and session_id = $2
+      where tenant_id = $1 and episode_id = $2
       """)
 
       deny =
@@ -257,21 +201,21 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
           deny.request_key,
           fn -> Postgres.begin_operation(host, deny) end,
           expire.request_key,
-          fn -> Postgres.begin_internal_operation(fixture.session, expire) end
+          fn -> Postgres.begin_internal_operation(fixture.episode, expire) end
         )
 
       [deny_result, expire_result] = results
 
       finalized =
         maybe_finalize(deny_result, fn operation_id ->
-          Postgres.finalize_operation(fixture.session, operation_id, {
+          Postgres.finalize_operation(fixture.episode, operation_id, {
             :applied,
             :admission_denied,
             %{"admission_request_id" => fixture.admission_request_id}
           })
         end) ++
           maybe_finalize(expire_result, fn operation_id ->
-            Postgres.finalize_operation(fixture.session, operation_id, {
+            Postgres.finalize_operation(fixture.episode, operation_id, {
               :applied,
               :admission_expired,
               %{"admission_request_id" => fixture.admission_request_id}
@@ -287,17 +231,17 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
       ]
     after
       Application.delete_env(:chalk_sync, :external_operation_fault_hook)
-      SyncPostgres.cleanup(hd(connections), fixture.session)
+      SyncPostgres.cleanup(hd(connections), fixture.episode)
     end
   end
 
   defp deadline_scenarios(connections) do
-    fixture = SyncPostgres.seed_session(hd(connections))
+    fixture = SyncPostgres.seed_episode(hd(connections))
 
     try do
-      query(fixture.session, """
-      update room_sessions set created_at = now() - interval '2 minutes',
-        deadline_at = now() - interval '1 second', maximum_duration_seconds = 119,
+      query(fixture.episode, """
+      update episodes set created_at = now() - interval '2 minutes',
+        deadline_at = now() - interval '1 second',
         deadline_generation = 2 where tenant_id = $1 and id = $2
       """)
 
@@ -305,19 +249,19 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
         operation("phase_deadline_stale1", :maximum_duration_expired, %{"deadlineGeneration" => 1})
 
       {:error, :stale_deadline_generation} =
-        Postgres.begin_internal_operation(fixture.session, stale)
+        Postgres.begin_internal_operation(fixture.episode, stale)
 
       current =
         operation("phase_deadline_current", :maximum_duration_expired, %{
           "deadlineGeneration" => 2
         })
 
-      {:ok, pending} = Postgres.begin_internal_operation(fixture.session, current)
+      {:ok, pending} = Postgres.begin_internal_operation(fixture.episode, current)
 
       {:ok, applied} =
-        Postgres.finalize_operation(fixture.session, pending.external_operation_id, {
+        Postgres.finalize_operation(fixture.episode, pending.external_operation_id, {
           :applied,
-          :session_ended,
+          :episode_ended,
           %{"reason" => "maximum_duration"}
         })
 
@@ -326,7 +270,7 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
         observation("current_deadline_expiry", [applied.result])
       ]
     after
-      SyncPostgres.cleanup(hd(connections), fixture.session)
+      SyncPostgres.cleanup(hd(connections), fixture.episode)
     end
   end
 
@@ -382,7 +326,7 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
     end)
   end
 
-  defp digest_sequence(_session, events) do
+  defp digest_sequence(_episode, events) do
     Enum.map(events, fn event ->
       %{
         "revision" => event.revision,
@@ -392,17 +336,17 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
     end)
   end
 
-  defp intent_states(session) do
-    query(session, """
+  defp intent_states(episode) do
+    query(episode, """
     select status from sync_lifecycle_intents
-    where tenant_id = $1 and session_id = $2 order by lifecycle_intent_id
+    where tenant_id = $1 and episode_id = $2 order by lifecycle_intent_id
     """)
     |> Enum.map(fn [status] -> status end)
   end
 
-  defp query(session, sql) do
-    Database.connection(session)
-    |> Postgrex.query!(sql, [UUID.dump!(session.tenant_id), UUID.dump!(session.session_id)])
+  defp query(episode, sql) do
+    Database.connection(episode)
+    |> Postgrex.query!(sql, [UUID.dump!(episode.tenant_id), UUID.dump!(episode.episode_id)])
     |> Map.fetch!(:rows)
   end
 
@@ -452,8 +396,8 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
   defp deterministic_ids(seed) do
     %{
       tenant_id: deterministic_uuid(seed, "tenant"),
-      room_id: deterministic_uuid(seed, "room"),
-      session_id: deterministic_uuid(seed, "session"),
+      space_id: deterministic_uuid(seed, "space"),
+      episode_id: deterministic_uuid(seed, "episode"),
       participants:
         Enum.map(1..2, fn index ->
           %{

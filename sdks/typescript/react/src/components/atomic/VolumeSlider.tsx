@@ -31,7 +31,7 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({ value, onChange, mu
         type="button"
         onClick={onMuteToggle}
         disabled={!onMuteToggle}
-        className={cn("flex items-center justify-center rounded-full transition-colors", "hover:bg-accent", size === "sm" ? "p-1" : "p-1.5", muted ? "text-muted-foreground" : "text-foreground", !onMuteToggle && "opacity-50 pointer-events-none")}
+        className={cn("flex items-center justify-center rounded-full transition-colors", "hover:bg-[var(--chalk-stage)]", size === "sm" ? "p-1" : "p-1.5", muted ? "text-[var(--chalk-muted-text)]" : "text-[var(--chalk-text)]", !onMuteToggle && "opacity-50 pointer-events-none")}
         aria-label={muted ? "Unmute volume" : "Mute volume"}
       >
         {muted || value === 0 ? <VolumeMute01Icon size={size === "sm" ? 14 : 18} /> : <VolumeHighIcon size={size === "sm" ? 14 : 18} />}
@@ -39,14 +39,14 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({ value, onChange, mu
 
       <Slider.Root value={sliderValue} onValueChange={handleValueChange} min={0} max={100} step={1} orientation={orientation} className={cn("relative flex items-center", isVertical ? "h-full w-2 flex-col" : "w-full")}>
         <Slider.Control className={cn("relative flex items-center touch-none select-none cursor-pointer", isVertical ? "h-full w-2 flex-col" : "w-full h-5")}>
-          <Slider.Track className={cn("relative grow rounded-full bg-muted", isVertical ? "w-2 h-full" : "h-2 w-full")}>
-            <Slider.Indicator className={cn("absolute rounded-full bg-primary", isVertical ? "w-full bottom-0" : "h-full left-0")} />
-            <Slider.Thumb className={cn("block rounded-full shadow-sm bg-primary", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", "disabled:pointer-events-none disabled:opacity-50", size === "sm" ? "h-3 w-3" : "h-4 w-4")} />
+          <Slider.Track className={cn("relative grow rounded-full bg-[var(--chalk-stage)]", isVertical ? "w-2 h-full" : "h-2 w-full")}>
+            <Slider.Indicator className={cn("absolute rounded-full bg-[var(--chalk-accent)]", isVertical ? "w-full bottom-0" : "h-full left-0")} />
+            <Slider.Thumb className={cn("block rounded-full shadow-sm bg-[var(--chalk-accent)]", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]", "disabled:pointer-events-none disabled:opacity-50", size === "sm" ? "h-3 w-3" : "h-4 w-4")} />
           </Slider.Track>
         </Slider.Control>
       </Slider.Root>
 
-      {showValue && <span className="text-xs text-muted-foreground min-w-[2rem] text-center">{Math.round(sliderValue)}%</span>}
+      {showValue && <span className="text-xs text-[var(--chalk-muted-text)] min-w-[2rem] text-center">{Math.round(sliderValue)}%</span>}
     </div>
   );
 });

@@ -778,7 +778,7 @@ func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
 	}
 }
 
-func TestLoadAcceptsExplicitMeetingOnlyCapabilitiesOutsideLocal(t *testing.T) {
+func TestLoadAcceptsExplicitlyDisabledCapabilitiesOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.IntegrationsEnabled, "false")
@@ -791,7 +791,7 @@ func TestLoadAcceptsExplicitMeetingOnlyCapabilitiesOutsideLocal(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription {
-		t.Fatalf("meeting-only capabilities = %#v, want disabled", cfg.Capabilities)
+		t.Fatalf("explicitly disabled capabilities = %#v, want disabled", cfg.Capabilities)
 	}
 }
 

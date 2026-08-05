@@ -21,24 +21,24 @@ func (q operationQuerier) CreateLifecycleParticipant(ctx context.Context, arg sq
 	return participant, err
 }
 
-func (q operationQuerier) CreateLifecycleRoomSession(ctx context.Context, arg sqlc.CreateLifecycleRoomSessionParams) (sqlc.RoomSession, error) {
+func (q operationQuerier) CreateLifecycleEpisode(ctx context.Context, arg sqlc.CreateLifecycleEpisodeParams) (sqlc.Episode, error) {
 	startedAt := time.Now()
-	session, err := q.next.CreateLifecycleRoomSession(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateLifecycleRoomSession", startedAt, err)
-	return session, err
+	episode, err := q.next.CreateLifecycleEpisode(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateLifecycleEpisode", startedAt, err)
+	return episode, err
 }
 
-func (q operationQuerier) CreateSyncSessionControl(ctx context.Context, arg sqlc.CreateSyncSessionControlParams) (sqlc.SyncSessionControl, error) {
+func (q operationQuerier) CreateSyncEpisodeControl(ctx context.Context, arg sqlc.CreateSyncEpisodeControlParams) (sqlc.SyncEpisodeControl, error) {
 	startedAt := time.Now()
-	control, err := q.next.CreateSyncSessionControl(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateSyncSessionControl", startedAt, err)
+	control, err := q.next.CreateSyncEpisodeControl(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateSyncEpisodeControl", startedAt, err)
 	return control, err
 }
 
-func (q operationQuerier) GetSessionCreateRequest(ctx context.Context, arg sqlc.GetSessionCreateRequestParams) (sqlc.SessionCreateRequest, error) {
+func (q operationQuerier) GetEpisodeCreateRequest(ctx context.Context, arg sqlc.GetEpisodeCreateRequestParams) (sqlc.EpisodeCreateRequest, error) {
 	startedAt := time.Now()
-	request, err := q.next.GetSessionCreateRequest(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "GetSessionCreateRequest", startedAt, err)
+	request, err := q.next.GetEpisodeCreateRequest(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetEpisodeCreateRequest", startedAt, err)
 	return request, err
 }
 
@@ -63,24 +63,24 @@ func (q operationQuerier) LockLifecycleParticipantForUpdate(ctx context.Context,
 	return participant, err
 }
 
-func (q operationQuerier) LockLifecycleRoomSessionForUpdate(ctx context.Context, arg sqlc.LockLifecycleRoomSessionForUpdateParams) (sqlc.RoomSession, error) {
+func (q operationQuerier) LockLifecycleEpisodeForUpdate(ctx context.Context, arg sqlc.LockLifecycleEpisodeForUpdateParams) (sqlc.Episode, error) {
 	startedAt := time.Now()
-	session, err := q.next.LockLifecycleRoomSessionForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockLifecycleRoomSessionForUpdate", startedAt, err)
-	return session, err
+	episode, err := q.next.LockLifecycleEpisodeForUpdate(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "LockLifecycleEpisodeForUpdate", startedAt, err)
+	return episode, err
 }
 
-func (q operationQuerier) LockSessionEndLifecycleIntentForUpdate(ctx context.Context, arg sqlc.LockSessionEndLifecycleIntentForUpdateParams) (sqlc.SyncLifecycleIntent, error) {
+func (q operationQuerier) LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg sqlc.LockEpisodeEndLifecycleIntentForUpdateParams) (sqlc.SyncLifecycleIntent, error) {
 	startedAt := time.Now()
-	intent, err := q.next.LockSessionEndLifecycleIntentForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockSessionEndLifecycleIntentForUpdate", startedAt, err)
+	intent, err := q.next.LockEpisodeEndLifecycleIntentForUpdate(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "LockEpisodeEndLifecycleIntentForUpdate", startedAt, err)
 	return intent, err
 }
 
-func (q operationQuerier) LockSyncSessionControlForUpdate(ctx context.Context, arg sqlc.LockSyncSessionControlForUpdateParams) (sqlc.SyncSessionControl, error) {
+func (q operationQuerier) LockSyncEpisodeControlForUpdate(ctx context.Context, arg sqlc.LockSyncEpisodeControlForUpdateParams) (sqlc.SyncEpisodeControl, error) {
 	startedAt := time.Now()
-	control, err := q.next.LockSyncSessionControlForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockSyncSessionControlForUpdate", startedAt, err)
+	control, err := q.next.LockSyncEpisodeControlForUpdate(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "LockSyncEpisodeControlForUpdate", startedAt, err)
 	return control, err
 }
 
@@ -91,37 +91,37 @@ func (q operationQuerier) MarkLifecycleParticipantLeaving(ctx context.Context, a
 	return participant, err
 }
 
-func (q operationQuerier) MarkLifecycleSessionEnding(ctx context.Context, arg sqlc.MarkLifecycleSessionEndingParams) (sqlc.RoomSession, error) {
+func (q operationQuerier) MarkLifecycleEpisodeEnding(ctx context.Context, arg sqlc.MarkLifecycleEpisodeEndingParams) (sqlc.Episode, error) {
 	startedAt := time.Now()
-	session, err := q.next.MarkLifecycleSessionEnding(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "MarkLifecycleSessionEnding", startedAt, err)
-	return session, err
+	episode, err := q.next.MarkLifecycleEpisodeEnding(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "MarkLifecycleEpisodeEnding", startedAt, err)
+	return episode, err
 }
 
-func (q operationQuerier) ReserveParticipantAdmission(ctx context.Context, arg sqlc.ReserveParticipantAdmissionParams) (sqlc.SyncSessionControl, error) {
+func (q operationQuerier) ReserveParticipantAdmission(ctx context.Context, arg sqlc.ReserveParticipantAdmissionParams) (sqlc.SyncEpisodeControl, error) {
 	startedAt := time.Now()
 	control, err := q.next.ReserveParticipantAdmission(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "ReserveParticipantAdmission", startedAt, err)
 	return control, err
 }
 
-func (q operationQuerier) ReserveParticipantRemoval(ctx context.Context, arg sqlc.ReserveParticipantRemovalParams) (sqlc.SyncSessionControl, error) {
+func (q operationQuerier) ReserveParticipantRemoval(ctx context.Context, arg sqlc.ReserveParticipantRemovalParams) (sqlc.SyncEpisodeControl, error) {
 	startedAt := time.Now()
 	control, err := q.next.ReserveParticipantRemoval(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "ReserveParticipantRemoval", startedAt, err)
 	return control, err
 }
 
-func (q operationQuerier) ReserveSessionEnd(ctx context.Context, arg sqlc.ReserveSessionEndParams) (sqlc.SyncSessionControl, error) {
+func (q operationQuerier) ReserveEpisodeEnd(ctx context.Context, arg sqlc.ReserveEpisodeEndParams) (sqlc.SyncEpisodeControl, error) {
 	startedAt := time.Now()
-	control, err := q.next.ReserveSessionEnd(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReserveSessionEnd", startedAt, err)
+	control, err := q.next.ReserveEpisodeEnd(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ReserveEpisodeEnd", startedAt, err)
 	return control, err
 }
 
-func (q operationQuerier) ReserveSessionCreateRequest(ctx context.Context, arg sqlc.ReserveSessionCreateRequestParams) (sqlc.SessionCreateRequest, error) {
+func (q operationQuerier) ReserveEpisodeCreateRequest(ctx context.Context, arg sqlc.ReserveEpisodeCreateRequestParams) (sqlc.EpisodeCreateRequest, error) {
 	startedAt := time.Now()
-	request, err := q.next.ReserveSessionCreateRequest(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReserveSessionCreateRequest", startedAt, err)
+	request, err := q.next.ReserveEpisodeCreateRequest(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ReserveEpisodeCreateRequest", startedAt, err)
 	return request, err
 }

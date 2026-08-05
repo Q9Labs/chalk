@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	MaximumMeetings             = 20
+	MaximumEpisodes             = 20
 	MaximumParticipants         = 100
-	MinimumMeetingParticipants  = 1
-	MaximumMeetingParticipants  = 10
+	MinimumEpisodeParticipants  = 1
+	MaximumEpisodeParticipants  = 10
 	MaximumRecordingDuration    = 2 * time.Hour
 	MaximumInputBitrateBPS      = int64(4_000_000)
-	MaximumInputBitrateTotalBPS = int64(MaximumMeetings) * MaximumInputBitrateBPS
+	MaximumInputBitrateTotalBPS = int64(MaximumEpisodes) * MaximumInputBitrateBPS
 	DefaultPayloadSchemaVersion = 1
 	DefaultCaptureAttemptLimit  = 5
 	DefaultRenderAttemptLimit   = 3
@@ -24,8 +24,8 @@ const (
 
 var (
 	ErrInvalidTenantID              = errors.New("invalid recording pipeline tenant id")
-	ErrInvalidRoomID                = errors.New("invalid recording pipeline room id")
-	ErrInvalidSessionID             = errors.New("invalid recording pipeline session id")
+	ErrInvalidSpaceID               = errors.New("invalid recording pipeline space id")
+	ErrInvalidEpisodeID             = errors.New("invalid recording pipeline episode id")
 	ErrInvalidRecordingID           = errors.New("invalid recording pipeline recording id")
 	ErrInvalidReservationID         = errors.New("invalid recording reservation id")
 	ErrInvalidJobID                 = errors.New("invalid recording job id")
@@ -96,8 +96,8 @@ const (
 type ReservationInput struct {
 	ID               utilities.ID
 	TenantID         utilities.ID
-	RoomID           utilities.ID
-	SessionID        utilities.ID
+	SpaceID          utilities.ID
+	EpisodeID        utilities.ID
 	RecordingID      utilities.ID
 	IdempotencyKey   string
 	ParticipantCount int
@@ -109,8 +109,8 @@ type ReservationInput struct {
 type Reservation struct {
 	ID               utilities.ID
 	TenantID         utilities.ID
-	RoomID           utilities.ID
-	SessionID        utilities.ID
+	SpaceID          utilities.ID
+	EpisodeID        utilities.ID
 	RecordingID      utilities.ID
 	IdempotencyKey   string
 	ParticipantCount int
@@ -137,7 +137,7 @@ type Pipeline struct {
 type Job struct {
 	ID                   utilities.ID
 	TenantID             utilities.ID
-	SessionID            utilities.ID
+	EpisodeID            utilities.ID
 	RecordingID          utilities.ID
 	Kind                 JobKind
 	IdempotencyKey       string

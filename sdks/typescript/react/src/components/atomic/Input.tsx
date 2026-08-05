@@ -23,30 +23,30 @@ export const Input = React.memo(
 
     return (
       <div className={cn("flex flex-col gap-1.5", fullWidth && "w-full")}>
-        {label && <label className="text-sm font-medium text-[#555b65]">{label}</label>}
+        {label && <label className="text-sm font-medium text-[var(--chalk-muted-text)]">{label}</label>}
         <div className="relative">
-          {icon && iconPosition === "left" && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">{icon}</div>}
+          {icon && iconPosition === "left" && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--chalk-muted-text)] pointer-events-none">{icon}</div>}
 
           <input
             ref={ref}
             className={cn(
-              "rounded-[8px] border border-[#c9c8c2] bg-[#fbfaf7] text-[#0c0e12] transition-colors",
-              "focus:border-[#74b7cf] focus:bg-white focus:outline-none",
-              "placeholder:text-[#858a92]",
+              "rounded-[8px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] transition-colors",
+              "focus:border-[var(--chalk-focus)] focus:bg-[var(--chalk-surface)] focus:outline-none",
+              "placeholder:text-[var(--chalk-muted-text)]",
               "disabled:cursor-not-allowed disabled:opacity-50",
               sizeClasses[size],
               fullWidth ? "w-full" : "w-auto",
               icon && iconPosition === "left" && iconPadding,
               icon && iconPosition === "right" && iconPaddingRight,
-              error && "border-destructive focus:border-destructive",
+              error && "border-[var(--chalk-danger)] focus:border-[var(--chalk-danger)]",
               className,
             )}
             {...props}
           />
 
-          {icon && iconPosition === "right" && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">{icon}</div>}
+          {icon && iconPosition === "right" && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--chalk-muted-text)] pointer-events-none">{icon}</div>}
         </div>
-        {error && <span className="text-sm text-destructive">{error}</span>}
+        {error && <span className="text-sm text-[var(--chalk-danger)]">{error}</span>}
       </div>
     );
   }),

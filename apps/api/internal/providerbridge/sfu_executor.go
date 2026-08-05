@@ -34,15 +34,15 @@ func (e SFUExecutor) Reconcile(ctx context.Context, input provideroperations.Ope
 func (e SFUExecutor) execute(ctx context.Context, input provideroperations.OperationInput) ExecutionResult {
 	switch input.Effect {
 	case provideroperations.EffectGrantPublication:
-		if input.ParticipantSessionGeneration <= 0 {
+		if input.ParticipantGeneration <= 0 {
 			return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "participant_generation_required"}
 		}
 		return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 	case provideroperations.EffectRevokePublication, provideroperations.EffectRemoveParticipant:
-		if input.ParticipantSessionGeneration <= 0 {
+		if input.ParticipantGeneration <= 0 {
 			return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "participant_generation_required"}
 		}
-	case provideroperations.EffectEndSession:
+	case provideroperations.EffectEndEpisode:
 	case provideroperations.EffectStartRecording, provideroperations.EffectStopRecording:
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_effect"}
 	default:
@@ -52,7 +52,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 	}
 
-	snapshot, err := e.publications.Latest(ctx, input.TenantID, input.SessionID)
+	snapshot, err := e.publications.Latest(ctx, input.TenantID, input.EpisodeID)
 	if err != nil {
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
 	}
@@ -82,7 +82,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		_, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
 			Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
 		})
-		if errors.Is(err, mediaplane.ErrSessionNotFound) {
+		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
 			err = nil
 		}
 		if err != nil {
@@ -90,7 +90,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		}
 		for _, target := range connectionTargets {
 			if err := e.publications.RecordClosedPublication(ctx, mediapublications.CloseInput{
-				TenantID: input.TenantID, SessionID: input.SessionID, ParticipantSessionID: target.publication.ParticipantSessionID,
+				TenantID: input.TenantID, EpisodeID: input.EpisodeID, ParticipantID: target.publication.ParticipantID,
 				ParticipantGeneration: target.reference.ParticipantGeneration, ConnectionID: connectionID,
 				MID: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID,
 			}); err != nil {
@@ -121,7 +121,7 @@ func operationTargets(publications []provideroperations.Publication, input provi
 			result := ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "legacy_publication_reference"}
 			return nil, &result
 		}
-		if input.Effect != provideroperations.EffectEndSession && reference.ParticipantGeneration != input.ParticipantSessionGeneration {
+		if input.Effect != provideroperations.EffectEndEpisode && reference.ParticipantGeneration != input.ParticipantGeneration {
 			continue
 		}
 		targets = append(targets, publicationTarget{publication: publication, reference: reference})
@@ -132,10 +132,10 @@ func operationTargets(publications []provideroperations.Publication, input provi
 func publicationMatchesOperation(publication provideroperations.Publication, input provideroperations.OperationInput) bool {
 	switch input.Effect {
 	case provideroperations.EffectRevokePublication:
-		return publication.ParticipantSessionID == input.ParticipantSessionID && publication.Source == input.PublicationSource
+		return publication.ParticipantID == input.ParticipantID && publication.Source == input.PublicationSource
 	case provideroperations.EffectRemoveParticipant:
-		return publication.ParticipantSessionID == input.ParticipantSessionID
-	case provideroperations.EffectEndSession:
+		return publication.ParticipantID == input.ParticipantID
+	case provideroperations.EffectEndEpisode:
 		return true
 	default:
 		return false

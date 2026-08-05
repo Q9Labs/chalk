@@ -1,8 +1,8 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
-import type { WhiteboardCommit, WhiteboardJsonValue, WhiteboardWireElement } from "../collab/wire.js";
-import { chalkEmbeddedWhiteboardSupportedElementTypes } from "./manifest.js";
+import type { WhiteboardCommit, WhiteboardJsonValue, WhiteboardWireElement } from "../collab/wire";
+import { chalkEmbeddedWhiteboardSupportedElementTypes } from "./manifest";
 import {
   CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION,
   CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES,
@@ -13,7 +13,7 @@ import {
   type ChalkEmbeddedWhiteboardRendererEnvelope,
   type ChalkEmbeddedWhiteboardTheme,
   type ChalkEmbeddedWhiteboardViewport,
-} from "./protocol.js";
+} from "./protocol";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 16_384;
@@ -49,7 +49,7 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
     }
   | {
       readonly type: "cursor";
-      readonly participantSessionId: string;
+      readonly participantId: string;
       readonly displayName: string;
       readonly x: number;
       readonly y: number;

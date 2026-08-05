@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { createFacehashScene, getColor, type Intensity3D, type Variant } from "./core/index.js";
-import { FacehashSceneSvgNative } from "./FacehashSceneSvg.native.js";
+import { createFacehashScene, getColor, type Intensity3D, type Variant } from "./core/index";
+import { FacehashSceneSvgNative } from "./FacehashSceneSvg.native";
 
 export interface FacehashNativeProps {
   name: string;

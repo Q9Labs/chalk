@@ -16,7 +16,7 @@
       </intent-filter>
     </service>
     <service
-      android:name=".ChalkMeetingForegroundService"
+      android:name=".ChalkSpaceForegroundService"
       android:enabled="true"
       android:exported="false"
       android:foregroundServiceType="camera|microphone" />

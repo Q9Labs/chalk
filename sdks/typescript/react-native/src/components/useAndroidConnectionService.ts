@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import { addAndroidConnectionServiceListener, endAndroidConnectionServiceCall, ensureAndroidConnectionServiceRegistered, setAndroidConnectionServiceActive, startAndroidConnectionServiceCall } from "../android/connection-service";
 import { AndroidConnectionServiceController } from "./android-connection-service-controller";
-import type { VideoConferencePhase } from "./VideoConference";
+import type { SpaceLifecyclePhase } from "./space-lifecycle";
 
 interface UseAndroidConnectionServiceOptions {
   displayName: string;
@@ -10,12 +10,12 @@ interface UseAndroidConnectionServiceOptions {
   hasVideo: boolean;
   joinNonce: number;
   onDisconnectRequest: () => void;
-  phase: VideoConferencePhase;
-  roomId: string;
-  roomName: string;
+  phase: SpaceLifecyclePhase;
+  spaceId: string;
+  spaceName: string;
 }
 
-export function useAndroidConnectionService({ displayName, enabled, hasVideo, joinNonce, onDisconnectRequest, phase, roomId, roomName }: UseAndroidConnectionServiceOptions): void {
+export function useAndroidConnectionService({ displayName, enabled, hasVideo, joinNonce, onDisconnectRequest, phase, spaceId, spaceName }: UseAndroidConnectionServiceOptions): void {
   const isEnabled = enabled && Platform.OS === "android";
   const controller = useMemo(
     () =>
@@ -27,8 +27,8 @@ export function useAndroidConnectionService({ displayName, enabled, hasVideo, jo
           joinNonce,
           onDisconnectRequest,
           phase,
-          roomId,
-          roomName,
+          spaceId,
+          spaceName,
         },
         {
           addListener: addAndroidConnectionServiceListener,
@@ -48,8 +48,8 @@ export function useAndroidConnectionService({ displayName, enabled, hasVideo, jo
     joinNonce,
     onDisconnectRequest,
     phase,
-    roomId,
-    roomName,
+    spaceId,
+    spaceName,
   });
   useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }

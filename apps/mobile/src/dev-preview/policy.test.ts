@@ -30,12 +30,12 @@ describe("native SDK preview policy", () => {
   it("does not replace a live Space route from a warm preview link", () => {
     expect(canOpenDevPreviewFromRoute("home")).toBe(true);
     expect(canOpenDevPreviewFromRoute("sdk-preview")).toBe(true);
-    expect(canOpenDevPreviewFromRoute("lobby")).toBe(false);
+    expect(canOpenDevPreviewFromRoute("space")).toBe(false);
   });
 
   it("keeps the global diagnostics launcher off the gallery", () => {
     expect(canShowGlobalDiagnostics("home")).toBe(true);
-    expect(canShowGlobalDiagnostics("lobby")).toBe(true);
+    expect(canShowGlobalDiagnostics("space")).toBe(true);
     expect(canShowGlobalDiagnostics("sdk-preview")).toBe(false);
   });
 });

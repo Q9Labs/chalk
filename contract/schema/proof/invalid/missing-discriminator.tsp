@@ -1,4 +1,4 @@
-import "../../../../tools/contract-codegen/src/typespec-proof/main.tsp";
+import "../../../../tools/contract-fixture-proof/src/typespec-proof/main.tsp";
 
 namespace Chalk.ContractProof;
 

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { WhiteboardCanvasClassNames } from "./WhiteboardCanvas.js";
+import type { WhiteboardCanvasClassNames } from "./WhiteboardCanvas";
 
 export interface MathEditorIcons {
   close?: ReactNode;

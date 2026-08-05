@@ -34,9 +34,9 @@ var (
 
 type Subject struct {
 	TenantID              utilities.ID
-	RoomID                utilities.ID
-	SessionID             utilities.ID
-	ParticipantSessionID  utilities.ID
+	SpaceID               utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 }
 
@@ -221,8 +221,8 @@ func validateInitiate(input InitiateInput) ([32]byte, string, error) {
 }
 
 func invalidSubject(subject Subject) bool {
-	return subject.TenantID.IsZero() || subject.RoomID.IsZero() || subject.SessionID.IsZero() ||
-		subject.ParticipantSessionID.IsZero() || subject.ParticipantGeneration <= 0
+	return subject.TenantID.IsZero() || subject.SpaceID.IsZero() || subject.EpisodeID.IsZero() ||
+		subject.ParticipantID.IsZero() || subject.ParticipantGeneration <= 0
 }
 
 func validFileID(value string) bool {
@@ -231,8 +231,8 @@ func validFileID(value string) bool {
 
 func objectKey(subject Subject, sceneID, uploadID utilities.ID) string {
 	return strings.Join([]string{
-		"whiteboard-v1", "tenants", subject.TenantID.String(), "sessions",
-		subject.SessionID.String(), "scenes", sceneID.String(), "uploads",
+		"whiteboard-v1", "tenants", subject.TenantID.String(), "episodes",
+		subject.EpisodeID.String(), "scenes", sceneID.String(), "uploads",
 		uploadID.String(),
 	}, "/")
 }

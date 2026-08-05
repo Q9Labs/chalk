@@ -15,8 +15,8 @@ function createInput(overrides: Partial<AndroidConnectionServiceControllerInput>
     joinNonce: 1,
     onDisconnectRequest: vi.fn(),
     phase: "joining",
-    roomId: "room-1",
-    roomName: "Daily Standup",
+    spaceId: "space-1",
+    spaceName: "Daily Standup",
     ...overrides,
   };
 }
@@ -45,24 +45,24 @@ describe("AndroidConnectionServiceController", () => {
 
     expect(dependencies.ensureRegistered).toHaveBeenCalledTimes(1);
     expect(dependencies.startCall).toHaveBeenCalledWith({
-      callId: "room-1:1",
+      callId: "space-1:1",
       displayName: "Guest",
       hasVideo: true,
-      roomId: "room-1",
-      roomName: "Daily Standup",
+      spaceId: "space-1",
+      spaceName: "Daily Standup",
     });
 
-    controller.update(createInput({ onDisconnectRequest, phase: "meeting" }));
+    controller.update(createInput({ onDisconnectRequest, phase: "live" }));
     await flushMicrotasks();
-    expect(dependencies.setActive).toHaveBeenCalledWith("room-1:1");
+    expect(dependencies.setActive).toHaveBeenCalledWith("space-1:1");
 
     getListener()?.({ callId: "other:1", reason: "remote", type: "disconnect" });
-    getListener()?.({ callId: "room-1:1", reason: "remote", type: "disconnect" });
+    getListener()?.({ callId: "space-1:1", reason: "remote", type: "disconnect" });
     expect(onDisconnectRequest).toHaveBeenCalledTimes(1);
 
-    controller.update(createInput({ onDisconnectRequest, phase: "lobby" }));
+    controller.update(createInput({ onDisconnectRequest, phase: "entrance" }));
     await flushMicrotasks();
-    expect(dependencies.endCall).toHaveBeenCalledWith("room-1:1", { reason: "canceled" });
+    expect(dependencies.endCall).toHaveBeenCalledWith("space-1:1", { reason: "canceled" });
 
     unsubscribe();
   });
@@ -74,7 +74,7 @@ describe("AndroidConnectionServiceController", () => {
 
     unsubscribe();
 
-    expect(dependencies.endCall).toHaveBeenCalledWith("room-1:1", { reason: "local" });
+    expect(dependencies.endCall).toHaveBeenCalledWith("space-1:1", { reason: "local" });
     expect(dependencies.addListener).toHaveBeenCalledTimes(1);
   });
 });
