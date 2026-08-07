@@ -433,3 +433,249 @@ design projection. `pnpm run contract:check` now passes with 68 paths and 116
 schemas. These five deterministic files join the same checkpoint; the debugger
 lanes will still treat all generated outputs as root-owned and final generation
 will run again after their producer changes settle.
+
+## 2026-08-05T13:22:49+05:00
+
+Committed the dashboard reconciliation as
+`7c6c7261` (`feat(dashboard): reconcile management workflows`), 106 files and
+12,420 insertions/527 deletions. Its staged smart gate passed in 609 seconds,
+including migrations, the full service-backed API gate, generated-contract
+drift, affected SDK and application typechecks/tests/builds, mobile iOS and
+Android exports, web production build, Publint, and package-resolution checks.
+The ignored React Native embedded Whiteboard output left by the build was
+inspected and removed; the checkpoint worktree was clean before the next lane.
+
+Launched three disjoint Luna extraction producers from the stable debugger
+snapshot: backend/contracts (88 manifest rows), SDK bindings (11 rows), and web
+UI/tooling (71 rows). They own only their selected target paths and lane logs;
+the six diagnostics-contract fixtures, package/router/lockfile seams, generated
+artifacts, language baseline, changelog, and all 19 generic-UI deny rows remain
+root-owned or excluded. Each producer must become quiescent before its Terra
+xhigh review starts.
+
+## 2026-08-05T15:01:41+05:00
+
+All three debugger producer lanes have been reconciled into the Wave 8 target,
+then split into API, Sync, and workspace/UI integration lanes. The legacy
+debugger source remains read-only and byte-stable at
+`c69de85875aca2c33e7889e136f59c41dd97ce0b`: its default binary diff is still
+`0138041986542419c3a4154b17e2b4c7eeae7909045f0ad1556ce4e67181f40c`, its
+full-index binary diff is still
+`ef817024cdbe60226f01c4aa9e029ce430a6903444a596a242725b2f3a320128`, and it
+still contains 260 tracked dirty plus 257 untracked paths.
+
+The bounded Sync review plus one re-review found and closed hosted endpoint
+hardening, W3C journey propagation, moderation ordering/deduplication, bounded
+1,024-key retention, malformed and duplicate attachment handling, and exact
+attachment commit lifecycle ordering. The final focused Sync aggregate passes
+28 tests twice. Its two-review ceiling is exhausted; root will independently
+verify the settled lane during integration.
+
+The backend review closed provider-HMAC exposure, unsafe migration downgrade,
+unsafe capacity-harness defaults, export/SSE cache policy, hosted tenant scope,
+deep projection validation, and anonymous participant labels. The API lane is
+now wiring the existing Dashboard authentication and tenant policy into the
+new account-authorizer seam, with explicit cross-account 403 coverage and no
+operator fallback.
+
+The SDK/UI review found six integration defects. Export redirect containment,
+safe attachment metadata, structured-only markdown rendering, deep contract
+validation, bounded SSE buffering, and production SDK runtime/render-observer
+wiring have been implemented with focused coverage. The remaining active work
+removes the environment-wide hosted operator credential in favor of the
+verified Dashboard account bearer, moves the diagnostics contract package into
+the client runtime dependency set, and resolves any directly caused typecheck
+seams. One bounded Terra xhigh re-review remains after those lanes are
+quiescent. No Wave 8 debugger path is staged or committed yet.
+
+## 2026-08-05T15:54:00+05:00
+
+Completed the hosted account boundary on both sides. The web gateway now uses
+only the HttpOnly Dashboard account credential, verifies it through `/v1/me`,
+strips cookies and browser-controlled authorization, and forwards the same
+account bearer to the API; the environment-wide hosted operator token was
+removed. The API authenticates that credential through the existing session
+service, adapts the authenticated Account's Tenant records through the normal
+Tenant policy, and supplies a bounded Tenant allowlist to Episode Diagnostics.
+Opaque cross-Tenant references return 403 and never fall back to operator
+authorization. The dedicated operator credential remains only for hosted CLI
+use, while the static operator token remains isolated to loopback localhost.
+
+Independent root repeats passed the Go HTTP/API/diagnostics packages without
+cache, the full 26-file/136-test debugger web set, diagnostics contracts and
+fixture drift, all seven tooling suites, client and render-observer tests,
+React and React Native typechecks, the 28-test Sync aggregate twice, and the
+Sync basic gate. The two workspace typecheck seams exposed by the new source
+graph were closed with a browser-safe optional `globalThis.Buffer` fallback in
+Whiteboard and explicit Node test typings in the React Native check config.
+
+The second and final Terra xhigh SDK/UI review confirmed hosted account scope,
+signed-download containment, server-Markdown rejection, and bounded SSE
+parsing, then found five survivors: credential revocation stopped delivery but
+not capture; several projection display strings lacked the forbidden-value
+filter; controller-owned SDK checkpoints were not composed into production;
+remote track registrations survived replacement/removal; and token-bearing
+exports/retry waits survived teardown. Luna closed all five. Contracts now
+reject bearer tokens, raw identities/emails, URLs, and credential-shaped display
+strings in snapshots and SSE deltas. The SDK now binds capture and operation
+callbacks to credential epochs, cancels exports/retries on revocation and
+disposal, instruments chat/media/reaction/Participant/moderation controller
+actions, and synchronizes remote-track registration. Root direct review caught
+and closed the delayed generation-1 operation callback after generation-2
+rotation. The final client proof is 18 files/64 tests plus TypeScript.
+
+Root regenerated SQLC, webhook artifacts, semantic fixtures, OpenAPI, generated
+SDK contracts, and the canonical API design. Contract drift checks pass with 68
+paths/116 schemas, 15 webhook Event fixtures, and current ContractIR. The
+language ratchet passes; active code has no `VideoConference` variants. Added
+the public Unreleased changelog entry while keeping hosted enablement and
+deployment explicitly manual. Nothing in the debugger scope is staged or
+committed yet.
+
+## 2026-08-05T17:35:20+05:00
+
+The first recoverable exact-tree M4 full-gate result passed Semgrep, dependency
+scanning, database migration, the complete Go API gate, lifecycle smoke, vet,
+Staticcheck, and vulnerability analysis. It stopped at Sync Credo with five
+refactoring findings: a negated coordinator branch, a redundant final `with`
+clause, excessive Chat nesting, an over-complex blocked-address predicate, and
+excessive DNS-resolution nesting. Complaint `#3728` records the gate stop.
+Luna refactored only the three affected Sync source files; strict Credo,
+test-environment warnings-as-errors compilation, the Sync basic gate, 20
+focused diagnostics/coordinator tests, formatting, and diff hygiene now pass.
+The failed remote tree and both uniquely named archives were removed and no
+task process remains. The next exact-tree gate waits for the newly discovered
+main-checkout evidence lane to settle.
+
+The local-master safety audit found that `/Users/macmini/code/chalk` is a bare
+Git directory with an explicit dirty work tree at
+`e45395e1875b692e7cc620ab8b52423d0b79bda9`, not a clean checkout that can be
+overwritten. Wave 8 now formally treats it as a third immutable evidence
+source. Its 7-path tracked binary diff hashes to
+`37759560bbb6b6670cb49f1f9f95149f8ac7d0145b04170b650c4d769d391e39`.
+Its 93 untracked files have sorted path-list SHA-256
+`84d0c0966d645ce7c98779767278f00f5a7d96a23fb64c5cef2ad76681445d6b`
+and sorted content-manifest SHA-256
+`a4b91d28bf8dadcc6e335bc2c26188b008ea6acdafc54e63ccd8e0f8df2c0d3d`.
+
+Luna classified every main-checkout delta against the Wave 8 target. The
+accepted tracked adaptation adds the Tenant-onboarding integration-test
+database export and preserves the unique launch-readiness and journey-
+correlation lessons under canonical Space/Episode vocabulary; its assigned
+binary diff SHA-256 is
+`a73717b3cdda206cafe2cd7831d47cc2fbccda5ac9ac054c61ad531c26f9b222`.
+The 12 unique canonical mobile SDK mockups and their index were copied byte for
+byte, all hashes and 13 links verified, and OCR found no banned vocabulary.
+The stale atlas/store copy, private mobile snapshot, raw repro material, broken
+import, and older diagnostics implementations remain excluded. The private
+mobile manager, admission, media, port, failure-mode, and whiteboard behavior
+seeds were mapped individually to existing canonical target coverage; no
+behavioral gap remains. A fresh Terra xhigh review owns this main-evidence
+handoff before the final gate.
+
+## 2026-08-05T19:30:00+05:00
+
+The exact two-commit M4 methodology is now explicit: the dashboard checkpoint
+is committed on a temporary `master` branch and the complete candidate is its
+single child. A first topology attempt omitted the named base, so Fallow could
+not detect it; complaint `#3730` records that harness requirement. A later
+local candidate archive was truncated by its command runner and rejected by
+tar validation before transfer; complaint `#3732` records the recovered
+archive failure. Every failed remote tree and uniquely named archive was
+removed after inspection, with no task process left behind.
+
+The full gate exposed and closed three clean-checkout integration seams. First,
+Sync's wire-SDK tests executed the client before the dist-exported diagnostics
+contracts package had been built, producing two `ERR_MODULE_NOT_FOUND`
+failures while 393/395 Sync tests passed. Complaint `#3731` records it. The
+correctness harness now builds contracts first and gives only wire-SDK child
+processes a no-alias runtime tsconfig. Clean/no-dist proof resolves the real
+`dist/index.js`; the next M4 run passed all 395 Sync tests, the breaker, replay
+twice, and the TypeScript/Whiteboard reliability suites.
+
+Second, the M4 generated-SDK check defaulted to Intel-style
+`/usr/local/go/bin/go` while the available supported toolchain is
+`/opt/homebrew/bin/go`; complaint `#3733` records the environment split. The
+unchanged exact tree uses the script's supported `GO` override on M4. Third,
+the external SDK tarball install attempted to fetch the then-private
+`@chalk/diagnostics-contracts` dependency from npm and failed 404; complaint
+`#3734` records the publication defect. Luna promoted the versioned shared
+contracts to a public `0.1.0` package and added it to the local-tarball consumer
+proof. Terra found and Luna closed clean-CI build ordering, missing package path
+filters, a false-positive direct-install proof, and an over-broad JSON publish
+allowlist. The final package re-review is clean. The external consumer now
+proves the packed client declares `^0.1.0`, resolves contracts transitively,
+typechecks, and browser-bundles without fetching a Chalk package. Publint and
+ATTW pass. CHANGELOG records the manual publish order: contracts, client,
+React; no package was published.
+
+The subsequent M4 run reached mobile export and found Metro could not resolve
+the new contracts workspace while following client source; complaint `#3736`
+records it. Luna added the diagnostics workspace to the existing mobile Metro
+mapping and builds it before native dependencies. Terra then found the normal
+`start:raw` path still skipped preparation and the first test only inspected
+configuration. Both are closed: `prestart:raw` prepares once for direct and
+logged starts, and a no-dist fixture now builds contracts, recreates the
+pnpm-style client dependency link, and invokes Metro's real resolver for iOS
+and Android. Both start smokes reached `localhost:8081` and stopped cleanly;
+clean iOS and Android exports, typechecks, formatting, vocabulary, and diff
+hygiene pass. The final mobile Terra re-review has no P0-P2 findings.
+
+The final freeze audit caught 245 untracked React Native embedded Whiteboard
+files generated by the mobile export. They were absent before that proof, all
+lived under one untracked non-symlink directory, and contained no tracked path.
+Luna removed only that exact task-generated tree with bounded cleanup. The
+untracked count returned from 463 to 218 and no Expo, Metro, or dev process
+remained.
+
+## 2026-08-05T20:05:00+05:00
+
+The final exact candidate contained 3,712 source files and a 300-file delta
+from the committed dashboard checkpoint. The local and M4 candidate archives
+matched at SHA-256
+`8813ce50cc18d8091a3821f2c5cc0d796d6a6dce333dfe1edd0664ad668f0316`;
+the unchanged dashboard-base archive matched at
+`c08974e6caecdf1a4ab50d6a87c15195e1b1ba6c48ac1a9c20e81de73efa9530`.
+The temporary two-commit repository used `9f25605` as its `master` dashboard
+base and `2ceb468` as the exact Wave 8 child. With the supported M4
+`GO=/opt/homebrew/bin/go` override, `pnpm run gate -- --full` passed.
+
+The green proof includes gate routing, vocabulary, hygiene, secret scanning,
+architecture generation/tests, two-commit Fallow analysis, Semgrep,
+dependency-vulnerability scanning, all migrations, the full API gate, all 395
+Sync tests, the Sync breaker and replay twice, contract/codegen drift, workspace
+dependency policy, test presence, every affected typecheck and coverage suite,
+the external packed SDK consumer, every affected package/application build,
+iOS and Android Expo exports, the web production build and prerender, recorder
+OpenTofu validation, Publint, and package TypeScript resolution through ATTW.
+After the result was captured, the exact remote tree, its provider/process
+state, both remote archives, and both local transfer archives were removed and
+verified absent. No shared cache or unrelated process was touched.
+
+## 2026-08-05T20:30:00+05:00
+
+The first commit attempt stopped only on three Markdown formatting findings.
+Luna formatted exactly those paths; scoped formatting and diff checks passed.
+The second attempt advanced through the API gate, 395 Sync tests, reliability
+proof, contracts, and dependency policy before the staged-file test-presence
+check found four new helper modules without adjacent test filenames. Complaint
+`#3741` records the difference from the earlier committed-tree full-gate
+fixture. Luna added meaningful adjacent web, UI, and SDK coverage rather than
+weakening the gate. Focused web/UI tests pass 41 assertions, and the final SDK
+lane passes 22 assertions plus client typecheck.
+
+The web/UI Terra xhigh review was clean. The bounded SDK reviews found and Luna
+closed three credential-parsing gaps: malformed three-segment payloads now
+fail closed, expiry requires an explicitly zoned RFC 3339 timestamp, and
+calendar/time validation rejects normalized impossible dates and hour 24 while
+retaining valid offsets and leap dates. The final surviving P2 was fixed after
+the second and final review pass; focused verification is green.
+
+Browser permission was granted for explicit `@Chrome` proof. The installed
+Google Chrome extension and native-host manifest both validate, and Chrome was
+launched in its selected Default profile. The Chrome runtime nevertheless
+reported `Browser is not available: chrome` after its one supported retry;
+complaints `#3742` and `#3743` record the stale catalog path and failed runtime
+registration. The browser proof and safe local `master` ref update remain
+blocked until the Browser/Chrome plugin is reinstalled or otherwise exposes
+the explicit Chrome family. No fallback browser surface was substituted.

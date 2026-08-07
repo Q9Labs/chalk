@@ -59,6 +59,7 @@ type Options struct {
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
 	ParticipantMediaIssuer ParticipantMediaIssuer
+	ParticipantDiagnostics ParticipantDiagnosticsIssuer
 	ParticipantMediaVerify ParticipantMediaVerifier
 	ParticipantMediaActive ActiveParticipantAuthorizer
 	ParticipantGeneration  ParticipantGenerationAuthorizer
@@ -94,6 +95,9 @@ type Options struct {
 	ChatParticipants       ChatParticipantVerifier
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
+	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
+	// value is disabled and therefore does not mount any /_internal route.
+	EpisodeDiagnostics EpisodeDiagnosticsHTTPOptions
 }
 
 func NewRouter(options Options) http.Handler {
@@ -114,6 +118,7 @@ func NewRouter(options Options) http.Handler {
 	})
 
 	mountWorkerRoutes(r, options)
+	mountEpisodeDiagnosticsRoutes(r, options)
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))

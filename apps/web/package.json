@@ -15,9 +15,11 @@
     "check-types": "tsc --project tsconfig.check-types.json --noEmit"
   },
   "dependencies": {
+    "@chalk/diagnostics-contracts": "workspace:^0.1.0",
     "@cloudflare/vite-plugin": "^1.43.0",
     "@q9labsai/chalk-client": "workspace:^4.0.0",
     "@q9labsai/chalk-react": "workspace:^4.0.0",
+    "@q9labsai/chalk-ui": "workspace:^4.0.0",
     "@tanstack/react-router": "1.170.16",
     "@tanstack/react-start": "1.168.26",
     "@tanstack/router-plugin": "1.168.18",

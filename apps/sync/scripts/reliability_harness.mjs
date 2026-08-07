@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../..");
 const syncDirectory = path.join(repositoryRoot, "apps/sync");
+const diagnosticsContractsTsconfig = path.join(repositoryRoot, "apps/sync/scripts/tsconfig.wire-sdk.json");
 const evidenceKind = "chalk_sync_reliability_profile";
 const schemaVersion = 1;
 const profiles = new Set(["correctness", "topology", "release"]);
@@ -27,9 +28,10 @@ export function createProfilePlan(profile, runDirectory) {
   if (!profiles.has(profile)) throw new Error(`unknown reliability profile: ${profile}`);
 
   const correctness = [
+    step("diagnostics_contracts_build", ["pnpm", "--dir", "packages/diagnostics-contracts", "run", "build"]),
     step("sync_full_gate", ["apps/sync/scripts/gate.sh", "run"]),
-    step("sync_v1_breaker", ["mix", "sync.breaker.v1", "--output", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
-    step("sync_v1_replay", ["mix", "sync.breaker.v1", "--replay", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
+    step("sync_v1_breaker", ["mix", "sync.breaker.v1", "--output", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test", TSX_TSCONFIG_PATH: diagnosticsContractsTsconfig } }),
+    step("sync_v1_replay", ["mix", "sync.breaker.v1", "--replay", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test", TSX_TSCONFIG_PATH: diagnosticsContractsTsconfig } }),
     step("typescript_sync_and_whiteboard", ["pnpm", "--dir", "sdks/typescript/client", "exec", "vitest", "run", "src/sync", "src/whiteboard"]),
     step("whiteboard_collaboration", ["pnpm", "--dir", "packages/whiteboard", "exec", "vitest", "run", "src/collab", "src/embedded"]),
   ];

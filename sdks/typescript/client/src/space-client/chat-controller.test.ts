@@ -2,6 +2,8 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
+import { diagnosticRuntime } from "../episode-diagnostic-runtime.test.helpers";
+import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { ChatControllerService, makeChatController } from "./chat-controller";
 import { SpaceStore } from "./store";
 
@@ -88,14 +90,32 @@ describe("ChatController", () => {
     expect(upload.finalizeUpload).toHaveBeenCalledWith("upload-1");
     expect(harness.controller.url({ attachmentId: "attachment/1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 })).toBe("https://api.chalk.video/v1/chat/attachments/attachment%2F1/download");
   });
+
+  it("records successful and failed send checkpoints without changing the product result", async () => {
+    const diagnostics = diagnosticRuntime();
+    const harness = createHarness(null, undefined, diagnostics);
+    harness.connection.setPorts(harness.ports);
+
+    await harness.runtime.runPromise(harness.controller.send({ text: "instrumented" }));
+    const successful = diagnostics.inspect().ring.filter((event) => event.name === "chat.send");
+    expect(successful.map((event) => event.expectation?.checkpoint)).toEqual(expect.arrayContaining(["intent", "validation", "authorization", "durable_commit", "paging_visibility", "recipient_projection", "sender_receipt"]));
+    expect(successful.find((event) => event.state === "not_observable")?.expectation?.checkpoint).toBe("recipient_projection");
+
+    harness.sync.sendChatMessage.mockRejectedValueOnce(new Error("temporary failure"));
+    await expect(harness.runtime.runPromise(harness.controller.send({ text: "failed" }))).rejects.toMatchObject({ code: "chat.payload_invalid" });
+    expect(diagnostics.inspect().ring.at(-1)).toMatchObject({ name: "chat.send", state: "failed" });
+    diagnostics.dispose();
+  });
 });
 
-function createHarness(transport: ChalkChatFileTransport | null = null, fetch?: typeof globalThis.fetch) {
+function createHarness(transport: ChalkChatFileTransport | null = null, fetch?: typeof globalThis.fetch, episodeDiagnostics?: EpisodeDiagnosticRuntime) {
   const store = new SpaceStore();
   const connection = new FakeConnection();
   const sync = new FakeSync();
   const ports = { sync, media: {} } as unknown as ConnectionPorts;
-  const runtime = ManagedRuntime.make(Layer.effect(ChatControllerService, makeChatController({ connection: connection as unknown as ConnectionLifecycleCapability, store, createTransport: transport ? () => transport : undefined, fetch })) as Layer.Layer<ChatControllerService, never>);
+  const runtime = ManagedRuntime.make(
+    Layer.effect(ChatControllerService, makeChatController({ connection: connection as unknown as ConnectionLifecycleCapability, store, createTransport: transport ? () => transport : undefined, fetch, episodeDiagnostics })) as Layer.Layer<ChatControllerService, never>,
+  );
   runtimes.push(runtime);
   return { store, connection, controller: runtime.runSync(Effect.service(ChatControllerService)), runtime, sync, ports };
 }

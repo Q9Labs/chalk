@@ -1,0 +1,27 @@
+{
+  "name": "@chalk/episode-diagnostics",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "trace:inspect": "./src/cli.mjs"
+  },
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./fixture-server": "./src/fixture-server.mjs",
+    "./visual-matrix": "./src/visual-matrix.mjs",
+    "./browser-proof": "./src/browser-proof.mjs",
+    "./local-browser-proof": "./src/local-browser-proof.mjs"
+  },
+  "scripts": {
+    "trace:inspect": "node src/cli.mjs",
+    "browser-proof:local": "node src/local-browser-proof.mjs",
+    "test": "pnpm exec vitest run",
+    "lint": "pnpm exec oxfmt --check .",
+    "check-types": "node --check src/cli.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.57.0"
+  }
+}

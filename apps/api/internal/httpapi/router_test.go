@@ -137,14 +137,14 @@ type recordingObjectService struct {
 }
 
 type authenticationService struct {
-	register                    func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error)
-	login                       func(context.Context, authentication.LoginInput) (authentication.AuthResult, error)
-	authenticateSession         func(context.Context, string) (authentication.SessionUser, error)
-	principalForSession         func(authentication.Session) authentication.Principal
-	logout                      func(context.Context, authentication.Principal) error
-	startGoogleSignIn           func(context.Context) (authentication.GoogleStart, error)
-	completeGoogleSignIn        func(context.Context, string, string, *string) (authentication.AuthResult, error)
-	startGoogleReauthentication func(context.Context, utilities.ID, string, utilities.ID) (authentication.GoogleReauthenticationStart, error)
+	register                      func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error)
+	login                         func(context.Context, authentication.LoginInput) (authentication.AuthResult, error)
+	authenticateAccountCredential func(context.Context, string) (authentication.SessionUser, error)
+	principalForAccountCredential func(authentication.Session) authentication.Principal
+	logout                        func(context.Context, authentication.Principal) error
+	startGoogleSignIn             func(context.Context) (authentication.GoogleStart, error)
+	completeGoogleSignIn          func(context.Context, string, string, *string) (authentication.AuthResult, error)
+	startGoogleReauthentication   func(context.Context, utilities.ID, string, utilities.ID) (authentication.GoogleReauthenticationStart, error)
 }
 
 type tenantAuthorizer struct {
@@ -170,15 +170,15 @@ func (s authenticationService) Login(ctx context.Context, input authentication.L
 }
 
 func (s authenticationService) AuthenticateSession(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
-	if s.authenticateSession == nil {
+	if s.authenticateAccountCredential == nil {
 		return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
 	}
-	return s.authenticateSession(ctx, rawToken)
+	return s.authenticateAccountCredential(ctx, rawToken)
 }
 
 func (s authenticationService) PrincipalForSession(session authentication.Session) authentication.Principal {
-	if s.principalForSession != nil {
-		return s.principalForSession(session)
+	if s.principalForAccountCredential != nil {
+		return s.principalForAccountCredential(session)
 	}
 	return authentication.Principal{
 		Kind:      authentication.PrincipalUser,
@@ -774,7 +774,7 @@ func TestMeAcceptsBearerSession(t *testing.T) {
 	req := bearerRequest(http.MethodGet, "/v1/me", "raw-session-token")
 	res := requestWithOptionsAndRequest(t, req, httpapi.Options{
 		Authentication: authenticationService{
-			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
 				if rawToken != "raw-session-token" {
 					t.Fatalf("raw token = %q, want raw-session-token", rawToken)
 				}
@@ -801,7 +801,7 @@ func TestMeAcceptsCookieSession(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "chalk_session", Value: "cookie-session-token"})
 	res := requestWithOptionsAndRequest(t, req, httpapi.Options{
 		Authentication: authenticationService{
-			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
 				if rawToken != "cookie-session-token" {
 					t.Fatalf("raw token = %q, want cookie-session-token", rawToken)
 				}
@@ -818,7 +818,7 @@ func TestMeAcceptsCookieSession(t *testing.T) {
 func TestMeRejectsMissingAndInvalidSession(t *testing.T) {
 	res := requestWithOptions(t, http.MethodGet, "/v1/me", httpapi.Options{
 		Authentication: authenticationService{
-			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return authentication.SessionUser{}, errors.New("unexpected auth call")
 			},
 		},
@@ -829,7 +829,7 @@ func TestMeRejectsMissingAndInvalidSession(t *testing.T) {
 
 	res = requestWithOptionsAndRequest(t, bearerRequest(http.MethodGet, "/v1/me", "invalid"), httpapi.Options{
 		Authentication: authenticationService{
-			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return authentication.SessionUser{}, authentication.ErrUnauthenticated
 			},
 		},
@@ -843,7 +843,7 @@ func TestLogoutRevokesCurrentSession(t *testing.T) {
 	sessionUser := authSessionUser(t)
 	res := requestWithOptionsAndRequest(t, bearerRequest(http.MethodPost, "/v1/auth/logout", "raw-session-token"), httpapi.Options{
 		Authentication: authenticationService{
-			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return sessionUser, nil
 			},
 			logout: func(ctx context.Context, principal authentication.Principal) error {
@@ -1055,7 +1055,7 @@ func TestAuthenticatedWriteRateLimitUsesPrincipal(t *testing.T) {
 			Now:     func() time.Time { return time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC) },
 		},
 		Authentication: authenticationService{
-			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
 				sessionUser := authSessionUser(t)
 				if rawToken == "second-session-token" {
 					secondUserID, err := utilities.ParseID("33333333-3333-4333-8333-333333333333")
@@ -1287,7 +1287,7 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 	for _, route := range routes {
 		res := requestWithOptionsAndBody(t, route.method, route.path, route.body, httpapi.Options{
 			Authentication: authenticationService{
-				authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+				authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 					return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
 				},
 			},
@@ -1847,7 +1847,7 @@ func TestLocalSystemTokenAuthenticatesProtectedTenantRoutes(t *testing.T) {
 	res := requestWithOptionsAndRequest(t, bearerRequestWithBody(http.MethodPost, "/v1/tenants", "local-system-token", `{"name":"Acme","default_region":"us"}`), httpapi.Options{
 		LocalSystemToken: "local-system-token",
 		Authentication: authenticationService{
-			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
 			},
 		},
@@ -1874,7 +1874,7 @@ func TestLocalSystemTokenAllowsSystemTenantList(t *testing.T) {
 	res := requestWithOptionsAndRequest(t, bearerRequest(http.MethodGet, "/v1/tenants", "local-system-token"), httpapi.Options{
 		LocalSystemToken: "local-system-token",
 		Authentication: authenticationService{
-			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
 			},
 		},
@@ -3563,7 +3563,7 @@ func authenticatedOptions(t *testing.T, options httpapi.Options) httpapi.Options
 
 	if options.Authentication == nil {
 		options.Authentication = authenticationService{
-			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
 				if rawToken != "raw-session-token" {
 					t.Fatalf("raw token = %q, want raw-session-token", rawToken)
 				}
@@ -3583,13 +3583,13 @@ func systemOptions(t *testing.T, options httpapi.Options) httpapi.Options {
 
 	if options.Authentication == nil {
 		options.Authentication = authenticationService{
-			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
 				if rawToken != "raw-session-token" {
 					t.Fatalf("raw token = %q, want raw-session-token", rawToken)
 				}
 				return authSessionUser(t), nil
 			},
-			principalForSession: func(authentication.Session) authentication.Principal {
+			principalForAccountCredential: func(authentication.Session) authentication.Principal {
 				return authentication.Principal{Kind: authentication.PrincipalSystem}
 			},
 		}

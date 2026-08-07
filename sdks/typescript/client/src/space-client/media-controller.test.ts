@@ -1,8 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { diagnosticRuntime } from "../episode-diagnostic-runtime.test.helpers";
 import { createMediaControllerHarness, deferred, FakeTrack, stream } from "./media-controller.test.helpers";
 
 describe("MediaController", () => {
   afterEach(() => vi.useRealTimers());
+
+  it("records media success, failure, and unexpected-end checkpoints", async () => {
+    const diagnostics = diagnosticRuntime();
+    const harness = createMediaControllerHarness(diagnostics);
+    const screen = new FakeTrack("screen-diagnostic", "video");
+    harness.activate();
+    harness.getDisplayMedia.mockResolvedValueOnce(stream(screen));
+    await harness.controller.setScreenShareEnabled(true);
+    const started = diagnostics.inspect().ring.filter((event) => event.name === "screen.start");
+    expect(started.map((event) => event.expectation?.checkpoint)).toEqual(expect.arrayContaining(["permission", "track_acquisition", "sync_commit", "sfu_publication"]));
+
+    screen.endFromBrowser();
+    await vi.waitFor(() => expect(diagnostics.inspect().ring.some((event) => event.name === "screen.unexpected_end" && event.state === "succeeded")).toBe(true));
+
+    const failedDiagnostics = diagnosticRuntime();
+    const failedHarness = createMediaControllerHarness(failedDiagnostics);
+    failedHarness.activate();
+    failedHarness.getUserMedia.mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"));
+    await expect(failedHarness.controller.setMicrophoneEnabled(true)).rejects.toBeDefined();
+    expect(failedDiagnostics.inspect().ring.at(-1)).toMatchObject({ name: "microphone.publish", state: "failed" });
+    diagnostics.dispose();
+    failedDiagnostics.dispose();
+  });
 
   it("captures only the configured initial sources and stops unexpected tracks", async () => {
     const harness = createMediaControllerHarness();

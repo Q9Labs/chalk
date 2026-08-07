@@ -1,9 +1,27 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { diagnosticRuntime } from "../episode-diagnostic-runtime.test.helpers";
 import { ControllerHarness, disposeControllerRuntimes, snapshot } from "./controller-parity.test.helpers";
 
 afterEach(disposeControllerRuntimes);
 
 describe("ParticipantsController", () => {
+  it("records moderation success, failure, and conditional target visibility", async () => {
+    const diagnostics = diagnosticRuntime();
+    const harness = new ControllerHarness();
+    const { controller, runtime } = harness.participants(diagnostics);
+    harness.connect();
+
+    await runtime.runPromise(controller.assignRole("participant-2", "observer"));
+    const success = diagnostics.inspect().ring.filter((event) => event.name === "moderation.role.change");
+    expect(success.map((event) => event.expectation?.checkpoint)).toEqual(expect.arrayContaining(["capability_decision", "command_commit", "target_application"]));
+    expect(success.some((event) => event.state === "not_observable")).toBe(true);
+
+    harness.sync.muteParticipant.mockRejectedValueOnce(new Error("rejected"));
+    await expect(runtime.runPromise(controller.mute("participant-2"))).rejects.toBeDefined();
+    expect(diagnostics.inspect().ring.at(-1)).toMatchObject({ name: "moderation.microphone.disable", state: "failed" });
+    diagnostics.dispose();
+  });
+
   it("projects participant media and negotiated collaboration capabilities, maps commands, and clears the roster on leave", async () => {
     const harness = new ControllerHarness(
       snapshot({

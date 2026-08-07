@@ -10,6 +10,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   use GenServer
 
   alias ChalkSync.DeliveryGate
+  alias ChalkSync.Diagnostics
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
@@ -21,6 +22,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   @repair_interval_ms 5_000
   @queue_check_interval_ms 1_000
   @live_reconcile_interval_ms 2_000
+  @diagnostic_record_limit 1_024
 
   def start_link(%EpisodeKey{} = episode) do
     GenServer.start_link(__MODULE__, episode, name: via(episode))
@@ -232,7 +234,12 @@ defmodule ChalkSync.Episodes.Coordinator do
        target_revision: 0,
        sockets: %{},
        live: LiveEpisode.new(episode),
-       live_reconcile_task: nil
+       live_reconcile_task: nil,
+       diagnostic_records: %{
+         delivery: new_diagnostic_record_set(),
+         application: new_diagnostic_record_set(),
+         unavailable: new_diagnostic_record_set()
+       }
      }}
   end
 
@@ -255,7 +262,8 @@ defmodule ChalkSync.Episodes.Coordinator do
         acknowledged_digest: digest_hex(head.digest),
         notified?: false,
         draining?: false,
-        terminal_revision: nil
+        terminal_revision: nil,
+        diagnostic_targets: %{}
       }
 
       state = %{
@@ -287,7 +295,8 @@ defmodule ChalkSync.Episodes.Coordinator do
       acknowledged_digest: nil,
       notified?: false,
       draining?: false,
-      terminal_revision: nil
+      terminal_revision: nil,
+      diagnostic_targets: %{}
     }
 
     {:reply, :ok, %{state | sockets: Map.put(state.sockets, socket, subscriber)}}
@@ -595,24 +604,24 @@ defmodule ChalkSync.Episodes.Coordinator do
   end
 
   defp catch_up_live_sockets(state) do
-    sockets =
-      Enum.reduce(state.sockets, %{}, fn {socket, subscriber}, kept ->
-        case catch_up_live_socket(state, socket, subscriber) do
-          {:ok, next_subscriber} ->
-            Map.put(kept, socket, next_subscriber)
+    {sockets, state} =
+      Enum.reduce(state.sockets, {%{}, state}, fn {socket, subscriber}, {kept, current_state} ->
+        case catch_up_live_socket(current_state, socket, subscriber) do
+          {:ok, next_subscriber, next_state} ->
+            {Map.put(kept, socket, next_subscriber), next_state}
 
           {:error, reason} ->
             notify_reconnect(socket, reason, subscriber.acknowledged_revision)
             close_subscriber(subscriber)
-            kept
+            {kept, current_state}
         end
       end)
 
     %{state | sockets: sockets}
   end
 
-  defp catch_up_live_socket(_state, _socket, %{mode: :recovering} = subscriber),
-    do: {:ok, subscriber}
+  defp catch_up_live_socket(state, _socket, %{mode: :recovering} = subscriber),
+    do: {:ok, subscriber, state}
 
   defp catch_up_live_socket(state, socket, subscriber) do
     with true <- subscriber.enqueued_revision < state.target_revision,
@@ -623,9 +632,14 @@ defmodule ChalkSync.Episodes.Coordinator do
              subscriber.enqueued_revision,
              state.target_revision
            ) do
-      enqueue_catch_up_events(socket, subscriber, events)
+      state = Enum.reduce(events, state, &diagnose_unavailable_target(&2, &1))
+
+      case enqueue_catch_up_events(socket, subscriber, events) do
+        {:ok, next_subscriber} -> {:ok, next_subscriber, state}
+        {:error, reason} -> {:error, reason}
+      end
     else
-      false -> {:ok, subscriber}
+      false -> {:ok, subscriber, state}
       {:ok, []} -> {:error, :revision_gap}
       {:error, reason} -> {:error, reason}
       {:retryable, _reason} -> {:error, :dependency_unavailable}
@@ -667,6 +681,8 @@ defmodule ChalkSync.Episodes.Coordinator do
   defp valid_delivery_revision(_head, _revision), do: :ok
 
   defp deliver_encoded_event(state, event, revision) do
+    state = diagnose_unavailable_target(state, event)
+
     sockets =
       Enum.reduce(state.sockets, %{}, fn socket_entry, kept ->
         deliver_to_socket(socket_entry, kept, event)
@@ -739,6 +755,8 @@ defmodule ChalkSync.Episodes.Coordinator do
       | enqueued_revision: revision,
         terminal_revision: terminal_revision
     }
+
+    next = track_moderation_target(next, event, revision)
 
     notify_reserved_event(socket, next, was_empty?)
   end
@@ -1067,7 +1085,8 @@ defmodule ChalkSync.Episodes.Coordinator do
          %{revision: revision, state_digest: state_digest, encoded: encoded}
        )
        when is_integer(revision) and is_binary(state_digest) do
-    next_subscriber = %{subscriber | notified?: false}
+    {state, subscriber} = diagnose_target_delivery(state, subscriber, revision)
+    next_subscriber = Map.put(subscriber, :notified?, false)
 
     {:reply, {:ok, encoded, {:terminal, revision, state_digest}},
      %{state | sockets: Map.put(state.sockets, socket, next_subscriber)}}
@@ -1075,7 +1094,9 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   defp popped_entry(state, socket, subscriber, entry) do
     more? = not unsent_empty?(subscriber.queue)
-    next_subscriber = %{subscriber | notified?: more?}
+
+    {state, subscriber} = diagnose_target_delivery(state, subscriber, entry.revision)
+    next_subscriber = Map.put(subscriber, :notified?, more?)
 
     if more? do
       deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
@@ -1197,6 +1218,8 @@ defmodule ChalkSync.Episodes.Coordinator do
        do: {:reply, {:error, reason}, state}
 
   defp store_ack(state, socket, subscriber, revision, state_digest) do
+    {state, subscriber} = diagnose_target_application(state, subscriber, revision)
+
     next_subscriber = %{
       subscriber
       | acknowledged_revision: revision,
@@ -1454,6 +1477,241 @@ defmodule ChalkSync.Episodes.Coordinator do
     do: send(socket, {:sync_outbound_overflow, reason, revision})
 
   defp field(map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
+
+  defp track_moderation_target(%{identity: identity} = subscriber, event, revision)
+       when is_map(identity) do
+    case moderation_target(event) do
+      %{participant_id: participant_id} = target
+      when participant_id == identity.participant_id ->
+        target = Map.put(target, :revision, revision)
+        key = {target.event_id, target.participant_id}
+
+        %{
+          subscriber
+          | diagnostic_targets: Map.put(subscriber.diagnostic_targets, key, target)
+        }
+
+      _other ->
+        subscriber
+    end
+  end
+
+  defp track_moderation_target(subscriber, _event, _revision), do: subscriber
+
+  defp diagnose_target_delivery(state, subscriber, revision) do
+    target =
+      subscriber.diagnostic_targets
+      |> Enum.find_value(fn {_key, target} ->
+        if target.revision == revision, do: target
+      end)
+
+    case target do
+      %{delivered: constructor} when not is_nil(constructor) ->
+        {state, _status} =
+          record_target_diagnostic(
+            state,
+            :delivery,
+            target,
+            constructor,
+            subscriber.identity,
+            operation_ref: target.operation_ref,
+            command_id: target.command_id,
+            attributes: %{delivery_status: :confirmed}
+          )
+
+        {state, subscriber}
+
+      _other ->
+        {state, subscriber}
+    end
+  end
+
+  defp diagnose_target_application(state, subscriber, revision) do
+    {applied, pending} =
+      subscriber.diagnostic_targets
+      |> Enum.sort_by(fn {_key, target} -> target.revision end)
+      |> Enum.split_with(fn {_key, target} -> target.revision <= revision end)
+
+    state =
+      Enum.reduce(applied, state, fn {_key, target}, current_state ->
+        record_target_diagnostic(
+          current_state,
+          :application,
+          target,
+          target.applied,
+          subscriber.identity,
+          operation_ref: target.operation_ref,
+          command_id: target.command_id,
+          checkpoint_class: :conditional,
+          attributes: %{result: :applied}
+        )
+        |> elem(0)
+      end)
+
+    {state, %{subscriber | diagnostic_targets: Map.new(pending)}}
+  end
+
+  defp diagnose_unavailable_target(state, event) do
+    case moderation_target(event) do
+      nil ->
+        state
+
+      target ->
+        diagnose_target_availability(state, target)
+    end
+  end
+
+  defp diagnose_target_availability(state, target) do
+    if target_connected?(state.sockets, target.participant_id) do
+      state
+    else
+      record_target_diagnostic(
+        state,
+        :unavailable,
+        target,
+        target.unavailable,
+        diagnostic_scope(state.episode, target.participant_id),
+        operation_ref: target.operation_ref,
+        command_id: target.command_id,
+        checkpoint_class: :conditional,
+        attributes: %{target_state: :not_observable}
+      )
+      |> elem(0)
+    end
+  end
+
+  defp record_target_diagnostic(state, stage, target, constructor, scope, options) do
+    key = {target.event_id, target.participant_id}
+    records = Map.fetch!(state.diagnostic_records, stage)
+
+    if MapSet.member?(records.keys, key) do
+      {state, :duplicate}
+    else
+      Diagnostics.record(constructor, scope, options)
+
+      diagnostic_records =
+        Map.put(state.diagnostic_records, stage, remember_diagnostic_record(records, key))
+
+      {%{state | diagnostic_records: diagnostic_records}, :recorded}
+    end
+  end
+
+  defp new_diagnostic_record_set, do: %{keys: MapSet.new(), order: :queue.new()}
+
+  defp remember_diagnostic_record(records, key) do
+    records
+    |> Map.update!(:keys, &MapSet.put(&1, key))
+    |> Map.update!(:order, fn order -> :queue.in(key, order) end)
+    |> trim_diagnostic_records()
+  end
+
+  defp trim_diagnostic_records(%{keys: keys, order: order} = records) do
+    if MapSet.size(keys) <= @diagnostic_record_limit do
+      records
+    else
+      {{:value, oldest}, next_order} = :queue.out(order)
+
+      records
+      |> Map.put(:keys, MapSet.delete(keys, oldest))
+      |> Map.put(:order, next_order)
+      |> trim_diagnostic_records()
+    end
+  end
+
+  defp target_connected?(sockets, target_participant_id) do
+    Enum.any?(sockets, fn {_socket, subscriber} ->
+      participant_id(subscriber.identity) == target_participant_id
+    end)
+  end
+
+  defp participant_id(%{participant_id: participant_id}), do: participant_id
+  defp participant_id(_identity), do: nil
+
+  defp moderation_target(event) do
+    name = field(event, :name)
+    payload = field(event, :payload) || %{}
+
+    kind = moderation_kind(name, field(payload, :reason))
+    participant_id = field(payload, :participant_id)
+
+    case {kind, participant_id} do
+      {kind, participant_id} when not is_nil(kind) and is_binary(participant_id) ->
+        build_moderation_target(event, kind, participant_id)
+
+      _invalid ->
+        nil
+    end
+  end
+
+  defp moderation_kind("role_assigned", _reason), do: :role
+  defp moderation_kind("participant_microphone_stopped", _reason), do: :microphone
+  defp moderation_kind("participant_camera_stopped", _reason), do: :camera
+  defp moderation_kind("participant_screen_share_stopped", _reason), do: :screen
+  defp moderation_kind("participant_left", "removed"), do: :remove
+  defp moderation_kind("participant_banned", _reason), do: :ban
+  defp moderation_kind(_name, _reason), do: nil
+
+  defp build_moderation_target(event, kind, participant_id) do
+    Map.merge(moderation_target_constructors(kind), %{
+      event_id: field(event, :event_id),
+      participant_id: participant_id,
+      operation_ref:
+        field(event, :command_id) || field(event, :external_operation_id) ||
+          field(event, :event_id),
+      command_id: field(event, :command_id)
+    })
+  end
+
+  defp moderation_target_constructors(:role),
+    do: %{
+      delivered: nil,
+      applied: :moderation_role_target_applied,
+      unavailable: :moderation_role_target_unavailable
+    }
+
+  defp moderation_target_constructors(:microphone),
+    do: %{
+      delivered: :moderation_microphone_target_delivered,
+      applied: :moderation_microphone_target_applied,
+      unavailable: :moderation_microphone_target_unavailable
+    }
+
+  defp moderation_target_constructors(:camera),
+    do: %{
+      delivered: :moderation_camera_target_delivered,
+      applied: :moderation_camera_target_applied,
+      unavailable: :moderation_camera_target_unavailable
+    }
+
+  defp moderation_target_constructors(:screen),
+    do: %{
+      delivered: :moderation_screen_target_delivered,
+      applied: :moderation_screen_target_applied,
+      unavailable: :moderation_screen_target_unavailable
+    }
+
+  defp moderation_target_constructors(:remove),
+    do: %{
+      delivered: :moderation_remove_target_delivered,
+      applied: :moderation_remove_target_applied,
+      unavailable: :moderation_remove_target_unavailable
+    }
+
+  defp moderation_target_constructors(:ban),
+    do: %{
+      delivered: :moderation_ban_target_delivered,
+      applied: :moderation_ban_target_applied,
+      unavailable: :moderation_ban_target_unavailable
+    }
+
+  defp diagnostic_scope(episode, participant_id) do
+    %{
+      "tenantId" => episode.tenant_id,
+      "spaceId" => episode.space_id,
+      "episodeId" => episode.episode_id,
+      "participantId" => participant_id
+    }
+  end
 
   defp via(episode),
     do: {:via, Registry, {ChalkSync.Episodes.Registry, EpisodeKey.authority_key(episode)}}

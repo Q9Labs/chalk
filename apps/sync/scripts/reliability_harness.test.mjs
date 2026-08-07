@@ -18,8 +18,16 @@ test("maps the three triggers to one harness with explicit profiles", () => {
 
   assert.deepEqual(
     correctness.map((step) => step.name),
-    ["sync_full_gate", "sync_v1_breaker", "sync_v1_replay", "typescript_sync_and_whiteboard", "whiteboard_collaboration"],
+    ["diagnostics_contracts_build", "sync_full_gate", "sync_v1_breaker", "sync_v1_replay", "typescript_sync_and_whiteboard", "whiteboard_collaboration"],
   );
+  assert.deepEqual(correctness[0].command, ["pnpm", "--dir", "packages/diagnostics-contracts", "run", "build"]);
+  assert.equal(correctness[1].env.TSX_TSCONFIG_PATH, undefined);
+  assert.match(correctness[2].env.TSX_TSCONFIG_PATH, /apps\/sync\/scripts\/tsconfig\.wire-sdk\.json$/);
+  assert.equal(correctness[3].env.TSX_TSCONFIG_PATH, correctness[2].env.TSX_TSCONFIG_PATH);
+  const buildIndex = correctness.findIndex((step) => step.name === "diagnostics_contracts_build");
+  for (const affectedStep of ["sync_v1_breaker", "sync_v1_replay"]) {
+    assert.ok(buildIndex < correctness.findIndex((step) => step.name === affectedStep));
+  }
   assert.deepEqual(
     topology.map((step) => step.name),
     ["sync_basic_gate", "multi_node_topology"],

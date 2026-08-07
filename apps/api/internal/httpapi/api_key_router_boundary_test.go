@@ -76,7 +76,7 @@ func TestTenantAPIKeyCannotAuthenticateGlobalOrUnguardedRoutes(t *testing.T) {
 			request := bearerRequestWithBody(route.method, route.path, "chalk_sk_narrow.secret", route.body)
 			response := requestWithOptionsAndRequest(t, request, httpapi.Options{
 				APIKeyAuthentication: authenticator,
-				Authentication: authenticationService{authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+				Authentication: authenticationService{authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 					t.Fatal("API key fell through to Session authentication")
 					return authentication.SessionUser{}, nil
 				}},
@@ -110,7 +110,7 @@ func TestTenantAPIKeyStillAuthenticatesScopeCheckedSDKRoute(t *testing.T) {
 	)
 	response := requestWithOptionsAndRequest(t, request, httpapi.Options{
 		APIKeyAuthentication: authenticator,
-		Authentication: authenticationService{authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+		Authentication: authenticationService{authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 			t.Fatal("API key fell through to Session authentication")
 			return authentication.SessionUser{}, nil
 		}},

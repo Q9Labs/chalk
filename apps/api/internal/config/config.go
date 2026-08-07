@@ -47,6 +47,36 @@ const (
 	DeadlineSchedulerIntervalMS = "CHALK_DEADLINE_SCHEDULER_INTERVAL_MS"
 	DeadlineSchedulerBatch      = "CHALK_DEADLINE_SCHEDULER_BATCH"
 
+	EpisodeDiagnosticsMode                    = "CHALK_EPISODE_DIAGNOSTICS"
+	EpisodeDiagnosticsProducerToken           = "CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN"
+	EpisodeDiagnosticsOperatorToken           = "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_TOKEN"
+	EpisodeDiagnosticsOperatorIssuer          = "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER"
+	EpisodeDiagnosticsOperatorAudience        = "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_AUDIENCE"
+	EpisodeDiagnosticsOperatorJWKS            = "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_JWKS"
+	EpisodeDiagnosticsServiceIssuer           = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER"
+	EpisodeDiagnosticsServiceKeyID            = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID"
+	EpisodeDiagnosticsServicePrivateKey       = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY"
+	EpisodeDiagnosticsServiceVerificationKeys = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_VERIFICATION_KEYS"
+	EpisodeDiagnosticsHMACKey                 = "CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY"
+	EpisodeDiagnosticsAppendDatabaseMaxConns  = "CHALK_EPISODE_DIAGNOSTICS_APPEND_DB_MAX_CONNS"
+	EpisodeDiagnosticsQueryDatabaseMaxConns   = "CHALK_EPISODE_DIAGNOSTICS_QUERY_DB_MAX_CONNS"
+	EpisodeDiagnosticsProjectorIntervalMS     = "CHALK_EPISODE_DIAGNOSTICS_PROJECTOR_INTERVAL_MS"
+	EpisodeDiagnosticsProjectorBatch          = "CHALK_EPISODE_DIAGNOSTICS_PROJECTOR_BATCH"
+	EpisodeDiagnosticsReconcileIntervalMS     = "CHALK_EPISODE_DIAGNOSTICS_RECONCILE_INTERVAL_MS"
+	EpisodeDiagnosticsReconcileBatch          = "CHALK_EPISODE_DIAGNOSTICS_RECONCILE_BATCH"
+	EpisodeDiagnosticsDeadlineIntervalMS      = "CHALK_EPISODE_DIAGNOSTICS_DEADLINE_INTERVAL_MS"
+	EpisodeDiagnosticsDeadlineBatch           = "CHALK_EPISODE_DIAGNOSTICS_DEADLINE_BATCH"
+	EpisodeDiagnosticsRetentionIntervalMS     = "CHALK_EPISODE_DIAGNOSTICS_RETENTION_INTERVAL_MS"
+	EpisodeDiagnosticsRetentionBatch          = "CHALK_EPISODE_DIAGNOSTICS_RETENTION_BATCH"
+
+	// Short aliases keep pool names concise at call sites while preserving the
+	// explicit Database wording in the canonical constants above.
+	EpisodeDiagnosticsAppendMaxConns = EpisodeDiagnosticsAppendDatabaseMaxConns
+	EpisodeDiagnosticsQueryMaxConns  = EpisodeDiagnosticsQueryDatabaseMaxConns
+	EpisodeDiagnosticsModeOff        = "off"
+	EpisodeDiagnosticsModeLocalhost  = "localhost"
+	EpisodeDiagnosticsModeHosted     = "hosted"
+
 	GoogleOAuthClientID     = "CHALK_GOOGLE_OAUTH_CLIENT_ID"
 	GoogleOAuthClientSecret = "CHALK_GOOGLE_OAUTH_CLIENT_SECRET"
 	GoogleOAuthRedirectURL  = "CHALK_GOOGLE_OAUTH_REDIRECT_URL"
@@ -94,33 +124,43 @@ const (
 	WebhookEncryptionKeyring        = "CHALK_WEBHOOK_ENCRYPTION_KEYRING"
 	WebhookEncryptionCurrentVersion = "CHALK_WEBHOOK_ENCRYPTION_CURRENT_VERSION"
 
-	DefaultAPIAddress                         = ":8080"
-	DefaultDatabaseURL                        = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
-	DefaultDBMaxConns                         = int32(10)
-	DefaultDBMinConns                         = int32(0)
-	DefaultDeadlineSchedulerIntervalMS        = int64(1000)
-	DefaultDeadlineSchedulerBatch             = int32(50)
-	DefaultEnvironment                        = "local"
-	DefaultGoogleRedirectURL                  = "http://127.0.0.1:3070/api/auth/google/callback"
-	DefaultLogFormat                          = "json"
-	DefaultLogLevel                           = "info"
-	DefaultOAuthStateTTLMS                    = int64(10 * 60 * 1000)
-	DefaultCloudflareRealtimeRequestTimeoutMS = int64(10000)
-	DefaultComposioBaseURL                    = "https://backend.composio.dev/api/v3.1"
-	DefaultComposioTimeoutMS                  = int64(10000)
-	DefaultCloudflareRTKPresetContributor     = "contributor"
-	DefaultCloudflareRTKPresetFacilitator     = "facilitator"
-	DefaultRequestLogs                        = "off"
-	DefaultRequestSampleRate                  = 0.01
-	DefaultR2RequestTimeoutMS                 = int64(10000)
-	DefaultTranscriptionControlAudience       = "chalk-control-api"
-	DefaultRedisURL                           = "redis://127.0.0.1:6379/0"
-	DefaultResendTimeoutMS                    = int64(10000)
-	DefaultSessionTTLMS                       = int64(30 * 24 * 60 * 60 * 1000)
-	DefaultRecentAuthSecret                   = "chalk-local-recent-auth-key-32!!"
-	DefaultServiceName                        = "chalk-api"
-	DefaultSlowRequestMS                      = int64(250)
-	DefaultVersion                            = "dev"
+	DefaultAPIAddress                            = ":8080"
+	DefaultDatabaseURL                           = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
+	DefaultDBMaxConns                            = int32(10)
+	DefaultDBMinConns                            = int32(0)
+	DefaultDeadlineSchedulerIntervalMS           = int64(1000)
+	DefaultDeadlineSchedulerBatch                = int32(50)
+	DefaultEpisodeDiagnosticsAppendDBMaxConns    = int32(5)
+	DefaultEpisodeDiagnosticsQueryDBMaxConns     = int32(5)
+	DefaultEpisodeDiagnosticsProjectorIntervalMS = int64(500)
+	DefaultEpisodeDiagnosticsProjectorBatch      = int32(200)
+	DefaultEpisodeDiagnosticsReconcileIntervalMS = int64(1000)
+	DefaultEpisodeDiagnosticsReconcileBatch      = int32(100)
+	DefaultEpisodeDiagnosticsDeadlineIntervalMS  = int64(1000)
+	DefaultEpisodeDiagnosticsDeadlineBatch       = int32(100)
+	DefaultEpisodeDiagnosticsRetentionIntervalMS = int64(60 * 1000)
+	DefaultEpisodeDiagnosticsRetentionBatch      = int32(10000)
+	DefaultEnvironment                           = "local"
+	DefaultGoogleRedirectURL                     = "http://127.0.0.1:3070/api/auth/google/callback"
+	DefaultLogFormat                             = "json"
+	DefaultLogLevel                              = "info"
+	DefaultOAuthStateTTLMS                       = int64(10 * 60 * 1000)
+	DefaultCloudflareRealtimeRequestTimeoutMS    = int64(10000)
+	DefaultComposioBaseURL                       = "https://backend.composio.dev/api/v3.1"
+	DefaultComposioTimeoutMS                     = int64(10000)
+	DefaultCloudflareRTKPresetContributor        = "contributor"
+	DefaultCloudflareRTKPresetFacilitator        = "facilitator"
+	DefaultRequestLogs                           = "off"
+	DefaultRequestSampleRate                     = 0.01
+	DefaultR2RequestTimeoutMS                    = int64(10000)
+	DefaultTranscriptionControlAudience          = "chalk-control-api"
+	DefaultRedisURL                              = "redis://127.0.0.1:6379/0"
+	DefaultResendTimeoutMS                       = int64(10000)
+	DefaultSessionTTLMS                          = int64(30 * 24 * 60 * 60 * 1000)
+	DefaultRecentAuthSecret                      = "chalk-local-recent-auth-key-32!!"
+	DefaultServiceName                           = "chalk-api"
+	DefaultSlowRequestMS                         = int64(250)
+	DefaultVersion                               = "dev"
 
 	DefaultOAuthStateTTL             = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
 	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
@@ -249,6 +289,35 @@ type DeadlineSchedulerConfig struct {
 	Batch    int32
 }
 
+type EpisodeDiagnosticsConfig struct {
+	Mode              string
+	Environment       string
+	ProducerToken     string
+	OperatorToken     string
+	OperatorIssuer    string
+	OperatorAudience  string
+	OperatorJWKS      []byte
+	ServiceToken      EpisodeDiagnosticsServiceTokenConfig
+	HMACKey           []byte
+	AppendDatabase    DatabaseConfig
+	QueryDatabase     DatabaseConfig
+	ProjectorInterval time.Duration
+	ReconcileInterval time.Duration
+	DeadlineInterval  time.Duration
+	RetentionInterval time.Duration
+	ProjectorBatch    int32
+	ReconcileBatch    int32
+	DeadlineBatch     int32
+	RetentionBatch    int32
+}
+
+type EpisodeDiagnosticsServiceTokenConfig struct {
+	Issuer           string
+	KeyID            string
+	PrivateKey       ed25519.PrivateKey
+	VerificationKeys map[string]ed25519.PublicKey
+}
+
 type Config struct {
 	API                APIConfig
 	Auth               AuthConfig
@@ -257,6 +326,7 @@ type Config struct {
 	Composio           ComposioConfig
 	Database           DatabaseConfig
 	DeadlineScheduler  DeadlineSchedulerConfig
+	EpisodeDiagnostics EpisodeDiagnosticsConfig
 	GoogleOAuth        GoogleOAuthConfig
 	Observability      ObservabilityConfig
 	ProviderBridge     ProviderBridgeConfig
@@ -300,12 +370,16 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("deadline scheduler interval and batch must be greater than zero")
 	}
 	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
-	capabilities, err := loadCapabilityConfig(environment)
+	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
+	if err := validateDatabaseURL(environment, databaseURL); err != nil {
+		return Config{}, err
+	}
+	episodeDiagnostics, err := loadEpisodeDiagnosticsConfig(environment, databaseURL)
 	if err != nil {
 		return Config{}, err
 	}
-	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
-	if err := validateDatabaseURL(environment, databaseURL); err != nil {
+	capabilities, err := loadCapabilityConfig(environment)
+	if err != nil {
 		return Config{}, err
 	}
 
@@ -480,7 +554,8 @@ func Load() (Config, error) {
 			MaxConns: maxConns,
 			MinConns: minConns,
 		},
-		DeadlineScheduler: DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
+		DeadlineScheduler:  DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
+		EpisodeDiagnostics: episodeDiagnostics,
 		GoogleOAuth: GoogleOAuthConfig{
 			ClientID:     envOrDefault(GoogleOAuthClientID, ""),
 			ClientSecret: envOrDefault(GoogleOAuthClientSecret, ""),
@@ -544,6 +619,237 @@ func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 		return CapabilityConfig{}, err
 	}
 	return CapabilityConfig{Integrations: integrations, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
+}
+
+const (
+	episodeDiagnosticsMinSecretLength   = 32
+	episodeDiagnosticsMaxPoolConns      = int32(100)
+	episodeDiagnosticsMaxIntervalMS     = int64(24 * 60 * 60 * 1000)
+	episodeDiagnosticsMaxProjectorBatch = int32(1000)
+	episodeDiagnosticsMaxReconcileBatch = int32(1000)
+	episodeDiagnosticsMaxDeadlineBatch  = int32(1000)
+	episodeDiagnosticsMaxRetentionBatch = int32(10000)
+)
+
+func loadEpisodeDiagnosticsConfig(environment string, databaseURL string) (EpisodeDiagnosticsConfig, error) {
+	mode, err := envEnum(EpisodeDiagnosticsMode, EpisodeDiagnosticsModeOff, EpisodeDiagnosticsModeOff, EpisodeDiagnosticsModeLocalhost, EpisodeDiagnosticsModeHosted)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+
+	producerToken := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsProducerToken, ""))
+	operatorToken := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsOperatorToken, ""))
+	operatorIssuer := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsOperatorIssuer, ""))
+	operatorAudience := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsOperatorAudience, ""))
+	operatorJWKS := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsOperatorJWKS, ""))
+	hmacKey := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsHMACKey, ""))
+	serviceToken, err := loadEpisodeDiagnosticsServiceTokenConfig()
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	if err := validateEpisodeDiagnosticsAuth(environment, mode, producerToken, operatorToken, operatorIssuer, operatorAudience, operatorJWKS, hmacKey, serviceToken); err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+
+	appendMaxConns, err := envBoundedInt32(EpisodeDiagnosticsAppendDatabaseMaxConns, DefaultEpisodeDiagnosticsAppendDBMaxConns, 1, episodeDiagnosticsMaxPoolConns)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	queryMaxConns, err := envBoundedInt32(EpisodeDiagnosticsQueryDatabaseMaxConns, DefaultEpisodeDiagnosticsQueryDBMaxConns, 1, episodeDiagnosticsMaxPoolConns)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	projectorInterval, err := envBoundedMilliseconds(EpisodeDiagnosticsProjectorIntervalMS, DefaultEpisodeDiagnosticsProjectorIntervalMS, 1, episodeDiagnosticsMaxIntervalMS)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	projectorBatch, err := envBoundedInt32(EpisodeDiagnosticsProjectorBatch, DefaultEpisodeDiagnosticsProjectorBatch, 1, episodeDiagnosticsMaxProjectorBatch)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	reconcileInterval, err := envBoundedMilliseconds(EpisodeDiagnosticsReconcileIntervalMS, DefaultEpisodeDiagnosticsReconcileIntervalMS, 1, episodeDiagnosticsMaxIntervalMS)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	reconcileBatch, err := envBoundedInt32(EpisodeDiagnosticsReconcileBatch, DefaultEpisodeDiagnosticsReconcileBatch, 1, episodeDiagnosticsMaxReconcileBatch)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	deadlineInterval, err := envBoundedMilliseconds(EpisodeDiagnosticsDeadlineIntervalMS, DefaultEpisodeDiagnosticsDeadlineIntervalMS, 1, episodeDiagnosticsMaxIntervalMS)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	deadlineBatch, err := envBoundedInt32(EpisodeDiagnosticsDeadlineBatch, DefaultEpisodeDiagnosticsDeadlineBatch, 1, episodeDiagnosticsMaxDeadlineBatch)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	retentionInterval, err := envBoundedMilliseconds(EpisodeDiagnosticsRetentionIntervalMS, DefaultEpisodeDiagnosticsRetentionIntervalMS, 1, episodeDiagnosticsMaxIntervalMS)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+	retentionBatch, err := envBoundedInt32(EpisodeDiagnosticsRetentionBatch, DefaultEpisodeDiagnosticsRetentionBatch, 1, episodeDiagnosticsMaxRetentionBatch)
+	if err != nil {
+		return EpisodeDiagnosticsConfig{}, err
+	}
+
+	return EpisodeDiagnosticsConfig{
+		Mode:              mode,
+		Environment:       episodeDiagnosticsEnvironment(environment),
+		ProducerToken:     producerToken,
+		OperatorToken:     operatorToken,
+		OperatorIssuer:    operatorIssuer,
+		OperatorAudience:  operatorAudience,
+		OperatorJWKS:      []byte(operatorJWKS),
+		ServiceToken:      serviceToken,
+		HMACKey:           []byte(hmacKey),
+		AppendDatabase:    DatabaseConfig{URL: databaseURL, MaxConns: appendMaxConns},
+		QueryDatabase:     DatabaseConfig{URL: databaseURL, MaxConns: queryMaxConns},
+		ProjectorInterval: projectorInterval,
+		ReconcileInterval: reconcileInterval,
+		DeadlineInterval:  deadlineInterval,
+		RetentionInterval: retentionInterval,
+		ProjectorBatch:    projectorBatch,
+		ReconcileBatch:    reconcileBatch,
+		DeadlineBatch:     deadlineBatch,
+		RetentionBatch:    retentionBatch,
+	}, nil
+}
+
+func validateEpisodeDiagnosticsAuth(environment string, mode string, producerToken string, operatorToken string, operatorIssuer string, operatorAudience string, operatorJWKS string, hmacKey string, serviceToken EpisodeDiagnosticsServiceTokenConfig) error {
+	serviceConfigured := serviceToken.Issuer != ""
+	switch mode {
+	case EpisodeDiagnosticsModeOff:
+		if producerToken != "" || operatorToken != "" || operatorIssuer != "" || operatorAudience != "" || operatorJWKS != "" || hmacKey != "" || serviceConfigured {
+			return fmt.Errorf("episode diagnostics credentials must be empty when %s=off", EpisodeDiagnosticsMode)
+		}
+	case EpisodeDiagnosticsModeLocalhost:
+		if environment != DefaultEnvironment {
+			return fmt.Errorf("%s=localhost requires %s=local", EpisodeDiagnosticsMode, APIEnvironment)
+		}
+		if producerToken == "" || operatorToken == "" || hmacKey == "" {
+			return fmt.Errorf("%s, %s, and %s must be set when %s=localhost", EpisodeDiagnosticsProducerToken, EpisodeDiagnosticsOperatorToken, EpisodeDiagnosticsHMACKey, EpisodeDiagnosticsMode)
+		}
+		if producerToken == operatorToken {
+			return fmt.Errorf("%s and %s must be distinct when %s=localhost", EpisodeDiagnosticsProducerToken, EpisodeDiagnosticsOperatorToken, EpisodeDiagnosticsMode)
+		}
+		if len(hmacKey) < episodeDiagnosticsMinSecretLength {
+			return fmt.Errorf("%s must contain at least %d bytes when %s=localhost", EpisodeDiagnosticsHMACKey, episodeDiagnosticsMinSecretLength, EpisodeDiagnosticsMode)
+		}
+		if operatorIssuer != "" || operatorAudience != "" || operatorJWKS != "" {
+			return fmt.Errorf("%s, %s, and %s are only supported when %s=hosted", EpisodeDiagnosticsOperatorIssuer, EpisodeDiagnosticsOperatorAudience, EpisodeDiagnosticsOperatorJWKS, EpisodeDiagnosticsMode)
+		}
+		if serviceConfigured {
+			return fmt.Errorf("%s is only supported when %s=hosted", EpisodeDiagnosticsServiceIssuer, EpisodeDiagnosticsMode)
+		}
+	case EpisodeDiagnosticsModeHosted:
+		if environment != "development" && environment != "staging" {
+			return fmt.Errorf("%s=hosted requires %s=development or staging", EpisodeDiagnosticsMode, APIEnvironment)
+		}
+		if hmacKey == "" || operatorIssuer == "" || operatorAudience == "" || operatorJWKS == "" || !serviceConfigured {
+			return fmt.Errorf("%s, %s, %s, %s, and dedicated service signing configuration must be set when %s=hosted", EpisodeDiagnosticsHMACKey, EpisodeDiagnosticsOperatorIssuer, EpisodeDiagnosticsOperatorAudience, EpisodeDiagnosticsOperatorJWKS, EpisodeDiagnosticsMode)
+		}
+		if producerToken != "" || operatorToken != "" {
+			return fmt.Errorf("%s and %s are only supported when %s=localhost", EpisodeDiagnosticsProducerToken, EpisodeDiagnosticsOperatorToken, EpisodeDiagnosticsMode)
+		}
+		if len(hmacKey) < episodeDiagnosticsMinSecretLength {
+			return fmt.Errorf("%s must contain at least %d bytes outside local environments", EpisodeDiagnosticsHMACKey, episodeDiagnosticsMinSecretLength)
+		}
+		issuerURL, err := url.Parse(operatorIssuer)
+		if err != nil || issuerURL.Scheme != "https" || issuerURL.Host == "" || issuerURL.User != nil || issuerURL.RawQuery != "" || issuerURL.Fragment != "" {
+			return fmt.Errorf("%s must be an absolute HTTPS URL without credentials, query, or fragment", EpisodeDiagnosticsOperatorIssuer)
+		}
+		if strings.ContainsAny(operatorAudience, "\r\n") {
+			return fmt.Errorf("%s contains invalid characters", EpisodeDiagnosticsOperatorAudience)
+		}
+		if len(operatorJWKS) > 64*1024 || !json.Valid([]byte(operatorJWKS)) {
+			return fmt.Errorf("%s must be valid JSON no larger than 64 KiB", EpisodeDiagnosticsOperatorJWKS)
+		}
+		serviceIssuerURL, err := url.Parse(serviceToken.Issuer)
+		if err != nil || serviceIssuerURL.Scheme != "https" || serviceIssuerURL.Host == "" || serviceIssuerURL.User != nil || serviceIssuerURL.RawQuery != "" || serviceIssuerURL.Fragment != "" {
+			return fmt.Errorf("%s must be an absolute HTTPS URL without credentials, query, or fragment", EpisodeDiagnosticsServiceIssuer)
+		}
+	}
+	return nil
+}
+
+func loadEpisodeDiagnosticsServiceTokenConfig() (EpisodeDiagnosticsServiceTokenConfig, error) {
+	config := EpisodeDiagnosticsServiceTokenConfig{
+		Issuer: strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServiceIssuer, "")),
+		KeyID:  strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServiceKeyID, "")),
+	}
+	encodedPrivateKey := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServicePrivateKey, ""))
+	encodedVerificationKeys := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServiceVerificationKeys, ""))
+	if config.Issuer == "" && config.KeyID == "" && encodedPrivateKey == "" && encodedVerificationKeys == "" {
+		return config, nil
+	}
+	if config.Issuer == "" || config.KeyID == "" || encodedPrivateKey == "" {
+		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s, %s, and %s must be set together", EpisodeDiagnosticsServiceIssuer, EpisodeDiagnosticsServiceKeyID, EpisodeDiagnosticsServicePrivateKey)
+	}
+	privateKey, err := base64.RawURLEncoding.DecodeString(encodedPrivateKey)
+	if err != nil || len(privateKey) != ed25519.PrivateKeySize {
+		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s must be an unpadded base64url Ed25519 private key", EpisodeDiagnosticsServicePrivateKey)
+	}
+	config.PrivateKey = append(ed25519.PrivateKey(nil), privateKey...)
+	currentPublicKey := append(ed25519.PublicKey(nil), config.PrivateKey.Public().(ed25519.PublicKey)...)
+	config.VerificationKeys = map[string]ed25519.PublicKey{config.KeyID: currentPublicKey}
+	if encodedVerificationKeys == "" {
+		return config, nil
+	}
+	var keyring map[string]string
+	if err := json.Unmarshal([]byte(encodedVerificationKeys), &keyring); err != nil || len(keyring) == 0 {
+		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s must be a non-empty JSON object of key IDs to unpadded base64url Ed25519 public keys", EpisodeDiagnosticsServiceVerificationKeys)
+	}
+	for keyID, encoded := range keyring {
+		keyID = strings.TrimSpace(keyID)
+		publicKey, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encoded))
+		if keyID == "" || err != nil || len(publicKey) != ed25519.PublicKeySize {
+			return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s contains an invalid Ed25519 public key", EpisodeDiagnosticsServiceVerificationKeys)
+		}
+		config.VerificationKeys[keyID] = ed25519.PublicKey(publicKey)
+	}
+	if configuredCurrent, ok := config.VerificationKeys[config.KeyID]; !ok || !configuredCurrent.Equal(currentPublicKey) {
+		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s must contain the current %s public key", EpisodeDiagnosticsServiceVerificationKeys, EpisodeDiagnosticsServiceKeyID)
+	}
+	return config, nil
+}
+
+func episodeDiagnosticsEnvironment(environment string) string {
+	if environment == DefaultEnvironment {
+		return "localhost"
+	}
+	return environment
+}
+
+func envBoundedInt32(name string, fallback int32, minimum int32, maximum int32) (int32, error) {
+	value, ok := os.LookupEnv(name)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback, nil
+	}
+
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer: %w", name, err)
+	}
+	if parsed < int64(minimum) || parsed > int64(maximum) {
+		return 0, fmt.Errorf("%s must be between %d and %d", name, minimum, maximum)
+	}
+	return int32(parsed), nil
+}
+
+func envBoundedMilliseconds(name string, fallback int64, minimum int64, maximum int64) (time.Duration, error) {
+	value, ok := os.LookupEnv(name)
+	if !ok || strings.TrimSpace(value) == "" {
+		return time.Duration(fallback) * time.Millisecond, nil
+	}
+
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer number of milliseconds: %w", name, err)
+	}
+	if parsed < minimum || parsed > maximum {
+		return 0, fmt.Errorf("%s must be between %d and %d milliseconds", name, minimum, maximum)
+	}
+	return time.Duration(parsed) * time.Millisecond, nil
 }
 
 func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config) error {

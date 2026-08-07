@@ -1,0 +1,20 @@
+{
+  "safe": {
+    "status": "committed",
+    "bytes": 64,
+    "retryable": false,
+    "size_bucket": "small"
+  },
+  "forbidden": {
+    "message": "do not retain this chat text",
+    "displayName": "Participant name",
+    "token": "Bearer secret",
+    "url": "https://example.invalid/path",
+    "sdp": "v=0\\r\\n",
+    "candidate": "candidate:1 1 UDP 10.0.0.1",
+    "exception": {
+      "message": "private error"
+    },
+    "webhookBody": "private payload"
+  }
+}

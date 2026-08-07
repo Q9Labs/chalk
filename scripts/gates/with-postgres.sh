@@ -149,6 +149,7 @@ export_database_url() {
   fi
 
   export CHALK_DATABASE_URL="${database_url}"
+  export CHALK_TENANT_ONBOARDING_TEST_DATABASE_URL="${database_url}"
   export CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL="${database_url}"
   export CHALK_SYNC_TEST_DATABASE_URL="${database_url}"
 }

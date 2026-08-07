@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/sdk-web-consumer-e2e.yml"
       - "packages/assets/**"
+      - "packages/diagnostics-contracts/**"
       - "packages/facehash/**"
       - "packages/ui/**"
       - "packages/whiteboard/**"
@@ -16,6 +17,7 @@ on:
     paths:
       - ".github/workflows/sdk-web-consumer-e2e.yml"
       - "packages/assets/**"
+      - "packages/diagnostics-contracts/**"
       - "packages/facehash/**"
       - "packages/ui/**"
       - "packages/whiteboard/**"
@@ -59,6 +61,7 @@ jobs:
       - name: Build package artifacts
         run: |
           pnpm --dir packages/assets run build
+          pnpm --dir packages/diagnostics-contracts run build
           pnpm --dir packages/facehash run build
           pnpm --dir packages/ui run build
           pnpm --dir packages/whiteboard run build

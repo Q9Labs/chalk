@@ -4,6 +4,7 @@ import type { ChalkChatFileTransport } from "../chat-files";
 import type { ConnectionLifecycleCapability } from "../connection";
 import type { ConnectionDependencies } from "../connection/dependencies";
 import { makeChatController, type ChatControllerEffects } from "./chat-controller";
+import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { makeMediaController, type MediaControllerEffects } from "./media-controller";
 import type { MediaDeviceSelection } from "./media-device-selection";
@@ -31,12 +32,14 @@ export const makeControllerEffects = (input: {
   readonly mediaDeviceSelection: MediaDeviceSelection;
   readonly featureFactories?: Pick<ConnectionDependencies, "createChatFileTransport" | "createWhiteboardClient">;
   readonly fetch?: typeof globalThis.fetch;
+  /** Private semantic diagnostics owner; never exposed through the public controller surface. */
+  readonly episodeDiagnostics?: EpisodeDiagnosticRuntime;
 }): Effect.Effect<ControllerEffects, never, import("effect").Clock.Clock | import("effect").Scope.Scope> =>
   Effect.gen(function* () {
-    const media = yield* makeMediaController(input.connection, input.store, input.mediaDeviceSelection);
-    const chat = yield* makeChatController({ connection: input.connection, store: input.store, createTransport: input.featureFactories?.createChatFileTransport, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch });
-    const participants = yield* makeParticipantsController(input.connection, input.store);
-    const reactions = yield* makeReactionsController(input.connection, input.store);
+    const media = yield* makeMediaController(input.connection, input.store, input.mediaDeviceSelection, input.episodeDiagnostics);
+    const chat = yield* makeChatController({ connection: input.connection, store: input.store, createTransport: input.featureFactories?.createChatFileTransport, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch, episodeDiagnostics: input.episodeDiagnostics });
+    const participants = yield* makeParticipantsController(input.connection, input.store, input.episodeDiagnostics);
+    const reactions = yield* makeReactionsController(input.connection, input.store, input.episodeDiagnostics);
     const whiteboard = yield* makeWhiteboardController(input.connection, input.store, input.featureFactories?.createWhiteboardClient);
     return { media, chat, participants, reactions, whiteboard };
   });

@@ -4,6 +4,39 @@ As of 2026-07-22. This is the human-readable view of [`product.yaml`](./product.
 
 `[x]` means the capability is implemented in this repository. `[ ]` means it is missing, placeholder-only, incomplete end to end, or still lacks the production proof named by the item. Large capabilities are split so there is no ambiguous “partial” state.
 
+## Launch Readiness
+
+The web experience is the launch-critical surface. The mobile redesign remains important, but it does not block the first web release unless shared Space/Episode behavior fails on mobile. The checklist below captures the current launch direction: “once the Episode path is stable, we can give it to consumers and customers.”
+
+### Web redesign
+
+- [ ] Complete the remaining web redesign work in a focused two-hour block.
+- [ ] Complete the mobile redesign after the web launch gate, while keeping shared Space/Episode behavior consistent across both clients.
+- [x] Preserve the existing design system, design board, and image-generation concept as the visual source of truth.
+- [ ] Establish the Chalk design system as Q9 Labs' reusable product baseline, adapting brand colors and product-specific identity without recreating the core interface language.
+- [ ] Apply and refine the baseline in the Q9 Labs website, Recruiter, Ava, and future products, then retain those implementations as high-quality references for new work.
+
+### Episode reliability and speed
+
+- [ ] Trace the full join path before committing to an optimization: request, Space admission and Episode resolution, Participant credentials, Cloudflare SFU connection, media readiness, Sync connection, and interactive-Space readiness.
+- [ ] Record stage timings and failure reasons for web and mobile so known and unknown bottlenecks can be distinguished.
+- [ ] Complete the planned web Episode-journey integration: carry the browser journey and W3C trace context through access, Space setup, media, Sync, readiness, diagnostics, and terminal cleanup.
+- [ ] Make Episode telemetry automatic for SDK consumers: `telemetry: true` must continue the active journey or start one, then cover the complete Episode lifecycle without requiring applications to pass journey plumbing manually.
+- [ ] Verify that web telemetry flushes authenticate successfully in the hosted path for public Spaces, and add an end-to-end assertion that one browser join produces one durable correlated journey.
+- [ ] Make the join path fast and reliable, with the same acceptance criteria on web and mobile where their behavior should match.
+- [ ] Verify stable live-Episode connection and recovery behavior.
+- [ ] Verify whiteboard synchronization across Participants.
+- [ ] Verify chat behavior across Participants.
+- [ ] Wire and verify Episode sounds and Space actions.
+- [ ] Measure whether Cloudflare SFU setup dominates join time; evaluate warm Spaces only if the trace justifies their cost and operational complexity.
+
+### Customer onboarding proof
+
+- [ ] Automate a complete customer journey: dashboard account, tenant, API key, application, SDK installation, API-key wiring, and a created Space.
+- [ ] Cover both scheduled Spaces and ordinary live Episodes.
+- [ ] Configure, receive, verify, and handle webhooks in the same acceptance flow.
+- [ ] Run the scripted flow against the web and mobile paths where possible, and turn every parity failure into a tracked fix.
+
 ## Product Delivery
 
 - [x] App-tier self-hosting source is available for API, sync, and Postgres

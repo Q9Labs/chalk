@@ -248,6 +248,190 @@ func TestLoadRecentAuthSecret(t *testing.T) {
 	}
 }
 
+func TestLoadEpisodeDiagnosticsDefaultsOff(t *testing.T) {
+	clearEpisodeDiagnosticsEnv(t)
+	t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
+	t.Setenv(config.DatabaseURL, "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	diagnostics := cfg.EpisodeDiagnostics
+	if diagnostics.Mode != config.EpisodeDiagnosticsModeOff || diagnostics.Environment != "localhost" {
+		t.Fatalf("diagnostic mode/environment = %q/%q", diagnostics.Mode, diagnostics.Environment)
+	}
+	if diagnostics.ProducerToken != "" || diagnostics.OperatorToken != "" || len(diagnostics.HMACKey) != 0 {
+		t.Fatalf("diagnostic credentials = %#v, want empty", diagnostics)
+	}
+	if diagnostics.AppendDatabase.URL != config.DefaultDatabaseURL || diagnostics.QueryDatabase.URL != config.DefaultDatabaseURL {
+		t.Fatalf("diagnostic database URLs = %q and %q", diagnostics.AppendDatabase.URL, diagnostics.QueryDatabase.URL)
+	}
+	if diagnostics.AppendDatabase.MaxConns != config.DefaultEpisodeDiagnosticsAppendDBMaxConns || diagnostics.QueryDatabase.MaxConns != config.DefaultEpisodeDiagnosticsQueryDBMaxConns {
+		t.Fatalf("diagnostic pool sizes = %d/%d", diagnostics.AppendDatabase.MaxConns, diagnostics.QueryDatabase.MaxConns)
+	}
+}
+
+func TestLoadEpisodeDiagnosticsLocalMode(t *testing.T) {
+	clearEpisodeDiagnosticsEnv(t)
+	t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
+	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeLocalhost)
+	t.Setenv(config.EpisodeDiagnosticsProducerToken, "local-producer")
+	t.Setenv(config.EpisodeDiagnosticsOperatorToken, "local-operator")
+	localHMACKey := strings.Repeat("h", 32)
+	t.Setenv(config.EpisodeDiagnosticsHMACKey, localHMACKey)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.EpisodeDiagnostics.Mode != config.EpisodeDiagnosticsModeLocalhost || cfg.EpisodeDiagnostics.Environment != "localhost" {
+		t.Fatalf("diagnostic mode/environment = %q/%q", cfg.EpisodeDiagnostics.Mode, cfg.EpisodeDiagnostics.Environment)
+	}
+	if cfg.EpisodeDiagnostics.ProducerToken != "local-producer" || cfg.EpisodeDiagnostics.OperatorToken != "local-operator" || string(cfg.EpisodeDiagnostics.HMACKey) != localHMACKey {
+		t.Fatalf("diagnostic credentials did not map: %#v", cfg.EpisodeDiagnostics)
+	}
+}
+
+func TestLoadEpisodeDiagnosticsHostedMode(t *testing.T) {
+	setHostedEnvironment(t)
+	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
+	t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
+	setHostedDiagnosticsOperatorIdentity(t)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	diagnostics := cfg.EpisodeDiagnostics
+	if diagnostics.Mode != config.EpisodeDiagnosticsModeHosted || diagnostics.Environment != "development" {
+		t.Fatalf("diagnostic mode/environment = %q/%q", diagnostics.Mode, diagnostics.Environment)
+	}
+	if diagnostics.ProducerToken != "" || diagnostics.OperatorToken != "" || string(diagnostics.HMACKey) != strings.Repeat("h", 32) {
+		t.Fatalf("hosted diagnostics static credentials = %#v", diagnostics)
+	}
+	if diagnostics.ServiceToken.Issuer != "https://diagnostics.chalk.test" || diagnostics.ServiceToken.KeyID != "diagnostics-1" || len(diagnostics.ServiceToken.PrivateKey) != ed25519.PrivateKeySize {
+		t.Fatalf("hosted service signer = %#v", diagnostics.ServiceToken)
+	}
+	if diagnostics.OperatorIssuer != "https://identity.chalk.test" || diagnostics.OperatorAudience != "chalk-diagnostics-operator" || len(diagnostics.OperatorJWKS) == 0 {
+		t.Fatalf("hosted operator identity = %#v", diagnostics)
+	}
+}
+
+func TestLoadEpisodeDiagnosticsRejectsInvalidLocalAuthAndBounds(t *testing.T) {
+	tests := []struct {
+		name string
+		set  func(*testing.T)
+		want string
+	}{
+		{
+			name: "missing producer",
+			set: func(t *testing.T) {
+				clearEpisodeDiagnosticsEnv(t)
+				t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
+				t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeLocalhost)
+				t.Setenv(config.EpisodeDiagnosticsOperatorToken, "local-operator")
+				t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
+			},
+			want: config.EpisodeDiagnosticsProducerToken,
+		},
+		{
+			name: "short HMAC",
+			set: func(t *testing.T) {
+				clearEpisodeDiagnosticsEnv(t)
+				t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
+				t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeLocalhost)
+				t.Setenv(config.EpisodeDiagnosticsProducerToken, "local-producer")
+				t.Setenv(config.EpisodeDiagnosticsOperatorToken, "local-operator")
+				t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 31))
+			},
+			want: config.EpisodeDiagnosticsHMACKey,
+		},
+		{
+			name: "pool below minimum",
+			set: func(t *testing.T) {
+				clearEpisodeDiagnosticsEnv(t)
+				t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
+				t.Setenv(config.EpisodeDiagnosticsAppendDatabaseMaxConns, "0")
+			},
+			want: config.EpisodeDiagnosticsAppendDatabaseMaxConns,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.set(t)
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("load error = %v, want %s validation", err, test.want)
+			}
+		})
+	}
+}
+
+func clearEpisodeDiagnosticsEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{
+		config.EpisodeDiagnosticsMode,
+		config.EpisodeDiagnosticsProducerToken,
+		config.EpisodeDiagnosticsOperatorToken,
+		config.EpisodeDiagnosticsOperatorIssuer,
+		config.EpisodeDiagnosticsOperatorAudience,
+		config.EpisodeDiagnosticsOperatorJWKS,
+		config.EpisodeDiagnosticsServiceIssuer,
+		config.EpisodeDiagnosticsServiceKeyID,
+		config.EpisodeDiagnosticsServicePrivateKey,
+		config.EpisodeDiagnosticsServiceVerificationKeys,
+		config.EpisodeDiagnosticsHMACKey,
+		config.EpisodeDiagnosticsAppendDatabaseMaxConns,
+		config.EpisodeDiagnosticsQueryDatabaseMaxConns,
+		config.EpisodeDiagnosticsProjectorIntervalMS,
+		config.EpisodeDiagnosticsProjectorBatch,
+		config.EpisodeDiagnosticsReconcileIntervalMS,
+		config.EpisodeDiagnosticsReconcileBatch,
+		config.EpisodeDiagnosticsDeadlineIntervalMS,
+		config.EpisodeDiagnosticsDeadlineBatch,
+		config.EpisodeDiagnosticsRetentionIntervalMS,
+		config.EpisodeDiagnosticsRetentionBatch,
+	} {
+		t.Setenv(name, "")
+	}
+}
+
+func setHostedEnvironment(t *testing.T) {
+	t.Helper()
+	clearEpisodeDiagnosticsEnv(t)
+	t.Setenv(config.APIEnvironment, "development")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
+	t.Setenv(config.IntegrationsEnabled, "false")
+	t.Setenv(config.TranscriptionEnabled, "false")
+	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8443")
+	t.Setenv(config.ProviderBridgeServerCertFile, "/tmp/chalk-server.crt")
+	t.Setenv(config.ProviderBridgeServerKeyFile, "/tmp/chalk-server.key")
+	t.Setenv(config.ProviderBridgeClientCAFile, "/tmp/chalk-client-ca.crt")
+	t.Setenv(config.ProviderBridgeSPIFFETrustDomain, "chalk.test")
+	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
+
+	_, diagnosticsPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.EpisodeDiagnosticsServiceIssuer, "https://diagnostics.chalk.test")
+	t.Setenv(config.EpisodeDiagnosticsServiceKeyID, "diagnostics-1")
+	t.Setenv(config.EpisodeDiagnosticsServicePrivateKey, base64.RawURLEncoding.EncodeToString(diagnosticsPrivateKey))
+}
+
+func setHostedDiagnosticsOperatorIdentity(t *testing.T) {
+	t.Helper()
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.EpisodeDiagnosticsOperatorIssuer, "https://identity.chalk.test")
+	t.Setenv(config.EpisodeDiagnosticsOperatorAudience, "chalk-diagnostics-operator")
+	t.Setenv(config.EpisodeDiagnosticsOperatorJWKS, `{"keys":[{"kty":"OKP","crv":"Ed25519","alg":"EdDSA","use":"sig","kid":"operator-1","x":"`+base64.RawURLEncoding.EncodeToString(publicKey)+`"}]}`)
+}
+
 func TestLoadRejectsShortRecentAuthSecret(t *testing.T) {
 	t.Setenv(config.AuthRecentAuthSecret, "short")
 	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.AuthRecentAuthSecret) {

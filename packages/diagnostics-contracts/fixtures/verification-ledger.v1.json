@@ -1,0 +1,1271 @@
+{
+  "schemaVersion": "EpisodeDiagnosticVerificationLedger/v1",
+  "generatedFrom": "episode-diagnostic-actions.v1.json",
+  "generatedBy": "semantic-fixtures.v1",
+  "status": "pending",
+  "fixtureStatus": "pass",
+  "runtimeStatus": "pending",
+  "entries": [
+    {
+      "operation": "episode.emerge",
+      "owner": "api",
+      "proofId": "diag.v1.episode.emerge",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.episode.emerge.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.episode.emerge.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.episode.emerge.v1"
+      }
+    },
+    {
+      "operation": "episode.start",
+      "owner": "api",
+      "proofId": "diag.v1.episode.start",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.episode.start.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.episode.start.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.episode.start.v1"
+      }
+    },
+    {
+      "operation": "episode.end.natural",
+      "owner": "api",
+      "proofId": "diag.v1.episode.end.natural",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.episode.end.natural.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.episode.end.natural.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.episode.end.natural.v1"
+      }
+    },
+    {
+      "operation": "episode.end.authorized",
+      "owner": "api",
+      "proofId": "diag.v1.episode.end.authorized",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.episode.end.authorized.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.episode.end.authorized.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.episode.end.authorized.v1"
+      }
+    },
+    {
+      "operation": "episode.end.linger",
+      "owner": "api",
+      "proofId": "diag.v1.episode.end.linger",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.episode.end.linger.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.episode.end.linger.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.episode.end.linger.v1"
+      }
+    },
+    {
+      "operation": "episode.end.deadline",
+      "owner": "api",
+      "proofId": "diag.v1.episode.end.deadline",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.episode.end.deadline.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.episode.end.deadline.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.episode.end.deadline.v1"
+      }
+    },
+    {
+      "operation": "episode.deadline.extend",
+      "owner": "api",
+      "proofId": "diag.v1.episode.deadline.extend",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.episode.deadline.extend.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.episode.deadline.extend.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.episode.deadline.extend.v1"
+      }
+    },
+    {
+      "operation": "access.request",
+      "owner": "api + client SDK",
+      "proofId": "diag.v1.access.request",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.access.request.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.access.request.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.access.request.v1"
+      }
+    },
+    {
+      "operation": "access.approve",
+      "owner": "api + client SDK",
+      "proofId": "diag.v1.access.approve",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.access.approve.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.access.approve.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.access.approve.v1"
+      }
+    },
+    {
+      "operation": "access.deny",
+      "owner": "api + client SDK",
+      "proofId": "diag.v1.access.deny",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.access.deny.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.access.deny.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.access.deny.v1"
+      }
+    },
+    {
+      "operation": "access.refresh",
+      "owner": "api + client SDK",
+      "proofId": "diag.v1.access.refresh",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.access.refresh.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.access.refresh.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.access.refresh.v1"
+      }
+    },
+    {
+      "operation": "participant.join",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.participant.join",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.participant.join.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.participant.join.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.participant.join.v1"
+      }
+    },
+    {
+      "operation": "participant.reconnect",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.participant.reconnect",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.participant.reconnect.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.participant.reconnect.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.participant.reconnect.v1"
+      }
+    },
+    {
+      "operation": "participant.rejoin",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.participant.rejoin",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.participant.rejoin.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.participant.rejoin.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.participant.rejoin.v1"
+      }
+    },
+    {
+      "operation": "participant.leave",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.participant.leave",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.participant.leave.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.participant.leave.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.participant.leave.v1"
+      }
+    },
+    {
+      "operation": "participant.rename",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.participant.rename",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.participant.rename.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.participant.rename.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.participant.rename.v1"
+      }
+    },
+    {
+      "operation": "participant.raised_hand.set",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.participant.raised_hand.set",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.participant.raised_hand.set.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.participant.raised_hand.set.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.participant.raised_hand.set.v1"
+      }
+    },
+    {
+      "operation": "microphone.publish",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.microphone.publish",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.microphone.publish.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.microphone.publish.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.microphone.publish.v1"
+      }
+    },
+    {
+      "operation": "microphone.unpublish",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.microphone.unpublish",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.microphone.unpublish.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.microphone.unpublish.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.microphone.unpublish.v1"
+      }
+    },
+    {
+      "operation": "microphone.recover",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.microphone.recover",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.microphone.recover.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.microphone.recover.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.microphone.recover.v1"
+      }
+    },
+    {
+      "operation": "camera.publish",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.camera.publish",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.camera.publish.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.camera.publish.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.camera.publish.v1"
+      }
+    },
+    {
+      "operation": "camera.unpublish",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.camera.unpublish",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.camera.unpublish.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.camera.unpublish.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.camera.unpublish.v1"
+      }
+    },
+    {
+      "operation": "camera.recover",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.camera.recover",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.camera.recover.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.camera.recover.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.camera.recover.v1"
+      }
+    },
+    {
+      "operation": "media_request.request",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.media_request.request",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.media_request.request.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.media_request.request.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.media_request.request.v1"
+      }
+    },
+    {
+      "operation": "media_request.accept",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.media_request.accept",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.media_request.accept.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.media_request.accept.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.media_request.accept.v1"
+      }
+    },
+    {
+      "operation": "media_request.decline",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.media_request.decline",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.media_request.decline.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.media_request.decline.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.media_request.decline.v1"
+      }
+    },
+    {
+      "operation": "media_request.expire",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.media_request.expire",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.media_request.expire.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.media_request.expire.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.media_request.expire.v1"
+      }
+    },
+    {
+      "operation": "screen.start",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.screen.start",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.screen.start.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.screen.start.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.screen.start.v1"
+      }
+    },
+    {
+      "operation": "screen.stop",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.screen.stop",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.screen.stop.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.screen.stop.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.screen.stop.v1"
+      }
+    },
+    {
+      "operation": "screen.unexpected_end",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.screen.unexpected_end",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.screen.unexpected_end.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.screen.unexpected_end.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.screen.unexpected_end.v1"
+      }
+    },
+    {
+      "operation": "screen.recover",
+      "owner": "client SDK + SFU adapter",
+      "proofId": "diag.v1.screen.recover",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.screen.recover.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.screen.recover.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.screen.recover.v1"
+      }
+    },
+    {
+      "operation": "sync.connect",
+      "owner": "Sync + client SDK",
+      "proofId": "diag.v1.sync.connect",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.sync.connect.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.sync.connect.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.sync.connect.v1"
+      }
+    },
+    {
+      "operation": "sync.authenticate",
+      "owner": "Sync + client SDK",
+      "proofId": "diag.v1.sync.authenticate",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.sync.authenticate.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.sync.authenticate.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.sync.authenticate.v1"
+      }
+    },
+    {
+      "operation": "sync.snapshot",
+      "owner": "Sync + client SDK",
+      "proofId": "diag.v1.sync.snapshot",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.sync.snapshot.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.sync.snapshot.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.sync.snapshot.v1"
+      }
+    },
+    {
+      "operation": "sync.live",
+      "owner": "Sync + client SDK",
+      "proofId": "diag.v1.sync.live",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.sync.live.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.sync.live.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.sync.live.v1"
+      }
+    },
+    {
+      "operation": "sync.reconnect",
+      "owner": "Sync + client SDK",
+      "proofId": "diag.v1.sync.reconnect",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.sync.reconnect.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.sync.reconnect.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.sync.reconnect.v1"
+      }
+    },
+    {
+      "operation": "sync.disconnect",
+      "owner": "Sync + client SDK",
+      "proofId": "diag.v1.sync.disconnect",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.sync.disconnect.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.sync.disconnect.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.sync.disconnect.v1"
+      }
+    },
+    {
+      "operation": "chat.send",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.chat.send",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.chat.send.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.chat.send.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.chat.send.v1"
+      }
+    },
+    {
+      "operation": "chat.retry",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.chat.retry",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.chat.retry.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.chat.retry.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.chat.retry.v1"
+      }
+    },
+    {
+      "operation": "chat.page",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.chat.page",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.chat.page.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.chat.page.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.chat.page.v1"
+      }
+    },
+    {
+      "operation": "chat.read",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.chat.read",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.chat.read.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.chat.read.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.chat.read.v1"
+      }
+    },
+    {
+      "operation": "chat.attachment.prepare",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.chat.attachment.prepare",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.chat.attachment.prepare.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.chat.attachment.prepare.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.chat.attachment.prepare.v1"
+      }
+    },
+    {
+      "operation": "chat.attachment.commit",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.chat.attachment.commit",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.chat.attachment.commit.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.chat.attachment.commit.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.chat.attachment.commit.v1"
+      }
+    },
+    {
+      "operation": "chat.attachment.fail",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.chat.attachment.fail",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.chat.attachment.fail.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.chat.attachment.fail.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.chat.attachment.fail.v1"
+      }
+    },
+    {
+      "operation": "reaction.send",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.reaction.send",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.reaction.send.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.reaction.send.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.reaction.send.v1"
+      }
+    },
+    {
+      "operation": "reaction.dedupe",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.reaction.dedupe",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.reaction.dedupe.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.reaction.dedupe.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.reaction.dedupe.v1"
+      }
+    },
+    {
+      "operation": "reaction.expire",
+      "owner": "client SDK + Sync",
+      "proofId": "diag.v1.reaction.expire",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.reaction.expire.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.reaction.expire.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.reaction.expire.v1"
+      }
+    },
+    {
+      "operation": "admission.policy.snapshot",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.admission.policy.snapshot",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.admission.policy.snapshot.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.admission.policy.snapshot.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.admission.policy.snapshot.v1"
+      }
+    },
+    {
+      "operation": "admission.policy.change",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.admission.policy.change",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.admission.policy.change.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.admission.policy.change.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.admission.policy.change.v1"
+      }
+    },
+    {
+      "operation": "admission.request",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.admission.request",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.admission.request.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.admission.request.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.admission.request.v1"
+      }
+    },
+    {
+      "operation": "admission.admit",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.admission.admit",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.admission.admit.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.admission.admit.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.admission.admit.v1"
+      }
+    },
+    {
+      "operation": "admission.deny",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.admission.deny",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.admission.deny.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.admission.deny.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.admission.deny.v1"
+      }
+    },
+    {
+      "operation": "moderation.role.change",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.moderation.role.change",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.moderation.role.change.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.moderation.role.change.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.moderation.role.change.v1"
+      }
+    },
+    {
+      "operation": "moderation.capability.check",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.moderation.capability.check",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.moderation.capability.check.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.moderation.capability.check.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.moderation.capability.check.v1"
+      }
+    },
+    {
+      "operation": "moderation.microphone.disable",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.moderation.microphone.disable",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.moderation.microphone.disable.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.moderation.microphone.disable.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.moderation.microphone.disable.v1"
+      }
+    },
+    {
+      "operation": "moderation.camera.disable",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.moderation.camera.disable",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.moderation.camera.disable.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.moderation.camera.disable.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.moderation.camera.disable.v1"
+      }
+    },
+    {
+      "operation": "moderation.screen.disable",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.moderation.screen.disable",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.moderation.screen.disable.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.moderation.screen.disable.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.moderation.screen.disable.v1"
+      }
+    },
+    {
+      "operation": "moderation.remove",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.moderation.remove",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.moderation.remove.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.moderation.remove.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.moderation.remove.v1"
+      }
+    },
+    {
+      "operation": "moderation.ban",
+      "owner": "API + Sync",
+      "proofId": "diag.v1.moderation.ban",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.moderation.ban.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.moderation.ban.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.moderation.ban.v1"
+      }
+    },
+    {
+      "operation": "recovery.access.refresh",
+      "owner": "client SDK + API + Sync",
+      "proofId": "diag.v1.recovery.access.refresh",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recovery.access.refresh.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recovery.access.refresh.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recovery.access.refresh.v1"
+      }
+    },
+    {
+      "operation": "recovery.media.retry",
+      "owner": "client SDK + API + Sync",
+      "proofId": "diag.v1.recovery.media.retry",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recovery.media.retry.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recovery.media.retry.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recovery.media.retry.v1"
+      }
+    },
+    {
+      "operation": "recovery.sync.retry",
+      "owner": "client SDK + API + Sync",
+      "proofId": "diag.v1.recovery.sync.retry",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recovery.sync.retry.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recovery.sync.retry.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recovery.sync.retry.v1"
+      }
+    },
+    {
+      "operation": "recovery.budget.exhaust",
+      "owner": "client SDK + API + Sync",
+      "proofId": "diag.v1.recovery.budget.exhaust",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recovery.budget.exhaust.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recovery.budget.exhaust.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recovery.budget.exhaust.v1"
+      }
+    },
+    {
+      "operation": "recording.start",
+      "owner": "API + worker",
+      "proofId": "diag.v1.recording.start",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recording.start.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recording.start.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recording.start.v1"
+      }
+    },
+    {
+      "operation": "recording.stop",
+      "owner": "API + worker",
+      "proofId": "diag.v1.recording.stop",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recording.stop.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recording.stop.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recording.stop.v1"
+      }
+    },
+    {
+      "operation": "recording.provider.callback",
+      "owner": "API + worker",
+      "proofId": "diag.v1.recording.provider.callback",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recording.provider.callback.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recording.provider.callback.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recording.provider.callback.v1"
+      }
+    },
+    {
+      "operation": "recording.finalize",
+      "owner": "API + worker",
+      "proofId": "diag.v1.recording.finalize",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.recording.finalize.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.recording.finalize.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.recording.finalize.v1"
+      }
+    },
+    {
+      "operation": "transcription.start",
+      "owner": "API + worker",
+      "proofId": "diag.v1.transcription.start",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.transcription.start.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.transcription.start.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.transcription.start.v1"
+      }
+    },
+    {
+      "operation": "transcription.stop",
+      "owner": "API + worker",
+      "proofId": "diag.v1.transcription.stop",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.transcription.stop.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.transcription.stop.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.transcription.stop.v1"
+      }
+    },
+    {
+      "operation": "transcription.provider.callback",
+      "owner": "API + worker",
+      "proofId": "diag.v1.transcription.provider.callback",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.transcription.provider.callback.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.transcription.provider.callback.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.transcription.provider.callback.v1"
+      }
+    },
+    {
+      "operation": "transcription.finalize",
+      "owner": "API + worker",
+      "proofId": "diag.v1.transcription.finalize",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.transcription.finalize.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.transcription.finalize.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.transcription.finalize.v1"
+      }
+    },
+    {
+      "operation": "cleanup.resource.release",
+      "owner": "API + worker",
+      "proofId": "diag.v1.cleanup.resource.release",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.cleanup.resource.release.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.cleanup.resource.release.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.cleanup.resource.release.v1"
+      }
+    },
+    {
+      "operation": "cleanup.fan_in",
+      "owner": "API + worker",
+      "proofId": "diag.v1.cleanup.fan_in",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.cleanup.fan_in.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.cleanup.fan_in.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.cleanup.fan_in.v1"
+      }
+    },
+    {
+      "operation": "cleanup.complete",
+      "owner": "API + worker",
+      "proofId": "diag.v1.cleanup.complete",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.cleanup.complete.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.cleanup.complete.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.cleanup.complete.v1"
+      }
+    },
+    {
+      "operation": "artifact.reserve",
+      "owner": "API + worker",
+      "proofId": "diag.v1.artifact.reserve",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.artifact.reserve.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.artifact.reserve.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.artifact.reserve.v1"
+      }
+    },
+    {
+      "operation": "artifact.write",
+      "owner": "API + worker",
+      "proofId": "diag.v1.artifact.write",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.artifact.write.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.artifact.write.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.artifact.write.v1"
+      }
+    },
+    {
+      "operation": "artifact.commit",
+      "owner": "API + worker",
+      "proofId": "diag.v1.artifact.commit",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.artifact.commit.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.artifact.commit.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.artifact.commit.v1"
+      }
+    },
+    {
+      "operation": "artifact.fail",
+      "owner": "API + worker",
+      "proofId": "diag.v1.artifact.fail",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.artifact.fail.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.artifact.fail.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.artifact.fail.v1"
+      }
+    },
+    {
+      "operation": "webhook.enqueue",
+      "owner": "API + worker",
+      "proofId": "diag.v1.webhook.enqueue",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.webhook.enqueue.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.webhook.enqueue.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.webhook.enqueue.v1"
+      }
+    },
+    {
+      "operation": "webhook.attempt",
+      "owner": "API + worker",
+      "proofId": "diag.v1.webhook.attempt",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.webhook.attempt.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.webhook.attempt.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.webhook.attempt.v1"
+      }
+    },
+    {
+      "operation": "webhook.retry",
+      "owner": "API + worker",
+      "proofId": "diag.v1.webhook.retry",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.webhook.retry.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.webhook.retry.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.webhook.retry.v1"
+      }
+    },
+    {
+      "operation": "webhook.deliver",
+      "owner": "API + worker",
+      "proofId": "diag.v1.webhook.deliver",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.webhook.deliver.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.webhook.deliver.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.webhook.deliver.v1"
+      }
+    },
+    {
+      "operation": "webhook.exhaust",
+      "owner": "API + worker",
+      "proofId": "diag.v1.webhook.exhaust",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.webhook.exhaust.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.webhook.exhaust.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.webhook.exhaust.v1"
+      }
+    },
+    {
+      "operation": "whiteboard.unsupported",
+      "owner": "whiteboard package",
+      "proofId": "diag.v1.whiteboard.unsupported",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "unsupported": true,
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.whiteboard.unsupported.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.whiteboard.unsupported.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.whiteboard.unsupported.v1"
+      }
+    }
+  ]
+}

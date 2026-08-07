@@ -4,6 +4,7 @@
     "composite": false,
     "noEmit": true,
     "rootDir": "../../../",
+    "types": ["node"],
     "paths": {
       "@q9labsai/chalk-client": ["../client/src/index.ts"],
       "@q9labsai/chalk-client/effect": ["../client/src/effect.ts"],

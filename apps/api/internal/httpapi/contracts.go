@@ -64,7 +64,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
 	endpoints = append(endpoints, spaceEndpoints(nil, nil)...)
 	endpoints = append(endpoints, apiKeyEndpoints(nil, nil, nil)...)
-	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
+	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)

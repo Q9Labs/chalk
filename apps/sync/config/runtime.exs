@@ -4,6 +4,210 @@ if port = System.get_env("CHALK_SYNC_PORT") do
   config :chalk_sync, port: String.to_integer(port)
 end
 
+diagnostics_mode = System.get_env("CHALK_EPISODE_DIAGNOSTICS", "off")
+api_environment = System.get_env("CHALK_API_ENV", "production")
+
+diagnostics_mode =
+  case diagnostics_mode do
+    "off" ->
+      :off
+
+    "localhost" ->
+      if api_environment not in ["local", "localhost"] do
+        raise "CHALK_EPISODE_DIAGNOSTICS=localhost requires CHALK_API_ENV=local"
+      end
+
+      :localhost
+
+    "hosted" ->
+      if api_environment not in ["development", "staging"] do
+        raise "CHALK_EPISODE_DIAGNOSTICS=hosted requires CHALK_API_ENV=development or staging"
+      end
+
+      :hosted
+
+    _ ->
+      raise "CHALK_EPISODE_DIAGNOSTICS must be one of off, localhost, hosted"
+  end
+
+if api_environment == "production" and diagnostics_mode != :off do
+  raise "Episode diagnostics must be off in production"
+end
+
+if diagnostics_mode == :off do
+  config :chalk_sync, episode_diagnostics: %{mode: :off}
+else
+  api_url =
+    System.get_env("CHALK_API_URL") ||
+      raise "CHALK_API_URL must be set when Episode diagnostics are enabled"
+
+  base_url = String.trim_trailing(api_url, "/")
+  parsed_api_url = URI.parse(base_url)
+
+  allowed_hosts =
+    case diagnostics_mode do
+      :localhost ->
+        [parsed_api_url.host]
+
+      :hosted ->
+        allowed_hosts =
+          System.get_env("CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS") ||
+            raise "CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS must be set for hosted diagnostics"
+
+        String.split(allowed_hosts, ",", trim: true)
+    end
+
+  case {diagnostics_mode, parsed_api_url} do
+    {:localhost,
+     %URI{scheme: "http", host: host, userinfo: nil, query: nil, fragment: nil, path: path}}
+    when host in ["localhost", "127.0.0.1", "::1"] and path in [nil, "", "/"] ->
+      :ok
+
+    {:hosted,
+     %URI{scheme: "https", host: host, userinfo: nil, query: nil, fragment: nil, path: path}}
+    when is_binary(host) and host != "" and path in [nil, "", "/"] ->
+      :ok
+
+    {:localhost, _uri} ->
+      raise "CHALK_API_URL must be a localhost HTTP origin for localhost diagnostics"
+
+    {:hosted, _uri} ->
+      raise "CHALK_API_URL must be an HTTPS origin for hosted diagnostics"
+  end
+
+  instance_id =
+    case {diagnostics_mode, System.get_env("CHALK_SYNC_INSTANCE_ID")} do
+      {:hosted, nil} ->
+        raise "CHALK_SYNC_INSTANCE_ID must be set for hosted Episode diagnostics"
+
+      {_mode, nil} ->
+        Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
+
+      {_mode, value} ->
+        value
+    end
+
+  {generation, authentication} =
+    case diagnostics_mode do
+      :localhost ->
+        if Enum.any?(
+             [
+               "CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER",
+               "CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID",
+               "CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY"
+             ],
+             &System.get_env/1
+           ) do
+          raise "Episode diagnostics service signing configuration is hosted-only"
+        end
+
+        producer_token =
+          System.get_env("CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN") ||
+            raise "CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN must be set for localhost diagnostics"
+
+        {1, %{token: producer_token}}
+
+      :hosted ->
+        if System.get_env("CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN") do
+          raise "CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN is localhost-only"
+        end
+
+        issuer =
+          System.get_env("CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER") ||
+            raise "CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER must be set for hosted diagnostics"
+
+        key_id =
+          System.get_env("CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID") ||
+            raise "CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID must be set for hosted diagnostics"
+
+        encoded_private_key =
+          System.get_env("CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY") ||
+            raise "CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY must be set for hosted diagnostics"
+
+        private_key =
+          case Base.url_decode64(encoded_private_key, padding: false) do
+            {:ok, decoded} when byte_size(decoded) == 64 ->
+              decoded
+
+            _invalid ->
+              raise "CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY must be an unpadded base64url Ed25519 private key"
+          end
+
+        generation =
+          case System.get_env("CHALK_SYNC_GENERATION") do
+            nil ->
+              raise "CHALK_SYNC_GENERATION must be set for hosted Episode diagnostics"
+
+            encoded ->
+              case Integer.parse(encoded) do
+                {value, ""} when value in 1..2_147_483_648 ->
+                  value
+
+                _invalid ->
+                  raise "CHALK_SYNC_GENERATION must be an integer between 1 and 2147483648"
+              end
+          end
+
+        credential =
+          case ChalkSync.Diagnostics.ServiceCredential.new(
+                 issuer: issuer,
+                 key_id: key_id,
+                 private_key: private_key,
+                 environment: api_environment,
+                 instance_id: instance_id,
+                 generation: generation
+               ) do
+            {:ok, credential} -> credential
+            {:error, :invalid_config} -> raise "hosted Episode diagnostics credential is invalid"
+          end
+
+        {generation, %{credential: credential}}
+    end
+
+  diagnostics_config =
+    %{
+      mode: diagnostics_mode,
+      base_url: base_url,
+      allowed_hosts: allowed_hosts,
+      instance_id: instance_id,
+      generation: generation,
+      connect_timeout_ms: 500,
+      request_timeout_ms: 1_500,
+      max_request_bytes: 512 * 1024
+    }
+    |> Map.merge(authentication)
+
+  release_id = System.get_env("CHALK_SYNC_RELEASE_ID")
+  source_commit = System.get_env("CHALK_SYNC_SOURCE_COMMIT")
+  safe_release = ~r/\A[A-Za-z0-9][A-Za-z0-9._:@+\/=\-]{0,127}\z/
+
+  diagnostics_config =
+    case {release_id, source_commit} do
+      {nil, nil} ->
+        diagnostics_config
+
+      {id, commit}
+      when is_binary(id) and (is_nil(commit) or is_binary(commit)) ->
+        if not Regex.match?(safe_release, id) or
+             (is_binary(commit) and not Regex.match?(safe_release, commit)) do
+          raise "CHALK_SYNC_RELEASE_ID and CHALK_SYNC_SOURCE_COMMIT must be safe identifiers"
+        end
+
+        release = %{id: id}
+        release = if commit, do: Map.put(release, :source_commit, commit), else: release
+        Map.put(diagnostics_config, :release, release)
+
+      _invalid ->
+        raise "CHALK_SYNC_RELEASE_ID is required when CHALK_SYNC_SOURCE_COMMIT is set"
+    end
+
+  if ChalkSync.Diagnostics.Transport.validate_config(diagnostics_config) != :ok do
+    raise "Episode diagnostics configuration is invalid"
+  end
+
+  config :chalk_sync, episode_diagnostics: diagnostics_config
+end
+
 if config_env() == :prod do
   config :chalk_sync,
     port: String.to_integer(System.get_env("CHALK_SYNC_PORT") || System.get_env("PORT", "4100"))

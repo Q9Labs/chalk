@@ -13,6 +13,7 @@ defmodule ChalkSync.Application do
         {Registry, keys: :unique, name: ChalkSync.Episodes.Registry},
         {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Episodes.Supervisor},
         {ChalkSync.Operations.Metrics, []},
+        diagnostics_supervisor_child(),
         database_child(),
         stateholder_child(),
         observability_child(),
@@ -45,6 +46,25 @@ defmodule ChalkSync.Application do
     case Application.fetch_env!(:chalk_sync, :stateholder) do
       ChalkSync.Stateholder.Memory -> {ChalkSync.Stateholder.Memory, []}
       _adapter -> nil
+    end
+  end
+
+  defp diagnostics_supervisor_child do
+    case Application.fetch_env!(:chalk_sync, :episode_diagnostics) do
+      %{mode: mode} = config when mode in [:localhost, :hosted] ->
+        children = [
+          {ChalkSync.Diagnostics.Buffer, []},
+          {ChalkSync.Diagnostics.Deadlines, []},
+          {ChalkSync.Diagnostics.Exporter, config: config}
+        ]
+
+        %{
+          id: ChalkSync.Diagnostics.Supervisor,
+          start: {Supervisor, :start_link, [children, [strategy: :rest_for_one]]}
+        }
+
+      _off ->
+        nil
     end
   end
 

@@ -3,13 +3,14 @@ defmodule ChalkSync.Chat do
 
   alias ChalkSync.Chat.Repository.Message
   alias ChalkSync.Chat.Repository.Postgres, as: PostgresRepository
+  alias ChalkSync.Diagnostics
   alias ChalkSync.Fanout.Collaboration
   alias ChalkSync.Fanout.Collaboration.PostgresNotifications
   alias ChalkSync.Stateholder.Identity
 
   @extension "collaboration_v1"
 
-  @type options :: [repository: module(), fanout: GenServer.server()]
+  @type options :: [repository: module(), fanout: GenServer.server(), observability: term()]
 
   @spec negotiate(Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
   def negotiate(%Identity{} = identity, chat_cursor, socket) when is_pid(socket),
@@ -59,17 +60,39 @@ defmodule ChalkSync.Chat do
     repository = repository(options)
     attachment_ids = Map.get(input, :attachment_ids, [])
 
-    case repository.append(identity, %{
-           client_message_id: client_message_id,
-           text: text,
-           attachment_ids: attachment_ids
-         }) do
+    {append_input, attachment_marker} =
+      attachment_observation(input, identity, client_message_id, attachment_ids, options)
+
+    append_result =
+      repository.append(
+        identity,
+        append_input
+        |> Map.put(:client_message_id, client_message_id)
+        |> Map.put(:text, text)
+        |> Map.put(:attachment_ids, attachment_ids)
+      )
+
+    attachment_attempted? = attachment_attempted?(attachment_marker)
+
+    case append_result do
       {:ok, %{outcome: outcome, message: message}} ->
         if outcome == :committed do
           Collaboration.publish_chat_head(fanout(options), identity.episode, %{
             head_sequence: message.sequence,
             retained_floor_sequence: retained_floor(repository, identity)
           })
+
+          diagnose_chat_commit(identity, client_message_id, outcome, options)
+
+          diagnose_attachment_success(
+            attachment_attempted?,
+            identity,
+            client_message_id,
+            attachment_ids,
+            options
+          )
+        else
+          diagnose_chat_commit(identity, client_message_id, outcome, options)
         end
 
         {:ok,
@@ -81,6 +104,19 @@ defmodule ChalkSync.Chat do
          }}
 
       {:error, reason} ->
+        diagnose_chat_rejection(identity, client_message_id, reason, options)
+
+        if attachment_attempted?,
+          do:
+            diagnose_attachment(
+              :failed,
+              identity,
+              client_message_id,
+              attachment_ids,
+              reason,
+              options
+            )
+
         {:ok, rejected_chat(client_message_id, reason)}
     end
   end
@@ -272,6 +308,151 @@ defmodule ChalkSync.Chat do
       {:error, _reason} -> "1"
     end
   end
+
+  defp diagnose_chat_commit(identity, client_message_id, :committed, options) do
+    Diagnostics.record(:chat_send_committed, identity,
+      observability: Keyword.get(options, :observability),
+      command_id: client_message_id,
+      operation_ref: client_message_id,
+      attributes: %{result: :committed}
+    )
+  end
+
+  defp diagnose_chat_commit(identity, client_message_id, :duplicate, options) do
+    Diagnostics.record(:chat_retry_deduped, identity,
+      observability: Keyword.get(options, :observability),
+      command_id: client_message_id,
+      retry_group_ref: client_message_id,
+      operation_ref: child_operation_ref(client_message_id, "retry"),
+      attributes: %{result: :duplicate}
+    )
+  end
+
+  defp diagnose_chat_commit(_identity, _client_message_id, _outcome, _options), do: :ok
+
+  defp diagnose_chat_rejection(identity, client_message_id, reason, options) do
+    Diagnostics.record(:chat_send_rejected, identity,
+      observability: Keyword.get(options, :observability),
+      command_id: client_message_id,
+      operation_ref: client_message_id,
+      attributes: %{reason: diagnostic_reason(reason)}
+    )
+  end
+
+  defp diagnose_attachment_success(
+         true,
+         identity,
+         client_message_id,
+         attachment_ids,
+         options
+       ),
+       do:
+         diagnose_attachment(
+           :succeeded,
+           identity,
+           client_message_id,
+           attachment_ids,
+           nil,
+           options
+         )
+
+  defp diagnose_attachment_success(
+         false,
+         _identity,
+         _client_message_id,
+         _attachment_ids,
+         _options
+       ),
+       do: :ok
+
+  defp attachment_observation(
+         input,
+         identity,
+         client_message_id,
+         attachment_ids,
+         options
+       )
+       when is_list(attachment_ids) and attachment_ids != [] do
+    marker = {__MODULE__, make_ref()}
+    Process.put(marker, false)
+
+    observer = fn ->
+      unless Process.get(marker, false) do
+        Process.put(marker, true)
+
+        diagnose_attachment(
+          :started,
+          identity,
+          client_message_id,
+          attachment_ids,
+          nil,
+          options
+        )
+      end
+    end
+
+    {Map.put(input, :attachment_commit_observer, observer), marker}
+  end
+
+  defp attachment_observation(input, _identity, _client_message_id, _attachment_ids, _options),
+    do: {input, nil}
+
+  defp attachment_attempted?(nil), do: false
+  defp attachment_attempted?(marker), do: Process.delete(marker) == true
+
+  defp diagnose_attachment(
+         _stage,
+         _identity,
+         _client_message_id,
+         attachment_ids,
+         _reason,
+         _options
+       )
+       when not is_list(attachment_ids),
+       do: :ok
+
+  defp diagnose_attachment(_stage, _identity, _client_message_id, [], _reason, _options),
+    do: :ok
+
+  defp diagnose_attachment(stage, identity, client_message_id, attachment_ids, reason, options) do
+    constructor =
+      case stage do
+        :started -> :chat_attachment_commit_started
+        :succeeded -> :chat_attachment_commit_succeeded
+        :failed -> :chat_attachment_failed
+      end
+
+    attributes =
+      %{count: length(attachment_ids), attachment_type: :unknown}
+      |> maybe_put_reason(reason)
+
+    Diagnostics.record(constructor, identity,
+      observability: Keyword.get(options, :observability),
+      command_id: client_message_id,
+      retry_group_ref: client_message_id,
+      operation_ref: child_operation_ref(client_message_id, "attachment"),
+      attributes: attributes
+    )
+  end
+
+  defp maybe_put_reason(attributes, nil), do: attributes
+
+  defp maybe_put_reason(attributes, reason),
+    do: Map.put(attributes, :reason, diagnostic_reason(reason))
+
+  defp diagnostic_reason(reason)
+       when reason in [
+              :capability_denied,
+              :episode_ended,
+              :dependency_unavailable,
+              :overloaded,
+              :command_id_conflict
+            ],
+       do: reason
+
+  defp diagnostic_reason(:client_message_id_conflict), do: :command_id_conflict
+  defp diagnostic_reason(_reason), do: :invalid_contract
+  defp child_operation_ref(operation_ref, kind), do: operation_ref <> "." <> kind
 
   defp repository(options),
     do:

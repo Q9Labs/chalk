@@ -245,7 +245,11 @@ defmodule ChalkSync.Transport.SocketV1 do
              identity.admission_lifecycle_intent_id
            ),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
-           negotiate_collaboration(identity, Map.get(hello, :collaboration)),
+           negotiate_collaboration(
+             identity,
+             Map.get(hello, :collaboration),
+             state.observability
+           ),
          {:ok, coordinator} <-
            Coordinator.begin_recovery(identity, self(), protocol_options) do
       start_registered_recovery(
@@ -458,7 +462,8 @@ defmodule ChalkSync.Transport.SocketV1 do
            collaboration_version: 1
          } = state
        ) do
-    with {:ok, frame} <- Chat.mark_chat_read(identity, input) do
+    with {:ok, frame} <-
+           Chat.mark_chat_read(identity, input, observability: state.observability) do
       state = observe_collaboration(state, "chat.read", frame["outcome"])
       enqueue_collaboration(frame, state)
     end
@@ -469,7 +474,10 @@ defmodule ChalkSync.Transport.SocketV1 do
          %{phase: :live, identity: identity, collaboration_negotiated: true} = state
        ) do
     with {:ok, frame} <-
-           Chat.send_chat(identity, input, version: state.collaboration_version) do
+           Chat.send_chat(identity, input,
+             version: state.collaboration_version,
+             observability: state.observability
+           ) do
       state = observe_collaboration(state, "chat.send", frame["outcome"])
       enqueue_collaboration(frame, state)
     end
@@ -479,7 +487,10 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:chat_page_request, input},
          %{phase: :live, identity: identity, collaboration_negotiated: true} = state
        ) do
-    case Chat.read_chat_page(identity, input, version: state.collaboration_version) do
+    case Chat.read_chat_page(identity, input,
+           version: state.collaboration_version,
+           observability: state.observability
+         ) do
       {:ok, frame} ->
         state = observe_collaboration(state, "chat.page", frame["outcome"])
         enqueue_collaboration(frame, state, :chat_page)
@@ -699,10 +710,10 @@ defmodule ChalkSync.Transport.SocketV1 do
     Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5_000) + 1_000
   end
 
-  defp negotiate_collaboration(_identity, nil), do: {:ok, %{}, false, nil}
+  defp negotiate_collaboration(_identity, nil, _observability), do: {:ok, %{}, false, nil}
 
-  defp negotiate_collaboration(identity, chat_cursor) do
-    case Chat.negotiate(identity, chat_cursor, self()) do
+  defp negotiate_collaboration(identity, chat_cursor, observability) do
+    case Chat.negotiate(identity, chat_cursor, self(), observability: observability) do
       {:ok, extension} ->
         {:ok, %{collaboration_extension: extension}, true, 1}
 

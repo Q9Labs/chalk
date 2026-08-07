@@ -134,7 +134,7 @@ func TestRecentAuthGoogleStartAndCallbackBindChallengeServerSide(t *testing.T) {
 	var startAction string
 	var startResourceID utilities.ID
 	startAuthentication := authenticationService{
-		authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+		authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 			return authSessionUser(t), nil
 		},
 		startGoogleReauthentication: func(_ context.Context, gotAccountID utilities.ID, gotAction string, gotResourceID utilities.ID) (authentication.GoogleReauthenticationStart, error) {

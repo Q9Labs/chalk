@@ -1230,6 +1230,12 @@ export interface components {
       secret: string;
     };
     AccessGrant: {
+      diagnostics?: {
+        expires_at: components["schemas"]["DateTimeString"];
+        generation: number;
+        intake_path: string;
+        token: string;
+      } | null;
       media: {
         client_payload: {
           [key: string]:

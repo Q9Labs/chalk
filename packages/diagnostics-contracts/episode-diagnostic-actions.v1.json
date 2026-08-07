@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chalk.dev/schemas/episode-diagnostic-actions.v1.json",
+  "title": "Episode Diagnostic Action Set v1",
+  "version": 1,
+  "closed": true,
+  "checkpointClasses": ["required", "conditional", "best_effort"],
+  "groups": [
+    { "group": "Episode lifecycle", "root": "episode", "owner": "api", "proofPrefix": "diag.v1.episode", "actions": ["emerge", "start", "end.natural", "end.authorized", "end.linger", "end.deadline", "deadline.extend"] },
+    { "group": "Space access", "root": "access", "owner": "api + client SDK", "proofPrefix": "diag.v1.access", "actions": ["request", "approve", "deny", "refresh"] },
+    { "group": "Participant lifecycle", "root": "participant", "owner": "client SDK + Sync", "proofPrefix": "diag.v1.participant", "actions": ["join", "reconnect", "rejoin", "leave", "rename", "raised_hand.set"] },
+    { "group": "Microphone", "root": "microphone", "owner": "client SDK + SFU adapter", "proofPrefix": "diag.v1.microphone", "actions": ["publish", "unpublish", "recover"] },
+    { "group": "Camera", "root": "camera", "owner": "client SDK + SFU adapter", "proofPrefix": "diag.v1.camera", "actions": ["publish", "unpublish", "recover"] },
+    { "group": "Directed media", "root": "media_request", "owner": "client SDK + Sync", "proofPrefix": "diag.v1.media_request", "actions": ["request", "accept", "decline", "expire"] },
+    { "group": "Screen sharing", "root": "screen", "owner": "client SDK + SFU adapter", "proofPrefix": "diag.v1.screen", "actions": ["start", "stop", "unexpected_end", "recover"] },
+    { "group": "Sync", "root": "sync", "owner": "Sync + client SDK", "proofPrefix": "diag.v1.sync", "actions": ["connect", "authenticate", "snapshot", "live", "reconnect", "disconnect"] },
+    { "group": "Chat", "root": "chat", "owner": "client SDK + Sync", "proofPrefix": "diag.v1.chat", "actions": ["send", "retry", "page", "read", "attachment.prepare", "attachment.commit", "attachment.fail"] },
+    { "group": "Reactions", "root": "reaction", "owner": "client SDK + Sync", "proofPrefix": "diag.v1.reaction", "actions": ["send", "dedupe", "expire"] },
+    { "group": "Admission", "root": "admission", "owner": "API + Sync", "proofPrefix": "diag.v1.admission", "actions": ["policy.snapshot", "policy.change", "request", "admit", "deny"] },
+    { "group": "Roles and moderation", "root": "moderation", "owner": "API + Sync", "proofPrefix": "diag.v1.moderation", "actions": ["role.change", "capability.check", "microphone.disable", "camera.disable", "screen.disable", "remove", "ban"] },
+    { "group": "Recovery", "root": "recovery", "owner": "client SDK + API + Sync", "proofPrefix": "diag.v1.recovery", "actions": ["access.refresh", "media.retry", "sync.retry", "budget.exhaust"] },
+    { "group": "Recording", "root": "recording", "owner": "API + worker", "proofPrefix": "diag.v1.recording", "actions": ["start", "stop", "provider.callback", "finalize"] },
+    { "group": "Transcription", "root": "transcription", "owner": "API + worker", "proofPrefix": "diag.v1.transcription", "actions": ["start", "stop", "provider.callback", "finalize"] },
+    { "group": "Cleanup", "root": "cleanup", "owner": "API + worker", "proofPrefix": "diag.v1.cleanup", "actions": ["resource.release", "fan_in", "complete"] },
+    { "group": "Artifact", "root": "artifact", "owner": "API + worker", "proofPrefix": "diag.v1.artifact", "actions": ["reserve", "write", "commit", "fail"] },
+    { "group": "Webhook", "root": "webhook", "owner": "API + worker", "proofPrefix": "diag.v1.webhook", "actions": ["enqueue", "attempt", "retry", "deliver", "exhaust"] },
+    { "group": "Whiteboard", "root": "whiteboard", "owner": "whiteboard package", "proofPrefix": "diag.v1.whiteboard", "actions": ["unsupported"], "unsupported": true }
+  ],
+  "fixtures": {
+    "expectationPattern": "expectation.<operation>.v1",
+    "successPattern": "success.<operation>.v1",
+    "failurePattern": "failure.<operation>.v1",
+    "whiteboardSuccess": "success.whiteboard.unsupported.v1",
+    "whiteboardFailure": "failure.whiteboard.unsupported.v1"
+  }
+}

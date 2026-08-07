@@ -8,6 +8,9 @@
     "emitDeclarationOnly": true,
     "noEmit": false,
     "composite": true,
+    "paths": {
+      "@chalk/diagnostics-contracts": ["../../../packages/diagnostics-contracts/dist/index.d.ts"]
+    },
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*"],

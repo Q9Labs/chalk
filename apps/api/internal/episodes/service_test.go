@@ -17,6 +17,20 @@ type captureRepository struct {
 	admissions []episodes.AdmitParticipantInput
 }
 
+type commitObserver struct {
+	episode episodes.Episode
+}
+
+func (o *commitObserver) EpisodeCommitted(episode episodes.Episode) {
+	o.episode = episode
+}
+
+type panicCommitObserver struct{}
+
+func (panicCommitObserver) EpisodeCommitted(episodes.Episode) {
+	panic("diagnostic observer failed")
+}
+
 func (r *captureRepository) CreateEpisode(_ context.Context, input episodes.CreateEpisodeInput) (episodes.Episode, error) {
 	r.creates = append(r.creates, input)
 	return episodes.Episode{ID: input.ID, TenantID: input.TenantID, SpaceID: input.SpaceID, Status: episodes.EpisodeStatusActive}, nil
@@ -72,6 +86,33 @@ func TestServiceDerivesStableEpisodeCreateFingerprint(t *testing.T) {
 	}
 	if repository.creates[0].Request.Fingerprint == repository.creates[2].Request.Fingerprint {
 		t.Fatal("different episode input produced the same fingerprint")
+	}
+}
+
+func TestServiceNotifiesCommitObserverWithoutChangingCommittedResult(t *testing.T) {
+	repository := &captureRepository{}
+	observer := &commitObserver{}
+	input := episodes.CreateEpisodeInput{
+		TenantID:       mustID(t, "11111111-1111-4111-8111-111111111111"),
+		SpaceID:        mustID(t, "22222222-2222-4222-8222-222222222222"),
+		Metadata:       []byte(`{"topic":"planning"}`),
+		ConfigSnapshot: validSnapshot(t),
+		Request:        episodes.Request{Key: "episode-create-observer-0001"},
+	}
+	created, err := episodes.NewService(repository).WithCommitObserver(observer).CreateEpisode(context.Background(), input)
+	if err != nil {
+		t.Fatalf("create episode: %v", err)
+	}
+	if observer.episode.ID != created.ID {
+		t.Fatalf("observer saw episode %s, want committed episode %s", observer.episode.ID, created.ID)
+	}
+
+	panicCreated, err := episodes.NewService(repository).WithCommitObserver(panicCommitObserver{}).CreateEpisode(context.Background(), input)
+	if err != nil {
+		t.Fatalf("observer failure changed committed result: %v", err)
+	}
+	if panicCreated.ID.IsZero() {
+		t.Fatal("observer failure returned zero committed episode")
 	}
 }
 

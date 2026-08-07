@@ -23,7 +23,7 @@ func TestEpisodeResponseUsesEpisodeVocabulary(t *testing.T) {
 }
 
 func TestEpisodeLifecycleRoutesHaveNoHostTransferEndpoint(t *testing.T) {
-	for _, endpoint := range episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil) {
+	for _, endpoint := range episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil) {
 		contract := endpoint.RouteContract()
 		if contract.Path == "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/host/recover" || contract.OperationID == "recoverEpisodeHost" {
 			t.Fatalf("obsolete host endpoint remains: %#v", contract)

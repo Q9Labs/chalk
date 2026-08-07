@@ -17,6 +17,18 @@ defmodule ChalkSync.RuntimeConfigTest do
     CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE
     CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE
     CHALK_SYNC_PROVIDER_BRIDGE_CAFILE
+    CHALK_EPISODE_DIAGNOSTICS
+    CHALK_API_ENV
+    CHALK_API_URL
+    CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS
+    CHALK_SYNC_INSTANCE_ID
+    CHALK_SYNC_GENERATION
+    CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN
+    CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER
+    CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID
+    CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY
+    CHALK_SYNC_RELEASE_ID
+    CHALK_SYNC_SOURCE_COMMIT
     CHALK_SYNC_LOCAL_PROOF
     CHALK_SYNC_LOCAL_PARITY
     CHALK_SYNC_BIND_IP
@@ -96,6 +108,32 @@ defmodule ChalkSync.RuntimeConfigTest do
     refute config[:local_parity]
   end
 
+  test "hosted diagnostics require and preserve deployment-owned destination hosts" do
+    {public_key, private_seed} = :crypto.generate_key(:eddsa, :ed25519)
+
+    config =
+      read_config([
+        {"CHALK_EPISODE_DIAGNOSTICS", "hosted"},
+        {"CHALK_API_ENV", "staging"},
+        {"CHALK_API_URL", "https://api.example.test"},
+        {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", "api.example.test,api.staging.example.test"},
+        {"CHALK_SYNC_INSTANCE_ID", "sync-runtime-test"},
+        {"CHALK_SYNC_GENERATION", "4"},
+        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER", "https://identity.example.test"},
+        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID", "sync-diagnostics-1"},
+        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY",
+         encoded_private_key(private_seed, public_key)}
+      ])
+
+    assert config[:episode_diagnostics][:mode] == :hosted
+    assert config[:episode_diagnostics][:base_url] == "https://api.example.test"
+
+    assert config[:episode_diagnostics][:allowed_hosts] == [
+             "api.example.test",
+             "api.staging.example.test"
+           ]
+  end
+
   defp base_env do
     [
       {"MIX_ENV", "prod"},
@@ -113,7 +151,19 @@ defmodule ChalkSync.RuntimeConfigTest do
       {"CHALK_SYNC_LOCAL_PROOF", nil},
       {"CHALK_SYNC_LOCAL_PARITY", nil},
       {"CHALK_SYNC_BIND_IP", nil},
-      {"CHALK_SYNC_PORT", nil}
+      {"CHALK_SYNC_PORT", nil},
+      {"CHALK_EPISODE_DIAGNOSTICS", nil},
+      {"CHALK_API_ENV", nil},
+      {"CHALK_API_URL", nil},
+      {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", nil},
+      {"CHALK_SYNC_INSTANCE_ID", nil},
+      {"CHALK_SYNC_GENERATION", nil},
+      {"CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN", nil},
+      {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER", nil},
+      {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID", nil},
+      {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY", nil},
+      {"CHALK_SYNC_RELEASE_ID", nil},
+      {"CHALK_SYNC_SOURCE_COMMIT", nil}
     ]
   end
 
@@ -124,6 +174,9 @@ defmodule ChalkSync.RuntimeConfigTest do
   end
 
   defp put_env(env, key, value), do: List.keystore(env, key, 0, {key, value})
+
+  defp encoded_private_key(private_seed, public_key),
+    do: Base.url_encode64(private_seed <> public_key, padding: false)
 
   defp read_config(overrides) do
     environment = merge_env(base_env(), overrides)

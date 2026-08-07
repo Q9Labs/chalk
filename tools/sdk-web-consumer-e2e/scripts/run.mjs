@@ -18,7 +18,7 @@ const temporaryDirectory = await mkdtemp(join(tmpdir(), "chalk-sdk-web-consumer-
 const archiveDirectory = join(temporaryDirectory, "archives");
 const consumerDirectory = join(temporaryDirectory, "consumer");
 const tenantAPIKey = `chalk_sk_fixture.${randomBytes(32).toString("base64url")}`;
-const packedPackages = ["packages/assets", "packages/facehash", "packages/ui", "packages/whiteboard", "sdks/typescript/client", "sdks/typescript/react"];
+const packedPackages = ["packages/assets", "packages/diagnostics-contracts", "packages/facehash", "packages/ui", "packages/whiteboard", "sdks/typescript/client", "sdks/typescript/react"];
 let serverProcess;
 
 try {
@@ -31,10 +31,11 @@ try {
   const archives = (await readdir(archiveDirectory)).filter((file) => file.endsWith(".tgz"));
   const clientArchive = requiredArchive(archives, "chalk-client");
   const reactArchive = requiredArchive(archives, "chalk-react");
+  const diagnosticsArchive = requiredArchive(archives, "diagnostics-contracts");
   const supportingArchives = [requiredArchive(archives, "chalk-assets"), requiredArchive(archives, "facehash"), requiredArchive(archives, "chalk-ui"), requiredArchive(archives, "chalk-whiteboard")];
 
   await writeFile(join(consumerDirectory, "package.json"), `${JSON.stringify({ name: "chalk-packed-web-consumer", private: true, type: "module", packageManager: "pnpm@10.26.2" }, null, 2)}\n`);
-  await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, { clientArchive, reactArchive, supportingArchives }));
+  await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, { clientArchive, reactArchive, diagnosticsArchive, supportingArchives }));
   await run(
     "pnpm",
     [
@@ -53,7 +54,7 @@ try {
     ],
     consumerDirectory,
   );
-  await assertPackedInstall(consumerDirectory, { clientArchive, reactArchive, supportingArchives });
+  await assertPackedInstall(consumerDirectory, archiveDirectory, { clientArchive, reactArchive, diagnosticsArchive, supportingArchives });
   await run("pnpm", ["exec", "tsc", "--project", "tsconfig.json"], consumerDirectory);
   await run(process.execPath, ["build.mjs"], consumerDirectory);
 
@@ -296,8 +297,9 @@ async function post(url) {
   if (!response.ok) throw new TypeError(`Fixture control request failed with HTTP ${response.status}: ${url}`);
 }
 
-async function assertPackedInstall(directory, archives) {
+async function assertPackedInstall(directory, archiveDirectory_, archives) {
   const packageJSON = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
+  if (packageJSON.dependencies?.["@chalk/diagnostics-contracts"] !== undefined) throw new TypeError("The clean consumer must not directly install @chalk/diagnostics-contracts");
   const packages = [
     ["@q9labsai/chalk-client", archives.clientArchive],
     ["@q9labsai/chalk-react", archives.reactArchive],
@@ -307,7 +309,23 @@ async function assertPackedInstall(directory, archives) {
     ["@q9labsai/chalk-whiteboard", archives.supportingArchives[3]],
   ];
   for (const [packageName, archive] of packages) assertArchiveDependency(packageJSON, packageName, archive);
-  await run(process.execPath, ["-e", 'for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); }'], directory);
+  const clientManifest = JSON.parse(await readArchiveManifest(join(archiveDirectory_, archives.clientArchive)));
+  const diagnosticsManifest = JSON.parse(await readArchiveManifest(join(archiveDirectory_, archives.diagnosticsArchive)));
+  assertClientDiagnosticsDependency(clientManifest, diagnosticsManifest);
+  await run(
+    process.execPath,
+    [
+      "-e",
+      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@chalk/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@chalk/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== "0.1.0") throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
+    ],
+    directory,
+  );
+}
+
+function assertClientDiagnosticsDependency(clientManifest, diagnosticsManifest) {
+  const expected = `^${diagnosticsManifest.version}`;
+  const declared = clientManifest.dependencies?.["@chalk/diagnostics-contracts"];
+  if (declared !== expected) throw new TypeError(`The packed client must declare @chalk/diagnostics-contracts as ${expected}; found ${String(declared)}`);
 }
 
 function assertArchiveDependency(packageJSON, packageName, archive) {
@@ -329,6 +347,7 @@ function workspacePolicy(archiveDirectory_, archives) {
     "@q9labsai/chalk-whiteboard": archives.supportingArchives.find((archive) => archive.includes("chalk-whiteboard")),
     "@q9labsai/chalk-client": archives.clientArchive,
     "@q9labsai/chalk-react": archives.reactArchive,
+    "@chalk/diagnostics-contracts": archives.diagnosticsArchive,
   };
   const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive)}"`);
   return [
@@ -372,5 +391,17 @@ function run(command, arguments__, cwd) {
     const child = spawn(command, arguments__, { cwd, stdio: "inherit" });
     child.once("error", reject);
     child.once("exit", (code) => (code === 0 ? resolveRun() : reject(new TypeError(`${command} ${arguments__.join(" ")} exited with code ${code}`))));
+  });
+}
+
+function readArchiveManifest(archivePath) {
+  return new Promise((resolveManifest, rejectManifest) => {
+    const child = spawn("tar", ["-xOf", archivePath, "package/package.json"], { stdio: ["ignore", "pipe", "inherit"] });
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += String(chunk);
+    });
+    child.once("error", rejectManifest);
+    child.once("exit", (code) => (code === 0 ? resolveManifest(output) : rejectManifest(new TypeError(`tar ${archivePath} exited with code ${code}`))));
   });
 }

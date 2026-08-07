@@ -17,6 +17,10 @@ type ParticipantMediaIssuer interface {
 	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
 }
 
+type ParticipantDiagnosticsIssuer interface {
+	Issue(context.Context, accessgrants.DiagnosticsSubject) (accessgrants.DiagnosticsCredential, error)
+}
+
 type ParticipantGenerationAuthorizer interface {
 	AuthorizeActiveParticipantGeneration(context.Context, synctokens.SubjectKey, int64) (bool, error)
 }
@@ -41,10 +45,18 @@ type accessGrantMediaResponse struct {
 	ClientPayload map[string]any `json:"client_payload"`
 }
 
+type accessGrantDiagnosticsResponse struct {
+	Token      string `json:"token"`
+	ExpiresAt  string `json:"expires_at"`
+	Generation int64  `json:"generation"`
+	IntakePath string `json:"intake_path"`
+}
+
 type accessGrantResponse struct {
-	Subject accessGrantSubjectResponse `json:"subject"`
-	Sync    accessGrantTokenResponse   `json:"sync"`
-	Media   accessGrantMediaResponse   `json:"media"`
+	Subject     accessGrantSubjectResponse      `json:"subject"`
+	Sync        accessGrantTokenResponse        `json:"sync"`
+	Media       accessGrantMediaResponse        `json:"media"`
+	Diagnostics *accessGrantDiagnosticsResponse `json:"diagnostics,omitempty"`
 }
 
 type issueAccessGrantBody struct {
@@ -64,6 +76,7 @@ type issueAccessGrantRequest struct {
 func issueAccessGrantEndpoint(
 	refresh SyncTokenRefreshIssuer,
 	mediaIssuer ParticipantMediaIssuer,
+	diagnosticsIssuer ParticipantDiagnosticsIssuer,
 	mediaVerifier ParticipantMediaVerifier,
 	active ActiveParticipantAuthorizer,
 	generations ParticipantGenerationAuthorizer,
@@ -144,7 +157,9 @@ func issueAccessGrantEndpoint(
 			if err != nil {
 				return accessGrantResponse{}, err
 			}
-			return newAccessGrantResponse(subject, syncCredential, mediaCredential, join), nil
+			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+			attachDiagnosticsCredential(ctx, &response, diagnosticsIssuer, subject)
+			return response, nil
 		},
 	).
 		Auth(APIAuthSessionOrBearer).
@@ -245,6 +260,23 @@ func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctok
 		},
 		Sync:  accessGrantTokenResponse{Token: syncCredential.Value, ExpiresAt: syncCredential.ExpiresAt.UTC().Format(time.RFC3339)},
 		Media: accessGrantMediaResponse{Token: mediaCredential.Token, ExpiresAt: mediaCredential.ExpiresAt.UTC().Format(time.RFC3339), Provider: subject.Provider, ClientPayload: join.ClientPayload},
+	}
+}
+
+func attachDiagnosticsCredential(ctx context.Context, response *accessGrantResponse, issuer ParticipantDiagnosticsIssuer, subject accessgrants.Subject) {
+	if response == nil || issuer == nil {
+		return
+	}
+	credential, err := issuer.Issue(ctx, accessgrants.DiagnosticsSubject{
+		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
+		ParticipantGeneration: subject.ParticipantGeneration, Capability: accessgrants.DiagnosticsCapability,
+	})
+	if err != nil {
+		return
+	}
+	response.Diagnostics = &accessGrantDiagnosticsResponse{
+		Token: credential.Token, ExpiresAt: credential.ExpiresAt.UTC().Format(time.RFC3339),
+		Generation: credential.Generation, IntakePath: credential.IntakePath,
 	}
 }
 

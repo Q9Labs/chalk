@@ -3,6 +3,7 @@ import type { ChalkChatFileTransport } from "../chat-files";
 import type { ChalkChatPageResult } from "../collaboration/types";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
+import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
@@ -27,6 +28,7 @@ export const makeChatController = (input: {
   readonly createTransport?: (input: { readonly token: () => Promise<string> }) => ChalkChatFileTransport | null;
   readonly apiBaseUrl?: string;
   readonly fetch?: typeof globalThis.fetch;
+  readonly episodeDiagnostics?: EpisodeDiagnosticRuntime;
 }): Effect.Effect<ChatControllerEffects, never, Scope.Scope> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
@@ -37,7 +39,7 @@ export const makeChatController = (input: {
     const controller = yield* Effect.sync(() => {
       let instance: ChatControllerRuntime | null = null;
       const transport = input.createTransport?.({ token: () => Effect.runPromiseWith(context)(input.connection.getSyncToken()) }) ?? null;
-      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalk.video", input.fetch ?? globalThis.fetch, fork);
+      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalk.video", input.fetch ?? globalThis.fetch, fork, input.episodeDiagnostics);
       return instance;
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
@@ -53,6 +55,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   readonly #transport: ChalkChatFileTransport | null;
   readonly #fetch: typeof globalThis.fetch;
   readonly #fork: Fork;
+  readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
   #catchUpRunning = false;
   #catchUpRequested = false;
   #hasOlder = false;
@@ -71,44 +74,68 @@ class ChatControllerRuntime implements ChatControllerEffects {
   #unsubscribeEvents: (() => void) | null = null;
   #unsubscribeSnapshot: (() => void) | null = null;
 
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork, diagnostics?: EpisodeDiagnosticRuntime) {
     this.#apiBaseUrl = apiBaseUrl.replace(/\/+$/u, "");
     this.#connection = connection;
     this.#store = store;
     this.#transport = transport;
     this.#fetch = fetch;
     this.#fork = fork;
+    this.#diagnostics = diagnostics;
     this.#unsubscribeConnection = connection.subscribePorts((ports) => this.#bind(ports));
   }
 
-  send = (input: ChatSendInput): ClientEffect<ChatMessage> =>
-    Effect.try({ try: () => validate(input), catch: normalizeClientError }).pipe(
+  send = (input: ChatSendInput): ClientEffect<ChatMessage> => {
+    const operation = this.#diagnostics?.startOperation("chat.send");
+    return Effect.try({ try: () => validate(input), catch: normalizeClientError }).pipe(
+      Effect.tap(() => Effect.sync(() => operation?.observe("observed", "validation"))),
       Effect.map((attachments) => ({ clientMessageId: this.#connection.createId(), attachments })),
       Effect.flatMap(({ clientMessageId, attachments }) => {
         this.#upsertPending(clientMessageId, input.text, attachments, "sending", null);
+        operation?.observe("observed", "authorization");
         return this.#connection
           .runCommand(({ sync }) => foreign(() => sync.sendChatMessage({ text: input.text, attachments, clientMessageId })))
+          .pipe(Effect.tap(() => Effect.sync(() => operation?.observe("observed", "durable_commit"))))
           .pipe(
             Effect.map(chatMessageFor),
             Effect.tap(() => Effect.sync(() => this.#removePending(clientMessageId))),
             Effect.map((message) => this.#observeMessage(message, false)),
+            Effect.tap(() =>
+              Effect.sync(() => {
+                operation?.observe("observed", "paging_visibility");
+                operation?.notObservable("recipient_projection", "recipient_projection_is_conditional");
+                operation?.succeed();
+              }),
+            ),
             Effect.catch((cause) => {
               const error = normalizeClientError(cause, "chat.payload_invalid");
-              return Effect.sync(() => this.#upsertPending(clientMessageId, input.text, attachments, "failed", failureFromError(error))).pipe(Effect.andThen(Effect.fail(error)));
+              return Effect.sync(() => {
+                this.#upsertPending(clientMessageId, input.text, attachments, "failed", failureFromError(error));
+                operation?.fail("send_failed");
+              }).pipe(Effect.andThen(Effect.fail(error)));
             }),
           );
       }),
       Effect.mapError(normalizeClientError),
+      Effect.tapError(() => Effect.sync(() => operation?.fail("send_failed"))),
     );
+  };
 
   loadOlder = (): ClientEffect<ChalkChatPageResult> => {
+    const operation = this.#diagnostics?.startOperation("chat.page");
     this.#status = "loading";
     this.#lastError = null;
     this.#publish();
     return this.#connection
       .runCommand(({ sync }) => foreign(() => sync.readChatPage({ beforeSequence: this.#messages[0]?.sequence, limit: MAX_CHAT_PAGE_SIZE })))
       .pipe(
-        Effect.tap((result) => Effect.sync(() => this.#applyPage(result))),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            this.#applyPage(result);
+            operation?.observe("observed", "page_visibility");
+            operation?.succeed();
+          }),
+        ),
         Effect.mapError((cause) => {
           const error = normalizeClientError(cause, "chat.payload_invalid");
           this.#status = "failed";
@@ -116,39 +143,78 @@ class ChatControllerRuntime implements ChatControllerEffects {
           this.#publish();
           return error;
         }),
+        Effect.tapError(() => Effect.sync(() => operation?.fail("page_failed"))),
       );
   };
 
-  markRead = (messageId: string): ClientEffect<ChatReadReceipt | null> =>
-    Effect.suspend(() => {
+  markRead = (messageId: string): ClientEffect<ChatReadReceipt | null> => {
+    const operation = this.#diagnostics?.startOperation("chat.read");
+    return Effect.suspend(() => {
       const message = this.#messages.find((candidate) => candidate.messageId === messageId);
-      if (!message) return Effect.succeed(null);
+      if (!message) {
+        operation?.notObservable("read_commit", "message_not_found");
+        operation?.succeed();
+        return Effect.succeed(null);
+      }
       this.#applyLocalReadThrough(message.sequence);
       const ports = this.#ports;
-      if (!ports || ports.sync.getCollaborationExtensionState().version !== 1) return Effect.succeed(null);
+      if (!ports || ports.sync.getCollaborationExtensionState().version !== 1) {
+        operation?.notObservable("read_commit", "collaboration_extension_unavailable");
+        operation?.succeed();
+        return Effect.succeed(null);
+      }
+      operation?.observe("observed", "read_commit");
       return this.#connection
         .runCommand(({ sync }) => foreign(() => sync.markChatRead(message.sequence)))
         .pipe(
           Effect.map(chatReceiptFor),
           Effect.tap((receipt) => Effect.sync(() => this.#mergeReceipt(receipt))),
+          Effect.tap(() => Effect.sync(() => operation?.succeed())),
           Effect.mapError(normalizeClientError),
+          Effect.tapError(() => Effect.sync(() => operation?.fail("read_failed"))),
         );
     });
+  };
 
-  upload = (file: ChatUploadFile): ClientEffect<ChatAttachment> =>
-    Effect.suspend(() => {
-      if (!this.#transport) return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file upload is unavailable" }));
+  upload = (file: ChatUploadFile): ClientEffect<ChatAttachment> => {
+    const prepareOperation = this.#diagnostics?.startOperation("chat.attachment.prepare");
+    return Effect.suspend(() => {
+      if (!this.#transport) {
+        prepareOperation?.fail("transport_unavailable");
+        return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file upload is unavailable" }));
+      }
       return bytesFor(file).pipe(
         Effect.flatMap((bytes) => {
           const clientAttachmentId = this.#connection.createId();
           return Effect.try({ try: () => validateUpload(file, bytes, clientAttachmentId), catch: normalizeClientError }).pipe(
+            Effect.tap(() => Effect.sync(() => prepareOperation?.observe("observed", "validation"))),
             Effect.flatMap((uploadFile) =>
               this.#connection.runPortCommand(() =>
                 foreign(() => this.#transport!.initiateUpload({ clientAttachmentId, fileName: uploadFile.fileName, mimeType: uploadFile.mimeType, byteLength: bytes.byteLength, sha256: chatDigest(bytes) })).pipe(
                   Effect.flatMap((upload) =>
-                    foreign(() => this.#fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
-                      Effect.flatMap((response) =>
-                        response.ok ? foreign(() => this.#transport!.finalizeUpload(upload.uploadId)) : Effect.fail(new SpaceClientError({ code: "command.rejected", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}` })),
+                    Effect.sync(() => {
+                      prepareOperation?.observe("observed", "storage_prepare");
+                      prepareOperation?.succeed();
+                    }).pipe(
+                      Effect.andThen(
+                        foreign(() => this.#fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
+                          Effect.flatMap((response) => {
+                            const commitOperation = this.#diagnostics?.startOperation("chat.attachment.commit");
+                            if (!response.ok) {
+                              commitOperation?.fail("storage_rejected");
+                              return Effect.fail(new SpaceClientError({ code: "command.rejected", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}` }));
+                            }
+                            return foreign(() => this.#transport!.finalizeUpload(upload.uploadId)).pipe(
+                              Effect.tap(() =>
+                                Effect.sync(() => {
+                                  commitOperation?.observe("observed", "storage_commit");
+                                  commitOperation?.succeed();
+                                }),
+                              ),
+                              Effect.tapError(() => Effect.sync(() => commitOperation?.fail("storage_commit_failed"))),
+                            );
+                          }),
+                        ),
                       ),
                     ),
                   ),
@@ -158,8 +224,17 @@ class ChatControllerRuntime implements ChatControllerEffects {
           );
         }),
         Effect.mapError(normalizeClientError),
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            prepareOperation?.fail("upload_failed");
+            const failureOperation = this.#diagnostics?.startOperation("chat.attachment.fail");
+            failureOperation?.observe("observed", "failure");
+            failureOperation?.succeed();
+          }),
+        ),
       );
     });
+  };
 
   url = (attachment: ChatAttachment): string => `${this.#apiBaseUrl}/v1/chat/attachments/${encodeURIComponent(attachment.attachmentId)}/download`;
   dispose(): void {

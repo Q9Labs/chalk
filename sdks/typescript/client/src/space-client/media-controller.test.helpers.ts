@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import type { CloudflareSFUSnapshot } from "../media";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { ConnectionError } from "../connection/types";
+import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import type { V1DirectedRequest } from "../sync";
 import { MediaControllerService, makeMediaController } from "./media-controller";
 import { MediaDeviceSelection } from "./media-device-selection";
@@ -10,7 +11,7 @@ import { SpaceStore } from "./store";
 
 type FakeConnectionState = "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
 
-export function createMediaControllerHarness() {
+export function createMediaControllerHarness(diagnostics?: EpisodeDiagnosticRuntime) {
   const connection = new FakeConnection();
   const media = new FakeMedia();
   const sync = new FakeSync(media);
@@ -32,7 +33,7 @@ export function createMediaControllerHarness() {
         return Effect.sync(() => clearTimeout(handle));
       }),
   });
-  const controllerLayer = Layer.effect(MediaControllerService, makeMediaController(connection as unknown as ConnectionLifecycleCapability, store, selection)).pipe(Layer.provide(clock)) as Layer.Layer<MediaControllerService, never>;
+  const controllerLayer = Layer.effect(MediaControllerService, makeMediaController(connection as unknown as ConnectionLifecycleCapability, store, selection, diagnostics)).pipe(Layer.provide(clock)) as Layer.Layer<MediaControllerService, never>;
   const runtime = ManagedRuntime.make(controllerLayer);
   const native = runtime.runSync(Effect.service(MediaControllerService));
   const controller = {

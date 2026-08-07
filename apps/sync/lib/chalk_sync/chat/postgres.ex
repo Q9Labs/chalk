@@ -296,6 +296,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
        ) do
     case select_idempotent(connection, identity, input.client_message_id) do
       nil ->
+        notify_attachment_commit_attempt(input)
+
         case lock_attachments(connection, identity, input.attachment_ids) do
           {:ok, attachments} ->
             append_new_message(
@@ -415,6 +417,13 @@ defmodule ChalkSync.Chat.Repository.Postgres do
              byte_length: byte_length
            }
          end)}
+    end
+  end
+
+  defp notify_attachment_commit_attempt(input) do
+    case Map.get(input, :attachment_commit_observer) do
+      observer when is_function(observer, 0) -> observer.()
+      _other -> :ok
     end
   end
 

@@ -1,3 +1,5 @@
+import { JOURNEY_HEADER, UUID_PATTERN, accountCookieName, csrfCookieName, forwardedContextHeaders, hasMatchingCsrfProof, readCookie, stripTokenFields, validJourneyID } from "./request-safety";
+
 export type AccountBoundaryEnv = {
   CHALK_API_ORIGIN: string;
 };
@@ -5,16 +7,11 @@ export type AccountBoundaryEnv = {
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const MAX_BODY_BYTES = 64 * 1024;
-const JOURNEY_HEADER = "x-chalk-journey-id";
-const TRACEPARENT_HEADER = "traceparent";
-const TRACESTATE_HEADER = "tracestate";
 const IDEMPOTENCY_HEADER = "idempotency-key";
 const RECENT_AUTH_HEADER = "x-chalk-recent-auth";
 const CSRF_HEADER = "x-chalk-csrf";
 const RECENT_AUTH_GOOGLE_MESSAGE = "chalk.recent-auth.google.complete";
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_SEGMENT_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
-const TRACEPARENT_PATTERN = /^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/i;
 
 type BoundaryRoute = {
   upstreamPath: string;
@@ -225,26 +222,21 @@ function validateMutationRequest(request: Request, url: URL): Response | undefin
   } catch {
     return errorResponse(403, "origin_mismatch", "A same-origin request is required");
   }
-  const cookieToken = readCookie(request.headers.get("cookie"), csrfCookieName(url));
-  const headerToken = request.headers.get(CSRF_HEADER)?.trim();
-  if (!cookieToken || !headerToken || !timingSafeEqual(cookieToken, headerToken)) {
+  if (!hasMatchingCsrfProof(request, csrfCookieName(url), CSRF_HEADER)) {
     return errorResponse(403, "csrf_mismatch", "CSRF validation failed");
   }
   return undefined;
 }
 
 function upstreamHeaders(request: Request, journeyID: string, accountToken?: string): Headers {
-  const headers = new Headers({ Accept: "application/json", [JOURNEY_HEADER]: journeyID });
+  const headers = forwardedContextHeaders(request, journeyID);
+  headers.set("Accept", "application/json");
   if (request.headers.get("content-type")) headers.set("Content-Type", "application/json");
   if (accountToken) headers.set("Authorization", `Bearer ${accountToken}`);
   const requestKey = request.headers.get(IDEMPOTENCY_HEADER);
   if (requestKey) headers.set("Idempotency-Key", requestKey);
   const recentAuth = request.headers.get(RECENT_AUTH_HEADER);
   if (recentAuth && recentAuth.length <= 2048 && !/[\r\n]/.test(recentAuth)) headers.set("X-Chalk-Recent-Auth", recentAuth);
-  const traceparent = request.headers.get(TRACEPARENT_HEADER);
-  if (traceparent && TRACEPARENT_PATTERN.test(traceparent)) headers.set(TRACEPARENT_HEADER, traceparent.toLowerCase());
-  const tracestate = request.headers.get(TRACESTATE_HEADER);
-  if (tracestate && tracestate.length <= 512 && !/[\r\n]/.test(tracestate)) headers.set(TRACESTATE_HEADER, tracestate);
   return headers;
 }
 
@@ -375,30 +367,8 @@ function clearCookie(name: string, url: URL, httpOnly: boolean): string {
   return serializeCookie(name, "", url, { httpOnly, sameSite: name.includes("csrf") ? "Strict" : "Lax", maxAge: 0, expires: new Date(0) });
 }
 
-function accountCookieName(url: URL): string {
-  return url.protocol === "https:" ? "__Host-chalk_account" : "chalk_account_local";
-}
-
-function csrfCookieName(url: URL): string {
-  return url.protocol === "https:" ? "__Host-chalk_csrf" : "chalk_csrf_local";
-}
-
 function oauthReturnCookieName(url: URL): string {
   return url.protocol === "https:" ? "__Host-chalk_oauth_return" : "chalk_oauth_return_local";
-}
-
-function readCookie(header: string | null, name: string): string | undefined {
-  for (const item of header?.split(";") ?? []) {
-    const [rawName, ...rest] = item.trim().split("=");
-    if (rawName === name) {
-      try {
-        return decodeURIComponent(rest.join("="));
-      } catch {
-        return undefined;
-      }
-    }
-  }
-  return undefined;
 }
 
 function safeReturnPath(value: string | null | undefined): string {
@@ -411,17 +381,6 @@ function randomToken(): string {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-function timingSafeEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return difference === 0;
-}
-
-function validJourneyID(value: string | null): string | undefined {
-  return value && UUID_PATTERN.test(value) ? value.toLowerCase() : undefined;
-}
-
 async function readJSONObject(response: Response): Promise<Record<string, unknown>> {
   try {
     const value: unknown = await response.json();
@@ -430,17 +389,6 @@ async function readJSONObject(response: Response): Promise<Record<string, unknow
     // The caller maps malformed upstream bodies to a stable boundary error.
   }
   return {};
-}
-
-function stripTokenFields(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripTokenFields);
-  if (!value || typeof value !== "object") return value;
-  const result: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (["session_token", "access_token", "refresh_token", "token"].includes(key.toLowerCase())) continue;
-    result[key] = stripTokenFields(child);
-  }
-  return result;
 }
 
 function sanitizeUser(value: Record<string, unknown>): Record<string, unknown> {

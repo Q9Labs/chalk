@@ -1,6 +1,6 @@
 import type { NativeParticipant as Participant } from "../ui/native-types";
 import { createNativeMediaStream, type NativeMediaStreamTrack } from "../media/native-webrtc";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Theme } from "../ui/theme";
 import { useNativeTheme } from "../ui/native-theme";
@@ -8,6 +8,7 @@ import { shouldRenderNativeMediaTrack } from "./native-media-visibility";
 import { FaceAvatar } from "./FaceAvatar";
 import { GradientSurface } from "./GradientSurface";
 import { hasRtcVideoView, RtcVideoView } from "./RtcVideoView";
+import { observeNativeFrameNotObservable } from "./episode-diagnostic-render-observer";
 
 export interface MediaViewProps {
   participant: Participant | null;
@@ -35,6 +36,10 @@ export function MediaView({ participant, track, mediaKind = "camera", label, mir
   const name = participant?.displayName?.trim() || label || "Participant";
   const showStream = Boolean(stream && canRenderPreview);
   const streamURL = showStream && stream ? stream.toURL() : null;
+
+  useEffect(() => {
+    if (shouldRenderVideo && track) observeNativeFrameNotObservable(track);
+  }, [shouldRenderVideo, track]);
 
   return (
     <View style={[styles.surface, { backgroundColor: theme.colors.stageBackground }]}>

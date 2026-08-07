@@ -3,6 +3,7 @@ import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
 import { Spinner, ParticipantTile } from "../atomic";
 import type { Participant } from "../participant-grid/ParticipantGrid";
+import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
 
 export interface ScreenShareViewProps {
   screenShareTrack: MediaStreamTrack;
@@ -111,12 +112,13 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
   const handleVideoLoaded = useCallback(() => {
     setIsLoading(false);
     if (videoRef.current) {
+      observeFirstRenderedFrame(videoRef.current, screenShareTrack);
       setVideoSize({
         width: videoRef.current.videoWidth,
         height: videoRef.current.videoHeight,
       });
     }
-  }, []);
+  }, [screenShareTrack]);
 
   // Reset pan when zoom resets
   useEffect(() => {

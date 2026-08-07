@@ -34,6 +34,15 @@ describe("access grant parsing", () => {
 
     expect(JSON.parse(JSON.stringify(grant))).toEqual(wire);
   });
+
+  it("binds a diagnostic credential to the participant generation", () => {
+    const wire = { ...accessWire(), diagnostics: { token: diagnosticJwt(), expires_at: "2026-07-21T12:05:00.000Z", generation: 3, intake_path: "/_internal/episode-diagnostic-events" } };
+    const parsed = parseParsedAccessGrant(wire);
+
+    expect(parsed.diagnostics).toMatchObject({ generation: 3, intakePath: "/_internal/episode-diagnostic-events" });
+    expect(JSON.parse(JSON.stringify(parseAccessGrant(wire)))).toEqual(wire);
+    expect(parseParsedAccessGrant({ ...wire, diagnostics: { ...wire.diagnostics, generation: 4 } }).diagnostics).toBeNull();
+  });
 });
 
 function accessWire() {
@@ -43,4 +52,8 @@ function accessWire() {
     sync: { token: jwt("chalk-sync"), expires_at: "2026-07-21T12:05:00.000Z" },
     media: { token: jwt("chalk-media"), expires_at: "2026-07-21T12:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "c", stunServer: "stun:test" } },
   } as const;
+}
+
+function diagnosticJwt(): string {
+  return `${btoa("header")}.${btoa(JSON.stringify({ aud: "chalk-diagnostics" }))}.signature`;
 }

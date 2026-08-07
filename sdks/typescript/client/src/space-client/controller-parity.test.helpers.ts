@@ -7,6 +7,7 @@ import type { V1Capability, V1ControlState, V1EpisodeSnapshot, V1Participant } f
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import { makeParticipantsController, ParticipantsControllerService } from "./participants-controller";
 import { makeReactionsController, ReactionsControllerService } from "./reactions-controller";
+import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { SpaceStore } from "./store";
 import { makeWhiteboardController, WhiteboardControllerService } from "./whiteboard-controller";
 
@@ -41,14 +42,14 @@ export class ControllerHarness {
     } as unknown as ConnectionLifecycleCapability;
   }
 
-  participants() {
-    const runtime = ManagedRuntime.make(Layer.effect(ParticipantsControllerService, makeParticipantsController(this.connection, this.store)) as Layer.Layer<ParticipantsControllerService, never>);
+  participants(diagnostics?: EpisodeDiagnosticRuntime) {
+    const runtime = ManagedRuntime.make(Layer.effect(ParticipantsControllerService, makeParticipantsController(this.connection, this.store, diagnostics)) as Layer.Layer<ParticipantsControllerService, never>);
     runtimes.push(runtime as ManagedRuntime.ManagedRuntime<never, never>);
     return { runtime, controller: runtime.runSync(Effect.service(ParticipantsControllerService)) };
   }
 
-  reactions() {
-    const runtime = ManagedRuntime.make(Layer.effect(ReactionsControllerService, makeReactionsController(this.connection, this.store)).pipe(Layer.provideMerge(TestClock.layer({ warningDelay: "1 hour" }))) as Layer.Layer<ReactionsControllerService, never>);
+  reactions(diagnostics?: EpisodeDiagnosticRuntime) {
+    const runtime = ManagedRuntime.make(Layer.effect(ReactionsControllerService, makeReactionsController(this.connection, this.store, diagnostics)).pipe(Layer.provideMerge(TestClock.layer({ warningDelay: "1 hour" }))) as Layer.Layer<ReactionsControllerService, never>);
     runtimes.push(runtime as ManagedRuntime.ManagedRuntime<never, never>);
     return { runtime, controller: runtime.runSync(Effect.service(ReactionsControllerService)) };
   }

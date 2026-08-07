@@ -98,7 +98,7 @@ func TestJourneyEventIntakeAcceptsValidEpisodeBearer(t *testing.T) {
 func TestJourneyEventIntakeRejectsArbitraryBearer(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Options{
 		Authentication: authenticationService{
-			authenticateSession: func(_ context.Context, token string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(_ context.Context, token string) (authentication.SessionUser, error) {
 				if token != "arbitrary-token" {
 					t.Fatalf("token = %q, want arbitrary token", token)
 				}
@@ -152,7 +152,7 @@ func TestJourneyEventIntakeAcceptsBearerSessionWithEpisodeVerifier(t *testing.T)
 			verify: func(context.Context, string) error { return mediaplane.ErrCredentialNotApplicable },
 		},
 		Authentication: authenticationService{
-			authenticateSession: func(_ context.Context, token string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(_ context.Context, token string) (authentication.SessionUser, error) {
 				if token != "session-token" {
 					t.Fatalf("token = %q, want session token", token)
 				}
@@ -200,7 +200,7 @@ func TestJourneyEventIntakeMapsEpisodeVerifierFailureSafely(t *testing.T) {
 func TestJourneyEventIntakeAcceptsAuthenticatedSessionCookie(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Options{
 		Authentication: authenticationService{
-			authenticateSession: func(_ context.Context, token string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(_ context.Context, token string) (authentication.SessionUser, error) {
 				if token != "session-token" {
 					t.Fatalf("token = %q, want session token", token)
 				}
@@ -234,7 +234,7 @@ func TestJourneyEventIntakeRateLimitDoesNotExhaustAuthenticatedWrites(t *testing
 			Now:     func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC) },
 		},
 		Authentication: authenticationService{
-			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return authSessionUser(t), nil
 			},
 		},
@@ -376,7 +376,7 @@ func TestLocalJourneyLedgerRequiresSystemPrincipal(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Options{
 		LocalTelemetry: true,
 		Authentication: authenticationService{
-			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return authentication.SessionUser{Session: authentication.Session{
 					ID:     mustJourneyID(t, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
 					UserID: mustJourneyID(t, "cccccccc-cccc-4ccc-8ccc-cccccccccccc"),

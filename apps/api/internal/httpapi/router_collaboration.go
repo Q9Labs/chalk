@@ -4,7 +4,7 @@ import "github.com/go-chi/chi/v5"
 
 func mountSpaceEpisodeRoutes(r chi.Router, options Options) {
 	mountSpaceRoutes(r, options.Spaces, options.TenantAuthz, options.RateLimit)
-	mountEpisodeLifecycleRoutes(r, options.Spaces, options.Tenants, options.Episodes, options.SyncTokens, options.SyncTokenRefresh, options.ParticipantMediaIssuer, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.ParticipantGeneration, options.MediaPlane, options.TenantAuthz, options.RateLimit)
+	mountEpisodeLifecycleRoutes(r, options.Spaces, options.Tenants, options.Episodes, options.SyncTokens, options.SyncTokenRefresh, options.ParticipantMediaIssuer, options.ParticipantDiagnostics, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.ParticipantGeneration, options.MediaPlane, options.TenantAuthz, options.RateLimit)
 }
 
 func mountLiveParticipantRoutes(r chi.Router, options Options) {

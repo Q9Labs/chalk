@@ -4,6 +4,7 @@ import { MicrophoneOff01Icon, Monitor01Icon, HandIcon, WifiOffIcon } from "../..
 import { Avatar } from "../atomic/Avatar";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
 
 export interface ParticipantTileProps {
   participant: {
@@ -125,7 +126,8 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
 
   const handleVideoLoaded = useCallback(() => {
     setIsLoaded(true);
-  }, []);
+    if (videoRef.current && videoTrack) observeFirstRenderedFrame(videoRef.current, videoTrack);
+  }, [videoTrack]);
 
   const isTrackValid = isTrackUsable(videoTrack);
   const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError && isLoaded;

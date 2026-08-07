@@ -18,7 +18,7 @@ func TestEpisodeLifecycleRouteContractUsesPluralEpisodeSurface(t *testing.T) {
 		"endEpisode":                       http.MethodPost + " /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end",
 	}
 	seen := make(map[string]bool)
-	for _, endpoint := range episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil) {
+	for _, endpoint := range episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil) {
 		contract := endpoint.RouteContract()
 		key := contract.OperationID
 		if want[key] != contract.Method+" "+contract.Path {

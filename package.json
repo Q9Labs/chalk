@@ -53,6 +53,8 @@
     "gate:explain": "sed -n '1,240p' scripts/gates/README.md",
     "language:ratchet": "node tools/language-ratchet/src/cli.mjs",
     "language:ratchet:update": "node tools/language-ratchet/src/cli.mjs --update",
+    "trace:inspect": "node tools/episode-diagnostics/src/cli.mjs",
+    "episode-diagnostics:browser-proof": "node tools/episode-diagnostics/src/browser-proof.mjs",
     "generate:openapi": "bash apps/api/scripts/generate-openapi.sh && pnpm run generate:api-design",
     "generate:api-design": "node scripts/api-design/generate-canonical-openapi.mjs",
     "test:membership-role-migration": "bash apps/api/scripts/membership-role-migration-test.sh",

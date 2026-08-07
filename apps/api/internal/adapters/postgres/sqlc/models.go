@@ -92,6 +92,257 @@ type AuthIdentity struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type DiagnosticBranch struct {
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID     pgtype.UUID        `json:"diagnostic_id"`
+	ID               pgtype.UUID        `json:"id"`
+	Kind             string             `json:"kind"`
+	State            string             `json:"state"`
+	LeaseEndsAt      pgtype.Timestamptz `json:"lease_ends_at"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	TerminalAt       pgtype.Timestamptz `json:"terminal_at"`
+	TerminalCursor   pgtype.Int8        `json:"terminal_cursor"`
+	Attempts         int32              `json:"attempts"`
+	FanInChildren    []byte             `json:"fan_in_children"`
+	LateObservations int32              `json:"late_observations"`
+	UnknownReason    pgtype.Text        `json:"unknown_reason"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type DiagnosticCheckpoint struct {
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID   pgtype.UUID        `json:"diagnostic_id"`
+	OperationID    pgtype.UUID        `json:"operation_id"`
+	CheckpointKey  string             `json:"checkpoint_key"`
+	Class          string             `json:"class"`
+	DisplayOrder   int32              `json:"display_order"`
+	DeadlineAt     pgtype.Timestamptz `json:"deadline_at"`
+	State          string             `json:"state"`
+	EvidenceCursor pgtype.Int8        `json:"evidence_cursor"`
+	UnknownReason  pgtype.Text        `json:"unknown_reason"`
+	Predicate      pgtype.Text        `json:"predicate"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type DiagnosticEnvironmentOwnership struct {
+	ID          int16              `json:"id"`
+	Environment string             `json:"environment"`
+	ClaimedAt   pgtype.Timestamptz `json:"claimed_at"`
+}
+
+type DiagnosticEvent struct {
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID               pgtype.UUID        `json:"diagnostic_id"`
+	Cursor                     int64              `json:"cursor"`
+	EventID                    string             `json:"event_id"`
+	EventFingerprint           string             `json:"event_fingerprint"`
+	EventVersion               int16              `json:"event_version"`
+	OperationID                pgtype.UUID        `json:"operation_id"`
+	ProducerOperationRef       pgtype.Text        `json:"producer_operation_ref"`
+	ParentProducerOperationRef pgtype.Text        `json:"parent_producer_operation_ref"`
+	ParticipantID              pgtype.UUID        `json:"participant_id"`
+	Source                     string             `json:"source"`
+	Name                       string             `json:"name"`
+	Phase                      string             `json:"phase"`
+	State                      string             `json:"state"`
+	ExpectationName            pgtype.Text        `json:"expectation_name"`
+	ExpectationVersion         pgtype.Int4        `json:"expectation_version"`
+	CheckpointKey              pgtype.Text        `json:"checkpoint_key"`
+	CheckpointClass            pgtype.Text        `json:"checkpoint_class"`
+	DeadlineAt                 pgtype.Timestamptz `json:"deadline_at"`
+	JourneyID                  pgtype.Text        `json:"journey_id"`
+	TraceID                    pgtype.Text        `json:"trace_id"`
+	SpanID                     pgtype.Text        `json:"span_id"`
+	RequestID                  pgtype.Text        `json:"request_id"`
+	CommandID                  pgtype.Text        `json:"command_id"`
+	ProviderID                 pgtype.Text        `json:"provider_id"`
+	RetryGroupRef              pgtype.Text        `json:"retry_group_ref"`
+	Attempt                    pgtype.Int4        `json:"attempt"`
+	ReleaseID                  pgtype.Text        `json:"release_id"`
+	SourceCommit               pgtype.Text        `json:"source_commit"`
+	OccurredAt                 pgtype.Timestamptz `json:"occurred_at"`
+	ReceivedAt                 pgtype.Timestamptz `json:"received_at"`
+	ProducerSequence           int64              `json:"producer_sequence"`
+	SafeAttributes             []byte             `json:"safe_attributes"`
+}
+
+type DiagnosticExportArtifactChunk struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID pgtype.UUID        `json:"diagnostic_id"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	PartIndex    int32              `json:"part_index"`
+	Payload      []byte             `json:"payload"`
+	Checksum     string             `json:"checksum"`
+	ByteSize     int64              `json:"byte_size"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type DiagnosticExportJob struct {
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID        pgtype.UUID        `json:"diagnostic_id"`
+	ID                  pgtype.UUID        `json:"id"`
+	State               string             `json:"state"`
+	CursorFrom          int64              `json:"cursor_from"`
+	CursorTo            pgtype.Int8        `json:"cursor_to"`
+	LeaseToken          pgtype.UUID        `json:"lease_token"`
+	LeaseOwner          pgtype.Text        `json:"lease_owner"`
+	LeaseEndsAt         pgtype.Timestamptz `json:"lease_ends_at"`
+	OperatorSubjectHash string             `json:"operator_subject_hash"`
+	JourneyID           pgtype.UUID        `json:"journey_id"`
+	TraceID             pgtype.Text        `json:"trace_id"`
+	SpanID              pgtype.Text        `json:"span_id"`
+	DownloadExpiresAt   pgtype.Timestamptz `json:"download_expires_at"`
+	Manifest            []byte             `json:"manifest"`
+	ProcessedEvents     int64              `json:"processed_events"`
+	TotalEvents         pgtype.Int8        `json:"total_events"`
+	CurrentCursor       pgtype.Int8        `json:"current_cursor"`
+	ErrorReason         pgtype.Text        `json:"error_reason"`
+	ObjectKey           pgtype.Text        `json:"object_key"`
+	ArtifactPayload     []byte             `json:"artifact_payload"`
+	ArtifactContentType pgtype.Text        `json:"artifact_content_type"`
+	ArtifactChecksum    pgtype.Text        `json:"artifact_checksum"`
+	ArtifactSize        pgtype.Int8        `json:"artifact_size"`
+	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DiagnosticIssue struct {
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID            pgtype.UUID        `json:"diagnostic_id"`
+	ID                      pgtype.UUID        `json:"id"`
+	OperationID             pgtype.UUID        `json:"operation_id"`
+	Kind                    string             `json:"kind"`
+	Severity                string             `json:"severity"`
+	State                   string             `json:"state"`
+	Summary                 string             `json:"summary"`
+	AffectedKind            pgtype.Text        `json:"affected_kind"`
+	AffectedIDClass         pgtype.Text        `json:"affected_id_class"`
+	AffectedIDValue         pgtype.Text        `json:"affected_id_value"`
+	AffectedIDCopyable      pgtype.Bool        `json:"affected_id_copyable"`
+	LastConfirmedCheckpoint pgtype.Text        `json:"last_confirmed_checkpoint"`
+	MissingCheckpoint       pgtype.Text        `json:"missing_checkpoint"`
+	FirstObservedAt         pgtype.Timestamptz `json:"first_observed_at"`
+	LastObservedAt          pgtype.Timestamptz `json:"last_observed_at"`
+	ResolvedAt              pgtype.Timestamptz `json:"resolved_at"`
+	RetryState              pgtype.Text        `json:"retry_state"`
+	UnknownReason           pgtype.Text        `json:"unknown_reason"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
+type DiagnosticOperation struct {
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID               pgtype.UUID        `json:"diagnostic_id"`
+	ID                         pgtype.UUID        `json:"id"`
+	ParentID                   pgtype.UUID        `json:"parent_id"`
+	BranchID                   pgtype.UUID        `json:"branch_id"`
+	ParticipantID              pgtype.UUID        `json:"participant_id"`
+	ProducerOperationRef       pgtype.Text        `json:"producer_operation_ref"`
+	ParentProducerOperationRef pgtype.Text        `json:"parent_producer_operation_ref"`
+	Kind                       string             `json:"kind"`
+	ExpectationVersion         int32              `json:"expectation_version"`
+	State                      string             `json:"state"`
+	RetryGroupID               pgtype.UUID        `json:"retry_group_id"`
+	RetryGroupRef              pgtype.Text        `json:"retry_group_ref"`
+	Attempt                    int32              `json:"attempt"`
+	StartedAt                  pgtype.Timestamptz `json:"started_at"`
+	DeadlineAt                 pgtype.Timestamptz `json:"deadline_at"`
+	GraceEndsAt                pgtype.Timestamptz `json:"grace_ends_at"`
+	EndedAt                    pgtype.Timestamptz `json:"ended_at"`
+	ErrorClass                 pgtype.Text        `json:"error_class"`
+	Source                     string             `json:"source"`
+	ReleaseID                  pgtype.Text        `json:"release_id"`
+	SourceCommit               pgtype.Text        `json:"source_commit"`
+	RequestID                  pgtype.Text        `json:"request_id"`
+	CommandID                  pgtype.Text        `json:"command_id"`
+	ProviderID                 pgtype.Text        `json:"provider_id"`
+	JourneyID                  pgtype.Text        `json:"journey_id"`
+	TraceID                    pgtype.Text        `json:"trace_id"`
+	SpanID                     pgtype.Text        `json:"span_id"`
+	ClockUncertainty           pgtype.Text        `json:"clock_uncertainty"`
+	VisibilityGaps             []byte             `json:"visibility_gaps"`
+	FirstEvidenceCursor        int64              `json:"first_evidence_cursor"`
+	LastEvidenceCursor         pgtype.Int8        `json:"last_evidence_cursor"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+}
+
+type DiagnosticParticipantProjection struct {
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID          pgtype.UUID        `json:"diagnostic_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	JoinedAt              pgtype.Timestamptz `json:"joined_at"`
+	LeftAt                pgtype.Timestamptz `json:"left_at"`
+	LatestLifecycleCursor int64              `json:"latest_lifecycle_cursor"`
+	LatestLifecycleName   string             `json:"latest_lifecycle_name"`
+	LatestLifecycleState  string             `json:"latest_lifecycle_state"`
+	OperationCount        int64              `json:"operation_count"`
+	IssueCount            int64              `json:"issue_count"`
+	FirstObservedAt       pgtype.Timestamptz `json:"first_observed_at"`
+	LastObservedAt        pgtype.Timestamptz `json:"last_observed_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DiagnosticProjectionChange struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID  pgtype.UUID        `json:"diagnostic_id"`
+	Cursor        int64              `json:"cursor"`
+	Ordinal       int32              `json:"ordinal"`
+	Kind          string             `json:"kind"`
+	EntityType    pgtype.Text        `json:"entity_type"`
+	EntityID      pgtype.Text        `json:"entity_id"`
+	Payload       []byte             `json:"payload"`
+	SchemaVersion string             `json:"schema_version"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type DiagnosticProjectorDeadLetter struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID pgtype.UUID        `json:"diagnostic_id"`
+	ID           pgtype.UUID        `json:"id"`
+	EventCursor  int64              `json:"event_cursor"`
+	EventID      pgtype.Text        `json:"event_id"`
+	ErrorClass   string             `json:"error_class"`
+	ErrorReason  string             `json:"error_reason"`
+	AttemptCount int32              `json:"attempt_count"`
+	State        string             `json:"state"`
+	ReplayedAt   pgtype.Timestamptz `json:"replayed_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DiagnosticProjectorOffset struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID    pgtype.UUID        `json:"diagnostic_id"`
+	ProjectedCursor int64              `json:"projected_cursor"`
+	LeaseToken      pgtype.UUID        `json:"lease_token"`
+	LeaseOwner      pgtype.Text        `json:"lease_owner"`
+	LeaseUntil      pgtype.Timestamptz `json:"lease_until"`
+	FailureCount    int32              `json:"failure_count"`
+	LastErrorClass  pgtype.Text        `json:"last_error_class"`
+	LastErrorAt     pgtype.Timestamptz `json:"last_error_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DiagnosticReference struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID  pgtype.UUID        `json:"diagnostic_id"`
+	ReferenceID   pgtype.UUID        `json:"reference_id"`
+	IDClass       string             `json:"id_class"`
+	RawValue      pgtype.Text        `json:"raw_value"`
+	HmacVersion   pgtype.Text        `json:"hmac_version"`
+	ValueHmac     pgtype.Text        `json:"value_hmac"`
+	Copyable      bool               `json:"copyable"`
+	UnknownReason pgtype.Text        `json:"unknown_reason"`
+	EventCursor   pgtype.Int8        `json:"event_cursor"`
+	OperationID   pgtype.UUID        `json:"operation_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type Episode struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Status             string             `json:"status"`
@@ -116,6 +367,34 @@ type EpisodeCreateRequest struct {
 	RequestFingerprint []byte             `json:"request_fingerprint"`
 	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type EpisodeDiagnostic struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	Environment           string             `json:"environment"`
+	State                 string             `json:"state"`
+	EpisodeStartedAt      pgtype.Timestamptz `json:"episode_started_at"`
+	EpisodeEndedAt        pgtype.Timestamptz `json:"episode_ended_at"`
+	EpilogueCompletedAt   pgtype.Timestamptz `json:"epilogue_completed_at"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	RunEndCursor          pgtype.Int8        `json:"run_end_cursor"`
+	CommittedCursor       int64              `json:"committed_cursor"`
+	ConfigSnapshot        []byte             `json:"config_snapshot"`
+	RetentionClaimToken   pgtype.UUID        `json:"retention_claim_token"`
+	RetentionClaimedUntil pgtype.Timestamptz `json:"retention_claimed_until"`
+	RetentionAttempts     int32              `json:"retention_attempts"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type EpisodeDiagnosticCursorHead struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	DiagnosticID    pgtype.UUID        `json:"diagnostic_id"`
+	CommittedCursor int64              `json:"committed_cursor"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Identity struct {

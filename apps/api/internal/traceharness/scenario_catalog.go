@@ -55,6 +55,7 @@ const (
 	RouteEpisodeDeadlineScenario          = "route:episode-deadline"
 	RouteRecordingTranscribeScenario      = "route:recording-transcribe"
 	RouteJourneyEventIntakeScenario       = "route:telemetry-journey-event-intake"
+	ServiceEpisodeDiagnosticsScenario     = "service:episode-diagnostics"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
 	PolicyTenantAPIKeyScopeScenario = "policy:tenant-api-key-scope"
@@ -108,6 +109,7 @@ func ScenarioNames() []string {
 		RouteEpisodeDeadlineScenario,
 		RouteRecordingTranscribeScenario,
 		RouteJourneyEventIntakeScenario,
+		ServiceEpisodeDiagnosticsScenario,
 		RouteChatAttachmentUploadScenario,
 		RouteWhiteboardFileUploadScenario,
 		RouteAPIKeyCustomerFlowScenario,

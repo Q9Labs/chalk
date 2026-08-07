@@ -14,6 +14,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added the public `@chalk/diagnostics-contracts@0.1.0` package for shared,
+  versioned Episode Diagnostics validators, schemas, and fixtures. Publish it
+  before `@q9labsai/chalk-client`, then publish `@q9labsai/chalk-react`; this
+  manual order keeps the client's public runtime dependency resolvable.
+
 - Added six labeled Home and Entrance mobile inspiration studies, including cardless, illustrated, bottom-sheet, and preview-first directions.
 
 - Added a development-only, URL-addressable SDK state gallery for the Entrance and Space, including loading, waiting, empty, warning, retry, confirmation, timeout, failure, recovery, and ended states built from production React SDK components.
@@ -29,6 +34,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the first fixture-backed Chalk dashboard slice in `apps/web`, with a responsive general-product shell, Home and Spaces routes, the New Space dialog, and routed foundations for Episodes, Artifacts, People, Developer, Activity, Tenant settings, and Account.
 
 - Added the dashboard Account/Tenant foundation: self-scoped Tenant discovery, atomic idempotent owner onboarding, a hardened same-origin account boundary, sign-in and sign-up, resumable Tenant selection, Account and Tenant reads, generated client contracts, trace proof, and public boundary monitoring.
+
+- Added an account- and Tenant-scoped Episode Diagnostics debugger for
+  localhost and staging, with bounded SDK, Sync, and API evidence; redacted
+  snapshots, projections, streams, and exports; web and CLI inspection tools;
+  W3C journey correlation; and a safe capacity harness. Hosted enablement and
+  deployment remain manual.
 
 - Added the framework-neutral `SpaceClient` with one stable `SpaceSnapshot`
   store, typed events, opaque `AccessGrant` refresh, and namespaced media,

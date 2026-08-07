@@ -1,3 +1,6 @@
+import { parseEpisodeDiagnosticCredential, type EpisodeDiagnosticCredential } from "./episode-diagnostic-credential";
+import { decodeBase64Url } from "./base64-url";
+
 declare const syncCredentialBrand: unique symbol;
 declare const mediaCredentialBrand: unique symbol;
 const accessGrantBrand: unique symbol = Symbol("AccessGrant");
@@ -32,6 +35,7 @@ export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
   readonly sync: ParticipantSyncAccess;
   readonly media: ParticipantMediaAccess;
+  readonly diagnostics?: EpisodeDiagnosticCredential | null;
 };
 
 /** Opaque signed envelope minted by the server SDK and consumed by SpaceClient. */
@@ -50,10 +54,13 @@ export class AccessGrantError extends TypeError {
 
 export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
   if (!isRecord(value)) throw new AccessGrantError();
+  const subject = parseSubject(value.subject);
+  const diagnostics = parseEpisodeDiagnosticCredential(value.diagnostics);
   return {
-    subject: parseSubject(value.subject),
+    subject,
     sync: parseSyncAccess(value.sync),
     media: parseMediaAccess(value.media),
+    diagnostics: diagnostics?.generation === subject.participantGeneration ? diagnostics : null,
   };
 }
 
@@ -77,6 +84,16 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
       provider: value.media.provider,
       client_payload: { ...value.media.clientPayload },
     },
+    ...(value.diagnostics
+      ? {
+          diagnostics: {
+            token: value.diagnostics.token,
+            expires_at: value.diagnostics.expiresAt,
+            generation: value.diagnostics.generation,
+            intake_path: value.diagnostics.intakePath,
+          },
+        }
+      : {}),
     [accessGrantBrand]: "AccessGrant" as const,
   });
 }
@@ -161,21 +178,12 @@ function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media
 
   let payload: unknown;
   try {
-    payload = JSON.parse(decodeBase64URL(segments[1] ?? ""));
+    payload = JSON.parse(decodeBase64Url(segments[1] ?? ""));
   } catch {
     throw new AccessGrantError();
   }
   if (!isRecord(payload) || payload.aud !== audience) throw new AccessGrantError();
   return token;
-}
-
-function decodeBase64URL(value: string): string {
-  const base64 = value
-    .replaceAll("-", "+")
-    .replaceAll("_", "/")
-    .padEnd(Math.ceil(value.length / 4) * 4, "=");
-  const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
 }
 
 function requireDateTime(value: unknown): string {

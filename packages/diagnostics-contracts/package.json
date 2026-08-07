@@ -1,0 +1,60 @@
+{
+  "name": "@chalk/diagnostics-contracts",
+  "version": "0.1.0",
+  "description": "Versioned, redaction-safe contracts for Chalk episode diagnostics.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "packages/diagnostics-contracts"
+  },
+  "files": [
+    "dist",
+    "agent-brief.v1.schema.json",
+    "diagnostic-event.v1.schema.json",
+    "episode-diagnostic-actions.v1.json",
+    "safe-id-classes.v1.json",
+    "safe-id-classes.v1.schema.json",
+    "fixtures/action-failure.v1.json",
+    "fixtures/action-success.v1.json",
+    "fixtures/agent-brief-parity.v1.json",
+    "fixtures/redaction-corpus.v1.json",
+    "fixtures/semantic-events.v1.json",
+    "fixtures/verification-ledger.v1.json"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schemas/*": "./*.json",
+    "./fixtures/*": "./fixtures/*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "rm -rf ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform node --no-splitting && pnpm run build:types",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "check-types": "tsc --noEmit",
+    "test": "pnpm exec vitest run",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
+    "fixtures:generate": "pnpm exec tsx scripts/generate-semantic-fixtures.ts",
+    "fixtures:check": "pnpm exec tsx scripts/generate-semantic-fixtures.ts --check",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.7.2"
+  }
+}

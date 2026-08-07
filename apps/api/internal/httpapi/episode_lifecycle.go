@@ -211,20 +211,20 @@ type externalOperationResponse struct {
 	CreatedAt                   string  `json:"created_at"`
 }
 
-func mountEpisodeLifecycleRoutes(r chi.Router, spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range episodeLifecycleEndpoints(spacesService, tenantsService, lifecycle, tokens, refresh, mediaTokens, mediaVerifier, active, generations, media, authorizer) {
+func mountEpisodeLifecycleRoutes(r chi.Router, spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range episodeLifecycleEndpoints(spacesService, tenantsService, lifecycle, tokens, refresh, mediaTokens, diagnosticsTokens, mediaVerifier, active, generations, media, authorizer) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
+func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createEpisodeEndpoint(lifecycle, authorizer),
 		listEpisodesEndpoint(lifecycle, authorizer),
 		getEpisodeEndpoint(lifecycle, authorizer),
-		admitParticipantEndpoint(lifecycle, tokens, refresh, mediaTokens, spacesService, tenantsService, media, authorizer),
+		admitParticipantEndpoint(lifecycle, tokens, refresh, mediaTokens, diagnosticsTokens, spacesService, tenantsService, media, authorizer),
 		issueSyncTokenEndpoint(refresh, authorizer),
-		issueAccessGrantEndpoint(refresh, mediaTokens, mediaVerifier, active, generations, spacesService, tenantsService, media, authorizer),
+		issueAccessGrantEndpoint(refresh, mediaTokens, diagnosticsTokens, mediaVerifier, active, generations, spacesService, tenantsService, media, authorizer),
 		removeParticipantEndpoint(lifecycle, authorizer),
 		setDeadlineEndpoint(lifecycle, authorizer),
 		endEpisodeEndpoint(lifecycle, authorizer),
@@ -312,7 +312,7 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
-func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
+func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return participantLifecycleResponse{}, err
@@ -364,6 +364,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 			}
 			response.Access = func() *accessGrantResponse {
 				grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+				attachDiagnosticsCredential(ctx, &grant, diagnosticsTokens, subject)
 				return &grant
 			}()
 		}

@@ -21,6 +21,7 @@ config :chalk_sync,
   token_audience: nil,
   token_issuer: nil,
   token_public_keys: %{},
+  episode_diagnostics: %{mode: :off},
   observability: [enabled: false, runtime_health_interval_ms: 30_000]
 
 config :opentelemetry, traces_exporter: :none

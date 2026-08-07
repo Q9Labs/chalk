@@ -54,7 +54,31 @@ vocabulary.
 
 ## Evidence sources
 
-Treat both worktrees as read-only throughout Wave 8.
+Treat both worktrees and the dirty main checkout as read-only throughout Wave 8. Inventory and adapt their valuable behavior into the isolated target; never
+clean or overwrite an evidence source.
+
+### Dirty local master checkout
+
+- Checkout: `/Users/macmini/code/chalk`
+- Branch/head: `master` at `e45395e1875b692e7cc620ab8b52423d0b79bda9`
+- Repository configuration: bare Git directory with an explicit work tree;
+  inspect it with `--git-dir=.git --work-tree=.` and never assume normal
+  checkout mutation is safe.
+- State at Wave 8 inventory: 7 tracked modifications and 93 untracked files
+  when enumerated file-by-file.
+- Audited tracked binary-diff SHA-256:
+  `37759560bbb6b6670cb49f1f9f95149f8ac7d0145b04170b650c4d769d391e39`.
+- Audited sorted untracked-path-list SHA-256:
+  `84d0c0966d645ce7c98779767278f00f5a7d96a23fb64c5cef2ad76681445d6b`.
+- Audited sorted untracked content-manifest SHA-256:
+  `a4b91d28bf8dadcc6e335bc2c26188b008ea6acdafc54e63ccd8e0f8df2c0d3d`.
+- Preserve the unique Tenant-onboarding test database export, canonically
+  rewritten launch-readiness and journey-correlation notes, and the 12-image
+  canonical mobile SDK mockup set with its index.
+- Do not copy the stale join atlas or store listing, private mobile snapshot,
+  raw scratchpad repro material, compile-breaking imports, or older debugger
+  files. Their useful behaviors are already covered by canonical target tests
+  or later target fixes.
 
 ### Dashboard completion
 
@@ -92,8 +116,9 @@ changed since this audit, stop extraction until the new state is inventoried.
 
 ## Target topology
 
-1. Create a new isolated Wave 8 worktree and branch from the then-current local
-   `master`. Record its exact tip.
+1. Inventory the dirty local `master` checkout, then create a new isolated Wave
+   8 worktree and branch from its committed tip. Record the exact tip and
+   evidence hashes without modifying the dirty checkout.
 2. Merge the final verified Waves 1–7 integration tip into that branch. Resolve
    conflicts in favor of the glossary and canonical package-owned behavior.
    Do not choose an old side wholesale for React, React Native, web routes,
@@ -116,6 +141,8 @@ changed since this audit, stop extraction until the new state is inventoried.
 Preserve and adapt:
 
 - Dashboard Account and Tenant access onboarding and switching.
+- Main-checkout Tenant-onboarding test wiring, canonically rewritten planning
+  and debugging lessons, and unique canonical mobile SDK design evidence.
 - Space list/create/edit/archive/restore workflows.
 - Episode list/detail/start/end and Participant history workflows.
 - API-key list/create/reveal-once/rotate/revoke, recent-auth, audit logs,
@@ -130,6 +157,8 @@ Do not port:
 
 - copied Wave 2 client/session implementations already replaced by
   `src/access`, `src/connection`, and final `SpaceClient` controllers;
+- stale main-checkout join atlas/store copy, private mobile snapshots, raw
+  scratchpad repro material, and older duplicate debugger implementations;
 - `VideoConference`, `ConferenceView`, `PreJoinScreen`, `Room`,
   `ChalkSession`, `ParticipantAccess`, host/admin built-in roles, or any
   compatibility alias for them;
@@ -212,7 +241,7 @@ up behavior plus post-migration queries before declaring the wave complete.
 
 - Local `master` contains the verified Waves 1–8 result and all valuable local
   master/dashboard/debugger behavior.
-- Neither evidence worktree was modified.
+- Neither evidence worktree nor the dirty main checkout was modified.
 - No legacy product alias or banned product vocabulary remains outside explicit
   historical, glossary, ratchet, or negative-compatibility fixtures.
 - Migrations and every generated artifact match final source.

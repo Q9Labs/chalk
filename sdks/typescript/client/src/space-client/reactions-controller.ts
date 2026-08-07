@@ -1,5 +1,6 @@
 import { Clock, Context, Effect, Layer, Scope } from "effect";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
+import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
 import type { ActiveReaction, Reaction } from "./types";
@@ -16,7 +17,7 @@ export type ReactionsControllerEffects = {
 export class ReactionsControllerService extends Context.Service<ReactionsControllerService, ReactionsControllerEffects>()("@chalk/client/ReactionsController") {}
 
 /** Reaction expiry fibers are owned by the active client Scope. */
-export const makeReactionsController = (connection: ConnectionLifecycleCapability, store: SpaceStore): Effect.Effect<ReactionsControllerEffects, never, Clock.Clock | Scope.Scope> =>
+export const makeReactionsController = (connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime): Effect.Effect<ReactionsControllerEffects, never, Clock.Clock | Scope.Scope> =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
     const scope = yield* Effect.scope;
@@ -24,43 +25,57 @@ export const makeReactionsController = (connection: ConnectionLifecycleCapabilit
     const fork = (effect: Effect.Effect<void>) => {
       void Effect.runForkWith(context)(Effect.forkIn(effect, scope).pipe(Effect.asVoid));
     };
-    const controller = new ReactionsControllerRuntime(connection, store, clock.currentTimeMillisUnsafe, fork);
+    const controller = new ReactionsControllerRuntime(connection, store, clock.currentTimeMillisUnsafe, fork, diagnostics);
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
     return controller;
   });
 
-export const makeReactionsControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore) => Layer.effect(ReactionsControllerService, makeReactionsController(connection, store));
+export const makeReactionsControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime) => Layer.effect(ReactionsControllerService, makeReactionsController(connection, store, diagnostics));
 
 class ReactionsControllerRuntime implements ReactionsControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
   readonly #now: () => number;
   readonly #fork: (effect: Effect.Effect<void>) => void;
+  readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
   readonly #active = new Map<string, ActiveReaction>();
   readonly #expiryGenerations = new Map<string, number>();
   #unsubscribePorts: (() => void) | null = null;
   #unsubscribe: (() => void) | null = null;
 
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, now: () => number, fork: (effect: Effect.Effect<void>) => void) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, now: () => number, fork: (effect: Effect.Effect<void>) => void, diagnostics?: EpisodeDiagnosticRuntime) {
     this.#connection = connection;
     this.#store = store;
     this.#now = now;
     this.#fork = fork;
+    this.#diagnostics = diagnostics;
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
   }
 
-  send = (emoji: Reaction): ClientEffect<ActiveReaction> =>
-    Effect.try({
+  send = (emoji: Reaction): ClientEffect<ActiveReaction> => {
+    const operation = this.#diagnostics?.startOperation("reaction.send");
+    return Effect.try({
       try: () => {
         if (!REACTIONS.has(emoji)) throw new SpaceClientError({ code: "reaction.invalid", recoverable: false, message: "The reaction is not supported" });
       },
       catch: normalizeClientError,
     }).pipe(
+      Effect.tap(() => Effect.sync(() => operation?.observe("observed", "authorization"))),
       Effect.andThen(this.#connection.runCommand(({ sync }) => foreign(() => sync.sendReaction(emoji)))),
+      Effect.tap(() => Effect.sync(() => operation?.observe("observed", "accepted_commit"))),
       Effect.map(reactionFor),
-      Effect.tap((reaction) => Effect.sync(() => this.#observe(reaction))),
+      Effect.tap((reaction) =>
+        Effect.sync(() => {
+          this.#observe(reaction);
+          operation?.observe("observed", "sender_result");
+          operation?.notObservable("recipient_projection", "recipient_projection_is_conditional");
+          operation?.succeed();
+        }),
+      ),
       Effect.mapError(normalizeClientError),
+      Effect.tapError(() => Effect.sync(() => operation?.fail("send_failed"))),
     );
+  };
 
   dispose(): void {
     this.#unsubscribePorts?.();

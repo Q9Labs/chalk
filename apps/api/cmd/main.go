@@ -175,6 +175,7 @@ func run() error {
 	var syncTokenService httpapi.SyncTokenIssuer
 	var syncTokenRefresh httpapi.SyncTokenRefreshIssuer
 	var participantMediaIssuer httpapi.ParticipantMediaIssuer
+	var participantDiagnosticsIssuer httpapi.ParticipantDiagnosticsIssuer
 	var participantMediaVerifier httpapi.ParticipantMediaVerifier
 	var syncParticipantVerifier synctokens.Verifier
 	var syncParticipantVerifierConfigured bool
@@ -221,6 +222,20 @@ func run() error {
 	var transcriptService transcripts.Service
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
+	episodeDiagnostics, err := newEpisodeDiagnosticsComponents(context.Background(), cfg, auditLogService, logger)
+	if err != nil {
+		return err
+	}
+	if episodeDiagnostics != nil {
+		defer episodeDiagnostics.Close()
+		episodeService = episodeService.WithCommitObserver(episodeDiagnostics.runtime)
+		participantDiagnosticsIssuer = episodeDiagnostics.issuer
+		logger.Info("Episode Diagnostics enabled",
+			"event", "episode_diagnostics.enabled",
+			"mode", cfg.EpisodeDiagnostics.Mode,
+			"environment", cfg.EpisodeDiagnostics.Environment,
+		)
+	}
 	journeyRepository := postgres.NewJourneyRepository(pool)
 	journeyService := journeys.NewService(journeyRepository)
 	var episodeCredentials httpapi.EpisodeCredentialVerifier
@@ -322,6 +337,8 @@ func run() error {
 	if cfg.Observability.Environment != config.DefaultEnvironment {
 		rateLimitOptions.Limiter = redisadapter.NewRateLimiter(redisClient)
 	}
+	episodeDiagnosticsHTTPOptions := episodeDiagnostics.HTTPOptions()
+	episodeDiagnosticsHTTPOptions.AccountAuthorizer = httpapi.NewEpisodeDiagnosticsAccountAuthorizer(accountTenantService, tenantAuthz)
 	var transcriptArtifacts httpapi.TranscriptArtifactService
 	var transcriptWorker httpapi.TranscriptWorkerService
 	var workloadAuthorizer httpapi.WorkloadAuthorizer
@@ -375,6 +392,7 @@ func run() error {
 		MediaPlane:             mediaPlaneRegistry,
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,
+		ParticipantDiagnostics: participantDiagnosticsIssuer,
 		ParticipantMediaVerify: participantMediaVerifier,
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,
@@ -415,6 +433,7 @@ func run() error {
 		ChatParticipants:       chatParticipantVerifier,
 		WhiteboardFiles:        whiteboardFileService,
 		WhiteboardParticipants: whiteboardParticipantVerifier,
+		EpisodeDiagnostics:     episodeDiagnosticsHTTPOptions,
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	diagnostics.ApplyHTTP(&routerOptions)
@@ -443,6 +462,12 @@ func run() error {
 	deadlineScheduler := episodes.NewDeadlineScheduler(episodeRepository, cfg.DeadlineScheduler.Interval, cfg.DeadlineScheduler.Batch)
 	deadlineSchedulerErr := make(chan error, 1)
 	go func() { deadlineSchedulerErr <- deadlineScheduler.Run(signalCtx) }()
+	var episodeDiagnosticsRuntimeErr <-chan error
+	if episodeDiagnostics != nil {
+		runtimeErr := make(chan error, 1)
+		episodeDiagnosticsRuntimeErr = runtimeErr
+		go func() { runtimeErr <- episodeDiagnostics.runtime.Run(signalCtx) }()
+	}
 	var whiteboardCleanupErr <-chan error
 	if whiteboardCleanupScheduler != nil {
 		cleanupErr := make(chan error, 1)
@@ -482,6 +507,7 @@ func run() error {
 	serverResultReceived := false
 	providerBridgeResultReceived := false
 	chatCleanupResultReceived := false
+	episodeDiagnosticsRuntimeResultReceived := false
 	whiteboardCleanupResultReceived := false
 	select {
 	case err := <-serverErr:
@@ -500,6 +526,10 @@ func run() error {
 		stop()
 	case err := <-deadlineSchedulerErr:
 		runErr = err
+		stop()
+	case err := <-episodeDiagnosticsRuntimeErr:
+		runErr = err
+		episodeDiagnosticsRuntimeResultReceived = true
 		stop()
 	case err := <-whiteboardCleanupErr:
 		runErr = err
@@ -551,6 +581,11 @@ func run() error {
 	}
 	if chatCleanupErr != nil && !chatCleanupResultReceived {
 		if err := <-chatCleanupErr; runErr == nil {
+			runErr = err
+		}
+	}
+	if episodeDiagnosticsRuntimeErr != nil && !episodeDiagnosticsRuntimeResultReceived {
+		if err := <-episodeDiagnosticsRuntimeErr; runErr == nil {
 			runErr = err
 		}
 	}

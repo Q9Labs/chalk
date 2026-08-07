@@ -30,7 +30,9 @@ const encodeBase64 = (value: string) => {
     }
     return btoa(binary);
   }
-  return Buffer.from(bytes).toString("base64");
+  const nodeBuffer = (globalThis as typeof globalThis & { Buffer?: { from(value: Uint8Array): { toString(encoding: "base64"): string } } }).Buffer;
+  if (nodeBuffer) return nodeBuffer.from(bytes).toString("base64");
+  throw new Error("Base64 encoding is unavailable in this runtime");
 };
 
 export const svgToDataUrl = (svg: string): DataURL => `data:image/svg+xml;base64,${encodeBase64(svg)}` as DataURL;

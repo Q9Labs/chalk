@@ -102,6 +102,14 @@ keeps provider callbacks, scheduled work, recovery loops, and monitor events
 fully diagnosable without manufacturing a causal history outside the system's
 evidence boundary.
 
+## A Page Journey Does Not Correlate An Episode Journey
+
+Starting a browser `web.application` journey at the document root does not
+instrument a later Episode journey. The Episode-start path must receive the
+active page journey or create a child Episode journey, then propagate W3C trace
+context through the AccessGrant, media, and Sync boundaries and emit a terminal
+outcome; otherwise an enabled exporter only proves that the page loaded.
+
 ## A Dashboard Is Not A Journey Ledger
 
 A single visualization surface does not guarantee a complete operational

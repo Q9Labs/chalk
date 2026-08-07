@@ -189,6 +189,9 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
         "pnpm",
         ["--dir", package, "exec", "tsx", script, Integer.to_string(seed)],
         cd: root,
+        env: [
+          {"TSX_TSCONFIG_PATH", Path.join(root, "apps/sync/scripts/tsconfig.wire-sdk.json")}
+        ],
         stderr_to_stdout: false
       )
 

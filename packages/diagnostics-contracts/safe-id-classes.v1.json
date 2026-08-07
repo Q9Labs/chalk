@@ -1,0 +1,26 @@
+{
+  "$schema": "./safe-id-classes.v1.schema.json",
+  "schemaVersion": "SafeIdClassRegistry/v1",
+  "version": 1,
+  "unknownClass": {
+    "storage": "hmac",
+    "copyable": false,
+    "unknownReason": "provider_opaque"
+  },
+  "classes": [
+    { "idClass": "chalk.request", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "chalk.command", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "chalk.journey", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "chalk.participant", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "chalk.service", "storage": "raw", "copyable": true, "maxLength": 64, "alphabet": "token" },
+    { "idClass": "chalk.retry", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "w3c.trace", "storage": "raw", "copyable": true, "maxLength": 32, "alphabet": "hex" },
+    { "idClass": "w3c.span", "storage": "raw", "copyable": true, "maxLength": 16, "alphabet": "hex" },
+    { "idClass": "provider", "storage": "hmac", "copyable": false, "maxLength": 160, "alphabet": "safe" },
+    { "idClass": "integration", "storage": "hmac", "copyable": false, "maxLength": 160, "alphabet": "safe" },
+    { "idClass": "diagnostic", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "operation", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "issue", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "event", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" }
+  ]
+}

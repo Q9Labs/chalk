@@ -105,8 +105,16 @@ type DeadlineSchedulerRepository interface {
 	EnqueueDueEpisodeDeadlines(context.Context, int32) (int, error)
 }
 
+// CommitObserver receives already-committed Episode facts. Implementations must
+// enqueue without blocking and own their recovery path; product behavior never
+// depends on diagnostic observation.
+type CommitObserver interface {
+	EpisodeCommitted(Episode)
+}
+
 type Service struct {
 	repository Repository
+	observer   CommitObserver
 }
 
 type EpisodeList struct {
@@ -281,6 +289,11 @@ func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
 
+func (s Service) WithCommitObserver(observer CommitObserver) Service {
+	s.observer = observer
+	return s
+}
+
 func (s Service) CreateEpisode(ctx context.Context, input CreateEpisodeInput) (Episode, error) {
 	if input.ID.IsZero() {
 		id, err := utilities.NewID()
@@ -292,7 +305,17 @@ func (s Service) CreateEpisode(ctx context.Context, input CreateEpisodeInput) (E
 	if err := prepareCreateEpisodeInput(&input); err != nil {
 		return Episode{}, err
 	}
-	return s.repository.CreateEpisode(ctx, input)
+	episode, err := s.repository.CreateEpisode(ctx, input)
+	if err != nil {
+		return Episode{}, err
+	}
+	if s.observer != nil {
+		func() {
+			defer func() { _ = recover() }()
+			s.observer.EpisodeCommitted(episode)
+		}()
+	}
+	return episode, nil
 }
 
 func (s Service) GetEpisode(ctx context.Context, tenantID, spaceID, episodeID utilities.ID) (Episode, error) {

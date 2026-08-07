@@ -3,6 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
+      "@chalk/diagnostics-contracts": ["../../packages/diagnostics-contracts/src/index.ts"],
       "@q9labsai/chalk-assets": ["../../packages/assets/src/index.ts"],
       "@q9labsai/chalk-client": ["../../sdks/typescript/client/src/index.ts"],
       "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"],

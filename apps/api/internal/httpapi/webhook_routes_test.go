@@ -106,7 +106,7 @@ func TestWebhookRoutesRequireAuthenticationAndAdminAuthorization(t *testing.T) {
 	}
 	for _, route := range routes {
 		t.Run(route.method+" "+route.path+" anonymous", func(t *testing.T) {
-			res := requestWithOptionsAndBody(t, route.method, route.path, route.body, httpapi.Options{Webhooks: webhookService{}, Authentication: authenticationService{authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+			res := requestWithOptionsAndBody(t, route.method, route.path, route.body, httpapi.Options{Webhooks: webhookService{}, Authentication: authenticationService{authenticateAccountCredential: func(context.Context, string) (authentication.SessionUser, error) {
 				return authentication.SessionUser{}, errors.New("unexpected authentication")
 			}}})
 			if res.Code != http.StatusUnauthorized {
@@ -310,7 +310,7 @@ func TestWebhookReadRoutesUseDedicatedPrincipalScopedRateLimit(t *testing.T) {
 	options := authenticatedOptions(t, httpapi.Options{
 		Webhooks:  service,
 		RateLimit: httpapi.RateLimitOptions{Limiter: limiter},
-		Authentication: authenticationService{authenticateSession: func(_ context.Context, token string) (authentication.SessionUser, error) {
+		Authentication: authenticationService{authenticateAccountCredential: func(_ context.Context, token string) (authentication.SessionUser, error) {
 			value := authSessionUser(t)
 			if token == "second-session-token" {
 				id, err := utilities.ParseID("44444444-4444-4444-8444-444444444444")

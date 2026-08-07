@@ -22,9 +22,10 @@ var (
 )
 
 const (
-	ActorUser   = "user"
-	ActorAPIKey = "api_key"
-	ActorSystem = "system"
+	ActorUser     = "user"
+	ActorAPIKey   = "api_key"
+	ActorSystem   = "system"
+	ActorOperator = "operator"
 
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
@@ -186,7 +187,7 @@ func actorType(value string) (string, error) {
 		return "", ErrInvalidActorType
 	}
 	switch actor {
-	case ActorUser, ActorAPIKey, ActorSystem:
+	case ActorUser, ActorAPIKey, ActorSystem, ActorOperator:
 		return actor, nil
 	default:
 		return "", ErrInvalidActorType

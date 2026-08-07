@@ -7,6 +7,7 @@ const workspaceNodeModules = path.resolve(__dirname, "../../node_modules");
 const chalkClientRoot = path.resolve(__dirname, "../../sdks/typescript/client");
 const sdkReactNativeRoot = path.resolve(__dirname, "../../sdks/typescript/react-native");
 const facehashRoot = path.resolve(__dirname, "../../packages/facehash");
+const diagnosticsContractsRoot = path.resolve(__dirname, "../../packages/diagnostics-contracts");
 const whiteboardRoot = path.resolve(__dirname, "../../packages/whiteboard");
 const sdkNodeModules = path.resolve(__dirname, "../../sdks/typescript/react-native/node_modules");
 const devPreviewEntry = path.resolve(__dirname, "src/dev-preview");
@@ -30,11 +31,12 @@ function isDevPreviewEntry(originModulePath, moduleName) {
 
 // Keep Metro focused on the app and the workspace packages it imports.
 // Watching the entire monorepo makes cold iOS development bundles unnecessarily slow.
-config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, facehashRoot, whiteboardRoot];
+config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, diagnosticsContractsRoot, facehashRoot, whiteboardRoot];
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 config.resolver.extraNodeModules = {
   "@hugeicons/core-free-icons": path.resolve(appNodeModules, "@hugeicons/core-free-icons"),
   "@hugeicons/react-native": path.resolve(appNodeModules, "@hugeicons/react-native"),
+  "@chalk/diagnostics-contracts": diagnosticsContractsRoot,
   "@q9labsai/chalk-whiteboard": whiteboardRoot,
   "react-native-svg": path.resolve(appNodeModules, "react-native-svg"),
 };

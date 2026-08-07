@@ -12789,6 +12789,25 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
       AccessGrant: {
         additionalProperties: false,
         properties: {
+          diagnostics: {
+            additionalProperties: false,
+            properties: {
+              expires_at: {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              generation: {
+                type: "integer",
+              },
+              intake_path: {
+                type: "string",
+              },
+              token: {
+                type: "string",
+              },
+            },
+            required: ["expires_at", "generation", "intake_path", "token"],
+            type: ["object", "null"],
+          },
           media: {
             additionalProperties: false,
             properties: {
