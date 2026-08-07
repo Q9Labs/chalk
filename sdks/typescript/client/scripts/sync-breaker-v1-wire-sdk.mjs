@@ -1,4 +1,5 @@
 import { V1SyncClient, InMemoryV1PendingTargetStore, computeV1StateDigest, encodeV1ClientFrame } from "../src/index.ts";
+import { V1_CAPABILITIES } from "../src/sync/v1-types.ts";
 
 const seed = Number(process.argv[2] ?? 730_044);
 const ids = {
@@ -243,31 +244,7 @@ async function pendingHarness(store) {
 
 async function baseState() {
   const roleCapabilities = {
-    owner: [
-      "publishAudio",
-      "publishVideo",
-      "publishScreen",
-      "subscribe",
-      "raiseHand",
-      "renameSelf",
-      "sendChat",
-      "sendReaction",
-      "drawWhiteboard",
-      "manageWhiteboard",
-      "manageAdmission",
-      "assignRoles",
-      "muteOthers",
-      "stopVideoOthers",
-      "stopScreenOthers",
-      "requestMediaOthers",
-      "removeParticipant",
-      "manageRecording",
-      "startEpisode",
-      "extendEpisode",
-      "endEpisode",
-      "manageMembers",
-      "clearSpaceContent",
-    ],
+    owner: [...V1_CAPABILITIES],
     collaborator: ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf", "sendChat", "sendReaction", "drawWhiteboard"],
     observer: ["subscribe", "sendReaction"],
   };

@@ -4,30 +4,33 @@ import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneT
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
 
-export type V1Capability =
-  | "publishAudio"
-  | "publishVideo"
-  | "publishScreen"
-  | "subscribe"
-  | "raiseHand"
-  | "renameSelf"
-  | "sendChat"
-  | "sendReaction"
-  | "drawWhiteboard"
-  | "manageWhiteboard"
-  | "manageAdmission"
-  | "assignRoles"
-  | "muteOthers"
-  | "stopVideoOthers"
-  | "stopScreenOthers"
-  | "requestMediaOthers"
-  | "removeParticipant"
-  | "manageRecording"
-  | "startEpisode"
-  | "extendEpisode"
-  | "endEpisode"
-  | "manageMembers"
-  | "clearSpaceContent";
+export const V1_CAPABILITIES = [
+  "publishAudio",
+  "publishVideo",
+  "publishScreen",
+  "subscribe",
+  "raiseHand",
+  "renameSelf",
+  "sendChat",
+  "sendReaction",
+  "drawWhiteboard",
+  "manageWhiteboard",
+  "manageAdmission",
+  "assignRoles",
+  "muteOthers",
+  "stopVideoOthers",
+  "stopScreenOthers",
+  "requestMediaOthers",
+  "removeParticipant",
+  "manageRecording",
+  "startEpisode",
+  "extendEpisode",
+  "endEpisode",
+  "manageMembers",
+  "clearSpaceContent",
+] as const;
+
+export type V1Capability = (typeof V1_CAPABILITIES)[number];
 
 // Roles are customer-defined; the wire accepts any non-empty role name.
 export type V1Role = string;

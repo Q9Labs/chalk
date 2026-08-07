@@ -1,8 +1,15 @@
 import type { TelemetryClientOptions } from "../telemetry/client";
 import type { MediaSource } from "../media/plane";
-import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkDirectedRequestResult, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
-import type { ChalkWhiteboardV1Failure, ChalkWhiteboardV1Transport } from "../whiteboard/types";
+import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
+import type { ChalkWhiteboardV1Failure } from "../whiteboard/types";
 import type { AccessGrant } from "../access/grant";
+import type { V1Capability } from "../sync/v1-types";
+import type { ChatControllerEffects } from "./chat-controller";
+import type { MediaControllerEffects } from "./media-controller";
+import type { ParticipantsControllerEffects } from "./participants-controller";
+import type { ReactionsControllerEffects } from "./reactions-controller";
+import type { WhiteboardControllerEffects } from "./whiteboard-controller";
+import type { PromiseController } from "./promise-facade";
 
 export type AccessReason = "join" | "refresh" | "retry";
 
@@ -36,29 +43,7 @@ export type JoinOptions = {
 
 export type ConnectionStatus = "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
 
-export type Capability =
-  | "publishAudio"
-  | "publishVideo"
-  | "publishScreen"
-  | "subscribe"
-  | "raiseHand"
-  | "renameSelf"
-  | "sendChat"
-  | "sendReaction"
-  | "drawWhiteboard"
-  | "manageWhiteboard"
-  | "manageAdmission"
-  | "assignRoles"
-  | "muteOthers"
-  | "stopVideoOthers"
-  | "stopScreenOthers"
-  | "requestMediaOthers"
-  | "removeParticipant"
-  | "startEpisode"
-  | "extendEpisode"
-  | "endEpisode"
-  | "manageMembers"
-  | "clearSpaceContent";
+export type Capability = V1Capability;
 
 export type ErrorCode =
   | "access.invalid"
@@ -210,45 +195,12 @@ export type ChatSendInput = { readonly text: string; readonly attachments?: read
 export type MediaRequestKind = "microphone" | "camera";
 export type ChatUploadFile = { readonly name: string; readonly type: string; readonly size: number; readonly arrayBuffer: () => Promise<ArrayBuffer> } | { readonly fileName: string; readonly mimeType: string; readonly bytes: ArrayBuffer };
 
-export type MediaController = {
-  readonly setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
-  readonly setCameraEnabled: (enabled: boolean) => Promise<void>;
-  readonly setScreenShareEnabled: (enabled: boolean) => Promise<void>;
-  readonly selectMicrophone: (deviceId: string) => Promise<void>;
-  readonly selectCamera: (deviceId: string) => Promise<void>;
-  readonly selectSpeaker: (deviceId: string) => Promise<void>;
-  readonly acceptRequest: (requestId: string) => Promise<void>;
-  readonly declineRequest: (requestId: string) => Promise<void>;
-};
-
-export type ChatFilesController = {
-  readonly upload: (file: ChatUploadFile) => Promise<ChatAttachment>;
-  readonly url: (attachment: ChatAttachment) => string;
-};
-
-export type ChatController = {
-  readonly files: ChatFilesController;
-  readonly send: (input: ChatSendInput) => Promise<ChatMessage>;
-  readonly loadOlder: () => Promise<ChalkChatPageResult>;
-  readonly markRead: (messageId: string) => Promise<ChatReadReceipt | null>;
-};
-
-export type ParticipantsController = {
-  readonly assignRole: (participantId: string, roleName: string) => Promise<void>;
-  readonly mute: (participantId: string) => Promise<void>;
-  readonly stopVideo: (participantId: string) => Promise<void>;
-  readonly stopScreenShare: (participantId: string) => Promise<void>;
-  readonly requestMedia: (participantId: string, kind: MediaRequestKind) => Promise<ChalkDirectedRequestResult>;
-  readonly remove: (participantId: string) => Promise<void>;
-  readonly admit: (requestId: string) => Promise<void>;
-  readonly deny: (requestId: string) => Promise<void>;
-  readonly raiseHand: () => Promise<void>;
-  readonly lowerHand: () => Promise<void>;
-  readonly renameSelf: (displayName: string) => Promise<void>;
-};
-
-export type ReactionsController = { readonly send: (emoji: Reaction) => Promise<ActiveReaction> };
-export type WhiteboardController = { readonly transport: () => ChalkWhiteboardV1Transport | null };
+export type MediaController = PromiseController<Omit<MediaControllerEffects, "configure" | "dispose">>;
+export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, "upload" | "url">>;
+export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "dispose">> & { readonly files: ChatFilesController };
+export type ParticipantsController = PromiseController<Omit<ParticipantsControllerEffects, "dispose">>;
+export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
+export type WhiteboardController = PromiseController<Omit<WhiteboardControllerEffects, "dispose">>;
 
 export type ClientEventMap = {
   readonly participantJoined: { readonly participant: Participant };

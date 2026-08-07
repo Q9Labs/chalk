@@ -4,38 +4,16 @@ import type { ChalkParticipantMediaState } from "../collaboration/types";
 import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
+import { V1_CAPABILITIES } from "../sync/v1-types";
 import type { Capability, MediaRequestKind, ParticipantsSlice, SelfSlice } from "./types";
 
-const CAPABILITIES = new Set<Capability>([
-  "publishAudio",
-  "publishVideo",
-  "publishScreen",
-  "subscribe",
-  "raiseHand",
-  "renameSelf",
-  "sendChat",
-  "sendReaction",
-  "drawWhiteboard",
-  "manageWhiteboard",
-  "manageAdmission",
-  "assignRoles",
-  "muteOthers",
-  "stopVideoOthers",
-  "stopScreenOthers",
-  "requestMediaOthers",
-  "removeParticipant",
-  "startEpisode",
-  "extendEpisode",
-  "endEpisode",
-  "manageMembers",
-  "clearSpaceContent",
-]);
+export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
 const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]) });
 
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 
 export type ParticipantsControllerEffects = {
-  readonly assignRole: (participantId: string, role: string) => ClientEffect<void>;
+  readonly assignRole: (participantId: string, roleName: string) => ClientEffect<void>;
   readonly mute: (participantId: string) => ClientEffect<void>;
   readonly stopVideo: (participantId: string) => ClientEffect<void>;
   readonly stopScreenShare: (participantId: string) => ClientEffect<void>;
@@ -74,11 +52,11 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
   }
 
-  assignRole = (participantId: string, role: string): ClientEffect<void> =>
+  assignRole = (participantId: string, roleName: string): ClientEffect<void> =>
     this.#command("moderation.role.change", ["capability_decision", "command_commit"], () => {
       assertIdentifier(participantId, "participant ID");
-      assertName(role, "role");
-      return ({ sync }) => foreign(() => sync.assignRole(participantId, role));
+      assertName(roleName, "role");
+      return ({ sync }) => foreign(() => sync.assignRole(participantId, roleName));
     });
 
   mute = (participantId: string): ClientEffect<void> =>

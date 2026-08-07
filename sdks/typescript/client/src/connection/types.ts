@@ -17,6 +17,7 @@ import type {
 } from "../collaboration/types";
 import type { ChalkChatFileTransport } from "../chat-files/types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
+import type { V1Capability } from "../sync/v1-types";
 
 export { ChalkWhiteboardV1Error } from "../whiteboard/types";
 export type {
@@ -140,29 +141,7 @@ export type ChalkParticipantRole = string;
 export type ChalkAssignableParticipantRole = string;
 export type ChalkAdmissionPolicy = "open" | "knock" | "members_only";
 
-export type ConnectionCapability =
-  | "publishAudio"
-  | "publishVideo"
-  | "publishScreen"
-  | "subscribe"
-  | "raiseHand"
-  | "renameSelf"
-  | "sendChat"
-  | "sendReaction"
-  | "drawWhiteboard"
-  | "manageWhiteboard"
-  | "manageAdmission"
-  | "assignRoles"
-  | "muteOthers"
-  | "stopVideoOthers"
-  | "stopScreenOthers"
-  | "requestMediaOthers"
-  | "removeParticipant"
-  | "startEpisode"
-  | "extendEpisode"
-  | "endEpisode"
-  | "manageMembers"
-  | "clearSpaceContent";
+export type ConnectionCapability = V1Capability;
 
 export type ChalkParticipant = {
   readonly participantId: string;

@@ -1,21 +1,7 @@
 import type { CloudflareSFUSnapshot } from "../media";
-import type { V1Capability, V1EpisodeSnapshot } from "../sync";
+import type { V1EpisodeSnapshot } from "../sync";
 import type { AccessSubject } from "../access/grant";
-import type {
-  ChalkChatState,
-  ChalkCollaborationCapability,
-  ChalkIncomingMediaRequest,
-  ChalkLocalMedia,
-  ChalkMediaSource,
-  ChalkParticipantMediaState,
-  ChalkReactionEvent,
-  ConnectionCapability,
-  ConnectionConnectionPhase,
-  ConnectionFailure,
-  ConnectionSnapshot,
-  ConnectionState,
-  ChalkWhiteboardSummary,
-} from "./types";
+import type { ChalkChatState, ChalkCollaborationCapability, ChalkIncomingMediaRequest, ChalkLocalMedia, ChalkMediaSource, ChalkParticipantMediaState, ChalkReactionEvent, ConnectionConnectionPhase, ConnectionFailure, ConnectionSnapshot, ConnectionState, ChalkWhiteboardSummary } from "./types";
 
 const SOURCES = ["microphone", "camera", "screen"] as const;
 const SYNC_CONNECTION_PHASES = {
@@ -162,7 +148,7 @@ function controlSlices(control: SnapshotControl | null): Pick<ConnectionSnapshot
       handRaised: participant.handRaised,
       role: participant.role,
       eligibleRoles: [...participant.eligibleRoles],
-      capabilities: participant.capabilities.filter(isPublicCapability),
+      capabilities: participant.capabilities,
     })),
     admissionRequests: control.admissionRequests.map((request) => ({
       admissionRequestId: request.admissionRequestId,
@@ -293,10 +279,6 @@ function mapSyncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefine
 
 function mapMediaPhase(phase: CloudflareSFUSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
   return phase === undefined ? "idle" : MEDIA_CONNECTION_PHASES[phase];
-}
-
-function isPublicCapability(capability: V1Capability): capability is ConnectionCapability {
-  return capability !== "manageRecording";
 }
 
 function freezeSnapshot(snapshot: ConnectionSnapshot): ConnectionSnapshot {
