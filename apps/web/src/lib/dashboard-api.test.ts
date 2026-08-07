@@ -14,12 +14,82 @@ const testStorage: Storage = {
   setItem: (key, value) => localValues.set(key, value),
 };
 
+const tenantID = "11111111-1111-4111-8111-111111111111";
+const accountID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+function tenant(id = tenantID) {
+  return { id, name: "Acme", default_region: "us", logo_key: null, website: null, default_media_plane: null, ai_provider_config: null, media_plane_provider_config: null, storage_provider_config: null, created_at: "2026-08-04T00:00:00Z", updated_at: "2026-08-04T00:00:00Z" };
+}
+
+function access(id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", tenant_id = tenantID) {
+  return { id, tenant_id, account_id: accountID, role: "owner", created_at: "2026-08-04T00:00:00Z", updated_at: "2026-08-04T00:00:00Z" };
+}
+
+function space(id: string, name: string, tenant_id = tenantID) {
+  return {
+    id,
+    tenant_id,
+    name,
+    slug: name.toLowerCase().replaceAll(" ", "-"),
+    media_plane: "cf_rtk",
+    metadata: {},
+    recurring_policy: {},
+    admission_policy: { mode: "open" },
+    default_episode_duration_seconds: 86_400,
+    maximum_episode_duration_seconds: 86_400,
+    linger_window_seconds: 0,
+    archived: false,
+    archived_at: null,
+    roles: [],
+    created_by_user_id: null,
+    updated_at: "2026-08-04T00:00:00Z",
+    created_at: "2026-08-04T00:00:00Z",
+  };
+}
+
+function episode(id: string, space_id: string, started_at: string, status: "active" | "ending" | "ended" = "ended", tenant_id = tenantID) {
+  return {
+    id,
+    tenant_id,
+    space_id,
+    status,
+    metadata: {},
+    config_snapshot: {},
+    started_at,
+    ended_at: status === "ended" ? started_at : null,
+    end_reason: status === "ended" ? "requested" : null,
+    deadline_at: "2026-08-05T00:00:00Z",
+    deadline_generation: 1,
+    updated_at: started_at,
+    created_at: started_at,
+  };
+}
+
+function episodeEnd(episode_id: string, status: string) {
+  return { episode_id, status, external_operation: { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", operation_name: "episode.end", request_key: "request-key", status, created_at: "2026-08-04T00:00:00Z" } };
+}
+
+function assertBoundaryMutation(init: RequestInit | undefined) {
+  if ((init?.method ?? "GET") === "GET") return;
+  const headers = new Headers(init?.headers);
+  expect(headers.get("content-type")).toBe("application/json");
+  expect(init?.body).toBeDefined();
+}
+
+function boundaryMutationResponseFetcher(...responses: Response[]) {
+  let responseIndex = 0;
+  return vi.fn(async (_path: string, init?: RequestInit) => {
+    assertBoundaryMutation(init);
+    return responses[responseIndex++];
+  });
+}
+
 function ambiguousMutationFetcher(successBody: unknown, successStatus = 201) {
-  return vi
-    .fn()
-    .mockResolvedValueOnce(Response.json({ csrf_token: "csrf-token" }))
-    .mockResolvedValueOnce(Response.json({ error: { code: "upstream_unavailable", message: "Try again" } }, { status: 502 }))
-    .mockResolvedValueOnce(Response.json(successBody, { status: successStatus }));
+  return boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), Response.json({ error: { code: "upstream_unavailable", message: "Try again" } }, { status: 502 }), Response.json(successBody, { status: successStatus }));
+}
+
+async function requestJSON(init: RequestInit | undefined): Promise<unknown> {
+  return new Response(init?.body).json();
 }
 
 function idempotencyKeyForCall(fetcher: ReturnType<typeof vi.fn>, call: number): string | null {
@@ -58,14 +128,14 @@ describe("dashboard API client", () => {
   });
 
   it("reuses a persisted onboarding key for a safe retry and clears it after success", async () => {
-    const fetcher = ambiguousMutationFetcher({ tenant: { id: "tenant-1" }, access: { role: "owner" }, replayed: true });
+    const fetcher = ambiguousMutationFetcher({ tenant: tenant(), access: access(), replayed: true });
     vi.stubGlobal("fetch", fetcher);
     const { onboardTenant } = await import("./dashboard-api");
     const input = { name: "Acme studio", default_region: "us" };
 
-    await expect(onboardTenant(input)).rejects.toMatchObject({ code: "upstream_unavailable" });
+    await expect(onboardTenant(input)).rejects.toMatchObject({ code: "request.failed" });
     const firstKey = idempotencyKeyForCall(fetcher, 1);
-    await expect(onboardTenant(input)).resolves.toMatchObject({ tenant: { id: "tenant-1" } });
+    await expect(onboardTenant(input)).resolves.toMatchObject({ tenant: { id: tenantID } });
     const secondKey = idempotencyKeyForCall(fetcher, 2);
     expect(firstKey).toBeTruthy();
     expect(secondKey).toBe(firstKey);
@@ -116,8 +186,8 @@ describe("dashboard API client", () => {
   it("carries Account Tenant pagination across every authorized page", async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ tenants: [{ tenant: { id: "tenant-1" } }], pagination: { page_size: 100, next_cursor: "cursor-2", has_more: true } }))
-      .mockResolvedValueOnce(Response.json({ tenants: [{ tenant: { id: "tenant-2" } }], pagination: { page_size: 100, next_cursor: null, has_more: false } }));
+      .mockResolvedValueOnce(Response.json({ tenants: [{ tenant: tenant(), access: access() }], pagination: { page_size: 100, next_cursor: "cursor-2", has_more: true } }))
+      .mockResolvedValueOnce(Response.json({ tenants: [{ tenant: tenant("22222222-2222-4222-8222-222222222222"), access: access("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "22222222-2222-4222-8222-222222222222") }], pagination: { page_size: 100, next_cursor: null, has_more: false } }));
     vi.stubGlobal("fetch", fetcher);
     const { listAllAccountTenants } = await import("./dashboard-api");
 
@@ -128,12 +198,11 @@ describe("dashboard API client", () => {
 
   it("keeps tenant-wide Episode history bounded and resumes each Space stream from a composite cursor", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
-    const spaceOne = { id: "space-one", name: "One" };
-    const spaceTwo = { id: "space-two", name: "Two" };
-    const episode = (id: string, spaceID: string, started_at: string) => ({ id, tenant_id: tenantID, space_id: spaceID, status: "ended", started_at });
+    const spaceOne = space("22222222-2222-4222-8222-222222222222", "One");
+    const spaceTwo = space("33333333-3333-4333-8333-333333333333", "Two");
     const firstSpacePage = { spaces: [spaceOne, spaceTwo], pagination: { page_size: 24, next_cursor: null, has_more: false } };
-    const spaceOneEpisodes = { episodes: [episode("episode-one-new", spaceOne.id, "2026-08-04T10:00:00Z"), episode("episode-one-old", spaceOne.id, "2026-08-04T08:00:00Z")], pagination: { page_size: 2, next_cursor: "space-one-next", has_more: true } };
-    const spaceTwoEpisodes = { episodes: [episode("episode-two-new", spaceTwo.id, "2026-08-04T11:00:00Z"), episode("episode-two-old", spaceTwo.id, "2026-08-04T07:00:00Z")], pagination: { page_size: 2, next_cursor: null, has_more: false } };
+    const spaceOneEpisodes = { episodes: [episode("44444444-4444-4444-8444-444444444444", spaceOne.id, "2026-08-04T10:00:00Z"), episode("55555555-5555-4555-8555-555555555555", spaceOne.id, "2026-08-04T08:00:00Z")], pagination: { page_size: 2, next_cursor: "space-one-next", has_more: true } };
+    const spaceTwoEpisodes = { episodes: [episode("66666666-6666-4666-8666-666666666666", spaceTwo.id, "2026-08-04T11:00:00Z"), episode("77777777-7777-4777-8777-777777777777", spaceTwo.id, "2026-08-04T07:00:00Z")], pagination: { page_size: 2, next_cursor: null, has_more: false } };
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(Response.json(firstSpacePage))
@@ -145,7 +214,7 @@ describe("dashboard API client", () => {
     const { listEpisodes } = await import("./dashboard-api");
 
     const first = await listEpisodes({ tenantID, pageSize: 2 });
-    expect(first.episodes.map((item) => item.id)).toEqual(["episode-two-new", "episode-one-new"]);
+    expect(first.episodes.map((item) => item.id)).toEqual(["66666666-6666-4666-8666-666666666666", "44444444-4444-4444-8444-444444444444"]);
     expect(first.pagination).toMatchObject({ page_size: 2, has_more: true });
     expect(first.pagination.next_cursor).toEqual(expect.any(String));
     expect(fetcher).toHaveBeenCalledTimes(3);
@@ -154,7 +223,7 @@ describe("dashboard API client", () => {
     expect(fetcher).toHaveBeenNthCalledWith(3, `/api/tenants/${tenantID}/spaces/${spaceTwo.id}/episodes?page_size=2`, expect.anything());
 
     const second = await listEpisodes({ tenantID, pageSize: 2, cursor: first.pagination.next_cursor ?? undefined });
-    expect(second.episodes.map((item) => item.id)).toEqual(["episode-one-old", "episode-two-old"]);
+    expect(second.episodes.map((item) => item.id)).toEqual(["55555555-5555-4555-8555-555555555555", "77777777-7777-4777-8777-777777777777"]);
     expect(fetcher).toHaveBeenCalledTimes(5);
     expect(fetcher).toHaveBeenNthCalledWith(4, `/api/tenants/${tenantID}/spaces/${spaceOne.id}/episodes?page_size=2`, expect.anything());
     expect(fetcher).toHaveBeenNthCalledWith(5, `/api/tenants/${tenantID}/spaces/${spaceTwo.id}/episodes?page_size=2`, expect.anything());
@@ -162,7 +231,7 @@ describe("dashboard API client", () => {
 
   it("discovers every bounded Space page before ordering tenant-wide Episode history", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
-    const spaces = Array.from({ length: 25 }, (_, index) => ({ id: `space-${index}`, name: `Space ${index}` }));
+    const spaces = Array.from({ length: 25 }, (_, index) => space(`00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`, `Space ${index}`));
     const firstSpacePage = { spaces: spaces.slice(0, 24), pagination: { page_size: 24, next_cursor: "spaces-next", has_more: true } };
     const lastSpacePage = { spaces: spaces.slice(24), pagination: { page_size: 24, next_cursor: null, has_more: false } };
     const fetcher = vi.fn((path: string) => {
@@ -174,7 +243,7 @@ describe("dashboard API client", () => {
       const index = spaces.findIndex((space) => space.id === spaceID);
       return Promise.resolve(
         Response.json({
-          episodes: [{ id: `episode-${spaceID}`, tenant_id: tenantID, space_id: spaceID, status: "ended", started_at: new Date(Date.UTC(2026, 7, 4, index)).toISOString() }],
+          episodes: [episode(`10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`, spaceID, new Date(Date.UTC(2026, 7, 4, index)).toISOString())],
           pagination: { page_size: 1, next_cursor: null, has_more: false },
         }),
       );
@@ -184,7 +253,7 @@ describe("dashboard API client", () => {
 
     const page = await listEpisodes({ tenantID, pageSize: 1 });
 
-    expect(page.episodes.map((item) => item.id)).toEqual(["episode-space-24"]);
+    expect(page.episodes.map((item) => item.id)).toEqual(["10000000-0000-4000-8000-000000000025"]);
     expect(page.pagination).toMatchObject({ page_size: 1, has_more: true });
     expect(fetcher).toHaveBeenCalledTimes(27);
   });
@@ -198,7 +267,7 @@ describe("dashboard API client", () => {
       const hasMore = pageNumber < 6;
       return Promise.resolve(
         Response.json({
-          spaces: Array.from({ length: 24 }, (_, index) => ({ id: `space-${pageNumber}-${index}`, name: `Space ${pageNumber}-${index}` })),
+          spaces: Array.from({ length: 24 }, (_, index) => space(`20000000-0000-4000-8000-${String(pageNumber * 24 + index + 1).padStart(12, "0")}`, `Space ${pageNumber}-${index}`)),
           pagination: { page_size: 24, next_cursor: hasMore ? `cursor-${pageNumber}` : null, has_more: hasMore },
         }),
       );
@@ -206,36 +275,81 @@ describe("dashboard API client", () => {
     vi.stubGlobal("fetch", fetcher);
     const { listEpisodes } = await import("./dashboard-api");
 
-    await expect(listEpisodes({ tenantID, pageSize: 25 })).rejects.toMatchObject({ code: "episode_history_too_large" });
+    await expect(listEpisodes({ tenantID, pageSize: 25 })).rejects.toMatchObject({ code: "episode.history_too_large" });
     expect(fetcher).toHaveBeenCalledTimes(6);
   });
 
   it("reuses an Episode creation key after an ambiguous failure", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const spaceID = "22222222-2222-4222-8222-222222222222";
-    const episode = { id: "33333333-3333-4333-8333-333333333333", tenant_id: tenantID, space_id: spaceID, status: "active" };
-    const fetcher = ambiguousMutationFetcher(episode);
+    const createdEpisode = episode("33333333-3333-4333-8333-333333333333", spaceID, "2026-08-04T10:00:00Z", "active");
+    const fetcher = ambiguousMutationFetcher(createdEpisode);
     vi.stubGlobal("fetch", fetcher);
     const { createEpisode } = await import("./dashboard-api");
 
-    await expect(createEpisode({ tenantID, spaceID })).rejects.toMatchObject({ code: "upstream_unavailable" });
+    await expect(createEpisode({ tenantID, spaceID })).rejects.toMatchObject({ code: "request.failed" });
     const firstKey = idempotencyKeyForCall(fetcher, 1);
-    await expect(createEpisode({ tenantID, spaceID })).resolves.toMatchObject({ id: episode.id });
+    await expect(createEpisode({ tenantID, spaceID })).resolves.toMatchObject({ id: createdEpisode.id });
     const retryKey = idempotencyKeyForCall(fetcher, 2);
 
     expect(retryKey).toBe(firstKey);
     expect(window.localStorage.getItem("chalk.dashboard-request.episode-create")).toBeNull();
   });
 
+  it("sends Space PATCH fields in the API wire shape", async () => {
+    const updated = space("22222222-2222-4222-8222-222222222222", "Renamed studio");
+    const bodies: unknown[] = [];
+    const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
+      assertBoundaryMutation(init);
+      if (path === "/api/auth/csrf") return Response.json({ csrf_token: "csrf-token" });
+      bodies.push(await requestJSON(init));
+      return Response.json(updated);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const { updateSpace } = await import("./dashboard-api");
+
+    await updateSpace({ tenantID, spaceID: updated.id, name: updated.name, slug: updated.slug, admission_policy: updated.admission_policy });
+    await updateSpace({ tenantID, spaceID: updated.id, default_episode_duration_seconds: 3_600 });
+    await updateSpace({ tenantID, spaceID: updated.id, default_episode_duration_seconds: null });
+
+    expect(bodies).toEqual([{ name: "Renamed studio", slug: "renamed-studio", admission_policy: { mode: "open" } }, { default_episode_duration_seconds: 3_600 }, { default_episode_duration_seconds: null }]);
+  });
+
+  it("maps a malformed successful generated response to a contract error", async () => {
+    const fetcher = boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), Response.json({ status: "not-a-space" }));
+    vi.stubGlobal("fetch", fetcher);
+    const { updateSpace } = await import("./dashboard-api");
+
+    await expect(updateSpace({ tenantID, spaceID: "22222222-2222-4222-8222-222222222222", name: "Malformed response" })).rejects.toMatchObject({ status: 502, code: "response.invalid" });
+  });
+
+  it("preserves the declared generated error code and actual HTTP status", async () => {
+    const fetcher = boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), Response.json({ error: { code: "space.not_found", message: "Space not found" } }, { status: 404 }));
+    vi.stubGlobal("fetch", fetcher);
+    const { updateSpace } = await import("./dashboard-api");
+
+    await expect(updateSpace({ tenantID, spaceID: "22222222-2222-4222-8222-222222222222", name: "Missing" })).rejects.toMatchObject({ status: 404, code: "space.not_found", message: "Space not found" });
+  });
+
+  it("sends explicit JSON bodies for Space archive, restore, and Episode end", async () => {
+    const spaceID = "22222222-2222-4222-8222-222222222222";
+    const episodeID = "33333333-3333-4333-8333-333333333333";
+    const fetcher = boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), Response.json(space(spaceID, "Studio")), Response.json(space(spaceID, "Studio")), Response.json(episodeEnd(episodeID, "ended"), { status: 202 }));
+    vi.stubGlobal("fetch", fetcher);
+    const { archiveSpace, endEpisode, restoreSpace } = await import("./dashboard-api");
+
+    await archiveSpace({ tenantID, spaceID });
+    await restoreSpace({ tenantID, spaceID });
+    await endEpisode({ tenantID, spaceID, episodeID });
+
+    expect(await Promise.all(fetcher.mock.calls.slice(1).map(([, init]) => requestJSON(init as RequestInit)))).toEqual([{}, {}, {}]);
+  });
+
   it("retains an Episode-end key while the operation is ending and clears it after completion", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const spaceID = "22222222-2222-4222-8222-222222222222";
     const episodeID = "33333333-3333-4333-8333-333333333333";
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ csrf_token: "csrf-token" }))
-      .mockResolvedValueOnce(Response.json({ status: "ending" }, { status: 202 }))
-      .mockResolvedValueOnce(Response.json({ status: "ended" }, { status: 202 }));
+    const fetcher = boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), Response.json(episodeEnd(episodeID, "ending"), { status: 202 }), Response.json(episodeEnd(episodeID, "ended"), { status: 202 }));
     vi.stubGlobal("fetch", fetcher);
     const { endEpisode } = await import("./dashboard-api");
     const input = { tenantID, spaceID, episodeID };
@@ -251,13 +365,13 @@ describe("dashboard API client", () => {
 
   it("reuses a Space creation key after an ambiguous failure", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
-    const created = { id: "22222222-2222-4222-8222-222222222222", tenant_id: tenantID, name: "Product studio", slug: "product-studio" };
+    const created = space("22222222-2222-4222-8222-222222222222", "Product studio");
     const fetcher = ambiguousMutationFetcher(created);
     vi.stubGlobal("fetch", fetcher);
     const { createSpace } = await import("./dashboard-api");
     const input = { tenantID, name: "Product studio", slug: "product-studio" };
 
-    await expect(createSpace(input)).rejects.toMatchObject({ code: "upstream_unavailable" });
+    await expect(createSpace(input)).rejects.toMatchObject({ code: "request.failed" });
     const firstKey = idempotencyKeyForCall(fetcher, 1);
     await expect(createSpace(input)).resolves.toMatchObject({ id: created.id });
     const retryKey = idempotencyKeyForCall(fetcher, 2);
@@ -269,10 +383,7 @@ describe("dashboard API client", () => {
   it("carries recent-auth proof to API-key mutations without putting it in the body", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const keyID = "22222222-2222-4222-8222-222222222222";
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ csrf_token: "csrf-token" }))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const fetcher = boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetcher);
     const { revokeAPIKey } = await import("./dashboard-api");
 
@@ -281,7 +392,8 @@ describe("dashboard API client", () => {
     expect(fetcher).toHaveBeenNthCalledWith(2, `/api/tenants/${tenantID}/api-keys/${keyID}`, expect.objectContaining({ method: "DELETE" }));
     const request = fetcher.mock.calls[1]?.[1] as RequestInit;
     expect(new Headers(request.headers).get("x-chalk-recent-auth")).toBe("recent-proof");
-    expect(request.body).toBeUndefined();
+    expect(request.body).toBeDefined();
+    expect(await requestJSON(request)).toEqual({});
   });
 
   it("starts and completes Google recent auth with only the allowlisted query fields", async () => {

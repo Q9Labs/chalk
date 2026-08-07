@@ -21,6 +21,9 @@
     "lint": "pnpm exec oxfmt --check .",
     "check-types": "node --check src/cli.mjs"
   },
+  "dependencies": {
+    "@chalk/diagnostics-contracts": "workspace:^0.1.0"
+  },
   "devDependencies": {
     "playwright": "^1.57.0"
   }

@@ -3,6 +3,7 @@
 import { asDiagnosticInspectError, DiagnosticInspectError } from "./errors.mjs";
 import { resolveOperatorConfig } from "./config.mjs";
 import { sanitizeDiagnosticData } from "./safety.mjs";
+import { parseAgentBrief, parseDiagnosticEventPage, parseDiagnosticOperationPage, parseDiagnosticResolverResponse, parseDiagnosticSnapshot, parseEpilogueProjection, parseFlameProjection, parseGraphProjection, parseParticipantProjection, parseRunProjection } from "@chalk/diagnostics-contracts";
 
 const BODY_ERROR_CODES = Object.freeze({
   unauthorized: "unauthorized",
@@ -22,6 +23,7 @@ const ERROR_MESSAGES = Object.freeze({
   expired: "Diagnostic data has expired",
   server: "Diagnostic service returned an unavailable response",
 });
+const PROJECTION_PARSERS = Object.freeze({ graph: parseGraphProjection, flame: parseFlameProjection, participants: parseParticipantProjections, epilogue: parseEpilogueProjection, run: parseRunProjection });
 
 /**
  * @typedef {{ config?: import("./config.mjs").DiagnosticOperatorConfig; baseUrl?: string; environment?: string; credential?: string; credentialFile?: string; fetchImpl?: typeof fetch; fetch?: typeof fetch }} DiagnosticClientOptions
@@ -42,16 +44,16 @@ export async function createDiagnosticClient(options = {}) {
   return {
     config: { ...config, fetchImpl: undefined },
     async snapshot(reference) {
-      return requestFirst(fetchImpl, headers, baseUrl, [`${pathFor(reference)}`, `${pathFor(reference)}/snapshot`]);
+      return requestFirst(fetchImpl, headers, baseUrl, [`${pathFor(reference)}`, `${pathFor(reference)}/snapshot`], { parseBody: parseDiagnosticRootResponse });
     },
     async brief(reference, query = {}) {
-      return request(fetchImpl, headers, `${baseUrl}${pathFor(reference)}/brief`, { query: queryParams(query) });
+      return request(fetchImpl, headers, `${baseUrl}${pathFor(reference)}/brief`, { query: queryParams(query), parseBody: parseAgentBriefResponse });
     },
     async page(reference, kind, query = {}) {
-      return request(fetchImpl, headers, `${baseUrl}${pathFor(reference)}/${kind}`, { query: queryParams(query) });
+      return request(fetchImpl, headers, `${baseUrl}${pathFor(reference)}/${kind}`, { query: queryParams(query), parseBody: kind === "events" ? parseDiagnosticEventPage : parseDiagnosticOperationPage });
     },
     async projection(reference, kind, query = {}) {
-      return requestFirst(fetchImpl, headers, baseUrl, [`${pathFor(reference)}/${kind}`, pathFor(reference)], { query: queryParams(query) });
+      return requestFirst(fetchImpl, headers, baseUrl, [`${pathFor(reference)}/${kind}`, pathFor(reference)], { query: queryParams(query), parseBody: (body) => parseProjectionResponse(body, kind) });
     },
   };
 }
@@ -87,7 +89,7 @@ function requestHeaders(credential) {
  * @param {Record<string, string>} headers
  * @param {string} baseUrl
  * @param {string[]} paths
- * @param {{ query?: Record<string, string> }} [options]
+ * @param {{ query?: Record<string, string>; parseBody?: (body: unknown) => unknown }} [options]
  */
 async function requestFirst(fetchImpl, headers, baseUrl, paths, options = {}) {
   let lastNotFound;
@@ -113,7 +115,7 @@ function notFoundError(lastNotFound) {
  * @param {typeof fetch} fetchImpl
  * @param {Record<string, string>} headers
  * @param {string} endpoint
- * @param {{ query?: Record<string, string> }} [options]
+ * @param {{ query?: Record<string, string>; parseBody?: (body: unknown) => unknown }} [options]
  * @returns {Promise<DiagnosticResponse>}
  */
 async function request(fetchImpl, headers, endpoint, options = {}) {
@@ -121,7 +123,62 @@ async function request(fetchImpl, headers, endpoint, options = {}) {
   const response = await fetchResponse(fetchImpl, headers, url);
   const body = await responseBody(response);
   if (!response.ok) throw responseError(response.status, body);
-  return { body, status: response.status, url: url.toString() };
+  return { body: parseResponseBody(body, options.parseBody), status: response.status, url: url.toString() };
+}
+
+/** @param {Record<string, unknown>} body @param {((body: unknown) => unknown) | undefined} parser */
+function parseResponseBody(body, parser) {
+  if (!parser) return body;
+  try {
+    return parser(body);
+  } catch (error) {
+    throw new DiagnosticInspectError("server", "Diagnostic service returned an invalid contract", { cause: error });
+  }
+}
+
+/** @param {Record<string, unknown>} body */
+function parseAgentBriefResponse(body) {
+  const brief = body.brief && typeof body.brief === "object" ? body.brief : body;
+  return { ...body, brief: parseAgentBrief(brief) };
+}
+
+/** @param {Record<string, unknown>} body */
+function parseDiagnosticRootResponse(body) {
+  return body.kind === undefined ? parseDiagnosticSnapshot(body) : parseDiagnosticResolverResponse(body);
+}
+
+/** @param {Record<string, unknown>} body @param {string} kind */
+function parseProjectionResponse(body, kind) {
+  const parser = PROJECTION_PARSERS[kind];
+  if (!parser) return body;
+  if (isBareSnapshot(body)) return parseBareSnapshotProjection(body, kind, parser);
+  return parseProjectionEnvelope(body, kind, parser);
+}
+
+function isBareSnapshot(body) {
+  return body.kind === undefined && body.schemaVersion === "DiagnosticSnapshot/v1";
+}
+
+function parseBareSnapshotProjection(body, kind, parser) {
+  const snapshot = parseDiagnosticSnapshot(body);
+  return { ...snapshot, [kind]: parser(snapshot[kind]) };
+}
+
+function parseProjectionEnvelope(body, kind, parser) {
+  const value = projectionValue(body, kind);
+  if (value !== body) return { ...body, [kind]: parser(value) };
+  const resolver = parseDiagnosticResolverResponse(body);
+  return { ...resolver, snapshot: { ...resolver.snapshot, [kind]: parser(resolver.snapshot[kind]) } };
+}
+
+function projectionValue(body, kind) {
+  const value = body[kind];
+  return Object.hasOwn(body, kind) ? value : body;
+}
+
+function parseParticipantProjections(value) {
+  if (!Array.isArray(value)) throw new TypeError("Expected a participants array");
+  return value.map(parseParticipantProjection);
 }
 
 /**

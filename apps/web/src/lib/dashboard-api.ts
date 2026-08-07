@@ -1,96 +1,37 @@
-export type DashboardAccount = {
-  id: string;
-  name: string;
-  email: string;
-  updated_at: string;
-  created_at: string;
-};
+import { Effect } from "effect";
+import {
+  createChalkEffectClient,
+  type APIKeyList,
+  type APIKeyWithSecret,
+  type AccountTenantList,
+  type AuthUser,
+  type DateTimeString,
+  type Episode,
+  type EpisodeEnd,
+  type Pagination,
+  type RecentAuth,
+  type RecentAuthGoogleStart as GeneratedRecentAuthGoogleStart,
+  type Regions,
+  type Space as GeneratedSpace,
+  type Tenant as GeneratedTenant,
+} from "@q9labsai/chalk-client/effect";
 
-export type Tenant = {
-  id: string;
-  name: string;
-  default_region: string | null;
-  logo_key: string | null;
-  website: string | null;
-  updated_at: string;
-  created_at: string;
-};
-
-export type TenantAccess = {
-  id: string;
-  tenant_id: string;
-  account_id: string;
-  role: string;
-  updated_at: string;
-  created_at: string;
-};
-
+type DashboardValue<T> = T extends string ? string : T extends readonly (infer Item)[] ? DashboardValue<Item>[] : T extends object ? { -readonly [Key in keyof T]: DashboardValue<T[Key]> } : T;
+export type DashboardAccount = DashboardValue<AuthUser>;
+export type Tenant = DashboardValue<GeneratedTenant>;
+export type TenantAccess = DashboardValue<AccountTenantList["tenants"][number]["access"]>;
 export type AccountTenant = { tenant: Tenant; access: TenantAccess };
-type AccountTenantPage = {
-  tenants: AccountTenant[];
-  pagination: { page_size: number; next_cursor: string | null; has_more: boolean };
-};
-export type Region = { code: string; name: string };
-
-export type DashboardPagination = { page_size: number; next_cursor: string | null; has_more: boolean };
-
-export type DashboardSpace = {
-  id: string;
-  tenant_id: string;
-  name: string;
-  slug: string;
-  media_plane: string;
-  metadata: unknown;
-  recurring_policy: unknown;
-  admission_policy: unknown;
-  default_episode_duration_seconds: number;
-  maximum_episode_duration_seconds: number;
-  linger_window_seconds: number;
-  archived: boolean;
-  archived_at: string | null;
-  roles: { id: string; name: string; capabilities: string[] }[];
-  created_by_user_id: string | null;
-  updated_at: string;
-  created_at: string;
-};
-
-export type DashboardSpacePage = { spaces: DashboardSpace[]; pagination: DashboardPagination };
+type AccountTenantPage = { tenants: AccountTenant[]; pagination: DashboardPagination };
+export type Region = DashboardValue<Regions["regions"][number]>;
+export type DashboardPagination = DashboardValue<Pagination>;
+export type DashboardSpace = DashboardValue<GeneratedSpace>;
 export type Space = DashboardSpace;
-
-export type DashboardEpisode = {
-  id: string;
-  tenant_id: string;
-  space_id: string;
-  status: "active" | "ending" | "ended";
-  metadata: unknown;
-  config_snapshot: unknown;
-  end_reason?: string | null;
-  started_at: string;
-  ended_at?: string | null;
-  deadline_at: string;
-  deadline_generation: number;
-  updated_at: string;
-  created_at: string;
-};
-
+export type DashboardSpacePage = { spaces: DashboardSpace[]; pagination: DashboardPagination };
+export type DashboardEpisode = Omit<DashboardValue<Episode>, "ended_at"> & { ended_at?: string | null };
 export type DashboardEpisodePage = { episodes: DashboardEpisode[]; pagination: DashboardPagination };
-
-export type DashboardAPIKey = {
-  id: string;
-  tenant_id: string;
-  name: string;
-  scopes: string[];
-  key_prefix: string;
-  created_by_user_id: string | null;
-  last_used_at: string | null;
-  revoked_at: string | null;
-  expires_at: string;
-  updated_at: string;
-  created_at: string;
-};
-
+export type DashboardAPIKey = DashboardValue<APIKeyList["api_keys"][number]>;
 export type DashboardAPIKeyPage = { api_keys: DashboardAPIKey[]; pagination: DashboardPagination };
-export type APIKeySecretResult = { api_key: DashboardAPIKey; secret: string };
+export type APIKeySecretResult = Omit<DashboardValue<APIKeyWithSecret>, "replayed"> & { replayed?: boolean };
 
 let csrfToken: string | undefined;
 let csrfExpiresAt = 0;
@@ -103,8 +44,11 @@ export class DashboardAPIError extends Error {
     message: string,
   ) {
     super(message);
+    this.name = "DashboardAPIError";
   }
 }
+
+type DashboardEffectClient = Effect.Success<ReturnType<typeof createChalkEffectClient>>;
 
 export async function registerAccount(input: { name: string; email: string; password: string }): Promise<DashboardAccount> {
   const response = await dashboardRequest<{ user: DashboardAccount }>("/api/auth/register", { method: "POST", body: input });
@@ -123,15 +67,11 @@ export async function logoutAccount(): Promise<void> {
 }
 
 export function getAccount(): Promise<DashboardAccount> {
-  return dashboardRequest("/api/me");
+  return generatedRequest((client) => client.me.getMe());
 }
 
 function listAccountTenants(options: { cursor?: string; pageSize?: number } = {}): Promise<AccountTenantPage> {
-  const query = new URLSearchParams();
-  if (options.cursor) query.set("cursor", options.cursor);
-  if (options.pageSize) query.set("page_size", String(options.pageSize));
-  const search = query.toString();
-  return dashboardRequest(`/api/me/tenants${search ? `?${search}` : ""}`);
+  return generatedRequest((client) => client.tenants.listMyTenants({ query: { cursor: options.cursor, page_size: options.pageSize } }));
 }
 
 export async function listAllAccountTenants(): Promise<AccountTenant[]> {
@@ -146,24 +86,20 @@ export async function listAllAccountTenants(): Promise<AccountTenant[]> {
 }
 
 export async function listRegions(): Promise<Region[]> {
-  const response = await dashboardRequest<{ regions: Region[] }>("/api/regions");
-  return response.regions;
+  const response = await generatedRequest((client) => client.regions.listRegions());
+  return response.regions.map(({ code, name }) => ({ code, name }));
 }
 
 export async function onboardTenant(input: { name: string; default_region: string }): Promise<AccountTenant> {
   const fingerprint = JSON.stringify({ name: input.name.trim(), default_region: input.default_region });
   const requestKey = tenantOnboardingRequestKey(fingerprint);
-  const response = await dashboardRequest<AccountTenant & { replayed: boolean }>("/api/me/tenants", {
-    method: "POST",
-    body: input,
-    headers: { "Idempotency-Key": requestKey },
-  });
+  const response = await generatedRequest((client) => client.tenants.onboardTenant({ headers: { "Idempotency-Key": requestKey }, payload: input }));
   window.localStorage.removeItem("chalk.tenant-onboarding-request");
-  return { tenant: response.tenant, access: response.access };
+  return { tenant: response.tenant as Tenant, access: response.access as TenantAccess };
 }
 
 export function listSpaces(input: { tenantID: string; cursor?: string; pageSize?: number; archived?: boolean }): Promise<DashboardSpacePage> {
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(input.tenantID)}/spaces${paginationSearch(input)}`);
+  return generatedRequest((client) => client.spaces.listSpaces({ params: { tenant_id: input.tenantID as GeneratedTenant["id"] }, query: { cursor: input.cursor, page_size: input.pageSize, archived: input.archived } }));
 }
 
 export async function createSpace(input: {
@@ -187,11 +123,7 @@ export async function createSpace(input: {
     ...values,
   };
   const request = mutationRequestKey("space-create", JSON.stringify({ tenantID, body }));
-  const space = await dashboardRequest<DashboardSpace>(`/api/tenants/${encodeURIComponent(tenantID)}/spaces`, {
-    method: "POST",
-    body,
-    headers: { "Idempotency-Key": request.key },
-  });
+  const space = await generatedRequest((client) => client.spaces.createSpace({ params: { tenant_id: tenantID as GeneratedTenant["id"] }, headers: { "Idempotency-Key": request.key }, payload: body }));
   clearMutationRequestKey(request.storageKey);
   return space;
 }
@@ -205,20 +137,20 @@ export function updateSpace(input: {
   metadata?: unknown;
   recurring_policy?: unknown;
   admission_policy?: unknown;
-  default_episode_duration_seconds?: number;
-  maximum_episode_duration_seconds?: number;
-  linger_window_seconds?: number;
+  default_episode_duration_seconds?: number | null;
+  maximum_episode_duration_seconds?: number | null;
+  linger_window_seconds?: number | null;
 }): Promise<DashboardSpace> {
   const { tenantID, spaceID, ...body } = input;
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/spaces/${encodeURIComponent(spaceID)}`, { method: "PATCH", body });
+  return generatedRequest((client) => client.spaces.updateSpace({ params: { tenant_id: tenantID as GeneratedTenant["id"], space_id: spaceID as GeneratedSpace["id"] }, payload: updateSpacePayload(body) }));
 }
 
 export function archiveSpace(input: { tenantID: string; spaceID: string }): Promise<DashboardSpace> {
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(input.tenantID)}/spaces/${encodeURIComponent(input.spaceID)}/archive`, { method: "POST", body: {} });
+  return generatedRequest((client) => client.spaces.archiveSpace({ params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] } }));
 }
 
 export function restoreSpace(input: { tenantID: string; spaceID: string }): Promise<DashboardSpace> {
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(input.tenantID)}/spaces/${encodeURIComponent(input.spaceID)}/restore`, { method: "POST", body: {} });
+  return generatedRequest((client) => client.spaces.restoreSpace({ params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] } }));
 }
 
 export async function listEpisodes(input: { tenantID: string; spaceID?: string; cursor?: string; pageSize?: number }): Promise<DashboardEpisodePage> {
@@ -228,30 +160,24 @@ export async function listEpisodes(input: { tenantID: string; spaceID?: string; 
 }
 
 export function getEpisode(input: { tenantID: string; spaceID: string; episodeID: string }): Promise<DashboardEpisode> {
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(input.tenantID)}/spaces/${encodeURIComponent(input.spaceID)}/episodes/${encodeURIComponent(input.episodeID)}`);
+  return generatedRequest((client) => client.episodes.getEpisode({ params: episodeParams(input) }));
 }
 
 export async function createEpisode(input: { tenantID: string; spaceID: string; metadata?: unknown; started_at?: string }): Promise<DashboardEpisode> {
   const { tenantID, spaceID, ...body } = input;
   const fingerprint = JSON.stringify({ tenantID, spaceID, body });
   const request = mutationRequestKey("episode-create", fingerprint);
-  const episode = await dashboardRequest<DashboardEpisode>(`/api/tenants/${encodeURIComponent(tenantID)}/spaces/${encodeURIComponent(spaceID)}/episodes`, {
-    method: "POST",
-    body,
-    headers: { "Idempotency-Key": request.key },
-  });
+  const episode = await generatedRequest((client) =>
+    client.episodes.createEpisode({ params: { tenant_id: tenantID as GeneratedTenant["id"], space_id: spaceID as GeneratedSpace["id"] }, headers: { "Idempotency-Key": request.key }, payload: { ...body, started_at: body.started_at as Episode["started_at"] } }),
+  );
   clearMutationRequestKey(request.storageKey);
   return episode;
 }
 
-export async function endEpisode(input: { tenantID: string; spaceID: string; episodeID: string }): Promise<unknown> {
+export async function endEpisode(input: { tenantID: string; spaceID: string; episodeID: string }): Promise<DashboardValue<EpisodeEnd>> {
   const fingerprint = episodeEndFingerprint(input);
   const request = mutationRequestKey("episode-end", fingerprint);
-  const result = await dashboardRequest<unknown>(`/api/tenants/${encodeURIComponent(input.tenantID)}/spaces/${encodeURIComponent(input.spaceID)}/episodes/${encodeURIComponent(input.episodeID)}/end`, {
-    method: "POST",
-    body: {},
-    headers: { "Idempotency-Key": request.key },
-  });
+  const result = await generatedRequest((client) => client.episodes.endEpisode({ params: episodeParams(input), headers: { "Idempotency-Key": request.key } }));
   if (!episodeEndStillPending(result)) clearMutationRequestKey(request.storageKey);
   return result;
 }
@@ -271,40 +197,71 @@ function episodeEndFingerprint(input: { tenantID: string; spaceID: string; episo
 }
 
 export function listAPIKeys(tenantID: string, options: { cursor?: string; pageSize?: number } = {}): Promise<DashboardAPIKeyPage> {
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/api-keys${paginationSearch(options)}`);
+  return generatedRequest((client) => client.default.listAPIKeys({ params: { tenant_id: tenantID as GeneratedTenant["id"] }, query: { cursor: options.cursor, page_size: options.pageSize } }));
 }
 
 export async function createAPIKey(tenantID: string, input: { name: string; scopes: string[]; expires_at: string }, options: { idempotencyKey?: string; recentAuth?: string } = {}): Promise<APIKeySecretResult> {
   const requestKey = options.idempotencyKey ?? crypto.randomUUID().replaceAll("-", "");
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/api-keys`, {
-    method: "POST",
-    body: input,
-    headers: mutationSecurityHeaders(requestKey, options.recentAuth),
-  });
+  return generatedRequest((client) => client.default.createAPIKey({ params: { tenant_id: tenantID as GeneratedTenant["id"] }, headers: requiredAPIKeyHeaders(requestKey, options.recentAuth), payload: { ...input, expires_at: input.expires_at as DateTimeString } }));
 }
 
 export async function rotateAPIKey(tenantID: string, keyID: string, input: { expires_at?: string } = {}, options: { idempotencyKey?: string; recentAuth?: string } = {}): Promise<APIKeySecretResult> {
   const requestKey = options.idempotencyKey ?? crypto.randomUUID().replaceAll("-", "");
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/api-keys/${encodeURIComponent(keyID)}/rotate`, {
-    method: "POST",
-    body: input,
-    headers: mutationSecurityHeaders(requestKey, options.recentAuth),
-  });
+  return generatedRequest((client) =>
+    client.default.rotateAPIKey({ params: { tenant_id: tenantID as GeneratedTenant["id"], api_key_id: keyID as APIKeyList["api_keys"][number]["id"] }, headers: requiredAPIKeyHeaders(requestKey, options.recentAuth), payload: { ...input, expires_at: input.expires_at as DateTimeString } }),
+  );
 }
 
 export function revokeAPIKey(tenantID: string, keyID: string, options: { recentAuth?: string } = {}): Promise<void> {
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/api-keys/${encodeURIComponent(keyID)}`, {
-    method: "DELETE",
-    headers: mutationSecurityHeaders(undefined, options.recentAuth),
-  });
+  return generatedRequest((client) => client.default.revokeAPIKey({ params: { tenant_id: tenantID as GeneratedTenant["id"], api_key_id: keyID as APIKeyList["api_keys"][number]["id"] }, headers: recentAPIKeyHeaders(options.recentAuth) }));
 }
 
-export function createRecentAuthProof(input: { password: string; action: string; resource_id?: string }): Promise<{ proof: string; expires_at: string }> {
+export function createRecentAuthProof(input: { password: string; action: string; resource_id?: string }): Promise<RecentAuthProof> {
   return dashboardRequest("/api/me/recent-auth", { method: "POST", body: input });
 }
 
-export type RecentAuthGoogleStart = { authorization_url: string; state: string };
-export type RecentAuthProof = { proof: string; expires_at: string };
+export type RecentAuthGoogleStart = DashboardValue<GeneratedRecentAuthGoogleStart>;
+export type RecentAuthProof = DashboardValue<RecentAuth>;
+
+function updateSpacePayload(input: {
+  name?: string;
+  slug?: string;
+  media_plane?: string;
+  metadata?: unknown;
+  recurring_policy?: unknown;
+  admission_policy?: unknown;
+  default_episode_duration_seconds?: number | null;
+  maximum_episode_duration_seconds?: number | null;
+  linger_window_seconds?: number | null;
+}) {
+  return {
+    ...(input.name === undefined ? {} : { name: input.name }),
+    ...(input.slug === undefined ? {} : { slug: input.slug }),
+    ...(input.media_plane === undefined ? {} : { media_plane: input.media_plane }),
+    ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+    ...(input.recurring_policy === undefined ? {} : { recurring_policy: input.recurring_policy }),
+    ...(input.admission_policy === undefined ? {} : { admission_policy: input.admission_policy }),
+    default_episode_duration_seconds: optionalSpaceNumber(input.default_episode_duration_seconds),
+    maximum_episode_duration_seconds: optionalSpaceNumber(input.maximum_episode_duration_seconds),
+    linger_window_seconds: optionalSpaceNumber(input.linger_window_seconds),
+  };
+}
+
+function optionalSpaceNumber(value: number | null | undefined): { Set: boolean; Value?: number | null } {
+  return value === undefined ? { Set: false } : { Set: true, Value: value };
+}
+
+function episodeParams(input: { tenantID: string; spaceID: string; episodeID: string }) {
+  return { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"], episode_id: input.episodeID as Episode["id"] };
+}
+
+function requiredAPIKeyHeaders(idempotencyKey: string, recentAuth: string | undefined) {
+  return { "Idempotency-Key": idempotencyKey, "X-Chalk-Recent-Auth": recentAuth ?? "" };
+}
+
+function recentAPIKeyHeaders(recentAuth: string | undefined) {
+  return { "X-Chalk-Recent-Auth": recentAuth ?? "" };
+}
 
 export function startRecentAuthGoogle(input: { action: string; resource_id?: string }): Promise<RecentAuthGoogleStart> {
   const query = new URLSearchParams({ action: input.action });
@@ -326,7 +283,123 @@ type DashboardRequestOptions = {
 type DashboardRequestCorrelation = {
   journeyID: string;
   traceparent: string;
+  responseStatus?: number;
 };
+
+async function createDashboardEffectClient(correlation: DashboardRequestCorrelation): Promise<DashboardEffectClient> {
+  const transport = dashboardTransport(correlation);
+  return Effect.runPromise(
+    createChalkEffectClient({
+      baseUrl: window.location.origin,
+      fetch: transport,
+    }),
+  );
+}
+
+async function generatedRequest<A, E = never>(operation: (client: DashboardEffectClient) => Effect.Effect<A, E>, correlation = newDashboardRequestCorrelation()): Promise<DashboardValue<A>> {
+  try {
+    const client = await createDashboardEffectClient(correlation);
+    return dashboardValue(await Effect.runPromise(operation(client)));
+  } catch (cause) {
+    throw dashboardEffectError(cause, correlation.responseStatus);
+  }
+}
+
+function dashboardValue<T>(value: T): DashboardValue<T> {
+  if (Array.isArray(value)) return value.map((item) => dashboardValue(item)) as DashboardValue<T>;
+  if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, dashboardValue(child)])) as DashboardValue<T>;
+  return value as DashboardValue<T>;
+}
+
+function dashboardTransport(correlation: DashboardRequestCorrelation): typeof globalThis.fetch {
+  const requestFetch = globalThis.fetch.bind(globalThis);
+  const send = async (input: RequestInfo | URL, init: RequestInit = {}, retryCSRF = true): Promise<Response> => {
+    const sourceURL = new URL(input instanceof Request ? input.url : input.toString(), window.location.origin);
+    const targetURL = new URL(sourceURL);
+    if (targetURL.pathname.startsWith("/v1")) targetURL.pathname = `/api${targetURL.pathname.slice(3)}`;
+    const method = (init.method ?? "GET").toUpperCase();
+    const headers = new Headers(init.headers);
+    headers.set("Accept", "application/json");
+    headers.set("X-Chalk-Journey-ID", correlation.journeyID);
+    headers.set("Traceparent", correlation.traceparent);
+    if (method !== "GET") headers.set("X-Chalk-CSRF", await getCSRFToken());
+    const body = dashboardTransportBody(targetURL, method, init.body);
+    if (method !== "GET" && body !== undefined) headers.set("Content-Type", "application/json");
+    const targetInput = targetURL.origin === window.location.origin ? `${targetURL.pathname}${targetURL.search}` : targetURL;
+    const response = await requestFetch(targetInput, { ...init, credentials: "same-origin", headers, body });
+    correlation.responseStatus = response.status;
+    if (retryCSRF && (await retryableCSRFResponse(response, method))) {
+      csrfToken = undefined;
+      csrfExpiresAt = 0;
+      return send(input, init, false);
+    }
+    return response;
+  };
+  return (input, init = {}) => send(input, init);
+}
+
+function dashboardTransportBody(targetURL: URL, method: string, body: RequestInit["body"]): RequestInit["body"] {
+  if (method !== "GET" && body === undefined) return "{}";
+  const text = requestBodyText(body);
+  if (method !== "PATCH" || !targetURL.pathname.includes("/spaces/") || text === undefined) return body;
+  try {
+    return JSON.stringify(normalizeUpdateSpaceBody(JSON.parse(text)));
+  } catch {
+    return body;
+  }
+}
+
+function requestBodyText(body: RequestInit["body"]): string | undefined {
+  if (typeof body === "string") return body;
+  if (body instanceof Uint8Array) return new TextDecoder().decode(body);
+  return undefined;
+}
+
+const SPACE_DURATION_FIELDS = new Set(["default_episode_duration_seconds", "maximum_episode_duration_seconds", "linger_window_seconds"]);
+
+function normalizeUpdateSpaceBody(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, field]) => {
+      if (!SPACE_DURATION_FIELDS.has(key) || !isRecord(field)) return [[key, field]];
+      return field.Set === true ? [[key, field.Value ?? null]] : [];
+    }),
+  );
+}
+
+async function retryableCSRFResponse(response: Response, method: string): Promise<boolean> {
+  if (method === "GET" || response.status !== 403) return false;
+  try {
+    const value: unknown = await response.clone().json();
+    const error = isRecord(value) && isRecord(value.error) ? value.error : undefined;
+    return normalizeDashboardErrorCode(error ? stringValue(error.code) : undefined) === "csrf.mismatch";
+  } catch {
+    return false;
+  }
+}
+
+function dashboardEffectError(cause: unknown, responseStatus?: number): DashboardAPIError {
+  const apiError = apiErrorFields(cause);
+  if (apiError) return new DashboardAPIError(effectErrorStatus(cause) ?? responseStatus ?? 500, apiError.code, apiError.message);
+  const status = effectErrorStatus(cause) ?? responseStatus;
+  if (status !== undefined && status >= 200 && status < 300) return new DashboardAPIError(502, "response.invalid", "Response did not match the expected contract");
+  return new DashboardAPIError(status ?? 500, "request.failed", "Request failed");
+}
+
+function apiErrorFields(value: unknown): { code: string; message: string } | undefined {
+  if (!isRecord(value)) return undefined;
+  const nested = isRecord(value.error) ? value.error : value;
+  const code = stringValue(nested.code);
+  const message = stringValue(nested.message);
+  return code && message && code.includes(".") ? { code, message } : undefined;
+}
+
+function effectErrorStatus(value: unknown): number | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.status === "number") return value.status;
+  if (!isRecord(value.reason) || !isRecord(value.reason.response)) return undefined;
+  return typeof value.reason.response.status === "number" ? value.reason.response.status : undefined;
+}
 
 async function dashboardRequest<T = unknown>(path: string, options: DashboardRequestOptions = {}, retryCSRF = true, correlation: DashboardRequestCorrelation = newDashboardRequestCorrelation()): Promise<T> {
   const method = options.method ?? "GET";
@@ -347,8 +420,9 @@ async function dashboardRequest<T = unknown>(path: string, options: DashboardReq
   if (!response.ok) {
     const value = await readJSON(response);
     const error = isRecord(value.error) ? value.error : {};
-    const code = stringValue(error.code) ?? "request_failed";
-    if (retryCSRF && method !== "GET" && response.status === 403 && code === "csrf_mismatch") {
+    const rawCode = stringValue(error.code);
+    const code = normalizeDashboardErrorCode(rawCode);
+    if (retryCSRF && method !== "GET" && response.status === 403 && code === "csrf.mismatch") {
       csrfToken = undefined;
       csrfExpiresAt = 0;
       return dashboardRequest(path, options, false, correlation);
@@ -359,17 +433,15 @@ async function dashboardRequest<T = unknown>(path: string, options: DashboardReq
   return (await response.json()) as T;
 }
 
-function paginationSearch(options: { cursor?: string; pageSize?: number; archived?: boolean }): string {
-  const query = new URLSearchParams();
-  if (options.cursor) query.set("cursor", options.cursor);
-  if (options.pageSize) query.set("page_size", String(options.pageSize));
-  if (options.archived !== undefined) query.set("archived", String(options.archived));
-  const search = query.toString();
-  return search ? `?${search}` : "";
+function normalizeDashboardErrorCode(code: string | undefined): string {
+  if (code === "csrf_mismatch") return "csrf.mismatch";
+  if (code === "upstream_unavailable") return "request.failed";
+  if (code && code.includes(".")) return code;
+  return "request.failed";
 }
 
 async function listSpaceEpisodes(input: { tenantID: string; spaceID: string; cursor?: string; pageSize?: number }): Promise<DashboardEpisodePage> {
-  return dashboardRequest(`/api/tenants/${encodeURIComponent(input.tenantID)}/spaces/${encodeURIComponent(input.spaceID)}/episodes${paginationSearch(input)}`);
+  return generatedRequest((client) => client.episodes.listEpisodes({ params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] }, query: { cursor: input.cursor, page_size: input.pageSize } }));
 }
 
 /**
@@ -409,7 +481,7 @@ async function listTenantEpisodes(input: { tenantID: string; cursor?: string; pa
   const pageSize = boundedEpisodePageSize(input.pageSize);
   const state = input.cursor ? decodeCompositeEpisodeCursor(input.cursor) : undefined;
   if (state && (state.tenant_id !== input.tenantID || state.page_size !== pageSize)) {
-    throw new DashboardAPIError(400, "invalid_cursor", "Episode history cursor does not match this request");
+    throw new DashboardAPIError(400, "request.invalid_cursor", "Episode history cursor does not match this request");
   }
 
   let spacesExhausted = state?.spaces_exhausted ?? false;
@@ -423,7 +495,7 @@ async function listTenantEpisodes(input: { tenantID: string; cursor?: string; pa
     streams = spaces.map((space) => ({ space_id: space.id, cursor: null, offset: 0, exhausted: false }));
     spacesExhausted = true;
   } else if (streams.length === 0 && !spacesExhausted) {
-    throw new DashboardAPIError(400, "invalid_cursor", "Episode history cursor is invalid");
+    throw new DashboardAPIError(400, "request.invalid_cursor", "Episode history cursor is invalid");
   }
 
   if (streams.length === 0) {
@@ -491,11 +563,11 @@ async function listTenantEpisodeSpaces(tenantID: string): Promise<DashboardSpace
     pagesRead += 1;
     spaces.push(...page.spaces);
     if (spaces.length > TENANT_EPISODE_MAX_SPACES || (pagesRead >= TENANT_EPISODE_MAX_SPACE_PAGES && page.pagination.has_more)) {
-      throw new DashboardAPIError(413, "episode_history_too_large", `Tenant-wide Episode history supports up to ${TENANT_EPISODE_MAX_SPACES} Spaces.`);
+      throw new DashboardAPIError(413, "episode.history_too_large", `Tenant-wide Episode history supports up to ${TENANT_EPISODE_MAX_SPACES} Spaces.`);
     }
     if (!page.pagination.has_more) return spaces;
     const nextCursor = page.pagination.next_cursor;
-    if (!nextCursor || nextCursor === cursor) throw new DashboardAPIError(502, "invalid_pagination", "The Spaces history cursor was invalid.");
+    if (!nextCursor || nextCursor === cursor) throw new DashboardAPIError(502, "pagination.invalid", "The Spaces history cursor was invalid.");
     cursor = nextCursor;
   }
 }
@@ -530,7 +602,7 @@ function decodeCompositeEpisodeCursor(cursor: string): CompositeEpisodeCursor {
   } catch {
     // Fall through to the stable client error below.
   }
-  throw new DashboardAPIError(400, "invalid_cursor", "Episode history cursor is invalid");
+  throw new DashboardAPIError(400, "request.invalid_cursor", "Episode history cursor is invalid");
 }
 
 function isCompositeEpisodeCursor(value: unknown): value is CompositeEpisodeCursor {
@@ -550,13 +622,6 @@ function isCompositeEpisodeCursor(value: unknown): value is CompositeEpisodeCurs
     return false;
   }
   return value.streams.every((stream) => isRecord(stream) && typeof stream.space_id === "string" && (typeof stream.cursor === "string" || stream.cursor === null) && typeof stream.offset === "number" && Number.isInteger(stream.offset) && stream.offset >= 0 && typeof stream.exhausted === "boolean");
-}
-
-function mutationSecurityHeaders(idempotencyKey?: string, recentAuth?: string): HeadersInit {
-  const headers = new Headers();
-  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
-  if (recentAuth) headers.set("X-Chalk-Recent-Auth", recentAuth);
-  return headers;
 }
 
 function mutationRequestKey(action: string, fingerprint: string): { key: string; storageKey: string } {
@@ -592,9 +657,9 @@ function newDashboardRequestCorrelation(): DashboardRequestCorrelation {
 async function getCSRFToken(): Promise<string> {
   if (csrfToken && Date.now() < csrfExpiresAt) return csrfToken;
   const response = await fetch("/api/auth/csrf", { credentials: "same-origin", headers: { Accept: "application/json" } });
-  if (!response.ok) throw new DashboardAPIError(response.status, "csrf_unavailable", "Could not secure this request");
+  if (!response.ok) throw new DashboardAPIError(response.status, "csrf.unavailable", "Could not secure this request");
   const value = (await response.json()) as { csrf_token?: unknown };
-  if (typeof value.csrf_token !== "string") throw new DashboardAPIError(502, "csrf_unavailable", "Could not secure this request");
+  if (typeof value.csrf_token !== "string") throw new DashboardAPIError(502, "csrf.unavailable", "Could not secure this request");
   csrfToken = value.csrf_token;
   csrfExpiresAt = Date.now() + CSRF_REFRESH_MS;
   return csrfToken;

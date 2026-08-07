@@ -247,7 +247,7 @@ export class EpisodeDiagnosticsApiClient {
       headers,
     });
     if (!response.ok) {
-      if (retryCSRF && method !== "GET" && method !== "HEAD" && response.status === 403 && (await this.responseErrorCode(response.clone())) === "csrf_mismatch") {
+      if (retryCSRF && method !== "GET" && method !== "HEAD" && response.status === 403 && (await this.responseErrorCode(response.clone())) === "csrf.mismatch") {
         this.csrfToken = undefined;
         this.csrfExpiresAt = 0;
         return this.fetchJson(url, init, false);
@@ -291,15 +291,15 @@ export class EpisodeDiagnosticsApiClient {
       credentials: "same-origin",
       headers: { accept: "application/json" },
     });
-    if (!response.ok) throw new EpisodeDiagnosticsApiError("Could not secure this request", response.status, "csrf_unavailable");
+    if (!response.ok) throw new EpisodeDiagnosticsApiError("Could not secure this request", response.status, "csrf.unavailable");
 
     let value: { csrf_token?: unknown };
     try {
       value = (await response.json()) as { csrf_token?: unknown };
     } catch {
-      throw new EpisodeDiagnosticsApiError("Could not secure this request", 502, "csrf_unavailable");
+      throw new EpisodeDiagnosticsApiError("Could not secure this request", 502, "csrf.unavailable");
     }
-    if (typeof value.csrf_token !== "string" || value.csrf_token.length === 0) throw new EpisodeDiagnosticsApiError("Could not secure this request", 502, "csrf_unavailable");
+    if (typeof value.csrf_token !== "string" || value.csrf_token.length === 0) throw new EpisodeDiagnosticsApiError("Could not secure this request", 502, "csrf.unavailable");
     this.csrfToken = value.csrf_token;
     this.csrfExpiresAt = Date.now() + CSRF_REFRESH_MS;
     return value.csrf_token;

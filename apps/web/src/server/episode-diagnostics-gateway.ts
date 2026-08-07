@@ -40,7 +40,7 @@ export async function handleEpisodeDiagnosticsGateway(request: Request, env: Epi
     const accountToken = readCookie(request.headers.get("cookie"), accountCookieName(requestURL));
     if (!accountToken) {
       responseStatus = 401;
-      return secureResponse(errorResponse(401, "unauthenticated", "Authentication required"), journeyID);
+      return secureResponse(errorResponse(401, "access.unauthenticated", "Authentication required"), journeyID);
     }
 
     const upstreamOrigin = resolveOrigin(env.CHALK_EPISODE_DIAGNOSTICS_API_ORIGIN ?? env.CHALK_API_ORIGIN);
@@ -54,7 +54,7 @@ export async function handleEpisodeDiagnosticsGateway(request: Request, env: Epi
     });
     if (!accountResponse.ok) {
       responseStatus = accountResponse.status === 401 || accountResponse.status === 403 ? 401 : 502;
-      return secureResponse(errorResponse(responseStatus, responseStatus === 401 ? "unauthenticated" : "account_unavailable", responseStatus === 401 ? "Authentication required" : "Account service is unavailable"), journeyID);
+      return secureResponse(errorResponse(responseStatus, responseStatus === 401 ? "access.unauthenticated" : "account.unavailable", responseStatus === 401 ? "Authentication required" : "Account service is unavailable"), journeyID);
     }
 
     const body = await requestBody(request);
@@ -67,34 +67,34 @@ export async function handleEpisodeDiagnosticsGateway(request: Request, env: Epi
     return secureResponse(response, journeyID);
   } catch (error) {
     responseStatus = error instanceof GatewayError ? error.status : 502;
-    return secureResponse(errorResponse(responseStatus, error instanceof GatewayError ? error.code : "upstream_unavailable", error instanceof GatewayError ? error.message : "Episode Diagnostics service is unavailable"), journeyID);
+    return secureResponse(errorResponse(responseStatus, error instanceof GatewayError ? error.code : "request.failed", error instanceof GatewayError ? error.message : "Episode Diagnostics service is unavailable"), journeyID);
   } finally {
     console.info(JSON.stringify({ event: "episode_diagnostics.gateway", journey_id: journeyID, route: boundedRoute(requestURL.pathname), method: request.method, outcome, status: responseStatus, duration_ms: Date.now() - startedAt }));
   }
 }
 
 function validateRequest(request: Request, url: URL, env: EpisodeDiagnosticsGatewayEnv): Response | undefined {
-  if (!ALLOWED_METHODS.has(request.method.toUpperCase())) return errorResponse(405, "method_not_allowed", "Episode Diagnostics gateway method is not allowed");
-  if (url.toString().length > MAX_URL_LENGTH || !isDiagnosticPath(url.pathname)) return errorResponse(404, "not_found", "Route not found");
+  if (!ALLOWED_METHODS.has(request.method.toUpperCase())) return errorResponse(405, "request.method_not_allowed", "Episode Diagnostics gateway method is not allowed");
+  if (url.toString().length > MAX_URL_LENGTH || !isDiagnosticPath(url.pathname)) return errorResponse(404, "route.not_found", "Route not found");
 
   for (const source of [request.headers.get("origin"), request.headers.get("referer")]) {
     if (!source) continue;
     try {
-      if (new URL(source).origin !== url.origin) return errorResponse(403, "origin_mismatch", "A same-origin request is required");
+      if (new URL(source).origin !== url.origin) return errorResponse(403, "origin.mismatch", "A same-origin request is required");
     } catch {
-      return errorResponse(403, "origin_mismatch", "A same-origin request is required");
+      return errorResponse(403, "origin.mismatch", "A same-origin request is required");
     }
   }
 
   const fetchSite = request.headers.get("sec-fetch-site");
-  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") return errorResponse(403, "origin_mismatch", "A same-origin request is required");
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") return errorResponse(403, "origin.mismatch", "A same-origin request is required");
   if (request.method.toUpperCase() !== "GET") {
     const source = request.headers.get("origin") ?? request.headers.get("referer");
-    if (!source) return errorResponse(403, "origin_required", "A same-origin request is required");
-    if (!hasMatchingCsrfProof(request, csrfCookieName(url), CSRF_HEADER)) return errorResponse(403, "csrf_mismatch", "CSRF validation failed");
+    if (!source) return errorResponse(403, "origin.required", "A same-origin request is required");
+    if (!hasMatchingCsrfProof(request, csrfCookieName(url), CSRF_HEADER)) return errorResponse(403, "csrf.mismatch", "CSRF validation failed");
   }
   if (env.CHALK_EPISODE_DIAGNOSTICS_GATEWAY?.trim() !== "verified" || env.CHALK_EPISODE_DIAGNOSTICS?.trim() !== "hosted" || !["development", "staging"].includes(env.CHALK_ENVIRONMENT?.trim() ?? "")) {
-    return errorResponse(503, "gateway_misconfigured", "Episode Diagnostics gateway is not enabled for this environment");
+    return errorResponse(503, "gateway.misconfigured", "Episode Diagnostics gateway is not enabled for this environment");
   }
   return undefined;
 }
@@ -111,18 +111,18 @@ async function requestBody(request: Request): Promise<ArrayBuffer | undefined> {
   if (request.method === "GET") return undefined;
   if (request.method === "POST") {
     const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-    if (contentType !== "application/json") throw new GatewayError(415, "unsupported_media_type", "Content-Type must be application/json");
+    if (contentType !== "application/json") throw new GatewayError(415, "request.unsupported_media_type", "Content-Type must be application/json");
   }
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) throw new GatewayError(413, "payload_too_large", "Request body is too large");
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) throw new GatewayError(413, "request.payload_too_large", "Request body is too large");
   const body = await request.arrayBuffer();
-  if (body.byteLength > MAX_BODY_BYTES) throw new GatewayError(413, "payload_too_large", "Request body is too large");
+  if (body.byteLength > MAX_BODY_BYTES) throw new GatewayError(413, "request.payload_too_large", "Request body is too large");
   return body;
 }
 
 function diagnosticURL(requestURL: URL, origin: URL): URL {
   const upstreamURL = new URL(`${requestURL.pathname}${allowedSearch(requestURL)}`, origin);
-  if (upstreamURL.origin !== origin.origin || !isDiagnosticPath(upstreamURL.pathname)) throw new GatewayError(400, "unsafe_path", "Diagnostic route is not safe");
+  if (upstreamURL.origin !== origin.origin || !isDiagnosticPath(upstreamURL.pathname)) throw new GatewayError(400, "route.unsafe_path", "Diagnostic route is not safe");
   return upstreamURL;
 }
 
@@ -156,7 +156,7 @@ async function sanitizeResponse(response: Response): Promise<Response> {
       const value = await response.json();
       return new Response(JSON.stringify(stripTokenFields(value, ["authorization", "secret", "credential"])), { status: response.status, headers });
     } catch {
-      return new Response(JSON.stringify({ code: "upstream_contract_error", message: "Diagnostics service returned malformed JSON" }), { status: 502, headers: { "content-type": "application/json; charset=utf-8" } });
+      return new Response(JSON.stringify({ code: "upstream.contract_error", message: "Diagnostics service returned malformed JSON" }), { status: 502, headers: { "content-type": "application/json; charset=utf-8" } });
     }
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
@@ -174,9 +174,9 @@ async function followSignedDownload(response: Response, upstreamURL: URL, env: E
   let currentResponse = response;
   let currentURL = upstreamURL;
   for (let redirectCount = 0; isRedirect(currentResponse.status); redirectCount += 1) {
-    if (redirectCount >= MAX_DOWNLOAD_REDIRECTS) throw new GatewayError(502, "download_redirect_limit", "The signed diagnostic download redirected too many times");
+    if (redirectCount >= MAX_DOWNLOAD_REDIRECTS) throw new GatewayError(502, "download.redirect_limit", "The signed diagnostic download redirected too many times");
     const location = currentResponse.headers.get("location");
-    if (!location) throw new GatewayError(502, "download_redirect_invalid", "The signed diagnostic download omitted its redirect location");
+    if (!location) throw new GatewayError(502, "download.redirect_invalid", "The signed diagnostic download omitted its redirect location");
     const signedURL = validateSignedDownloadURL(location, currentURL, env.CHALK_EPISODE_DIAGNOSTICS_SIGNED_DOWNLOAD_HOSTS);
     currentResponse = await fetcher(signedURL, { method: "GET", redirect: "manual", credentials: "omit" });
     currentURL = signedURL;
@@ -199,15 +199,15 @@ function validateSignedDownloadURL(rawLocation: string, currentURL: URL, rawHost
       .map((host) => host.trim().toLowerCase())
       .filter(Boolean),
   );
-  if (allowedHosts.size === 0) throw new GatewayError(503, "download_misconfigured", "Signed diagnostic download hosts are not configured");
+  if (allowedHosts.size === 0) throw new GatewayError(503, "download.misconfigured", "Signed diagnostic download hosts are not configured");
   let location: URL;
   try {
     location = new URL(rawLocation, currentURL);
   } catch {
-    throw new GatewayError(502, "download_redirect_invalid", "The signed diagnostic download location is invalid");
+    throw new GatewayError(502, "download.redirect_invalid", "The signed diagnostic download location is invalid");
   }
   if (location.protocol !== "https:" || location.username || location.password || location.hash || !allowedHosts.has(location.host.toLowerCase())) {
-    throw new GatewayError(502, "download_redirect_invalid", "The signed diagnostic download location is not allowlisted");
+    throw new GatewayError(502, "download.redirect_invalid", "The signed diagnostic download location is not allowlisted");
   }
   return location;
 }
@@ -228,7 +228,7 @@ async function sanitizeDownloadResponse(response: Response): Promise<Response> {
 async function boundedDownloadBody(response: Response): Promise<Uint8Array> {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength !== null && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAX_DOWNLOAD_BYTES)) {
-    throw new GatewayError(413, "download_too_large", "The diagnostic download exceeds the gateway size limit");
+    throw new GatewayError(413, "download.too_large", "The diagnostic download exceeds the gateway size limit");
   }
   if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
@@ -241,7 +241,7 @@ async function boundedDownloadBody(response: Response): Promise<Uint8Array> {
       total += result.value.byteLength;
       if (total > MAX_DOWNLOAD_BYTES) {
         await reader.cancel();
-        throw new GatewayError(413, "download_too_large", "The diagnostic download exceeds the gateway size limit");
+        throw new GatewayError(413, "download.too_large", "The diagnostic download exceeds the gateway size limit");
       }
       chunks.push(result.value);
     }
@@ -260,14 +260,14 @@ async function boundedDownloadBody(response: Response): Promise<Uint8Array> {
 function safeDownloadContentType(value: string | null): string | undefined {
   if (!value) return undefined;
   const contentType = value.trim();
-  if (contentType.length > 256 || /[\r\n]/u.test(contentType) || !DOWNLOAD_CONTENT_TYPE.test(contentType)) throw new GatewayError(502, "download_content_type_invalid", "The diagnostic download content type is not allowed");
+  if (contentType.length > 256 || /[\r\n]/u.test(contentType) || !DOWNLOAD_CONTENT_TYPE.test(contentType)) throw new GatewayError(502, "download.content_type_invalid", "The diagnostic download content type is not allowed");
   return contentType;
 }
 
 function safeContentDisposition(value: string | null): string | undefined {
   if (!value) return undefined;
   const disposition = value.trim();
-  if (disposition.length > 512 || /[\r\n\\/]/u.test(disposition) || !/^attachment(?:;\s*filename(?:\*?)=(?:"[A-Za-z0-9._ -]{1,160}"|[A-Za-z0-9._-]{1,160}))?$/iu.test(disposition)) throw new GatewayError(502, "download_disposition_invalid", "The diagnostic download disposition is not allowed");
+  if (disposition.length > 512 || /[\r\n\\/]/u.test(disposition) || !/^attachment(?:;\s*filename(?:\*?)=(?:"[A-Za-z0-9._ -]{1,160}"|[A-Za-z0-9._-]{1,160}))?$/iu.test(disposition)) throw new GatewayError(502, "download.disposition_invalid", "The diagnostic download disposition is not allowed");
   return disposition;
 }
 
@@ -289,16 +289,16 @@ function secureResponse(response: Response, journeyID: string): Response {
 }
 
 function resolveOrigin(rawOrigin: string | undefined): URL {
-  if (!rawOrigin) throw new GatewayError(503, "gateway_misconfigured", "Episode Diagnostics gateway has no upstream origin");
+  if (!rawOrigin) throw new GatewayError(503, "gateway.misconfigured", "Episode Diagnostics gateway has no upstream origin");
   let origin: URL;
   try {
     origin = new URL(rawOrigin);
   } catch {
-    throw new GatewayError(503, "gateway_misconfigured", "Episode Diagnostics gateway has an invalid upstream origin");
+    throw new GatewayError(503, "gateway.misconfigured", "Episode Diagnostics gateway has an invalid upstream origin");
   }
   const local = origin.hostname === "127.0.0.1" || origin.hostname === "localhost" || origin.hostname === "[::1]";
   if (origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/" || (origin.protocol !== "https:" && !(local && origin.protocol === "http:"))) {
-    throw new GatewayError(503, "gateway_misconfigured", "Episode Diagnostics gateway has an unsafe upstream origin");
+    throw new GatewayError(503, "gateway.misconfigured", "Episode Diagnostics gateway has an unsafe upstream origin");
   }
   return origin;
 }

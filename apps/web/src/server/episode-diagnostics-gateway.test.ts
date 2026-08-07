@@ -36,7 +36,7 @@ describe("Episode Diagnostics gateway", () => {
 
     expect(response.status).toBe(403);
     expect(fetcher).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toEqual({ code: "origin_mismatch", message: "A same-origin request is required" });
+    await expect(response.json()).resolves.toEqual({ code: "origin.mismatch", message: "A same-origin request is required" });
   });
 
   it("requires the authenticated dashboard cookie", async () => {
@@ -174,7 +174,7 @@ describe("Episode Diagnostics gateway", () => {
     );
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ code: "csrf_mismatch", message: "CSRF validation failed" });
+    await expect(response.json()).resolves.toEqual({ code: "csrf.mismatch", message: "CSRF validation failed" });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -203,7 +203,7 @@ describe("Episode Diagnostics gateway", () => {
     const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }), env, fetcher);
 
     expect(response.status).toBe(502);
-    await expect(response.json()).resolves.toMatchObject({ code: "download_redirect_invalid" });
+    await expect(response.json()).resolves.toMatchObject({ code: "download.redirect_invalid" });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -225,6 +225,6 @@ describe("Episode Diagnostics gateway", () => {
     const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01`, { headers: { Cookie: "__Host-chalk_account=account-token" } }), { ...env, CHALK_EPISODE_DIAGNOSTICS_GATEWAY: undefined }, vi.fn());
 
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({ code: "gateway_misconfigured" });
+    await expect(response.json()).resolves.toMatchObject({ code: "gateway.misconfigured" });
   });
 });
