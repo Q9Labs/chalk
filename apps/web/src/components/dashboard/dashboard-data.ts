@@ -33,14 +33,3 @@ export const spaces: SpaceSummary[] = [
     lastActive: "3 days ago",
   },
 ];
-
-export const recentEpisodes = [
-  { title: "Monday product critique", space: "Product studio", when: "Today · 42 min" },
-  { title: "Research synthesis", space: "Research lab", when: "Yesterday · 58 min" },
-  { title: "July campfire", space: "Company campfire", when: "Jul 28 · 35 min" },
-];
-
-export const recentArtifacts = [
-  { title: "Product critique notes", kind: "Notes", when: "Edited 18 min ago" },
-  { title: "Research synthesis transcript", kind: "Transcript", when: "Ready yesterday" },
-];

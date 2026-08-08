@@ -26,7 +26,7 @@ defmodule ChalkSync.MixProject do
     [
       {:bandit,
        github: "mtrudel/bandit", ref: "418ef7e906192a230ddba112f7a669c87b6b0e3a", override: true},
-      {:postgrex, "~> 0.22.3"},
+      {:postgrex, "~> 0.22.4"},
       {:telemetry, "~> 1.3"},
       {:websock_adapter, "~> 0.5"},
       {:opentelemetry_api, "~> 1.5"},

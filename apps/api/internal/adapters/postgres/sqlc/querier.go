@@ -190,6 +190,7 @@ type Querier interface {
 	// Projector dead letters.
 	InsertProjectorDeadLetter(ctx context.Context, arg InsertProjectorDeadLetterParams) (DiagnosticProjectorDeadLetter, error)
 	InsertRecordingBundle(ctx context.Context, arg InsertRecordingBundleParams) (RecordingBundle, error)
+	InsertStatusMonitorResult(ctx context.Context, arg InsertStatusMonitorResultParams) (StatusMonitorResult, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
 	InsertWebhookEndpoint(ctx context.Context, arg InsertWebhookEndpointParams) (WebhookEndpoint, error)
 	InsertWebhookEndpointRevision(ctx context.Context, arg InsertWebhookEndpointRevisionParams) (WebhookEndpointRevision, error)
@@ -224,6 +225,7 @@ type Querier interface {
 	ListRecordingTranscriptionSourceChunks(ctx context.Context, arg ListRecordingTranscriptionSourceChunksParams) ([]RecordingTranscriptionSourceChunk, error)
 	ListSpaceMembers(ctx context.Context, arg ListSpaceMembersParams) ([]SpaceMember, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
+	ListStatusMonitorCurrent(ctx context.Context) ([]StatusMonitorCurrent, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantAuditLogs(ctx context.Context, arg ListTenantAuditLogsParams) ([]AuditLog, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
@@ -330,6 +332,7 @@ type Querier interface {
 	UpsertDiagnosticReference(ctx context.Context, arg UpsertDiagnosticReferenceParams) (int64, error)
 	UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecordingPoolHealthParams) (RecordingPoolHealth, error)
 	UpsertRecordingTranscriptionSource(ctx context.Context, arg UpsertRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
+	UpsertStatusMonitorCurrent(ctx context.Context, arg UpsertStatusMonitorCurrentParams) (StatusMonitorCurrent, error)
 }
 
 var _ Querier = (*Queries)(nil)

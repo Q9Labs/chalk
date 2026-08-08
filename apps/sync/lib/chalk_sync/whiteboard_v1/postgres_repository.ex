@@ -174,7 +174,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   defp read_after_rows(connection, identity, scene_id, revision) do
     params = [
       uuid(identity.episode.tenant_id),
-      uuid(identity.episode.space_id),
+      uuid(identity.episode.episode_id),
       uuid(scene_id),
       revision
     ]
@@ -201,7 +201,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
     case Postgrex.query(connection, SQL.lock_authority(), params) do
       {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw]]}} ->
-        role_capabilities = capabilities
+        role_capabilities =
+          Enum.filter(capabilities, &(&1 in ["drawWhiteboard", "manageWhiteboard"]))
 
         participant_capabilities =
           if can_draw,
@@ -210,7 +211,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
         {:ok,
          %{
-           capabilities: participant_capabilities,
+           capabilities: role_capabilities,
            participant_capabilities: participant_capabilities,
            can_draw: can_draw
          }}

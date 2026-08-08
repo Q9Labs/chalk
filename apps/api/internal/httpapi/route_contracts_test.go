@@ -44,6 +44,8 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodGet, "/v1/me/recent-auth/google/callback"},
 		{http.MethodGet, "/v1/me/tenants"},
 		{http.MethodPost, "/v1/me/tenants"},
+		{http.MethodGet, "/v1/status"},
+		{http.MethodPost, "/v1/ops/ingest/monitor-results"},
 		{http.MethodPost, "/v1/telemetry/journey-events"},
 		{http.MethodGet, "/v1/regions"},
 		{http.MethodPost, "/v1/chat/attachments/uploads"},
@@ -141,7 +143,7 @@ func TestPreviewRouteContracts(t *testing.T) {
 		if len(contract.Errors) == 0 {
 			t.Fatalf("%s %s has no error metadata", contract.Method, contract.Path)
 		}
-		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer && contract.Auth != httpapi.APIAuthParticipantMedia && contract.Auth != httpapi.APIAuthParticipantSync {
+		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer && contract.Auth != httpapi.APIAuthParticipantMedia && contract.Auth != httpapi.APIAuthParticipantSync && contract.Auth != httpapi.APIAuthOpsToken {
 			t.Fatalf("%s %s should advertise a supported auth family", contract.Method, contract.Path)
 		}
 		if strings.Contains(contract.Path, "/media/sfu/") && contract.Auth != httpapi.APIAuthParticipantMedia {
@@ -454,6 +456,7 @@ func publicContract(method string, path string) bool {
 		http.MethodGet + " /v1/auth/google/start":    {},
 		http.MethodPost + " /v1/auth/login":          {},
 		http.MethodPost + " /v1/auth/register":       {},
+		http.MethodGet + " /v1/status":               {},
 	}
 	_, ok := public[method+" "+path]
 	return ok

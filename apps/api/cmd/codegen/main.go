@@ -80,7 +80,7 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 				},
 			},
 			Servers: []openAPIServer{
-				{URL: "https://api.chalk.q9labs.com", Description: "Production API"},
+				{URL: "https://api.chalkmeet.com", Description: "Production API"},
 			},
 			Paths: make(map[string]map[string]any),
 			Components: openAPIComponents{
@@ -101,6 +101,12 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"scheme":       "bearer",
 						"bearerFormat": "JWT",
 						"description":  "Short-lived Sync participant credential bound to one Space Episode and participant generation.",
+					},
+					"opsIngestToken": map[string]any{
+						"type":        "apiKey",
+						"in":          "header",
+						"name":        "X-Ops-Ingest-Token",
+						"description": "Private monitor-result ingestion token.",
 					},
 				},
 				Schemas: make(map[string]map[string]any),
@@ -157,6 +163,10 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 	case httpapi.APIAuthParticipantSync:
 		operation["security"] = []map[string][]string{
 			{"participantSyncBearer": {}},
+		}
+	case httpapi.APIAuthOpsToken:
+		operation["security"] = []map[string][]string{
+			{"opsIngestToken": {}},
 		}
 	default:
 		operation["security"] = []map[string][]string{}
@@ -775,12 +785,14 @@ func secretCapableStringSchema() map[string]any {
 
 func scalarSchemas() map[string]map[string]any {
 	schemas := map[string]map[string]any{
-		"UUID":                 brandedStringSchema("UUID", "uuid", 36, 36),
-		"Email":                brandedStringSchema("Email", "email", 0, 0),
-		"URLString":            brandedStringSchema("URLString", "uri", 0, 0),
-		"DateTimeString":       brandedStringSchema("DateTimeString", "date-time", 0, 0),
-		"IntegrationServiceId": brandedStringSchema("IntegrationServiceId", "", 1, 0),
-		"IntegrationActionId":  brandedStringSchema("IntegrationActionId", "", 1, 0),
+		"UUID":                    brandedStringSchema("UUID", "uuid", 36, 36),
+		"Email":                   brandedStringSchema("Email", "email", 0, 0),
+		"URLString":               brandedStringSchema("URLString", "uri", 0, 0),
+		"DateTimeString":          brandedStringSchema("DateTimeString", "date-time", 0, 0),
+		"IntegrationServiceId":    brandedStringSchema("IntegrationServiceId", "", 1, 0),
+		"IntegrationActionId":     brandedStringSchema("IntegrationActionId", "", 1, 0),
+		"StatusComponentId":       brandedStringSchema("StatusComponentId", "", 1, 0),
+		"StatusMonitorIdentifier": brandedStringSchema("StatusMonitorIdentifier", "", 1, 0),
 	}
 	for _, name := range idSchemaNames() {
 		schemas[name] = brandedStringSchema(name, "uuid", 36, 36)

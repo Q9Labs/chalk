@@ -40,7 +40,8 @@ export function createProfilePlan(profile, runDirectory) {
 
   const topology = [
     step("sync_basic_gate", ["apps/sync/scripts/gate.sh", "basic"]),
-    step("multi_node_topology", ["mix", "test", "test/chalk_sync/reliability/topology_profile_test.exs", "test/chalk_sync/reliability/postgres_failover_profile_test.exs", "--include", "reliability_topology", "--max-cases", "1"], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
+    step("multi_node_topology", ["mix", "test", "test/chalk_sync/reliability/topology_profile_test.exs", "--include", "reliability_topology", "--max-cases", "1"], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
+    step("postgres_failover", ["mix", "test", "test/chalk_sync/reliability/postgres_failover_profile_test.exs", "--include", "reliability_topology", "--max-cases", "1"], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
   ];
 
   if (profile === "topology") return topology;

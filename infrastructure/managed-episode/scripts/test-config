@@ -83,6 +83,36 @@ digest_b="$(printf 'b%.0s' {1..64})"
   --rendered-root "${fixture_root}/rendered" \
   --allow-dirty >/dev/null
 
+cp -R "${fixture_root}/env" "${fixture_root}/weak-ops-token-env"
+sed -i.bak 's/^CHALK_OPS_INGEST_TOKEN=.*/CHALK_OPS_INGEST_TOKEN=too-short/' \
+  "${fixture_root}/weak-ops-token-env/api.env"
+rm "${fixture_root}/weak-ops-token-env/api.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/weak-ops-token-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "weak CHALK_OPS_INGEST_TOKEN was accepted" >&2
+  exit 1
+fi
+
+cp -R "${fixture_root}/env" "${fixture_root}/recording-env"
+sed -i.bak 's/^CHALK_RECORDING_ENABLED=false$/CHALK_RECORDING_ENABLED=maybe/' \
+  "${fixture_root}/recording-env/api.env"
+rm "${fixture_root}/recording-env/api.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/recording-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "invalid recording capability flag was accepted" >&2
+  exit 1
+fi
+
 cp -R "${fixture_root}/env" "${fixture_root}/whiteboard-env"
 sed -i.bak \
   -e '/^CHALK_R2_ACCOUNT_ID=/d' \

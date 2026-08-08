@@ -1,4 +1,316 @@
 -- +goose Up
+-- This migration is the one-time bridge from the Room/Session schema.  It is
+-- intentionally transactional: every guard runs before the first rename or
+-- DDL, and a failed guard leaves the old schema untouched.
+-- +goose StatementBegin
+do $$
+declare
+    duplicate_room uuid;
+begin
+    if to_regclass('spaces') is not null
+        or to_regclass('episodes') is not null
+        or to_regclass('identities') is not null then
+        raise exception 'Space/Episode bridge requires the target schema to be absent';
+    end if;
+
+    if not exists (select 1 from pg_class where relname = 'rooms' and relkind = 'r')
+        or not exists (select 1 from pg_class where relname = 'room_sessions' and relkind = 'r') then
+        raise exception 'Space/Episode bridge requires the legacy Room/Session schema';
+    end if;
+
+    select room_id
+    into duplicate_room
+    from (
+        select room_id
+        from room_sessions
+        where status in ('active', 'ending')
+        group by room_id
+        having count(*) > 1
+        limit 1
+    ) live;
+    if duplicate_room is not null then
+        raise exception 'Space/Episode bridge found multiple live Sessions for Room %', duplicate_room;
+    end if;
+
+    if exists (select 1 from sync_session_control where host_participant_session_id is not null) then
+        raise exception 'Space/Episode bridge cannot migrate legacy host authority';
+    end if;
+
+    if exists (
+        select 1
+        from sync_session_control control
+        join room_sessions session on session.id = control.session_id
+        where session.status <> 'ended'
+    ) then
+        raise exception 'Space/Episode bridge requires every durable Session to be ended before migration';
+    end if;
+
+    if exists (
+        select 1
+        from sync_session_control
+        where retention_cleaned_at is not null
+    ) then
+        raise exception 'Space/Episode bridge cannot rewrite a retained legacy Sync checkpoint';
+    end if;
+
+    if exists (
+        select 1
+        from sync_session_control control
+        where control.control_revision > 0
+          and not exists (
+              select 1
+              from sync_control_events event
+              where event.tenant_id = control.tenant_id
+                and event.session_id = control.session_id
+                and event.revision = control.control_revision
+          )
+    ) then
+        raise exception 'Space/Episode bridge found a durable Sync head without its terminal Event';
+    end if;
+
+    if exists (
+        select 1
+        from sync_session_control
+        where coalesce(folded_state ->> 'admission_policy', '') not in ('open', 'approval', 'closed')
+           or coalesce(folded_state ->> 'status', '') <> 'ended'
+           or coalesce((folded_state ->> 'state_schema_version')::integer, 0) <> 1
+           or coalesce((folded_state ->> 'control_revision')::bigint, -1) <> control_revision
+           or jsonb_typeof(folded_state -> 'participants') <> 'array'
+           or jsonb_array_length(folded_state -> 'participants') <> 0
+           or jsonb_typeof(folded_state -> 'admission_requests') <> 'array'
+           or jsonb_array_length(folded_state -> 'admission_requests') <> 0
+           or coalesce((folded_state ->> 'deadline_at_ms')::bigint, 0) < 1
+           or coalesce((folded_state ->> 'deadline_generation')::bigint, 0) < 1
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported terminal Sync snapshot';
+    end if;
+
+    if exists (
+        select 1
+        from sync_chat_streams
+        group by tenant_id, room_id
+        having count(*) > 1
+    ) or exists (
+        select 1
+        from sync_whiteboard_scenes
+        group by tenant_id, room_id, scene_id
+        having count(*) > 1
+    ) or exists (
+        select 1
+        from sync_whiteboard_scenes
+        where is_current
+        group by tenant_id, room_id
+        having count(*) > 1
+    ) then
+        raise exception 'Space/Episode bridge found a Chat/Whiteboard collision';
+    end if;
+
+    if exists (select 1 from participants where user_id is not null) then
+        raise exception 'Space/Episode bridge requires operator identity mapping for legacy Participant.user_id';
+    end if;
+
+    if exists (
+        select 1
+        from room_sessions
+        where status not in ('active', 'ending', 'ended')
+    ) or exists (
+        select 1
+        from participants
+        where status not in ('joining', 'active', 'leaving', 'left')
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported lifecycle enum';
+    end if;
+
+    if exists (
+        select 1 from rooms where status not in ('active', 'archived', 'ended')
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported Room status';
+    end if;
+
+    if exists (
+        select 1 from participants
+        where role not in ('host', 'cohost', 'participant')
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported Participant role';
+    end if;
+
+    if exists (
+        select 1
+        from participants p
+        cross join lateral unnest(p.eligible_roles) eligible(role_name)
+        where eligible.role_name not in ('host', 'cohost', 'participant')
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported eligible role';
+    end if;
+
+    if exists (
+        select 1
+        from sync_control_events
+        where num_nonnulls(command_id, lifecycle_intent_id, external_operation_id) <> 1
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported control-event origin';
+    end if;
+
+    if exists (
+        select 1
+        from sync_external_operations
+        where operation_name not in (
+            'admit_participant', 'deny_admission', 'admission_request_expired',
+            'mute_participant', 'stop_participant_camera',
+            'stop_participant_screen_share', 'remove_participant',
+            'start_recording', 'stop_recording', 'participant_leave',
+            'end_session', 'tenant_transfer_host', 'tenant_set_deadline',
+            'tenant_end_session', 'maximum_duration_expired',
+            'role_transition_cleanup', 'role_transition_source_stop'
+        )
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported external-operation enum';
+    end if;
+
+    if exists (
+        select 1
+        from provider_operation_receipts
+        where effect not in (
+            'media.grant_publication', 'media.revoke_publication',
+            'media.remove_participant', 'media.end_session',
+            'recording.start', 'recording.stop'
+        )
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported provider-operation enum';
+    end if;
+
+    if exists (
+        select 1
+        from sync_command_receipts
+        where command_name not in (
+            'raise_hand', 'lower_hand', 'set_hand_raised', 'set_display_name',
+            'set_admission_policy', 'set_participant_role', 'transfer_host',
+            'admit_participant', 'deny_admission', 'mute_participant',
+            'stop_participant_camera', 'stop_participant_screen_share',
+            'remove_participant', 'start_recording', 'stop_recording',
+            'participant_leave', 'end_session'
+        )
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported command enum';
+    end if;
+
+    if exists (
+        select 1
+        from sync_command_receipts
+        where rejection_reason is not null
+          and rejection_reason not in (
+              'session_ended', 'participant_inactive',
+              'stale_participant_generation', 'capability_denied',
+              'invalid_state', 'invalid_target', 'role_not_eligible',
+              'host_transfer_required', 'screen_share_in_use',
+              'recording_in_progress', 'external_operation_failed',
+              'command_id_conflict'
+          )
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported command rejection reason';
+    end if;
+
+    if exists (
+        select 1
+        from (
+            select unnest(p.capabilities) as capability
+            from participants p
+            union all
+            select jsonb_array_elements_text(value) as capability
+            from room_sessions rs
+            cross join lateral jsonb_each(rs.role_capabilities)
+        ) capabilities
+        where capability not in (
+            'publishAudio', 'publishVideo', 'publishScreen', 'subscribe',
+            'raiseHand', 'renameSelf', 'manageAdmission', 'promoteDemote',
+            'transferHost', 'muteOthers', 'stopVideoOthers',
+            'stopScreenOthers', 'requestMediaOthers', 'removeParticipant',
+            'manageRecording', 'endMeeting', 'sendChat', 'sendReaction',
+            'drawWhiteboard', 'manageWhiteboard', 'assignRoles', 'endEpisode'
+        )
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported capability value';
+    end if;
+
+    if exists (
+        select 1
+        from room_sessions
+        where maximum_duration_seconds not between 60 and 604800
+           or maximum_duration_ceiling_seconds not between 60 and 604800
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported Episode duration';
+    end if;
+
+    if exists (
+        select 1
+        from transcriptions
+        where status not in ('pending', 'processing', 'completed', 'failed',
+                             'not_requested', 'preparing', 'transcribing',
+                             'verifying', 'complete', 'retryable_failure',
+                             'terminal_failure', 'deleted')
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported transcription status';
+    end if;
+end;
+$$;
+-- +goose StatementEnd
+
+-- Preserve all legacy objects while the target definitions below are created.
+-- Indexes are schema-scoped, so rename every legacy index before target DDL.
+-- +goose StatementBegin
+do $$
+declare
+    table_name text;
+    index_name text;
+    legacy_table_names constant text[] := array[
+        'tenants', 'users', 'memberships', 'auth_identities', 'login_sessions',
+        'api_keys', 'tenant_signing_keys', 'rooms', 'room_sessions',
+        'participants', 'sync_session_control', 'sync_lifecycle_intents',
+        'sync_control_events', 'sync_command_receipts', 'session_create_requests',
+        'sync_external_operations', 'sync_admission_requests',
+        'sync_screen_share_leases', 'sync_publication_fences',
+        'sync_publication_grant_reservations', 'sync_recordings',
+        'recordings', 'transcriptions', 'audit_logs', 'integration_connections',
+        'observability_journey_events', 'webhook_tenant_state', 'webhook_endpoints',
+        'webhook_endpoint_revisions', 'webhook_events', 'webhook_deliveries',
+        'webhook_delivery_attempts', 'webhook_idempotency_records',
+        'recording_transcription_sources', 'recording_transcription_source_chunks',
+        'artifact_jobs', 'transcript_chunks', 'transcription_attempts',
+        'transcription_chunk_results', 'transcription_cleanup_jobs',
+        'recording_capacity', 'recording_pool_health', 'recording_reservations',
+        'recording_pipelines', 'recording_jobs', 'recording_bundles',
+        'recording_artifacts', 'provider_operation_receipts',
+        'provider_operation_observation_heads', 'provider_operation_observations',
+        'sync_whiteboard_scenes', 'sync_whiteboard_elements',
+        'sync_whiteboard_permissions', 'sync_whiteboard_operation_receipts',
+        'sync_whiteboard_files', 'sync_chat_streams', 'sync_chat_messages',
+        'sync_chat_attachments', 'sync_chat_read_receipts'
+    ];
+begin
+    foreach table_name in array legacy_table_names loop
+        if to_regclass(table_name) is not null then
+            execute format('alter table %I rename to %I', table_name, '__chalk_legacy_' || table_name);
+        end if;
+    end loop;
+
+    if to_regprocedure('reject_recording_object_mutation()') is not null then
+        execute 'alter function reject_recording_object_mutation() rename to __chalk_legacy_reject_recording_object_mutation';
+    end if;
+
+    for index_name in
+        select c.relname
+        from pg_class c
+        join pg_index i on i.indexrelid = c.oid
+        join pg_class t on t.oid = i.indrelid
+        where c.relkind = 'i'
+          and t.relname ~ '^__chalk_legacy_'
+    loop
+        execute format('alter index %I rename to %I', index_name, 'legacy_i_' || md5(index_name));
+    end loop;
+end;
+$$;
+-- +goose StatementEnd
+
 create table tenants (
     id uuid primary key,
     name text not null,
@@ -2661,71 +2973,1341 @@ create table provider_operation_observations (
 
 create index provider_operation_observations_episode_cursor_idx
     on provider_operation_observations(tenant_id, episode_id, incarnation, sequence);
+
+-- The old wire vocabulary appears in schema-owned Sync payloads as well as
+-- column names. Translate only those known contracts. Opaque product,
+-- customer, provider, audit, and observability JSON is copied unchanged below.
+-- +goose StatementBegin
+create function __chalk_bridge_payload(value jsonb)
+returns jsonb
+language plpgsql
+immutable
+strict
+as $$
+declare
+    key text;
+    child jsonb;
+    output jsonb := '{}'::jsonb;
+    mapped_key text;
+begin
+    if jsonb_typeof(value) = 'object' then
+        for key, child in select * from jsonb_each(value) loop
+            mapped_key := case key
+                when 'room_id' then 'space_id'
+                when 'session_id' then 'episode_id'
+                when 'participant_session_id' then 'participant_id'
+                when 'actor_participant_session_id' then 'actor_participant_id'
+                when 'target_participant_session_id' then 'target_participant_id'
+                when 'granted_by_participant_session_id' then 'granted_by_participant_id'
+                when 'started_by_participant_session_id' then 'started_by_participant_id'
+                when 'host_participant_session_id' then 'host_participant_id'
+                when 'participant_session_generation' then 'participant_generation'
+                else key
+            end;
+
+            if mapped_key in ('intent_name', 'event_name', 'command_name', 'operation_name')
+                and jsonb_typeof(child) = 'string' then
+                child := to_jsonb(case child #>> '{}'
+                    when 'session_ended' then 'episode_ended'
+                    when 'end_session' then 'end_episode'
+                    when 'transfer_host' then 'assign_roles'
+                    when 'tenant_end_session' then 'tenant_end_episode'
+                    when 'maximum_duration_expired' then 'maximum_episode_duration_expired'
+                    when 'tenant_transfer_host' then 'tenant_assign_roles'
+                    else child #>> '{}'
+                end);
+            elsif mapped_key in ('rejection_reason', 'terminal_reason')
+                and jsonb_typeof(child) = 'string' then
+                child := to_jsonb(case child #>> '{}'
+                    when 'session_ended' then 'episode_ended'
+                    when 'superseded_by_session_end' then 'superseded_by_episode_end'
+                    when 'host_transfer_required' then 'role_assignment_required'
+                    else child #>> '{}'
+                end);
+            elsif mapped_key in ('role', 'initial_role', 'new_role', 'old_role')
+                and jsonb_typeof(child) = 'string' then
+                child := to_jsonb(case child #>> '{}'
+                    when 'host' then 'owner'
+                    when 'cohost' then 'cohost'
+                    when 'participant' then 'participant'
+                    else child #>> '{}'
+                end);
+            elsif mapped_key in ('eligible_roles', 'roles')
+                and jsonb_typeof(child) = 'array' then
+                child := (
+                    select coalesce(jsonb_agg(to_jsonb(case item #>> '{}'
+                        when 'host' then 'owner'
+                        when 'cohost' then 'cohost'
+                        when 'participant' then 'participant'
+                        else item #>> '{}'
+                    end)), '[]'::jsonb)
+                    from jsonb_array_elements(child) item
+                );
+            else
+                child := __chalk_bridge_payload(child);
+            end if;
+
+            output := output || jsonb_build_object(mapped_key, child);
+        end loop;
+        return output;
+    elsif jsonb_typeof(value) = 'array' then
+        return (
+            select coalesce(jsonb_agg(__chalk_bridge_payload(item)), '[]'::jsonb)
+            from jsonb_array_elements(value) item
+        );
+    end if;
+    return value;
+end;
+$$;
+-- +goose StatementEnd
+
+-- Legacy media roles used three names that have direct Episode equivalents.
+-- The two role-capability names that represented the same permission are
+-- deduplicated after translation because target capability arrays are sets.
+-- +goose StatementBegin
+create function __chalk_bridge_capabilities(value text[])
+returns text[]
+language sql
+immutable
+strict
+as $$
+    select coalesce(array_agg(distinct case capability
+        when 'promoteDemote' then 'assignRoles'
+        when 'transferHost' then 'assignRoles'
+        when 'endMeeting' then 'endEpisode'
+        else capability
+    end order by case capability
+        when 'promoteDemote' then 'assignRoles'
+        when 'transferHost' then 'assignRoles'
+        when 'endMeeting' then 'endEpisode'
+        else capability
+    end), '{}'::text[])
+    from unnest(value) capability
+$$;
+-- +goose StatementEnd
+
+-- Return the durable Space role policy represented by one legacy Session
+-- policy. Host becomes owner. Cohost and participant stay distinct so the
+-- bridge cannot union a more privileged bundle into an ordinary Participant.
+-- +goose StatementBegin
+create function __chalk_bridge_role_config(
+    value jsonb,
+    whiteboard_value jsonb default '{}'::jsonb,
+    action_value jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+immutable
+strict
+as $$
+declare
+    role_name text;
+    mapped_role text;
+    capability_value jsonb;
+    mapped_capabilities text[];
+    existing_capabilities text[];
+    output jsonb := '{}'::jsonb;
+begin
+    for role_name, capability_value in
+        select entries.key, entries.value
+        from jsonb_each(value) entries
+        union all
+        select entries.key, entries.value
+        from jsonb_each(whiteboard_value) entries
+        union all
+        select entries.key, entries.value
+        from jsonb_each(action_value) entries
+    loop
+        mapped_role := case role_name
+            when 'host' then 'owner'
+            when 'cohost' then 'cohost'
+            when 'participant' then 'participant'
+            else role_name
+        end;
+        mapped_capabilities := __chalk_bridge_capabilities(array(
+            select jsonb_array_elements_text(capability_value)
+        ));
+        existing_capabilities := case
+            when output ? mapped_role then array(
+                select jsonb_array_elements_text(output -> mapped_role)
+            )
+            else '{}'::text[]
+        end;
+        output := output || jsonb_build_object(
+            mapped_role,
+            to_jsonb(__chalk_bridge_capabilities(existing_capabilities || mapped_capabilities))
+        );
+    end loop;
+    if output = '{}'::jsonb then
+        output := jsonb_build_object(
+            'owner', to_jsonb(array['publishAudio', 'publishVideo', 'publishScreen', 'subscribe']::text[]),
+            'cohost', to_jsonb(array['publishAudio', 'publishVideo', 'subscribe']::text[]),
+            'participant', to_jsonb(array['publishAudio', 'publishVideo', 'subscribe']::text[])
+        );
+    end if;
+    return output;
+end;
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+create function __chalk_bridge_role_name(value text)
+returns text
+language sql
+immutable
+strict
+as $$
+    select case value
+        when 'host' then 'owner'
+        when 'cohost' then 'cohost'
+        when 'participant' then 'participant'
+        else value
+    end
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+create function __chalk_bridge_admission_policy(value text)
+returns text
+language sql
+immutable
+strict
+as $$
+    select case value
+        when 'open' then 'open'
+        when 'approval' then 'knock'
+        when 'closed' then 'members_only'
+        else null
+    end
+$$;
+-- +goose StatementEnd
+
+-- Build the exact Episode reducer snapshot. A recursive key rename is not
+-- enough because the old reducer had extra authority fields and a different
+-- admission-request shape.
+-- +goose StatementBegin
+create function __chalk_bridge_snapshot(value jsonb, role_config jsonb)
+returns jsonb
+language plpgsql
+immutable
+strict
+as $$
+declare
+    participants jsonb;
+    admission_requests jsonb;
+begin
+    select coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'participant_id', participant -> 'participant_session_id',
+                'display_name', participant -> 'display_name',
+                'hand_raised', participant -> 'hand_raised',
+                'role', __chalk_bridge_role_name(participant ->> 'role'),
+                'capabilities', role_config -> __chalk_bridge_role_name(participant ->> 'role'),
+                'admission_revision', participant -> 'admission_revision'
+            )
+            order by participant ->> 'participant_session_id'
+        ),
+        '[]'::jsonb
+    )
+    into participants
+    from jsonb_array_elements(value -> 'participants') participant;
+
+    select coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'admission_request_id', request -> 'admission_request_id',
+                'participant_id', request -> 'participant_session_id',
+                'display_name', request -> 'display_name',
+                'role', __chalk_bridge_role_name(request ->> 'initial_role'),
+                'expires_at_ms', request -> 'expires_at_ms'
+            )
+            order by request ->> 'admission_request_id'
+        ),
+        '[]'::jsonb
+    )
+    into admission_requests
+    from jsonb_array_elements(value -> 'admission_requests') request;
+
+    return jsonb_build_object(
+        'admission_policy', __chalk_bridge_admission_policy(value ->> 'admission_policy'),
+        'admission_requests', admission_requests,
+        'control_revision', value -> 'control_revision',
+        'deadline_at_ms', value -> 'deadline_at_ms',
+        'deadline_generation', value -> 'deadline_generation',
+        'participants', participants,
+        'recording', value -> 'recording',
+        'role_capabilities', role_config,
+        'state_schema_version', 1,
+        'status', value -> 'status'
+    );
+end;
+$$;
+-- +goose StatementEnd
+
+-- Canonical JSON mirrors ChalkSync.CanonicalJSON for the reducer's bounded
+-- value set. Schema-owned object keys are sorted lexically before hashing.
+-- +goose StatementBegin
+create function __chalk_bridge_canonical_json(value jsonb)
+returns text
+language plpgsql
+immutable
+strict
+as $$
+declare
+    encoded text;
+begin
+    case jsonb_typeof(value)
+        when 'object' then
+            select '{' || coalesce(
+                string_agg(to_jsonb(entry.key)::text || ':' || __chalk_bridge_canonical_json(entry.value), ',' order by entry.key),
+                ''
+            ) || '}'
+            into encoded
+            from jsonb_each(value) entry;
+            return encoded;
+        when 'array' then
+            select '[' || coalesce(
+                string_agg(__chalk_bridge_canonical_json(entry.value), ',' order by entry.ordinality),
+                ''
+            ) || ']'
+            into encoded
+            from jsonb_array_elements(value) with ordinality entry(value, ordinality);
+            return encoded;
+        else
+            return value::text;
+    end case;
+end;
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+create function __chalk_bridge_state_digest(value jsonb)
+returns bytea
+language sql
+immutable
+strict
+as $$
+    select sha256(
+        convert_to('chalk-sync-state-v1', 'UTF8')
+        || int4send(1)
+        || convert_to(__chalk_bridge_canonical_json(value), 'UTF8')
+    )
+$$;
+-- +goose StatementEnd
+
+insert into tenants (
+    id, name, default_region, default_media_plane,
+    media_plane_provider_config, ai_provider_config, storage_provider_config,
+    logo_key, website, updated_at, created_at
+)
+select id, name, default_region, default_media_plane,
+    null, null, null, logo_key, website, updated_at, created_at
+from __chalk_legacy_tenants;
+
+insert into users (id, name, email, updated_at, created_at)
+select id, name, email, updated_at, created_at
+from __chalk_legacy_users;
+
+insert into memberships (id, tenant_id, user_id, role, updated_at, created_at)
+select id, tenant_id, user_id, role, updated_at, created_at
+from __chalk_legacy_memberships;
+
+insert into auth_identities (
+    id, user_id, provider, provider_subject, password_hash, updated_at, created_at
+)
+select id, user_id, provider, provider_subject, password_hash, updated_at, created_at
+from __chalk_legacy_auth_identities;
+
+insert into login_sessions (
+    id, user_id, token_hash, user_agent, device_name, ip_address,
+    expires_at, revoked_at, updated_at, created_at
+)
+select id, user_id, token_hash, user_agent, device_name, ip_address,
+    expires_at, revoked_at, updated_at, created_at
+from __chalk_legacy_login_sessions;
+
+insert into api_keys (
+    id, name, scopes, tenant_id, key_hash, key_prefix,
+    created_by_user_id, last_used_ip, last_used_at, revoked_at,
+    expires_at, updated_at, created_at
+)
+select id, name, scopes, tenant_id, key_hash, key_prefix,
+    created_by_user_id, last_used_ip, last_used_at, revoked_at,
+    expires_at, updated_at, created_at
+from __chalk_legacy_api_keys;
+
+insert into tenant_signing_keys (
+    id, tenant_id, key_id, algorithm, public_key_jwk, last_used_at,
+    created_by_api_key_id, created_by_user_id, revoked_at, expires_at,
+    updated_at, created_at
+)
+select id, tenant_id, key_id, algorithm, public_key_jwk, last_used_at,
+    created_by_api_key_id, created_by_user_id, revoked_at, expires_at,
+    updated_at, created_at
+from __chalk_legacy_tenant_signing_keys;
+
+insert into spaces (
+    id, name, tenant_id, slug, media_plane, metadata, recurring_policy,
+    created_by_user_id, updated_at, created_at
+)
+select id, name, tenant_id, slug, media_plane,
+    case when status <> 'active'
+        then coalesce(metadata, '{}'::jsonb) || jsonb_build_object('legacy_status', status)
+        else metadata
+    end,
+    recurring_policy, created_by_user_id, updated_at, created_at
+from __chalk_legacy_rooms;
+
+insert into space_roles (
+    id, tenant_id, space_id, name, capabilities, updated_at, created_at
+)
+select md5(s.id::text || ':' || roles.role_name)::uuid,
+    s.tenant_id, s.id, roles.role_name, roles.capabilities,
+    s.updated_at, s.created_at
+from spaces s
+join lateral (
+    select mapped.role_name,
+        __chalk_bridge_capabilities(array_agg(mapped.capability order by mapped.capability)) as capabilities
+    from (
+        select case key
+                when 'host' then 'owner'
+                when 'cohost' then 'cohost'
+                when 'participant' then 'participant'
+                else key
+            end as role_name,
+            jsonb_array_elements_text(value) as capability
+        from (
+            select __chalk_bridge_role_config(
+                rs.role_capabilities,
+                rs.whiteboard_role_capabilities,
+                rs.room_action_role_capabilities
+            ) as role_capabilities
+            from __chalk_legacy_room_sessions rs
+            where rs.room_id = s.id
+            order by rs.created_at desc, rs.id desc
+            limit 1
+        ) latest
+        cross join lateral jsonb_each(latest.role_capabilities)
+    ) mapped
+    group by mapped.role_name
+) roles on true
+where roles.capabilities <> '{}'::text[];
+
+-- The query above intentionally chooses one policy per Space.  Episodes keep
+-- their own immutable policy snapshot, so historical policy changes remain
+-- lossless even though Space roles are the current durable default.
+insert into space_roles (
+    id, tenant_id, space_id, name, capabilities, updated_at, created_at
+)
+select md5(s.id::text || ':' || defaults.name)::uuid,
+    s.tenant_id, s.id, defaults.name, defaults.capabilities, s.updated_at, s.created_at
+from spaces s
+cross join (values
+    ('owner', array['publishAudio', 'publishVideo', 'publishScreen', 'subscribe']::text[]),
+    ('cohost', array['publishAudio', 'publishVideo', 'subscribe']::text[]),
+    ('participant', array['publishAudio', 'publishVideo', 'subscribe']::text[])
+) defaults(name, capabilities)
+where not exists (
+    select 1 from space_roles sr
+    where sr.space_id = s.id and sr.name = defaults.name
+);
+
+insert into episodes (
+    id, status, metadata, space_id, tenant_id, created_by_user_id,
+    started_at, ended_at, config_snapshot, end_reason, deadline_at,
+    deadline_generation, updated_at, created_at
+)
+select rs.id, rs.status, rs.metadata, rs.room_id, rs.tenant_id,
+    rs.created_by_user_id, rs.started_at, rs.ended_at,
+    jsonb_build_object(
+            'roles', __chalk_bridge_role_config(
+                rs.role_capabilities,
+                rs.whiteboard_role_capabilities,
+                rs.room_action_role_capabilities
+            ),
+        'admission_policy', jsonb_build_object(
+            'mode', coalesce(
+                (
+                    select __chalk_bridge_admission_policy(control.folded_state ->> 'admission_policy')
+                    from __chalk_legacy_sync_session_control control
+                    where control.tenant_id = rs.tenant_id
+                      and control.session_id = rs.id
+                ),
+                'open'
+            )
+        ),
+        'host_exit_policy', rs.host_exit_policy,
+        'default_episode_duration_seconds', greatest(60, least(rs.maximum_duration_seconds, 604800)),
+        'maximum_episode_duration_seconds', greatest(60, least(rs.maximum_duration_ceiling_seconds, 604800)),
+        'linger_window_seconds', 0
+    ),
+    case when rs.status <> 'ended' then null
+        when exists (
+            select 1 from __chalk_legacy_sync_external_operations op
+            where op.tenant_id = rs.tenant_id
+              and op.session_id = rs.id
+              and op.operation_name = 'maximum_duration_expired'
+        ) then 'deadline'
+        else 'explicit'
+    end,
+    coalesce(rs.deadline_at, rs.created_at + interval '24 hours'),
+    rs.deadline_generation, rs.updated_at, rs.created_at
+from __chalk_legacy_room_sessions rs;
+
+insert into episode_create_requests (
+    tenant_id, space_id, request_key, request_fingerprint, episode_id, created_at
+)
+select tenant_id, room_id, request_key, request_fingerprint, session_id, created_at
+from __chalk_legacy_session_create_requests;
+
+insert into participants (
+    id, name, metadata, capabilities, tenant_id, space_id, episode_id,
+    identity_id, generation, status, role, joined_at, left_at,
+    updated_at, created_at
+)
+select p.id, p.name,
+    coalesce(p.metadata, '{}'::jsonb) || jsonb_build_object(
+        'legacy_role', p.role,
+        'legacy_eligible_roles', p.eligible_roles
+    ),
+    __chalk_bridge_capabilities(p.capabilities), p.tenant_id, p.room_id, p.session_id,
+    null,
+    p.generation, p.status,
+    __chalk_bridge_role_name(p.role),
+    p.joined_at, p.left_at, p.updated_at, p.created_at
+from __chalk_legacy_participants p;
+
+insert into sync_chat_streams (
+    tenant_id, space_id, head_sequence, retained_floor_sequence,
+    message_count, message_bytes, attachment_count, attachment_bytes,
+    created_at, updated_at
+)
+select tenant_id, room_id, head_sequence, retained_floor_sequence,
+    message_count, message_bytes, attachment_count, attachment_bytes,
+    created_at, updated_at
+from __chalk_legacy_sync_chat_streams;
+
+insert into sync_chat_messages (
+    tenant_id, space_id, episode_id, sequence, message_id,
+    participant_id, participant_generation, client_message_id,
+    request_fingerprint, display_name, message_text, encoded_bytes, created_at
+)
+select tenant_id, room_id, session_id, sequence, message_id,
+    participant_session_id, participant_session_generation, client_message_id,
+    request_fingerprint, display_name, message_text, encoded_bytes, created_at
+from __chalk_legacy_sync_chat_messages;
+
+insert into sync_chat_attachments (
+    tenant_id, space_id, episode_id, attachment_id, participant_id,
+    participant_generation, client_attachment_id, request_fingerprint,
+    upload_id, object_key, original_filename, mime_type, byte_length, sha256,
+    immutable_object_identity, status, expires_at, message_sequence,
+    message_ordinal, finalize_claim_token, finalize_claimed_until,
+    finalize_attempts, cleanup_claim_token, cleanup_claimed_until,
+    cleanup_attempts, finalized_at, attached_at, updated_at, created_at
+)
+select tenant_id, room_id, session_id, attachment_id, participant_session_id,
+    participant_session_generation, client_attachment_id, request_fingerprint,
+    upload_id, object_key, original_filename, mime_type, byte_length, sha256,
+    immutable_object_identity, status, expires_at, message_sequence,
+    message_ordinal, finalize_claim_token, finalize_claimed_until,
+    finalize_attempts, cleanup_claim_token, cleanup_claimed_until,
+    cleanup_attempts, finalized_at, attached_at, updated_at, created_at
+from __chalk_legacy_sync_chat_attachments;
+
+insert into sync_chat_read_receipts (
+    tenant_id, space_id, episode_id, participant_id, participant_generation,
+    sequence, read_at, updated_at
+)
+select tenant_id, room_id, session_id, participant_session_id,
+    participant_session_generation, sequence, read_at, updated_at
+from __chalk_legacy_sync_chat_read_receipts;
+
+insert into sync_whiteboard_scenes (
+    tenant_id, space_id, scene_id, is_current, revision, app_state,
+    element_count, encoded_bytes, created_at, updated_at
+)
+select tenant_id, room_id, scene_id, is_current, revision, app_state,
+    element_count, encoded_bytes, created_at, updated_at
+from __chalk_legacy_sync_whiteboard_scenes;
+
+insert into sync_whiteboard_elements (
+    tenant_id, space_id, episode_id, scene_id, element_id, element_type,
+    version, version_nonce, element_index, is_deleted, payload, encoded_bytes,
+    updated_at
+)
+select tenant_id, room_id, session_id, scene_id, element_id, element_type,
+    version, version_nonce, element_index, is_deleted,
+    payload, encoded_bytes, updated_at
+from __chalk_legacy_sync_whiteboard_elements;
+
+insert into sync_whiteboard_permissions (
+    tenant_id, space_id, episode_id, participant_id, can_draw,
+    granted_by_participant_id, updated_at
+)
+select tenant_id, room_id, session_id, participant_session_id, can_draw,
+    granted_by_participant_session_id, updated_at
+from __chalk_legacy_sync_whiteboard_permissions;
+
+insert into sync_whiteboard_operation_receipts (
+    tenant_id, space_id, episode_id, participant_id, submitted_generation,
+    operation_id, request_fingerprint, operation_name, outcome, scene_id,
+    revision, event_elements, event_encoded_bytes, completed_at
+)
+select tenant_id, room_id, session_id, participant_session_id,
+    submitted_generation, operation_id, request_fingerprint, operation_name,
+    outcome, scene_id, revision, event_elements,
+    event_encoded_bytes, completed_at
+from __chalk_legacy_sync_whiteboard_operation_receipts;
+
+insert into sync_whiteboard_files (
+    upload_id, tenant_id, space_id, episode_id, scene_id, participant_id,
+    participant_generation, file_id, object_key, mime_type, byte_length,
+    sha256, status, immutable_object_identity, expires_at, finalized_at,
+    cleanup_claim_token, cleanup_claimed_until, cleanup_attempts,
+    created_at, updated_at
+)
+select upload_id, tenant_id, room_id, session_id, scene_id,
+    participant_session_id, participant_generation, file_id, object_key,
+    mime_type, byte_length, sha256, status, immutable_object_identity,
+    expires_at, finalized_at, cleanup_claim_token, cleanup_claimed_until,
+    cleanup_attempts, created_at, updated_at
+from __chalk_legacy_sync_whiteboard_files;
+
+insert into sync_episode_control (
+    tenant_id, space_id, episode_id, control_revision, folded_state,
+    state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes,
+    participant_event_count, participant_event_bytes, lifecycle_event_count,
+    lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes,
+    lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents,
+    lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes,
+    retention_checkpoint_revision, retention_checkpoint_state_digest,
+    retention_checkpoint_event_count, retention_cleaned_at,
+    retention_deleted_event_rows, retention_deleted_event_bytes,
+    retention_deleted_receipt_rows, retention_deleted_receipt_bytes,
+    retention_deleted_lifecycle_intent_rows,
+    retention_deleted_lifecycle_intent_bytes,
+    retention_deleted_external_operation_rows,
+    retention_deleted_external_operation_bytes,
+    retention_deleted_admission_request_rows,
+    retention_deleted_admission_request_bytes,
+    retention_deleted_recording_rows, retention_deleted_recording_bytes,
+    retention_deleted_screen_share_lease_rows,
+    retention_deleted_screen_share_lease_bytes,
+    retention_deleted_publication_fence_rows,
+    retention_deleted_publication_fence_bytes,
+    retention_deleted_publication_grant_reservation_rows,
+    retention_deleted_publication_grant_reservation_bytes,
+    created_at, updated_at
+)
+with transformed as (
+    select control.*,
+        __chalk_bridge_snapshot(
+            control.folded_state,
+            __chalk_bridge_role_config(
+                session.role_capabilities,
+                session.whiteboard_role_capabilities,
+                session.room_action_role_capabilities
+            )
+        ) as episode_snapshot
+    from __chalk_legacy_sync_session_control control
+    join __chalk_legacy_room_sessions session
+      on session.tenant_id = control.tenant_id
+     and session.id = control.session_id
+), hashed as (
+    select transformed.*,
+        __chalk_bridge_state_digest(episode_snapshot) as episode_digest
+    from transformed
+)
+select tenant_id, room_id, session_id, control_revision, episode_snapshot,
+    1, episode_digest,
+    octet_length(
+        __chalk_bridge_canonical_json(
+            episode_snapshot || jsonb_build_object('state_digest', encode(episode_digest, 'hex'))
+        )
+    ),
+    snapshot_reserved_bytes,
+    participant_event_count, participant_event_bytes, lifecycle_event_count,
+    lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes,
+    lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents,
+    lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes,
+    retention_checkpoint_revision, retention_checkpoint_state_digest,
+    retention_checkpoint_event_count, retention_cleaned_at,
+    retention_deleted_event_rows, retention_deleted_event_bytes,
+    retention_deleted_receipt_rows, retention_deleted_receipt_bytes,
+    retention_deleted_lifecycle_intent_rows,
+    retention_deleted_lifecycle_intent_bytes,
+    retention_deleted_external_operation_rows,
+    retention_deleted_external_operation_bytes,
+    retention_deleted_admission_request_rows,
+    retention_deleted_admission_request_bytes,
+    retention_deleted_recording_rows, retention_deleted_recording_bytes,
+    retention_deleted_screen_share_lease_rows,
+    retention_deleted_screen_share_lease_bytes,
+    retention_deleted_publication_fence_rows,
+    retention_deleted_publication_fence_bytes,
+    retention_deleted_publication_grant_reservation_rows,
+    retention_deleted_publication_grant_reservation_bytes,
+    created_at, updated_at
+from hashed;
+
+-- External operations are staged before Events because the target Event
+-- foreign key is immediate. Their terminal fields are restored after the
+-- Event rows (which provide the applied-event proof) are present.
+insert into sync_external_operations (
+    tenant_id, space_id, episode_id, external_operation_id,
+    parent_external_operation_id, request_key, request_fingerprint,
+    operation_name, actor_participant_id, actor_generation,
+    target_participant_id, target_participant_generation, source, recording_id,
+    deadline_generation, journey_id, parent_journey_event_id,
+    producing_trace_id, producing_span_id, payload, status, fence_active,
+    attempt_count, next_attempt_at, last_error_code, applied_event_id,
+    applied_revision, created_at, completed_at
+)
+select tenant_id, room_id, session_id, external_operation_id,
+    null, request_key, request_fingerprint,
+    case operation_name
+        when 'end_session' then 'end_episode'
+        when 'tenant_end_session' then 'tenant_end_episode'
+        when 'tenant_transfer_host' then 'tenant_assign_roles'
+        when 'maximum_duration_expired' then 'maximum_episode_duration_expired'
+        else operation_name
+    end,
+    actor_participant_session_id, actor_generation,
+    target_participant_session_id, target_participant_generation, source,
+    recording_id, deadline_generation, journey_id, parent_journey_event_id,
+    producing_trace_id, producing_span_id, __chalk_bridge_payload(payload),
+    'pending', false, attempt_count, next_attempt_at, null,
+    null, null, created_at, null
+from __chalk_legacy_sync_external_operations;
+
+insert into sync_lifecycle_intents (
+    tenant_id, space_id, episode_id, lifecycle_intent_id, request_key,
+    request_fingerprint, intent_name, participant_id, participant_generation,
+    payload, status, terminal_reason, applied_event_id, applied_revision,
+    attempt_count, last_error_code, next_attempt_at, created_at, completed_at
+)
+select tenant_id, room_id, session_id, lifecycle_intent_id, request_key,
+    request_fingerprint,
+    case intent_name when 'session_ended' then 'episode_ended' else intent_name end,
+    participant_session_id, participant_session_generation,
+    __chalk_bridge_payload(payload), 'pending', null,
+    null, null, attempt_count, last_error_code,
+    next_attempt_at, created_at, null
+from __chalk_legacy_sync_lifecycle_intents;
+
+insert into sync_control_events (
+    tenant_id, space_id, episode_id, event_id, base_revision, revision,
+    event_name, payload, actor_participant_id, actor_generation, command_id,
+    lifecycle_intent_id, external_operation_id, event_schema_version,
+    resulting_state_digest, encoded_bytes, created_at
+)
+select tenant_id, room_id, session_id, event_id, base_revision, revision,
+    case event_name when 'session_ended' then 'episode_ended' else event_name end,
+    __chalk_bridge_payload(payload), actor_participant_session_id,
+    actor_generation, command_id, lifecycle_intent_id, external_operation_id,
+    event_schema_version, resulting_state_digest, encoded_bytes, created_at
+from __chalk_legacy_sync_control_events;
+
+-- Legacy cursors are invalidated by the coordinated client release. The
+-- terminal head still needs the rebuilt Episode digest so every new cursor
+-- starts from one coherent authority point.
+update sync_control_events event
+set resulting_state_digest = control.state_digest
+from sync_episode_control control
+where event.tenant_id = control.tenant_id
+  and event.episode_id = control.episode_id
+  and event.revision = control.control_revision;
+
+-- Event vocabulary and the terminal digest changed, so the stored wire size
+-- must be rebuilt from the same map shape used by ChalkSync. External events
+-- carry actor and operation fields; command and lifecycle events do not.
+update sync_control_events event
+set encoded_bytes = octet_length(
+    __chalk_bridge_canonical_json(
+        jsonb_build_object(
+            'event_id', event.event_id,
+            'base_revision', event.base_revision,
+            'revision', event.revision,
+            'name', event.event_name,
+            'payload', event.payload,
+            'command_id', event.command_id,
+            'lifecycle_intent_id', event.lifecycle_intent_id,
+            'schema_version', event.event_schema_version,
+            'resulting_state_digest', encode(event.resulting_state_digest, 'hex')
+        ) || case when event.external_operation_id is not null then
+            jsonb_build_object(
+                'external_operation_id', event.external_operation_id,
+                'actor_participant_id', event.actor_participant_id,
+                'actor_generation', event.actor_generation
+            )
+        else '{}'::jsonb end
+    )
+);
+
+-- Replay and retention admission read these counters directly. Rebuild them
+-- from the translated rows instead of carrying legacy byte totals forward.
+update sync_episode_control control
+set participant_event_count = totals.participant_count,
+    participant_event_bytes = totals.participant_bytes,
+    lifecycle_event_count = totals.lifecycle_count,
+    lifecycle_event_bytes = totals.lifecycle_bytes
+from (
+    select current_control.tenant_id, current_control.episode_id,
+        count(event.event_id) filter (where event.lifecycle_intent_id is null) as participant_count,
+        coalesce(sum(event.encoded_bytes) filter (where event.lifecycle_intent_id is null), 0) as participant_bytes,
+        count(event.event_id) filter (where event.lifecycle_intent_id is not null) as lifecycle_count,
+        coalesce(sum(event.encoded_bytes) filter (where event.lifecycle_intent_id is not null), 0) as lifecycle_bytes
+    from sync_episode_control current_control
+    left join sync_control_events event
+      on event.tenant_id = current_control.tenant_id
+     and event.episode_id = current_control.episode_id
+    group by current_control.tenant_id, current_control.episode_id
+) totals
+where control.tenant_id = totals.tenant_id
+  and control.episode_id = totals.episode_id;
+
+update sync_lifecycle_intents target
+set status = source.status,
+    terminal_reason = case source.terminal_reason
+        when 'superseded_by_session_end' then 'superseded_by_episode_end'
+        else source.terminal_reason
+    end,
+    applied_event_id = source.applied_event_id,
+    applied_revision = source.applied_revision,
+    completed_at = source.completed_at
+from __chalk_legacy_sync_lifecycle_intents source
+where target.lifecycle_intent_id = source.lifecycle_intent_id
+  and source.status <> 'pending';
+
+insert into sync_command_receipts (
+    tenant_id, episode_id, participant_id, submitted_generation, command_id,
+    request_fingerprint, command_name, outcome, rejection_reason, event_id,
+    resulting_revision, resulting_state_digest, external_operation_id,
+    completed_at, created_at
+)
+select r.tenant_id, r.session_id, r.participant_session_id,
+    r.submitted_generation, r.command_id, r.request_fingerprint,
+    case r.command_name
+        when 'end_session' then 'end_episode'
+        when 'transfer_host' then 'assign_roles'
+        else r.command_name
+    end,
+    r.outcome,
+    case r.rejection_reason
+        when 'session_ended' then 'episode_ended'
+        when 'host_transfer_required' then 'role_assignment_required'
+        else r.rejection_reason
+    end,
+    r.event_id, r.resulting_revision,
+    case when r.resulting_revision = control.control_revision then control.state_digest
+        when r.resulting_state_digest is not null then r.resulting_state_digest
+        when r.event_id is not null then e.resulting_state_digest
+        else null
+    end,
+    r.external_operation_id,
+    case when r.command_name in ('raise_hand', 'lower_hand') then null
+        else coalesce(r.completed_at, r.created_at)
+    end,
+    r.created_at
+from __chalk_legacy_sync_command_receipts r
+left join __chalk_legacy_sync_control_events e
+    on e.tenant_id = r.tenant_id
+   and e.session_id = r.session_id
+   and e.event_id = r.event_id
+   and e.revision = r.resulting_revision
+left join sync_episode_control control
+    on control.tenant_id = r.tenant_id
+   and control.episode_id = r.session_id;
+
+update sync_external_operations target
+set parent_external_operation_id = source.parent_external_operation_id,
+    status = source.status,
+    fence_active = source.fence_active,
+    last_error_code = source.last_error_code,
+    applied_event_id = source.applied_event_id,
+    applied_revision = source.applied_revision,
+    completed_at = source.completed_at
+from __chalk_legacy_sync_external_operations source
+where target.external_operation_id = source.external_operation_id;
+
+insert into sync_admission_requests (
+    tenant_id, space_id, episode_id, admission_request_id, request_key,
+    request_fingerprint, participant_id, display_name, role, status,
+    decision_external_operation_id, requested_at, expires_at, completed_at
+)
+select tenant_id, room_id, session_id, admission_request_id, request_key,
+    request_fingerprint, participant_session_id, display_name,
+    __chalk_bridge_role_name(initial_role),
+    status, decision_external_operation_id, requested_at, expires_at,
+    completed_at
+from __chalk_legacy_sync_admission_requests;
+
+insert into sync_screen_share_leases (
+    tenant_id, space_id, episode_id, lease_id, owner_participant_id,
+    owner_generation, lease_generation, status, acquired_at, renewed_until,
+    hard_expires_at
+)
+select tenant_id, room_id, session_id, lease_id,
+    owner_participant_session_id, owner_generation, lease_generation, status,
+    acquired_at, renewed_until, hard_expires_at
+from __chalk_legacy_sync_screen_share_leases;
+
+insert into sync_publication_fences (
+    tenant_id, space_id, episode_id, participant_id, participant_generation,
+    source, external_operation_id, expires_at, created_at
+)
+select tenant_id, room_id, session_id, participant_session_id,
+    participant_generation, source, external_operation_id, expires_at, created_at
+from __chalk_legacy_sync_publication_fences;
+
+insert into sync_publication_grant_reservations (
+    tenant_id, space_id, episode_id, reservation_id, operation_id,
+    participant_id, participant_generation, source, status, failure_code,
+    expires_at, created_at, completed_at
+)
+select tenant_id, room_id, session_id, reservation_id, operation_id,
+    participant_session_id, participant_generation, source, status,
+    failure_code, expires_at, created_at, completed_at
+from __chalk_legacy_sync_publication_grant_reservations;
+
+insert into sync_recordings (
+    tenant_id, space_id, episode_id, recording_id, status, generation,
+    adapter_metadata, started_by_participant_id, started_by_generation,
+    start_external_operation_id, stop_external_operation_id, failure_code,
+    created_at, updated_at, completed_at
+)
+select tenant_id, room_id, session_id, recording_id, status, generation,
+    adapter_metadata, started_by_participant_session_id,
+    started_by_generation, start_external_operation_id, stop_external_operation_id,
+    failure_code, created_at, updated_at, completed_at
+from __chalk_legacy_sync_recordings;
+
+insert into recordings (
+    id, tenant_id, space_id, episode_id, status, storage_provider,
+    storage_key, metadata, updated_at, created_at
+)
+select id, tenant_id, room_id, session_id, status, storage_provider,
+    storage_key, metadata, updated_at, created_at
+from __chalk_legacy_recordings;
+
+insert into transcriptions (
+    id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
+    languages, metadata, completed_at, updated_at, created_at
+)
+select id, tenant_id, recording_id, room_id, session_id,
+    case status
+        when 'pending' then 'preparing'
+        when 'processing' then 'transcribing'
+        when 'completed' then 'complete'
+        when 'failed' then 'terminal_failure'
+        else status
+    end,
+    provider, model, languages, metadata,
+    completed_at, updated_at, created_at
+from __chalk_legacy_transcriptions;
+
+insert into recording_transcription_sources (
+    recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size,
+    manifest_content_type, schema_version, committed_at
+)
+select recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size,
+    manifest_content_type, schema_version, committed_at
+from __chalk_legacy_recording_transcription_sources;
+
+insert into recording_transcription_source_chunks (
+    id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms,
+    participant_ref, track_epoch, identity_kind, track_class, storage_key,
+    checksum, size, content_type
+)
+select id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms,
+    participant_ref, track_epoch, identity_kind, track_class, storage_key,
+    checksum, size, content_type
+from __chalk_legacy_recording_transcription_source_chunks;
+
+insert into artifact_jobs (
+    id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id,
+    chunk_id, artifact_kind, payload_schema_version, state, priority,
+    available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner,
+    lease_expires_at, error_code, error_detail, journey_id, traceparent,
+    tracestate, terminal_at, updated_at, created_at
+)
+select id, idempotency_key, tenant_id, session_id, recording_id, transcript_id,
+    chunk_id, artifact_kind, payload_schema_version,
+    case state when 'retryable_failure' then 'retryable'
+        when 'terminal_failure' then 'dead_letter'
+        else state
+    end,
+    priority, available_at, attempt_count, attempt_limit, lease_token_hash,
+    lease_owner, lease_expires_at, error_code, error_detail, journey_id,
+    traceparent, tracestate, terminal_at, updated_at, created_at
+from __chalk_legacy_artifact_jobs;
+
+insert into transcript_chunks (
+    id, transcript_id, tenant_id, chunk_index, generation, start_ms, end_ms,
+    participant_ref, track_epoch, identity_kind, track_class, storage_key,
+    result_key, checksum, size, content_type, created_at
+)
+select id, transcript_id, tenant_id, chunk_index, generation, start_ms, end_ms,
+    participant_ref, track_epoch, identity_kind, track_class, storage_key,
+    result_key, checksum, size, content_type, created_at
+from __chalk_legacy_transcript_chunks;
+
+insert into transcription_attempts (
+    id, transcript_id, chunk_id, generation, attempt, provider, model,
+    provider_version, execution_identity, provider_request_id,
+    measured_audio_ms, provider_observed_duration_ms, state,
+    billed_audio_seconds, error_code, error_detail, journey_id, traceparent,
+    tracestate, quality, started_at, finished_at, created_at
+)
+select id, transcript_id, chunk_id, generation, attempt, provider, model,
+    provider_version, execution_identity, provider_request_id,
+    measured_audio_ms, provider_observed_duration_ms, state,
+    billed_audio_seconds, error_code, error_detail, journey_id, traceparent,
+    tracestate, quality, started_at, finished_at,
+    created_at
+from __chalk_legacy_transcription_attempts;
+
+insert into transcription_chunk_results (
+    id, chunk_id, generation, attempt_id, provider, model, provider_version,
+    result_key, result_sha256, result_size, result_content_type, language,
+    billed_audio_seconds, quality, accepted_at
+)
+select id, chunk_id, generation, attempt_id, provider, model, provider_version,
+    result_key, result_sha256, result_size, result_content_type, language,
+    billed_audio_seconds, quality, accepted_at
+from __chalk_legacy_transcription_chunk_results;
+
+insert into transcription_cleanup_jobs (
+    id, tenant_id, transcript_id, object_key, object_kind, due_at, state,
+    attempt_count, attempt_limit, lease_token_hash, lease_owner,
+    lease_expires_at, error_code, error_detail, verified_at,
+    provider_copy_status, updated_at, created_at
+)
+select id, tenant_id, transcript_id, object_key, object_kind, due_at, state,
+    attempt_count, attempt_limit, lease_token_hash, lease_owner,
+    lease_expires_at, error_code, error_detail, verified_at,
+    provider_copy_status, updated_at, created_at
+from __chalk_legacy_transcription_cleanup_jobs;
+
+insert into recording_capacity (
+    id, reserved_episodes, reserved_participants, reserved_input_bitrate_bps,
+    updated_at
+)
+select id, reserved_meetings, reserved_participants, reserved_input_bitrate_bps,
+    updated_at
+from __chalk_legacy_recording_capacity;
+
+insert into recording_pool_health (
+    role, admission_open, ready_capacity, reason, observed_at, updated_at
+)
+select role, admission_open, ready_capacity, reason, observed_at, updated_at
+from __chalk_legacy_recording_pool_health;
+
+insert into recording_reservations (
+    id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
+    request_fingerprint, participant_count, max_duration_seconds,
+    input_bitrate_bps, state, starts_at, ends_at, updated_at, created_at
+)
+select id, tenant_id, room_id, session_id, recording_id, idempotency_key,
+    request_fingerprint, participant_count, max_duration_seconds,
+    input_bitrate_bps, state, starts_at, ends_at, updated_at, created_at
+from __chalk_legacy_recording_reservations;
+
+insert into recording_pipelines (
+    recording_id, tenant_id, reservation_id, state, capture_completed_at,
+    committed_at, updated_at, created_at
+)
+select recording_id, tenant_id, reservation_id, state, capture_completed_at,
+    committed_at, updated_at, created_at
+from __chalk_legacy_recording_pipelines;
+
+insert into recording_jobs (
+    id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+    payload_schema_version, state, priority, available_at, attempt_count,
+    attempt_limit, lease_token, lease_owner, lease_expires_at,
+    fencing_generation, error_code, error_detail, terminal_at,
+    updated_at, created_at
+)
+select id, tenant_id, session_id, recording_id, kind, idempotency_key,
+    payload_schema_version, state, priority, available_at, attempt_count,
+    attempt_limit, lease_token, lease_owner, lease_expires_at,
+    fencing_generation, error_code, error_detail, terminal_at,
+    updated_at, created_at
+from __chalk_legacy_recording_jobs;
+
+insert into recording_bundles (
+    id, tenant_id, recording_id, capture_job_id, sequence_number,
+    fencing_generation, object_key, content_type, codec, layer, byte_size,
+    checksum, monotonic_start_millis, monotonic_end_millis,
+    media_start_millis, media_end_millis, created_at
+)
+select id, tenant_id, recording_id, capture_job_id, sequence_number,
+    fencing_generation, object_key, content_type, codec, layer, byte_size,
+    checksum, monotonic_start_millis, monotonic_end_millis,
+    media_start_millis, media_end_millis, created_at
+from __chalk_legacy_recording_bundles;
+
+insert into recording_artifacts (
+    recording_id, tenant_id, render_job_id, object_key, content_type,
+    byte_size, checksum, duration_millis, committed_at, created_at
+)
+select recording_id, tenant_id, render_job_id, object_key, content_type,
+    byte_size, checksum, duration_millis, committed_at, created_at
+from __chalk_legacy_recording_artifacts;
+
+insert into audit_logs (
+    id, tenant_id, actor_user_id, actor_type, action, resource_type,
+    resource_id, details, outcome, error_code, error_message, before, after,
+    external_request_id, updated_at, created_at
+)
+select id, tenant_id, actor_user_id, actor_type, action, resource_type,
+    resource_id, details, outcome, error_code,
+    error_message, before, after,
+    external_request_id, updated_at, created_at
+from __chalk_legacy_audit_logs;
+
+insert into integration_connections (
+    id, tenant_id, user_id, provider, service, external_account_ref,
+    external_auth_config_ref, status, account_label, account_email, scopes,
+    metadata, connected_at, expires_at, last_used_at, revoked_at,
+    updated_at, created_at
+)
+select id, tenant_id, user_id, provider, service, external_account_ref,
+    external_auth_config_ref, status, account_label, account_email, scopes,
+    metadata, connected_at, expires_at, last_used_at,
+    revoked_at, updated_at, created_at
+from __chalk_legacy_integration_connections;
+
+insert into observability_journey_events (
+    event_id, journey_id, sequence, occurred_at, received_at, name, phase,
+    state, origin_kind, first_observed_layer, upstream_visibility,
+    parent_event_id, trace_id, span_id, attributes
+)
+select event_id, journey_id, sequence, occurred_at, received_at, name, phase,
+    state, origin_kind, first_observed_layer, upstream_visibility,
+    parent_event_id, trace_id, span_id, attributes
+from __chalk_legacy_observability_journey_events;
+
+insert into webhook_tenant_state (tenant_id, updated_at)
+select tenant_id, updated_at
+from __chalk_legacy_webhook_tenant_state;
+
+insert into webhook_endpoints (
+    id, tenant_id, name, enabled, revision, current_target_revision,
+    current_secret_ciphertext, previous_secret_ciphertext,
+    previous_secret_expires_at, created_by_user_id, deleted_at, updated_at,
+    created_at
+)
+select id, tenant_id, name, enabled, revision, current_target_revision,
+    current_secret_ciphertext, previous_secret_ciphertext,
+    previous_secret_expires_at, created_by_user_id, deleted_at, updated_at,
+    created_at
+from __chalk_legacy_webhook_endpoints;
+
+insert into webhook_endpoint_revisions (
+    id, tenant_id, endpoint_id, revision, url_ciphertext, url_redacted,
+    url_destroyed_at, api_version, event_types, created_at
+)
+select id, tenant_id, endpoint_id, revision, url_ciphertext, url_redacted,
+    url_destroyed_at, api_version, event_types, created_at
+from __chalk_legacy_webhook_endpoint_revisions;
+
+insert into webhook_events (
+    id, tenant_id, event_name, api_version, occurred_at, body, body_sha256,
+    semantic_transition_key, resource_type, resource_id, linked_user_id,
+    journey_id, parent_journey_event_id, producing_trace_id,
+    producing_span_id, erased_at, created_at
+)
+select id, tenant_id, event_name, api_version, occurred_at, body, body_sha256,
+    semantic_transition_key, resource_type, resource_id, linked_user_id,
+    journey_id, parent_journey_event_id, producing_trace_id,
+    producing_span_id, erased_at, created_at
+from __chalk_legacy_webhook_events;
+
+insert into webhook_deliveries (
+    id, tenant_id, event_id, endpoint_id, endpoint_revision_id,
+    endpoint_revision, state, next_attempt_at, attempt_count, lease_token,
+    lease_owner, lease_expires_at, terminal_at, queued_journey_event_id,
+    terminal_journey_event_id, parent_delivery_id, created_at, updated_at
+)
+select id, tenant_id, event_id, endpoint_id, endpoint_revision_id,
+    endpoint_revision, state, next_attempt_at, attempt_count, lease_token,
+    lease_owner, lease_expires_at, terminal_at, queued_journey_event_id,
+    terminal_journey_event_id, parent_delivery_id, created_at, updated_at
+from __chalk_legacy_webhook_deliveries;
+
+insert into webhook_delivery_attempts (
+    id, tenant_id, delivery_id, attempt_number, started_at, finished_at,
+    latency_milliseconds, outcome, http_status, error_code, trace_id,
+    span_id, created_at
+)
+select id, tenant_id, delivery_id, attempt_number, started_at, finished_at,
+    latency_milliseconds, outcome, http_status, error_code, trace_id,
+    span_id, created_at
+from __chalk_legacy_webhook_delivery_attempts;
+
+insert into webhook_idempotency_records (
+    tenant_id, operation, idempotency_key, request_sha256, response_status,
+    response_ciphertext, resource_id, expires_at, created_at
+)
+select tenant_id, operation, idempotency_key, request_sha256, response_status,
+    response_ciphertext, resource_id, expires_at, created_at
+from __chalk_legacy_webhook_idempotency_records;
+
+insert into provider_operation_receipts (
+    operation_id, effect, tenant_id, episode_id, participant_id,
+    participant_generation, publication_source, recording_id,
+    request_fingerprint, request_payload, state, outcome, reason, created_at,
+    dispatching_at, completed_at
+)
+select operation_id,
+    case effect when 'media.end_session' then 'media.end_episode' else effect end,
+    tenant_id, session_id, participant_session_id, participant_session_generation,
+    publication_source, recording_id, request_fingerprint,
+    __chalk_bridge_payload(request_payload), state, outcome, reason, created_at,
+    dispatching_at, completed_at
+from __chalk_legacy_provider_operation_receipts;
+
+insert into provider_operation_observation_heads (
+    tenant_id, episode_id, incarnation, sequence, observation_fingerprint,
+    updated_at
+)
+select tenant_id, session_id, incarnation, sequence, observation_fingerprint,
+    updated_at
+from __chalk_legacy_provider_operation_observation_heads;
+
+insert into provider_operation_observations (
+    tenant_id, episode_id, incarnation, sequence, publications,
+    observation_fingerprint, created_at
+)
+select tenant_id, session_id, incarnation, sequence,
+    publications, observation_fingerprint, created_at
+from __chalk_legacy_provider_operation_observations;
+
+-- Row-count parity is the final guard against a silent omission.  Every
+-- legacy relation that has a target counterpart is checked before the source
+-- graph is removed; transformed core relations are checked separately by
+-- their one-to-one Room/Session IDs.
+-- +goose StatementBegin
+do $$
+declare
+    pair record;
+    source_count bigint;
+    target_count bigint;
+begin
+    for pair in select * from (values
+        ('tenants', 'tenants'), ('users', 'users'), ('memberships', 'memberships'),
+        ('auth_identities', 'auth_identities'), ('login_sessions', 'login_sessions'),
+        ('api_keys', 'api_keys'), ('tenant_signing_keys', 'tenant_signing_keys'),
+        ('rooms', 'spaces'), ('room_sessions', 'episodes'), ('participants', 'participants'),
+        ('session_create_requests', 'episode_create_requests'),
+        ('sync_session_control', 'sync_episode_control'),
+        ('sync_lifecycle_intents', 'sync_lifecycle_intents'),
+        ('sync_control_events', 'sync_control_events'),
+        ('sync_command_receipts', 'sync_command_receipts'),
+        ('sync_external_operations', 'sync_external_operations'),
+        ('sync_admission_requests', 'sync_admission_requests'),
+        ('sync_screen_share_leases', 'sync_screen_share_leases'),
+        ('sync_publication_fences', 'sync_publication_fences'),
+        ('sync_publication_grant_reservations', 'sync_publication_grant_reservations'),
+        ('sync_recordings', 'sync_recordings'),
+        ('sync_whiteboard_scenes', 'sync_whiteboard_scenes'),
+        ('sync_whiteboard_elements', 'sync_whiteboard_elements'),
+        ('sync_whiteboard_permissions', 'sync_whiteboard_permissions'),
+        ('sync_whiteboard_operation_receipts', 'sync_whiteboard_operation_receipts'),
+        ('sync_whiteboard_files', 'sync_whiteboard_files'),
+        ('sync_chat_streams', 'sync_chat_streams'),
+        ('sync_chat_messages', 'sync_chat_messages'),
+        ('sync_chat_attachments', 'sync_chat_attachments'),
+        ('sync_chat_read_receipts', 'sync_chat_read_receipts'),
+        ('recordings', 'recordings'), ('transcriptions', 'transcriptions'),
+        ('recording_transcription_sources', 'recording_transcription_sources'),
+        ('recording_transcription_source_chunks', 'recording_transcription_source_chunks'),
+        ('artifact_jobs', 'artifact_jobs'), ('transcript_chunks', 'transcript_chunks'),
+        ('transcription_attempts', 'transcription_attempts'),
+        ('transcription_chunk_results', 'transcription_chunk_results'),
+        ('transcription_cleanup_jobs', 'transcription_cleanup_jobs'),
+        ('recording_capacity', 'recording_capacity'), ('recording_pool_health', 'recording_pool_health'),
+        ('recording_reservations', 'recording_reservations'),
+        ('recording_pipelines', 'recording_pipelines'), ('recording_jobs', 'recording_jobs'),
+        ('recording_bundles', 'recording_bundles'), ('recording_artifacts', 'recording_artifacts'),
+        ('audit_logs', 'audit_logs'), ('integration_connections', 'integration_connections'),
+        ('observability_journey_events', 'observability_journey_events'),
+        ('webhook_tenant_state', 'webhook_tenant_state'), ('webhook_endpoints', 'webhook_endpoints'),
+        ('webhook_endpoint_revisions', 'webhook_endpoint_revisions'), ('webhook_events', 'webhook_events'),
+        ('webhook_deliveries', 'webhook_deliveries'), ('webhook_delivery_attempts', 'webhook_delivery_attempts'),
+        ('webhook_idempotency_records', 'webhook_idempotency_records'),
+        ('provider_operation_receipts', 'provider_operation_receipts'),
+        ('provider_operation_observation_heads', 'provider_operation_observation_heads'),
+        ('provider_operation_observations', 'provider_operation_observations')
+    ) as mappings(source_name, target_name) loop
+        execute format('select count(*) from %I', '__chalk_legacy_' || pair.source_name)
+            into source_count;
+        execute format('select count(*) from %I', pair.target_name)
+            into target_count;
+        if source_count <> target_count then
+            raise exception 'Space/Episode bridge row-count mismatch for %: legacy %, target %',
+                pair.source_name, source_count, target_count;
+        end if;
+    end loop;
+end;
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+do $$
+declare
+    table_name text;
+    legacy_table_names constant text[] := array[
+        'tenants', 'users', 'memberships', 'auth_identities', 'login_sessions',
+        'api_keys', 'tenant_signing_keys', 'rooms', 'room_sessions',
+        'participants', 'sync_session_control', 'sync_lifecycle_intents',
+        'sync_control_events', 'sync_command_receipts', 'session_create_requests',
+        'sync_external_operations', 'sync_admission_requests',
+        'sync_screen_share_leases', 'sync_publication_fences',
+        'sync_publication_grant_reservations', 'sync_recordings',
+        'recordings', 'transcriptions', 'audit_logs', 'integration_connections',
+        'observability_journey_events', 'webhook_tenant_state', 'webhook_endpoints',
+        'webhook_endpoint_revisions', 'webhook_events', 'webhook_deliveries',
+        'webhook_delivery_attempts', 'webhook_idempotency_records',
+        'recording_transcription_sources', 'recording_transcription_source_chunks',
+        'artifact_jobs', 'transcript_chunks', 'transcription_attempts',
+        'transcription_chunk_results', 'transcription_cleanup_jobs',
+        'recording_capacity', 'recording_pool_health', 'recording_reservations',
+        'recording_pipelines', 'recording_jobs', 'recording_bundles',
+        'recording_artifacts', 'provider_operation_receipts',
+        'provider_operation_observation_heads', 'provider_operation_observations',
+        'sync_whiteboard_scenes', 'sync_whiteboard_elements',
+        'sync_whiteboard_permissions', 'sync_whiteboard_operation_receipts',
+        'sync_whiteboard_files', 'sync_chat_streams', 'sync_chat_messages',
+        'sync_chat_attachments', 'sync_chat_read_receipts'
+    ];
+begin
+    foreach table_name in array legacy_table_names loop
+        execute format('drop table if exists %I cascade', '__chalk_legacy_' || table_name);
+    end loop;
+    drop function __chalk_bridge_payload(jsonb);
+    drop function __chalk_bridge_capabilities(text[]);
+    drop function __chalk_bridge_role_config(jsonb, jsonb, jsonb);
+    drop function __chalk_bridge_snapshot(jsonb, jsonb);
+    drop function __chalk_bridge_state_digest(jsonb);
+    drop function __chalk_bridge_canonical_json(jsonb);
+    drop function __chalk_bridge_role_name(text);
+    drop function __chalk_bridge_admission_policy(text);
+    drop function if exists __chalk_legacy_reject_recording_object_mutation();
+end;
+$$;
+-- +goose StatementEnd
+
 -- +goose Down
-drop table if exists provider_operation_observations cascade;
-drop table if exists provider_operation_observation_heads cascade;
-drop table if exists provider_operation_receipts cascade;
-drop table if exists webhook_idempotency_records cascade;
-drop table if exists webhook_delivery_attempts cascade;
-drop table if exists webhook_deliveries cascade;
-drop table if exists webhook_events cascade;
-drop table if exists webhook_endpoint_revisions cascade;
-drop table if exists webhook_endpoints cascade;
-drop table if exists webhook_tenant_state cascade;
-drop table if exists observability_journey_events cascade;
-drop table if exists integration_connections cascade;
-drop table if exists audit_logs cascade;
-drop table if exists recording_artifacts cascade;
-drop table if exists recording_bundles cascade;
-drop table if exists recording_jobs cascade;
-drop table if exists recording_pipelines cascade;
-drop table if exists recording_reservations cascade;
-drop table if exists recording_pool_health cascade;
-drop table if exists recording_capacity cascade;
-drop table if exists transcription_cleanup_jobs cascade;
-drop table if exists transcription_chunk_results cascade;
-drop table if exists transcription_attempts cascade;
-drop table if exists transcript_chunks cascade;
-drop table if exists artifact_jobs cascade;
-drop table if exists recording_transcription_source_chunks cascade;
-drop table if exists recording_transcription_sources cascade;
-drop table if exists transcriptions cascade;
-drop table if exists recordings cascade;
-drop table if exists sync_recordings cascade;
-drop table if exists sync_publication_grant_reservations cascade;
-drop table if exists sync_publication_fences cascade;
-drop table if exists sync_screen_share_leases cascade;
-drop table if exists sync_admission_requests cascade;
-drop table if exists sync_external_operations cascade;
-drop table if exists sync_command_receipts cascade;
-drop table if exists sync_control_events cascade;
-drop table if exists sync_lifecycle_intents cascade;
-drop table if exists sync_episode_control cascade;
-drop table if exists sync_whiteboard_files cascade;
-drop table if exists sync_whiteboard_operation_receipts cascade;
-drop table if exists sync_whiteboard_permissions cascade;
-drop table if exists sync_whiteboard_elements cascade;
-drop table if exists sync_whiteboard_scenes cascade;
-drop table if exists sync_chat_read_receipts cascade;
-drop table if exists sync_chat_attachments cascade;
-drop table if exists sync_chat_messages cascade;
-drop table if exists sync_chat_streams cascade;
-drop table if exists participants cascade;
-drop table if exists episode_create_requests cascade;
-drop table if exists episodes cascade;
-drop table if exists space_members cascade;
-drop table if exists space_roles cascade;
-drop table if exists identities cascade;
-drop table if exists spaces cascade;
-drop table if exists tenant_signing_keys cascade;
-drop table if exists api_keys cascade;
-drop table if exists login_sessions cascade;
-drop table if exists auth_identities cascade;
-drop table if exists memberships cascade;
-drop table if exists users cascade;
-drop table if exists tenants cascade;
-drop function if exists valid_capabilities(text[]);
-drop function if exists protect_immutable_episode_policy();
-drop function if exists validate_episode_config_snapshot(jsonb);
-drop function if exists sync_validate_receipt_event_origin();
-drop function if exists reject_recording_object_mutation();
+-- The bridge has no lossless rollback: restoring the old table graph would
+-- require reconstructing legacy policy columns and JSON payload vocabulary.
+-- +goose StatementBegin
+do $$
+begin
+    raise exception 'Space/Episode bridge is irreversible; restore from a backup instead of running Down';
+end;
+$$;
+-- +goose StatementEnd

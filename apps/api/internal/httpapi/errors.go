@@ -126,6 +126,9 @@ var (
 	apiErrorJourneyNotFound          = APIError{Status: http.StatusNotFound, Code: "journey.not_found", Message: "Journey not found"}
 	apiErrorJourneyLedgerUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "journey.ledger_unavailable", Message: "Journey ledger is unavailable"}
 
+	apiErrorInvalidStatusResult = APIError{Status: http.StatusBadRequest, Code: "status.invalid_result", Message: "Invalid monitor result"}
+	apiErrorStatusUnavailable   = APIError{Status: http.StatusServiceUnavailable, Code: "status.unavailable", Message: "Status is unavailable"}
+
 	apiErrorInvalidIntegrationCallbackURL       = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_callback_url", Message: "Invalid callback URL"}
 	apiErrorInvalidIntegrationProvider          = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_provider", Message: "Invalid integration provider"}
 	apiErrorInvalidIntegrationService           = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_service", Message: "Invalid integration service"}

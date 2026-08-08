@@ -43,8 +43,8 @@ defmodule ChalkSync.SyncPostgres do
 
     participants =
       Enum.map(1..participant_count, fn index ->
-        role = if index == 1, do: "owner", else: "observer"
         participant = Enum.at(participant_identifiers, index - 1, %{})
+        role = Map.get(participant, :role, if(index == 1, do: "owner", else: "observer"))
 
         capabilities =
           Map.get(

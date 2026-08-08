@@ -12,6 +12,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-08-08
+
+> Recording and transcription hosted infrastructure is intentionally excluded
+> from this release. Those hosted services are not part of 4.0.0.
+
 ### Added
 
 - Added the public `@chalk/diagnostics-contracts@0.1.0` package for shared,

@@ -8,6 +8,7 @@ const (
 	APIAuthSessionOrBearer  APIAuth = "session_or_bearer"
 	APIAuthParticipantMedia APIAuth = "participant_media"
 	APIAuthParticipantSync  APIAuth = "participant_sync"
+	APIAuthOpsToken         APIAuth = "ops_token"
 )
 
 type APISchemaRef struct {
@@ -59,6 +60,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, meEndpoints(nil, nil)...)
 	endpoints = append(endpoints, accountTenantEndpoints(nil)...)
 	endpoints = append(endpoints, journeyEndpoints(nil, nil)...)
+	endpoints = append(endpoints, statusEndpoints(nil, nil)...)
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
 	endpoints = append(endpoints, userEndpoints(nil)...)
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)

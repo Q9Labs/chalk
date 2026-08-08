@@ -43,6 +43,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	statusdomain "github.com/q9labs/chalk/apps/api/internal/status"
 	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -110,6 +111,7 @@ func run() error {
 		"operation_logs", cfg.Observability.OperationLogs,
 		"profiler", cfg.Observability.Profiler,
 		"request_logs", cfg.Observability.RequestLogs,
+		"recording_enabled", cfg.Capabilities.Recording,
 		"transcription_enabled", cfg.Capabilities.Transcription,
 	)
 
@@ -238,6 +240,8 @@ func run() error {
 	}
 	journeyRepository := postgres.NewJourneyRepository(pool)
 	journeyService := journeys.NewService(journeyRepository)
+	statusRepository := postgres.NewStatusRepository(pool)
+	statusService := statusdomain.NewService(statusRepository, statusdomain.Config{})
 	var episodeCredentials httpapi.EpisodeCredentialVerifier
 	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
 		verifier, err := rtkadapter.NewCredentialVerifier(cfg.CloudflareRealtime)
@@ -371,12 +375,14 @@ func run() error {
 	routerOptions := httpapi.Options{
 		Capabilities: httpapi.CapabilityStatus{
 			Integrations:  cfg.Capabilities.Integrations,
+			Recording:     cfg.Capabilities.Recording,
 			Transcription: cfg.Capabilities.Transcription,
 		},
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 		},
 		LocalSystemToken:       cfg.API.LocalSystemToken,
+		OpsIngestToken:         cfg.API.OpsIngestToken,
 		RateLimit:              rateLimitOptions,
 		Readiness:              postgres.Readiness{Pool: pool},
 		Authentication:         authenticationService,
@@ -387,6 +393,8 @@ func run() error {
 		APIKeyAudits:           auditLogService,
 		Integrations:           integrationService,
 		Journeys:               journeyService,
+		StatusIngestion:        statusService,
+		StatusSnapshot:         statusService,
 		LocalTelemetry:         cfg.Observability.Environment == config.DefaultEnvironment,
 		EpisodeCredentials:     episodeCredentials,
 		MediaPlane:             mediaPlaneRegistry,
@@ -599,11 +607,20 @@ func r2Configured(cfg config.R2Config) bool {
 func applyCapabilityProfile(options *httpapi.Options, capabilities config.CapabilityConfig) {
 	options.Capabilities = httpapi.CapabilityStatus{
 		Integrations:    capabilities.Integrations,
+		Recording:       capabilities.Recording,
 		Transcription:   capabilities.Transcription,
 		WhiteboardFiles: capabilities.WhiteboardFiles,
 	}
 	if !capabilities.Integrations {
 		options.Integrations = nil
+	}
+	if !capabilities.Recording {
+		options.RecordingDownloads = nil
+		options.RecordingObjects = nil
+		options.Recordings = nil
+		options.RecordingPipeline = nil
+		options.RecorderHealth = nil
+		options.RecorderMetrics = nil
 	}
 	if !capabilities.WhiteboardFiles {
 		options.WhiteboardFiles = nil

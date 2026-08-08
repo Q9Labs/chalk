@@ -11,7 +11,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
   },
   servers: [
     {
-      url: "https://api.chalk.q9labs.com",
+      url: "https://api.chalkmeet.com",
       description: "Production API",
     },
   ],
@@ -1690,6 +1690,131 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         },
       },
     },
+    "/v1/ops/ingest/monitor-results": {
+      post: {
+        operationId: "ingestMonitorResult",
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/StatusMonitorResult",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          202: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/StatusMonitorResultAccepted",
+                },
+              },
+            },
+            description: "Accepted",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["status.invalid_result"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["status.unavailable"],
+          },
+        },
+        security: [
+          {
+            opsIngestToken: [],
+          },
+        ],
+        summary: "Ingest monitor result",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 600,
+          name: "v1.telemetry.intake",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/regions": {
       get: {
         operationId: "listRegions",
@@ -1744,6 +1869,55 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         ],
         summary: "List regions",
+      },
+    },
+    "/v1/status": {
+      get: {
+        operationId: "getPublicStatus",
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PublicStatus",
+                },
+              },
+            },
+            description: "OK",
+            headers: {
+              "Cache-Control": {
+                required: true,
+                schema: {
+                  type: "string",
+                },
+              },
+            },
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["status.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Get public status",
       },
     },
     "/v1/telemetry/journey-events": {
@@ -12573,6 +12747,12 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
   },
   components: {
     securitySchemes: {
+      opsIngestToken: {
+        description: "Private monitor-result ingestion token.",
+        in: "header",
+        name: "X-Ops-Ingest-Token",
+        type: "apiKey",
+      },
       participantMediaBearer: {
         bearerFormat: "JWT",
         description: "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
@@ -14709,6 +14889,64 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["external_operation", "participant"],
         type: "object",
       },
+      PublicStatus: {
+        additionalProperties: false,
+        properties: {
+          components: {
+            items: {
+              additionalProperties: false,
+              properties: {
+                checked_at: {
+                  anyOf: [
+                    {
+                      $ref: "#/components/schemas/DateTimeString",
+                    },
+                    {
+                      type: "null",
+                    },
+                  ],
+                },
+                description: {
+                  type: "string",
+                },
+                id: {
+                  $ref: "#/components/schemas/StatusComponentId",
+                },
+                last_changed_at: {
+                  anyOf: [
+                    {
+                      $ref: "#/components/schemas/DateTimeString",
+                    },
+                    {
+                      type: "null",
+                    },
+                  ],
+                },
+                name: {
+                  type: "string",
+                },
+                state: {
+                  type: "string",
+                },
+              },
+              required: ["checked_at", "description", "id", "last_changed_at", "name", "state"],
+              type: "object",
+            },
+            type: "array",
+          },
+          generated_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          overall: {
+            type: "string",
+          },
+          schema_version: {
+            type: "integer",
+          },
+        },
+        required: ["components", "generated_at", "overall", "schema_version"],
+        type: "object",
+      },
       RecentAuth: {
         additionalProperties: false,
         properties: {
@@ -15248,6 +15486,98 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         },
         required: ["status"],
+        type: "object",
+      },
+      StatusComponentId: {
+        minLength: 1,
+        type: "string",
+        "x-chalk-brand": "StatusComponentId",
+      },
+      StatusMonitorIdentifier: {
+        minLength: 1,
+        type: "string",
+        "x-chalk-brand": "StatusMonitorIdentifier",
+      },
+      StatusMonitorResult: {
+        additionalProperties: false,
+        properties: {
+          checked_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          details: {
+            additionalProperties: {
+              additionalProperties: true,
+              items: {},
+              type: ["object", "array", "string", "number", "boolean", "null"],
+            },
+            type: "object",
+          },
+          error_code: {
+            minLength: 1,
+            type: "string",
+          },
+          error_message: {
+            minLength: 1,
+            type: "string",
+          },
+          event_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          http_status: {
+            type: ["integer", "null"],
+          },
+          latency_ms: {
+            type: "integer",
+          },
+          metadata: {
+            additionalProperties: {
+              additionalProperties: true,
+              items: {},
+              type: ["object", "array", "string", "number", "boolean", "null"],
+            },
+            type: "object",
+          },
+          monitor_key: {
+            minLength: 1,
+            type: "string",
+          },
+          reported_emitter_id: {
+            $ref: "#/components/schemas/StatusMonitorIdentifier",
+          },
+          reported_source: {
+            minLength: 1,
+            type: "string",
+          },
+          response_excerpt: {
+            minLength: 1,
+            type: "string",
+          },
+          result_key: {
+            minLength: 1,
+            type: "string",
+          },
+          run_id: {
+            $ref: "#/components/schemas/StatusMonitorIdentifier",
+          },
+          status: {
+            minLength: 1,
+            type: "string",
+          },
+        },
+        required: ["checked_at", "event_at", "latency_ms", "monitor_key", "reported_emitter_id", "reported_source", "result_key", "run_id", "status"],
+        type: "object",
+      },
+      StatusMonitorResultAccepted: {
+        additionalProperties: false,
+        properties: {
+          accepted: {
+            type: "boolean",
+          },
+          duplicate: {
+            type: "boolean",
+          },
+        },
+        required: ["accepted", "duplicate"],
         type: "object",
       },
       StorageProviderConfig: {

@@ -16,6 +16,7 @@ const UUID_SEGMENT_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-
 type BoundaryRoute = {
   upstreamPath: string;
   authenticated?: boolean;
+  publicStatus?: boolean;
   mutation?: boolean;
   authResult?: boolean;
   browserCallback?: boolean;
@@ -51,6 +52,14 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
     if (!route) {
       responseStatus = 404;
       return secureResponse(errorResponse(404, "not_found", "Route not found"), journeyID);
+    }
+    if (route.publicStatus) {
+      const upstreamURL = resolveUpstreamURL(env.CHALK_API_ORIGIN, route.upstreamPath, "");
+      const upstream = await fetcher(upstreamURL, { method: "GET", headers: forwardedContextHeaders(request, journeyID), redirect: "manual" });
+      const response = await sanitizePublicStatusResponse(upstream);
+      outcome = response.ok ? "succeeded" : response.status >= 500 ? "failed" : "rejected";
+      responseStatus = response.status;
+      return securePublicResponse(response, journeyID);
     }
     if (route.mutation) {
       const requestCheck = validateMutationRequest(request, url);
@@ -130,6 +139,7 @@ function resolveRoute(method: string, pathname: string): BoundaryRoute | undefin
     ["POST /api/auth/register", { upstreamPath: "/v1/auth/register", mutation: true, authResult: true }],
     ["POST /api/auth/login", { upstreamPath: "/v1/auth/login", mutation: true, authResult: true }],
     ["POST /api/auth/logout", { upstreamPath: "/v1/auth/logout", mutation: true, authenticated: true }],
+    ["GET /api/status", { upstreamPath: "/v1/status", publicStatus: true }],
     ["GET /api/auth/google/start", { upstreamPath: "/v1/auth/google/start" }],
     ["GET /api/auth/google/callback", { upstreamPath: "/v1/auth/google/callback", authResult: true, queryParameters: ["state", "code"] }],
     ["GET /api/me", { upstreamPath: "/v1/me", authenticated: true }],
@@ -260,6 +270,66 @@ async function sanitizeUpstreamResponse(upstream: Response): Promise<Response> {
   return errorResponse(upstream.status, code ?? "upstream_error", message ?? "Request failed");
 }
 
+type PublicStatusSummary = {
+  schema_version: number;
+  generated_at: string;
+  overall: "operational" | "degraded" | "outage" | "unknown";
+  components: Array<{
+    id: string;
+    name: string;
+    description: string;
+    state: "operational" | "degraded" | "outage" | "unknown";
+    checked_at: string | null;
+    last_changed_at: string | null;
+  }>;
+};
+
+const PUBLIC_STATUS_STATES = new Set<PublicStatusSummary["overall"]>(["operational", "degraded", "outage", "unknown"]);
+
+async function sanitizePublicStatusResponse(upstream: Response): Promise<Response> {
+  if (!upstream.ok) return errorResponse(upstream.status, "status.unavailable", "Status is temporarily unavailable");
+
+  const value = await readJSONObject(upstream);
+  const summary = parsePublicStatusSummary(value);
+  return summary ? jsonResponse(summary, upstream.status) : errorResponse(502, "status.invalid_response", "Status service returned an invalid response");
+}
+
+function parsePublicStatusSummary(value: Record<string, unknown>): PublicStatusSummary | undefined {
+  const schemaVersion = value.schema_version;
+  const generatedAt = stringField(value, "generated_at");
+  const overall = stringField(value, "overall");
+  const components = value.components;
+  if (typeof schemaVersion !== "number" || !Number.isInteger(schemaVersion) || !generatedAt || !overall || !PUBLIC_STATUS_STATES.has(overall as PublicStatusSummary["overall"]) || !Array.isArray(components)) return undefined;
+
+  const safeComponents = components.map(parsePublicStatusComponent);
+  if (safeComponents.some((component) => !component)) return undefined;
+  return {
+    schema_version: schemaVersion,
+    generated_at: generatedAt,
+    overall: overall as PublicStatusSummary["overall"],
+    components: safeComponents as PublicStatusSummary["components"],
+  };
+}
+
+function parsePublicStatusComponent(value: unknown): PublicStatusSummary["components"][number] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const component = value as Record<string, unknown>;
+  const id = stringField(component, "id");
+  const name = stringField(component, "name");
+  const description = stringField(component, "description");
+  const state = stringField(component, "state");
+  const checkedAt = optionalTimestamp(component.checked_at);
+  const lastChangedAt = optionalTimestamp(component.last_changed_at);
+  if (!id || !name || !description || !state || !PUBLIC_STATUS_STATES.has(state as PublicStatusSummary["overall"]) || checkedAt === undefined || lastChangedAt === undefined) return undefined;
+  return { id, name, description, state: state as PublicStatusSummary["components"][number]["state"], checked_at: checkedAt, last_changed_at: lastChangedAt };
+}
+
+function optionalTimestamp(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string" || !value || !Number.isFinite(Date.parse(value))) return undefined;
+  return value;
+}
+
 async function isRecentAuthFailure(response: Response): Promise<boolean> {
   if (response.status !== 401) return false;
   const value = await readJSONObject(response.clone());
@@ -338,6 +408,14 @@ function secureResponse(response: Response, journeyID: string): Response {
   headers.set(JOURNEY_HEADER, journeyID);
   headers.set("Vary", "Cookie, Origin");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function securePublicResponse(response: Response, journeyID: string): Response {
+  const secured = secureResponse(response, journeyID);
+  const headers = new Headers(secured.headers);
+  headers.set("Cache-Control", "no-store");
+  headers.set("Vary", "Origin");
+  return new Response(secured.body, { status: secured.status, statusText: secured.statusText, headers });
 }
 
 function jsonResponse(value: unknown, status: number): Response {

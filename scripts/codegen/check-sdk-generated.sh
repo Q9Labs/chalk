@@ -3,6 +3,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+go_command="${GO:-go}"
+if ! command -v "$go_command" >/dev/null 2>&1; then
+  echo "Go command not found: $go_command" >&2
+  exit 1
+fi
+
 tmpdir="$(mktemp -d)"
 cleanup() {
   rm -rf "$tmpdir"
@@ -13,7 +19,7 @@ mkdir -p "$tmpdir"
 
 (
   cd apps/api
-  "${GO:-/usr/local/go/bin/go}" run ./cmd/codegen > "$tmpdir/openapi.json"
+  "$go_command" run ./cmd/codegen > "$tmpdir/openapi.json"
 )
 
 CODEGEN_OPENAPI_PATH="$tmpdir/openapi.json" \

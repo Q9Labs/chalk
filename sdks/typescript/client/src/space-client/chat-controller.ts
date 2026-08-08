@@ -39,7 +39,7 @@ export const makeChatController = (input: {
     const controller = yield* Effect.sync(() => {
       let instance: ChatControllerRuntime | null = null;
       const transport = input.createTransport?.({ token: () => Effect.runPromiseWith(context)(input.connection.getSyncToken()) }) ?? null;
-      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalk.video", input.fetch ?? globalThis.fetch, fork, input.episodeDiagnostics);
+      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalkmeet.com", input.fetch ?? globalThis.fetch, fork, input.episodeDiagnostics);
       return instance;
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));

@@ -5,6 +5,7 @@ import "github.com/go-chi/chi/v5"
 func mountV1Routes(r chi.Router, options Options) {
 	r.Route("/v1", func(r chi.Router) {
 		mountPublicAuthRoutes(r, options)
+		mountStatusRoutes(r, options)
 		mountJourneyRoutes(r, options)
 		mountAuthenticatedSessionRoutes(r, options)
 

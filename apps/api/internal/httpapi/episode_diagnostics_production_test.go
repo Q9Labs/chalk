@@ -122,6 +122,7 @@ func setProductionHostedDiagnosticsEnvironment(t *testing.T, optIn string) {
 	t.Setenv(config.ProviderBridgeClientCAFile, "/tmp/chalk-client-ca.crt")
 	t.Setenv(config.ProviderBridgeSPIFFETrustDomain, "chalk.test")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
+	t.Setenv(config.OpsIngestToken, strings.Repeat("o", 32))
 	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
 	t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
 	t.Setenv(config.EpisodeDiagnosticsProductionOptIn, optIn)

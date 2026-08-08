@@ -2,6 +2,19 @@
 alter table spaces
     add column archived_at timestamptz;
 
+-- The compatibility bridge keeps the legacy Room status in this private
+-- metadata key until the archive column exists.  Preserve the source
+-- timestamp for terminal Rooms, then remove only the bridge-owned key so
+-- unrelated Space metadata survives unchanged.  Active Rooms remain
+-- unarchived (and normally have no bridge marker at all).
+update spaces
+set archived_at = coalesce(updated_at, created_at)
+where metadata ->> 'legacy_status' in ('archived', 'ended');
+
+update spaces
+set metadata = metadata - 'legacy_status'
+where metadata ? 'legacy_status';
+
 create index spaces_tenant_archived_created_at_id_idx
     on spaces(tenant_id, archived_at, created_at desc, id desc);
 

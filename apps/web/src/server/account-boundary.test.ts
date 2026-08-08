@@ -28,6 +28,68 @@ describe("account boundary", () => {
     await expect(response.json()).resolves.toMatchObject({ csrf_token: expect.stringMatching(/^[0-9a-f]{64}$/) });
   });
 
+  it("proxies anonymous public status without cookies or private monitor fields", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://api.chalk.test/v1/status");
+      const headers = new Headers(init?.headers);
+      expect(Object.fromEntries(headers)).toEqual({
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        tracestate: "chalk=web",
+        "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
+      });
+      return Response.json({
+        schema_version: 1,
+        generated_at: "2026-08-08T12:00:00Z",
+        overall: "degraded",
+        components: [
+          {
+            id: "api",
+            name: "API",
+            description: "Chalk control plane API",
+            state: "degraded",
+            checked_at: "2026-08-08T11:59:00Z",
+            last_changed_at: "2026-08-08T11:58:00Z",
+            monitor_key: "private.monitor",
+            target_url: "https://private.example",
+            error_message: "private failure details",
+          },
+        ],
+      });
+    });
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/status`, {
+        headers: {
+          Cookie: "__Host-chalk_account=private-token",
+          Authorization: "Bearer private-token",
+          "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
+          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          tracestate: "chalk=web",
+        },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("vary")).toBe("Origin");
+    await expect(response.json()).resolves.toEqual({
+      schema_version: 1,
+      generated_at: "2026-08-08T12:00:00Z",
+      overall: "degraded",
+      components: [
+        {
+          id: "api",
+          name: "API",
+          description: "Chalk control plane API",
+          state: "degraded",
+          checked_at: "2026-08-08T11:59:00Z",
+          last_changed_at: "2026-08-08T11:58:00Z",
+        },
+      ],
+    });
+  });
+
   it("rejects mutations before upstream access when origin or CSRF validation fails", async () => {
     const fetcher = vi.fn();
     const response = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "hasan@example.com", password: "secret" }, { Origin: "https://evil.test" }), upstream, fetcher);

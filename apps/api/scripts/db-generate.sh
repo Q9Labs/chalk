@@ -20,7 +20,7 @@ Commands:
   help      Show this help.
 
 Reads:
-  db/migrations
+  db/schema.sql
   db/queries
 
 Writes:

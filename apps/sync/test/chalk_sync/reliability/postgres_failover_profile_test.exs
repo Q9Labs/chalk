@@ -44,8 +44,9 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
 
     {_client_a, committed} = Wire.commit_hand(client_a, "failover-hand-0001", true)
     assert committed["ack"]["outcome"] == "committed"
-    {_client_b, observed} = Wire.receive_json_type(client_b, "event")
+    {client_b, observed} = Wire.receive_json_type(client_b, "event")
     assert observed["revision"] == initial_revision + 1
+    _client_b = Wire.acknowledge_control_event(client_b, observed)
 
     run_control!("failover")
     assert :ok = TcpFaultProxy.switch_upstream(database_proxy, {127, 0, 0, 1}, standby_port)

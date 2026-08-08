@@ -46,8 +46,22 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     host: host,
     participant: participant
   } do
-    assert {:ok, %{scene_id: scene_id, revision: 0, can_draw: true}} =
+    assert {:ok,
+            %{
+              scene_id: scene_id,
+              revision: 0,
+              capabilities: ["drawWhiteboard", "manageWhiteboard"],
+              participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+              can_draw: true
+            }} =
              PostgresRepository.connect(host)
+
+    assert {:ok,
+            %{
+              capabilities: [],
+              participant_capabilities: [],
+              can_draw: false
+            }} = PostgresRepository.connect(participant)
 
     update = %{
       operation_id: "whiteboard-update-0001",
@@ -57,6 +71,15 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
     assert {:ok, %{outcome: :committed, revision: 1, scene_id: ^scene_id}} =
              PostgresRepository.commit_update(host, update)
+
+    assert {:ok,
+            [
+              %{
+                operation_id: "whiteboard-update-0001",
+                revision: 1,
+                scene_id: ^scene_id
+              }
+            ]} = PostgresRepository.read_after(participant, scene_id, 0)
 
     assert {:ok, %{outcome: :duplicate, revision: 1, scene_id: ^scene_id}} =
              PostgresRepository.commit_update(host, update)

@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { __internal, runMonitorCycle, type Env } from "./index";
 
 const atlasURL = "https://atlas.example.test/";
-const ingestPath = "/api/v1/ops/ingest/monitor-results";
+const ingestPath = "/v1/ops/ingest/monitor-results";
 
 function environment(): Env {
   return {

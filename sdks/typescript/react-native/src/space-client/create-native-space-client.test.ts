@@ -52,6 +52,12 @@ describe("native client creation", () => {
     expect(createSpaceClientForPlatform.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ syncStartupTimeoutMs: 45_000 }));
   });
 
+  it("derives the canonical Sync origin from the default API origin", () => {
+    createNativeSpaceClient({ ...options(), baseUrl: undefined, syncUrl: undefined });
+
+    expect(createSpaceClientForPlatform.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ apiBaseUrl: "https://api.chalkmeet.com", syncUrl: "wss://sync.chalkmeet.com/v1/sync" }));
+  });
+
   it("passes the closed access callback to the client", () => {
     const getAccess = vi.fn();
     createNativeSpaceClient({ ...options(), getAccess });

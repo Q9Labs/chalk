@@ -286,6 +286,32 @@ func TestRunRouteJourneyEventIntakeScenario(t *testing.T) {
 	assertEvent(t, result.Events, "ledger", "observability_journey_events.insert")
 }
 
+func TestRunRouteStatusMonitorIngestScenarioShowsBoundedSuccessAndFailures(t *testing.T) {
+	result, err := Run(context.Background(), RouteStatusMonitorIngestScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want final public snapshot 200", result.StatusCode)
+	}
+	assertEvent(t, result.Events, "service", "status.Service.Ingest")
+	assertEvent(t, result.Events, "service", "status.Service.Snapshot")
+	encoded, err := json.Marshal(result.Events)
+	if err != nil {
+		t.Fatalf("marshal trace: %v", err)
+	}
+	for _, private := range []string{"private.example", "private detail", "trace-ops-token", "trace-run:api.health", "api.health"} {
+		if strings.Contains(string(encoded), private) {
+			t.Fatalf("trace contains private value %q: %s", private, encoded)
+		}
+	}
+	for _, statusCode := range []string{"401", "400", "503"} {
+		if !strings.Contains(string(encoded), `"status":`+statusCode) {
+			t.Fatalf("trace does not show HTTP %s boundary: %s", statusCode, encoded)
+		}
+	}
+}
+
 func TestWebhookDeliveryAttemptScenarioShowsAtomicProductionRetryAndSuccess(t *testing.T) {
 	result, err := Run(context.Background(), WebhookDeliveryAttemptScenario)
 	if err != nil {

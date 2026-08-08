@@ -226,6 +226,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/ops/ingest/monitor-results": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Ingest monitor result */
+    post: operations["ingestMonitorResult"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/regions": {
     parameters: {
       query?: never;
@@ -235,6 +252,23 @@ export interface paths {
     };
     /** List regions */
     get: operations["listRegions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get public status */
+    get: operations["getPublicStatus"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1868,6 +1902,19 @@ export interface components {
         tenant_id: components["schemas"]["TenantId"];
       };
     };
+    PublicStatus: {
+      components: {
+        checked_at: components["schemas"]["DateTimeString"] | null;
+        description: string;
+        id: components["schemas"]["StatusComponentId"];
+        last_changed_at: components["schemas"]["DateTimeString"] | null;
+        name: string;
+        state: string;
+      }[];
+      generated_at: components["schemas"]["DateTimeString"];
+      overall: string;
+      schema_version: number;
+    };
     RecentAuth: {
       expires_at: components["schemas"]["DateTimeString"];
       proof: string;
@@ -2041,6 +2088,49 @@ export interface components {
     };
     Status: {
       status: string;
+    };
+    StatusComponentId: string;
+    StatusMonitorIdentifier: string;
+    StatusMonitorResult: {
+      checked_at: components["schemas"]["DateTimeString"];
+      details?: {
+        [key: string]:
+          | {
+              [key: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+      };
+      error_code?: string;
+      error_message?: string;
+      event_at: components["schemas"]["DateTimeString"];
+      http_status?: number | null;
+      latency_ms: number;
+      metadata?: {
+        [key: string]:
+          | {
+              [key: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+      };
+      monitor_key: string;
+      reported_emitter_id: components["schemas"]["StatusMonitorIdentifier"];
+      reported_source: string;
+      response_excerpt?: string;
+      result_key: string;
+      run_id: components["schemas"]["StatusMonitorIdentifier"];
+      status: string;
+    };
+    StatusMonitorResultAccepted: {
+      accepted: boolean;
+      duplicate: boolean;
     };
     StorageProviderConfig: {
       access_key_id?: string;
@@ -3425,6 +3515,87 @@ export interface operations {
       };
     };
   };
+  ingestMonitorResult: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StatusMonitorResult"];
+      };
+    };
+    responses: {
+      /** @description Accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StatusMonitorResultAccepted"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   listRegions: {
     parameters: {
       query?: never;
@@ -3450,6 +3621,45 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getPublicStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          "Cache-Control": string;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PublicStatus"];
         };
       };
       /** @description Internal Server Error */

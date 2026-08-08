@@ -15,7 +15,7 @@ const packageJsonPath = resolve(process.cwd(), "package.json");
 const STATUS_TITLE = "Chalk Status";
 const STATUS_DESCRIPTION = "Live system status, incidents, uptime, and maintenance updates for Chalk.";
 const STATUS_CANONICAL = "https://chalkmeet.com/status";
-const STATUS_IMAGE = "https://chalk-api.q9labs.ai/api/v1/status/card.png";
+const STATUS_IMAGE = "https://chalkmeet.com/brand/chalk/chalk-icon-512.png";
 
 if (!existsSync(shellPath)) {
   throw new Error(`missing ${shellPath}; expected TanStack Start SPA build output to include _shell.html`);

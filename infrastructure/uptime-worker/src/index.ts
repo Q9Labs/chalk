@@ -67,6 +67,7 @@ type IngestAttempt =
 
 type BufferedIngestRecord = {
   payload: IngestPayload;
+  trace_context?: TraceContext;
   buffered_at: string;
   error_code: string;
   error_message: string;
@@ -123,6 +124,12 @@ type RuntimeConfig = {
   fallbackBufferPrefix: string;
   twilioAlertThreshold: number;
   twilioTimeoutMs: number;
+};
+
+type TraceContext = {
+  journeyID: string;
+  traceparent: string;
+  tracestate: string;
 };
 
 export interface Env {
@@ -270,6 +277,9 @@ const DEFAULT_REPORTED_EMITTER_ID = "chalk-uptime-worker";
 const DEFAULT_FALLBACK_BUFFER_PREFIX = "ops-monitor";
 const DEFAULT_TWILIO_ALERT_STREAK_THRESHOLD = 2;
 const DEFAULT_TWILIO_TIMEOUT_MS = 5_000;
+const DEFAULT_TRACESTATE = "chalk=uptime-worker";
+const TRACEPARENT_PATTERN = /^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/i;
+const JOURNEY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const BUFFER_PATH = "failed-ingest";
 const STATE_PATH = "state/critical-ingest-streak.json";
@@ -315,7 +325,7 @@ function readRuntimeConfig(env: Env): RuntimeConfig {
   }
 
   return {
-    ingestURL: `${normalizeBaseURL(apiBaseURL)}/api/v1/ops/ingest/monitor-results`,
+    ingestURL: `${normalizeBaseURL(apiBaseURL)}/v1/ops/ingest/monitor-results`,
     ingestToken,
     checkTimeoutMs: parseNumberEnv(env.CHECK_TIMEOUT_MS, DEFAULT_CHECK_TIMEOUT_MS, 100),
     checkRetries: parseNumberEnv(env.CHECK_RETRIES, DEFAULT_CHECK_RETRIES, 0),
@@ -331,6 +341,42 @@ function readRuntimeConfig(env: Env): RuntimeConfig {
     fallbackBufferPrefix: env.OPS_FALLBACK_BUFFER_PREFIX || DEFAULT_FALLBACK_BUFFER_PREFIX,
     twilioAlertThreshold: parseNumberEnv(env.TWILIO_ALERT_STREAK_THRESHOLD, DEFAULT_TWILIO_ALERT_STREAK_THRESHOLD, 1),
     twilioTimeoutMs: parseNumberEnv(env.TWILIO_TIMEOUT_MS, DEFAULT_TWILIO_TIMEOUT_MS, 100),
+  };
+}
+
+function randomHex(byteLength: number): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function createTraceparent(): string {
+  return `00-${randomHex(16)}-${randomHex(8)}-01`;
+}
+
+function createTraceContext(request?: Request): TraceContext {
+  const journeyID = request?.headers.get("x-chalk-journey-id");
+  const traceparent = request?.headers.get("traceparent");
+  const tracestate = request?.headers.get("tracestate");
+  return {
+    journeyID: journeyID && JOURNEY_ID_PATTERN.test(journeyID) ? journeyID.toLowerCase() : crypto.randomUUID(),
+    traceparent: traceparent && TRACEPARENT_PATTERN.test(traceparent) ? traceparent.toLowerCase() : createTraceparent(),
+    tracestate: tracestate && tracestate.length <= 512 && !/[\r\n]/.test(tracestate) ? tracestate : DEFAULT_TRACESTATE,
+  };
+}
+
+function bufferedTraceContext(value: unknown, fallback: TraceContext): TraceContext {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  const source = value as Record<string, unknown>;
+  if (typeof source.journeyID !== "string" || !JOURNEY_ID_PATTERN.test(source.journeyID) || typeof source.traceparent !== "string" || !TRACEPARENT_PATTERN.test(source.traceparent) || typeof source.tracestate !== "string" || source.tracestate.length > 512 || /[\r\n]/.test(source.tracestate)) {
+    return fallback;
+  }
+  return {
+    journeyID: source.journeyID.toLowerCase(),
+    traceparent: source.traceparent.toLowerCase(),
+    tracestate: source.tracestate,
   };
 }
 
@@ -392,7 +438,15 @@ function classifyFetchError(error: unknown): { code: string; message: string } {
   };
 }
 
-async function executeMonitorCheck(monitor: MonitorDefinition, config: RuntimeConfig, runID: string, deadlineAt: number): Promise<MonitorCheckResult> {
+function traceHeaders(context: TraceContext): Record<string, string> {
+  return {
+    "x-chalk-journey-id": context.journeyID,
+    traceparent: context.traceparent,
+    tracestate: context.tracestate,
+  };
+}
+
+async function executeMonitorCheck(monitor: MonitorDefinition, config: RuntimeConfig, runID: string, deadlineAt: number, context: TraceContext): Promise<MonitorCheckResult> {
   const attemptsTotal = config.checkRetries + 1;
 
   for (let attempt = 1; attempt <= attemptsTotal; attempt += 1) {
@@ -420,6 +474,7 @@ async function executeMonitorCheck(monitor: MonitorDefinition, config: RuntimeCo
           headers: {
             "user-agent": config.checkUserAgent,
             "x-ops-monitor-run-id": runID,
+            ...traceHeaders(context),
           },
           redirect: "follow",
         },
@@ -548,7 +603,7 @@ function buildIngestPayload(result: MonitorCheckResult, config: RuntimeConfig): 
   };
 }
 
-async function postIngestPayload(payload: IngestPayload, config: RuntimeConfig, deadlineAt: number): Promise<IngestAttempt> {
+async function postIngestPayload(payload: IngestPayload, config: RuntimeConfig, deadlineAt: number, context: TraceContext): Promise<IngestAttempt> {
   const body = JSON.stringify(payload);
   const attemptsTotal = config.ingestRetries + 1;
 
@@ -571,6 +626,8 @@ async function postIngestPayload(payload: IngestPayload, config: RuntimeConfig, 
           headers: {
             "content-type": "application/json",
             "X-Ops-Ingest-Token": config.ingestToken,
+            "Idempotency-Key": payload.result_key,
+            ...traceHeaders(context),
           },
           body,
         },
@@ -626,7 +683,7 @@ function buildBufferedObjectKey(config: RuntimeConfig, payload: IngestPayload): 
   return `${config.fallbackBufferPrefix}/${BUFFER_PATH}/${payload.monitor_key}/${encodedResultKey}.json`;
 }
 
-async function bufferFailedIngest(env: Env, config: RuntimeConfig, payload: IngestPayload, ingestFailure: IngestAttempt & { ok: false }): Promise<boolean> {
+async function bufferFailedIngest(env: Env, config: RuntimeConfig, payload: IngestPayload, ingestFailure: IngestAttempt & { ok: false }, context: TraceContext): Promise<boolean> {
   const bucket = env.OPS_FALLBACK_BUFFER_BUCKET;
   if (!bucket) {
     return false;
@@ -634,6 +691,7 @@ async function bufferFailedIngest(env: Env, config: RuntimeConfig, payload: Inge
 
   const record: BufferedIngestRecord = {
     payload,
+    trace_context: context,
     buffered_at: new Date().toISOString(),
     error_code: ingestFailure.errorCode,
     error_message: ingestFailure.errorMessage,
@@ -645,9 +703,9 @@ async function bufferFailedIngest(env: Env, config: RuntimeConfig, payload: Inge
   return true;
 }
 
-async function tryBufferFailedIngest(env: Env, config: RuntimeConfig, payload: IngestPayload, ingestFailure: IngestAttempt & { ok: false }, runID: string): Promise<boolean> {
+async function tryBufferFailedIngest(env: Env, config: RuntimeConfig, payload: IngestPayload, ingestFailure: IngestAttempt & { ok: false }, runID: string, context: TraceContext): Promise<boolean> {
   try {
-    return await bufferFailedIngest(env, config, payload, ingestFailure);
+    return await bufferFailedIngest(env, config, payload, ingestFailure, context);
   } catch (error) {
     console.error("ops-monitor.ingest.buffer.error", {
       run_id: runID,
@@ -659,7 +717,7 @@ async function tryBufferFailedIngest(env: Env, config: RuntimeConfig, payload: I
   }
 }
 
-async function replayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt: number): Promise<ReplaySummary> {
+async function replayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt: number, context: TraceContext): Promise<ReplaySummary> {
   const bucket = env.OPS_FALLBACK_BUFFER_BUCKET;
   if (!bucket) {
     return { attempted: 0, replayed: 0, failed: 0 };
@@ -687,9 +745,11 @@ async function replayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt
 
     attempted += 1;
     let payload: IngestPayload | null = null;
+    let replayContext = context;
     try {
       const record = JSON.parse(await body.text()) as BufferedIngestRecord;
       payload = record.payload;
+      replayContext = bufferedTraceContext(record.trace_context, context);
     } catch {
       payload = null;
     }
@@ -699,7 +759,7 @@ async function replayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt
       continue;
     }
 
-    const ingest = await postIngestPayload(payload, config, deadlineAt);
+    const ingest = await postIngestPayload(payload, config, deadlineAt, replayContext);
     if (ingest.ok) {
       replayed += 1;
       await bucket.delete(object.key);
@@ -713,9 +773,9 @@ async function replayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt
   return { attempted, replayed, failed };
 }
 
-async function tryReplayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt: number, runID: string): Promise<ReplaySummary> {
+async function tryReplayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt: number, runID: string, context: TraceContext): Promise<ReplaySummary> {
   try {
-    return await replayBufferedIngests(env, config, deadlineAt);
+    return await replayBufferedIngests(env, config, deadlineAt, context);
   } catch (error) {
     console.error("ops-monitor.replay.error", {
       run_id: runID,
@@ -874,7 +934,7 @@ async function maybeSendCriticalIngestAlert(env: Env, config: RuntimeConfig, ing
   };
 }
 
-export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promise<RunSummary> {
+export async function runMonitorCycle(env: Env, scheduledAt = new Date(), context = createTraceContext()): Promise<RunSummary> {
   const config = readRuntimeConfig(env);
   const monitors = monitorDefinitions(env);
   const runID = buildRunID(scheduledAt);
@@ -886,7 +946,7 @@ export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promi
     ingest_url: config.ingestURL,
   });
 
-  const replaySummary = await tryReplayBufferedIngests(env, config, deadlineAt, runID);
+  const replaySummary = await tryReplayBufferedIngests(env, config, deadlineAt, runID, context);
   if (replaySummary.attempted > 0) {
     console.log("ops-monitor.replay.completed", {
       run_id: runID,
@@ -896,7 +956,7 @@ export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promi
     });
   }
 
-  const checks = await mapWithConcurrency(monitors, config.maxParallelChecks, (monitor) => executeMonitorCheck(monitor, config, runID, deadlineAt));
+  const checks = await mapWithConcurrency(monitors, config.maxParallelChecks, (monitor) => executeMonitorCheck(monitor, config, runID, deadlineAt, context));
 
   const failures: IngestFailure[] = [];
   let ingestSuccessCount = 0;
@@ -904,7 +964,7 @@ export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promi
 
   for (const check of checks) {
     const payload = buildIngestPayload(check, config);
-    const ingest = await postIngestPayload(payload, config, deadlineAt);
+    const ingest = await postIngestPayload(payload, config, deadlineAt, context);
 
     if (ingest.ok) {
       ingestSuccessCount += 1;
@@ -939,7 +999,7 @@ export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promi
       error_message: ingest.errorMessage,
     });
 
-    const buffered = await tryBufferFailedIngest(env, config, payload, ingest, runID);
+    const buffered = await tryBufferFailedIngest(env, config, payload, ingest, runID, context);
     if (buffered) {
       bufferedCount += 1;
       console.warn("ops-monitor.ingest.buffered", {
@@ -1021,7 +1081,7 @@ export default {
       }
 
       try {
-        const summary = await runMonitorCycle(env);
+        const summary = await runMonitorCycle(env, new Date(), createTraceContext(request));
         return json(summary, 200);
       } catch (error) {
         return json(
@@ -1038,7 +1098,7 @@ export default {
 
   async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
-      await runMonitorCycle(env, new Date(controller.scheduledTime));
+      await runMonitorCycle(env, new Date(controller.scheduledTime), createTraceContext());
     } catch (error) {
       console.error("ops-monitor.run.error", {
         error: error instanceof Error ? error.message : String(error),

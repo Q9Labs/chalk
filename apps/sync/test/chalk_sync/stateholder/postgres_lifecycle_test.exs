@@ -1201,6 +1201,13 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
   defp stop_connection(connection) do
-    if Process.alive?(connection), do: GenServer.stop(connection)
+    if Process.alive?(connection) do
+      try do
+        GenServer.stop(connection)
+      catch
+        :exit, {:noproc, _details} -> :ok
+        :exit, :noproc -> :ok
+      end
+    end
   end
 end

@@ -716,6 +716,35 @@ type SpaceRole struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type StatusMonitorCurrent struct {
+	MonitorKey    string             `json:"monitor_key"`
+	ResultKey     string             `json:"result_key"`
+	RunID         string             `json:"run_id"`
+	Status        string             `json:"status"`
+	CheckedAt     pgtype.Timestamptz `json:"checked_at"`
+	LastChangedAt pgtype.Timestamptz `json:"last_changed_at"`
+	ReceivedAt    pgtype.Timestamptz `json:"received_at"`
+}
+
+type StatusMonitorResult struct {
+	ResultKey         string             `json:"result_key"`
+	RunID             string             `json:"run_id"`
+	MonitorKey        string             `json:"monitor_key"`
+	Status            string             `json:"status"`
+	CheckedAt         pgtype.Timestamptz `json:"checked_at"`
+	EventAt           pgtype.Timestamptz `json:"event_at"`
+	LatencyMs         int64              `json:"latency_ms"`
+	HttpStatus        pgtype.Int4        `json:"http_status"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	ErrorMessage      pgtype.Text        `json:"error_message"`
+	ResponseExcerpt   pgtype.Text        `json:"response_excerpt"`
+	ReportedSource    string             `json:"reported_source"`
+	ReportedEmitterID string             `json:"reported_emitter_id"`
+	Metadata          []byte             `json:"metadata"`
+	Details           []byte             `json:"details"`
+	ReceivedAt        pgtype.Timestamptz `json:"received_at"`
+}
+
 type SyncAdmissionRequest struct {
 	TenantID                    pgtype.UUID        `json:"tenant_id"`
 	SpaceID                     pgtype.UUID        `json:"space_id"`

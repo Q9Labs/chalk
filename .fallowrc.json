@@ -44,6 +44,7 @@
     "scripts/transcription-dispatcher/source-state.mjs"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
+  "ignoreUnresolvedImports": ["../../../sdks/typescript/client/dist/effect.js", "../../../sdks/typescript/client/dist/index.js", "../../../sdks/typescript/client/dist/telemetry/index.js", "../../../sdks/typescript/client/dist/webhooks/index.js", "../dist/index.js"],
   "ignoreDependencies": [
     "@arethetypeswrong/cli",
     "publint",

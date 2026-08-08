@@ -42,7 +42,7 @@ export type NativeSpaceClientOptions = {
 
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
   const { storage, telemetry: journey } = options;
-  const apiBaseURL = options.baseUrl ?? "https://api.chalk.video";
+  const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
   const syncURL = options.syncUrl ?? defaultSyncURL(apiBaseURL);
   const telemetry = journey ? createTelemetry(journey) : undefined;
   const fetch = telemetryFetch(journey);
@@ -272,6 +272,7 @@ function whiteboardURL(syncURL: string): string {
 function defaultSyncURL(apiBaseURL: string): string {
   const url = new URL(apiBaseURL);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  if (url.hostname.startsWith("api.")) url.hostname = `sync.${url.hostname.slice(4)}`;
   url.pathname = "/v1/sync";
   url.search = "";
   url.hash = "";

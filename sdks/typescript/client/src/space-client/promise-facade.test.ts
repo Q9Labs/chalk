@@ -14,17 +14,21 @@ type StubController = {
   readonly dispose: () => void;
 };
 
+function createStubController(failure = new Error("failure")): StubController {
+  return {
+    send: (value) => Effect.succeed(`sent:${value}`),
+    fail: () => Effect.fail(failure),
+    upload: (file) => Effect.succeed({ attachmentId: file }),
+    url: (attachmentId) => `/attachments/${attachmentId}`,
+    configure: () => undefined,
+    dispose: () => undefined,
+  };
+}
+
 describe("toPromiseController", () => {
   it("runs Effect commands and preserves their failures", async () => {
     const failure = new SpaceClientError({ code: "chat.payload_invalid", recoverable: false, message: "mapped failure" });
-    const controller: StubController = {
-      send: (value) => Effect.succeed(`sent:${value}`),
-      fail: () => Effect.fail(failure),
-      upload: (file) => Effect.succeed({ attachmentId: file }),
-      url: (attachmentId) => `/attachments/${attachmentId}`,
-      configure: () => undefined,
-      dispose: () => undefined,
-    };
+    const controller = createStubController(failure);
     const runtime = { runPromise: vi.fn((effect: Effect.Effect<unknown, unknown>) => Effect.runPromise(effect)) };
     const projected = toPromiseController(runtime, controller);
 
@@ -34,14 +38,7 @@ describe("toPromiseController", () => {
   });
 
   it("returns direct members synchronously and projects chat.files", async () => {
-    const controller: StubController = {
-      send: (value) => Effect.succeed(`sent:${value}`),
-      fail: () => Effect.fail(new Error("failure")),
-      upload: (file) => Effect.succeed({ attachmentId: file }),
-      url: (attachmentId) => `/attachments/${attachmentId}`,
-      configure: () => undefined,
-      dispose: () => undefined,
-    };
+    const controller = createStubController();
     const runtime = { runPromise: vi.fn((effect: Effect.Effect<unknown, unknown>) => Effect.runPromise(effect)) };
     const projected = toPromiseController(runtime, controller);
     const chat = { send: projected.send, files: { upload: projected.upload, url: projected.url } };
@@ -54,14 +51,7 @@ describe("toPromiseController", () => {
   });
 
   it("omits lifecycle methods from the runtime and projected type", () => {
-    const controller: StubController = {
-      send: (value) => Effect.succeed(`sent:${value}`),
-      fail: () => Effect.fail(new Error("failure")),
-      upload: (file) => Effect.succeed({ attachmentId: file }),
-      url: (attachmentId) => `/attachments/${attachmentId}`,
-      configure: () => undefined,
-      dispose: () => undefined,
-    };
+    const controller = createStubController();
     const runtime = { runPromise: vi.fn((effect: Effect.Effect<unknown, unknown>) => Effect.runPromise(effect)) };
     const projected = toPromiseController(runtime, controller);
 

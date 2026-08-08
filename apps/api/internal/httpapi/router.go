@@ -32,6 +32,7 @@ type EpisodeCredentialVerifier interface {
 
 type CapabilityStatus struct {
 	Integrations    bool
+	Recording       bool
 	Transcription   bool
 	WhiteboardFiles bool
 }
@@ -40,6 +41,7 @@ type Options struct {
 	Capabilities           CapabilityStatus
 	CORS                   CORSOptions
 	LocalSystemToken       string
+	OpsIngestToken         string
 	Middleware             []func(http.Handler) http.Handler
 	Profiler               http.Handler
 	RateLimit              RateLimitOptions
@@ -69,6 +71,8 @@ type Options struct {
 	RecordingObjects       RecordingObjectService
 	Recordings             RecordingService
 	RecordingPipeline      RecordingPipelineService
+	StatusIngestion        StatusIngestionService
+	StatusSnapshot         StatusSnapshotService
 	RecorderMetrics        RecordingPipelineMetricRecorder
 	Spaces                 SpaceService
 	Episodes               EpisodeLifecycleService
@@ -196,6 +200,7 @@ func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus) {
 func capabilityReadiness(capabilities CapabilityStatus) map[string]string {
 	return map[string]string{
 		"integrations":     enabledStatus(capabilities.Integrations),
+		"recording":        enabledStatus(capabilities.Recording),
 		"transcription":    enabledStatus(capabilities.Transcription),
 		"whiteboard_files": enabledStatus(capabilities.WhiteboardFiles),
 	}

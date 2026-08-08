@@ -88,6 +88,15 @@ defmodule ChalkSync.Reliability.Wire do
     receive_json_type_result(client, expected_type, timeout, 8)
   end
 
+  def acknowledge_control_event(client, event) do
+    Client.send_json(client, %{
+      "type" => "delivery_ack",
+      "stream" => "control",
+      "revision" => event["revision"],
+      "state_digest" => event["resulting_state_digest"]
+    })
+  end
+
   def token(identity) do
     DevTokenVerifier.token(%{
       "tenant_id" => identity.episode.tenant_id,

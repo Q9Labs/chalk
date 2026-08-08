@@ -29,6 +29,8 @@ const (
 	APIService            = "CHALK_API_SERVICE"
 	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
 	APILocalSystemToken   = "CHALK_API_LOCAL_SYSTEM_TOKEN"
+	APIOpsIngestToken     = "CHALK_OPS_INGEST_TOKEN"
+	OpsIngestToken        = APIOpsIngestToken
 	APIVersion            = "CHALK_API_VERSION"
 
 	AuthEmailVerificationRequired = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
@@ -116,6 +118,7 @@ const (
 	TranscriptionWorkloadAuthSecret = "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET"
 	TranscriptionControlAudience    = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
+	RecordingEnabled                = "CHALK_RECORDING_ENABLED"
 	TranscriptionEnabled            = "CHALK_TRANSCRIPTION_ENABLED"
 	WhiteboardFilesEnabled          = "CHALK_WHITEBOARD_FILES_ENABLED"
 
@@ -175,11 +178,15 @@ type APIConfig struct {
 	Address            string
 	CORSAllowedOrigins []string
 	LocalSystemToken   string
+	OpsIngestToken     string
 	TrustedProxyCIDRs  []string
 }
 
+const opsIngestTokenMinLength = 32
+
 type CapabilityConfig struct {
 	Integrations    bool
+	Recording       bool
 	Transcription   bool
 	WhiteboardFiles bool
 }
@@ -478,6 +485,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	opsIngestToken := strings.TrimSpace(envOrDefault(APIOpsIngestToken, ""))
+	if err := validateOpsIngestToken(environment, opsIngestToken); err != nil {
+		return Config{}, err
+	}
 	realtimeBaseURL := strings.TrimRight(strings.TrimSpace(envOrDefault(CloudflareRealtimeBaseURL, "")), "/")
 	if realtimeBaseURL != "" {
 		if environment != DefaultEnvironment {
@@ -523,6 +534,7 @@ func Load() (Config, error) {
 			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
 			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
 			LocalSystemToken:   localSystemToken,
+			OpsIngestToken:     opsIngestToken,
 			TrustedProxyCIDRs:  envList(APITrustedProxyCIDRs),
 		},
 		Auth: AuthConfig{
@@ -591,6 +603,19 @@ func Load() (Config, error) {
 	}, nil
 }
 
+func validateOpsIngestToken(environment, token string) error {
+	if token == "" {
+		if environment == DefaultEnvironment {
+			return nil
+		}
+		return fmt.Errorf("%s must be set outside local environments", APIOpsIngestToken)
+	}
+	if len(token) < opsIngestTokenMinLength {
+		return fmt.Errorf("%s must be at least %d bytes", APIOpsIngestToken, opsIngestTokenMinLength)
+	}
+	return nil
+}
+
 func loadRecentAuthSecret(environment string) ([]byte, error) {
 	secret := strings.TrimSpace(envOrDefault(AuthRecentAuthSecret, ""))
 	if secret == "" {
@@ -615,11 +640,15 @@ func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 	if err != nil {
 		return CapabilityConfig{}, err
 	}
+	recording, err := envStrictBool(RecordingEnabled, defaultEnabled)
+	if err != nil {
+		return CapabilityConfig{}, err
+	}
 	whiteboardFiles, err := envStrictBool(WhiteboardFilesEnabled, false)
 	if err != nil {
 		return CapabilityConfig{}, err
 	}
-	return CapabilityConfig{Integrations: integrations, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
+	return CapabilityConfig{Integrations: integrations, Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
 }
 
 const (

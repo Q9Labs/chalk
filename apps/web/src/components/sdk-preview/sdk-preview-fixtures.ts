@@ -1,10 +1,8 @@
 import type { ChalkChatMessage, ChalkReactionEvent, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type { SpacePanel, ThemePalette, ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
 import type { Participant } from "../../../../../sdks/typescript/react/src/components/participant-grid/ParticipantGrid";
-import type { ParticipantListParticipant } from "../../../../../sdks/typescript/react/src/components/participants-panel/ParticipantsPanel";
 import type { SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
 import type { ReconnectingOverlayProps } from "../../../../../sdks/typescript/react/src/components/reconnecting-overlay/ReconnectingOverlay";
-import type { TranscriptEntry } from "../../../../../sdks/typescript/react/src/components/transcript-panel/TranscriptPanel";
 
 import type { PreviewSearch } from "./preview-state";
 
@@ -89,24 +87,6 @@ export const INITIAL_CHAT_MESSAGES: readonly ChalkChatMessage[] = [
   },
 ];
 
-export const TRANSCRIPT_FIXTURES: readonly TranscriptEntry[] = [
-  {
-    id: "transcript-1",
-    speaker: "Nora Williams",
-    speakerId: "nora",
-    text: "We can ship the first collaborative surface this week.",
-    timestamp: new Date("2026-08-01T10:15:00.000Z"),
-  },
-  {
-    id: "transcript-2",
-    speaker: DISPLAY_NAME,
-    speakerId: "you",
-    text: "Let’s keep the Space controls calm and predictable.",
-    timestamp: new Date("2026-08-01T10:15:08.000Z"),
-    isLocalParticipant: true,
-  },
-];
-
 export const WAITING_PARTICIPANTS = [
   { id: "guest-1", displayName: "Priya Shah", joinedAt: new Date("2026-08-01T10:14:00.000Z") },
   { id: "guest-2", displayName: "Eli Morgan", joinedAt: new Date("2026-08-01T10:16:00.000Z") },
@@ -185,17 +165,6 @@ export function participantsForCount(count: PreviewSearch["participants"], searc
     isVideoEnabled: index === 0 ? search.camera : participant.isVideoEnabled,
     isHandRaised: index === 0 ? search.hand : participant.isHandRaised,
     isScreenSharing: search.stage === "share" && participant.id === "nora",
-  }));
-}
-
-export function toParticipantList(participants: readonly GalleryParticipant[]): ParticipantListParticipant[] {
-  return participants.map((participant) => ({
-    id: participant.id,
-    displayName: participant.displayName,
-    isLocal: participant.isLocal,
-    isMuted: participant.isMuted,
-    isVideoEnabled: participant.isVideoEnabled,
-    isHandRaised: participant.isHandRaised,
   }));
 }
 

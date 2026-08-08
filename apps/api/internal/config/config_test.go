@@ -112,7 +112,7 @@ func TestLoadDefaults(t *testing.T) {
 	if string(cfg.Auth.RecentAuthSecret) != config.DefaultRecentAuthSecret {
 		t.Fatalf("recent-auth secret = %q, want local default", cfg.Auth.RecentAuthSecret)
 	}
-	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription || cfg.Capabilities.WhiteboardFiles {
+	if cfg.Capabilities.Integrations || cfg.Capabilities.Recording || cfg.Capabilities.Transcription || cfg.Capabilities.WhiteboardFiles {
 		t.Fatalf("local capabilities = %#v, want disabled", cfg.Capabilities)
 	}
 	if cfg.Database.URL != config.DefaultDatabaseURL {
@@ -245,6 +245,55 @@ func TestLoadRecentAuthSecret(t *testing.T) {
 	}
 	if string(cfg.Auth.RecentAuthSecret) != strings.Repeat("r", 32) {
 		t.Fatalf("recent-auth secret = %q, want configured value", cfg.Auth.RecentAuthSecret)
+	}
+}
+
+func TestLoadOpsIngestToken(t *testing.T) {
+	want := strings.Repeat("m", 32)
+	t.Setenv(config.OpsIngestToken, "  "+want+"  ")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.API.OpsIngestToken != want {
+		t.Fatalf("ops ingest token = %q, want trimmed token", cfg.API.OpsIngestToken)
+	}
+}
+
+func TestLoadAllowsEmptyOpsIngestTokenLocally(t *testing.T) {
+	t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
+	t.Setenv(config.OpsIngestToken, "")
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("load local config: %v", err)
+	}
+}
+
+func TestLoadRejectsWeakOpsIngestTokenOutsideLocal(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		token string
+	}{
+		{name: "missing", token: ""},
+		{name: "short", token: strings.Repeat("x", 31)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(config.APIEnvironment, "staging")
+			t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+			t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
+			t.Setenv(config.IntegrationsEnabled, "false")
+			t.Setenv(config.RecordingEnabled, "false")
+			t.Setenv(config.TranscriptionEnabled, "false")
+			t.Setenv(config.WhiteboardFilesEnabled, "false")
+			t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
+			setProviderBridgeConfig(t)
+			setSyncTokenConfig(t)
+			t.Setenv(config.OpsIngestToken, test.token)
+
+			_, err := config.Load()
+			if err == nil || !strings.Contains(err.Error(), config.OpsIngestToken) {
+				t.Fatalf("load error = %v, want weak ops token rejection", err)
+			}
+		})
 	}
 }
 
@@ -495,6 +544,7 @@ func setHostedEnvironment(t *testing.T) {
 	t.Setenv(config.ProviderBridgeClientCAFile, "/tmp/chalk-client-ca.crt")
 	t.Setenv(config.ProviderBridgeSPIFFETrustDomain, "chalk.test")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
+	t.Setenv(config.OpsIngestToken, strings.Repeat("o", 32))
 
 	_, diagnosticsPrivateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -1065,7 +1115,7 @@ func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if !cfg.Capabilities.Integrations || !cfg.Capabilities.Transcription {
+	if !cfg.Capabilities.Integrations || !cfg.Capabilities.Recording || !cfg.Capabilities.Transcription {
 		t.Fatalf("non-local capabilities = %#v, want enabled", cfg.Capabilities)
 	}
 }
@@ -1075,6 +1125,7 @@ func TestLoadAcceptsExplicitlyDisabledCapabilitiesOutsideLocal(t *testing.T) {
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.IntegrationsEnabled, "false")
+	t.Setenv(config.RecordingEnabled, "false")
 	t.Setenv(config.TranscriptionEnabled, "false")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	setProviderBridgeConfig(t)
@@ -1083,7 +1134,7 @@ func TestLoadAcceptsExplicitlyDisabledCapabilitiesOutsideLocal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription {
+	if cfg.Capabilities.Integrations || cfg.Capabilities.Recording || cfg.Capabilities.Transcription {
 		t.Fatalf("explicitly disabled capabilities = %#v, want disabled", cfg.Capabilities)
 	}
 }
@@ -1172,7 +1223,7 @@ func TestLoadAcceptsLocalWhiteboardFilesWithCustomObjectStorage(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidCapabilityFlags(t *testing.T) {
-	for _, name := range []string{config.IntegrationsEnabled, config.TranscriptionEnabled, config.WhiteboardFilesEnabled} {
+	for _, name := range []string{config.IntegrationsEnabled, config.RecordingEnabled, config.TranscriptionEnabled, config.WhiteboardFilesEnabled} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(name, "sometimes")
 			_, err := config.Load()
@@ -1203,6 +1254,7 @@ func setProviderBridgeConfig(t *testing.T) {
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/run/secrets/provider-bridge-server.key")
 	t.Setenv(config.ProviderBridgeClientCAFile, "/run/secrets/provider-bridge-client-ca.crt")
 	t.Setenv(config.ProviderBridgeSPIFFETrustDomain, "chalk.test")
+	t.Setenv(config.OpsIngestToken, strings.Repeat("o", 32))
 }
 
 func setTranscriptionConfig(t *testing.T) {

@@ -22,7 +22,12 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
     connection: connection
   } do
     write_schedule()
-    fixture = SyncPostgres.seed_episode(connection, 2)
+
+    fixture =
+      SyncPostgres.seed_episode(connection, 2, %{}, %{
+        participants: [%{}, %{role: "collaborator"}]
+      })
+
     [identity_a, identity_b] = fixture.identities
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
@@ -40,6 +45,7 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
     assert first_frames["ack"]["outcome"] == "committed"
     {client_b, observed} = Wire.receive_json_type(client_b, "event")
     assert observed["command_id"] == "topology-hand-0001"
+    client_b = Wire.acknowledge_control_event(client_b, observed)
 
     assert :ok = TcpFaultProxy.partition(proxy)
     {client_b, second_frames} = Wire.commit_hand(client_b, "topology-hand-0002", true)
@@ -54,7 +60,7 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
     assert :ok = ExternalSyncNode.kill(node_a)
     client_b = Client.send_json(client_b, %{"type" => "ping"})
     {_client_b, pong} = Wire.receive_json_type(client_b, "pong")
-    assert pong == %{"type" => "pong"}
+    assert pong["type"] == "pong"
 
     assert %{partitions: 1} = TcpFaultProxy.stats(proxy)
     write_result()

@@ -55,6 +55,7 @@ const (
 	RouteEpisodeDeadlineScenario          = "route:episode-deadline"
 	RouteRecordingTranscribeScenario      = "route:recording-transcribe"
 	RouteJourneyEventIntakeScenario       = "route:telemetry-journey-event-intake"
+	RouteStatusMonitorIngestScenario      = "route:status-monitor-ingest"
 	ServiceEpisodeDiagnosticsScenario     = "service:episode-diagnostics"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
@@ -109,6 +110,7 @@ func ScenarioNames() []string {
 		RouteEpisodeDeadlineScenario,
 		RouteRecordingTranscribeScenario,
 		RouteJourneyEventIntakeScenario,
+		RouteStatusMonitorIngestScenario,
 		ServiceEpisodeDiagnosticsScenario,
 		RouteChatAttachmentUploadScenario,
 		RouteWhiteboardFileUploadScenario,
@@ -1899,6 +1901,9 @@ func tracedHeaders(r *http.Request) map[string]string {
 	}
 	if value := r.Header.Get("Idempotency-Key"); value != "" {
 		headers["idempotency-key"] = value
+	}
+	if value := r.Header.Get("X-Ops-Ingest-Token"); value != "" {
+		headers["x-ops-ingest-token"] = "[redacted]"
 	}
 	return headers
 }

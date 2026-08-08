@@ -172,6 +172,7 @@ function matchesGeneratedPath({ basename, directories }) {
 const EXCLUSION_RULES = [
   [({ relativePath }) => relativePath === "tools/language-ratchet/baseline.json", "ratchet baseline"],
   [({ parts }) => parts[0] === "scratchpad", "scratchpad"],
+  [({ relativePath }) => relativePath.startsWith("apps/api/db/migrations/"), "immutable migration history"],
   [isReferenceFile, "migration reference or checklist"],
   [({ relativePath }) => relativePath === "sdks/ubiquitous-language.md", "superseded vocabulary catalog"],
   [({ relativePath }) => isLockfile(relativePath), "lockfile or dependency checksum"],

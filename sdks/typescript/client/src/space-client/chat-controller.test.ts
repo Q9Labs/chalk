@@ -88,7 +88,7 @@ describe("ChatController", () => {
     expect(upload.initiateUpload).toHaveBeenCalledWith(expect.objectContaining({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }));
     expect(fetch).toHaveBeenCalledWith("https://upload.test/object", expect.objectContaining({ headers: { "content-type": "text/plain" } }));
     expect(upload.finalizeUpload).toHaveBeenCalledWith("upload-1");
-    expect(harness.controller.url({ attachmentId: "attachment/1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 })).toBe("https://api.chalk.video/v1/chat/attachments/attachment%2F1/download");
+    expect(harness.controller.url({ attachmentId: "attachment/1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 })).toBe("https://api.chalkmeet.com/v1/chat/attachments/attachment%2F1/download");
   });
 
   it("records successful and failed send checkpoints without changing the product result", async () => {

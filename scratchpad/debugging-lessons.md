@@ -156,3 +156,17 @@ Generated API clients validate the upstream wire contract, but a browser
 boundary may deliberately remove credentials or add CSRF and cookie behavior.
 Keep those security transformations at the boundary adapter, then use the
 generated client for resource calls whose response shape remains exact.
+
+## Public Status Needs A Narrow Projection
+
+An anonymous status page should receive only the stable component summary it
+can render. Keep monitor keys, target URLs, error details, and credentials on
+the worker and API side, and make the browser boundary allowlist both fields
+and trace headers so a future upstream response cannot widen public exposure.
+
+## Status Projections Must Be Monotonic
+
+Persist each monitor result for auditability, then update the current projection
+only when its checked timestamp advances. Missing or stale rows are `unknown`,
+not healthy, and public responses should be built from an allowlisted catalog
+so internal monitor identity and failure detail never cross the boundary.

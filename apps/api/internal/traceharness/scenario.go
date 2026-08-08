@@ -93,6 +93,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteRecordingTranscribe(ctx)
 	case RouteJourneyEventIntakeScenario:
 		return runRouteJourneyEventIntake(ctx)
+	case RouteStatusMonitorIngestScenario:
+		return runRouteStatusMonitorIngest(ctx)
 	case ServiceEpisodeDiagnosticsScenario:
 		return runServiceEpisodeDiagnostics(ctx)
 	case RouteWhiteboardFileUploadScenario:

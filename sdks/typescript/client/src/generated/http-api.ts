@@ -328,6 +328,12 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getPublicStatus", "/v1/status", {
+      success: S.GetPublicStatusResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)), S.StatusUnavailableErrorSchema.pipe(HttpApiSchema.status(503))],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getWebhookDelivery", "/v1/tenants/:tenant_id/webhook-endpoints/:endpoint_id/deliveries/:delivery_id", {
       params: S.GetWebhookDeliveryPathParamsSchema,
       success: S.GetWebhookDeliveryResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -387,6 +393,20 @@ const defaultGroup = HttpApiGroup.make("default")
         S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("ingestMonitorResult", "/v1/ops/ingest/monitor-results", {
+      payload: S.IngestMonitorResultRequestBodySchema,
+      success: S.IngestMonitorResultResponseSchema.pipe(HttpApiSchema.status(202)),
+      error: [
+        S.StatusInvalidResultErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.StatusUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
   )

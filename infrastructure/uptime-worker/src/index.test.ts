@@ -13,13 +13,13 @@ function createResponse(status: number, body = "", headers?: HeadersInit): Respo
 
 function createEnv(overrides: Partial<Env> = {}): Env {
   return {
-    API_BASE_URL: "https://chalk-api.q9labs.ai",
+    API_BASE_URL: "https://api.chalkmeet.com",
     OPS_INGEST_TOKEN: "ops-ingest-token",
     ...overrides,
   };
 }
 
-const INGEST_PATH = "/api/v1/ops/ingest/monitor-results";
+const INGEST_PATH = "/v1/ops/ingest/monitor-results";
 const TWILIO_PATH = "api.twilio.com/2010-04-01/Accounts";
 type FetchInput = string | URL | Request;
 type FetchResponder = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -126,8 +126,48 @@ describe("chalk ops monitor worker", () => {
     expect(summary.ingest_success_count).toBe(__internal.DEFAULT_MONITORS.length);
     expect(summary.ingest_failure_count).toBe(0);
 
-    const ingestCalls = fetchMock.mock.calls.filter(([target]) => String(target).includes("/api/v1/ops/ingest/monitor-results"));
+    const ingestCalls = fetchMock.mock.calls.filter(([target]) => String(target).includes("/v1/ops/ingest/monitor-results"));
     expect(ingestCalls).toHaveLength(__internal.DEFAULT_MONITORS.length);
+  });
+
+  it("creates and propagates safe journey and W3C trace context while keeping the ingest token out of payloads", async () => {
+    const context = {
+      journeyID: "11111111-1111-4111-8111-111111111111",
+      traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      tracestate: "chalk=test",
+    };
+    const fetchMock = stubFetch((url, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("x-chalk-journey-id")).toBe(context.journeyID);
+      expect(headers.get("traceparent")).toBe(context.traceparent);
+      expect(headers.get("tracestate")).toBe(context.tracestate);
+      if (url.includes(INGEST_PATH)) {
+        const body = String(init?.body);
+        expect(headers.get("Idempotency-Key")).toBe(JSON.parse(body).result_key);
+        expect(headers.get("X-Ops-Ingest-Token")).toBe("ops-ingest-token");
+        expect(body).not.toContain("ops-ingest-token");
+        return createResponse(202, JSON.stringify({ ok: true }));
+      }
+      return createResponse(200, "ok");
+    });
+
+    await runMonitorCycle(createEnv(), new Date("2026-04-14T12:00:00Z"), context);
+
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("creates context for scheduled cycles when no inbound request exists", async () => {
+    let ingestHeaders: Headers | undefined;
+    stubFetch((url, init) => {
+      if (url.includes(INGEST_PATH)) ingestHeaders = new Headers(init?.headers);
+      return createResponse(url.includes(INGEST_PATH) ? 202 : 200, "ok");
+    });
+
+    await runMonitorCycle(createEnv(), new Date("2026-04-14T12:00:00Z"));
+
+    expect(ingestHeaders?.get("x-chalk-journey-id")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(ingestHeaders?.get("traceparent")).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    expect(ingestHeaders?.get("tracestate")).toBe("chalk=uptime-worker");
   });
 
   it("checks the launch surfaces and supports environment-specific target overrides", () => {
@@ -202,6 +242,12 @@ describe("chalk ops monitor worker", () => {
     expect(summary.ingest_failure_count).toBe(__internal.DEFAULT_MONITORS.length);
     expect(summary.buffered_count).toBe(__internal.DEFAULT_MONITORS.length);
     expect(stored.size).toBeGreaterThan(0);
+    const records = Array.from(stored.entries())
+      .filter(([key]) => key.includes("/failed-ingest/"))
+      .map(([, value]) => JSON.parse(value) as { trace_context?: Record<string, unknown> });
+    expect(records.every((record) => typeof record.trace_context?.journeyID === "string")).toBe(true);
+    expect(records.every((record) => typeof record.trace_context?.traceparent === "string")).toBe(true);
+    expect(records.every((record) => typeof record.trace_context?.tracestate === "string")).toBe(true);
   });
 
   it("replays buffered ingest records before current checks", async () => {
@@ -222,6 +268,11 @@ describe("chalk ops monitor worker", () => {
           metadata: {},
           details: {},
         },
+        trace_context: {
+          journeyID: "11111111-1111-4111-8111-111111111111",
+          traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+          tracestate: "chalk=seed",
+        },
         buffered_at: "2026-04-14T12:00:00Z",
         error_code: "ingest_http_503",
         error_message: "seed failure",
@@ -237,7 +288,11 @@ describe("chalk ops monitor worker", () => {
       new Date("2026-04-14T12:02:00Z"),
     );
 
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/v1/ops/ingest/monitor-results");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/v1/ops/ingest/monitor-results");
+    const replayHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(replayHeaders.get("x-chalk-journey-id")).toBe("11111111-1111-4111-8111-111111111111");
+    expect(replayHeaders.get("traceparent")).toBe("00-11111111111111111111111111111111-2222222222222222-01");
+    expect(replayHeaders.get("tracestate")).toBe("chalk=seed");
     expect(Array.from(stored.keys()).some((key) => key.startsWith("ops-monitor/failed-ingest/"))).toBe(false);
   });
 

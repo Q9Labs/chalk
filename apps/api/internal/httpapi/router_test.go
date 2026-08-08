@@ -603,8 +603,8 @@ func TestReady(t *testing.T) {
 	if body.Dependencies["postgres"] != "ok" {
 		t.Fatalf("postgres readiness = %q, want ok", body.Dependencies["postgres"])
 	}
-	if body.Capabilities["integrations"] != "enabled" || body.Capabilities["transcription"] != "disabled" || body.Capabilities["whiteboard_files"] != "disabled" {
-		t.Fatalf("capabilities = %#v, want integrations enabled and transcription and whiteboard files disabled", body.Capabilities)
+	if body.Capabilities["integrations"] != "enabled" || body.Capabilities["recording"] != "disabled" || body.Capabilities["transcription"] != "disabled" || body.Capabilities["whiteboard_files"] != "disabled" {
+		t.Fatalf("capabilities = %#v, want integrations enabled and recording, transcription, and whiteboard files disabled", body.Capabilities)
 	}
 }
 
@@ -627,8 +627,8 @@ func TestReadyUnavailable(t *testing.T) {
 	if body.Dependencies["postgres"] != "unavailable" {
 		t.Fatalf("postgres readiness = %q, want unavailable", body.Dependencies["postgres"])
 	}
-	if body.Capabilities["integrations"] != "disabled" || body.Capabilities["transcription"] != "enabled" || body.Capabilities["whiteboard_files"] != "enabled" {
-		t.Fatalf("capabilities = %#v, want integrations disabled and transcription and whiteboard files enabled", body.Capabilities)
+	if body.Capabilities["integrations"] != "disabled" || body.Capabilities["recording"] != "disabled" || body.Capabilities["transcription"] != "enabled" || body.Capabilities["whiteboard_files"] != "enabled" {
+		t.Fatalf("capabilities = %#v, want integrations and recording disabled and transcription and whiteboard files enabled", body.Capabilities)
 	}
 }
 
@@ -1331,6 +1331,33 @@ func TestTenantScopedMediaRoutesRejectForbiddenPrincipal(t *testing.T) {
 			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusForbidden)
 		}
 		assertErrorCode(t, res, "access.forbidden")
+	}
+}
+
+func TestDisabledRecordingRoutesReturnServiceUnavailable(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/recordings", body: `{"status":"ready","storage_provider":"r2"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444", body: `{"status":"failed"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222/episodes/33333333-3333-3333-3333-333333333333/recording-reservations", body: `{}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recording-reservations/55555555-5555-4555-8555-555555555555"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recording-reservations/55555555-5555-4555-8555-555555555555", body: `{}`},
+		{method: http.MethodDelete, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recording-reservations/55555555-5555-4555-8555-555555555555"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/pipeline"},
+	}
+
+	for _, route := range routes {
+		res := authenticatedRequestWithOptionsAndBody(t, route.method, route.path, route.body, httpapi.Options{})
+		if res.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusServiceUnavailable)
+		}
+		assertErrorCode(t, res, "service.unavailable")
 	}
 }
 

@@ -44,18 +44,20 @@ Redis-backed rate limiting through `CHALK_REDIS_URL`.
 
 ### Production capabilities
 
-Integrations and transcription are explicit runtime capabilities:
+Integrations, recording, and transcription are explicit runtime capabilities:
 
 - `CHALK_INTEGRATIONS_ENABLED=true|false`
+- `CHALK_RECORDING_ENABLED=true|false`
 - `CHALK_TRANSCRIPTION_ENABLED=true|false`
 
-Both default to `true` outside `local`, preserving fail-closed production
-startup. Local development defaults both to `false`. A capability-disabled
-deployment must set both flags to `false`; omitting provider credentials never
+All three default to `true` outside `local`, preserving fail-closed production
+startup. Local development defaults all three to `false`. A capability-disabled
+deployment must set its flag to `false`; omitting provider credentials never
 disables a capability implicitly.
 
 ```bash
 CHALK_INTEGRATIONS_ENABLED=false
+CHALK_RECORDING_ENABLED=false
 CHALK_TRANSCRIPTION_ENABLED=false
 ```
 
@@ -64,7 +66,8 @@ Authenticated public routes for that capability return the bounded
 `503 service_unavailable` response, and private transcription worker routes are
 not mounted. `/readyz` reports each capability as `enabled` or `disabled` on
 both ready and dependency-failure responses. The `api.starting` structured log
-records the same two booleans without logging credentials or provider config.
+records the same capability booleans without logging credentials or provider
+config.
 
 When integrations are enabled, startup requires `CHALK_COMPOSIO_API_KEY`. When
 transcription is enabled, startup requires a workload secret of at least 32

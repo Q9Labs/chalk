@@ -48,7 +48,7 @@ export class SpaceClientCoreService extends Context.Service<SpaceClientCoreServi
 
 /** Production composition keeps every mutable owner inside a scoped Layer. */
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
-  const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalk.video");
+  const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalkmeet.com");
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
   const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
   const episodeDiagnostics = new EpisodeDiagnosticRuntime({
@@ -101,7 +101,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
       const space = options.space.trim();
       if (space.length === 0) return yield* Effect.die(new TypeError("A Space slug is required"));
       if (typeof options.getAccess !== "function") return yield* Effect.die(new TypeError("getAccess is required"));
-      const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalk.video");
+      const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalkmeet.com");
       const selection = new MediaDeviceSelection(dependencies.mediaDevices);
       const episodeDiagnostics = episodeDiagnosticsForDependencies(dependencies);
       if (episodeDiagnostics) registerEpisodeDiagnosticConnection(lifecycle, episodeDiagnostics);

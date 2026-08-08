@@ -12,7 +12,7 @@ import { Effect } from "effect";
 
 const createEndpoint = Effect.gen(function* () {
   const chalk = yield* createChalkEffectClient({
-    baseUrl: "https://api.chalk.video",
+    baseUrl: "https://api.chalkmeet.com",
     auth: { type: "bearer", token: process.env.CHALK_API_TOKEN! },
   });
 

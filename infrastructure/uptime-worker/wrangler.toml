@@ -6,7 +6,7 @@ compatibility_date = "2026-07-05"
 crons = ["*/5 * * * *"]
 
 [vars]
-API_BASE_URL = "https://chalk-api.q9labs.ai"
+API_BASE_URL = "https://api.chalkmeet.com"
 
 # Optional private deployment configuration:
 # - API_MONITOR_BASE_URL, BROKER_BASE_URL, SYNC_BASE_URL, and WEB_BASE_URL

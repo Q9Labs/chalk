@@ -15,10 +15,10 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: asyncStor
 import { createMobileSpaceClient, createMobileSpaceRelease, ownMobileSpaceClient } from "./mobile-space-client";
 
 const credential = {
-  apiBaseURL: "https://api.chalk.video",
+  apiBaseURL: "https://api.chalkmeet.com",
   participantCredentialId: "c".repeat(43),
   spaceInviteToken: "i".repeat(43),
-  syncURL: "wss://sync.chalk.video/v1/sync",
+  syncURL: "wss://sync.chalkmeet.com/v1/sync",
 };
 
 function spaceClient(status: "left" | "live" = "live"): SpaceClient {

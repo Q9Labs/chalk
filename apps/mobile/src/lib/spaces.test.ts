@@ -21,8 +21,8 @@ import { cleanupParticipantCredential, createAccessGrantGetter, enterLocalSpaceR
 
 const spaceInviteToken = "i".repeat(43);
 const participantCredentialId = "c".repeat(43);
-const apiBaseURL = "https://api.chalk.video";
-const syncURL = "wss://sync.chalk.video/v1/sync";
+const apiBaseURL = "https://api.chalkmeet.com";
+const syncURL = "wss://sync.chalkmeet.com/v1/sync";
 
 describe("space links", () => {
   it("enters the existing local Space without claiming durable creation", async () => {

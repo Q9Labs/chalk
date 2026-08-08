@@ -30,8 +30,10 @@ test("maps the three triggers to one harness with explicit profiles", () => {
   }
   assert.deepEqual(
     topology.map((step) => step.name),
-    ["sync_basic_gate", "multi_node_topology"],
+    ["sync_basic_gate", "multi_node_topology", "postgres_failover"],
   );
+  assert.deepEqual(topology[1].command.slice(0, 3), ["mix", "test", "test/chalk_sync/reliability/topology_profile_test.exs"]);
+  assert.deepEqual(topology[2].command.slice(0, 3), ["mix", "test", "test/chalk_sync/reliability/postgres_failover_profile_test.exs"]);
   assert.deepEqual(
     release.map((step) => step.name),
     ["correctness_profile", "topology_profile", "soak_and_load", "node_process_restart", "real_browser"],
