@@ -1,8 +1,8 @@
 import React from "react";
+import { Tooltip } from "@q9labsai/chalk-ui";
 import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 import { cn } from "../../utils/cn";
-import { Tooltip } from "../atomic/Tooltip";
 
 interface ControlBarButtonProps {
   icon: React.ReactNode;

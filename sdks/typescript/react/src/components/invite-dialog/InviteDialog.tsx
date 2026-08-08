@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Input } from "@q9labsai/chalk-ui";
 import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { Input } from "../atomic/Input";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface InviteDialogProps {

@@ -1,6 +1,7 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
+import type React from "react";
 
 import { cn } from "./lib/utils";
 
@@ -23,14 +24,33 @@ const badgeVariants = cva(
   },
 );
 
-function Badge({ className, variant = "default", render, ...props }: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
-  return useRender({
+type BadgeProps = useRender.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & {
+    readonly count?: number;
+    readonly max?: number;
+    readonly dot?: boolean;
+    readonly showZero?: boolean;
+  };
+
+function getBadgeContent(count: number | undefined, max: number, dot: boolean): React.ReactNode {
+  if (dot) return null;
+  if (count !== undefined && count > max) return `${max}+`;
+  return count;
+}
+
+function CountBadge({ className, variant, dot, content }: { readonly className?: string; readonly variant: BadgeProps["variant"]; readonly dot: boolean; readonly content: React.ReactNode }) {
+  return <span className={cn(badgeVariants({ className, variant }), dot ? "h-2 w-2 p-0" : "min-w-5 px-2", "absolute -top-1 -right-1 translate-x-1/2 -translate-y-1/2 z-10")}>{content}</span>;
+}
+
+function Badge({ className, variant = "default", render, count, max = 99, dot = false, showZero = false, children, ...props }: BadgeProps) {
+  const hasCount = count !== undefined || dot;
+  const renderedPlain = useRender({
     defaultTagName: "span",
     props: mergeProps<"span">(
       {
         className: cn(badgeVariants({ className, variant })),
       },
-      props,
+      { ...props, children },
     ),
     render,
     state: {
@@ -38,6 +58,27 @@ function Badge({ className, variant = "default", render, ...props }: useRender.C
       variant,
     },
   });
+
+  if (!hasCount) {
+    return renderedPlain;
+  }
+
+  if (!showZero && count === 0 && !dot) return <>{children}</>;
+  const content = getBadgeContent(count, max, dot);
+  if (children) {
+    return (
+      <span className="relative inline-flex overflow-visible" {...props}>
+        {children}
+        <CountBadge className={className} variant={variant} dot={dot} content={content} />
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn(badgeVariants({ className, variant }), dot ? "h-2 w-2 p-0" : "min-w-5 px-2")} {...props}>
+      {content}
+    </span>
+  );
 }
 
 export { Badge, badgeVariants };

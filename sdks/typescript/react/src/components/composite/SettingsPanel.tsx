@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
+import { IconButton, Toggle } from "@q9labsai/chalk-ui";
+import { useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Microphone01Icon, Video01Icon, Settings01Icon, PictureInPictureIcon } from "../../utils/icons";
-import { IconButton } from "../atomic";
-import { Toggle } from "../atomic/Toggle";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 import { VolumeSlider } from "../atomic";
@@ -10,22 +10,6 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 
 export interface SettingsPanelProps {
-  audioInputDevices: MediaDeviceInfo[];
-  audioOutputDevices: MediaDeviceInfo[];
-  selectedAudioInput?: string;
-  selectedAudioOutput?: string;
-  onAudioInputChange?: (deviceId: string) => void;
-  onAudioOutputChange?: (deviceId: string) => void;
-  audioLevel?: number;
-
-  videoInputDevices: MediaDeviceInfo[];
-  selectedVideoInput?: string;
-  onVideoInputChange?: (deviceId: string) => void;
-  videoTrack?: MediaStreamTrack | null;
-
-  noiseSuppression?: boolean;
-  onNoiseSuppressionChange?: (enabled: boolean) => void;
-
   enablePictureInPicture?: boolean;
   isPictureInPictureSupported?: boolean;
   isPictureInPictureActive?: boolean;
@@ -38,7 +22,23 @@ export interface SettingsPanelProps {
   className?: string;
 }
 
-export const SettingsPanel = React.memo(
+interface SettingsPanelSurfaceProps extends SettingsPanelProps {
+  readonly audioInputDevices: Array<Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">>;
+  readonly audioOutputDevices: Array<Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">>;
+  readonly selectedAudioInput?: string;
+  readonly selectedAudioOutput?: string;
+  readonly onAudioInputChange?: (deviceId: string) => void;
+  readonly onAudioOutputChange?: (deviceId: string) => void;
+  readonly audioLevel?: number;
+  readonly videoInputDevices: Array<Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">>;
+  readonly selectedVideoInput?: string;
+  readonly onVideoInputChange?: (deviceId: string) => void;
+  readonly videoTrack?: MediaStreamTrack | null;
+  readonly noiseSuppression?: boolean;
+  readonly onNoiseSuppressionChange?: (enabled: boolean) => void;
+}
+
+const SettingsPanelSurface = React.memo(
   ({
     audioInputDevices,
     audioOutputDevices,
@@ -62,7 +62,7 @@ export const SettingsPanel = React.memo(
     onClose,
     participantColorSeed,
     className,
-  }: SettingsPanelProps) => {
+  }: SettingsPanelSurfaceProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [activeTab, setActiveTab] = useState<"audio" | "video" | "general">("audio");
     const [speakerVolume, setSpeakerVolume] = useState(100);
@@ -193,5 +193,31 @@ export const SettingsPanel = React.memo(
     );
   },
 );
+
+export function SettingsPanel(props: SettingsPanelProps): React.JSX.Element {
+  const client = useSpaceClient();
+  const media = useMedia();
+  const self = useSelf();
+  const devices = {
+    audioInputDevices: media.devices.microphones.map((device) => ({ ...device, kind: "audioinput" as const })),
+    audioOutputDevices: media.devices.speakers.map((device) => ({ ...device, kind: "audiooutput" as const })),
+    videoInputDevices: media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" as const })),
+  };
+
+  return (
+    <SettingsPanelSurface
+      {...props}
+      {...devices}
+      selectedAudioInput={media.selection.microphone ?? undefined}
+      selectedAudioOutput={media.selection.speaker ?? undefined}
+      selectedVideoInput={media.selection.camera ?? undefined}
+      videoTrack={media.local.camera.track}
+      onAudioInputChange={(deviceId) => void client.media.selectMicrophone(deviceId)}
+      onAudioOutputChange={(deviceId) => void client.media.selectSpeaker(deviceId)}
+      onVideoInputChange={(deviceId) => void client.media.selectCamera(deviceId)}
+      participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined}
+    />
+  );
+}
 
 SettingsPanel.displayName = "SettingsPanel";

@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
+import { IconButton, Input } from "@q9labsai/chalk-ui";
+import { useConnection, useSelf } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon, ArrowDown01Icon, ArrowUp01Icon, Download01Icon, Copy01Icon, FileTextIcon } from "../../utils/icons";
-import { TranscriptLine, IconButton } from "../atomic";
-import { Input } from "../atomic/Input";
+import { TranscriptLine } from "../atomic";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
@@ -18,8 +19,6 @@ export interface TranscriptEntry {
 }
 
 export interface TranscriptPanelProps {
-  transcripts: TranscriptEntry[];
-  isLive?: boolean;
   showSpeakerNames?: boolean;
   showTimestamps?: boolean;
   showConfidence?: boolean;
@@ -29,10 +28,15 @@ export interface TranscriptPanelProps {
   onClose?: () => void;
   position?: "right" | "bottom";
   variant?: "default" | "sidebar" | "mobile";
-  localParticipantId?: string;
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
+}
+
+interface TranscriptPanelSurfaceProps extends TranscriptPanelProps {
+  readonly transcripts: TranscriptEntry[];
+  readonly isLive?: boolean;
+  readonly localParticipantId?: string;
 }
 
 interface GroupedTranscript {
@@ -183,7 +187,7 @@ function TurnSeparator() {
   );
 }
 
-export const TranscriptPanel = React.memo(
+const TranscriptPanelSurface = React.memo(
   ({
     transcripts,
     isLive = true,
@@ -200,7 +204,7 @@ export const TranscriptPanel = React.memo(
     participantColorSeed,
     participantGradientPreference,
     className,
-  }: TranscriptPanelProps) => {
+  }: TranscriptPanelSurfaceProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -567,5 +571,12 @@ export const TranscriptPanel = React.memo(
     );
   },
 );
+
+export const TranscriptPanel = React.memo((props: TranscriptPanelProps): React.JSX.Element => {
+  const connection = useConnection();
+  const self = useSelf();
+
+  return <TranscriptPanelSurface {...props} transcripts={[]} isLive={connection.status === "live" || connection.status === "reconnecting"} localParticipantId={self.participantId ?? undefined} participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined} />;
+});
 
 TranscriptPanel.displayName = "TranscriptPanel";

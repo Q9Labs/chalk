@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_PREVIEW_SEARCH, type PreviewSearch } from "./preview-state";
@@ -14,7 +13,8 @@ vi.mock("./PreviewGalleryToolbar", () => ({
   ),
 }));
 
-vi.mock("../../../../../sdks/typescript/react/src/test-support/preview-fixtures", () => {
+vi.mock("../../../../../sdks/typescript/react/src/test-support/preview-fixtures", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../../sdks/typescript/react/src/test-support/preview-fixtures")>();
   const MockPreviewEntrance = ({ error, onJoin }: { readonly error?: string; readonly onJoin: (settings: { displayName: string; microphone: boolean; camera: boolean }) => void }) => (
     <section data-testid="entrance-screen">
       <h1>Entrance</h1>
@@ -50,51 +50,15 @@ vi.mock("../../../../../sdks/typescript/react/src/test-support/preview-fixtures"
       </section>
     ) : null;
   const MockCommandErrorAlert = ({ message }: { readonly message?: string }) => (message ? <p role="alert">{message}</p> : null);
-  const MockSpaceView = (props: {
-    readonly participants: readonly unknown[];
-    readonly panels?: { readonly active: string | null; readonly chat?: { readonly messages: readonly unknown[]; readonly pendingMessages?: readonly unknown[] }; readonly transcript?: { readonly transcripts: readonly unknown[] } };
-    readonly controls?: { readonly onToggleHandRaise?: () => void };
-    readonly overlay?: React.ReactNode;
-    readonly reconnecting?: { readonly status: string };
-    readonly settingsDialog?: {
-      readonly settings: { readonly appearance: { readonly palette?: string; readonly texture?: string } };
-      readonly onUpdateAppearance: (updates: { readonly palette?: string; readonly texture?: string }) => void;
-    };
-    readonly spaceName: string;
-    readonly onLeft?: () => void;
-  }) => (
-    <main data-testid="space-view">
-      <h1 data-testid="space-name">{props.spaceName}</h1>
-      <output data-testid="participant-count">{props.participants.length}</output>
-      <output data-testid="active-panel">{props.panels?.active ?? "none"}</output>
-      <output data-testid="chat-count">{props.panels?.chat?.messages.length ?? 0}</output>
-      <output data-testid="pending-count">{props.panels?.chat?.pendingMessages?.length ?? 0}</output>
-      <output data-testid="transcript-count">{props.panels?.transcript?.transcripts.length ?? 0}</output>
-      <output data-testid="settings-palette">{props.settingsDialog?.settings.appearance.palette ?? ""}</output>
-      <output data-testid="settings-texture">{props.settingsDialog?.settings.appearance.texture ?? ""}</output>
-      <button type="button" data-testid="update-appearance" onClick={() => props.settingsDialog?.onUpdateAppearance({ palette: "light", texture: "none" })}>
-        Update appearance
-      </button>
-      {props.reconnecting ? <p role="alert">{props.reconnecting.status}</p> : null}
-      {props.overlay}
-      <button type="button" onClick={props.controls?.onToggleHandRaise}>
-        Raise hand
-      </button>
-      <button type="button" onClick={props.onLeft}>
-        Leave Space
-      </button>
-    </main>
-  );
 
   return {
+    ...actual,
     CommandErrorAlert: MockCommandErrorAlert,
     PreviewEntrance: MockPreviewEntrance,
     PreviewEpisodeEnded: MockPreviewEpisodeEnded,
     PreviewJoiningScreen: MockPreviewJoiningScreen,
-    PreviewSpaceView: MockSpaceView,
     JoinFailedScreen: MockJoinFailedScreen,
     LeaveDialog: MockLeaveDialog,
-    getThemeMode: () => "dark",
   };
 });
 
@@ -131,46 +95,42 @@ describe("SdkPreviewGallery", () => {
   });
 
   it.each([
-    ["happy", "space-view"],
-    ["empty", "space-view"],
-    ["warning", "space-view"],
-    ["reconnecting", "space-view"],
-    ["retry", "space-view"],
-    ["confirmation", "space-view"],
-    ["timeout", "space-view"],
-    ["failure", "space-view"],
-    ["ended", "episode-ended"],
-  ] as const)("selects the production Space surface for %s", (state, testId) => {
+    ["happy", true],
+    ["empty", true],
+    ["warning", true],
+    ["reconnecting", true],
+    ["retry", true],
+    ["confirmation", true],
+    ["timeout", true],
+    ["failure", true],
+    ["ended", false],
+  ] as const)("selects the production Space surface for %s", (state, hasSpaceView) => {
     render(<SdkPreviewGallery search={search({ view: "space", state })} onSearchChange={vi.fn()} />);
 
-    expect(screen.getByTestId(testId)).toBeTruthy();
+    expect(hasSpaceView ? screen.getByRole("main") : screen.getByTestId("episode-ended")).toBeTruthy();
   });
 
-  it("maps participant, chat, transcript, stage, and recovery fixtures to production props", () => {
+  it("drives the real context-backed composition from the preview snapshot", () => {
     render(<SdkPreviewGallery search={search({ view: "space", state: "reconnecting", participants: 5, panel: "chat", chat: "pending", stage: "share" })} onSearchChange={vi.fn()} />);
 
-    expect(screen.getByTestId("participant-count").textContent).toBe("5");
-    expect(screen.getByTestId("active-panel").textContent).toBe("chat");
-    expect(screen.getByTestId("pending-count").textContent).toBe("1");
-    expect(screen.getByRole("alert").textContent).toContain("reconnecting");
-    expect(screen.getByTestId("space-name").textContent).toBe("Design review Space");
+    expect(screen.getByRole("main").getAttribute("data-chalk-palette")).toBe("warm-charcoal");
+    expect(screen.getByRole("complementary", { name: "Chat panel" })).toBeTruthy();
+    expect(screen.getByText("I’m sending the latest Space notes…")).toBeTruthy();
+    expect(screen.getByText("The Space connection was interrupted. Reconnecting now…")).toBeTruthy();
+    expect(screen.getByText("Nora Williams")).toBeTruthy();
   });
 
-  it("hydrates Settings appearance from direct palette and texture links", () => {
-    const onSearchChange = vi.fn();
-    render(<SdkPreviewGallery search={search({ view: "space", state: "happy", dialog: "settings", palette: "midnight", texture: "soft-dots" })} onSearchChange={onSearchChange} />);
+  it("hydrates Settings from direct palette and texture links", () => {
+    render(<SdkPreviewGallery search={search({ view: "space", state: "happy", dialog: "settings", palette: "midnight", texture: "soft-dots" })} onSearchChange={vi.fn()} />);
 
-    expect(screen.getByTestId("settings-palette").textContent).toBe("oled-signal");
-    expect(screen.getByTestId("settings-texture").textContent).toBe("slate");
-
-    fireEvent.click(screen.getByTestId("update-appearance"));
-    expect(onSearchChange).toHaveBeenCalledWith({ palette: "paper", texture: "none" });
+    expect(screen.getByRole("dialog", { name: "Space settings" }).getAttribute("data-chalk-palette")).toBe("oled-signal");
+    expect(screen.getByRole("dialog", { name: "Space settings" }).getAttribute("data-chalk-texture")).toBe("slate");
   });
 
   it("keeps the whiteboard fixture local and network-free", () => {
     render(<SdkPreviewGallery search={search({ view: "space", state: "happy", stage: "whiteboard" })} onSearchChange={vi.fn()} />);
 
-    expect(screen.getByTestId("space-view")).toBeTruthy();
+    expect(screen.getByRole("main")).toBeTruthy();
     expect(screen.getByTestId("preview-whiteboard")).toBeTruthy();
     expect(document.head.querySelector('link[href*="jsdelivr"], link[href*="excalidraw"]')).toBeNull();
   });
@@ -178,19 +138,18 @@ describe("SdkPreviewGallery", () => {
   it("keeps the direct Empty Space link empty even with default knobs", () => {
     render(<SdkPreviewGallery search={search({ view: "space", state: "empty", panel: "chat" })} onSearchChange={vi.fn()} />);
 
-    expect(screen.getByTestId("participant-count").textContent).toBe("0");
-    expect(screen.getByTestId("chat-count").textContent).toBe("0");
-    expect(screen.getByTestId("transcript-count").textContent).toBe("0");
+    expect(screen.getByRole("complementary", { name: "Chat panel" })).toBeTruthy();
+    expect(screen.queryByText("The new Space direction feels much calmer.")).toBeNull();
   });
 
   it("patches shareable control state and confirms leaving the Space", () => {
     const onSearchChange = vi.fn();
     render(<SdkPreviewGallery search={search({ view: "space", state: "confirmation" })} onSearchChange={onSearchChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Raise hand" }));
+    fireEvent.click(screen.getByTestId("preview-toolbar"));
     expect(onSearchChange).toHaveBeenCalledWith({ hand: true });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Leave" }).at(-1)!);
     expect(onSearchChange).toHaveBeenCalledWith({ view: "entrance", state: "ready", panel: "none", dialog: "none" });
   });
 });

@@ -28,15 +28,14 @@ describe("NativeAppearanceProvider controlled initial appearance", () => {
     expect(result.current.appearance.texture).toBe("paper");
   });
 
-  it("notifies consumers when appearance controls change", () => {
-    const onAppearanceChange = vi.fn();
-    const wrapper = ({ children }: { readonly children?: ReactNode }): React.JSX.Element => <NativeAppearanceProvider onAppearanceChange={onAppearanceChange}>{children}</NativeAppearanceProvider>;
+  it("updates appearance when controls change", () => {
+    const wrapper = ({ children }: { readonly children?: ReactNode }): React.JSX.Element => <NativeAppearanceProvider>{children}</NativeAppearanceProvider>;
     const { result } = renderHook(() => useNativeAppearance(), { wrapper });
 
     act(() => result.current.setPalette("warm-porcelain"));
     act(() => result.current.setTexture("paper"));
 
-    expect(onAppearanceChange).toHaveBeenNthCalledWith(1, { palette: "warm-porcelain", texture: "none" });
-    expect(onAppearanceChange).toHaveBeenNthCalledWith(2, { palette: "warm-porcelain", texture: "paper" });
+    expect(result.current.appearance.palette).toBe("warm-porcelain");
+    expect(result.current.appearance.texture).toBe("paper");
   });
 });

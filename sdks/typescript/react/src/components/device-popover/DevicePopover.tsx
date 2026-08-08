@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Tooltip } from "@q9labsai/chalk-ui";
 interface MediaDevice {
   deviceId: string;
   label: string;
@@ -8,7 +9,6 @@ interface MediaDevice {
 import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, ArrowDown01Icon, Tick01Icon, VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { ControlBarButton } from "../atomic";
-import { Tooltip } from "../atomic/Tooltip";
 import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 

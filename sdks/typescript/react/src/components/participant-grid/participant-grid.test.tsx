@@ -3,40 +3,35 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { ChalkProvider } from "../../bindings/context";
+import { createSnapshot, createTestClient } from "../../test-support/test-client";
 import { ParticipantGrid } from "./ParticipantGrid";
 
 afterEach(cleanup);
 
 describe("ParticipantGrid", () => {
   it.each(["desktop", "mobile"] as const)("renders the empty state for the %s variant", (variant) => {
-    const { container } = render(<ParticipantGrid participants={[]} variant={variant} />);
-
-    expect(screen.getByRole("status")).toHaveTextContent("The Space is quiet");
-    expect(screen.getByRole("heading", { name: "The Space is quiet" })).toBeInTheDocument();
-    expect(screen.getByText("No other Participants are here yet.")).toBeInTheDocument();
-    expect(container.querySelector('[data-tour="video-grid"]')).toBeInTheDocument();
-  });
-
-  it("keeps the consumer class on the empty-state grid surface", () => {
-    const { container } = render(<ParticipantGrid participants={[]} className="sdk-preview-grid" />);
-
-    expect(container.querySelector('[data-tour="video-grid"]')).toHaveClass("sdk-preview-grid");
-  });
-
-  it("renders an application-owned screen-share surface with the participant rail", () => {
+    const client = createTestClient(createSnapshot());
     render(
-      <ParticipantGrid
-        variant="desktop"
-        layout="presentation"
-        participants={[
-          { id: "nora", displayName: "Nora", isScreenSharing: true },
-          { id: "hasan", displayName: "Hasan", isLocal: true },
-        ]}
-        screenShareContent={<div>Shared product document</div>}
-      />,
+      <ChalkProvider client={client}>
+        <ParticipantGrid variant={variant} />
+      </ChalkProvider>,
     );
+    expect(screen.getByRole("status")).toHaveTextContent("The Space is quiet");
+  });
 
-    expect(screen.getByText("Shared product document")).toBeInTheDocument();
+  it("derives participants from the provider store", () => {
+    const client = createTestClient(createSnapshot());
+    client.setSnapshot({
+      ...client.getSnapshot(),
+      self: { ...client.getSnapshot().self, participantId: "hasan", displayName: "Hasan" },
+      participants: { roster: [{ participantId: "hasan", displayName: "Hasan", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "active", screenShare: "inactive" } }], admissionQueue: [] },
+    });
+    render(
+      <ChalkProvider client={client}>
+        <ParticipantGrid layout="grid" />
+      </ChalkProvider>,
+    );
     expect(screen.getByRole("button", { name: "Video tile for Hasan" })).toBeInTheDocument();
   });
 });

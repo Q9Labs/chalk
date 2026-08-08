@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Toggle as TogglePrimitive } from "@base-ui/react/toggle";
 import { cva, type VariantProps } from "class-variance-authority";
 
@@ -24,8 +25,31 @@ const toggleVariants = cva(
   },
 );
 
-function Toggle({ className, variant = "default", size = "default", ...props }: TogglePrimitive.Props & VariantProps<typeof toggleVariants>) {
-  return <TogglePrimitive data-slot="toggle" className={cn(toggleVariants({ variant, size, className }))} {...props} />;
+type ToggleProps = Omit<TogglePrimitive.Props, "pressed" | "onPressedChange" | "onChange"> &
+  VariantProps<typeof toggleVariants> & {
+    readonly checked?: boolean;
+    readonly enabled?: boolean;
+    readonly onChange?: (checked: boolean) => void;
+    readonly pressed?: boolean;
+    readonly onPressedChange?: (checked: boolean) => void;
+    readonly label?: React.ReactNode;
+    readonly ariaLabel?: string;
+    readonly ariaLabelledby?: string;
+  };
+
+function Toggle({ className, variant = "default", size = "default", checked, enabled, onChange, label, ariaLabel, ariaLabelledby, pressed, onPressedChange, id, ...props }: ToggleProps) {
+  const resolvedPressed = checked ?? enabled ?? pressed;
+  const generatedId = React.useId();
+  const toggleId = id ?? (label ? `chalk-toggle-${generatedId.replace(/:/g, "")}` : undefined);
+  const toggle = <TogglePrimitive id={toggleId} data-slot="toggle" className={cn(toggleVariants({ variant, size, className }))} pressed={resolvedPressed} onPressedChange={onPressedChange ?? onChange} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} {...props} />;
+  return label ? (
+    <span className="inline-flex items-center gap-2">
+      {toggle}
+      <label htmlFor={toggleId}>{label}</label>
+    </span>
+  ) : (
+    toggle
+  );
 }
 
 export { Toggle, toggleVariants };

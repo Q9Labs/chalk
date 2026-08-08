@@ -1,6 +1,5 @@
 import React from "react";
-import { Select } from "../atomic";
-import { Toggle } from "../atomic/Toggle";
+import { Select, Toggle } from "@q9labsai/chalk-ui";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 

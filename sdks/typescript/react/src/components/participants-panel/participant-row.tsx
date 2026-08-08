@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
+import { IconButton } from "@q9labsai/chalk-ui";
 import { MoreVerticalIcon, MicrophoneOff01Icon, Edit02Icon } from "../../utils/icons";
-import { Avatar, AudioIndicator, HandRaiseIndicator, IconButton } from "../atomic";
+import { Avatar, AudioIndicator, HandRaiseIndicator } from "../atomic";
 import { cn } from "../../utils/cn";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";

@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { IconButton, Select } from "@q9labsai/chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
-import { Select, AudioIndicator, IconButton } from "../atomic";
+import { AudioIndicator } from "../atomic";
 import { Thumbnail } from "../../internal/thumbnail";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";

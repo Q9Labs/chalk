@@ -1,4 +1,5 @@
 import type React from "react";
+import type { ThemePalette, ThemeTexture } from "./components/theme";
 
 /** The default light palette used when no color scheme is requested. */
 export const LIGHT_CHALK_THEME_TOKENS = {
@@ -47,6 +48,8 @@ export type ChalkColorScheme = "light" | "dark" | "system";
 
 export type ChalkTheme = {
   readonly colorScheme?: ChalkColorScheme;
+  readonly palette?: ThemePalette;
+  readonly texture?: ThemeTexture;
   readonly accent?: string;
   readonly tokens?: Partial<ChalkThemeTokens>;
 };

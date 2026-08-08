@@ -6,7 +6,7 @@ import { ChalkProvider, useSpaceClient } from "../context/space-client-context";
 import { useConnection } from "../hooks/space-hooks";
 import { createNativeSpaceClient } from "../space-client/create-native-space-client";
 import { NativeAppearanceProvider, NativeTextureOverlay, useNativeAppearance } from "../ui/native-appearance-context";
-import { type ThemeAppearance, type ThemePalette, type ThemeTexture } from "../ui/appearance";
+import { type ThemePalette, type ThemeTexture } from "../ui/appearance";
 import { NativeThemeProvider, useNativeTheme } from "../ui/native-theme";
 import { DEFAULT_CHALK_THEME_TOKENS } from "../ui/theme-tokens";
 import { SpaceView } from "./SpaceView";
@@ -32,6 +32,8 @@ export type ChalkThemeTokens = {
 
 export type ChalkTheme = {
   readonly colorScheme?: "dark" | "light";
+  readonly palette?: ThemePalette;
+  readonly texture?: ThemeTexture;
   readonly accent?: string;
   readonly tokens?: Partial<ChalkThemeTokens>;
 };
@@ -55,10 +57,6 @@ type ChalkCommonProps = ChalkCallbacks & {
   readonly defaults?: EntranceDefaults;
   readonly features?: ChalkFeatures;
   readonly theme?: ChalkTheme;
-  /** Optional palette/texture selection retained for native appearance controls. */
-  readonly initialPalette?: ThemePalette;
-  readonly initialTexture?: ThemeTexture;
-  readonly onAppearanceChange?: (appearance: ThemeAppearance) => void;
   /** Selects files; the SDK owns bounds, upload, and send sequencing. */
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly logoUrl?: string;
@@ -119,7 +117,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   }, [ownedClient]);
 
   return (
-    <NativeAppearanceProvider initialAppearance={{ palette: props.initialPalette, texture: props.initialTexture }} onAppearanceChange={props.onAppearanceChange}>
+    <NativeAppearanceProvider initialAppearance={{ palette: props.theme?.palette, texture: props.theme?.texture }}>
       <AppearanceThemeBridge theme={props.theme}>
         <ChalkProvider client={client}>
           <SpaceExperience {...props} />

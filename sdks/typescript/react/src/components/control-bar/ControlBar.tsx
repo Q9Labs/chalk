@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCan, useChat, useConnection, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import {
   CallEnd01Icon,
@@ -24,6 +25,7 @@ import {
 import { ControlBarButton } from "../atomic";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { DevicePopover } from "../device-popover/DevicePopover";
+import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 
 interface MediaDevice {
   deviceId: string;
@@ -56,7 +58,7 @@ function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined,
 
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "more" | "info" | "thumbsup" | "leave";
 
-export interface ControlBarProps {
+interface ControlBarSurfaceProps {
   position?: "bottom" | "top";
   placement?: "inline" | "floating";
   density?: "comfortable" | "compact";
@@ -107,6 +109,29 @@ export interface ControlBarProps {
   className?: string;
 }
 
+export interface ControlBarProps {
+  readonly position?: "bottom" | "top";
+  readonly placement?: "inline" | "floating";
+  readonly density?: "comfortable" | "compact";
+  readonly showLabels?: boolean;
+  readonly buttons?: ControlBarButtonName[];
+  readonly activePanel?: "chat" | "participants" | null;
+  readonly onToggleChat?: () => void;
+  readonly onToggleParticipants?: () => void;
+  readonly onToggleWhiteboard?: () => void;
+  readonly onOpenReactions?: () => void;
+  readonly onOpenSettings?: () => void;
+  readonly onOpenDiagnostics?: () => void;
+  readonly onOpenMore?: () => void;
+  readonly onOpenInfo?: () => void;
+  readonly onLeaveRequest?: () => void;
+  readonly onLeft?: () => void;
+  readonly onCommandError?: (message: string | null) => void;
+  readonly participantColorSeed?: string;
+  readonly participantGradientPreference?: ParticipantGradientPreference;
+  readonly className?: string;
+}
+
 const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "transcription", "thumbsup", "pip", "settings"];
 
 const formatDuration = (seconds: number) => {
@@ -140,7 +165,7 @@ function FloatingControlBarButton({ icon, label, onClick, active = false, danger
   );
 }
 
-export const ControlBar = React.memo(
+const ControlBarSurface = React.memo(
   ({
     isMuted = false,
     isVideoEnabled = true,
@@ -188,7 +213,7 @@ export const ControlBar = React.memo(
     participantGradientPreference,
 
     className,
-  }: ControlBarProps) => {
+  }: ControlBarSurfaceProps) => {
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
     const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
     const buttonsToRender = buttons ?? DEFAULT_BUTTONS;
@@ -248,8 +273,10 @@ export const ControlBar = React.memo(
             />
           );
         case "record":
+          if (!onToggleRecording) return null;
           return <ControlBarButton key="record" icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop Recording" : "Record"} onClick={onToggleRecording} active={isRecording} showLabel={showLabels} data-tour="controls-record" />;
         case "chat":
+          if (!onToggleChat) return null;
           return (
             <div key="chat" className="relative">
               <ControlBarButton
@@ -267,6 +294,7 @@ export const ControlBar = React.memo(
             </div>
           );
         case "participants":
+          if (!onToggleParticipants) return null;
           return (
             <ControlBarButton
               key="participants"
@@ -280,6 +308,7 @@ export const ControlBar = React.memo(
             />
           );
         case "transcription":
+          if (!onToggleTranscription) return null;
           return (
             <ControlBarButton
               key="transcription"
@@ -292,6 +321,7 @@ export const ControlBar = React.memo(
             />
           );
         case "handraise":
+          if (!onToggleHandRaise) return null;
           return (
             <ControlBarButton
               key="handraise"
@@ -304,8 +334,10 @@ export const ControlBar = React.memo(
             />
           );
         case "reactions":
+          if (!onOpenReactions) return null;
           return <ControlBarButton key="reactions" icon={<SmileIcon />} label="Reactions" onClick={onOpenReactions} showLabel={showLabels} />;
         case "whiteboard":
+          if (!onToggleWhiteboard) return null;
           return (
             <ControlBarButton
               key="whiteboard"
@@ -339,6 +371,7 @@ export const ControlBar = React.memo(
             />
           );
         case "settings":
+          if (!onOpenSettings) return null;
           return <ControlBarButton key="settings" icon={<Settings01Icon size={20} />} label="Settings" onClick={onOpenSettings} showLabel={showLabels} />;
         case "diagnostics":
           if (!onOpenDiagnostics) {
@@ -346,12 +379,15 @@ export const ControlBar = React.memo(
           }
           return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} showLabel={showLabels} />;
         case "more":
+          if (!onOpenMore) return null;
           return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} showLabel={showLabels} />;
         case "leave":
           return null; // Handled explicitly in the layout
         case "info":
+          if (!onOpenInfo) return null;
           return <ControlBarButton key="info" icon={<InformationCircleIcon size={20} />} label="Info" onClick={onOpenInfo} noBorder />;
         case "thumbsup":
+          if (!onOpenReactions) return null;
           return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[var(--chalk-app-control-active-text)]" />} label="Reactions" onClick={onOpenReactions} />;
         default:
           return null;
@@ -452,7 +488,7 @@ export const ControlBar = React.memo(
 
             {/* Group 3: More & Leave */}
             <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
-              {buttonsToRender.includes("more") && (
+              {buttonsToRender.includes("more") && onOpenMore && (
                 <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
                   <MoreHorizontalIcon className="w-5 h-5" />
                 </button>
@@ -481,29 +517,39 @@ export const ControlBar = React.memo(
           case "screenshare":
             return <FloatingControlBarButton key={type} icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />} label={isScreenSharing ? "Stop share" : "Share"} onClick={onToggleScreenShare} active={isScreenSharing} />;
           case "whiteboard":
+            if (!onToggleWhiteboard) return null;
             return <FloatingControlBarButton key={type} icon={<Edit02Icon />} label="Board" onClick={onToggleWhiteboard} active={isWhiteboardOpen} />;
           case "handraise":
+            if (!onToggleHandRaise) return null;
             return <FloatingControlBarButton key={type} icon={<HandIcon />} label={isHandRaised ? "Lower" : "Raise"} onClick={onToggleHandRaise} active={isHandRaised} />;
           case "participants":
+            if (!onToggleParticipants) return null;
             return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} />;
           case "chat":
+            if (!onToggleChat) return null;
             return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} />;
           case "reactions":
           case "thumbsup":
+            if (!onOpenReactions) return null;
             return <FloatingControlBarButton key={type} icon={<SmileIcon />} label="React" onClick={onOpenReactions} />;
           case "record":
+            if (!onToggleRecording) return null;
             return <FloatingControlBarButton key={type} icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop" : "Record"} onClick={onToggleRecording} active={isRecording} />;
           case "transcription":
+            if (!onToggleTranscription) return null;
             return <FloatingControlBarButton key={type} icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} />;
           case "pip":
             return onTogglePictureInPicture ? <FloatingControlBarButton key={type} icon={<PictureInPictureIcon />} label="Picture in picture" onClick={() => void onTogglePictureInPicture()} active={isPictureInPictureActive} /> : null;
           case "settings":
+            if (!onOpenSettings) return null;
             return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} />;
           case "diagnostics":
             return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} /> : null;
           case "more":
+            if (!onOpenMore) return null;
             return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} />;
           case "info":
+            if (!onOpenInfo) return null;
             return <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Info" onClick={onOpenInfo} />;
           default:
             return null;
@@ -565,5 +611,104 @@ export const ControlBar = React.memo(
     );
   },
 );
+
+export function ControlBar(props: ControlBarProps): React.JSX.Element {
+  const client = useSpaceClient();
+  const self = useSelf();
+  const media = useMedia();
+  const chat = useChat();
+  const connection = useConnection();
+  const canPublishScreen = useCan("publishScreen");
+  const canSendReaction = useCan("sendReaction");
+  const canRaiseHand = useCan("raiseHand");
+  const canDrawWhiteboard = useCan("drawWhiteboard");
+  const microphoneEnabled = media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting";
+  const cameraEnabled = media.local.camera.state === "enabled" || media.local.camera.state === "requesting";
+  const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
+  const episodeStart = connection.episode?.startedAt ? Date.parse(connection.episode.startedAt) : null;
+  const [now, setNow] = useState(() => Date.now());
+  const [commandError, setCommandError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!episodeStart) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [episodeStart]);
+
+  const run = useCallback(
+    async (command: () => Promise<unknown>) => {
+      try {
+        await command();
+        setCommandError(null);
+        props.onCommandError?.(null);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : "This command could not be completed.";
+        if (!props.onCommandError) setCommandError(message);
+        props.onCommandError?.(message);
+      }
+    },
+    [props.onCommandError],
+  );
+  const leave = useCallback(() => {
+    if (props.onLeaveRequest) {
+      props.onLeaveRequest();
+      return;
+    }
+    void run(async () => {
+      await client.leave();
+      props.onLeft?.();
+    });
+  }, [client, props.onLeaveRequest, props.onLeft, run]);
+  const buttons = (props.buttons ?? DEFAULT_BUTTONS).filter((button) => {
+    if (button === "screenshare") return canPublishScreen;
+    if (button === "reactions" || button === "thumbsup") return canSendReaction;
+    if (button === "handraise") return canRaiseHand;
+    if (button === "whiteboard") return canDrawWhiteboard;
+    return true;
+  });
+  const audioInputDevices = media.devices.microphones.map((device) => ({ ...device, kind: "audioinput" as const }));
+  const audioOutputDevices = media.devices.speakers.map((device) => ({ ...device, kind: "audiooutput" as const }));
+  const videoInputDevices = media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" as const }));
+
+  return (
+    <>
+      <ControlBarSurface
+        {...props}
+        buttons={buttons}
+        duration={episodeStart ? Math.max(0, Math.floor((now - episodeStart) / 1000)) : 0}
+        isMuted={!microphoneEnabled}
+        isVideoEnabled={cameraEnabled}
+        isScreenSharing={screenSharing}
+        isChatOpen={props.activePanel === "chat"}
+        isParticipantsOpen={props.activePanel === "participants"}
+        isHandRaised={self.handRaised}
+        unreadChatCount={chat.unreadCount}
+        audioInputDevices={audioInputDevices}
+        audioOutputDevices={audioOutputDevices}
+        videoInputDevices={videoInputDevices}
+        selectedAudioInput={media.selection.microphone ?? undefined}
+        selectedAudioOutput={media.selection.speaker ?? undefined}
+        selectedVideoInput={media.selection.camera ?? undefined}
+        onToggleMute={() => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled))}
+        onToggleVideo={() => void run(() => client.media.setCameraEnabled(!cameraEnabled))}
+        onAudioInputChange={(deviceId) => void run(() => client.media.selectMicrophone(deviceId))}
+        onAudioOutputChange={(deviceId) => void run(() => client.media.selectSpeaker(deviceId))}
+        onVideoInputChange={(deviceId) => void run(() => client.media.selectCamera(deviceId))}
+        onToggleScreenShare={() => void run(() => client.media.setScreenShareEnabled(!screenSharing))}
+        onToggleChat={props.onToggleChat}
+        onToggleParticipants={props.onToggleParticipants}
+        onToggleHandRaise={() => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand()))}
+        onToggleWhiteboard={props.onToggleWhiteboard}
+        onOpenReactions={props.onOpenReactions}
+        onOpenSettings={props.onOpenSettings}
+        onOpenDiagnostics={props.onOpenDiagnostics}
+        onOpenMore={props.onOpenMore}
+        onOpenInfo={props.onOpenInfo}
+        onLeft={leave}
+      />
+      {!props.onCommandError ? <CommandErrorAlert message={commandError ?? undefined} /> : null}
+    </>
+  );
+}
 
 ControlBar.displayName = "ControlBar";

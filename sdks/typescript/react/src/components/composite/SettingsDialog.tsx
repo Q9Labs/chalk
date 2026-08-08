@@ -1,14 +1,13 @@
 import { Dialog } from "@base-ui/react/dialog";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { IconButton, Input, Toggle } from "@q9labsai/chalk-ui";
 
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
 import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
-import { IconButton, VolumeSlider } from "../atomic";
-import { Input } from "../atomic/Input";
-import { Toggle } from "../atomic/Toggle";
+import { VolumeSlider } from "../atomic";
 import { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_TEXTURES, type ThemePalette, type ThemeTexture } from "../theme";
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type React from "react";
+import type { SpaceClient } from "@q9labsai/chalk-client";
 
 import { CommandErrorAlert } from "../components/composite/CommandErrorAlert";
 import type { SpaceLayout } from "../components/chalk/Chalk";
@@ -10,6 +11,8 @@ import type { EntranceProps, EntranceSettings } from "../components/entrance/Ent
 import { JoinFailedScreen } from "../components/join-failed-screen/JoinFailedScreen";
 import { LeaveDialog } from "../components/leave-dialog/LeaveDialog";
 import { SpaceView, type SpacePanel, type SpaceViewProps } from "../components/space-view/SpaceView";
+import { ChalkProvider } from "../bindings/context";
+import { createPreviewClient } from "./preview-client";
 import { getThemeMode, THEME_PALETTES, THEME_TEXTURES, type ThemeAppearance, type ThemeMode, type ThemePalette, type ThemeTexture } from "../components/theme";
 
 /**
@@ -60,8 +63,15 @@ export function PreviewEntrance({ microphone = true, camera = true, defaultDispl
 }
 
 /** The gallery supplies all state and commands; the production Chalk wrapper is never involved. */
-export function PreviewSpaceView(props: SpaceViewProps): React.JSX.Element {
-  return <SpaceView {...props} />;
+export type PreviewSpaceViewProps = SpaceViewProps & { readonly client?: SpaceClient };
+
+export function PreviewSpaceView({ client, ...props }: PreviewSpaceViewProps): React.JSX.Element {
+  const [fallbackClient] = useState(() => createPreviewClient());
+  return (
+    <ChalkProvider client={client ?? fallbackClient}>
+      <SpaceView {...props} />
+    </ChalkProvider>
+  );
 }
 
 export function PreviewJoiningScreen({ displayName, message, supportingMessages = [] }: { readonly displayName?: string; readonly message: string; readonly supportingMessages?: readonly string[] }): React.JSX.Element {

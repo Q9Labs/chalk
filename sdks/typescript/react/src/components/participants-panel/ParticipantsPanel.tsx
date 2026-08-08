@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from "react";
+import { Badge, Button, IconButton, Input } from "@q9labsai/chalk-ui";
+import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
-import { IconButton } from "../atomic";
-import { Badge } from "../atomic/Badge";
-import { Input } from "../atomic/Input";
-import { Button } from "@q9labsai/chalk-ui";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { ParticipantRow } from "./participant-row";
+import { useParticipantVolumeContext } from "./participant-volume-context";
 
 export interface ParticipantListParticipant {
   id: string;
@@ -22,15 +21,7 @@ export interface ParticipantListParticipant {
 export type ParticipantListVariant = "default" | "sidebar" | "mobile";
 
 export interface ParticipantsPanelProps {
-  participants: ParticipantListParticipant[];
-  onMuteParticipant?: (id: string) => void;
-  onRequestUnmute?: (id: string) => void;
-  onStopParticipantCamera?: (id: string) => void;
-  onRequestStartCamera?: (id: string) => void;
-  onRemoveParticipant?: (id: string) => void;
-  onUpdateDisplayName?: (name: string) => void;
   onAddPeople?: () => void;
-  canManageParticipants?: boolean;
   searchable?: boolean;
   onClose?: () => void;
   /** Per-participant volume overrides (0-100). Only contains adjusted participants. */
@@ -44,11 +35,22 @@ export interface ParticipantsPanelProps {
   title?: string;
 }
 
+interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
+  readonly participants: ParticipantListParticipant[];
+  readonly onMuteParticipant?: (id: string) => void;
+  readonly onRequestUnmute?: (id: string) => void;
+  readonly onStopParticipantCamera?: (id: string) => void;
+  readonly onRequestStartCamera?: (id: string) => void;
+  readonly onRemoveParticipant?: (id: string) => void;
+  readonly onUpdateDisplayName?: (name: string) => void;
+  readonly canManageParticipants?: boolean;
+}
+
 function getParticipantIdentity(participant: ParticipantListParticipant): string {
   return participant.id || participant.displayName || "__unknown-participant__";
 }
 
-export const ParticipantsPanel = React.memo(
+const ParticipantsPanelSurface = React.memo(
   ({
     participants,
     onMuteParticipant,
@@ -68,7 +70,7 @@ export const ParticipantsPanel = React.memo(
     className,
     variant = "default",
     title = "Participants",
-  }: ParticipantsPanelProps) => {
+  }: ParticipantsPanelSurfaceProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -223,5 +225,58 @@ export const ParticipantsPanel = React.memo(
     );
   },
 );
+
+export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
+  const client = useSpaceClient();
+  const self = useSelf();
+  const participantsSlice = useParticipants();
+  const canMuteOthers = useCan("muteOthers");
+  const canStopVideoOthers = useCan("stopVideoOthers");
+  const canRequestMedia = useCan("requestMediaOthers");
+  const canRemoveParticipants = useCan("removeParticipant");
+  const contextVolumeState = useParticipantVolumeContext();
+  const [localVolumes, setLocalVolumes] = useState<ReadonlyMap<string, number>>(new Map());
+  const isControlled = props.participantVolumes !== undefined && props.onParticipantVolumeChange !== undefined;
+  const participantVolumes = isControlled ? props.participantVolumes : (contextVolumeState?.volumes ?? localVolumes);
+  const onParticipantVolumeChange = isControlled
+    ? props.onParticipantVolumeChange
+    : (contextVolumeState?.setVolume ??
+      ((participantId, volume) =>
+        setLocalVolumes((current) => {
+          const next = new Map(current);
+          if (volume === 100) next.delete(participantId);
+          else next.set(participantId, volume);
+          return next;
+        })));
+  const participants = useMemo(
+    () =>
+      participantsSlice.roster.map((participant) => ({
+        id: participant.participantId,
+        displayName: participant.displayName,
+        isLocal: participant.participantId === self.participantId,
+        isMuted: participant.media.microphone !== "active",
+        isVideoEnabled: participant.media.camera === "active",
+        isHandRaised: participant.handRaised,
+      })),
+    [participantsSlice.roster, self.participantId],
+  );
+
+  return (
+    <ParticipantsPanelSurface
+      {...props}
+      participantVolumes={participantVolumes}
+      onParticipantVolumeChange={onParticipantVolumeChange}
+      participants={participants}
+      canManageParticipants={canMuteOthers || canStopVideoOthers || canRequestMedia || canRemoveParticipants}
+      onMuteParticipant={canMuteOthers ? (id) => void client.participants.mute(id) : undefined}
+      onRequestUnmute={canRequestMedia ? (id) => void client.participants.requestMedia(id, "microphone") : undefined}
+      onStopParticipantCamera={canStopVideoOthers ? (id) => void client.participants.stopVideo(id) : undefined}
+      onRequestStartCamera={canRequestMedia ? (id) => void client.participants.requestMedia(id, "camera") : undefined}
+      onRemoveParticipant={canRemoveParticipants ? (id) => void client.participants.remove(id) : undefined}
+      onUpdateDisplayName={(displayName) => void client.participants.renameSelf(displayName)}
+      participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined}
+    />
+  );
+});
 
 ParticipantsPanel.displayName = "ParticipantsPanel";

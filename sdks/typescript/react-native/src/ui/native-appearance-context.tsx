@@ -13,10 +13,9 @@ const NativeAppearanceContext = createContext<NativeAppearanceContextValue | nul
 
 interface NativeAppearanceProviderProps extends PropsWithChildren {
   readonly initialAppearance?: Partial<ThemeAppearance>;
-  readonly onAppearanceChange?: (appearance: ThemeAppearance) => void;
 }
 
-export function NativeAppearanceProvider({ children, initialAppearance, onAppearanceChange }: NativeAppearanceProviderProps): React.JSX.Element {
+export function NativeAppearanceProvider({ children, initialAppearance }: NativeAppearanceProviderProps): React.JSX.Element {
   const [selection, setSelection] = useState<ThemeAppearance>({ palette: initialAppearance?.palette ?? "light", texture: initialAppearance?.texture ?? "none" });
   useEffect(() => {
     if (initialAppearance?.palette === undefined && initialAppearance?.texture === undefined) return;
@@ -30,13 +29,9 @@ export function NativeAppearanceProvider({ children, initialAppearance, onAppear
   }, [initialAppearance?.palette, initialAppearance?.texture]);
   const appearance = useMemo(() => resolveNativeAppearance(selection), [selection]);
 
-  const updateSelection = useCallback(
-    (next: ThemeAppearance) => {
-      setSelection(next);
-      onAppearanceChange?.(next);
-    },
-    [onAppearanceChange],
-  );
+  const updateSelection = useCallback((next: ThemeAppearance) => {
+    setSelection(next);
+  }, []);
 
   const value = useMemo<NativeAppearanceContextValue>(
     () => ({

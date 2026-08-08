@@ -1,10 +1,12 @@
-import type { ChalkChatMessage } from "@q9labsai/chalk-client";
+import type { Capability, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type React from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { CommandErrorAlert, JoinFailedScreen, LeaveDialog, PreviewEpisodeEnded, PreviewEntrance, PreviewJoiningScreen, PreviewSpaceView, type SpaceLayout, type ThemePalette, type ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
-import type { SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
+import { SettingsDialog, type SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
 import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
+import { ToastStack } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
+import { createPreviewClient, createSnapshot } from "../../../../../sdks/typescript/react/src/test-support/preview-client";
 
 import { PreviewGalleryToolbar } from "./PreviewGalleryToolbar";
 import {
@@ -16,16 +18,14 @@ import {
   previewPalette,
   previewTexture,
   participantsForCount,
-  panelFor,
   REACTIONS,
   SPACE_LINK,
   SPACE_NAME,
   statusOverlay,
-  toParticipantList,
   TOAST_MESSAGES,
-  TRANSCRIPT_FIXTURES,
   WAITING_PARTICIPANTS,
   chatPending,
+  type GalleryParticipant,
 } from "./sdk-preview-fixtures";
 import type { PreviewSearch, PreviewSearchPatch } from "./preview-state";
 import { ScreenShareMock } from "./ScreenShareMock";
@@ -37,7 +37,6 @@ export interface SdkPreviewGalleryProps {
 
 export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(DISPLAY_NAME);
-  const [chatMessages, setChatMessages] = useState<readonly ChalkChatMessage[]>(INITIAL_CHAT_MESSAGES);
   const mappedPalette: ThemePalette = productionPalette(search.palette);
   const mappedTexture: ThemeTexture = productionTexture(search.texture);
   const [settings, setSettings] = useState<SettingsDialogValue>(() => ({
@@ -46,10 +45,15 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   }));
   const fixtureSearch = useMemo<PreviewSearch>(() => (search.state === "empty" ? { ...search, participants: 0 as const, chat: "empty" as const } : search), [search]);
   const participants = useMemo(() => participantsForCount(fixtureSearch.participants, fixtureSearch), [fixtureSearch]);
-  const participantList = useMemo(() => toParticipantList(participants), [participants]);
-  const panel = panelFor(search);
+  const panel = search.panel === "none" ? null : search.panel;
   const effectiveLayout: SpaceLayout = search.stage === "share" ? "presentation" : search.stage === "whiteboard" ? "focus" : search.layout;
   const episodeDuration = 18 * 60 + 42;
+  const gallerySnapshot = useMemo(() => createGallerySnapshot(participants, fixtureSearch, search, displayName), [displayName, fixtureSearch, participants, search]);
+  const previewClient = useMemo(() => createPreviewClient(gallerySnapshot), []);
+
+  useEffect(() => {
+    previewClient.setSnapshot(gallerySnapshot);
+  }, [gallerySnapshot, previewClient]);
 
   useEffect(() => {
     setSettings((current) => {
@@ -130,69 +134,16 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
     <div data-preview-view="space" data-preview-state={search.state} className="relative min-h-screen">
       <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
       <PreviewSpaceView
+        client={previewClient}
         spaceName={SPACE_NAME}
-        displayName={displayName}
         logoUrl="/brand/chalk/chalk-logo.svg"
         palette={mappedPalette}
         texture={mappedTexture}
         inviteLink={SPACE_LINK}
-        duration={episodeDuration}
         layout={effectiveLayout}
         onLayoutChange={(nextLayout) => patch({ layout: nextLayout })}
-        participants={participants}
-        controls={{
-          buttons: ["mic", "video", "screenshare", "whiteboard", "handraise", "participants", "chat", "transcription", "reactions", "more", "info", "leave"],
-          isMuted: !search.mic,
-          isVideoEnabled: search.camera,
-          isHandRaised: search.hand,
-          isWhiteboardOpen: search.stage === "whiteboard",
-          isScreenSharing: search.stage === "share",
-          isChatOpen: search.panel === "chat",
-          isParticipantsOpen: search.panel === "participants",
-          unreadChatCount: fixtureSearch.chat === "ready" ? 3 : 0,
-          onToggleMute: () => patch({ mic: !search.mic }),
-          onToggleVideo: () => patch({ camera: !search.camera }),
-          onToggleScreenShare: () => patch({ stage: search.stage === "share" ? "people" : "share", layout: "presentation" }),
-          onToggleWhiteboard: () => patch({ stage: search.stage === "whiteboard" ? "people" : "whiteboard", layout: "focus" }),
-          onToggleHandRaise: () => patch({ hand: !search.hand }),
-          onToggleChat: () => patch({ panel: search.panel === "chat" ? "none" : "chat" }),
-          onToggleParticipants: () => patch({ panel: search.panel === "participants" ? "none" : "participants" }),
-          onOpenMore: () => patch({ dialog: "settings" }),
-          onOpenInfo: () => patch({ dialog: "info" }),
-          onOpenReactions: () => patch({ toast: "success" }),
-        }}
-        mobileControlButtons={["mic", "video", "participants", "chat", "handraise", "more", "leave"]}
-        panels={{
-          active: panel,
-          onChange: (nextPanel) => patch({ panel: nextPanel === "settings" ? "none" : (nextPanel ?? "none") }),
-          participants: { participants: participantList, searchable: true, canManageParticipants: true, onAddPeople: () => patch({ dialog: "invite" }), onUpdateDisplayName: setDisplayName },
-          chat: {
-            messages: fixtureSearch.chat === "ready" ? chatMessages : [],
-            pendingMessages: chatPending(fixtureSearch),
-            localParticipantId: "you",
-            participantNames: Object.fromEntries(participants.map((participant) => [participant.id, participant.displayName])),
-            error: fixtureSearch.chat === "failure" ? "Chat is temporarily unavailable in this Space." : undefined,
-            hasOlder: fixtureSearch.chat === "loading",
-            loadingOlder: fixtureSearch.chat === "loading",
-            onLoadOlder: async () => undefined,
-            onRetryMessage: async () => undefined,
-            onSendMessage: async ({ text, attachments }) => {
-              setChatMessages((current) => [
-                ...current,
-                { messageId: `preview-message-${current.length + 1}`, clientMessageId: `preview-client-${current.length + 1}`, sequence: String(current.length + 1), participantId: "you", displayName, text, createdAt: new Date().toISOString(), attachments: attachments ?? [] },
-              ]);
-            },
-          },
-          transcript: { transcripts: search.state === "empty" ? [] : [...TRANSCRIPT_FIXTURES], isLive: true, searchable: true, localParticipantId: "you", onExport: () => undefined, onCopyAll: () => undefined },
-          admission: {
-            participants: search.state === "empty" ? [] : WAITING_PARTICIPANTS,
-            onAdmit: () => patch({ toast: "success" }),
-            onDeny: () => patch({ toast: "info" }),
-            onAdmitAll: () => patch({ toast: "success" }),
-            onDenyAll: () => patch({ toast: "info" }),
-            loading: search.state === "reconnecting",
-          },
-        }}
+        initialPanel={search.dialog === "settings" ? "settings" : panel}
+        features={{ chat: true, participants: true, admission: true, screenShare: false, whiteboard: false, reactions: true, handRaise: true, info: true, settings: true, transcript: true }}
         infoDialog={{
           isOpen: search.dialog === "info",
           onOpenChange: (open) => patch({ dialog: open ? "info" : "none" }),
@@ -204,26 +155,25 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
           },
           duration: episodeDuration,
         }}
-        settingsDialog={{
-          isOpen: search.dialog === "settings",
-          onOpenChange: (open) => patch({ dialog: open ? "settings" : "none" }),
-          settings,
-          onUpdateIdentity: (updates) => {
-            updateSettings("identity", updates);
-            if (updates.displayName) setDisplayName(updates.displayName);
-          },
-          onUpdateJoin: (updates) => updateSettings("join", updates),
-          onUpdateAudio: (updates) => updateSettings("audio", updates),
-          onUpdateVideo: (updates) => updateSettings("video", updates),
-          onUpdateAppearance: (updates) => updateSettings("appearance", updates),
-          onUpdateExperience: (updates) => updateSettings("experience", updates),
-          videoTrack: null,
-          participantColorSeed: displayName,
-        }}
+        settingsDialog={
+          <SettingsDialog
+            isOpen={search.dialog === "settings"}
+            onClose={() => patch({ dialog: "none" })}
+            settings={settings}
+            onUpdateIdentity={(updates) => {
+              updateSettings("identity", updates);
+              if (updates.displayName) setDisplayName(updates.displayName);
+            }}
+            onUpdateJoin={(updates) => updateSettings("join", updates)}
+            onUpdateAudio={(updates) => updateSettings("audio", updates)}
+            onUpdateVideo={(updates) => updateSettings("video", updates)}
+            onUpdateAppearance={(updates) => updateSettings("appearance", updates)}
+            onUpdateExperience={(updates) => updateSettings("experience", updates)}
+            videoTrack={null}
+            participantColorSeed={displayName}
+          />
+        }
         inviteDialog={{ isOpen: search.dialog === "invite", onOpenChange: (open) => patch({ dialog: open ? "invite" : "none" }), inviteLink: SPACE_LINK, onCopyLink: () => patch({ toast: "success" }) }}
-        reactions={{ reactions: REACTIONS, allowedReactions: ["👍", "❤️", "😂", "😮", "😢", "🎉"], onSelect: async () => patch({ toast: "success" }) }}
-        toasts={toast}
-        onDismissToast={() => patch({ toast: "none" })}
         reconnecting={statusOverlay(search, retrySpace, backToEntrance)}
         overlay={
           <Fragment>
@@ -231,12 +181,85 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
             {whiteboardFallback}
             {warningOverlay}
             {confirmationOverlay}
+            <ToastStack toasts={toast} onDismiss={() => patch({ toast: "none" })} palette={mappedPalette} texture={mappedTexture} />
           </Fragment>
         }
         onLeft={backToEntrance}
       />
     </div>
   );
+}
+
+const PREVIEW_CAPABILITIES: readonly Capability[] = [
+  "publishAudio",
+  "publishVideo",
+  "publishScreen",
+  "subscribe",
+  "raiseHand",
+  "renameSelf",
+  "sendChat",
+  "sendReaction",
+  "drawWhiteboard",
+  "manageWhiteboard",
+  "manageAdmission",
+  "assignRoles",
+  "muteOthers",
+  "stopVideoOthers",
+  "stopScreenOthers",
+  "requestMediaOthers",
+  "removeParticipant",
+  "manageRecording",
+  "startEpisode",
+  "extendEpisode",
+  "endEpisode",
+  "manageMembers",
+  "clearSpaceContent",
+];
+
+function createGallerySnapshot(participants: readonly GalleryParticipant[], fixtureSearch: PreviewSearch, search: PreviewSearch, displayName: string): SpaceSnapshot {
+  const base = createSnapshot(PREVIEW_CAPABILITIES);
+  const roster = participants.map((participant) => ({
+    participantId: participant.id,
+    displayName: participant.isLocal ? displayName : participant.displayName,
+    role: participant.isLocal ? "member" : "participant",
+    eligibleRoles: ["member", "participant"],
+    capabilities: [],
+    handRaised: Boolean(participant.isHandRaised),
+    media: {
+      microphone: participant.isMuted ? ("inactive" as const) : ("active" as const),
+      camera: participant.isVideoEnabled ? ("active" as const) : ("inactive" as const),
+      screenShare: participant.isScreenSharing ? ("active" as const) : ("inactive" as const),
+    },
+  }));
+  const admissionQueue =
+    search.panel === "admission" && search.state !== "empty"
+      ? WAITING_PARTICIPANTS.map((participant, index) => ({ requestId: participant.id, participantId: participant.id, displayName: participant.displayName, initialRole: "participant", eligibleRoles: ["participant"], expiresAt: new Date(Date.now() + (index + 1) * 60_000).toISOString() }))
+      : [];
+  const chatFailure = fixtureSearch.chat === "failure" ? { code: "client.internal_error" as const, recoverable: true, message: "Chat is temporarily unavailable in this Space." } : null;
+
+  return {
+    ...base,
+    connection: { ...base.connection, status: search.state === "reconnecting" ? "reconnecting" : "live" },
+    self: { ...base.self, participantId: "you", displayName, role: "member", capabilities: PREVIEW_CAPABILITIES, handRaised: search.hand, can: (capability) => PREVIEW_CAPABILITIES.includes(capability) },
+    participants: { roster, admissionQueue },
+    media: {
+      ...base.media,
+      local: {
+        ...base.media.local,
+        microphone: { ...base.media.local.microphone, state: fixtureSearch.mic ? "enabled" : "disabled" },
+        camera: { ...base.media.local.camera, state: fixtureSearch.camera ? "enabled" : "disabled" },
+      },
+    },
+    chat: {
+      ...base.chat,
+      status: fixtureSearch.chat === "loading" ? "loading" : fixtureSearch.chat === "failure" ? "failed" : fixtureSearch.chat === "ready" ? "ready" : "idle",
+      messages: fixtureSearch.chat === "ready" ? INITIAL_CHAT_MESSAGES : [],
+      pendingSends: chatPending(fixtureSearch),
+      unreadCount: fixtureSearch.chat === "ready" ? 3 : 0,
+      lastError: chatFailure,
+    },
+    reactions: { active: search.state === "empty" ? [] : REACTIONS },
+  };
 }
 
 function PreviewWhiteboardMock({ palette, texture }: { readonly palette: ThemePalette; readonly texture: ThemeTexture }): React.JSX.Element {

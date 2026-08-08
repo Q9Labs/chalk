@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from "react";
-import { Spinner } from "./atomic/Spinner";
+import { Spinner } from "@q9labsai/chalk-ui";
 
 export const LazyChatPanel = lazy(() => import("./composite/ChatPanel").then((m) => ({ default: m.ChatPanel })));
 export const LazyTranscriptPanel = lazy(() => import("./transcript-panel/TranscriptPanel").then((m) => ({ default: m.TranscriptPanel })));

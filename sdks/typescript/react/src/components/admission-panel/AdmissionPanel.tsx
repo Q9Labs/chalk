@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { Badge, IconButton, Spinner } from "@q9labsai/chalk-ui";
+import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { Tick01Icon, Cancel01Icon, UserGroupIcon } from "../../utils/icons";
-import { Avatar, IconButton, Spinner } from "../atomic";
-import { Badge } from "../atomic/Badge";
+import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
 
 export interface AdmissionParticipant {
@@ -12,16 +13,19 @@ export interface AdmissionParticipant {
 }
 
 export interface AdmissionPanelProps {
-  participants: AdmissionParticipant[];
-  onAdmit: (id: string) => void;
-  onDeny: (id: string) => void;
-  onAdmitAll?: () => void;
-  onDenyAll?: () => void;
   loading?: boolean;
   className?: string;
 }
 
-export const AdmissionPanel = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className }: AdmissionPanelProps) => {
+interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
+  readonly participants: AdmissionParticipant[];
+  readonly onAdmit: (id: string) => void;
+  readonly onDeny: (id: string) => void;
+  readonly onAdmitAll?: () => void;
+  readonly onDenyAll?: () => void;
+}
+
+const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -114,5 +118,27 @@ export const AdmissionPanel = React.memo(({ participants, onAdmit, onDeny, onAdm
     </div>
   );
 });
+
+export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
+  const client = useSpaceClient();
+  const participantsSlice = useParticipants();
+  const canManageAdmission = useCan("manageAdmission");
+  const participants = canManageAdmission ? participantsSlice.admissionQueue.map((request) => ({ id: request.requestId, displayName: request.displayName })) : [];
+
+  return (
+    <AdmissionPanelSurface
+      {...props}
+      participants={participants}
+      onAdmit={(requestId) => void client.participants.admit(requestId)}
+      onDeny={(requestId) => void client.participants.deny(requestId)}
+      onAdmitAll={() => {
+        for (const participant of participants) void client.participants.admit(participant.id);
+      }}
+      onDenyAll={() => {
+        for (const participant of participants) void client.participants.deny(participant.id);
+      }}
+    />
+  );
+}
 
 AdmissionPanel.displayName = "AdmissionPanel";

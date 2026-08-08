@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { Capability, ChatUploadFile, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
-import { act, fireEvent, render, renderHook, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, waitFor, within } from "@testing-library/react";
 import { type PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +27,7 @@ type TestClient = SpaceClient & {
 };
 
 afterEach(() => {
+  cleanup();
   createSpaceClientSpy.mockReset();
   vi.unstubAllGlobals();
 });
@@ -245,7 +246,7 @@ describe("React bindings", () => {
 
     const explicitClient = createTestClient();
     explicitClient.setSnapshot({ ...explicitClient.getSnapshot(), connection: { ...explicitClient.getSnapshot().connection, status: "live" } });
-    const explicitView = render(<Chalk client={explicitClient} entrance={false} theme={{ colorScheme: "system" }} initialPalette="espresso-night" />);
+    const explicitView = render(<Chalk client={explicitClient} entrance={false} theme={{ colorScheme: "system", palette: "espresso-night" }} />);
     matches = false;
     act(() => listeners.forEach((listener) => listener()));
     expect(within(explicitView.container).getByRole("main")).toHaveAttribute("data-chalk-palette", "espresso-night");
@@ -318,9 +319,7 @@ describe("React bindings", () => {
 
     const view = render(<Chalk client={client} entrance={false} layout="grid" />);
 
-    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ screenShareTrack: track, sharedByName: "You" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "Stop active share" }));
-    expect(stopScreenShare).toHaveBeenCalledWith(false);
+    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ className: "h-full" }));
 
     act(() =>
       client.setSnapshot({
@@ -356,10 +355,8 @@ describe("React bindings", () => {
 
     const view = render(<Chalk client={client} entrance={false} layout="grid" />);
 
-    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ screenShareTrack: track, sharedByName: "Grace" }));
+    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ className: "h-full" }));
     expect(within(view.container).getByRole("button", { name: "Presentation layout" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(within(view.container).getByRole("button", { name: "Stop active share" }));
-    expect(stopScreenShare).toHaveBeenCalledWith("grace");
 
     act(() => client.setSnapshot({ ...client.getSnapshot(), media: { ...client.getSnapshot().media, remote: [] } }));
     expect(within(view.container).getByRole("button", { name: "Grid layout" })).toHaveAttribute("aria-pressed", "true");
@@ -390,11 +387,10 @@ describe("React bindings", () => {
     expect(requestMedia).toHaveBeenCalledWith("grace", "camera");
   });
 
-  it("seeds the public appearance props and reports palette and texture changes", () => {
+  it("uses the single theme prop for initial palette and texture", () => {
     const client = createTestClient();
     client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
-    const onAppearanceChange = vi.fn();
-    const view = render(<Chalk client={client} entrance={false} features={{ settings: true }} initialPalette="oled-signal" initialTexture="slate" onAppearanceChange={onAppearanceChange} />);
+    const view = render(<Chalk client={client} entrance={false} features={{ settings: true }} theme={{ palette: "oled-signal", texture: "slate" }} />);
 
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-palette", "oled-signal");
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-texture", "slate");
@@ -404,8 +400,6 @@ describe("React bindings", () => {
     fireEvent.click(within(document.body).getByRole("button", { name: /Warm Porcelain/ }));
     fireEvent.click(within(document.body).getByRole("button", { name: "Use Paper Grain texture" }));
 
-    expect(onAppearanceChange).toHaveBeenNthCalledWith(1, { palette: "warm-porcelain", texture: "slate" });
-    expect(onAppearanceChange).toHaveBeenNthCalledWith(2, { palette: "warm-porcelain", texture: "paper" });
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-palette", "warm-porcelain");
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-texture", "paper");
   });
@@ -461,6 +455,63 @@ describe("React bindings", () => {
     view.unmount();
     const disabledView = render(<Chalk client={client} features={{ settings: false }} />);
     expect(within(disabledView.container).queryByRole("button", { name: "Settings" })).not.toBeInTheDocument();
+  });
+
+  it("clears the settings sidebar when turnkey Settings closes", async () => {
+    const client = createTestClient(createSnapshot(["sendChat"]));
+    client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
+    const view = render(<Chalk client={client} features={{ settings: true }} />);
+
+    fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
+    expect(view.container.querySelector("aside")).toBeInTheDocument();
+    fireEvent.click(document.querySelector('[role="dialog"] button[aria-label="Close settings"]')!);
+
+    await waitFor(() => {
+      expect(document.querySelector('[role="dialog"]')).not.toBeInTheDocument();
+      expect(view.container.querySelector("aside")).not.toBeInTheDocument();
+    });
+  });
+
+  it("applies the Settings layout selector to the live stage", () => {
+    const client = createTestClient(createSnapshot(["sendChat"]));
+    client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
+    const view = render(<Chalk client={client} features={{ settings: true }} />);
+
+    fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
+    fireEvent.click(within(document.body).getByRole("button", { name: /Appearance/ }));
+    fireEvent.click(within(document.body).getByRole("button", { name: "Grid" }));
+
+    expect(view.container.querySelector('button[aria-label="Grid layout"]')?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps a texture-only theme following system palette changes", () => {
+    let matches = true;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal("matchMedia", () => ({
+      get matches() {
+        return matches;
+      },
+      media: "(prefers-color-scheme: dark)",
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+    }));
+    const client = createTestClient();
+    client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
+    const view = render(<Chalk client={client} entrance={false} theme={{ colorScheme: "system", texture: "paper" }} />);
+
+    expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-palette", "warm-charcoal");
+    matches = false;
+    act(() => listeners.forEach((listener) => listener()));
+
+    expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-palette", "light");
+  });
+
+  it("does not render a Chat composer without sendChat", () => {
+    const client = createTestClient(createSnapshot([]));
+    client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
+    const view = render(<Chalk client={client} />);
+
+    expect(within(view.container).queryByRole("button", { name: "Chat" })).not.toBeInTheDocument();
   });
 
   it("gates the separately confirmed End Episode action on the endEpisode capability", () => {

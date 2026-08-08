@@ -8,6 +8,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMedia } from "../../bindings/hooks";
+import { toAudioParticipants } from "../../selectors/space-selectors";
+import { useParticipantVolumeContext } from "../participants-panel/participant-volume-context";
 
 export interface AudioParticipant {
   id: string;
@@ -18,7 +21,7 @@ export interface AudioParticipant {
 
 export interface AudioOutputProps {
   /** All participants - will filter to remote participants with audio tracks */
-  participants: AudioParticipant[];
+  participants?: AudioParticipant[];
   /** Volume level 0-1 (default: 1) */
   volume?: number;
   /** Selected audio output device id for routing playback via setSinkId (when supported). */
@@ -37,6 +40,12 @@ type SinkAwareAudioElement = HTMLAudioElement & {
 };
 
 export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume }: AudioOutputProps) {
+  const media = useMedia();
+  const volumeContext = useParticipantVolumeContext();
+  const contextParticipants = useMemo(() => toAudioParticipants(media.remote), [media.remote]);
+  const effectiveParticipants = participants ?? contextParticipants;
+  const effectiveAudioOutputDeviceId = audioOutputDeviceId ?? media.selection.speaker ?? undefined;
+  const effectiveGetParticipantVolume = getParticipantVolume ?? ((participantId: string) => (volumeContext?.volumes.get(participantId) ?? 100) / 100);
   // Map of participant ID -> audio element (mic audio)
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   // Map of participant ID -> audio element (screen share audio)
@@ -60,19 +69,19 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
 
   const applyAudioOutputDevice = useCallback(
     (audioEl: HTMLAudioElement) => {
-      if (!audioOutputDeviceId) return;
+      if (!effectiveAudioOutputDeviceId) return;
       const sinkAware = audioEl as SinkAwareAudioElement;
       if (typeof sinkAware.setSinkId !== "function") return;
-      if (sinkAware.sinkId === audioOutputDeviceId) return;
-      void sinkAware.setSinkId(audioOutputDeviceId).catch(() => {
+      if (sinkAware.sinkId === effectiveAudioOutputDeviceId) return;
+      void sinkAware.setSinkId(effectiveAudioOutputDeviceId).catch(() => {
         // Ignore unsupported/failed sink routing and continue with default output.
       });
     },
-    [audioOutputDeviceId],
+    [effectiveAudioOutputDeviceId],
   );
 
   // Filter to remote participants with valid audio tracks
-  const remoteWithAudio = participants.filter((p) => {
+  const remoteWithAudio = effectiveParticipants.filter((p) => {
     if (p.isLocal) return false;
     if (!p.audioTrack) return false;
     try {
@@ -84,7 +93,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   });
 
   // Filter to remote participants with valid screen share audio tracks
-  const remoteWithScreenShareAudio = participants.filter((p) => {
+  const remoteWithScreenShareAudio = effectiveParticipants.filter((p) => {
     if (p.isLocal) return false;
     if (!p.screenShareAudioTrack) return false;
     try {
@@ -176,7 +185,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       applyAudioOutputDevice(audioEl);
 
       // Update volume (per-participant override multiplied by global volume)
-      const baseVolume = getParticipantVolume ? getParticipantVolume(id) : 1;
+      const baseVolume = effectiveGetParticipantVolume(id);
       audioEl.volume = Math.max(0, Math.min(1, baseVolume * volume));
 
       // Check if we need to attach a new track
@@ -208,7 +217,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       }
     }
     // No cleanup return here - we only clean departed participants above
-  }, [remoteWithAudio, volume, audioOutputDeviceId, getParticipantVolume, applyAudioOutputDevice]);
+  }, [remoteWithAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for mic audio
   useEffect(() => {
@@ -281,7 +290,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       applyAudioOutputDevice(audioEl);
 
       // Update volume (per-participant override multiplied by global volume)
-      const baseVolume = getParticipantVolume ? getParticipantVolume(id) : 1;
+      const baseVolume = effectiveGetParticipantVolume(id);
       audioEl.volume = Math.max(0, Math.min(1, baseVolume * volume));
 
       const currentStream = audioEl.srcObject as MediaStream | null;
@@ -307,7 +316,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         audioElements.delete(key);
       }
     }
-  }, [remoteWithScreenShareAudio, volume, audioOutputDeviceId, getParticipantVolume, applyAudioOutputDevice]);
+  }, [remoteWithScreenShareAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for screen share audio
   useEffect(() => {

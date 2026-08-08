@@ -1,7 +1,7 @@
 import React from "react";
+import { Spinner } from "@q9labsai/chalk-ui";
 import { WifiOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { Spinner } from "../atomic/Spinner";
 
 export interface ReconnectingOverlayProps {
   isVisible: boolean;

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as publicEntry from "../index";
 import { PreviewEntrance, PreviewSpaceView } from "./preview-fixtures";
+import { createTestClient } from "./test-client";
 
 afterEach(() => {
   cleanup();
@@ -34,8 +35,14 @@ describe("preview fixtures", () => {
   });
 
   it("accepts caller-owned state for the presentational SpaceView", () => {
-    render(<PreviewSpaceView spaceName="Design review" displayName="Ada" participants={[]} palette="warm-charcoal" texture="paper" />);
+    render(<PreviewSpaceView client={createTestClient()} spaceName="Design review" palette="warm-charcoal" texture="paper" />);
 
     expect(document.querySelector('[data-chalk-palette="warm-charcoal"]')).toHaveAttribute("data-chalk-texture", "paper");
+  });
+
+  it("creates a preview client when no client is supplied", () => {
+    render(<PreviewSpaceView spaceName="Design review" />);
+
+    expect(document.querySelector("main[data-chalk]")).toBeInTheDocument();
   });
 });

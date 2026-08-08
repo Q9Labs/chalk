@@ -5,9 +5,11 @@ import * as components from "../components";
 import * as sdk from "../index";
 
 describe("React SDK public exports", () => {
-  it("exports Chalk and Entrance through the component entry", () => {
+  it("exports the turnkey component and context-connected prebuilt set", () => {
     expect(components.Chalk).toBeDefined();
     expect(components.Entrance).toBeDefined();
+    for (const component of [components.ControlBar, components.ParticipantGrid, components.ChatPanel, components.ParticipantsPanel, components.AdmissionPanel, components.SettingsPanel, components.ReactionsOverlay, components.ScreenShareView]) expect(component).toBeDefined();
+    expect("TranscriptPanel" in components).toBe(false);
   });
 
   it("exports the closed React binding surface from the package root", () => {

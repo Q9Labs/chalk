@@ -1,17 +1,30 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, SpaceSnapshot } from "@q9labsai/chalk-client";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
+import { uploadChatAttachment } from "./chat-file-upload";
 
 export type { ChatMessage } from "./chat-types";
 
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
 export interface ChatPanelProps {
+  readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
+  readonly onRetryMessage?: (id: string) => Promise<void>;
+  readonly onClose?: () => void;
+  readonly disabled?: boolean;
+  readonly placeholder?: string;
+  readonly className?: string;
+  readonly title?: string;
+  readonly variant?: "sidebar" | "mobile";
+}
+
+interface ChatPanelSurfaceProps extends ChatPanelProps {
   readonly messages: readonly ChatMessage[];
   readonly pendingMessages?: SpaceSnapshot["chat"]["pendingSends"];
   readonly readReceipts?: readonly ChatReadReceipt[];
@@ -19,24 +32,16 @@ export interface ChatPanelProps {
   readonly participantNames?: Readonly<Record<string, string>>;
   readonly onSendMessage: (input: Pick<ChatSendInput, "text" | "attachments">) => Promise<void>;
   readonly onUploadAttachment?: (file: ChatUploadFile) => Promise<ChatAttachment>;
-  readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
   readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
-  readonly onRetryMessage?: (id: string) => Promise<void>;
   readonly onLoadOlder?: () => Promise<void>;
   readonly hasOlder?: boolean;
   readonly loadingOlder?: boolean;
   readonly localParticipantId?: string;
-  readonly onClose?: () => void;
-  readonly disabled?: boolean;
-  readonly placeholder?: string;
-  readonly className?: string;
-  readonly title?: string;
-  readonly variant?: "sidebar" | "mobile";
   readonly error?: string | null;
 }
 
-export const ChatPanel = React.memo(
+const ChatPanelSurface = React.memo(
   ({
     messages,
     pendingMessages = [],
@@ -60,7 +65,7 @@ export const ChatPanel = React.memo(
     variant = "sidebar",
     error,
     className,
-  }: ChatPanelProps) => {
+  }: ChatPanelSurfaceProps) => {
     const [draft, setDraft] = useState("");
     const [stagedFiles, setStagedFiles] = useState<readonly ChatUploadFile[]>([]);
     const [sending, setSending] = useState(false);
@@ -331,6 +336,40 @@ export const ChatPanel = React.memo(
     );
   },
 );
+
+export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
+  const client = useSpaceClient();
+  const chat = useChat();
+  const participants = useParticipants();
+  const self = useSelf();
+  const localParticipantId = self.participantId ?? "local";
+  const participantNames = useMemo(() => Object.fromEntries([...participants.roster.map((participant) => [participant.participantId, participant.displayName] as const), [localParticipantId, self.displayName ?? "You"]]), [localParticipantId, participants.roster, self.displayName]);
+
+  return (
+    <ChatPanelSurface
+      {...props}
+      messages={chat.messages}
+      pendingMessages={chat.pendingSends}
+      readReceipts={chat.readReceipts}
+      participantNames={participantNames}
+      localParticipantId={localParticipantId}
+      hasOlder={chat.pagination.hasOlder}
+      onSendMessage={(input) => client.chat.send(input).then(() => undefined)}
+      onUploadAttachment={(file) => uploadChatAttachment(file, client.chat.files)}
+      onResolveAttachmentUrl={async (attachmentId) => {
+        const attachment = [...chat.messages, ...chat.pendingSends].flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
+        if (!attachment) throw new Error("The chat attachment is no longer available.");
+        return client.chat.files.url(attachment);
+      }}
+      onMarkRead={(sequence) => {
+        const message = chat.messages.find((candidate) => candidate.sequence === sequence);
+        return message ? client.chat.markRead(message.messageId) : undefined;
+      }}
+      onLoadOlder={() => client.chat.loadOlder().then(() => undefined)}
+      error={chat.lastError?.message ?? null}
+    />
+  );
+});
 
 ChatPanel.displayName = "ChatPanel";
 

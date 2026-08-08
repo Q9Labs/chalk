@@ -1,19 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Spinner } from "@q9labsai/chalk-ui";
+import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
-import { Spinner, ParticipantTile } from "../atomic";
+import { ParticipantTile } from "../atomic";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
+import { toVideoParticipants } from "../../selectors/space-selectors";
 
 export interface ScreenShareViewProps {
-  screenShareTrack: MediaStreamTrack;
-  sharedByName: string;
-  participants: Participant[];
   onStopShare?: () => void;
   showThumbnails?: boolean;
   thumbnailPosition?: "bottom" | "right";
   enableZoom?: boolean;
   className?: string;
+}
+
+interface ScreenShareViewSurfaceProps extends ScreenShareViewProps {
+  readonly screenShareTrack: MediaStreamTrack;
+  readonly sharedByName: string;
+  readonly participants: Participant[];
 }
 
 const MIN_ZOOM = 1;
@@ -44,7 +50,7 @@ const getContainedSize = (containerWidth: number, containerHeight: number, video
   };
 };
 
-export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewProps) => {
+const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -354,5 +360,33 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
     </div>
   );
 });
+
+export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
+  const client = useSpaceClient();
+  const self = useSelf();
+  const participantsSlice = useParticipants();
+  const media = useMedia();
+  const localId = self.participantId ?? "local";
+  const participants = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local), [localId, media.local, media.remote, participantsSlice.roster, self.displayName]);
+  const active = participants.find((participant) => participant.isScreenSharing && participant.screenShareTrack);
+
+  if (!active?.screenShareTrack) {
+    return (
+      <div className="grid h-full place-items-center text-sm text-[var(--chalk-app-text-muted)]" role="status">
+        No active screen share
+      </div>
+    );
+  }
+
+  return (
+    <ScreenShareViewSurface
+      {...props}
+      screenShareTrack={active.screenShareTrack}
+      sharedByName={active.displayName}
+      participants={participants}
+      onStopShare={props.onStopShare ?? (() => void (active.isLocal ? client.media.setScreenShareEnabled(false) : client.participants.stopScreenShare(active.id)))}
+    />
+  );
+}
 
 ScreenShareView.displayName = "ScreenShareView";

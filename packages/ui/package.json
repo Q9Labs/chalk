@@ -35,6 +35,24 @@
       "input": [
         "./dist/input.d.ts"
       ],
+      "select": [
+        "./dist/select.d.ts"
+      ],
+      "textarea": [
+        "./dist/textarea.d.ts"
+      ],
+      "spinner": [
+        "./dist/spinner.d.ts"
+      ],
+      "skeleton": [
+        "./dist/skeleton.d.ts"
+      ],
+      "icon-button": [
+        "./dist/icon-button.d.ts"
+      ],
+      "progress-bar": [
+        "./dist/progress-bar.d.ts"
+      ],
       "reactions": [
         "./dist/reactions.d.ts"
       ],
@@ -86,6 +104,30 @@
       "types": "./dist/input.d.ts",
       "import": "./dist/input.js"
     },
+    "./select": {
+      "types": "./dist/select.d.ts",
+      "import": "./dist/select.js"
+    },
+    "./textarea": {
+      "types": "./dist/textarea.d.ts",
+      "import": "./dist/textarea.js"
+    },
+    "./spinner": {
+      "types": "./dist/spinner.d.ts",
+      "import": "./dist/spinner.js"
+    },
+    "./skeleton": {
+      "types": "./dist/skeleton.d.ts",
+      "import": "./dist/skeleton.js"
+    },
+    "./icon-button": {
+      "types": "./dist/icon-button.d.ts",
+      "import": "./dist/icon-button.js"
+    },
+    "./progress-bar": {
+      "types": "./dist/progress-bar.d.ts",
+      "import": "./dist/progress-bar.js"
+    },
     "./logos/*": "./dist/logos/*",
     "./reactions": {
       "types": "./dist/reactions.d.ts",
@@ -122,11 +164,11 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/assets.ts ./src/badge.tsx ./src/button.tsx ./src/card.tsx ./src/input.tsx ./src/lib/utils.ts ./src/reactions.ts ./src/status-badge.tsx ./src/toast.tsx ./src/toggle.tsx ./src/toggle-group.tsx ./src/tooltip.tsx --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:logos",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/assets.ts ./src/badge.tsx ./src/button.tsx ./src/card.tsx ./src/input.tsx ./src/select.tsx ./src/textarea.tsx ./src/spinner.tsx ./src/skeleton.tsx ./src/icon-button.tsx ./src/progress-bar.tsx ./src/lib/utils.ts ./src/reactions.ts ./src/status-badge.tsx ./src/toast.tsx ./src/toggle.tsx ./src/toggle-group.tsx ./src/tooltip.tsx --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:logos",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
     "build:logos": "mkdir -p ./dist && cp -R ../assets/src/logos ./dist/",
-    "dev": "pnpm run build:css && pnpm run build:logos && tsup ./src/index.ts ./src/assets.ts ./src/badge.tsx ./src/button.tsx ./src/card.tsx ./src/input.tsx ./src/lib/utils.ts ./src/reactions.ts ./src/status-badge.tsx ./src/toast.tsx ./src/toggle.tsx ./src/toggle-group.tsx ./src/tooltip.tsx --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge --watch",
+    "dev": "pnpm run build:css && pnpm run build:logos && tsup ./src/index.ts ./src/assets.ts ./src/badge.tsx ./src/button.tsx ./src/card.tsx ./src/input.tsx ./src/select.tsx ./src/textarea.tsx ./src/spinner.tsx ./src/skeleton.tsx ./src/icon-button.tsx ./src/progress-bar.tsx ./src/lib/utils.ts ./src/reactions.ts ./src/status-badge.tsx ./src/toast.tsx ./src/toggle.tsx ./src/toggle-group.tsx ./src/tooltip.tsx --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge --watch",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --project tsconfig.check-types.json --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
@@ -141,8 +183,12 @@
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.18",
+    "@testing-library/react": "^16.3.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.3",
+    "happy-dom": "^20.0.11",
+    "react-dom": "19.2.7",
     "tailwindcss": "^4.1.18",
     "tw-animate-css": "^1.3.0",
     "typescript": "^5.7.2"
