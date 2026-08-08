@@ -6,6 +6,7 @@
     "rootDir": "../../../",
     "types": ["node"],
     "paths": {
+      "@chalk/diagnostics-contracts": ["../../../packages/diagnostics-contracts/src/index.ts"],
       "@q9labsai/chalk-client": ["../client/src/index.ts"],
       "@q9labsai/chalk-client/effect": ["../client/src/effect.ts"],
       "@q9labsai/chalk-client/telemetry": ["../client/src/telemetry/index.ts"],

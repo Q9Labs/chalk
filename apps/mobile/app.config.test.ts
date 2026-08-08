@@ -10,6 +10,7 @@ describe("createExpoConfig", () => {
     const config = createExpoConfig("development");
 
     expect(config.expo.plugins).toEqual(["expo-secure-store"]);
+    expect(config.expo.experiments.tsconfigPaths).toBe(false);
     expect(config.expo.android.blockedPermissions).toContain("android.permission.SYSTEM_ALERT_WINDOW");
     expect(config.expo.extra.telemetryEnabled).toBe(false);
   });

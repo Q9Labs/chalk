@@ -55,6 +55,9 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
+      experiments: {
+        tsconfigPaths: false,
+      },
       plugins: ["expo-secure-store"],
       splash: {
         image: "./assets/splash-logo.png",
