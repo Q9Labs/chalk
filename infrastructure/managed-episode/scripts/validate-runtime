@@ -77,10 +77,21 @@ fi
 
 api_required=(
   CHALK_API_ADDR CHALK_API_CORS_ALLOWED_ORIGINS CHALK_API_ENV
-  CHALK_API_TRUSTED_PROXY_CIDRS CHALK_API_VERSION
+  CHALK_API_TRUSTED_PROXY_CIDRS CHALK_API_SERVICE CHALK_API_VERSION
+  CHALK_API_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_HEADERS
+  OTEL_EXPORTER_OTLP_LOGS_HEADERS OTEL_EXPORTER_OTLP_METRICS_HEADERS
   CHALK_OPS_INGEST_TOKEN
   CHALK_DATABASE_URL CHALK_REDIS_URL CHALK_SYNC_TOKEN_ISSUER
   CHALK_SYNC_TOKEN_AUDIENCE CHALK_SYNC_TOKEN_KEY_ID CHALK_SYNC_TOKEN_PRIVATE_KEY
+  CHALK_EPISODE_DIAGNOSTICS CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN
+  CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY
+  CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER
+  CHALK_EPISODE_DIAGNOSTICS_OPERATOR_AUDIENCE
+  CHALK_EPISODE_DIAGNOSTICS_OPERATOR_JWKS
+  CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER
+  CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID
+  CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY
+  CHALK_EPISODE_DIAGNOSTICS_SERVICE_VERIFICATION_KEYS
   CHALK_PROVIDER_BRIDGE_ADDRESS CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE
   CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE
   CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN CHALK_CLOUDFLARE_ACCOUNT_ID
@@ -92,7 +103,15 @@ api_required=(
   CHALK_WEBHOOK_ENCRYPTION_KEY
 )
 sync_required=(
-  PORT CHALK_SYNC_BIND_IP CHALK_DATABASE_URL CHALK_SYNC_DATABASE_POOL_SIZE
+  PORT CHALK_SYNC_BIND_IP CHALK_API_ENV CHALK_API_URL CHALK_DATABASE_URL
+  CHALK_SYNC_DATABASE_POOL_SIZE CHALK_EPISODE_DIAGNOSTICS
+  CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN
+  CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER
+  CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID
+  CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY
+  CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS CHALK_SYNC_INSTANCE_ID
+  CHALK_SYNC_GENERATION CHALK_SYNC_RELEASE_ID CHALK_SYNC_OTLP_ENDPOINT
+  OTEL_EXPORTER_OTLP_TRACES_HEADERS OTEL_RESOURCE_ATTRIBUTES
   CHALK_SYNC_TOKEN_ISSUER CHALK_SYNC_TOKEN_AUDIENCE CHALK_SYNC_TOKEN_PUBLIC_KEYS
   CHALK_SYNC_MAX_WAL_LAG_BYTES CHALK_SYNC_PROVIDER_BRIDGE_URL
   CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE
@@ -111,16 +130,13 @@ case "$(env_value "${api_env}" CHALK_INTEGRATIONS_ENABLED)" in
   *) fail "CHALK_INTEGRATIONS_ENABLED must be true or false" ;;
 esac
 case "$(env_value "${api_env}" CHALK_RECORDING_ENABLED)" in
-  true|false) ;;
+  false) ;;
+  true) fail "CHALK_RECORDING_ENABLED must remain false for this release" ;;
   *) fail "CHALK_RECORDING_ENABLED must be true or false" ;;
 esac
 case "$(env_value "${api_env}" CHALK_TRANSCRIPTION_ENABLED)" in
-  true)
-    for name in CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME CHALK_R2_ACCOUNT_ID CHALK_R2_ACCESS_KEY_ID CHALK_R2_SECRET_ACCESS_KEY CHALK_R2_BUCKET; do
-      require_env "${api_env}" "${name}"
-    done
-    ;;
   false) ;;
+  true) fail "CHALK_TRANSCRIPTION_ENABLED must remain false for this release" ;;
   *) fail "CHALK_TRANSCRIPTION_ENABLED must be true or false" ;;
 esac
 case "$(env_value "${api_env}" CHALK_WHITEBOARD_FILES_ENABLED)" in
@@ -134,6 +150,51 @@ case "$(env_value "${api_env}" CHALK_WHITEBOARD_FILES_ENABLED)" in
 esac
 
 [[ "$(env_value "${api_env}" CHALK_API_ENV)" == production ]] || fail "CHALK_API_ENV must be production"
+[[ "$(env_value "${sync_env}" CHALK_API_ENV)" == production ]] || fail "Sync CHALK_API_ENV must be production"
+[[ "$(env_value "${api_env}" CHALK_API_SERVICE)" == chalk-api ]] || fail "CHALK_API_SERVICE must be chalk-api"
+for endpoint_entry in "${api_env}|CHALK_API_OTLP_ENDPOINT" "${sync_env}|CHALK_SYNC_OTLP_ENDPOINT"; do
+  IFS='|' read -r file name <<<"${endpoint_entry}"
+  [[ "$(env_value "${file}" "${name}")" == https://api.axiom.co ]] || fail "${name} must use the pathless direct Axiom HTTPS endpoint"
+done
+api_trace_headers="$(env_value "${api_env}" OTEL_EXPORTER_OTLP_TRACES_HEADERS)"
+api_log_headers="$(env_value "${api_env}" OTEL_EXPORTER_OTLP_LOGS_HEADERS)"
+api_metrics_headers="$(env_value "${api_env}" OTEL_EXPORTER_OTLP_METRICS_HEADERS)"
+if [[ "${api_trace_headers}" == "${api_log_headers}" || "${api_trace_headers}" == "${api_metrics_headers}" || "${api_log_headers}" == "${api_metrics_headers}" ]]; then
+  fail "API traces, logs, and metrics must use distinct dedicated Axiom header secrets"
+fi
+[[ "$(env_value "${sync_env}" OTEL_EXPORTER_OTLP_TRACES_HEADERS)" == "${api_trace_headers}" ]] || fail "API and Sync traces must share the same Axiom trace header secret"
+for file in "${api_env}" "${sync_env}"; do
+  [[ "$(env_value "${file}" CHALK_EPISODE_DIAGNOSTICS)" == hosted ]] || fail "CHALK_EPISODE_DIAGNOSTICS must be hosted in ${file}"
+  [[ "$(env_value "${file}" CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN)" == true ]] || fail "CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN must be true in ${file}"
+done
+[[ "$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_OPERATOR_AUDIENCE)" == chalk-diagnostics-operator ]] || fail "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_AUDIENCE must use the hosted operator audience"
+operator_issuer="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER)"
+[[ "${operator_issuer}" =~ ^https://[^/?#]+/?$ ]] || fail "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER must be an HTTPS origin"
+operator_jwks="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_OPERATOR_JWKS)"
+jq -e '.keys | type == "array" and length > 0' <<<"${operator_jwks}" >/dev/null 2>&1 || fail "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_JWKS must contain at least one key"
+diagnostics_hmac_key="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY)"
+diagnostics_hmac_key_bytes="$(LC_ALL=C printf '%s' "${diagnostics_hmac_key}" | LC_ALL=C wc -c | tr -d '[:space:]')"
+(( diagnostics_hmac_key_bytes >= 32 )) || fail "CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY must contain at least 32 bytes"
+for name in CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY; do
+  [[ "$(env_value "${api_env}" "${name}")" == "$(env_value "${sync_env}" "${name}")" ]] || fail "${name} must match between API and Sync"
+done
+[[ "$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER)" == https://api.chalkmeet.com ]] || fail "CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER must use the production API origin"
+diagnostics_service_key_id="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID)"
+diagnostics_service_verification_keys="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_SERVICE_VERIFICATION_KEYS)"
+jq -e --arg key "${diagnostics_service_key_id}" 'type == "object" and length > 0 and (.[$key] | type == "string" and length > 0)' <<<"${diagnostics_service_verification_keys}" >/dev/null 2>&1 || fail "CHALK_EPISODE_DIAGNOSTICS_SERVICE_VERIFICATION_KEYS must contain the current service key ID"
+[[ "$(env_value "${sync_env}" CHALK_API_URL)" == https://api.chalkmeet.com ]] || fail "CHALK_API_URL must use the production API origin"
+[[ "$(env_value "${sync_env}" CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS)" == api.chalkmeet.com ]] || fail "CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS must allow only the production API host"
+sync_generation="$(env_value "${sync_env}" CHALK_SYNC_GENERATION)"
+if [[ ! "${sync_generation}" =~ ^[1-9][0-9]*$ ]] || (( sync_generation > 2147483648 )); then
+  fail "CHALK_SYNC_GENERATION must be an integer between 1 and 2147483648"
+fi
+sync_release_id="$(env_value "${sync_env}" CHALK_SYNC_RELEASE_ID)"
+[[ "${sync_release_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_RELEASE_ID must be a safe bounded identifier"
+[[ "$(env_value "${api_env}" CHALK_API_VERSION)" == "${sync_release_id}" ]] || fail "API and Sync telemetry must use the same release identifier"
+sync_instance_id="$(env_value "${sync_env}" CHALK_SYNC_INSTANCE_ID)"
+[[ "${sync_instance_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_INSTANCE_ID must be a safe bounded identifier"
+expected_sync_resource_attributes="service.name=chalk-sync,service.version=${sync_release_id},deployment.environment.name=production,service.instance.id=${sync_instance_id}"
+[[ "$(env_value "${sync_env}" OTEL_RESOURCE_ATTRIBUTES)" == "${expected_sync_resource_attributes}" ]] || fail "OTEL_RESOURCE_ATTRIBUTES must bind Sync telemetry to its production service, release, and instance"
 [[ "$(env_value "${api_env}" CHALK_API_ADDR)" == 0.0.0.0:8080 ]] || fail "CHALK_API_ADDR must match the Quadlet port"
 [[ "$(env_value "${sync_env}" PORT)" == 4100 ]] || fail "Sync PORT must match the Quadlet port"
 [[ "$(env_value "${api_env}" CHALK_REDIS_URL)" == redis://redis:6379/0 ]] || fail "CHALK_REDIS_URL must use the private Redis network alias"

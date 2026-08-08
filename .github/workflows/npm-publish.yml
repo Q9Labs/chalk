@@ -7,6 +7,11 @@ on:
         description: Build and pack packages without publishing
         type: boolean
         default: true
+      release_sha:
+        description: Exact commit to check out for a guarded release dispatch
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -26,6 +31,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+
+      - name: Verify publish ref
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          live_master_sha="$(git ls-remote origin refs/heads/master | awk 'NR == 1 { print $1 }')"
+          if [[ ! "$live_master_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Could not read a valid live origin/master SHA" >&2
+            exit 1
+          fi
+          if [[ "$checked_out_sha" != "$live_master_sha" ]]; then
+            echo "Publish ref $checked_out_sha is not the current origin/master $live_master_sha" >&2
+            exit 1
+          fi
+          echo "Publish ref verified: $checked_out_sha"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

@@ -78,6 +78,7 @@
     "test:coverage": "turbo test -- --coverage",
     "package:publint": "pnpm --filter './packages/*' --filter './sdks/typescript/*' exec publint",
     "package:attw": "pnpm --filter './packages/*' --filter './sdks/typescript/*' exec attw --pack --ignore-rules cjs-resolves-to-esm internal-resolution-error --exclude-entrypoints './styles.css' './src/styles.css' './dist/styles/*' './styles/*'",
+    "package:release": "node scripts/npm-release.mjs",
     "test": "turbo test",
     "lint": "turbo lint",
     "check-types": "turbo check-types",

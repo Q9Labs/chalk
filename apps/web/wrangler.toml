@@ -7,5 +7,9 @@ pages_build_output_dir = "dist/client"
 
 [vars]
 CHALK_API_ORIGIN = "https://api.chalkmeet.com"
+CHALK_ENVIRONMENT = "production"
+CHALK_EPISODE_DIAGNOSTICS = "hosted"
+CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN = "true"
+CHALK_EPISODE_DIAGNOSTICS_GATEWAY = "verified"
 VITE_API_URL = "https://api.chalkmeet.com"
 VITE_PUBLIC_APP_URL = "https://chalkmeet.com"

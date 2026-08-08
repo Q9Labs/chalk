@@ -67,6 +67,7 @@ apps/mobile/android/app/*.jks
 apps/mobile/android/app/*.keystore
 sdks/typescript/react-native/.turbo
 sdks/typescript/react-native/dist
+sdks/typescript/react-native/embedded
 sdks/typescript/react-native/tsconfig.tsbuildinfo
 sdks/typescript/react/tsconfig.tsbuildinfo
 sdks/typescript/client/tsconfig.tsbuildinfo

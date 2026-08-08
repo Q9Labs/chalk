@@ -31,6 +31,17 @@ render_example_env() {
     -e 's|__SECRET_JSON_KEYRING__|{"test":"dGVzdA"}|' \
     -e 's|__SECRET_AT_LEAST_32_BYTES__|test-only-32-byte-workload-secret|' \
     -e 's|__SECRET_BASE64_32_BYTES__|MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=|' \
+    -e 's|__SECRET_AXIOM_TRACE_OTLP_HEADERS__|authorization=test-trace-token,x-axiom-dataset=chalk-traces-test|' \
+    -e 's|__SECRET_AXIOM_LOG_OTLP_HEADERS__|authorization=test-log-token,x-axiom-dataset=chalk-logs-test|' \
+    -e 's|__SECRET_AXIOM_METRICS_OTLP_HEADERS__|authorization=test-metrics-token,x-axiom-metrics-dataset=chalk-metrics-test|' \
+    -e 's|__SECRET_EPISODE_DIAGNOSTICS_HMAC_KEY_AT_LEAST_32_BYTES__|test-only-32-byte-diagnostics-key|' \
+    -e 's|__SECRET_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER_HTTPS_URL__|https://identity.example.test|' \
+    -e 's|__SECRET_EPISODE_DIAGNOSTICS_OPERATOR_JWKS__|{"keys":[{"kty":"OKP","crv":"Ed25519","alg":"EdDSA","use":"sig","kid":"operator-1","x":"MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA"}]}|' \
+    -e 's|__SECRET_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID__|diagnostics-1|' \
+    -e 's|__SECRET_EPISODE_DIAGNOSTICS_ED25519_PRIVATE_KEY__|MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA|' \
+    -e 's|__SECRET_EPISODE_DIAGNOSTICS_SERVICE_VERIFICATION_KEYS__|{"diagnostics-1":"MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA"}|' \
+    -e 's|__SYNC_INSTANCE_ID__|sync-test-instance|' \
+    -e 's|__SYNC_GENERATION__|1|' \
     -e 's|__RELEASE_ID__|test-release|' \
     -e 's|__SECRET[A-Z0-9_]*__|test-value|g' \
     "${source}" >"${output}"
@@ -110,6 +121,133 @@ if "${managed_root}/scripts/validate-runtime" \
   --rendered-root "${fixture_root}/rendered" \
   --allow-dirty >/dev/null 2>&1; then
   echo "invalid recording capability flag was accepted" >&2
+  exit 1
+fi
+
+for mutation in \
+  'api.env|CHALK_EPISODE_DIAGNOSTICS=hosted|CHALK_EPISODE_DIAGNOSTICS=off' \
+  'api.env|CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true|CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=false' \
+  'sync.env|CHALK_EPISODE_DIAGNOSTICS=hosted|CHALK_EPISODE_DIAGNOSTICS=off' \
+  'sync.env|CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true|CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=false' \
+  'api.env|CHALK_RECORDING_ENABLED=false|CHALK_RECORDING_ENABLED=true' \
+  'api.env|CHALK_TRANSCRIPTION_ENABLED=false|CHALK_TRANSCRIPTION_ENABLED=true'; do
+  IFS='|' read -r file_name expected replacement <<<"${mutation}"
+  rejected_env="${fixture_root}/rejected-$(printf '%s' "${file_name}-${replacement}" | tr -cs '[:alnum:]' '-')"
+  cp -R "${fixture_root}/env" "${rejected_env}"
+  sed -i.bak "s|^${expected}$|${replacement}|" "${rejected_env}/${file_name}"
+  rm "${rejected_env}/${file_name}.bak"
+  if "${managed_root}/scripts/validate-runtime" \
+    --env-root "${rejected_env}" \
+    --secret-root "${fixture_root}/secrets" \
+    --manifest "${fixture_root}/release-manifest.json" \
+    --sync-proof "${fixture_root}/sync-proof.json" \
+    --rendered-root "${fixture_root}/rendered" \
+    --allow-dirty >/dev/null 2>&1; then
+    echo "invalid production runtime mutation was accepted: ${replacement}" >&2
+    exit 1
+  fi
+done
+
+cp -R "${fixture_root}/env" "${fixture_root}/mismatched-diagnostics-service-env"
+sed -i.bak 's/^CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID=.*/CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID=other-key/' \
+  "${fixture_root}/mismatched-diagnostics-service-env/sync.env"
+rm "${fixture_root}/mismatched-diagnostics-service-env/sync.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/mismatched-diagnostics-service-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "mismatched API and Sync diagnostics service identities were accepted" >&2
+  exit 1
+fi
+
+for missing_entry in \
+  'api.env|CHALK_API_OTLP_ENDPOINT' \
+  'api.env|OTEL_EXPORTER_OTLP_TRACES_HEADERS' \
+  'api.env|OTEL_EXPORTER_OTLP_LOGS_HEADERS' \
+  'api.env|OTEL_EXPORTER_OTLP_METRICS_HEADERS' \
+  'sync.env|CHALK_SYNC_OTLP_ENDPOINT' \
+  'sync.env|OTEL_EXPORTER_OTLP_TRACES_HEADERS'; do
+  IFS='|' read -r file_name env_name <<<"${missing_entry}"
+  missing_env="${fixture_root}/missing-$(printf '%s' "${file_name}-${env_name}" | tr -cs '[:alnum:]' '-')"
+  cp -R "${fixture_root}/env" "${missing_env}"
+  sed -i.bak "/^${env_name}=/d" "${missing_env}/${file_name}"
+  rm "${missing_env}/${file_name}.bak"
+  if "${managed_root}/scripts/validate-runtime" \
+    --env-root "${missing_env}" \
+    --secret-root "${fixture_root}/secrets" \
+    --manifest "${fixture_root}/release-manifest.json" \
+    --sync-proof "${fixture_root}/sync-proof.json" \
+    --rendered-root "${fixture_root}/rendered" \
+    --allow-dirty >/dev/null 2>&1; then
+    echo "missing production observability input was accepted: ${env_name}" >&2
+    exit 1
+  fi
+done
+
+cp -R "${fixture_root}/env" "${fixture_root}/shared-axiom-signal-header-env"
+trace_headers="$(sed -n 's/^OTEL_EXPORTER_OTLP_TRACES_HEADERS=//p' "${fixture_root}/env/api.env")"
+sed -i.bak "s|^OTEL_EXPORTER_OTLP_LOGS_HEADERS=.*|OTEL_EXPORTER_OTLP_LOGS_HEADERS=${trace_headers}|" \
+  "${fixture_root}/shared-axiom-signal-header-env/api.env"
+rm "${fixture_root}/shared-axiom-signal-header-env/api.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/shared-axiom-signal-header-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "shared Axiom trace and log headers were accepted" >&2
+  exit 1
+fi
+
+cp -R "${fixture_root}/env" "${fixture_root}/mismatched-axiom-trace-header-env"
+sed -i.bak 's/^OTEL_EXPORTER_OTLP_TRACES_HEADERS=.*/OTEL_EXPORTER_OTLP_TRACES_HEADERS=test-other-trace-header/' \
+  "${fixture_root}/mismatched-axiom-trace-header-env/sync.env"
+rm "${fixture_root}/mismatched-axiom-trace-header-env/sync.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/mismatched-axiom-trace-header-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "mismatched API and Sync Axiom trace headers were accepted" >&2
+  exit 1
+fi
+
+for endpoint_entry in 'api.env|CHALK_API_OTLP_ENDPOINT' 'sync.env|CHALK_SYNC_OTLP_ENDPOINT'; do
+  IFS='|' read -r file_name env_name <<<"${endpoint_entry}"
+  pathful_env="${fixture_root}/pathful-$(printf '%s' "${file_name}-${env_name}" | tr -cs '[:alnum:]' '-')"
+  cp -R "${fixture_root}/env" "${pathful_env}"
+  sed -i.bak "s|^${env_name}=.*|${env_name}=https://api.axiom.co/v1/traces|" "${pathful_env}/${file_name}"
+  rm "${pathful_env}/${file_name}.bak"
+  if "${managed_root}/scripts/validate-runtime" \
+    --env-root "${pathful_env}" \
+    --secret-root "${fixture_root}/secrets" \
+    --manifest "${fixture_root}/release-manifest.json" \
+    --sync-proof "${fixture_root}/sync-proof.json" \
+    --rendered-root "${fixture_root}/rendered" \
+    --allow-dirty >/dev/null 2>&1; then
+    echo "pathful production OTLP endpoint was accepted: ${env_name}" >&2
+    exit 1
+  fi
+done
+
+cp -R "${fixture_root}/env" "${fixture_root}/unbounded-otel-resource-env"
+sed -i.bak 's/^OTEL_RESOURCE_ATTRIBUTES=.*/OTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync/' \
+  "${fixture_root}/unbounded-otel-resource-env/sync.env"
+rm "${fixture_root}/unbounded-otel-resource-env/sync.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/unbounded-otel-resource-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "incomplete Sync telemetry resource attributes were accepted" >&2
   exit 1
 fi
 
