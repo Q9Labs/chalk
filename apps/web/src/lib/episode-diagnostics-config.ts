@@ -28,7 +28,7 @@ export class EpisodeDiagnosticsConfigError extends Error {
 
 const includes = <T extends string>(values: readonly T[], value: string): value is T => (values as readonly string[]).includes(value);
 
-export const resolveEpisodeDiagnosticsConfig = (modeInput: string | undefined, environmentInput: string | undefined, hostedGatewayInput?: string): EpisodeDiagnosticsConfig => {
+export const resolveEpisodeDiagnosticsConfig = (modeInput: string | undefined, environmentInput: string | undefined, hostedGatewayInput?: string, productionOptInInput?: string): EpisodeDiagnosticsConfig => {
   const mode = modeInput?.trim() || "off";
   const environment = environmentInput?.trim() || "production";
 
@@ -38,14 +38,11 @@ export const resolveEpisodeDiagnosticsConfig = (modeInput: string | undefined, e
   if (!includes(EPISODE_DIAGNOSTICS_ENVIRONMENTS, environment)) {
     throw new EpisodeDiagnosticsConfigError(`CHALK_ENVIRONMENT must be one of ${EPISODE_DIAGNOSTICS_ENVIRONMENTS.join("|")}; received ${environment}`);
   }
-  if (environment === "production" && mode !== "off") {
-    throw new EpisodeDiagnosticsConfigError("Episode diagnostics must be off in production; the route and proxy are omitted from the build");
-  }
   if (mode === "localhost" && environment !== "localhost") {
     throw new EpisodeDiagnosticsConfigError("Episode diagnostics localhost mode requires CHALK_ENVIRONMENT=localhost");
   }
-  if (mode === "hosted" && environment !== "development" && environment !== "staging") {
-    throw new EpisodeDiagnosticsConfigError("Episode diagnostics hosted mode requires CHALK_ENVIRONMENT=development or staging");
+  if (mode === "hosted" && environment !== "development" && environment !== "staging" && !(environment === "production" && productionOptInInput === "true")) {
+    throw new EpisodeDiagnosticsConfigError("Episode diagnostics hosted mode requires CHALK_ENVIRONMENT=development or staging, or CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true in production");
   }
   if (mode === "hosted" && hostedGatewayInput?.trim() !== "verified") {
     throw new EpisodeDiagnosticsConfigError("Episode diagnostics hosted mode requires CHALK_EPISODE_DIAGNOSTICS_GATEWAY=verified after the same-origin operator gateway is configured");

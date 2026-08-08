@@ -81,7 +81,16 @@ func TestAcceptEventAndReferenceGrammar(t *testing.T) {
 	if parsed.Environment != EnvironmentDevelopment || parsed.Focus == nil || parsed.Focus.Kind != ReferenceFocusIssue || parsed.Cursor == nil || *parsed.Cursor != 9 {
 		t.Fatalf("round trip mismatch: %+v", parsed)
 	}
-	for _, malformed := range []string{"chalkdiag:v1:production:diag01", "chalkdiag:v1:development:diag01:span:x", "chalkdiag:v1:development:diag01@01", "chalkdiag:v1:development:diag01@9007199254740992"} {
+	productionReference := DiagnosticReference{Version: ContractVersion, Environment: EnvironmentProduction, DiagnosticID: "diag01"}
+	productionFormatted, err := FormatReference(productionReference)
+	if err != nil || productionFormatted != "chalkdiag:v1:production:diag01" {
+		t.Fatalf("format production reference = %q, %v", productionFormatted, err)
+	}
+	productionParsed, err := ParseReference(productionFormatted)
+	if err != nil || productionParsed != productionReference {
+		t.Fatalf("parse production reference = %+v, %v; want %+v", productionParsed, err, productionReference)
+	}
+	for _, malformed := range []string{"chalkdiag:v1:preview:diag01", "chalkdiag:v1:development:diag01:span:x", "chalkdiag:v1:development:diag01@01", "chalkdiag:v1:development:diag01@9007199254740992"} {
 		if _, err := ParseReference(malformed); err == nil {
 			t.Fatalf("malformed reference accepted: %s", malformed)
 		}

@@ -314,7 +314,7 @@ func diagnosticsOperatorTenantIDs(values []string) ([]string, error) {
 
 func validDiagnosticsOperatorEnvironment(environment string) bool {
 	switch environment {
-	case "development", "staging":
+	case "development", "staging", "production":
 		return true
 	default:
 		return false

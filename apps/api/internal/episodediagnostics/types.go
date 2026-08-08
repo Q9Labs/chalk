@@ -10,6 +10,7 @@ const (
 	EnvironmentLocalhost   Environment = "localhost"
 	EnvironmentDevelopment Environment = "development"
 	EnvironmentStaging     Environment = "staging"
+	EnvironmentProduction  Environment = "production"
 )
 
 type EventSource string

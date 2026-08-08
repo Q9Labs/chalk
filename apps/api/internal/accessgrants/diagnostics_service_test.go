@@ -192,7 +192,7 @@ func TestNewDiagnosticsAPIPrincipalBindsSource(t *testing.T) {
 		{name: "empty service", service: "", instanceID: "api-instance", generation: 1, environment: "localhost"},
 		{name: "empty instance", service: "api", instanceID: "", generation: 1, environment: "localhost"},
 		{name: "invalid generation", service: "api", instanceID: "api-instance", generation: 0, environment: "localhost"},
-		{name: "invalid environment", service: "api", instanceID: "api-instance", generation: 1, environment: "production"},
+		{name: "invalid environment", service: "api", instanceID: "api-instance", generation: 1, environment: "preview"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := accessgrants.NewDiagnosticsAPIPrincipal(test.service, test.instanceID, test.generation, test.environment); err == nil {

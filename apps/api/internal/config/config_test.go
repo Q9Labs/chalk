@@ -318,6 +318,89 @@ func TestLoadEpisodeDiagnosticsHostedMode(t *testing.T) {
 	}
 }
 
+func TestLoadEpisodeDiagnosticsHostedModeProductionOptIn(t *testing.T) {
+	setHostedEnvironment(t)
+	t.Setenv(config.APIEnvironment, "production")
+	t.Setenv(config.EpisodeDiagnosticsProductionOptIn, "true")
+	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
+	t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
+	setHostedDiagnosticsOperatorIdentity(t)
+	_, syncPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.SyncTokenAudience, "chalk-sync")
+	t.Setenv(config.SyncTokenIssuer, "https://api.chalk.test")
+	t.Setenv(config.SyncTokenKeyID, "sync-1")
+	t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(syncPrivateKey))
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load production config: %v", err)
+	}
+	if cfg.EpisodeDiagnostics.Mode != config.EpisodeDiagnosticsModeHosted || cfg.EpisodeDiagnostics.Environment != "production" {
+		t.Fatalf("diagnostic mode/environment = %q/%q", cfg.EpisodeDiagnostics.Mode, cfg.EpisodeDiagnostics.Environment)
+	}
+}
+
+func TestLoadEpisodeDiagnosticsHostedModeProductionOptInRequiresCompleteConfig(t *testing.T) {
+	setHostedEnvironment(t)
+	t.Setenv(config.APIEnvironment, "production")
+	t.Setenv(config.EpisodeDiagnosticsProductionOptIn, "true")
+	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
+	t.Setenv(config.EpisodeDiagnosticsHMACKey, "")
+	setHostedDiagnosticsOperatorIdentity(t)
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.EpisodeDiagnosticsHMACKey) {
+		t.Fatalf("load error = %v, want incomplete hosted diagnostics validation", err)
+	}
+}
+
+func TestLoadEpisodeDiagnosticsHostedModeProductionRequiresOptIn(t *testing.T) {
+	setHostedEnvironment(t)
+	t.Setenv(config.APIEnvironment, "production")
+	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
+	t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
+	setHostedDiagnosticsOperatorIdentity(t)
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.EpisodeDiagnosticsProductionOptIn) {
+		t.Fatalf("load error = %v, want production opt-in validation", err)
+	}
+}
+
+func TestLoadEpisodeDiagnosticsProductionOptInMatrix(t *testing.T) {
+	for _, optIn := range []string{"", "false", "TRUE", "1", " true"} {
+		t.Run("hosted/"+optIn, func(t *testing.T) {
+			setHostedEnvironment(t)
+			t.Setenv(config.APIEnvironment, "production")
+			t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
+			t.Setenv(config.EpisodeDiagnosticsProductionOptIn, optIn)
+			t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
+			setHostedDiagnosticsOperatorIdentity(t)
+
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.EpisodeDiagnosticsProductionOptIn) {
+				t.Fatalf("load error = %v, want exact production opt-in rejection", err)
+			}
+		})
+	}
+
+	t.Run("localhost/true", func(t *testing.T) {
+		clearEpisodeDiagnosticsEnv(t)
+		t.Setenv(config.APIEnvironment, "production")
+		t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+		t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
+		t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeLocalhost)
+		t.Setenv(config.EpisodeDiagnosticsProductionOptIn, "true")
+		t.Setenv(config.EpisodeDiagnosticsProducerToken, "local-producer")
+		t.Setenv(config.EpisodeDiagnosticsOperatorToken, "local-operator")
+		t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
+
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.EpisodeDiagnosticsMode) {
+			t.Fatalf("load error = %v, want localhost production rejection", err)
+		}
+	})
+}
+
 func TestLoadEpisodeDiagnosticsRejectsInvalidLocalAuthAndBounds(t *testing.T) {
 	tests := []struct {
 		name string
@@ -372,6 +455,7 @@ func clearEpisodeDiagnosticsEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{
 		config.EpisodeDiagnosticsMode,
+		config.EpisodeDiagnosticsProductionOptIn,
 		config.EpisodeDiagnosticsProducerToken,
 		config.EpisodeDiagnosticsOperatorToken,
 		config.EpisodeDiagnosticsOperatorIssuer,

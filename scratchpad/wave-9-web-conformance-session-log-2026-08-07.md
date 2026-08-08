@@ -37,3 +37,21 @@
 - Mapped malformed generated 2xx responses to `502` with `response.invalid` and added the malformed-200 regression.
 - Extended Space update duration inputs with typed null clear values and verified the exact normalized null body; the shared Go OptionalInt32 decoder accepts null for all three duration fields.
 - Verification passed: web 305 tests, web typecheck, diagnostics 36 tests, changed-file Oxfmt, Fallow diff audit exit 0, language ratchet, and diff check. The isolated remote checkout and task-specific local mirror were cleaned up.
+
+## 2026-08-07 20:28 Asia/Karachi
+
+- Implemented Wave 9 Lane D legal pages at `/privacy` and `/terms` with the supplied prose rendered as accessible markup, including the cookie table, internal Privacy Policy link, public/auth footer links, and removal of stale blank static artifacts.
+- Added the explicit `CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN` gate across Go API config, Sync runtime/service credentials, and the web resolver/gateway. Exact true values enable only hosted production diagnostics; localhost mode and all existing auth, origin, generation, host, and signing requirements remain enforced.
+- Added cross-component production acceptance, incomplete configuration, and absent/non-exact flag tests. No operator-facing docs under `docs/` or the diagnostics README contained the old production-forbidden wording.
+- Verification passed: web 315 tests, web typecheck, Go config tests, Sync runtime/service-credential tests (12), Oxfmt, Fallow diff audit, language ratchet, web production build, logged-out browser smoke, repository smart gate, and diff check.
+
+## 2026-08-07 21:02 Asia/Karachi
+
+- Started the Lane D review fix round after the reviewer found that production opt-in stopped at configuration parsing while deeper diagnostics constructors still rejected `production`, and that the five-row security matrix was incomplete.
+- Traced the closed environment contract through Go access grants and Episode Diagnostics validation, the shared TypeScript contracts, Sync runtime and service credentials, and the web resolver/gateway before patching.
+
+## 2026-08-07 21:18 Asia/Karachi
+
+- Extended the diagnostics environment contract with `production` across Go participant/service/operator credentials, Episode Diagnostics references, the shared TypeScript package, and Sync service credentials; retained production activation only in the Go, Sync, and web configuration gates.
+- Added the Go production configuration and HTTP-path test, exact-value matrix rows in all three runtimes, production reference round trips, and the two requested legal prose corrections.
+- Focused verification passed. The full local Go suite reached one unrelated Postgres integration failure because `127.0.0.1:5432` was unavailable; the remote M4 run was not started because its safety hook blocked the validated temporary-tree cleanup command before execution.

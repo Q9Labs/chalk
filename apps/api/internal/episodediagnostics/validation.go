@@ -633,7 +633,7 @@ func encodeCanonicalValue(value any) ([]byte, error) {
 var referencePattern = regexp.MustCompile(`^chalkdiag:v1:([a-z]+):([A-Za-z0-9][A-Za-z0-9_-]{0,127})(?::(op|issue|event):([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?(?:@([0-9]+))?$`)
 
 func validEnvironment(environment Environment) bool {
-	return environment == EnvironmentLocalhost || environment == EnvironmentDevelopment || environment == EnvironmentStaging
+	return environment == EnvironmentLocalhost || environment == EnvironmentDevelopment || environment == EnvironmentStaging || environment == EnvironmentProduction
 }
 func ValidEnvironment(environment Environment) bool { return validEnvironment(environment) }
 

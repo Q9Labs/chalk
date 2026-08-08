@@ -48,6 +48,7 @@ const (
 	DeadlineSchedulerBatch      = "CHALK_DEADLINE_SCHEDULER_BATCH"
 
 	EpisodeDiagnosticsMode                    = "CHALK_EPISODE_DIAGNOSTICS"
+	EpisodeDiagnosticsProductionOptIn         = "CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN"
 	EpisodeDiagnosticsProducerToken           = "CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN"
 	EpisodeDiagnosticsOperatorToken           = "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_TOKEN"
 	EpisodeDiagnosticsOperatorIssuer          = "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER"
@@ -643,11 +644,12 @@ func loadEpisodeDiagnosticsConfig(environment string, databaseURL string) (Episo
 	operatorAudience := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsOperatorAudience, ""))
 	operatorJWKS := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsOperatorJWKS, ""))
 	hmacKey := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsHMACKey, ""))
+	productionOptIn := envOrDefault(EpisodeDiagnosticsProductionOptIn, "") == "true"
 	serviceToken, err := loadEpisodeDiagnosticsServiceTokenConfig()
 	if err != nil {
 		return EpisodeDiagnosticsConfig{}, err
 	}
-	if err := validateEpisodeDiagnosticsAuth(environment, mode, producerToken, operatorToken, operatorIssuer, operatorAudience, operatorJWKS, hmacKey, serviceToken); err != nil {
+	if err := validateEpisodeDiagnosticsAuth(environment, mode, productionOptIn, producerToken, operatorToken, operatorIssuer, operatorAudience, operatorJWKS, hmacKey, serviceToken); err != nil {
 		return EpisodeDiagnosticsConfig{}, err
 	}
 
@@ -715,7 +717,7 @@ func loadEpisodeDiagnosticsConfig(environment string, databaseURL string) (Episo
 	}, nil
 }
 
-func validateEpisodeDiagnosticsAuth(environment string, mode string, producerToken string, operatorToken string, operatorIssuer string, operatorAudience string, operatorJWKS string, hmacKey string, serviceToken EpisodeDiagnosticsServiceTokenConfig) error {
+func validateEpisodeDiagnosticsAuth(environment string, mode string, productionOptIn bool, producerToken string, operatorToken string, operatorIssuer string, operatorAudience string, operatorJWKS string, hmacKey string, serviceToken EpisodeDiagnosticsServiceTokenConfig) error {
 	serviceConfigured := serviceToken.Issuer != ""
 	switch mode {
 	case EpisodeDiagnosticsModeOff:
@@ -742,8 +744,8 @@ func validateEpisodeDiagnosticsAuth(environment string, mode string, producerTok
 			return fmt.Errorf("%s is only supported when %s=hosted", EpisodeDiagnosticsServiceIssuer, EpisodeDiagnosticsMode)
 		}
 	case EpisodeDiagnosticsModeHosted:
-		if environment != "development" && environment != "staging" {
-			return fmt.Errorf("%s=hosted requires %s=development or staging", EpisodeDiagnosticsMode, APIEnvironment)
+		if environment != "development" && environment != "staging" && !(environment == "production" && productionOptIn) {
+			return fmt.Errorf("%s=hosted requires %s=development or staging, or %s=true in production", EpisodeDiagnosticsMode, APIEnvironment, EpisodeDiagnosticsProductionOptIn)
 		}
 		if hmacKey == "" || operatorIssuer == "" || operatorAudience == "" || operatorJWKS == "" || !serviceConfigured {
 			return fmt.Errorf("%s, %s, %s, %s, and dedicated service signing configuration must be set when %s=hosted", EpisodeDiagnosticsHMACKey, EpisodeDiagnosticsOperatorIssuer, EpisodeDiagnosticsOperatorAudience, EpisodeDiagnosticsOperatorJWKS, EpisodeDiagnosticsMode)

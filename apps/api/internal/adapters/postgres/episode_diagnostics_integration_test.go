@@ -190,6 +190,56 @@ func TestEpisodeDiagnosticsPostgresAppendProjectionFiltersAndExportOwnership(t *
 	}
 }
 
+func TestEpisodeDiagnosticsPostgresAcceptsProductionEnvironment(t *testing.T) {
+	pool := episodeDiagnosticsIntegrationPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	tenantID := newDiagnosticIntegrationID(t)
+	spaceID := newDiagnosticIntegrationID(t)
+	episodeID := newDiagnosticIntegrationID(t)
+	startedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
+
+	if _, err := pool.Exec(ctx, `insert into tenants (id, name) values ($1, $2)`, tenantID.Bytes(), "Episode diagnostics production constraint"); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, $2, $3, $4, 'cf_sfu')`, spaceID.Bytes(), "Episode diagnostics production constraint", tenantID.Bytes(), "episode-diagnostics-"+spaceID.String()[:8]); err != nil {
+		t.Fatalf("seed Space: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, started_at, config_snapshot) values ($1, 'active', $2, $3, $4, '{}'::jsonb)`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes(), startedAt); err != nil {
+		t.Fatalf("seed Episode: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+		_, _ = pool.Exec(cleanupCtx, `delete from episodes where tenant_id = $1`, tenantID.Bytes())
+		_, _ = pool.Exec(cleanupCtx, `delete from spaces where tenant_id = $1`, tenantID.Bytes())
+		_, _ = pool.Exec(cleanupCtx, `delete from tenants where id = $1`, tenantID.Bytes())
+	})
+
+	// Rolled back so the singleton ownership claim and diagnostics rows of
+	// other tests are untouched; the point is that both check constraints
+	// accept the production vocabulary added by the opt-in migration.
+	transaction, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = transaction.Rollback(ctx) }()
+	if _, err := transaction.Exec(ctx, `delete from diagnostic_environment_ownership`); err != nil {
+		t.Fatalf("clear ownership inside transaction: %v", err)
+	}
+	if _, err := transaction.Exec(ctx, `insert into diagnostic_environment_ownership (id, environment) values (1, 'production')`); err != nil {
+		t.Fatalf("ownership environment constraint rejects production: %v", err)
+	}
+	diagnosticID := newDiagnosticIntegrationID(t)
+	if _, err := transaction.Exec(ctx, `insert into episode_diagnostics (id, tenant_id, space_id, episode_id, environment, episode_started_at) values ($1, $2, $3, $4, 'production', $5)`, diagnosticID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), startedAt); err != nil {
+		t.Fatalf("diagnostics environment constraint rejects production: %v", err)
+	}
+	if err := transaction.Rollback(ctx); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+}
+
 func episodeDiagnosticsIntegrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	databaseURL := os.Getenv(episodeDiagnosticsTestDatabaseURL)

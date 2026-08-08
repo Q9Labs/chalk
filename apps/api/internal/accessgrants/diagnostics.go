@@ -243,7 +243,7 @@ func validDiagnosticsSubject(subject DiagnosticsSubject) bool {
 
 func validDiagnosticsEnvironment(environment string) bool {
 	switch environment {
-	case "localhost", "development", "staging":
+	case "localhost", "development", "staging", "production":
 		return true
 	default:
 		return false

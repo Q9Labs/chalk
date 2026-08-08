@@ -18,12 +18,12 @@ const localBrokerPort = process.env.CHALK_DEV_BROKER_PORT?.trim();
 const localBrokerTarget = process.env.CHALK_DEV_BROKER_ORIGIN?.trim() || (localBrokerPort ? `http://127.0.0.1:${localBrokerPort}` : "http://127.0.0.1:8787");
 const diagnosticsMode = process.env.CHALK_EPISODE_DIAGNOSTICS?.trim();
 const diagnosticsEnvironment = process.env.CHALK_ENVIRONMENT?.trim() || (diagnosticsMode === "localhost" ? "localhost" : undefined);
-const diagnosticsConfig = resolveEpisodeDiagnosticsConfig(diagnosticsMode, diagnosticsEnvironment, process.env.CHALK_EPISODE_DIAGNOSTICS_GATEWAY);
+const diagnosticsConfig = resolveEpisodeDiagnosticsConfig(diagnosticsMode, diagnosticsEnvironment, process.env.CHALK_EPISODE_DIAGNOSTICS_GATEWAY, process.env.CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN);
 
 const buildEpisodeDiagnosticsProxy = (environment: NodeJS.ProcessEnv): ProxyOptions | undefined => {
   const mode = environment.CHALK_EPISODE_DIAGNOSTICS?.trim();
   const runtimeEnvironment = environment.CHALK_ENVIRONMENT?.trim() || (mode === "localhost" ? "localhost" : undefined);
-  const resolved = resolveEpisodeDiagnosticsConfig(mode, runtimeEnvironment, environment.CHALK_EPISODE_DIAGNOSTICS_GATEWAY);
+  const resolved = resolveEpisodeDiagnosticsConfig(mode, runtimeEnvironment, environment.CHALK_EPISODE_DIAGNOSTICS_GATEWAY, environment.CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN);
   if (resolved.mode !== "localhost") return undefined;
 
   const operatorToken = environment.CHALK_EPISODE_DIAGNOSTICS_OPERATOR_TOKEN?.trim();

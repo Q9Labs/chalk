@@ -6,6 +6,7 @@ export type EpisodeDiagnosticsGatewayEnv = {
   CHALK_EPISODE_DIAGNOSTICS_SIGNED_DOWNLOAD_HOSTS?: string;
   CHALK_EPISODE_DIAGNOSTICS_GATEWAY?: string;
   CHALK_EPISODE_DIAGNOSTICS?: string;
+  CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN?: string;
   CHALK_ENVIRONMENT?: string;
 };
 
@@ -93,7 +94,9 @@ function validateRequest(request: Request, url: URL, env: EpisodeDiagnosticsGate
     if (!source) return errorResponse(403, "origin.required", "A same-origin request is required");
     if (!hasMatchingCsrfProof(request, csrfCookieName(url), CSRF_HEADER)) return errorResponse(403, "csrf.mismatch", "CSRF validation failed");
   }
-  if (env.CHALK_EPISODE_DIAGNOSTICS_GATEWAY?.trim() !== "verified" || env.CHALK_EPISODE_DIAGNOSTICS?.trim() !== "hosted" || !["development", "staging"].includes(env.CHALK_ENVIRONMENT?.trim() ?? "")) {
+  const environment = env.CHALK_ENVIRONMENT?.trim() ?? "";
+  const hostedEnvironmentAllowed = ["development", "staging"].includes(environment) || (environment === "production" && env.CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN === "true");
+  if (env.CHALK_EPISODE_DIAGNOSTICS_GATEWAY?.trim() !== "verified" || env.CHALK_EPISODE_DIAGNOSTICS?.trim() !== "hosted" || !hostedEnvironmentAllowed) {
     return errorResponse(503, "gateway.misconfigured", "Episode Diagnostics gateway is not enabled for this environment");
   }
   return undefined;
