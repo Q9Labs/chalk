@@ -217,9 +217,8 @@ export class FixtureMediaClient {
     connection.addEventListener("track", (event) => {
       const mid = event.transceiver.mid;
       const source = (mid ? peer.remoteByMid.get(mid) : undefined) ?? (event.track.kind === "audio" ? "microphone" : "camera");
-      const key = `${remote}:${source}`;
-      this.#received.set(key, { participantId: remote, source, publicationId: `${remote}|${source}`, track: event.track });
-      this.#reconcileRemoteSnapshot();
+      recordFixtureRemoteTrack(this.#received, { participantId: remote, source, publicationId: `${remote}|${source}`, track: event.track });
+      this.#publish();
     });
     return peer;
   }
@@ -267,12 +266,7 @@ export class FixtureMediaClient {
   }
 
   #reconcileRemoteSnapshot(): void {
-    const wanted = new Set(this.#remotePublications.map((item) => `${item.participantId}:${item.source}`));
-    for (const [key, remote] of this.#received) {
-      if (wanted.has(key)) continue;
-      releaseTrack(remote.track);
-      this.#received.delete(key);
-    }
+    reconcileFixtureRemoteTracks(this.#remotePublications, this.#received);
     this.#publish();
   }
 
@@ -297,8 +291,7 @@ export class FixtureMediaClient {
 
   #makeSnapshot(phase: CloudflareSFUSnapshot["connection"]["phase"], failure: CloudflareSFUSnapshot["failure"]): CloudflareSFUSnapshot {
     const localTracks: readonly CloudflareSFULocalTrack[] = [...this.#local].map(([source, local]) => ({ source, enabled: local.enabled, publicationId: local.enabled ? `${this.#bootstrap.connectionId}|${source}` : null, track: local.track }));
-    const wanted = new Set(this.#remotePublications.map((item) => `${item.participantId}:${item.source}`));
-    const remoteTracks = [...this.#received].filter(([key]) => wanted.has(key)).map(([, remote]) => remote);
+    const remoteTracks = projectFixtureRemoteTracks(this.#remotePublications, this.#received);
     return { connection: { phase, peerConnectionState: null, iceConnectionState: null }, cursor: null, localTracks, remoteTracks, failure };
   }
 
@@ -311,6 +304,24 @@ export class FixtureMediaClient {
   #emit(): void {
     for (const listener of this.#listeners) listener();
   }
+}
+
+export function reconcileFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: Map<string, CloudflareSFURemoteTrack>): void {
+  const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
+  for (const [key, remote] of received) {
+    if (wanted.has(key)) continue;
+    releaseTrack(remote.track);
+    received.delete(key);
+  }
+}
+
+export function recordFixtureRemoteTrack(received: Map<string, CloudflareSFURemoteTrack>, remote: CloudflareSFURemoteTrack): void {
+  received.set(`${remote.participantId}:${remote.source}`, remote);
+}
+
+export function projectFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: ReadonlyMap<string, CloudflareSFURemoteTrack>): readonly CloudflareSFURemoteTrack[] {
+  const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
+  return [...received].filter(([key]) => wanted.has(key)).map(([, remote]) => remote);
 }
 
 export function bindFixtureMediaClient(client: FixtureMediaClient) {

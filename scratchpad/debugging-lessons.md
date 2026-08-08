@@ -170,3 +170,11 @@ Persist each monitor result for auditability, then update the current projection
 only when its checked timestamp advances. Missing or stale rows are `unknown`,
 not healthy, and public responses should be built from an allowlisted catalog
 so internal monitor identity and failure detail never cross the boundary.
+
+## Explicit Orchestration Is A Role Boundary
+
+When the production owner asks for orchestration, keep the root thread out of
+execution detail. Give bounded discovery, reproduction, and implementation to
+Luna workers. The root thread owns the task map, seam decisions, integration,
+final verification, and production authorization. Do not drift back into
+hands-on diagnosis merely because a gate fails.
