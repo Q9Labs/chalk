@@ -1,6 +1,6 @@
 export const DIAGNOSTIC_CONTRACT_VERSION = 1 as const;
 
-export type Environment = "localhost" | "development" | "staging";
+export type Environment = "localhost" | "development" | "staging" | "production";
 export type DiagnosticEventSource = "ui" | "sdk" | "api" | "sync" | "rtc" | "provider" | "worker";
 export type DiagnosticEventState = "started" | "observed" | "succeeded" | "failed" | "cancelled" | "timed_out" | "not_observable" | "late_observed";
 export type CheckpointClass = "required" | "conditional" | "best_effort";

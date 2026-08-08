@@ -49,7 +49,8 @@ defmodule ChalkSync.Diagnostics.ServiceCredential do
     with true <- valid_issuer?(issuer),
          true <- safe_identifier?(key_id),
          {:ok, private_seed} <- private_seed(private_key),
-         true <- environment in ["localhost", "development", "staging"],
+         true <-
+           environment in ["localhost", "development", "staging", "production"],
          true <- safe_identifier?(instance_id),
          true <- is_integer(generation) and generation in 1..@maximum_generation,
          true <- is_function(clock, 0) do

@@ -10,6 +10,14 @@ describe("inspectDiagnostic", () => {
     fixture = undefined;
   });
 
+  function projectionFallbackFetch(upstreamFetch, transformRoot = (body) => body) {
+    return async (input, init) => {
+      if (new URL(String(input)).pathname.endsWith("/graph")) return new Response(JSON.stringify({ code: "not_found" }), { status: 404, headers: { "content-type": "application/json" } });
+      const response = await upstreamFetch(input, init);
+      return Response.json(transformRoot(await response.json()), { status: response.status });
+    };
+  }
+
   it("returns a bounded overview and resolves a focused operation", async () => {
     fixture = await createDiagnosticFixtureServer();
     const result = await inspectDiagnostic(fixture.reference("stalled", { kind: "op", id: "fixture-op-chat" }), { baseUrl: fixture.url, environment: fixture.environment, credential: fixture.credential });
@@ -27,6 +35,38 @@ describe("inspectDiagnostic", () => {
     expect(page.page.hasMore).toBe(true);
     const graph = await inspectDiagnostic(fixture.reference("stalled"), { baseUrl: fixture.url, environment: fixture.environment, credential: fixture.credential, query: "graph", format: "json" });
     expect(graph.projection.schemaVersion).toBe("GraphProjection/v1");
+  });
+
+  it("parses a bare unfocused snapshot for summaries and projection fallback", async () => {
+    fixture = await createDiagnosticFixtureServer();
+    const upstreamFetch = globalThis.fetch;
+    const fetch = projectionFallbackFetch(upstreamFetch, (body) => body.snapshot);
+
+    const summary = await inspectDiagnostic(fixture.reference("stalled"), { baseUrl: fixture.url, environment: fixture.environment, credential: fixture.credential, format: "json", fetch });
+    const graph = await inspectDiagnostic(fixture.reference("stalled"), { baseUrl: fixture.url, environment: fixture.environment, credential: fixture.credential, query: "graph", format: "json", fetch });
+
+    expect(summary.snapshot.schemaVersion).toBe("DiagnosticSnapshot/v1");
+    expect(graph.projection.schemaVersion).toBe("GraphProjection/v1");
+  });
+
+  it("parses a multi-element participants projection array", async () => {
+    fixture = await createDiagnosticFixtureServer();
+    const result = await inspectDiagnostic(fixture.reference("stalled"), { baseUrl: fixture.url, environment: fixture.environment, credential: fixture.credential, query: "participants", format: "json" });
+
+    expect(result.projection).toHaveLength(2);
+    expect(result.projection[0].schemaVersion).toBe("ParticipantProjection/v1");
+    expect(result.projection[1].schemaVersion).toBe("ParticipantProjection/v1");
+  });
+
+  it("parses the resolver envelope when the dedicated projection endpoint is unavailable", async () => {
+    fixture = await createDiagnosticFixtureServer();
+    const upstreamFetch = globalThis.fetch;
+    const fetch = projectionFallbackFetch(upstreamFetch);
+
+    const result = await inspectDiagnostic(fixture.reference("stalled"), { baseUrl: fixture.url, environment: fixture.environment, credential: fixture.credential, query: "graph", format: "json", fetch });
+
+    expect(result.projection.schemaVersion).toBe("GraphProjection/v1");
+    expect(result.projection.summary.nodeCount).toBeGreaterThan(0);
   });
 
   it("builds compact and copy-all brief outputs", async () => {

@@ -137,7 +137,7 @@ describe("EpisodeDiagnosticsApiClient", () => {
   });
 
   it("refreshes the CSRF token once when the account boundary rejects a mutation", async () => {
-    const fetch = mockFetchSequence(Response.json({ csrf_token: "stale-token" }), Response.json({ code: "csrf_mismatch", message: "Refresh CSRF" }, { status: 403 }), Response.json({ csrf_token: "fresh-token" }), Response.json(exportJobFixture()));
+    const fetch = mockFetchSequence(Response.json({ csrf_token: "stale-token" }), Response.json({ code: "csrf.mismatch", message: "Refresh CSRF" }, { status: 403 }), Response.json({ csrf_token: "fresh-token" }), Response.json(exportJobFixture()));
     const client = new EpisodeDiagnosticsApiClient({ fetch });
 
     await client.createExportJob(TEST_REFERENCE, 11);

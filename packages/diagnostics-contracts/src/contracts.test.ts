@@ -80,6 +80,12 @@ describe("references and action coverage", () => {
     expect(() => parseDiagnosticReference("chalkdiag:v1:development:diag01:span:abc")).toThrow();
   });
 
+  it("round-trips production references", () => {
+    const reference = { version: 1 as const, environment: "production" as const, diagnosticId: "diag01", cursor: 9 };
+    expect(formatDiagnosticReference(reference)).toBe("chalkdiag:v1:production:diag01@9");
+    expect(parseDiagnosticReference("chalkdiag:v1:production:diag01@9")).toEqual(reference);
+  });
+
   it("keeps whiteboard explicit and closes every action", () => {
     expect(validateActionCoverage().complete).toBe(true);
     expect(actionStatus("whiteboard.unsupported")).toBe("unsupported");

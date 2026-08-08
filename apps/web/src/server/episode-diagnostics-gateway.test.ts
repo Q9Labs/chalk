@@ -10,6 +10,12 @@ const env: EpisodeDiagnosticsGatewayEnv = {
   CHALK_ENVIRONMENT: "staging",
 };
 
+const productionEnv: EpisodeDiagnosticsGatewayEnv = {
+  ...env,
+  CHALK_ENVIRONMENT: "production",
+  CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN: "true",
+};
+
 function mockGatewayFetch(...responses: Response[]) {
   const fetcher = vi.fn();
   fetcher.mockResolvedValueOnce(Response.json({ user: { id: "account-1" } }));
@@ -24,6 +30,38 @@ function expectSafeDownloadResponse(response: Response, contentDisposition: stri
 }
 
 describe("Episode Diagnostics gateway", () => {
+  it("accepts a fully configured production hosted gateway with the explicit opt-in", async () => {
+    const fetcher = mockGatewayFetch(Response.json({ diagnostic_id: "chalkdiag:v1:production:diag01" }));
+    const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Aproduction%3Adiag01`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }), productionEnv, fetcher);
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects production hosted mode when the opt-in is absent", async () => {
+    const fetcher = vi.fn();
+    const response = await handleEpisodeDiagnosticsGateway(
+      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Aproduction%3Adiag01`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }),
+      { ...productionEnv, CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN: undefined },
+      fetcher,
+    );
+
+    expect(response.status).toBe(503);
+    expect(fetcher).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({ code: "gateway.misconfigured" });
+  });
+
+  it("keeps signed download host validation enabled in production", async () => {
+    const fetcher = mockGatewayFetch(new Response(null, { status: 302, headers: { Location: "https://downloads.chalk.test/diagnostics/job-1" } }));
+    const response = await handleEpisodeDiagnosticsGateway(
+      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Aproduction%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }),
+      { ...productionEnv, CHALK_EPISODE_DIAGNOSTICS_SIGNED_DOWNLOAD_HOSTS: undefined },
+      fetcher,
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ code: "download.misconfigured" });
+  });
+
   it("rejects a cross-origin request before account or diagnostic upstream calls", async () => {
     const fetcher = vi.fn();
     const response = await handleEpisodeDiagnosticsGateway(
@@ -36,7 +74,7 @@ describe("Episode Diagnostics gateway", () => {
 
     expect(response.status).toBe(403);
     expect(fetcher).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toEqual({ code: "origin_mismatch", message: "A same-origin request is required" });
+    await expect(response.json()).resolves.toEqual({ code: "origin.mismatch", message: "A same-origin request is required" });
   });
 
   it("requires the authenticated dashboard cookie", async () => {
@@ -174,7 +212,7 @@ describe("Episode Diagnostics gateway", () => {
     );
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ code: "csrf_mismatch", message: "CSRF validation failed" });
+    await expect(response.json()).resolves.toEqual({ code: "csrf.mismatch", message: "CSRF validation failed" });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -203,7 +241,7 @@ describe("Episode Diagnostics gateway", () => {
     const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }), env, fetcher);
 
     expect(response.status).toBe(502);
-    await expect(response.json()).resolves.toMatchObject({ code: "download_redirect_invalid" });
+    await expect(response.json()).resolves.toMatchObject({ code: "download.redirect_invalid" });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -225,6 +263,6 @@ describe("Episode Diagnostics gateway", () => {
     const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01`, { headers: { Cookie: "__Host-chalk_account=account-token" } }), { ...env, CHALK_EPISODE_DIAGNOSTICS_GATEWAY: undefined }, vi.fn());
 
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({ code: "gateway_misconfigured" });
+    await expect(response.json()).resolves.toMatchObject({ code: "gateway.misconfigured" });
   });
 });

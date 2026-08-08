@@ -6,6 +6,7 @@ end
 
 diagnostics_mode = System.get_env("CHALK_EPISODE_DIAGNOSTICS", "off")
 api_environment = System.get_env("CHALK_API_ENV", "production")
+production_opt_in? = System.get_env("CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN") == "true"
 
 diagnostics_mode =
   case diagnostics_mode do
@@ -20,8 +21,9 @@ diagnostics_mode =
       :localhost
 
     "hosted" ->
-      if api_environment not in ["development", "staging"] do
-        raise "CHALK_EPISODE_DIAGNOSTICS=hosted requires CHALK_API_ENV=development or staging"
+      if api_environment not in ["development", "staging"] and
+           not (api_environment == "production" and production_opt_in?) do
+        raise "CHALK_EPISODE_DIAGNOSTICS=hosted requires CHALK_API_ENV=development or staging, or CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true in production"
       end
 
       :hosted
@@ -31,7 +33,9 @@ diagnostics_mode =
   end
 
 if api_environment == "production" and diagnostics_mode != :off do
-  raise "Episode diagnostics must be off in production"
+  unless diagnostics_mode == :hosted and production_opt_in? do
+    raise "Episode diagnostics must be off in production unless CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true"
+  end
 end
 
 if diagnostics_mode == :off do

@@ -60,6 +60,8 @@ export function Closing() {
             <a href="#sdk">SDK</a>
             <a href="#performance">Performance</a>
             <a href="#self-host">Self-host</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
           </nav>
           <span>© 2026 Q9 Labs · Under active development</span>
         </div>

@@ -72,6 +72,11 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
           <p className="auth-switch">
             {signingUp ? "Already have an Account?" : "New to Chalk?"} <Link to={signingUp ? "/sign-in" : "/sign-up"}>{signingUp ? "Sign in" : "Create one"}</Link>
           </p>
+          <p className="auth-legal-links">
+            <Link to="/privacy">Privacy</Link>
+            <span aria-hidden="true">·</span>
+            <Link to="/terms">Terms</Link>
+          </p>
         </form>
       </section>
     </main>

@@ -2,7 +2,7 @@ import { ENVIRONMENTS, UNKNOWN_REASONS, isEnvironment, isSafeIdClass, MAX_SAFE_I
 import { checkEnum, checkSafeToken, finishValidation, isNonNegativeInteger, isRecord, isString, parseOrThrow, requireString, type ValidationIssue, type ValidationResult } from "./runtime.js";
 import type { AlternateSafeId, DiagnosticReference, DiagnosticReferenceFocusKind, SafeIdentifier } from "./types.js";
 
-const REFERENCE_PATTERN = /^chalkdiag:v1:([a-z]+):([A-Za-z0-9][A-Za-z0-9_-]{0,127})(?::(op|issue|event):([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?(?:@([0-9]+))?$/;
+const REFERENCE_PATTERN = /^chalkdiag:v1:(localhost|development|staging|production):([A-Za-z0-9][A-Za-z0-9_-]{0,127})(?::(op|issue|event):([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?(?:@([0-9]+))?$/;
 const FOCUS_KINDS = ["op", "issue", "event"] as const satisfies readonly DiagnosticReferenceFocusKind[];
 
 export const DIAGNOSTIC_REFERENCE_PREFIX = "chalkdiag:v1:";

@@ -149,3 +149,10 @@ component used by the product, assert meaningful status semantics, and verify
 the result at desktop and mobile widths. Preview chrome also needs a tested
 restore affordance above product-owned mobile docks; DOM presence alone does
 not prove that the control is visible or usable.
+
+## Browser Boundaries Need Contract Adapters
+
+Generated API clients validate the upstream wire contract, but a browser
+boundary may deliberately remove credentials or add CSRF and cookie behavior.
+Keep those security transformations at the boundary adapter, then use the
+generated client for resource calls whose response shape remains exact.

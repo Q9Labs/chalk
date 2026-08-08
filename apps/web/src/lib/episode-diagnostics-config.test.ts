@@ -16,6 +16,14 @@ describe("resolveEpisodeDiagnosticsConfig", () => {
     });
   });
 
+  it("accepts hosted diagnostics in production only with the exact opt-in", () => {
+    expect(resolveEpisodeDiagnosticsConfig("hosted", "production", "verified", "true")).toEqual({
+      enabled: true,
+      mode: "hosted",
+      environment: "production",
+    });
+  });
+
   it("defaults to the fail-closed production configuration", () => {
     expect(resolveEpisodeDiagnosticsConfig(undefined, undefined)).toEqual({
       enabled: false,
@@ -33,6 +41,18 @@ describe("resolveEpisodeDiagnosticsConfig", () => {
     ["off", "preview"],
   ])("refuses mode %s in environment %s", (mode, environment) => {
     expect(() => resolveEpisodeDiagnosticsConfig(mode, environment)).toThrow(EpisodeDiagnosticsConfigError);
+  });
+
+  it("rejects production localhost mode even with the exact hosted opt-in", () => {
+    expect(() => resolveEpisodeDiagnosticsConfig("localhost", "production", undefined, "true")).toThrow(EpisodeDiagnosticsConfigError);
+  });
+
+  it.each([undefined, "false", "TRUE", "1", " true "])("rejects production hosted mode without the exact opt-in: %s", (productionOptIn) => {
+    expect(() => resolveEpisodeDiagnosticsConfig("hosted", "production", "verified", productionOptIn)).toThrow("CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true");
+  });
+
+  it("preserves hosted configuration errors after the production opt-in", () => {
+    expect(() => resolveEpisodeDiagnosticsConfig("hosted", "production", undefined, "true")).toThrow("CHALK_EPISODE_DIAGNOSTICS_GATEWAY=verified");
   });
 
   it("refuses hosted mode until the environment gateway is explicitly verified", () => {

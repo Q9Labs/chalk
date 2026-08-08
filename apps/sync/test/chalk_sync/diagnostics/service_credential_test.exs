@@ -78,6 +78,16 @@ defmodule ChalkSync.Diagnostics.ServiceCredentialTest do
              ServiceCredential.new(Keyword.put(base, :generation, 2_147_483_649))
   end
 
+  test "accepts production as a well-formed hosted credential environment" do
+    {public_key, private_seed} = :crypto.generate_key(:eddsa, :ed25519)
+    base = valid_options(private_seed <> public_key)
+
+    assert {:ok, credential} =
+             ServiceCredential.new(Keyword.put(base, :environment, "production"))
+
+    assert credential.environment == "production"
+  end
+
   test "fails closed when the signing clock is unavailable" do
     {credential, _public_key, _private_key} = credential_fixture(clock: fn -> :unavailable end)
     assert {:error, :credential_unavailable} = ServiceCredential.issue(credential)

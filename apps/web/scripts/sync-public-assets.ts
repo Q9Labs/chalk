@@ -12,6 +12,4 @@ function writePublicFile(relativePath: string, contents: string) {
   writeFileSync(outputPath, contents);
 }
 
-writePublicFile("privacy/index.html", blankHtml);
-writePublicFile("terms/index.html", blankHtml);
 writePublicFile("privacy-policy/index.html", blankHtml);

@@ -18,6 +18,7 @@ defmodule ChalkSync.RuntimeConfigTest do
     CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE
     CHALK_SYNC_PROVIDER_BRIDGE_CAFILE
     CHALK_EPISODE_DIAGNOSTICS
+    CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN
     CHALK_API_ENV
     CHALK_API_URL
     CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS
@@ -134,6 +135,95 @@ defmodule ChalkSync.RuntimeConfigTest do
            ]
   end
 
+  test "hosted diagnostics are accepted in production only with the explicit opt-in" do
+    {public_key, private_seed} = :crypto.generate_key(:eddsa, :ed25519)
+
+    config =
+      read_config([
+        {"CHALK_EPISODE_DIAGNOSTICS", "hosted"},
+        {"CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN", "true"},
+        {"CHALK_API_ENV", "production"},
+        {"CHALK_API_URL", "https://api.example.test"},
+        {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", "api.example.test"},
+        {"CHALK_SYNC_INSTANCE_ID", "sync-runtime-production-test"},
+        {"CHALK_SYNC_GENERATION", "4"},
+        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER", "https://identity.example.test"},
+        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID", "sync-diagnostics-1"},
+        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY",
+         encoded_private_key(private_seed, public_key)}
+      ])
+
+    assert config[:episode_diagnostics][:mode] == :hosted
+    assert config[:episode_diagnostics][:credential].environment == "production"
+  end
+
+  test "production hosted diagnostics still requires complete hosted configuration" do
+    error =
+      assert_raise RuntimeError, fn ->
+        read_config([
+          {"CHALK_EPISODE_DIAGNOSTICS", "hosted"},
+          {"CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN", "true"},
+          {"CHALK_API_ENV", "production"},
+          {"CHALK_API_URL", "https://api.example.test"},
+          {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", "api.example.test"},
+          {"CHALK_SYNC_INSTANCE_ID", "sync-runtime-production-test"},
+          {"CHALK_SYNC_GENERATION", "4"}
+        ])
+      end
+
+    assert error.message ==
+             "CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER must be set for hosted diagnostics"
+  end
+
+  test "production hosted diagnostics names the opt-in when it is absent" do
+    error =
+      assert_raise RuntimeError, fn ->
+        read_config([{"CHALK_EPISODE_DIAGNOSTICS", "hosted"}, {"CHALK_API_ENV", "production"}])
+      end
+
+    assert error.message ==
+             "CHALK_EPISODE_DIAGNOSTICS=hosted requires CHALK_API_ENV=development or staging, or CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true in production"
+  end
+
+  test "production hosted diagnostics requires the exact opt-in and never enables localhost mode" do
+    {public_key, private_seed} = :crypto.generate_key(:eddsa, :ed25519)
+    private_key = encoded_private_key(private_seed, public_key)
+
+    hosted_base = [
+      {"CHALK_EPISODE_DIAGNOSTICS", "hosted"},
+      {"CHALK_API_ENV", "production"},
+      {"CHALK_API_URL", "https://api.example.test"},
+      {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", "api.example.test"},
+      {"CHALK_SYNC_INSTANCE_ID", "sync-runtime-production-test"},
+      {"CHALK_SYNC_GENERATION", "4"},
+      {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER", "https://identity.example.test"},
+      {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID", "sync-diagnostics-1"},
+      {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY", private_key}
+    ]
+
+    for opt_in <- ["", "false", "TRUE", "1", " true"] do
+      assert_raise RuntimeError,
+                   "CHALK_EPISODE_DIAGNOSTICS=hosted requires CHALK_API_ENV=development or staging, or CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true in production",
+                   fn ->
+                     read_config(
+                       hosted_base ++ [{"CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN", opt_in}]
+                     )
+                   end
+    end
+
+    assert_raise RuntimeError,
+                 "CHALK_EPISODE_DIAGNOSTICS=localhost requires CHALK_API_ENV=local",
+                 fn ->
+                   read_config([
+                     {"CHALK_EPISODE_DIAGNOSTICS", "localhost"},
+                     {"CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN", "true"},
+                     {"CHALK_API_ENV", "production"},
+                     {"CHALK_API_URL", "https://api.example.test"},
+                     {"CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN", "producer-secret"}
+                   ])
+                 end
+  end
+
   defp base_env do
     [
       {"MIX_ENV", "prod"},
@@ -153,6 +243,7 @@ defmodule ChalkSync.RuntimeConfigTest do
       {"CHALK_SYNC_BIND_IP", nil},
       {"CHALK_SYNC_PORT", nil},
       {"CHALK_EPISODE_DIAGNOSTICS", nil},
+      {"CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN", nil},
       {"CHALK_API_ENV", nil},
       {"CHALK_API_URL", nil},
       {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", nil},

@@ -1,6 +1,6 @@
 import type { CheckpointClass, DiagnosticEventSource, DiagnosticEventState, Environment, SafeUnknownReason } from "./types.js";
 
-export const ENVIRONMENTS = ["localhost", "development", "staging"] as const satisfies readonly Environment[];
+export const ENVIRONMENTS = ["localhost", "development", "staging", "production"] as const satisfies readonly Environment[];
 export const EVENT_SOURCES = ["ui", "sdk", "api", "sync", "rtc", "provider", "worker"] as const satisfies readonly DiagnosticEventSource[];
 export const EVENT_STATES = ["started", "observed", "succeeded", "failed", "cancelled", "timed_out", "not_observable", "late_observed"] as const satisfies readonly DiagnosticEventState[];
 export const CHECKPOINT_CLASSES = ["required", "conditional", "best_effort"] as const satisfies readonly CheckpointClass[];
