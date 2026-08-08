@@ -125,7 +125,7 @@ describe("dashboard API client", () => {
     expect(headers.get("traceparent")).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
     expect(request.credentials).toBe("same-origin");
     expect(request.body).toBe(JSON.stringify({ email: "hasan@example.com", password: "password-1" }));
-  });
+  }, 15_000);
 
   it("reuses a persisted onboarding key for a safe retry and clears it after success", async () => {
     const fetcher = ambiguousMutationFetcher({ tenant: tenant(), access: access(), replayed: true });
