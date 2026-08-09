@@ -220,6 +220,7 @@ declare
     repaired_receipt_count bigint;
     repaired_receipt_bytes bigint;
     old_shape boolean;
+    episode_ending_intent boolean;
 begin
     if to_regclass('episodes') is null
         or to_regclass('sync_episode_control') is null
@@ -231,7 +232,7 @@ begin
 
     for control in
         select candidate.*, episode.config_snapshot, episode.deadline_at,
-            episode.deadline_generation
+            episode.deadline_generation, episode.status as episode_status
         from sync_episode_control candidate
         join episodes episode
           on episode.tenant_id = candidate.tenant_id
@@ -324,7 +325,12 @@ begin
         end if;
 
         -- Validate pending intents before clearing their stale invalid_state
-        -- retry marker.  No unsupported intent is made runnable by this repair.
+        -- retry marker.  A participant_joined intent that Sync already
+        -- rejected with episode_ending is the one terminal exception: the
+        -- Episode is ending/ended, so Sync's episode-ended product cleanup
+        -- would supersede the intent and complete its joining Participant.
+        -- Keep every other error fail-closed rather than guessing whether a
+        -- retry is safe.
         for intent in
             select intent_row.*
             from sync_lifecycle_intents intent_row
@@ -332,8 +338,18 @@ begin
               and intent_row.episode_id = control.episode_id
             order by intent_row.created_at, intent_row.lifecycle_intent_id
         loop
+            episode_ending_intent :=
+                intent.status = 'pending'
+                and intent.intent_name = 'participant_joined'
+                and intent.last_error_code = 'episode_ending'
+                and control.episode_status in ('ending', 'ended');
+
             if intent.status <> 'pending'
-                or (intent.last_error_code is not null and intent.last_error_code <> 'invalid_state') then
+                or (
+                    intent.last_error_code is not null
+                    and intent.last_error_code <> 'invalid_state'
+                    and not coalesce(episode_ending_intent, false)
+                ) then
                 raise exception 'Episode v1 snapshot repair found a non-retryable lifecycle intent % for Episode %', intent.lifecycle_intent_id, control.episode_id;
             end if;
 
@@ -372,6 +388,41 @@ begin
                     or participant_row.name is distinct from intent.payload ->> 'display_name'
                     or participant_row.role is distinct from intent.payload ->> 'role' then
                     raise exception 'Episode v1 snapshot repair found an unsupported participant_joined product row for intent %', intent.lifecycle_intent_id;
+                end if;
+
+                if episode_ending_intent then
+                    -- Match Sync's complete_external_episode path.  The
+                    -- Episode-ending intent is not applied to the v1
+                    -- control; its joining Participant is terminalized and
+                    -- the rejected intent is marked superseded atomically.
+                    update participants
+                    set status = 'left',
+                        left_at = coalesce(left_at, now()),
+                        updated_at = now()
+                    where tenant_id = control.tenant_id
+                      and space_id = control.space_id
+                      and episode_id = control.episode_id
+                      and id = intent.participant_id
+                      and generation = intent.participant_generation
+                      and status <> 'left';
+                    if not found then
+                        raise exception 'Episode v1 snapshot repair could not complete ending Participant for intent %', intent.lifecycle_intent_id;
+                    end if;
+
+                    update sync_lifecycle_intents
+                    set status = 'superseded',
+                        terminal_reason = 'superseded_by_episode_end',
+                        completed_at = now(),
+                        attempt_count = least(attempt_count::bigint + 1, 2147483647)::integer,
+                        last_error_code = null
+                    where tenant_id = control.tenant_id
+                      and space_id = control.space_id
+                      and episode_id = control.episode_id
+                      and lifecycle_intent_id = intent.lifecycle_intent_id
+                      and status = 'pending';
+                    if not found then
+                        raise exception 'Episode v1 snapshot repair could not supersede ending intent %', intent.lifecycle_intent_id;
+                    end if;
                 end if;
             elsif intent.intent_name = 'admission_requested' then
                 if intent.participant_id is not null

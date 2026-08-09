@@ -10,7 +10,7 @@ export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}"
 
 if [[ "${CHALK_EPISODE_SNAPSHOT_REPAIR_PROOF_CHILD:-0}" != "1" ]]; then
   export CHALK_GATE_POSTGRES_MIGRATION_TARGET=20260809160000
-  for proof_case in valid unsupported_snapshot unsupported_intent; do
+  for proof_case in valid episode_ending unsupported_snapshot unsupported_intent unsupported_error; do
     CHALK_EPISODE_SNAPSHOT_REPAIR_PROOF_CHILD=1 \
       CHALK_EPISODE_SNAPSHOT_REPAIR_PROOF_CASE="${proof_case}" \
       "${repository_root}/scripts/gates/with-postgres.sh" -- \
@@ -147,33 +147,49 @@ values (
 );
 SQL
 
-if [[ "${proof_case}" == "unsupported_snapshot" || "${proof_case}" == "unsupported_intent" ]]; then
+if [[ "${proof_case}" == "episode_ending" ]]; then
+  psql -c "update episodes set status = 'ending' where tenant_id = '${tenant_id}' and id = '${episode_id}'"
+  psql -c "update sync_lifecycle_intents set last_error_code = 'episode_ending' where tenant_id = '${tenant_id}' and episode_id = '${episode_id}' and lifecycle_intent_id = '${intent_id}'"
+elif [[ "${proof_case}" == "unsupported_error" ]]; then
+  psql -c "update sync_lifecycle_intents set last_error_code = 'stale_participant_generation' where tenant_id = '${tenant_id}' and episode_id = '${episode_id}' and lifecycle_intent_id = '${intent_id}'"
+fi
+
+if [[ "${proof_case}" == "unsupported_snapshot" || "${proof_case}" == "unsupported_intent" || "${proof_case}" == "unsupported_error" ]]; then
   if [[ "${proof_case}" == "unsupported_snapshot" ]]; then
     psql -c "update sync_episode_control set folded_state = folded_state || '{\"future_authority\":true}'::jsonb where tenant_id = '${tenant_id}' and episode_id = '${episode_id}'"
     expected_error="unsupported revision-zero snapshot"
-  else
+  elif [[ "${proof_case}" == "unsupported_intent" ]]; then
     psql -c "update sync_lifecycle_intents set payload = payload || '{\"future_field\":true}'::jsonb where tenant_id = '${tenant_id}' and episode_id = '${episode_id}'"
     expected_error="unsupported participant_joined intent"
+  else
+    expected_error="non-retryable lifecycle intent"
   fi
   set +e
   migration_output="$(goose up 2>&1)"
   migration_status=$?
   set -e
   if [[ "${migration_status}" -eq 0 ]]; then
-    echo "Expected unsupported revision-zero snapshot to abort the repair migration." >&2
+    echo "Expected ${proof_case} to abort the repair migration." >&2
     exit 1
   fi
   if [[ "${migration_output}" != *"${expected_error}"* ]]; then
-    echo "Unsupported snapshot failed without the repair preflight error:" >&2
+    echo "${proof_case} failed without the repair preflight error:" >&2
     echo "${migration_output}" >&2
     exit 1
   fi
   if [[ "${proof_case}" == "unsupported_snapshot" ]]; then
     unchanged="$(psql -At -c "select folded_state ? 'future_authority' from sync_episode_control where tenant_id = '${tenant_id}' and episode_id = '${episode_id}'")"
-  else
+  elif [[ "${proof_case}" == "unsupported_intent" ]]; then
     unchanged="$(psql -At -c "select payload ? 'future_field' from sync_lifecycle_intents where tenant_id = '${tenant_id}' and episode_id = '${episode_id}'")"
+  else
+    unchanged="$(psql -At -F '|' -c "select intent.status, intent.last_error_code, participant.status from sync_lifecycle_intents intent join participants participant on participant.tenant_id = intent.tenant_id and participant.space_id = intent.space_id and participant.episode_id = intent.episode_id and participant.id = intent.participant_id where intent.lifecycle_intent_id = '${intent_id}'")"
   fi
-  if [[ "${unchanged}" != "t" ]]; then
+  if [[ "${proof_case}" == "unsupported_error" ]]; then
+    if [[ "${unchanged}" != "pending|stale_participant_generation|joining" ]]; then
+      echo "Unsupported lifecycle error changed the intent or Participant after the failed migration: ${unchanged}" >&2
+      exit 1
+    fi
+  elif [[ "${unchanged}" != "t" ]]; then
     echo "Unsupported input was changed after the failed migration." >&2
     exit 1
   fi
@@ -226,6 +242,48 @@ end;
 \$\$;
 SQL
 
+if [[ "${proof_case}" == "episode_ending" ]]; then
+  psql <<SQL
+do \$\$
+declare
+    intent_status text;
+    terminal_reason text;
+    completed_at timestamptz;
+    attempt_count integer;
+    participant_status text;
+    participant_left_at timestamptz;
+    episode_status text;
+begin
+    select intent_row.status, intent_row.terminal_reason,
+        intent_row.completed_at, intent_row.attempt_count
+    into intent_status, terminal_reason, completed_at, attempt_count
+    from sync_lifecycle_intents intent_row
+    where intent_row.lifecycle_intent_id = '${intent_id}';
+    if intent_status <> 'superseded'
+        or terminal_reason <> 'superseded_by_episode_end'
+        or completed_at is null
+        or attempt_count <> 3 then
+        raise exception 'episode_ending intent was not superseded with the Sync terminal contract';
+    end if;
+
+    select status, left_at into participant_status, participant_left_at
+    from participants
+    where id = '${participant_id}';
+    if participant_status <> 'left' or participant_left_at is null then
+        raise exception 'episode_ending Participant was not completed consistently';
+    end if;
+
+    select status into episode_status
+    from episodes
+    where id = '${episode_id}';
+    if episode_status <> 'ending' then
+        raise exception 'episode_ending fixture changed the Episode lifecycle status';
+    end if;
+end;
+\$\$;
+SQL
+fi
+
 set +e
 down_output="$(goose down 2>&1)"
 down_status=$?
@@ -240,4 +298,4 @@ if [[ "${down_output}" != *"canonical control integrity cannot return"* ]]; then
   exit 1
 fi
 
-echo "episode control snapshot repair valid-shape proof passed"
+echo "episode control snapshot repair ${proof_case} proof passed"
