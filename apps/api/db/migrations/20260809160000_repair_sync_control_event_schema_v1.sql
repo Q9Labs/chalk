@@ -164,10 +164,79 @@ as $$
 $$;
 -- +goose StatementEnd
 
--- The bridge already rewrote legacy keys and names.  This validator accepts
--- only the target event vocabulary and exact payload shapes.  It also keeps
--- the migration independent from permissive JSON casts: malformed values
--- return false and are rejected by the preflight below.
+-- The bridge already rewrote legacy keys and names.  The v3 participant_joined
+-- payload also carries its bounded `eligible_roles` authority field; validate
+-- that field against the immutable Episode role policy before removing only
+-- this v3-only key. This validator keeps the migration independent from
+-- permissive JSON casts: malformed values return false and are rejected by the
+-- preflight below.
+-- +goose StatementBegin
+create function __chalk_repair_sync_v1_valid_legacy_eligible_roles(
+    payload jsonb,
+    role_capabilities jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+as $$
+declare
+    eligible_roles jsonb;
+    item jsonb;
+    role_name text;
+    selected_role text;
+    seen_roles text[] := '{}'::text[];
+    selected_role_seen boolean := false;
+begin
+    -- The v3 bridge preserves this one authority field. Validate the whole
+    -- legacy payload before removing only `eligible_roles` below.
+    if not __chalk_repair_sync_v1_exact_keys(
+        payload,
+        array['admission_revision', 'display_name', 'eligible_roles', 'participant_id', 'role']
+    )
+        or jsonb_typeof(role_capabilities) <> 'object'
+        or not __chalk_repair_sync_v1_uuid(payload ->> 'participant_id')
+        or not __chalk_repair_sync_v1_string(payload -> 'display_name', 1, 256)
+        or not __chalk_repair_sync_v1_string(payload -> 'role', 1, 64)
+        or not __chalk_repair_sync_v1_positive_integer(payload -> 'admission_revision') then
+        return false;
+    end if;
+
+    selected_role := payload ->> 'role';
+    if not (role_capabilities ? selected_role) then
+        return false;
+    end if;
+
+    eligible_roles := payload -> 'eligible_roles';
+    if jsonb_typeof(eligible_roles) <> 'array'
+        or jsonb_array_length(eligible_roles) not between 1 and 3 then
+        return false;
+    end if;
+
+    for item in select value from jsonb_array_elements(eligible_roles) loop
+        if jsonb_typeof(item) <> 'string'
+            or not __chalk_repair_sync_v1_string(item, 1, 64) then
+            return false;
+        end if;
+        role_name := item #>> '{}';
+        if not (role_capabilities ? role_name)
+            or role_name = any(seen_roles) then
+            return false;
+        end if;
+        seen_roles := array_append(seen_roles, role_name);
+        if role_name = selected_role then
+            selected_role_seen := true;
+        end if;
+    end loop;
+
+    return selected_role_seen;
+exception
+    when others then
+        return false;
+end;
+$$;
+-- +goose StatementEnd
+
 -- +goose StatementBegin
 create function __chalk_repair_sync_v1_valid_event_payload(event_name text, payload jsonb)
 returns boolean
@@ -644,6 +713,7 @@ declare
     control record;
     event_row record;
     state jsonb;
+    translated_payload jsonb;
     event_digest bytea;
     initial_policy text;
     initial_roles jsonb;
@@ -699,8 +769,24 @@ begin
     if exists (
         select 1
         from sync_control_events event
+        join sync_episode_control candidate
+          on candidate.tenant_id = event.tenant_id
+         and candidate.episode_id = event.episode_id
+        join episodes episode
+          on episode.tenant_id = candidate.tenant_id
+         and episode.space_id = candidate.space_id
+         and episode.id = candidate.episode_id
         where event.event_schema_version = 3
-          and not __chalk_repair_sync_v1_valid_event_payload(event.event_name, event.payload)
+          and not (
+              __chalk_repair_sync_v1_valid_event_payload(event.event_name, event.payload)
+              or (
+                  event.event_name = 'participant_joined'
+                  and __chalk_repair_sync_v1_valid_legacy_eligible_roles(
+                      event.payload,
+                      episode.config_snapshot -> 'roles'
+                  )
+              )
+          )
     ) then
         raise exception 'Sync v1 event repair found an unsupported bridged event payload';
     end if;
@@ -782,28 +868,42 @@ begin
                 raise exception 'Sync v1 event repair found a revision gap for Episode %', control.episode_id;
             end if;
 
+            translated_payload := event_row.payload;
+            if event_row.event_schema_version = 3
+                and event_row.event_name = 'participant_joined'
+                and event_row.payload ? 'eligible_roles' then
+                if not __chalk_repair_sync_v1_valid_legacy_eligible_roles(
+                    event_row.payload,
+                    control.config_snapshot -> 'roles'
+                ) then
+                    raise exception 'Sync v1 event repair found an unsupported eligible_roles contract for Episode %', control.episode_id;
+                end if;
+                translated_payload := event_row.payload - 'eligible_roles';
+            end if;
+
             state := __chalk_repair_sync_v1_apply_event(
                 state,
                 control.episode_id,
                 event_row.event_name,
-                event_row.payload
+                translated_payload
             );
             event_digest := __chalk_repair_sync_v1_state_digest(state);
 
             update sync_control_events
-            set event_schema_version = 1,
+            set payload = translated_payload,
+                event_schema_version = 1,
                 resulting_state_digest = event_digest,
                 encoded_bytes = __chalk_repair_sync_v1_event_bytes(
-                    event_id,
-                    base_revision,
-                    revision,
-                    event_name,
-                    payload,
-                    command_id,
-                    lifecycle_intent_id,
-                    external_operation_id,
-                    actor_participant_id,
-                    actor_generation,
+                    event_row.event_id,
+                    event_row.base_revision,
+                    event_row.revision,
+                    event_row.event_name,
+                    translated_payload,
+                    event_row.command_id,
+                    event_row.lifecycle_intent_id,
+                    event_row.external_operation_id,
+                    event_row.actor_participant_id,
+                    event_row.actor_generation,
                     1,
                     event_digest
                 )
@@ -941,6 +1041,7 @@ drop function __chalk_repair_sync_v1_event_bytes(uuid, bigint, bigint, text, jso
 drop function __chalk_repair_sync_v1_apply_event(jsonb, uuid, text, jsonb);
 drop function __chalk_repair_sync_v1_sort_array(jsonb, text);
 drop function __chalk_repair_sync_v1_valid_event_payload(text, jsonb);
+drop function __chalk_repair_sync_v1_valid_legacy_eligible_roles(jsonb, jsonb);
 drop function __chalk_repair_sync_v1_valid_role_capabilities(jsonb);
 drop function __chalk_repair_sync_v1_string(jsonb, integer, integer);
 drop function __chalk_repair_sync_v1_positive_integer(jsonb);

@@ -10,7 +10,7 @@ export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}"
 
 if [[ "${CHALK_SYNC_RETAINED_EVENT_REPAIR_PROOF_CHILD:-0}" != "1" ]]; then
   export CHALK_GATE_POSTGRES_MIGRATION_TARGET=20260808150000
-  for proof_case in valid unsupported_payload; do
+  for proof_case in valid unsupported_payload mismatched_eligible_roles; do
     CHALK_SYNC_RETAINED_EVENT_REPAIR_PROOF_CHILD=1 \
       CHALK_SYNC_RETAINED_EVENT_REPAIR_PROOF_CASE="${proof_case}" \
       "${repository_root}/scripts/gates/with-postgres.sh" -- \
@@ -102,6 +102,7 @@ values (
     '{
       "roles": {
         "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand"],
+        "moderator": ["subscribe", "sendChat"],
         "observer": ["subscribe"]
       },
       "admission_policy": {"mode": "open"},
@@ -152,6 +153,7 @@ values (
       "recording": null,
       "role_capabilities": {
         "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand"],
+        "moderator": ["subscribe", "sendChat"],
         "observer": ["subscribe"]
       },
       "state_schema_version": 1,
@@ -169,6 +171,7 @@ values (
           "recording": null,
           "role_capabilities": {
             "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand"],
+            "moderator": ["subscribe", "sendChat"],
             "observer": ["subscribe"]
           },
           "state_schema_version": 1,
@@ -198,7 +201,8 @@ values
         'participant_id', '${participant_id}',
         'display_name', 'Custom Facilitator',
         'role', 'facilitator',
-        'admission_revision', 1
+        'admission_revision', 1,
+        'eligible_roles', jsonb_build_array('facilitator', 'moderator', 'observer')
     ),
     '${participant_id}', 1, 'repair-fixture-cmd-0001',
     3, decode(repeat('ab', 32), 'hex'), 1
@@ -242,20 +246,26 @@ fi
 
 if [[ "${proof_case}" == "unsupported_payload" ]]; then
   psql -c "update sync_control_events set payload = payload || '{\"unsupported\":true}'::jsonb where tenant_id = '${tenant_id}' and episode_id = '${episode_id}' and revision = 1"
+elif [[ "${proof_case}" == "mismatched_eligible_roles" ]]; then
+  psql -c "update sync_control_events set payload = jsonb_set(payload, '{eligible_roles}', '[\"moderator\",\"observer\"]'::jsonb) where tenant_id = '${tenant_id}' and episode_id = '${episode_id}' and revision = 1"
 fi
 
 set +e
-migration_output="$(goose up 2>&1)"
+migration_output="$(goose up-to 20260809160000 2>&1)"
 migration_status=$?
 set -e
 
-if [[ "${proof_case}" == "unsupported_payload" ]]; then
+if [[ "${proof_case}" == "unsupported_payload" || "${proof_case}" == "mismatched_eligible_roles" ]]; then
   if [[ "${migration_status}" -eq 0 ]]; then
-    echo "Expected unsupported v3 payload to abort the repair migration." >&2
+    echo "Expected ${proof_case} to abort the repair migration." >&2
     exit 1
   fi
-  if [[ "${migration_output}" != *"unsupported bridged event payload"* ]]; then
-    echo "Unsupported payload failed without the repair preflight error:" >&2
+  expected_error="unsupported bridged event payload"
+  if [[ "${proof_case}" == "mismatched_eligible_roles" ]]; then
+    expected_error="unsupported bridged event payload"
+  fi
+  if [[ "${migration_output}" != *"${expected_error}"* ]]; then
+    echo "${proof_case} failed without the repair preflight error:" >&2
     echo "${migration_output}" >&2
     exit 1
   fi
@@ -269,7 +279,7 @@ if [[ "${proof_case}" == "unsupported_payload" ]]; then
     echo "Goose advanced after rejected repair: ${version}" >&2
     exit 1
   fi
-  echo "Sync retained-event repair proof passed: unsupported payload aborted atomically at Goose ${version}."
+  echo "Sync retained-event repair proof passed: ${proof_case} aborted atomically at Goose ${version}."
   exit 0
 fi
 
@@ -282,6 +292,12 @@ fi
 schema_versions="$(psql -At -c "select string_agg(event_schema_version::text, ',' order by revision) from sync_control_events where tenant_id = '${tenant_id}' and episode_id = '${episode_id}'")"
 if [[ "${schema_versions}" != "1,1,1" ]]; then
   echo "Repair did not rewrite every event schema version: ${schema_versions}" >&2
+  exit 1
+fi
+
+legacy_payload_keys="$(psql -At -c "select count(*) from sync_control_events where tenant_id = '${tenant_id}' and episode_id = '${episode_id}' and payload ? 'eligible_roles'")"
+if [[ "${legacy_payload_keys}" != "0" ]]; then
+  echo "Repair retained the v3-only eligible_roles key in translated events: ${legacy_payload_keys}" >&2
   exit 1
 fi
 
@@ -305,6 +321,7 @@ with expected(revision, state) as (
         'recording', null,
         'role_capabilities', jsonb_build_object(
             'facilitator', jsonb_build_array('publishAudio', 'publishVideo', 'subscribe', 'raiseHand'),
+            'moderator', jsonb_build_array('subscribe', 'sendChat'),
             'observer', jsonb_build_array('subscribe')
         ),
         'state_schema_version', 1,
@@ -320,6 +337,7 @@ with expected(revision, state) as (
         'recording', null,
         'role_capabilities', jsonb_build_object(
             'facilitator', jsonb_build_array('publishAudio', 'publishVideo', 'subscribe', 'raiseHand'),
+            'moderator', jsonb_build_array('subscribe', 'sendChat'),
             'observer', jsonb_build_array('subscribe')
         ),
         'state_schema_version', 1,
@@ -335,6 +353,7 @@ with expected(revision, state) as (
         'recording', null,
         'role_capabilities', jsonb_build_object(
             'facilitator', jsonb_build_array('publishAudio', 'publishVideo', 'subscribe', 'raiseHand'),
+            'moderator', jsonb_build_array('subscribe', 'sendChat'),
             'observer', jsonb_build_array('subscribe')
         ),
         'state_schema_version', 1,
