@@ -181,7 +181,10 @@ defmodule ChalkSync.Retention.CleanupWorker do
   end
 
   defp verify_history(transaction, candidate) do
-    state = Reducer.new(UUID.load!(candidate.episode_id))
+    state =
+      Reducer.new(UUID.load!(candidate.episode_id), %{
+        config_snapshot: candidate.config_snapshot
+      })
 
     with {:ok, state, event_count, event_bytes} <-
            fold_event_pages(transaction, candidate, state, 0, 0),
@@ -325,6 +328,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
          tenant_id,
          space_id,
          episode_id,
+         config_snapshot,
          control_revision,
          folded_state,
          state_schema_version,
@@ -342,6 +346,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
       tenant_id: tenant_id,
       space_id: space_id,
       episode_id: episode_id,
+      config_snapshot: config_snapshot,
       control_revision: control_revision,
       folded_state: folded_state,
       state_schema_version: state_schema_version,

@@ -16,6 +16,7 @@ defmodule ChalkSync.Retention.SQL do
       control.tenant_id,
       control.space_id,
       control.episode_id,
+      episode.config_snapshot,
       control.control_revision,
       control.folded_state,
       control.state_schema_version,
