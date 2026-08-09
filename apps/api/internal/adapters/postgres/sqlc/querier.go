@@ -82,7 +82,7 @@ type Querier interface {
 	CreateRecording(ctx context.Context, arg CreateRecordingParams) (Recording, error)
 	CreateRecordingReservation(ctx context.Context, arg CreateRecordingReservationParams) (CreateRecordingReservationRow, error)
 	CreateRequestedTranscription(ctx context.Context, arg CreateRequestedTranscriptionParams) (Transcription, error)
-	CreateSpace(ctx context.Context, arg CreateSpaceParams) (Space, error)
+	CreateSpace(ctx context.Context, arg CreateSpaceParams) (CreateSpaceRow, error)
 	CreateSpaceMember(ctx context.Context, arg CreateSpaceMemberParams) (SpaceMember, error)
 	CreateSpaceRole(ctx context.Context, arg CreateSpaceRoleParams) (SpaceRole, error)
 	CreateSyncEpisodeControl(ctx context.Context, arg CreateSyncEpisodeControlParams) (SyncEpisodeControl, error)

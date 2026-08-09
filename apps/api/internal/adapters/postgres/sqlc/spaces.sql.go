@@ -278,23 +278,22 @@ returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, ad
     returning id
 )
 select
-    spaces.id,
-    spaces.name,
-    spaces.tenant_id,
-    spaces.slug,
-    spaces.media_plane,
-    spaces.metadata,
-    spaces.recurring_policy,
-    spaces.admission_policy,
-    spaces.default_episode_duration_seconds,
-    spaces.maximum_episode_duration_seconds,
-    spaces.linger_window_seconds,
-    spaces.created_by_user_id,
-    spaces.updated_at,
-    spaces.created_at,
-    spaces.archived_at
-from spaces
-join inserted on inserted.id = spaces.id
+    inserted.id,
+    inserted.name,
+    inserted.tenant_id,
+    inserted.slug,
+    inserted.media_plane,
+    inserted.metadata,
+    inserted.recurring_policy,
+    inserted.admission_policy,
+    inserted.default_episode_duration_seconds,
+    inserted.maximum_episode_duration_seconds,
+    inserted.linger_window_seconds,
+    inserted.created_by_user_id,
+    inserted.updated_at,
+    inserted.created_at,
+    inserted.archived_at
+from inserted
 `
 
 type CreateSpaceParams struct {
@@ -312,7 +311,25 @@ type CreateSpaceParams struct {
 	CreatedByUserID               pgtype.UUID `json:"created_by_user_id"`
 }
 
-func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Space, error) {
+type CreateSpaceRow struct {
+	ID                            pgtype.UUID        `json:"id"`
+	Name                          string             `json:"name"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	Slug                          string             `json:"slug"`
+	MediaPlane                    string             `json:"media_plane"`
+	Metadata                      []byte             `json:"metadata"`
+	RecurringPolicy               []byte             `json:"recurring_policy"`
+	AdmissionPolicy               []byte             `json:"admission_policy"`
+	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
+	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (CreateSpaceRow, error) {
 	row := q.db.QueryRow(ctx, createSpace,
 		arg.ID,
 		arg.Name,
@@ -327,7 +344,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Space
 		arg.LingerWindowSeconds,
 		arg.CreatedByUserID,
 	)
-	var i Space
+	var i CreateSpaceRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,

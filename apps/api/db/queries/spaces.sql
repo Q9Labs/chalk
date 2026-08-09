@@ -86,23 +86,22 @@ returning *
     returning id
 )
 select
-    spaces.id,
-    spaces.name,
-    spaces.tenant_id,
-    spaces.slug,
-    spaces.media_plane,
-    spaces.metadata,
-    spaces.recurring_policy,
-    spaces.admission_policy,
-    spaces.default_episode_duration_seconds,
-    spaces.maximum_episode_duration_seconds,
-    spaces.linger_window_seconds,
-    spaces.created_by_user_id,
-    spaces.updated_at,
-    spaces.created_at,
-    spaces.archived_at
-from spaces
-join inserted on inserted.id = spaces.id;
+    inserted.id,
+    inserted.name,
+    inserted.tenant_id,
+    inserted.slug,
+    inserted.media_plane,
+    inserted.metadata,
+    inserted.recurring_policy,
+    inserted.admission_policy,
+    inserted.default_episode_duration_seconds,
+    inserted.maximum_episode_duration_seconds,
+    inserted.linger_window_seconds,
+    inserted.created_by_user_id,
+    inserted.updated_at,
+    inserted.created_at,
+    inserted.archived_at
+from inserted;
 
 -- name: SeedDefaultSpaceRoles :exec
 insert into space_roles (id, tenant_id, space_id, name, capabilities)

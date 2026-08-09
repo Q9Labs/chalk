@@ -71,7 +71,7 @@ func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input space
 		}
 		return spaces.Space{}, err
 	}
-	space := mapSpace(row)
+	space := mapCreatedSpace(row)
 	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
 		TenantID:     input.TenantID,
 		EventName:    "space.created",

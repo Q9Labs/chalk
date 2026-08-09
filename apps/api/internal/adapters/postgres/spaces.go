@@ -20,7 +20,7 @@ type SpaceRepository struct {
 }
 
 type spaceQuerier interface {
-	CreateSpace(ctx context.Context, arg sqlc.CreateSpaceParams) (sqlc.Space, error)
+	CreateSpace(ctx context.Context, arg sqlc.CreateSpaceParams) (sqlc.CreateSpaceRow, error)
 	ListSpaceRoles(ctx context.Context, arg sqlc.ListSpaceRolesParams) ([]sqlc.SpaceRole, error)
 	GetTenantSpace(ctx context.Context, arg sqlc.GetTenantSpaceParams) (sqlc.Space, error)
 	ListTenantSpaces(ctx context.Context, arg sqlc.ListTenantSpacesParams) ([]sqlc.Space, error)
@@ -50,7 +50,7 @@ func (r SpaceRepository) CreateSpace(ctx context.Context, input spaces.CreateSpa
 		return spaces.Space{}, fmt.Errorf("create space: %w", err)
 	}
 
-	return r.withSpaceRoles(ctx, mapSpace(space))
+	return r.withSpaceRoles(ctx, mapCreatedSpace(space))
 }
 
 // CreateSpaceIdempotent persists the request reservation and Space in the
@@ -239,6 +239,26 @@ func optionalInt32(value spaces.OptionalInt32) int32 {
 }
 
 func mapSpace(space sqlc.Space) spaces.Space {
+	return spaces.Space{
+		ID:                            utilities.IDFromBytes(space.ID.Bytes),
+		Name:                          space.Name,
+		TenantID:                      utilities.IDFromBytes(space.TenantID.Bytes),
+		Slug:                          space.Slug,
+		MediaPlane:                    space.MediaPlane,
+		Metadata:                      jsonRaw(space.Metadata),
+		RecurringPolicy:               jsonRaw(space.RecurringPolicy),
+		AdmissionPolicy:               jsonRaw(space.AdmissionPolicy),
+		DefaultEpisodeDurationSeconds: space.DefaultEpisodeDurationSeconds,
+		MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds,
+		LingerWindowSeconds:           space.LingerWindowSeconds,
+		ArchivedAt:                    nullableTimestamp(space.ArchivedAt),
+		CreatedByUserID:               nullableID(space.CreatedByUserID),
+		UpdatedAt:                     timestamp(space.UpdatedAt),
+		CreatedAt:                     timestamp(space.CreatedAt),
+	}
+}
+
+func mapCreatedSpace(space sqlc.CreateSpaceRow) spaces.Space {
 	return spaces.Space{
 		ID:                            utilities.IDFromBytes(space.ID.Bytes),
 		Name:                          space.Name,

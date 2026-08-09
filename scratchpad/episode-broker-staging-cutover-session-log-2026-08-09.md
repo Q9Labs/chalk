@@ -1,0 +1,4 @@
+# Episode broker staging cutover session log
+
+[2026-08-09T10:40:00+05:00] Read the repository protocol, glossary, episode-broker contracts, bootstrap operator path, and Cloudflare staging notes. The legacy route remains `chalkmeet.com/local-chalk/*` on `chalk-meeting-broker`; the new Worker exists without a route and has a distinct EpisodeLease Durable Object namespace. No production route or legacy resource changed.
+[2026-08-09T15:55:00+05:00] The approved bootstrap retry reached the migrated database but failed with `create space: no rows in result set`. The generated Space CTE selected the base table after a data-modifying CTE insert, so PostgreSQL's statement snapshot hid the new row. The query now returns the `inserted` CTE directly, with regenerated sqlc and adapter mappings. The broker deployment remains paused until this API hotfix is live.

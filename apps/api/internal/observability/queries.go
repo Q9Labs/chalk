@@ -97,7 +97,7 @@ func (q operationQuerier) CreateRecording(ctx context.Context, arg sqlc.CreateRe
 	return recording, err
 }
 
-func (q operationQuerier) CreateSpace(ctx context.Context, arg sqlc.CreateSpaceParams) (sqlc.Space, error) {
+func (q operationQuerier) CreateSpace(ctx context.Context, arg sqlc.CreateSpaceParams) (sqlc.CreateSpaceRow, error) {
 	startedAt := time.Now()
 	space, err := q.next.CreateSpace(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "CreateSpace", startedAt, err)
