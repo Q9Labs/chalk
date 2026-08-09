@@ -1,0 +1,5 @@
+2026-08-09T10:54:22Z Started Sync invalid-handshake boundary hotfix; scope is HTTP router/transport and focused tests only.
+2026-08-09T11:02:25Z Added guarded WebSocket upgrade validation, safe 426/400 JSON boundary responses with propagated correlation headers, and focused router tests including real Bandit HTTP/1.1/101 paths. Focused 5-test router suite and combined 21-test Sync transport suite pass.
+2026-08-09T11:02:30Z Boundary evidence: WebSockAdapter validation rejects plain HTTP/1.1 requests with ; the router now handles that result before the adapter can raise UpgradeError.
+2026-08-09T11:02:42Z Correction: the exact dependency message is: connection header must contain upgrade; the router handles this result before the adapter can raise UpgradeError.
+2026-08-09T11:17:39Z Full staged smart gate reached Sync correctness; 405 tests ran, 4 excluded, and one CoordinatorTest outbound-ready timeout failed. Focused router/transport tests remain green; no unrelated test code was changed.
