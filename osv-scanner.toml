@@ -1,9 +1,9 @@
 [[IgnoredVulns]]
 id = "GHSA-5p2g-fcmc-qvqq"
 ignoreUntil = 2026-10-08
-reason = "image-size 1.2.1 is a build-time dependency of metro (React Native/Expo toolchain) with no fixed release in metro's supported range. It parses only local project image assets during mobile builds, never untrusted input. Revisit when metro ships a fixed image-size or OSV publishes a fix path."
+reason = "image-size 2.0.2 is patched locally in patches/image-size@2.0.2.patch; upstream has no fixed release. It is a build-time dependency of metro (React Native/Expo toolchain) and parses local project image assets, never untrusted input. Revisit when image-size ships an upstream fix or metro moves to it."
 
 [[IgnoredVulns]]
 id = "GHSA-w3rx-r6r6-pgpr"
 ignoreUntil = 2026-10-08
-reason = "Same image-size 1.2.1 build-time metro dependency as GHSA-5p2g-fcmc-qvqq; local project assets only, no untrusted input at build time."
+reason = "Same locally patched image-size 2.0.2 build-time metro dependency as GHSA-5p2g-fcmc-qvqq; local project assets only, no untrusted input at build time. Revisit when image-size ships an upstream fix or metro moves to it."

@@ -73,6 +73,7 @@
     "static:semgrep": "bash scripts/gates/semgrep.sh",
     "security:secrets": "bash scripts/gates/gitleaks.sh",
     "security:osv": "bash scripts/gates/osv-scanner.sh",
+    "security:image-size": "node --test scripts/security/image-size-patch.test.mjs",
     "deps:syncpack": "syncpack lint",
     "test:presence": "node scripts/gates/test-presence.mjs",
     "test:coverage": "turbo test -- --coverage",
