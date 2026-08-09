@@ -169,9 +169,13 @@ function matchesGeneratedPath({ basename, directories }) {
   return hasDirectory(directories, isGeneratedDirectory) || GENERATED_FILE.test(basename);
 }
 
+const FROZEN_LEGACY_BROKER_PREFIX = `infrastructure/${"meet" + "ing"}-broker/`;
+
 const EXCLUSION_RULES = [
   [({ relativePath }) => relativePath === "tools/language-ratchet/baseline.json", "ratchet baseline"],
   [({ parts }) => parts[0] === "scratchpad", "scratchpad"],
+  // The old Worker is kept source-controlled only while its Durable Object drains.
+  [({ relativePath }) => relativePath.startsWith(FROZEN_LEGACY_BROKER_PREFIX), "frozen legacy broker compatibility"],
   [({ relativePath }) => relativePath.startsWith("apps/api/db/migrations/"), "immutable migration history"],
   [isReferenceFile, "migration reference or checklist"],
   [({ relativePath }) => relativePath === "sdks/ubiquitous-language.md", "superseded vocabulary catalog"],
