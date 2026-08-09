@@ -17,6 +17,8 @@ defmodule ChalkSync.Retention.SQL do
       control.space_id,
       control.episode_id,
       episode.config_snapshot,
+      episode.deadline_at,
+      episode.deadline_generation,
       control.control_revision,
       control.folded_state,
       control.state_schema_version,
@@ -92,6 +94,18 @@ defmodule ChalkSync.Retention.SQL do
     order by episode.ended_at, control.tenant_id, control.episode_id
     limit $3
     for update of control skip locked
+    """
+  end
+
+  def has_deadline_transition? do
+    """
+    select exists (
+      select 1
+      from sync_control_events
+      where tenant_id = $1
+        and episode_id = $2
+        and event_name = 'deadline_changed'
+    )
     """
   end
 

@@ -10,7 +10,7 @@ export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}"
 
 if [[ "${CHALK_SYNC_RETAINED_EVENT_REPAIR_PROOF_CHILD:-0}" != "1" ]]; then
   export CHALK_GATE_POSTGRES_MIGRATION_TARGET=20260808150000
-  for proof_case in valid unsupported_payload mismatched_eligible_roles; do
+  for proof_case in valid unsupported_payload mismatched_eligible_roles mismatched_deadline; do
     CHALK_SYNC_RETAINED_EVENT_REPAIR_PROOF_CHILD=1 \
       CHALK_SYNC_RETAINED_EVENT_REPAIR_PROOF_CASE="${proof_case}" \
       "${repository_root}/scripts/gates/with-postgres.sh" -- \
@@ -28,6 +28,9 @@ tenant_id='00000000-0000-4000-8000-000000000001'
 space_id='00000000-0000-4000-8000-000000000002'
 episode_id='00000000-0000-4000-8000-000000000003'
 participant_id='00000000-0000-4000-8000-000000000004'
+deadline_at='2026-08-08T12:34:56.789Z'
+deadline_at_ms='1786192496789'
+deadline_generation='7'
 
 # This is the same bounded sorted-object encoding used by the bridge and the
 # Sync reducer's CanonicalJSON digest. It stays in the fixture so assertions
@@ -90,7 +93,8 @@ insert into spaces (id, name, tenant_id, slug, media_plane)
 values ('${space_id}', 'Sync Retention Proof', '${tenant_id}', 'sync-retention-proof', 'cf_sfu');
 
 insert into episodes (
-    id, status, space_id, tenant_id, started_at, ended_at, config_snapshot, end_reason
+    id, status, space_id, tenant_id, started_at, ended_at, config_snapshot, end_reason,
+    deadline_at, deadline_generation
 )
 values (
     '${episode_id}',
@@ -110,7 +114,9 @@ values (
       "maximum_episode_duration_seconds": 86400,
       "linger_window_seconds": 0
     }'::jsonb,
-    'explicit'
+    'explicit',
+    '${deadline_at}'::timestamptz,
+    ${deadline_generation}
 );
 
 insert into participants (
@@ -147,8 +153,8 @@ values (
       "admission_policy": "open",
       "admission_requests": [],
       "control_revision": 3,
-      "deadline_at_ms": 1,
-      "deadline_generation": 1,
+      "deadline_at_ms": ${deadline_at_ms},
+      "deadline_generation": ${deadline_generation},
       "participants": [],
       "recording": null,
       "role_capabilities": {
@@ -165,8 +171,8 @@ values (
           "admission_policy": "open",
           "admission_requests": [],
           "control_revision": 3,
-          "deadline_at_ms": 1,
-          "deadline_generation": 1,
+          "deadline_at_ms": ${deadline_at_ms},
+          "deadline_generation": ${deadline_generation},
           "participants": [],
           "recording": null,
           "role_capabilities": {
@@ -248,6 +254,8 @@ if [[ "${proof_case}" == "unsupported_payload" ]]; then
   psql -c "update sync_control_events set payload = payload || '{\"unsupported\":true}'::jsonb where tenant_id = '${tenant_id}' and episode_id = '${episode_id}' and revision = 1"
 elif [[ "${proof_case}" == "mismatched_eligible_roles" ]]; then
   psql -c "update sync_control_events set payload = jsonb_set(payload, '{eligible_roles}', '[\"moderator\",\"observer\"]'::jsonb) where tenant_id = '${tenant_id}' and episode_id = '${episode_id}' and revision = 1"
+elif [[ "${proof_case}" == "mismatched_deadline" ]]; then
+  psql -c "update sync_episode_control set folded_state = jsonb_set(folded_state, '{deadline_at_ms}', to_jsonb((${deadline_at_ms} + 1)::bigint)) where tenant_id = '${tenant_id}' and episode_id = '${episode_id}'"
 fi
 
 set +e
@@ -255,14 +263,14 @@ migration_output="$(goose up-to 20260809160000 2>&1)"
 migration_status=$?
 set -e
 
-if [[ "${proof_case}" == "unsupported_payload" || "${proof_case}" == "mismatched_eligible_roles" ]]; then
+if [[ "${proof_case}" == "unsupported_payload" || "${proof_case}" == "mismatched_eligible_roles" || "${proof_case}" == "mismatched_deadline" ]]; then
   if [[ "${migration_status}" -eq 0 ]]; then
     echo "Expected ${proof_case} to abort the repair migration." >&2
     exit 1
   fi
   expected_error="unsupported bridged event payload"
-  if [[ "${proof_case}" == "mismatched_eligible_roles" ]]; then
-    expected_error="unsupported bridged event payload"
+  if [[ "${proof_case}" == "mismatched_deadline" ]]; then
+    expected_error="fold diverges from the Episode control snapshot"
   fi
   if [[ "${migration_output}" != *"${expected_error}"* ]]; then
     echo "${proof_case} failed without the repair preflight error:" >&2
@@ -301,6 +309,12 @@ if [[ "${legacy_payload_keys}" != "0" ]]; then
   exit 1
 fi
 
+deadline_checks="$(psql -At -c "select (folded_state ->> 'deadline_at_ms') || ':' || (folded_state ->> 'deadline_generation') || ':' || (extract(epoch from deadline_at) * 1000)::bigint || ':' || deadline_generation from sync_episode_control control join episodes episode on episode.tenant_id = control.tenant_id and episode.space_id = control.space_id and episode.id = control.episode_id where control.tenant_id = '${tenant_id}' and control.episode_id = '${episode_id}'")"
+if [[ "${deadline_checks}" != "${deadline_at_ms}:${deadline_generation}:${deadline_at_ms}:${deadline_generation}" ]]; then
+  echo "Repair did not preserve the persisted Episode deadline contract: ${deadline_checks}" >&2
+  exit 1
+fi
+
 digest_checks="$(psql -At <<SQL
 with expected(revision, state) as (
     values
@@ -308,8 +322,8 @@ with expected(revision, state) as (
         'admission_policy', 'open',
         'admission_requests', '[]'::jsonb,
         'control_revision', 1,
-        'deadline_at_ms', 1,
-        'deadline_generation', 1,
+        'deadline_at_ms', ${deadline_at_ms},
+        'deadline_generation', ${deadline_generation},
         'participants', jsonb_build_array(jsonb_build_object(
             'participant_id', '${participant_id}',
             'display_name', 'Custom Facilitator',
@@ -331,8 +345,8 @@ with expected(revision, state) as (
         'admission_policy', 'open',
         'admission_requests', '[]'::jsonb,
         'control_revision', 2,
-        'deadline_at_ms', 1,
-        'deadline_generation', 1,
+        'deadline_at_ms', ${deadline_at_ms},
+        'deadline_generation', ${deadline_generation},
         'participants', '[]'::jsonb,
         'recording', null,
         'role_capabilities', jsonb_build_object(
@@ -347,8 +361,8 @@ with expected(revision, state) as (
         'admission_policy', 'open',
         'admission_requests', '[]'::jsonb,
         'control_revision', 3,
-        'deadline_at_ms', 1,
-        'deadline_generation', 1,
+        'deadline_at_ms', ${deadline_at_ms},
+        'deadline_generation', ${deadline_generation},
         'participants', '[]'::jsonb,
         'recording', null,
         'role_capabilities', jsonb_build_object(

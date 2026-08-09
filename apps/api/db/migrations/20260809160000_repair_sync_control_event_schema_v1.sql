@@ -717,6 +717,8 @@ declare
     event_digest bytea;
     initial_policy text;
     initial_roles jsonb;
+    initial_deadline_at_ms bigint;
+    initial_deadline_generation bigint;
     expected_snapshot jsonb;
     expected_digest bytea;
     expected_snapshot_bytes bigint;
@@ -811,7 +813,8 @@ begin
     end if;
 
     for control in
-        select candidate.*, episode.config_snapshot
+        select candidate.*, episode.config_snapshot, episode.deadline_at,
+            episode.deadline_generation
         from sync_episode_control candidate
         join episodes episode
           on episode.tenant_id = candidate.tenant_id
@@ -843,12 +846,23 @@ begin
             raise exception 'Sync v1 event repair found an unsupported admission policy for Episode %', control.episode_id;
         end if;
 
+        if control.deadline_at is null
+            or control.deadline_at <> date_trunc('milliseconds', control.deadline_at)
+            or extract(epoch from control.deadline_at) * 1000 < 1
+            or control.deadline_generation is null
+            or control.deadline_generation < 1 then
+            raise exception 'Sync v1 event repair found an unsupported deadline for Episode %', control.episode_id;
+        end if;
+
+        initial_deadline_at_ms := floor(extract(epoch from control.deadline_at) * 1000)::bigint;
+        initial_deadline_generation := control.deadline_generation;
+
         state := jsonb_build_object(
             'admission_policy', initial_policy,
             'admission_requests', '[]'::jsonb,
             'control_revision', 0,
-            'deadline_at_ms', 1,
-            'deadline_generation', 1,
+            'deadline_at_ms', initial_deadline_at_ms,
+            'deadline_generation', initial_deadline_generation,
             'participants', '[]'::jsonb,
             'recording', null,
             'role_capabilities', initial_roles,

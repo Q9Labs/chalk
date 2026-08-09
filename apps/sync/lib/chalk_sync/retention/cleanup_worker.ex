@@ -181,12 +181,9 @@ defmodule ChalkSync.Retention.CleanupWorker do
   end
 
   defp verify_history(transaction, candidate) do
-    state =
-      Reducer.new(UUID.load!(candidate.episode_id), %{
-        config_snapshot: candidate.config_snapshot
-      })
-
-    with {:ok, state, event_count, event_bytes} <-
+    with {:ok, initial_policy} <- initial_policy(transaction, candidate),
+         state <- Reducer.new(UUID.load!(candidate.episode_id), initial_policy),
+         {:ok, state, event_count, event_bytes} <-
            fold_event_pages(transaction, candidate, state, 0, 0),
          true <- state.status == "ended",
          true <- state.revision == candidate.control_revision,
@@ -202,6 +199,50 @@ defmodule ChalkSync.Retention.CleanupWorker do
     else
       {:error, reason} -> {:error, reason}
       false -> {:error, :terminal_checkpoint_mismatch}
+    end
+  end
+
+  defp initial_policy(transaction, candidate) do
+    config_policy = %{config_snapshot: candidate.config_snapshot}
+
+    with {:ok, deadline_policy} <- persisted_deadline_policy(candidate),
+         true <- terminal_deadline_matches?(candidate, deadline_policy),
+         false <- has_deadline_transition?(transaction, candidate) do
+      {:ok, Map.merge(config_policy, deadline_policy)}
+    else
+      :not_usable -> {:ok, config_policy}
+      false -> {:ok, config_policy}
+    end
+  end
+
+  defp persisted_deadline_policy(candidate) do
+    with %DateTime{} = deadline_at <- candidate.deadline_at,
+         {microseconds, _precision} <- deadline_at.microsecond,
+         true <- rem(microseconds, 1_000) == 0,
+         deadline_at_ms <- DateTime.to_unix(deadline_at, :millisecond),
+         true <- deadline_at_ms >= 1,
+         generation when is_integer(generation) and generation >= 1 <-
+           candidate.deadline_generation do
+      {:ok, %{deadline_at_ms: deadline_at_ms, deadline_generation: generation}}
+    else
+      _ -> :not_usable
+    end
+  end
+
+  defp terminal_deadline_matches?(candidate, %{
+         deadline_at_ms: deadline_at_ms,
+         deadline_generation: generation
+       }) do
+    candidate.folded_state["deadline_at_ms"] == deadline_at_ms and
+      candidate.folded_state["deadline_generation"] == generation
+  end
+
+  defp has_deadline_transition?(transaction, candidate) do
+    case Postgrex.query!(transaction, SQL.has_deadline_transition?(), [
+           candidate.tenant_id,
+           candidate.episode_id
+         ]).rows do
+      [[value]] -> value
     end
   end
 
@@ -329,6 +370,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
          space_id,
          episode_id,
          config_snapshot,
+         deadline_at,
+         deadline_generation,
          control_revision,
          folded_state,
          state_schema_version,
@@ -347,6 +390,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
       space_id: space_id,
       episode_id: episode_id,
       config_snapshot: config_snapshot,
+      deadline_at: deadline_at,
+      deadline_generation: deadline_generation,
       control_revision: control_revision,
       folded_state: folded_state,
       state_schema_version: state_schema_version,

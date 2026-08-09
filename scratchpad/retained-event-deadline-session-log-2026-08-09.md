@@ -1,0 +1,6 @@
+# Retained event deadline repair — 2026-08-09
+
+- 2026-08-09 19:18 Asia/Karachi — The nontrivial production-shaped fixture exposed `CleanupWorker` replay divergence: the migration folded v3 history with persisted Episode deadline values, while CleanupWorker still initialized the reducer with literal defaults (`deadline_at_ms=1`, `deadline_generation=1`).
+- 2026-08-09 19:21 Asia/Karachi — Patched migration `20260809160000` to join persisted `episodes.deadline_at` and `deadline_generation`, reject null/non-positive/non-millisecond values, and seed the reducer with the exact millisecond deadline and generation before folding retained events.
+- 2026-08-09 19:22 Asia/Karachi — Updated CleanupWorker retention verification to load the immutable Episode deadline policy, use it only when the terminal snapshot matches and no `deadline_changed` event exists, and retain the legacy baseline for ordinary histories.
+- 2026-08-09 19:24 Asia/Karachi — Isolated PostgreSQL proofs passed for valid custom-role history, unsupported payload, mismatched eligible roles, and mismatched terminal deadline. The valid case independently verified v1 digests/encoded bytes, CleanupWorker folding/deletion, and irreversible Down; rejected cases remained atomically at Goose `20260808150000`.
