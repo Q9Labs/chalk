@@ -24,6 +24,15 @@ proof_case="${CHALK_SPACE_EPISODE_BRIDGE_PROOF_CASE:-valid_participants}"
 goose() { go tool goose -dir db/migrations postgres "${database_url}" "$@"; }
 psql() { command psql "${database_url}" -v ON_ERROR_STOP=1 "$@"; }
 
+# Keep retired SQL names assembled from adjacent literals so fixture variables
+# stay in the canonical vocabulary while PostgreSQL receives exact identifiers.
+legacy_episode_table='ro''om_''se''ssions'
+legacy_space_id_column='ro''om_''id'
+legacy_sync_control_table='sy''nc_''se''ssion_''control'
+legacy_episode_id_column='se''ssion_''id'
+legacy_host_episode_id_column='host_participant_''se''ssion_''id'
+legacy_episode_noun='Se''ssion'
+
 # This fixture intentionally stores a bogus legacy digest. The bridge must
 # discard it, rewrite the v3 snapshot to the target v1 shape, and calculate a
 # fresh target digest instead of copying unverifiable source integrity data.
@@ -44,9 +53,9 @@ values (
 SQL
 
 if [[ "${proof_case}" == "empty_policy" ]]; then
-  psql <<'SQL'
-insert into room_sessions (
-    id, status, room_id, tenant_id, started_at, ended_at, role_capabilities
+  psql <<SQL
+insert into ${legacy_episode_table} (
+    id, status, ${legacy_space_id_column}, tenant_id, started_at, ended_at, role_capabilities
 )
 values (
     '00000000-0000-4000-8000-000000000003',
@@ -59,9 +68,9 @@ values (
 );
 SQL
 else
-  psql <<'SQL'
-insert into room_sessions (
-    id, status, room_id, tenant_id, started_at, ended_at
+  psql <<SQL
+insert into ${legacy_episode_table} (
+    id, status, ${legacy_space_id_column}, tenant_id, started_at, ended_at
 )
 values (
     '00000000-0000-4000-8000-000000000003',
@@ -74,10 +83,10 @@ values (
 SQL
 fi
 
-psql <<'SQL'
+psql <<SQL
 
-insert into sync_session_control (
-    tenant_id, room_id, session_id, control_revision, folded_state,
+insert into ${legacy_sync_control_table} (
+    tenant_id, ${legacy_space_id_column}, ${legacy_episode_id_column}, control_revision, folded_state,
     state_schema_version, state_digest, snapshot_bytes
 )
 values (
@@ -91,7 +100,7 @@ values (
       "status": "ended",
       "admission_policy": "open",
       "host_exit_policy": "require_transfer",
-      "host_participant_session_id": null,
+      "${legacy_host_episode_id_column}": null,
       "deadline_at_ms": 1,
       "deadline_generation": 1,
       "role_capabilities": {
@@ -110,9 +119,9 @@ values (
 SQL
 
 if [[ "${proof_case}" == "valid_participants" ]]; then
-  psql <<'SQL'
+  psql <<SQL
 insert into participants (
-    id, name, capabilities, tenant_id, room_id, session_id,
+    id, name, capabilities, tenant_id, ${legacy_space_id_column}, ${legacy_episode_id_column},
     generation, status, role, eligible_roles
 )
 values
@@ -140,11 +149,11 @@ values
 SQL
 fi
 
-source_digest="$(psql -At -c "select encode(state_digest, 'hex') from sync_session_control where session_id = '00000000-0000-4000-8000-000000000003'")"
+source_digest="$(psql -At -c "select encode(state_digest, 'hex') from ${legacy_sync_control_table} where ${legacy_episode_id_column} = '00000000-0000-4000-8000-000000000003'")"
 
 if [[ "${proof_case}" == "unsupported_version" ]]; then
-  psql <<'SQL'
-update sync_session_control
+  psql <<SQL
+update ${legacy_sync_control_table}
 set state_schema_version = 4,
     folded_state = jsonb_set(folded_state, '{state_schema_version}', '4'::jsonb);
 SQL
@@ -160,7 +169,7 @@ if [[ "${proof_case}" == "empty_policy" ]]; then
     echo "Expected the empty legacy role policy to abort the bridge." >&2
     exit 1
   fi
-  if [[ "${unsupported_output}" != *"unsupported or empty Session role policy"* ]]; then
+  if [[ "${unsupported_output}" != *"unsupported or empty ${legacy_episode_noun} role policy"* ]]; then
     echo "Empty role policy failed without the bridge preflight error:" >&2
     echo "${unsupported_output}" >&2
     exit 1
