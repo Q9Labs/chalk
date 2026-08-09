@@ -178,3 +178,12 @@ execution detail. Give bounded discovery, reproduction, and implementation to
 Luna workers. The root thread owns the task map, seam decisions, integration,
 final verification, and production authorization. Do not drift back into
 hands-on diagnosis merely because a gate fails.
+
+## GitHub Workflow Dispatch Needs An Explicit Repository
+
+`gh repo view` can infer a repository from a local Git remote, while
+`gh workflow run` can still fail when no GitHub CLI default repository is set.
+Release scripts should pass `--repo owner/repo` or set and verify the intended
+default before dispatching a workflow, especially in clones with multiple
+remotes. This failure happens before GitHub Actions starts, so it does not
+prove anything about the workflow, npm credentials, or package state.

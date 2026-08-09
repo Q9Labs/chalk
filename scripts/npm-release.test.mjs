@@ -14,7 +14,7 @@ test("dry-run is the default and publish requires an explicit flag", () => {
 test("publish dispatch is pinned to the exact origin commit and has a clear confirmation", () => {
   const revision = "ae5da214f4ec1fd4f86db07f789be45fa914865d";
   assert.equal(publishConfirmationPhrase("4.0.0", revision.slice(0, 8)), "PUBLISH CHALK 4.0.0 FROM ae5da214");
-  assert.deepEqual(publishWorkflowArguments(revision), ["workflow", "run", ".github/workflows/npm-publish.yml", "--ref", "master", "-f", "dry_run=false", "-f", `release_sha=${revision}`]);
+  assert.deepEqual(publishWorkflowArguments(revision), ["workflow", "run", ".github/workflows/npm-publish.yml", "--repo", "Q9Labs/chalk", "--ref", "master", "-f", "dry_run=false", "-f", `release_sha=${revision}`]);
 });
 
 test("release options keep artifacts outside the repository", () => {
@@ -92,4 +92,9 @@ test("the publish workflow independently pins publish to live master", () => {
   assert.equal(workflow.includes("if: ${{ !inputs.dry_run }}"), true);
   assert.equal(workflow.includes("git ls-remote origin refs/heads/master"), true);
   assert.equal(workflow.includes('[[ \"$checked_out_sha\" != \"$live_master_sha\" ]]'), true);
+});
+
+test("the publish workflow uses options supported by pnpm publish", () => {
+  const workflow = readFileSync(".github/workflows/npm-publish.yml", "utf8");
+  assert.match(workflow, /run: pnpm --filter '\.\/packages\/\*' --filter '\.\/sdks\/typescript\/\*' --recursive publish --access public --no-git-checks/);
 });

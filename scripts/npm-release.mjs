@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = "https://registry.npmjs.org/";
+const githubRepository = "Q9Labs/chalk";
 const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs", "scripts/npm-release.test.mjs"]);
 const attwIgnoreRules = ["cjs-resolves-to-esm", "internal-resolution-error"];
 const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"];
@@ -475,14 +476,14 @@ function assertGitHubAuth() {
 }
 
 export function publishWorkflowArguments(head) {
-  return ["workflow", "run", ".github/workflows/npm-publish.yml", "--ref", "master", "-f", "dry_run=false", "-f", `release_sha=${head}`];
+  return ["workflow", "run", ".github/workflows/npm-publish.yml", "--repo", githubRepository, "--ref", "master", "-f", "dry_run=false", "-f", `release_sha=${head}`];
 }
 
 function dispatchPublishWorkflow(head) {
   runCommand("gh", publishWorkflowArguments(head), { label: "dispatch npm publish workflow" });
   console.log("Workflow dispatched. Follow it with:");
-  console.log("  gh run list --workflow .github/workflows/npm-publish.yml --limit 5 --json databaseId,status,conclusion,url,headSha");
-  console.log("  gh run watch <run-id> --exit-status");
+  console.log(`  gh run list --repo ${githubRepository} --workflow .github/workflows/npm-publish.yml --limit 5 --json databaseId,status,conclusion,url,headSha`);
+  console.log(`  gh run watch <run-id> --repo ${githubRepository} --exit-status`);
 }
 
 function prepareReleasePlan(options) {
