@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 )
 
 const (
@@ -14,6 +15,8 @@ const (
 
 type InitialControlPolicy struct {
 	ConfigSnapshot                json.RawMessage
+	DeadlineAt                    time.Time
+	DeadlineGeneration            int64
 	AdmissionPolicy               json.RawMessage
 	MaximumDurationSeconds        int32
 	MaximumDurationCeilingSeconds int32
@@ -22,7 +25,7 @@ type InitialControlPolicy struct {
 // NewInitialControlState validates immutable Episode policy and encodes the
 // empty, pre-admission authority projection used by Sync.
 func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, error) {
-	snapshot, config, err := validateConfigSnapshot(policy.ConfigSnapshot)
+	_, config, err := validateConfigSnapshot(policy.ConfigSnapshot)
 	if err != nil {
 		return InitialControlState{}, err
 	}
@@ -41,14 +44,26 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 	if policy.MaximumDurationCeilingSeconds < MinimumEpisodeDurationSeconds || policy.MaximumDurationCeilingSeconds > MaximumEpisodeDurationSeconds || policy.MaximumDurationSeconds > policy.MaximumDurationCeilingSeconds {
 		return InitialControlState{}, ErrInvalidMaximumDurationCeiling
 	}
+	if policy.DeadlineAt.IsZero() || policy.DeadlineAt.UnixMilli() < 1 || policy.DeadlineAt.UnixMilli() != policy.DeadlineAt.UTC().Truncate(time.Millisecond).UnixMilli() {
+		return InitialControlState{}, ErrInvalidInitialControlState
+	}
+	if policy.DeadlineGeneration < 1 {
+		return InitialControlState{}, ErrInvalidInitialControlState
+	}
+	admissionPolicy, err := admissionPolicyMode(config.AdmissionPolicy)
+	if err != nil {
+		return InitialControlState{}, err
+	}
 
 	durableProjection := map[string]any{
-		"admission_policy":     config.AdmissionPolicy,
-		"config_snapshot":      json.RawMessage(snapshot),
+		"admission_policy":     admissionPolicy,
 		"admission_requests":   []any{},
 		"control_revision":     0,
+		"deadline_at_ms":       policy.DeadlineAt.UTC().Truncate(time.Millisecond).UnixMilli(),
+		"deadline_generation":  policy.DeadlineGeneration,
 		"participants":         []any{},
 		"recording":            nil,
+		"role_capabilities":    config.Roles,
 		"state_schema_version": controlStateSchemaV1,
 		"status":               EpisodeStatusActive,
 	}

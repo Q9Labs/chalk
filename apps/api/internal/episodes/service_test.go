@@ -155,8 +155,13 @@ func TestServiceRejectsMissingRoleBeforeRepository(t *testing.T) {
 	}
 }
 
-func TestNewInitialControlStateContainsSnapshotAndNoHostAuthority(t *testing.T) {
-	state, err := episodes.NewInitialControlState(episodes.InitialControlPolicy{ConfigSnapshot: validSnapshot(t)})
+func TestNewInitialControlStateMatchesSyncV1Snapshot(t *testing.T) {
+	deadline := time.Date(2026, 8, 9, 12, 34, 56, 789000000, time.UTC)
+	state, err := episodes.NewInitialControlState(episodes.InitialControlPolicy{
+		ConfigSnapshot:     validSnapshot(t),
+		DeadlineAt:         deadline,
+		DeadlineGeneration: 1,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,8 +178,37 @@ func TestNewInitialControlStateContainsSnapshotAndNoHostAuthority(t *testing.T) 
 	if projection["status"] != episodes.EpisodeStatusActive {
 		t.Fatalf("status = %#v", projection["status"])
 	}
-	if _, ok := projection["config_snapshot"]; !ok {
-		t.Fatal("initial control omitted config snapshot")
+	wantKeys := map[string]struct{}{
+		"admission_policy": {}, "admission_requests": {}, "control_revision": {},
+		"deadline_at_ms": {}, "deadline_generation": {}, "participants": {},
+		"recording": {}, "role_capabilities": {}, "state_schema_version": {}, "status": {},
+	}
+	if len(projection) != len(wantKeys) {
+		t.Fatalf("initial control keys = %#v", projection)
+	}
+	for key := range projection {
+		if _, ok := wantKeys[key]; !ok {
+			t.Fatalf("initial control retained non-Sync key %q", key)
+		}
+	}
+	if projection["admission_policy"] != "open" {
+		t.Fatalf("admission policy = %#v", projection["admission_policy"])
+	}
+	if projection["deadline_at_ms"] != float64(deadline.UnixMilli()) {
+		t.Fatalf("deadline_at_ms = %#v", projection["deadline_at_ms"])
+	}
+	if projection["deadline_generation"] != float64(1) {
+		t.Fatalf("deadline_generation = %#v", projection["deadline_generation"])
+	}
+	if _, ok := projection["role_capabilities"]; !ok {
+		t.Fatal("initial control omitted role capabilities")
+	}
+}
+
+func TestNewInitialControlStateRejectsMissingDeadlineAuthority(t *testing.T) {
+	_, err := episodes.NewInitialControlState(episodes.InitialControlPolicy{ConfigSnapshot: validSnapshot(t)})
+	if !errors.Is(err, episodes.ErrInvalidInitialControlState) {
+		t.Fatalf("error = %v, want invalid initial control state", err)
 	}
 }
 

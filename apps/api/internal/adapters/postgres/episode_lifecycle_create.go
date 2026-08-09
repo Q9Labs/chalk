@@ -74,7 +74,11 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 			return fmt.Errorf("create lifecycle episode: %w", err)
 		}
 
-		initialControl, err := episodes.NewInitialControlState(episodes.InitialControlPolicy{ConfigSnapshot: episode.ConfigSnapshot})
+		initialControl, err := episodes.NewInitialControlState(episodes.InitialControlPolicy{
+			ConfigSnapshot:     episode.ConfigSnapshot,
+			DeadlineAt:         timestamp(episode.DeadlineAt),
+			DeadlineGeneration: episode.DeadlineGeneration,
+		})
 		if err != nil {
 			return err
 		}
