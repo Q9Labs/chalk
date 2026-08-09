@@ -16,6 +16,9 @@ ENV MIX_ENV=prod
 WORKDIR /src
 
 COPY --from=healthcheck /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
 RUN mix local.hex --force && mix local.rebar --force
 COPY --from=sync_source mix.exs mix.lock ./
 RUN mix deps.get --only prod && mix deps.compile
