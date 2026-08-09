@@ -9,7 +9,7 @@
     "test:e2e": "node test/wrangler-e2e.mjs"
   },
   "dependencies": {
-    "@q9labsai/chalk-client": "workspace:^4.0.0"
+    "@q9labsai/chalk-client": "workspace:^4.0.1"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

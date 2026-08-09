@@ -16,6 +16,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Fixed the guarded npm publish workflow for pnpm 10 and made release dispatches
   target `Q9Labs/chalk` explicitly.
+
+## [4.0.1] - 2026-08-09
+
+### Fixed
+
 - Hardened the Metro image-size dependency against the upstream-unfixed
   zero-length parser loops and added ESM/CJS regression coverage.
 
