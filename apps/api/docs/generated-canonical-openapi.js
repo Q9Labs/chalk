@@ -6987,7 +6987,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Conflict",
-            "x-chalk-error-codes": ["request.idempotency_conflict"],
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict"],
           },
           413: {
             content: {

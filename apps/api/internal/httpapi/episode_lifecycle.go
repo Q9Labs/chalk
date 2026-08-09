@@ -247,7 +247,7 @@ func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAut
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateEpisodeRequest", createEpisodeRequest{}).Responds(http.StatusCreated, "Episode", episodeResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func listEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listEpisodesRequest, episodeListResponse] {
@@ -545,6 +545,8 @@ func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidRequestKey, true
 	case errors.Is(err, episodes.ErrIdempotencyConflict):
 		return apiErrorIdempotencyConflict, true
+	case errors.Is(err, episodes.ErrEpisodeAlreadyExists):
+		return apiErrorEpisodeCapacityExceeded, true
 	case errors.Is(err, episodes.ErrCapacityExceeded):
 		return apiErrorEpisodeCapacityExceeded, true
 	case errors.Is(err, episodes.ErrAdmissionClosed), errors.Is(err, episodes.ErrInvalidAdmissionPolicy), errors.Is(err, episodes.ErrInvalidRole), errors.Is(err, episodes.ErrInvalidRoleCapabilities), errors.Is(err, episodes.ErrInvalidConfigSnapshot), errors.Is(err, episodes.ErrInvalidParticipantName), errors.Is(err, episodes.ErrInvalidParticipantGeneration), errors.Is(err, episodes.ErrInvalidIntentPayload), errors.Is(err, episodes.ErrInvalidInitialControlState), errors.Is(err, episodes.ErrInvalidMaximumDuration), errors.Is(err, episodes.ErrInvalidMaximumDurationCeiling), errors.Is(err, episodes.ErrInvalidDeadline), errors.Is(err, episodes.ErrDeadlineExceedsCeiling), errors.Is(err, episodes.ErrDeadlineChangePending), errors.Is(err, episodes.ErrEpisodeControlBusy):

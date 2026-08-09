@@ -2,6 +2,7 @@ import { DurableObject, type DurableObjectState } from "cloudflare:workers";
 import { ChalkAPIError, createChalkServerClient, type AccessGrant, type ChalkServerClient } from "@q9labsai/chalk-client/server";
 
 import { BrokerError, episodeDeadlineSeconds, maximumDisplayNameLength, maximumEpisodeParticipants, type InternalAccessInput, type InternalCredentialInput, type InternalParticipantCredentialInput, type TraceContext, type WorkerEnv } from "./contracts";
+import { brokerErrorResponse } from "./errors";
 import { empty, json } from "./http";
 import { LeaseStore, type LeaseRecord, type ParticipantCredentialRecord } from "./store";
 
@@ -47,10 +48,10 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
       if (path === "/participant-credentials/cleanup") return await this.cleanup(internalCredentialInput(body));
       return json(404, { error: "Not found." });
     } catch (error) {
-      const status = error instanceof BrokerError ? error.status : 502;
-      const message = error instanceof BrokerError ? error.message : "The Episode broker could not complete the request.";
+      const response = brokerErrorResponse(error);
+      const status = response.status;
       this.log("operation_failed", { path, status, upstreamOrigin: configuredOrigin(this.environment.CHALK_API_URL), ...chalkErrorFields(error) });
-      return json(status, { error: message });
+      return response;
     }
   }
 

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
@@ -31,6 +32,20 @@ func TestMapLifecycleEpisodePreservesImmutablePolicyAndDeadline(t *testing.T) {
 	}
 	if string(got.ConfigSnapshot) != string(row.ConfigSnapshot) {
 		t.Fatalf("config snapshot = %s", got.ConfigSnapshot)
+	}
+}
+
+func TestEpisodeCreateMapsLiveSpaceUniqueViolationToAlreadyExists(t *testing.T) {
+	for _, constraint := range []string{"episodes_pkey", "episodes_one_live_per_space_idx"} {
+		err := &pgconn.PgError{Code: "23505", ConstraintName: constraint}
+		if !episodeAlreadyExists(err) {
+			t.Fatalf("constraint %q was not mapped to an existing Episode conflict", constraint)
+		}
+	}
+
+	other := &pgconn.PgError{Code: "23505", ConstraintName: "episodes_tenant_space_key"}
+	if episodeAlreadyExists(other) {
+		t.Fatal("unrelated unique violation was treated as the live Episode constraint")
 	}
 }
 

@@ -67,7 +67,7 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 		if errors.Is(err, pgx.ErrNoRows) {
 			return episodes.ErrSpaceNotFound
 		}
-		if uniqueConstraintViolation(err, "episodes_pkey") {
+		if episodeAlreadyExists(err) {
 			return episodes.ErrEpisodeAlreadyExists
 		}
 		if err != nil {
@@ -114,6 +114,10 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 	}
 	commitMetric.Record(ctx)
 	return result, nil
+}
+
+func episodeAlreadyExists(err error) bool {
+	return uniqueConstraintViolation(err, "episodes_pkey") || uniqueConstraintViolation(err, "episodes_one_live_per_space_idx")
 }
 
 func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input episodes.AdmitParticipantInput) (episodes.Admission, error) {

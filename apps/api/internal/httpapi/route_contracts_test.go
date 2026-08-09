@@ -434,6 +434,9 @@ func TestEpisodeLifecycleRouteContracts(t *testing.T) {
 		}
 	}
 	createContract := contracts["createEpisode"]
+	if !contractHasErrorCode(createContract, "episode.capacity_exceeded") {
+		t.Fatal("createEpisode does not declare the live Episode conflict")
+	}
 	for _, parameter := range createContract.Parameters {
 		if parameter.Name == "Idempotency-Key" {
 			if parameter.Pattern != `^[A-Za-z0-9_-]+$` || parameter.MinLength != 16 || parameter.MaxLength != 128 {

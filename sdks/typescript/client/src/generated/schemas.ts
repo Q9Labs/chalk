@@ -5104,6 +5104,7 @@ export type CreateAPIKeyError = typeof CreateAPIKeyErrorSchema.Type;
 export const CreateEpisodeErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
+  EpisodeCapacityExceededErrorSchema,
   EpisodeNotFoundErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,

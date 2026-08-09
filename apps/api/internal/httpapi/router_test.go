@@ -93,8 +93,9 @@ type guardedSpaceService struct{}
 
 type spaceService struct {
 	guardedSpaceService
-	createSpace func(context.Context, spaces.CreateSpaceInput) (spaces.Space, error)
-	getEpisode  func(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error)
+	createSpace   func(context.Context, spaces.CreateSpaceInput) (spaces.Space, error)
+	getEpisode    func(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error)
+	createEpisode func(context.Context, episodes.CreateEpisodeInput) (episodes.Episode, error)
 }
 
 type guardedRecordingService struct{}
@@ -291,6 +292,13 @@ func (s spaceService) GetEpisode(ctx context.Context, tenantID, spaceID, episode
 		return episodes.Episode{}, errors.New("unexpected get episode call")
 	}
 	return s.getEpisode(ctx, tenantID, spaceID, episodeID)
+}
+
+func (s spaceService) CreateEpisode(ctx context.Context, input episodes.CreateEpisodeInput) (episodes.Episode, error) {
+	if s.createEpisode == nil {
+		return s.guardedSpaceService.CreateEpisode(ctx, input)
+	}
+	return s.createEpisode(ctx, input)
 }
 
 func (guardedSpaceService) CreateEpisode(context.Context, episodes.CreateEpisodeInput) (episodes.Episode, error) {
@@ -1459,6 +1467,37 @@ func TestCreateSpaceMapsDuplicateSlugToConflict(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
 	}
 	assertErrorCode(t, res, "space.slug_conflict")
+}
+
+func TestCreateEpisodeMapsExistingLiveEpisodeToConflict(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const spaceID = "22222222-2222-2222-2222-222222222222"
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/spaces/"+spaceID+"/episodes",
+		`{"metadata":{"topic":"duplicate"}}`,
+		httpapi.Options{
+			Episodes: spaceService{
+				createEpisode: func(context.Context, episodes.CreateEpisodeInput) (episodes.Episode, error) {
+					return episodes.Episode{}, episodes.ErrEpisodeAlreadyExists
+				},
+			},
+			Middleware: []func(http.Handler) http.Handler{
+				func(next http.Handler) http.Handler {
+					return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+						request.Header.Set("Idempotency-Key", "episode-duplicate-0001")
+						next.ServeHTTP(w, request)
+					})
+				},
+			},
+		})
+
+	if res.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
+	}
+	assertErrorCode(t, res, "episode.capacity_exceeded")
 }
 
 func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
