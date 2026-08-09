@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { changedReleaseSources, parseArguments, parseRemoteMasterSha, publishConfirmationPhrase, publishWorkflowArguments, releasePackages, topologicalOrder, workspaceRangeMatches } from "./npm-release.mjs";
+import { changedReleaseSources, chalkReleaseVersion, parseArguments, parseRemoteMasterSha, publishConfirmationPhrase, publishWorkflowArguments, releasePackages, topologicalOrder, workspaceRangeMatches } from "./npm-release.mjs";
 
 test("dry-run is the default and publish requires an explicit flag", () => {
   assert.deepEqual(parseArguments([]), { mode: "dry-run", skipInstall: false, artifactDirectory: null, help: false });
@@ -13,6 +13,7 @@ test("dry-run is the default and publish requires an explicit flag", () => {
 
 test("publish dispatch is pinned to the exact origin commit and has a clear confirmation", () => {
   const revision = "ae5da214f4ec1fd4f86db07f789be45fa914865d";
+  assert.equal(chalkReleaseVersion, "4.0.0");
   assert.equal(publishConfirmationPhrase("4.0.0", revision.slice(0, 8)), "PUBLISH CHALK 4.0.0 FROM ae5da214");
   assert.deepEqual(publishWorkflowArguments(revision), ["workflow", "run", ".github/workflows/npm-publish.yml", "--repo", "Q9Labs/chalk", "--ref", "master", "-f", "dry_run=false", "-f", `release_sha=${revision}`]);
 });

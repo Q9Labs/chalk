@@ -28,6 +28,7 @@ export const releasePackages = Object.freeze([
 ]);
 
 const packageByName = new Map(releasePackages.map((releasePackage) => [releasePackage.name, releasePackage]));
+export const chalkReleaseVersion = releasePackages.find(({ name }) => name === "@q9labsai/chalk-assets").version;
 
 export function usage() {
   return `Usage:
@@ -532,8 +533,7 @@ function reportDryRun() {
 async function dispatchRelease() {
   const { head, shortRevision } = releaseHead();
   assertGitHubAuth();
-  const mainReleaseVersion = releasePackages.find(({ name }) => name.startsWith("@q9labsai/")).version;
-  await confirmPublish(mainReleaseVersion, shortRevision);
+  await confirmPublish(chalkReleaseVersion, shortRevision);
   dispatchPublishWorkflow(head);
 }
 
