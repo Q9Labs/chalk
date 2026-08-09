@@ -1,5 +1,5 @@
 import { Button, Input, ToastProvider, ToastViewport, toast } from "@q9labsai/chalk-ui";
-import { formatDiagnosticReference, parseDiagnosticReference, parseDiagnosticFilter, renderAgentBriefMarkdown, type DiagnosticFilterV1 } from "@chalk/diagnostics-contracts";
+import { formatDiagnosticReference, parseDiagnosticReference, parseDiagnosticFilter, renderAgentBriefMarkdown, type DiagnosticFilterV1 } from "@q9labsai/diagnostics-contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { EpisodeDiagnosticsApiClient } from "./api-client";

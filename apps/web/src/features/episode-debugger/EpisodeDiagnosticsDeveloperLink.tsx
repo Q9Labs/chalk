@@ -1,5 +1,5 @@
 import { buttonVariants } from "@q9labsai/chalk-ui";
-import { parseDiagnosticReference } from "@chalk/diagnostics-contracts";
+import { parseDiagnosticReference } from "@q9labsai/diagnostics-contracts";
 
 export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__ }: { diagnosticReference?: string; enabled?: boolean }) {
   if (!enabled || !diagnosticReference) return null;

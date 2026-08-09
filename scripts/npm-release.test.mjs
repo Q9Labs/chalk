@@ -96,5 +96,10 @@ test("the publish workflow independently pins publish to live master", () => {
 
 test("the publish workflow uses options supported by pnpm publish", () => {
   const workflow = readFileSync(".github/workflows/npm-publish.yml", "utf8");
-  assert.match(workflow, /run: pnpm --filter '\.\/packages\/\*' --filter '\.\/sdks\/typescript\/\*' --recursive publish --access public --no-git-checks/);
+  assert.match(workflow, /pnpm "\$\{package_filters\[@\]\}" --recursive publish --access public --no-git-checks/);
+  assert.match(workflow, /Skipping already published/);
+});
+
+test("the diagnostics contracts package uses the Q9Labs npm scope", () => {
+  assert.equal(releasePackages[0].name, "@q9labsai/diagnostics-contracts");
 });

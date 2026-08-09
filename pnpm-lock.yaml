@@ -219,7 +219,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@chalk/diagnostics-contracts':
+      '@q9labsai/diagnostics-contracts':
         specifier: workspace:^0.1.0
         version: link:../../packages/diagnostics-contracts
       '@cloudflare/vite-plugin':
@@ -462,7 +462,7 @@ importers:
 
   sdks/typescript/client:
     dependencies:
-      '@chalk/diagnostics-contracts':
+      '@q9labsai/diagnostics-contracts':
         specifier: workspace:^0.1.0
         version: link:../../../packages/diagnostics-contracts
       '@noble/hashes':
@@ -621,7 +621,7 @@ importers:
 
   tools/episode-diagnostics:
     dependencies:
-      '@chalk/diagnostics-contracts':
+      '@q9labsai/diagnostics-contracts':
         specifier: workspace:^0.1.0
         version: link:../../packages/diagnostics-contracts
     devDependencies:

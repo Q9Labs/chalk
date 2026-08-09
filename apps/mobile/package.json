@@ -5,7 +5,7 @@
   "license": "MIT",
   "main": "./index.ts",
   "scripts": {
-    "prepare:native-dependencies": "pnpm --filter @chalk/diagnostics-contracts build && pnpm --filter @q9labsai/chalk-client build && pnpm --filter @q9labsai/facehash build && pnpm --filter @q9labsai/chalk-whiteboard build:embedded && pnpm --filter @q9labsai/chalk-react-native build",
+    "prepare:native-dependencies": "pnpm --filter @q9labsai/diagnostics-contracts build && pnpm --filter @q9labsai/chalk-client build && pnpm --filter @q9labsai/facehash build && pnpm --filter @q9labsai/chalk-whiteboard build:embedded && pnpm --filter @q9labsai/chalk-react-native build",
     "start": "node ../../scripts/dev-log.mjs start:raw",
     "prestart:raw": "pnpm run prepare:native-dependencies",
     "start:raw": "expo start --clear",

@@ -1,4 +1,4 @@
-import { fingerprintDiagnosticFilter, type AcceptedDiagnosticEvent, type DiagnosticFilterV1, type DiagnosticOperationDetail, type DiagnosticSnapshotV1, type DiagnosticStreamDeltaV1 } from "@chalk/diagnostics-contracts";
+import { fingerprintDiagnosticFilter, type AcceptedDiagnosticEvent, type DiagnosticFilterV1, type DiagnosticOperationDetail, type DiagnosticSnapshotV1, type DiagnosticStreamDeltaV1 } from "@q9labsai/diagnostics-contracts";
 import { EpisodeDiagnosticsApiClient, EpisodeDiagnosticsStreamClosedError } from "./api-client";
 import { abortableDelay } from "./controller-utils";
 

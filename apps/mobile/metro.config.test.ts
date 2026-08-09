@@ -32,7 +32,7 @@ function runResolver(profile: string, nodeEnv: NodeEnv = "test"): MetroConfigPro
     console.log(JSON.stringify({
       diagnosticsContractsRoot,
       diagnosticsWatchFolder: config.watchFolders.includes(diagnosticsContractsRoot),
-      diagnosticsExtraNodeModule: config.resolver.extraNodeModules["@chalk/diagnostics-contracts"],
+      diagnosticsExtraNodeModule: config.resolver.extraNodeModules["@q9labsai/diagnostics-contracts"],
       resolution,
       resolverType: typeof config.resolver.resolveRequest,
     }));
@@ -107,8 +107,8 @@ function buildAndResolveDiagnosticsForPlatforms(): Readonly<Record<"ios" | "andr
     execFileSync(rootTsc, ["--emitDeclarationOnly", "--declaration", "--outDir", "dist"], { cwd: fixtureDiagnosticsRoot, stdio: "ignore" });
     expect(existsSync(path.join(fixtureDiagnosticsRoot, "dist/index.js"))).toBe(true);
 
-    mkdirSync(path.join(fixtureClientRoot, "node_modules/@chalk"), { recursive: true });
-    symlinkSync(fixtureDiagnosticsRoot, path.join(fixtureClientRoot, "node_modules/@chalk/diagnostics-contracts"), "dir");
+    mkdirSync(path.join(fixtureClientRoot, "node_modules/@q9labsai"), { recursive: true });
+    symlinkSync(fixtureDiagnosticsRoot, path.join(fixtureClientRoot, "node_modules/@q9labsai/diagnostics-contracts"), "dir");
     const originModulePath = path.join(fixtureClientRoot, "src/space-client/episode-diagnostic-runtime.js");
     writeFileSync(originModulePath, "");
 
@@ -137,7 +137,7 @@ function buildAndResolveDiagnosticsForPlatforms(): Readonly<Record<"ios" | "andr
       customResolverOptions: {},
       disableHierarchicalLookup: false,
       doesFileExist: existsSync,
-      extraNodeModules: { "@chalk/diagnostics-contracts": fixtureDiagnosticsRoot },
+      extraNodeModules: { "@q9labsai/diagnostics-contracts": fixtureDiagnosticsRoot },
       dev: false,
       getPackage: cachedReadPackage,
       getPackageForModule: (modulePath: string) => packageForModule(modulePath, fixtureRoot),
@@ -160,8 +160,8 @@ function buildAndResolveDiagnosticsForPlatforms(): Readonly<Record<"ios" | "andr
     };
 
     return {
-      ios: metroResolver.resolve(resolverContext, "@chalk/diagnostics-contracts", "ios"),
-      android: metroResolver.resolve(resolverContext, "@chalk/diagnostics-contracts", "android"),
+      ios: metroResolver.resolve(resolverContext, "@q9labsai/diagnostics-contracts", "ios"),
+      android: metroResolver.resolve(resolverContext, "@q9labsai/diagnostics-contracts", "android"),
     };
   } finally {
     rmSync(fixtureRoot, { force: true, recursive: true });

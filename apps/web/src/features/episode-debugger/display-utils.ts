@@ -1,4 +1,4 @@
-import { SAFE_ID_CLASSES, type SafeIdentifier } from "@chalk/diagnostics-contracts";
+import { SAFE_ID_CLASSES, type SafeIdentifier } from "@q9labsai/diagnostics-contracts";
 
 export function safeIdentifierDisplay(identifier: SafeIdentifier): string {
   const rule = SAFE_ID_CLASSES[identifier.idClass as keyof typeof SAFE_ID_CLASSES];

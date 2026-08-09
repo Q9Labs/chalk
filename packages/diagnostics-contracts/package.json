@@ -1,5 +1,5 @@
 {
-  "name": "@chalk/diagnostics-contracts",
+  "name": "@q9labsai/diagnostics-contracts",
   "version": "0.1.0",
   "description": "Versioned, redaction-safe contracts for Chalk episode diagnostics.",
   "license": "MIT",

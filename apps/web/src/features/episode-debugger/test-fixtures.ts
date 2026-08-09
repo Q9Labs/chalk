@@ -1,4 +1,4 @@
-import { acceptDiagnosticEvent, fingerprintDiagnosticFilter, type AcceptedDiagnosticEvent, type DiagnosticFilterV1, type DiagnosticSnapshotV1, type DiagnosticStreamDeltaV1 } from "@chalk/diagnostics-contracts";
+import { acceptDiagnosticEvent, fingerprintDiagnosticFilter, type AcceptedDiagnosticEvent, type DiagnosticFilterV1, type DiagnosticSnapshotV1, type DiagnosticStreamDeltaV1 } from "@q9labsai/diagnostics-contracts";
 
 export const TEST_REFERENCE = "chalkdiag:v1:localhost:diag_fixture";
 export const TEST_FILTER: DiagnosticFilterV1 = { schemaVersion: "DiagnosticFilter/v1" };

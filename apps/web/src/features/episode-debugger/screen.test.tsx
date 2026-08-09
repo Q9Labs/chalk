@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DiagnosticStreamDeltaV1 } from "@chalk/diagnostics-contracts";
+import type { DiagnosticStreamDeltaV1 } from "@q9labsai/diagnostics-contracts";
 import type { EpisodeDiagnosticsApiClient } from "./api-client";
 import { buildFilter, EpisodeDebuggerScreen } from "./EpisodeDebuggerScreen";
 import { eventFixture, snapshotFixture, TEST_FILTER_FINGERPRINT, TEST_REFERENCE } from "./test-fixtures";

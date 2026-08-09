@@ -1,5 +1,5 @@
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@q9labsai/chalk-ui";
-import type { DiagnosticFilterV1, DiagnosticSnapshotV1 } from "@chalk/diagnostics-contracts";
+import type { DiagnosticFilterV1, DiagnosticSnapshotV1 } from "@q9labsai/diagnostics-contracts";
 import { formatTime, type DebuggerSelection } from "./model";
 import { participantIdentityDisplay, safeIdentifierDisplay } from "./display-utils";
 import { EvidenceEmpty } from "./RunGraphViews";

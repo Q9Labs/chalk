@@ -15,7 +15,7 @@
     "check-types": "tsc --project tsconfig.check-types.json --noEmit"
   },
   "dependencies": {
-    "@chalk/diagnostics-contracts": "workspace:^0.1.0",
+    "@q9labsai/diagnostics-contracts": "workspace:^0.1.0",
     "@cloudflare/vite-plugin": "^1.43.0",
     "@q9labsai/chalk-client": "workspace:^4.0.0",
     "@q9labsai/chalk-react": "workspace:^4.0.0",

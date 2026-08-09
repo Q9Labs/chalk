@@ -187,3 +187,10 @@ Release scripts should pass `--repo owner/repo` or set and verify the intended
 default before dispatching a workflow, especially in clones with multiple
 remotes. This failure happens before GitHub Actions starts, so it does not
 prove anything about the workflow, npm credentials, or package state.
+
+## npm Release Scopes Must Belong To The Publishing Organization
+
+A valid npm token can still return `404` on `PUT` when the package scope
+belongs to another organization. Verify every release scope belongs to the
+publishing account or organization. Publish retries should query the registry
+and skip exact versions that succeeded before a later package failed.

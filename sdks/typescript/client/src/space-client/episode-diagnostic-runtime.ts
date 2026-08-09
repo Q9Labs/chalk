@@ -1,4 +1,4 @@
-import { encodedEventSize, getActionContract, parseDiagnosticEventDraft, redactDiagnosticAttributes, type DiagnosticAttributes, type DiagnosticEventCorrelation, type DiagnosticEventDraft, type DiagnosticEventState, type DiagnosticRelease } from "@chalk/diagnostics-contracts";
+import { encodedEventSize, getActionContract, parseDiagnosticEventDraft, redactDiagnosticAttributes, type DiagnosticAttributes, type DiagnosticEventCorrelation, type DiagnosticEventDraft, type DiagnosticEventState, type DiagnosticRelease } from "@q9labsai/diagnostics-contracts";
 import { parseEpisodeDiagnosticCredential, validEpisodeDiagnosticCredential, type EpisodeDiagnosticCredential } from "../access/episode-diagnostic-credential";
 import { createTraceContext, parseTraceparent } from "../telemetry/trace";
 

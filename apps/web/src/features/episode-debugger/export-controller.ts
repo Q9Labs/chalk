@@ -1,4 +1,4 @@
-import type { DiagnosticExportStatus } from "@chalk/diagnostics-contracts";
+import type { DiagnosticExportStatus } from "@q9labsai/diagnostics-contracts";
 import { EpisodeDiagnosticsApiClient } from "./api-client";
 import { abortableDelay } from "./controller-utils";
 

@@ -1,5 +1,5 @@
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@q9labsai/chalk-ui";
-import type { DiagnosticSnapshotV1 } from "@chalk/diagnostics-contracts";
+import type { DiagnosticSnapshotV1 } from "@q9labsai/diagnostics-contracts";
 import { useState } from "react";
 import { DiagnosticTable } from "./DiagnosticTable";
 import { formatDuration } from "./model";

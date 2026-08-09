@@ -1,5 +1,5 @@
 import { Button } from "@q9labsai/chalk-ui";
-import { SAFE_ID_CLASSES, type DiagnosticFilterV1, type DiagnosticSnapshotV1, type SafeIdentifier } from "@chalk/diagnostics-contracts";
+import { SAFE_ID_CLASSES, type DiagnosticFilterV1, type DiagnosticSnapshotV1, type SafeIdentifier } from "@q9labsai/diagnostics-contracts";
 import { formatDuration, formatTime, type DebuggerSelection } from "./model";
 import { StatusPill } from "./StatusPill";
 

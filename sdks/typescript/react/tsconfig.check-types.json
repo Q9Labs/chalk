@@ -5,7 +5,7 @@
     "noEmit": true,
     "rootDir": "../../../",
     "paths": {
-      "@chalk/diagnostics-contracts": ["../../../packages/diagnostics-contracts/src/index.ts"],
+      "@q9labsai/diagnostics-contracts": ["../../../packages/diagnostics-contracts/src/index.ts"],
       "@q9labsai/chalk-client": ["../client/src/index.ts"],
       "@q9labsai/chalk-assets": ["../../../packages/assets/src/index.ts"],
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.ts"],

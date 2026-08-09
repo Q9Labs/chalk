@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DiagnosticExportStatus } from "@chalk/diagnostics-contracts";
+import type { DiagnosticExportStatus } from "@q9labsai/diagnostics-contracts";
 import type { EpisodeDiagnosticsApiClient } from "./api-client";
 import { DiagnosticExportController, type DiagnosticExportState } from "./export-controller";
 import { TEST_REFERENCE } from "./test-fixtures";

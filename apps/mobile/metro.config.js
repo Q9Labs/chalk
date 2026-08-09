@@ -36,7 +36,7 @@ config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 config.resolver.extraNodeModules = {
   "@hugeicons/core-free-icons": path.resolve(appNodeModules, "@hugeicons/core-free-icons"),
   "@hugeicons/react-native": path.resolve(appNodeModules, "@hugeicons/react-native"),
-  "@chalk/diagnostics-contracts": diagnosticsContractsRoot,
+  "@q9labsai/diagnostics-contracts": diagnosticsContractsRoot,
   "@q9labsai/chalk-whiteboard": whiteboardRoot,
   "react-native-svg": path.resolve(appNodeModules, "react-native-svg"),
 };

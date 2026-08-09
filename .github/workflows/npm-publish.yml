@@ -81,4 +81,22 @@ jobs:
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm --filter './packages/*' --filter './sdks/typescript/*' --recursive publish --access public --no-git-checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_filters=()
+          while IFS=$'\t' read -r package_name package_version; do
+            if npm view "${package_name}@${package_version}" version --json --registry https://registry.npmjs.org/ >/dev/null 2>&1; then
+              echo "Skipping already published ${package_name}@${package_version}"
+            else
+              package_filters+=(--filter "$package_name")
+            fi
+          done < <(
+            pnpm --filter './packages/*' --filter './sdks/typescript/*' --recursive list --depth -1 --json |
+              node -e 'const fs = require("node:fs"); for (const { name, version, private: privatePackage } of JSON.parse(fs.readFileSync(0, "utf8"))) if (!privatePackage) console.log(name+"\t"+version);'
+          )
+          if (( ${#package_filters[@]} == 0 )); then
+            echo "All release versions are already published."
+            exit 0
+          fi
+          pnpm "${package_filters[@]}" --recursive publish --access public --no-git-checks

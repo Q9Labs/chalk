@@ -1,4 +1,4 @@
-import type { AcceptedDiagnosticEvent, DiagnosticBranchDetail, DiagnosticIssueDetail, DiagnosticOperationDetail, ParticipantProjectionV1 } from "@chalk/diagnostics-contracts";
+import type { AcceptedDiagnosticEvent, DiagnosticBranchDetail, DiagnosticIssueDetail, DiagnosticOperationDetail, ParticipantProjectionV1 } from "@q9labsai/diagnostics-contracts";
 
 export const DEBUGGER_VIEWS = ["run", "graph", "trace", "flame", "issues", "participants", "epilogue"] as const;
 export type DebuggerView = (typeof DEBUGGER_VIEWS)[number];

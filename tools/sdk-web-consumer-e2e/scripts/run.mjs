@@ -299,7 +299,7 @@ async function post(url) {
 
 async function assertPackedInstall(directory, archiveDirectory_, archives) {
   const packageJSON = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
-  if (packageJSON.dependencies?.["@chalk/diagnostics-contracts"] !== undefined) throw new TypeError("The clean consumer must not directly install @chalk/diagnostics-contracts");
+  if (packageJSON.dependencies?.["@q9labsai/diagnostics-contracts"] !== undefined) throw new TypeError("The clean consumer must not directly install @q9labsai/diagnostics-contracts");
   const packages = [
     ["@q9labsai/chalk-client", archives.clientArchive],
     ["@q9labsai/chalk-react", archives.reactArchive],
@@ -316,7 +316,7 @@ async function assertPackedInstall(directory, archiveDirectory_, archives) {
     process.execPath,
     [
       "-e",
-      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@chalk/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@chalk/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== "0.1.0") throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
+      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@q9labsai/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@q9labsai/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== "0.1.0") throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
     ],
     directory,
   );
@@ -324,8 +324,8 @@ async function assertPackedInstall(directory, archiveDirectory_, archives) {
 
 function assertClientDiagnosticsDependency(clientManifest, diagnosticsManifest) {
   const expected = `^${diagnosticsManifest.version}`;
-  const declared = clientManifest.dependencies?.["@chalk/diagnostics-contracts"];
-  if (declared !== expected) throw new TypeError(`The packed client must declare @chalk/diagnostics-contracts as ${expected}; found ${String(declared)}`);
+  const declared = clientManifest.dependencies?.["@q9labsai/diagnostics-contracts"];
+  if (declared !== expected) throw new TypeError(`The packed client must declare @q9labsai/diagnostics-contracts as ${expected}; found ${String(declared)}`);
 }
 
 function assertArchiveDependency(packageJSON, packageName, archive) {
@@ -347,7 +347,7 @@ function workspacePolicy(archiveDirectory_, archives) {
     "@q9labsai/chalk-whiteboard": archives.supportingArchives.find((archive) => archive.includes("chalk-whiteboard")),
     "@q9labsai/chalk-client": archives.clientArchive,
     "@q9labsai/chalk-react": archives.reactArchive,
-    "@chalk/diagnostics-contracts": archives.diagnosticsArchive,
+    "@q9labsai/diagnostics-contracts": archives.diagnosticsArchive,
   };
   const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive)}"`);
   return [

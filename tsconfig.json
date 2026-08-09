@@ -64,7 +64,7 @@
       "@q9labsai/chalk-ui/toggle-group": ["./packages/ui/src/toggle-group.tsx"],
       "@q9labsai/chalk-ui/tooltip": ["./packages/ui/src/tooltip.tsx"],
       "@q9labsai/chalk-ui/utils": ["./packages/ui/src/lib/utils.ts"],
-      "@chalk/diagnostics-contracts": ["./packages/diagnostics-contracts/src/index.ts"]
+      "@q9labsai/diagnostics-contracts": ["./packages/diagnostics-contracts/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist", "**/dist/**"]

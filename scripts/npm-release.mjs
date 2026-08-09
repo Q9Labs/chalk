@@ -17,7 +17,7 @@ const attwIgnoreRules = ["cjs-resolves-to-esm", "internal-resolution-error"];
 const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"];
 
 export const releasePackages = Object.freeze([
-  { directory: "packages/diagnostics-contracts", name: "@chalk/diagnostics-contracts", version: "0.1.0" },
+  { directory: "packages/diagnostics-contracts", name: "@q9labsai/diagnostics-contracts", version: "0.1.0" },
   { directory: "packages/assets", name: "@q9labsai/chalk-assets", version: "4.0.0" },
   { directory: "packages/facehash", name: "@q9labsai/facehash", version: "4.0.0" },
   { directory: "packages/ui", name: "@q9labsai/chalk-ui", version: "4.0.0" },
@@ -335,8 +335,11 @@ function registryVersion(releasePackage) {
 function assertRegistryVersionsAvailable() {
   for (const releasePackage of releasePackages) {
     const existingVersion = registryVersion(releasePackage);
-    if (existingVersion !== null) throw new Error(`${releasePackage.name}@${releasePackage.version} already exists on npm; refusing to overwrite it`);
-    console.log(`Registry available: ${releasePackage.name}@${releasePackage.version}`);
+    if (existingVersion !== null) {
+      console.log(`Registry already has ${releasePackage.name}@${releasePackage.version}; the publish workflow will skip it`);
+    } else {
+      console.log(`Registry available: ${releasePackage.name}@${releasePackage.version}`);
+    }
   }
 }
 

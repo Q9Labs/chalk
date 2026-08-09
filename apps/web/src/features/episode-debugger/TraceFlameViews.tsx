@@ -1,5 +1,5 @@
 import { Button } from "@q9labsai/chalk-ui";
-import type { AcceptedDiagnosticEvent, DiagnosticOperationDetail, DiagnosticSnapshotV1 } from "@chalk/diagnostics-contracts";
+import type { AcceptedDiagnosticEvent, DiagnosticOperationDetail, DiagnosticSnapshotV1 } from "@q9labsai/diagnostics-contracts";
 import { useMemo, useState } from "react";
 import { DiagnosticTable } from "./DiagnosticTable";
 import { safeReferenceLabel } from "./display-utils";

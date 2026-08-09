@@ -24,7 +24,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- Added the public `@chalk/diagnostics-contracts@0.1.0` package for shared,
+- Added the public `@q9labsai/diagnostics-contracts@0.1.0` package for shared,
   versioned Episode Diagnostics validators, schemas, and fixtures. Publish it
   before `@q9labsai/chalk-client`, then publish `@q9labsai/chalk-react`; this
   manual order keeps the client's public runtime dependency resolvable.

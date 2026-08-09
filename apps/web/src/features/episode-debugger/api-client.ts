@@ -19,7 +19,7 @@ import {
   type DiagnosticResolverResponseV1,
   type DiagnosticSnapshotV1,
   type DiagnosticStreamDeltaV1,
-} from "@chalk/diagnostics-contracts";
+} from "@q9labsai/diagnostics-contracts";
 import { decodeServerSentEvents } from "./sse";
 
 export class EpisodeDiagnosticsApiError extends Error {

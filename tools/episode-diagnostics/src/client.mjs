@@ -3,7 +3,7 @@
 import { asDiagnosticInspectError, DiagnosticInspectError } from "./errors.mjs";
 import { resolveOperatorConfig } from "./config.mjs";
 import { sanitizeDiagnosticData } from "./safety.mjs";
-import { parseAgentBrief, parseDiagnosticEventPage, parseDiagnosticOperationPage, parseDiagnosticResolverResponse, parseDiagnosticSnapshot, parseEpilogueProjection, parseFlameProjection, parseGraphProjection, parseParticipantProjection, parseRunProjection } from "@chalk/diagnostics-contracts";
+import { parseAgentBrief, parseDiagnosticEventPage, parseDiagnosticOperationPage, parseDiagnosticResolverResponse, parseDiagnosticSnapshot, parseEpilogueProjection, parseFlameProjection, parseGraphProjection, parseParticipantProjection, parseRunProjection } from "@q9labsai/diagnostics-contracts";
 
 const BODY_ERROR_CODES = Object.freeze({
   unauthorized: "unauthorized",
