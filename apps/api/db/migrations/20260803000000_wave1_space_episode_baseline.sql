@@ -68,12 +68,18 @@ begin
         raise exception 'Space/Episode bridge found a durable Sync head without its terminal Event';
     end if;
 
+    -- The legacy durable reducer is v3.  The target Episode reducer is v1;
+    -- __chalk_bridge_snapshot below performs that explicit shape/version
+    -- rewrite and __chalk_bridge_state_digest recomputes the v1 digest.  Do
+    -- not accept any other source version, even when its JSON happens to look
+    -- like a terminal snapshot.
     if exists (
         select 1
         from sync_session_control
-        where coalesce(folded_state ->> 'admission_policy', '') not in ('open', 'approval', 'closed')
+        where state_schema_version <> 3
+           or coalesce((folded_state ->> 'state_schema_version')::integer, 0) <> 3
+           or coalesce(folded_state ->> 'admission_policy', '') not in ('open', 'approval', 'closed')
            or coalesce(folded_state ->> 'status', '') <> 'ended'
-           or coalesce((folded_state ->> 'state_schema_version')::integer, 0) <> 1
            or coalesce((folded_state ->> 'control_revision')::bigint, -1) <> control_revision
            or jsonb_typeof(folded_state -> 'participants') <> 'array'
            or jsonb_array_length(folded_state -> 'participants') <> 0
@@ -230,6 +236,22 @@ begin
         )
     ) then
         raise exception 'Space/Episode bridge found an unsupported capability value';
+    end if;
+
+    if exists (
+        select 1
+        from room_sessions
+        where jsonb_typeof(role_capabilities) <> 'object'
+           or not role_capabilities ?& array['host', 'cohost', 'participant']
+           or role_capabilities - array['host', 'cohost', 'participant'] <> '{}'::jsonb
+           or jsonb_typeof(role_capabilities -> 'host') <> 'array'
+           or jsonb_typeof(role_capabilities -> 'cohost') <> 'array'
+           or jsonb_typeof(role_capabilities -> 'participant') <> 'array'
+           or jsonb_array_length(role_capabilities -> 'host') < 1
+           or jsonb_array_length(role_capabilities -> 'cohost') < 1
+           or jsonb_array_length(role_capabilities -> 'participant') < 1
+    ) then
+        raise exception 'Space/Episode bridge found an unsupported or empty Session role policy';
     end if;
 
     if exists (
@@ -3166,6 +3188,42 @@ as $$
 $$;
 -- +goose StatementEnd
 
+-- A legacy Participant row may have no capability array because the Session
+-- role policy was authoritative.  Use that Participant's own role bundle in
+-- that case.  Non-empty arrays remain explicit per-Participant overrides.
+-- +goose StatementBegin
+create function __chalk_bridge_participant_capabilities(
+    value text[],
+    role_name text,
+    role_config jsonb
+)
+returns text[]
+language plpgsql
+immutable
+strict
+as $$
+declare
+    mapped_role text;
+    configured_capabilities jsonb;
+begin
+    if cardinality(value) > 0 then
+        return __chalk_bridge_capabilities(value);
+    end if;
+
+    mapped_role := __chalk_bridge_role_name(role_name);
+    configured_capabilities := role_config -> mapped_role;
+    if jsonb_typeof(configured_capabilities) <> 'array'
+        or jsonb_array_length(configured_capabilities) = 0 then
+        raise exception 'Space/Episode bridge found an empty role policy for Participant role %', role_name;
+    end if;
+
+    return __chalk_bridge_capabilities(array(
+        select jsonb_array_elements_text(configured_capabilities)
+    ));
+end;
+$$;
+-- +goose StatementEnd
+
 -- +goose StatementBegin
 create function __chalk_bridge_admission_policy(value text)
 returns text
@@ -3471,12 +3529,24 @@ select p.id, p.name,
         'legacy_role', p.role,
         'legacy_eligible_roles', p.eligible_roles
     ),
-    __chalk_bridge_capabilities(p.capabilities), p.tenant_id, p.room_id, p.session_id,
+    __chalk_bridge_participant_capabilities(
+        p.capabilities,
+        p.role,
+        __chalk_bridge_role_config(
+            session.role_capabilities,
+            session.whiteboard_role_capabilities,
+            session.room_action_role_capabilities
+        )
+    ), p.tenant_id, p.room_id, p.session_id,
     null,
     p.generation, p.status,
     __chalk_bridge_role_name(p.role),
     p.joined_at, p.left_at, p.updated_at, p.created_at
-from __chalk_legacy_participants p;
+from __chalk_legacy_participants p
+join __chalk_legacy_room_sessions session
+  on session.tenant_id = p.tenant_id
+ and session.room_id = p.room_id
+ and session.id = p.session_id;
 
 insert into sync_chat_streams (
     tenant_id, space_id, head_sequence, retained_floor_sequence,
@@ -4294,6 +4364,7 @@ begin
     drop function __chalk_bridge_snapshot(jsonb, jsonb);
     drop function __chalk_bridge_state_digest(jsonb);
     drop function __chalk_bridge_canonical_json(jsonb);
+    drop function __chalk_bridge_participant_capabilities(text[], text, jsonb);
     drop function __chalk_bridge_role_name(text);
     drop function __chalk_bridge_admission_policy(text);
     drop function if exists __chalk_legacy_reject_recording_object_mutation();
