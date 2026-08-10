@@ -22,6 +22,20 @@ func TestEpisodeResponseUsesEpisodeVocabulary(t *testing.T) {
 	}
 }
 
+func TestEpisodeResponseProjectsLegacyBlankStartedAtFromCreatedAt(t *testing.T) {
+	createdAt := time.Date(2026, 8, 3, 10, 0, 0, 0, time.UTC)
+	response := newEpisodeResponse(episodes.Episode{CreatedAt: createdAt})
+	if response.StartedAt != createdAt.Format(time.RFC3339Nano) {
+		t.Fatalf("started_at = %q, want %q", response.StartedAt, createdAt.Format(time.RFC3339Nano))
+	}
+
+	startedAt := createdAt.Add(15 * time.Minute)
+	response = newEpisodeResponse(episodes.Episode{StartedAt: startedAt, CreatedAt: createdAt})
+	if response.StartedAt != startedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("started_at = %q, want persisted value %q", response.StartedAt, startedAt.Format(time.RFC3339Nano))
+	}
+}
+
 func TestEpisodeLifecycleRoutesHaveNoHostTransferEndpoint(t *testing.T) {
 	for _, endpoint := range episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil) {
 		contract := endpoint.RouteContract()

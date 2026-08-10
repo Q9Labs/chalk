@@ -466,7 +466,12 @@ func resolveMediaEpisode(ctx context.Context, spacesService SpaceService, tenant
 }
 
 func newEpisodeResponse(episode episodes.Episode) episodeResponse {
-	return episodeResponse{ID: episode.ID.String(), TenantID: episode.TenantID.String(), SpaceID: episode.SpaceID.String(), Status: episode.Status, Metadata: rawJSONValue(episode.Metadata), ConfigSnapshot: rawJSONValue(episode.ConfigSnapshot), EndReason: episode.EndReason, StartedAt: episodeTimestampString(episode.StartedAt), EndedAt: episodeTimestampString(episode.EndedAt), DeadlineAt: episodeTimestampString(episode.DeadlineAt), DeadlineGeneration: episode.DeadlineGeneration, UpdatedAt: episodeTimestampString(episode.UpdatedAt), CreatedAt: episodeTimestampString(episode.CreatedAt)}
+	startedAt := episode.StartedAt
+	if startedAt.IsZero() && !episode.CreatedAt.IsZero() {
+		// Legacy migrations can leave started_at blank; created_at is the persisted timestamp we can truthfully expose.
+		startedAt = episode.CreatedAt
+	}
+	return episodeResponse{ID: episode.ID.String(), TenantID: episode.TenantID.String(), SpaceID: episode.SpaceID.String(), Status: episode.Status, Metadata: rawJSONValue(episode.Metadata), ConfigSnapshot: rawJSONValue(episode.ConfigSnapshot), EndReason: episode.EndReason, StartedAt: episodeTimestampString(startedAt), EndedAt: episodeTimestampString(episode.EndedAt), DeadlineAt: episodeTimestampString(episode.DeadlineAt), DeadlineGeneration: episode.DeadlineGeneration, UpdatedAt: episodeTimestampString(episode.UpdatedAt), CreatedAt: episodeTimestampString(episode.CreatedAt)}
 }
 
 func newParticipantResponse(participant episodes.Participant) participantResponse {
