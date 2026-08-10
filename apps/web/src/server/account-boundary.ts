@@ -21,6 +21,7 @@ type BoundaryRoute = {
   authResult?: boolean;
   browserCallback?: boolean;
   preserveAuthOnUnauthorized?: boolean;
+  preserveTokens?: boolean;
   queryParameters?: readonly string[];
 };
 
@@ -109,7 +110,7 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
         response.headers.append("Set-Cookie", serializeCookie(oauthReturnCookieName(url), safeReturnPath(url.searchParams.get("return_to")), url, { httpOnly: true, sameSite: "Lax", maxAge: 600 }));
       }
     } else {
-      response = await sanitizeUpstreamResponse(upstream);
+      response = await sanitizeUpstreamResponse(upstream, route.preserveTokens === true);
       preserveAuthOnUnauthorized = route.preserveAuthOnUnauthorized === true && (await isRecentAuthFailure(response));
       if (route.browserCallback && acceptsHTML(request)) response = await browserOAuthCallbackResponse(response, url.origin);
     }
@@ -169,6 +170,20 @@ function resolveSpaceRoute(method: string, segments: string[], tenantID: string)
   if (segments.length === 4) {
     if (method === "GET") return { upstreamPath: base, authenticated: true, queryParameters: ["cursor", "page_size", "archived"] };
     if (method === "POST") return { upstreamPath: base, authenticated: true, mutation: true };
+    return undefined;
+  }
+
+  if (segments[4] === "by-slug") {
+    const slug = segments[5];
+    if (!slug || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(slug)) return undefined;
+    const selfPath = `${base}/by-slug/${encodeURIComponent(slug)}/participants/self`;
+    if (segments.length === 8 && segments[6] === "participants" && segments[7] === "self") {
+      if (method === "POST") return { upstreamPath: selfPath, authenticated: true, mutation: true, preserveTokens: true };
+      if (method === "DELETE") return { upstreamPath: selfPath, authenticated: true, mutation: true };
+    }
+    if (segments.length === 9 && segments[6] === "participants" && segments[7] === "self" && segments[8] === "access-grants" && method === "POST") {
+      return { upstreamPath: `${selfPath}/access-grants`, authenticated: true, mutation: true, preserveTokens: true };
+    }
     return undefined;
   }
 
@@ -260,10 +275,10 @@ async function boundedBody(request: Request): Promise<ArrayBuffer | undefined> {
   return body;
 }
 
-async function sanitizeUpstreamResponse(upstream: Response): Promise<Response> {
+async function sanitizeUpstreamResponse(upstream: Response, preserveTokens = false): Promise<Response> {
   if (upstream.status === 204) return new Response(null, { status: 204 });
   const value = await readJSONObject(upstream);
-  if (upstream.ok) return jsonResponse(stripTokenFields(value), upstream.status);
+  if (upstream.ok) return jsonResponse(preserveTokens ? value : stripTokenFields(value), upstream.status);
   const error = objectField(value, "error");
   const code = error ? stringField(error, "code") : undefined;
   const message = error ? stringField(error, "message") : undefined;

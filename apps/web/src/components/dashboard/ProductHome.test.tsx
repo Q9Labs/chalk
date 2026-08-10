@@ -7,6 +7,9 @@ describe("product Home contract", () => {
     expect(source).toContain("Continue where you left off");
     expect(source).toContain("Browse Spaces");
     expect(source).toContain("listEpisodes");
+    expect(source).toContain("Open Space");
+    expect(source).toContain("Open history");
+    expect(source).toContain("episodeHistoryHref");
     expect(source).toContain("!state && !error");
     expect(source).not.toContain('from "./dashboard-data"');
     expect(source).not.toMatch(/revenue|conversion|monthly active|API usage/iu);

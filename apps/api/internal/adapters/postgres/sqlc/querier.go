@@ -67,6 +67,7 @@ type Querier interface {
 	CreateAdmissionRequest(ctx context.Context, arg CreateAdmissionRequestParams) (SyncAdmissionRequest, error)
 	CreateArtifactJob(ctx context.Context, arg CreateArtifactJobParams) (ArtifactJob, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
+	CreateDashboardLifecycleParticipant(ctx context.Context, arg CreateDashboardLifecycleParticipantParams) (Participant, error)
 	CreateDeferredLifecycleIntent(ctx context.Context, arg CreateDeferredLifecycleIntentParams) (SyncLifecycleIntent, error)
 	CreateDiagnosticExportJob(ctx context.Context, arg CreateDiagnosticExportJobParams) (DiagnosticExportJob, error)
 	CreateEpisode(ctx context.Context, arg CreateEpisodeParams) (Episode, error)
@@ -248,18 +249,27 @@ type Querier interface {
 	LockActiveParticipantsForTenantEnd(ctx context.Context, arg LockActiveParticipantsForTenantEndParams) ([]LockActiveParticipantsForTenantEndRow, error)
 	LockActiveRecordingForTenantEnd(ctx context.Context, arg LockActiveRecordingForTenantEndParams) (pgtype.UUID, error)
 	LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error)
+	LockDashboardJoinIntentForUpdate(ctx context.Context, arg LockDashboardJoinIntentForUpdateParams) (SyncLifecycleIntent, error)
+	LockDashboardParticipantForUpdate(ctx context.Context, arg LockDashboardParticipantForUpdateParams) (Participant, error)
 	LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error)
 	LockDiagnosticAppendState(ctx context.Context, arg LockDiagnosticAppendStateParams) (LockDiagnosticAppendStateRow, error)
 	// Cursor-head locking and durable append.
 	LockDiagnosticCursorHead(ctx context.Context, arg LockDiagnosticCursorHeadParams) (EpisodeDiagnosticCursorHead, error)
 	LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg LockEpisodeEndLifecycleIntentForUpdateParams) (SyncLifecycleIntent, error)
+	LockLatestDashboardParticipantForUpdate(ctx context.Context, arg LockLatestDashboardParticipantForUpdateParams) (Participant, error)
+	LockLatestEpisodeForUpdate(ctx context.Context, arg LockLatestEpisodeForUpdateParams) (Episode, error)
 	LockLifecycleEpisodeForUpdate(ctx context.Context, arg LockLifecycleEpisodeForUpdateParams) (Episode, error)
 	LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg LockLifecycleIntentForParticipantTransitionForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleParticipantForUpdate(ctx context.Context, arg LockLifecycleParticipantForUpdateParams) (Participant, error)
+	LockLiveEpisodeForUpdate(ctx context.Context, arg LockLiveEpisodeForUpdateParams) (Episode, error)
 	LockPendingDeadlineOperation(ctx context.Context, arg LockPendingDeadlineOperationParams) (SyncExternalOperation, error)
 	LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockSyncEpisodeControlForUpdateParams) (SyncEpisodeControl, error)
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
+	// Dashboard account-bound Space join primitives. These queries are kept
+	// separate from the legacy Episode/Participant broker surface so slug lookup,
+	// live-Episode reuse, and account ownership stay explicit.
+	LockTenantSpaceBySlugForUpdate(ctx context.Context, arg LockTenantSpaceBySlugForUpdateParams) (Space, error)
 	LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSpaceForUpdateParams) (Space, error)
 	LockTenantTranscriptionForUpdate(ctx context.Context, arg LockTenantTranscriptionForUpdateParams) (Transcription, error)
 	LockWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error

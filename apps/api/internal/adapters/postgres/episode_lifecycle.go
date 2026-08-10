@@ -186,6 +186,7 @@ func mapLifecycleParticipant(row sqlc.Participant) episodes.Participant {
 		TenantID:     utilities.IDFromBytes(row.TenantID.Bytes),
 		SpaceID:      utilities.IDFromBytes(row.SpaceID.Bytes),
 		EpisodeID:    utilities.IDFromBytes(row.EpisodeID.Bytes),
+		AccountID:    nullableID(row.AccountID),
 		IdentityID:   nullableID(row.IdentityID),
 		Role:         row.Role,
 		Capabilities: append([]string(nil), row.Capabilities...),

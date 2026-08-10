@@ -67,6 +67,10 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, spaceEndpoints(nil, nil)...)
 	endpoints = append(endpoints, apiKeyEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
+	// Account-bound Dashboard Space routes are mounted when the concrete
+	// lifecycle service supports the self-join seam. Include their contracts
+	// here even with nil services so generated previews remain complete.
+	endpoints = append(endpoints, dashboardSpaceSelfEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)

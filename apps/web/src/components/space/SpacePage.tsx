@@ -1,7 +1,8 @@
 import { Chalk } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isTerminalParticipantCredentialCleanupError, type ParticipantCredential, type ParticipantCredentialCleanupOptions } from "../../lib/chalk-access";
+import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isTerminalParticipantCredentialCleanupError, joinDashboardSpace, type DashboardSpaceAccess, type ParticipantCredential, type ParticipantCredentialCleanupOptions } from "../../lib/chalk-access";
+import { listAllAccountTenants } from "../../lib/dashboard-api";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";
 
@@ -80,20 +81,85 @@ export function SpacePage() {
   return <SpaceArrival displayName={displayName} error={error} preparing={preparing} onDisplayNameChange={setDisplayName} onEnter={enter} />;
 }
 
+/** Account-bound Dashboard entry. The slug is the only browser route state. */
+export function DashboardSpacePage({ slug }: { readonly slug: string }) {
+  const { journey, telemetry } = useWebTelemetry();
+  const [displayName, setDisplayName] = useState("");
+  const [spaceAccess, setSpaceAccess] = useState<DashboardSpaceAccess | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const active = useRef(true);
+  const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
+
+  const enter = useCallback(() => {
+    const normalized = displayName.trim();
+    if (!normalized || spaceAccess || preparing) return;
+    setPreparing(true);
+    setError(null);
+    void resolveTenantID()
+      .then((tenantID) => {
+        if (!tenantID) throw new Error("Select a Tenant in the Dashboard before entering this Space.");
+        return joinDashboardSpace(tenantID, slug, normalized, journey);
+      })
+      .then((next) => {
+        if (!active.current) {
+          void next.leave().catch(() => undefined);
+          return;
+        }
+        telemetry.configureApiBaseURL(next.credential.apiBaseURL);
+        setSpaceAccess(next);
+      })
+      .catch((cause: unknown) => {
+        if (active.current) setError(cause instanceof Error ? cause.message : "Could not join this Space.");
+      })
+      .finally(() => {
+        if (active.current) setPreparing(false);
+      });
+  }, [displayName, journey, preparing, slug, spaceAccess, telemetry]);
+
+  const finish = useCallback(
+    (options: ParticipantCredentialCleanupOptions = {}) => {
+      if (cleanupPromise.current) return cleanupPromise.current;
+      const attempt =
+        spaceAccess?.leave(options).catch((cause: unknown) => {
+          cleanupPromise.current = undefined;
+          throw cause;
+        }) ?? Promise.resolve();
+      cleanupPromise.current = attempt;
+      return attempt;
+    },
+    [spaceAccess],
+  );
+
+  useEffect(
+    () => () => {
+      active.current = false;
+    },
+    [],
+  );
+
+  if (spaceAccess) return <LocalSpace credential={spaceAccess.credential} displayName={displayName.trim()} getAccess={spaceAccess.getAccess} connectionAccess={spaceAccess.connectionAccess} journey={journey} onFinish={finish} spaceName={slug} />;
+  return <SpaceArrival displayName={displayName} error={error} preparing={preparing} onDisplayNameChange={setDisplayName} onEnter={enter} />;
+}
+
 function LocalSpace({
   credential,
   displayName,
   getAccess,
+  connectionAccess,
   journey,
   onFinish,
+  spaceName,
 }: {
-  readonly credential: ParticipantCredential;
+  readonly credential: ParticipantCredential | DashboardSpaceAccess["credential"];
   readonly displayName: string;
   readonly getAccess: ReturnType<typeof createAccessGrantProvider>;
+  readonly connectionAccess?: DashboardSpaceAccess["connectionAccess"];
   readonly journey: ReturnType<typeof useWebTelemetry>["journey"];
   readonly onFinish: (options?: ParticipantCredentialCleanupOptions) => Promise<void>;
+  readonly spaceName?: string;
 }) {
-  const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, journey }), [credential, getAccess, journey]);
+  const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess, journey }), [connectionAccess, credential, getAccess, journey]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const releaseFromLifecycle = useCallback(() => {
     void release().catch(() => undefined);
@@ -116,9 +182,32 @@ function LocalSpace({
 
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance displayName={displayName} defaults={{ microphone: true, camera: true }} logoUrl="/brand/chalk/chalk-logo.svg" spaceName="Local Space" inviteLink={globalThis.location?.href} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      <Chalk client={client} entrance displayName={displayName} defaults={{ microphone: true, camera: true }} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName ?? "Local Space"} inviteLink={globalThis.location?.href} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
     </main>
   );
+}
+
+function tenantIDFromPage(): string {
+  try {
+    return globalThis.localStorage?.getItem("chalk.tenant-hint") ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function resolveTenantID(): Promise<string> {
+  const hint = tenantIDFromPage();
+  if (hint) return hint;
+  const tenants = await listAllAccountTenants();
+  const tenantID = tenants[0]?.tenant.id ?? "";
+  if (tenantID) {
+    try {
+      globalThis.localStorage?.setItem("chalk.tenant-hint", tenantID);
+    } catch {
+      // Storage is an optimization; the current request remains authoritative.
+    }
+  }
+  return tenantID;
 }
 
 function SpaceArrival({ displayName, error, preparing, onDisplayNameChange, onEnter }: { readonly displayName: string; readonly error: string | null; readonly preparing: boolean; readonly onDisplayNameChange: (displayName: string) => void; readonly onEnter: () => void }) {

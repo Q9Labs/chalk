@@ -218,7 +218,7 @@ func mountEpisodeLifecycleRoutes(r chi.Router, spacesService SpaceService, tenan
 }
 
 func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
-	return []RouteEndpoint{
+	endpoints := []RouteEndpoint{
 		createEpisodeEndpoint(lifecycle, authorizer),
 		listEpisodesEndpoint(lifecycle, authorizer),
 		getEpisodeEndpoint(lifecycle, authorizer),
@@ -229,6 +229,10 @@ func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService Tenant
 		setDeadlineEndpoint(lifecycle, authorizer),
 		endEpisodeEndpoint(lifecycle, authorizer),
 	}
+	if self, ok := lifecycle.(DashboardSpaceJoinService); ok {
+		endpoints = append(endpoints, dashboardSpaceSelfEndpoints(self, tokens, refresh, mediaTokens, diagnosticsTokens, mediaVerifier, active, generations, spacesService, tenantsService, media, authorizer)...)
+	}
+	return endpoints
 }
 
 func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[createEpisodeEndpointRequest, episodeResponse] {

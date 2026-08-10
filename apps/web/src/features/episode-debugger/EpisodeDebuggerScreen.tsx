@@ -175,9 +175,11 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
   if (mode === "off") return <Refusal title="Episode Diagnostics are off" detail="This build does not register the debugger route when diagnostics mode is off." />;
   if (mode === "localhost" && !["localhost", "127.0.0.1", "[::1]"].includes(globalThis.location.hostname)) return <Refusal title="Localhost origin required" detail="Local diagnostics refuse non-loopback browser origins." />;
   const snapshot = liveState.snapshot;
+  const evidenceAvailable = snapshot ? hasDiagnosticEvidence(snapshot, liveState) : false;
+  const evidenceInactive = snapshot !== undefined && !evidenceAvailable;
 
   return (
-    <main className="chalk-root episode-debugger" data-chalk data-chalk-theme="light" data-chalk-palette="light" data-episode-stream-state={liveState.phase}>
+    <main className="chalk-root episode-debugger" data-chalk data-chalk-theme="light" data-chalk-palette="light" data-episode-stream-state={evidenceInactive ? "inactive" : liveState.phase} data-episode-evidence-state={evidenceInactive ? "inactive" : "available"}>
       <header className="episode-topbar">
         <div className="episode-brand">
           <span className="episode-brand-mark" aria-hidden="true">
@@ -194,7 +196,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
         </div>
         <div className="episode-top-status">
           <span className="episode-environment">{snapshot?.environment ?? "resolving"}</span>
-          <StatusPill state={snapshot?.state ?? "loading"} />
+          <StatusPill state={evidenceInactive ? "not_observable" : (snapshot?.state ?? "loading")} label={evidenceInactive ? "Evidence inactive" : undefined} />
           <span className="episode-mono">{formatDuration(snapshot?.run?.elapsedMilliseconds)}</span>
           <span className="episode-mono">
             c {snapshot?.committedCursor ?? "—"} / p {snapshot?.projectedCursor ?? "—"}
@@ -202,7 +204,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
           <span className="episode-mono">lag {snapshot ? Math.max(0, snapshot.committedCursor - snapshot.projectedCursor) : "—"}</span>
           <span className="episode-heartbeat">activity {liveState.lastActivityAt ? new Date(liveState.lastActivityAt).toLocaleTimeString() : "waiting"}</span>
           <span className="episode-retention">Retention · 7 days after completion</span>
-          <StatusPill state={liveState.phase} label={streamLabel(liveState)} />
+          <StatusPill state={evidenceInactive ? "not_observable" : liveState.phase} label={evidenceInactive ? "Evidence unavailable" : streamLabel(liveState)} />
         </div>
         <div className="episode-top-actions">
           <Button variant="outline" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
@@ -235,7 +237,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
         <section className="episode-canvas" aria-label={`${viewLabel(view)} view`}>
           <div className="episode-canvas-header">
             <div>
-              <p className="episode-eyebrow">Live semantic evidence</p>
+              <p className="episode-eyebrow">{evidenceInactive ? "Evidence unavailable" : "Live semantic evidence"}</p>
               <h1>{viewLabel(view)}</h1>
               <p>{viewDescription(view)}</p>
             </div>
@@ -296,8 +298,13 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
               </Button>
             </div>
           )}
+          {evidenceInactive ? (
+            <div className="episode-stream-banner" data-tone="warning" role="status">
+              Evidence unavailable: this Diagnostic Reference has no Events, Operations, or Participants to show. The Episode may be inactive or outside the retained evidence window.
+            </div>
+          ) : null}
           <div className="episode-canvas-body">
-            {snapshot ? (
+            {snapshot && !evidenceInactive ? (
               renderView(
                 view,
                 liveState,
@@ -318,6 +325,8 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
                   setView("trace");
                 },
               )
+            ) : evidenceInactive ? (
+              <EvidenceUnavailableView />
             ) : liveState.phase === "failed" ? (
               <FailureView error={liveState.error} onRetry={() => setRetryGeneration((value) => value + 1)} />
             ) : (
@@ -325,7 +334,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
             )}
           </div>
         </section>
-        {snapshot ? (
+        {snapshot && !evidenceInactive ? (
           <DetailsPanel
             snapshot={snapshot}
             selection={selection}
@@ -338,6 +347,8 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
               setView("trace");
             }}
           />
+        ) : evidenceInactive ? (
+          <InactiveDetailsPanel />
         ) : (
           <aside className="episode-details-panel">
             <LoadingLines />
@@ -355,6 +366,10 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
       </ToastProvider>
     </main>
   );
+}
+
+export function hasDiagnosticEvidence(snapshot: { summary: { eventCount: number; operationCount: number; participantCount?: number }; operations?: readonly unknown[]; participants?: readonly unknown[] }, liveState: Pick<DiagnosticLiveState, "events" | "operations">): boolean {
+  return snapshot.summary.eventCount > 0 || snapshot.summary.operationCount > 0 || (snapshot.summary.participantCount ?? 0) > 0 || (snapshot.operations?.length ?? 0) > 0 || (snapshot.participants?.length ?? 0) > 0 || liveState.events.length > 0 || liveState.operations.length > 0;
 }
 
 function renderView(view: DebuggerView, liveState: DiagnosticLiveState, selection: DebuggerSelection | undefined, onSelect: (selection: DebuggerSelection) => void, onLoadMoreEvents: () => void, onLoadMoreOperations: () => void, onOpenRelated: (filter: DiagnosticFilterV1) => void) {
@@ -579,6 +594,30 @@ function FailureView({ error, onRetry }: { error?: string; onRetry: () => void }
         Retry evidence
       </Button>
     </div>
+  );
+}
+
+function EvidenceUnavailableView() {
+  return (
+    <div className="episode-empty" role="status" data-episode-evidence-state="inactive">
+      <span className="episode-empty-mark" aria-hidden="true">
+        ◎
+      </span>
+      <h2>Evidence unavailable</h2>
+      <p>Evidence is inactive: no Events, Operations, or Participants are projected for this Diagnostic Reference.</p>
+    </div>
+  );
+}
+
+function InactiveDetailsPanel() {
+  return (
+    <aside className="episode-details-panel" aria-label="Diagnostic details">
+      <section className="episode-empty" data-episode-evidence-state="inactive">
+        <p className="episode-eyebrow">Evidence state</p>
+        <h2>Evidence inactive</h2>
+        <p>No Events, Operations, or Participants are available. No positive state is claimed without evidence.</p>
+      </section>
+    </aside>
   );
 }
 

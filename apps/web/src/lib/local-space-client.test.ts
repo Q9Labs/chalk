@@ -21,6 +21,19 @@ describe("local Space client", () => {
     expect(createSpaceClient).toHaveBeenCalledWith({ space: "local-space", getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL, telemetry: operationJourney.context });
   });
 
+  it("uses the Dashboard Space slug and full refresh seam without a broker Sync override", () => {
+    const getAccess = vi.fn<GetAccess>();
+    const connectionAccess = vi.fn<NonNullable<SpaceClientPlatform["connectionAccess"]>>();
+    const client = fakeSpaceClient();
+    const createSpaceClient = vi.fn<(_: SpaceClientOptions, __: SpaceClientPlatform) => SpaceClient>(() => client);
+    const operationJourney = journey();
+    const dashboardCredential = { apiBaseURL: "https://api.chalk.test", space: "design-lab", access: {} as never, participantGeneration: 3 };
+
+    createLocalSpaceClient({ credential: dashboardCredential, getAccess, connectionAccess, journey: operationJourney }, { createSpaceClient });
+
+    expect(createSpaceClient).toHaveBeenCalledWith({ space: "design-lab", getAccess, baseUrl: dashboardCredential.apiBaseURL }, { connectionAccess, telemetry: operationJourney.context });
+  });
+
   it("records SDK client operations on the page journey", async () => {
     const { client: instrumented, recordDiagnostic } = instrumentedSpaceClient();
 

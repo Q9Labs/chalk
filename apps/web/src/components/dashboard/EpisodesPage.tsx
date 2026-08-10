@@ -6,6 +6,7 @@ import { EndEpisodeDialog, StartEpisodeDialog } from "./EpisodeDialogs";
 import { EpisodeEmptyState, EpisodeErrorState, EpisodeListLoading, EpisodePagination, NoSpacesState } from "./EpisodeStates";
 import { durationLabel, formatDateTime, humanizeReason, messageForError, readSearchParam, statusLabel, updateSearch } from "./episode-utils";
 import { clearEpisodeEndRequest, createEpisode, endEpisode, getEpisode, listEpisodes, listSpaces, type DashboardEpisode, type DashboardEpisodePage, type DashboardPagination, type DashboardSpace, type DashboardSpacePage } from "../../lib/dashboard-api";
+import { defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
 
 export type EpisodeStatus = DashboardEpisode["status"];
 
@@ -19,7 +20,19 @@ export type EpisodeClient = {
 
 const defaultEpisodeClient: EpisodeClient = { listSpaces, listEpisodes, getEpisode, createEpisode, endEpisode };
 
-export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnosticsApi }: { tenantID: string; api?: EpisodeClient; diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient }) {
+export function EpisodesPage({
+  tenantID,
+  api = defaultEpisodeClient,
+  diagnosticsApi,
+  spaceHrefBuilder = defaultSpaceHrefBuilder,
+  navigateToSpace = (href) => globalThis.location.assign(href),
+}: {
+  tenantID: string;
+  api?: EpisodeClient;
+  diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient;
+  spaceHrefBuilder?: SpaceHrefBuilder;
+  navigateToSpace?: (href: string) => void;
+}) {
   const [spaces, setSpaces] = useState<DashboardSpace[]>([]);
   const [episodes, setEpisodes] = useState<DashboardEpisode[]>([]);
   const [pagination, setPagination] = useState<DashboardPagination | null>(null);
@@ -40,8 +53,9 @@ export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnostics
   const [endBusy, setEndBusy] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
   const [filterTenantID, setFilterTenantID] = useState(tenantID);
+  const [refreshGeneration, setRefreshGeneration] = useState(0);
 
-  const spaceNames = useMemo(() => new Map(spaces.map((space) => [space.id, space.name])), [spaces]);
+  const spacesByID = useMemo(() => new Map(spaces.map((space) => [space.id, space])), [spaces]);
   const activeSpaces = useMemo(() => spaces.filter((space) => !space.archived), [spaces]);
   const visibleEpisodes = useMemo(() => episodes.filter((episode) => statusFilter === "all" || episode.status === statusFilter), [episodes, statusFilter]);
   const selectedEpisode = detail ?? episodes.find((episode) => episode.id === selectedEpisodeID) ?? null;
@@ -92,7 +106,22 @@ export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnostics
     return () => {
       active = false;
     };
-  }, [api, cursorHistory, filterTenantID, spaceFilter, tenantID]);
+  }, [api, cursorHistory, filterTenantID, refreshGeneration, spaceFilter, tenantID]);
+
+  useEffect(() => {
+    const refresh = () => setRefreshGeneration((value) => value + 1);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const interval = globalThis.setInterval(refreshWhenVisible, 10_000);
+    globalThis.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      globalThis.clearInterval(interval);
+      globalThis.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, []);
 
   useEffect(() => {
     if (filterTenantID !== tenantID) return;
@@ -172,6 +201,8 @@ export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnostics
       updateSearch({ space: created.space_id, episode: created.id });
       setSpaceFilter(created.space_id);
       setCursorHistory([]);
+      const space = activeSpaces.find((item) => item.id === created.space_id);
+      if (space) navigateToSpace(spaceHrefBuilder(space));
     } catch (cause) {
       setCreateError(messageForError(cause, "Episode could not start"));
     } finally {
@@ -209,7 +240,7 @@ export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnostics
         </div>
         <button className="dashboard-button primary episodes-start-button" type="button" onClick={openCreate} disabled={activeSpaces.length === 0 || listState === "loading"}>
           <Icon name="plus" />
-          Start an Episode
+          Start and join
         </button>
       </header>
 
@@ -248,20 +279,32 @@ export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnostics
             <span>{visibleEpisodes.length} shown</span>
           </div>
           <div className="episode-list">
-            {visibleEpisodes.map((episode) => (
-              <button className={`episode-list-item episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} type="button" key={episode.id} onClick={() => selectEpisode(episode)}>
-                <span className="episode-status-mark" aria-hidden="true" />
-                <span className="episode-list-copy">
-                  <strong>{spaceNames.get(episode.space_id) ?? "Space"}</strong>
-                  <small>{formatDateTime(episode.started_at)}</small>
-                </span>
-                <span className="episode-list-state">
-                  <strong>{statusLabel(episode.status)}</strong>
-                  <small>{episode.status === "active" ? `Ends ${formatDateTime(episode.deadline_at)}` : episode.end_reason ? humanizeReason(episode.end_reason) : durationLabel(episode)}</small>
-                </span>
-                <Icon name="arrow" />
-              </button>
-            ))}
+            {visibleEpisodes.map((episode) => {
+              const space = spacesByID.get(episode.space_id);
+              return (
+                <article className={`episode-list-item episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} key={episode.id}>
+                  <button className="episode-list-select" type="button" onClick={() => selectEpisode(episode)}>
+                    <span className="episode-status-mark" aria-hidden="true" />
+                    <span className="episode-list-copy">
+                      <strong>{space?.name ?? "Space"}</strong>
+                      <small>
+                        <code>{space?.slug ?? "Space slug unavailable"}</code> · {formatDateTime(episode.started_at)}
+                      </small>
+                    </span>
+                    <span className="episode-list-state">
+                      <strong>{statusLabel(episode.status)}</strong>
+                      <small>{episode.status === "active" ? `Ends ${formatDateTime(episode.deadline_at)}` : episode.end_reason ? humanizeReason(episode.end_reason) : durationLabel(episode)}</small>
+                    </span>
+                    <Icon name="arrow" />
+                  </button>
+                  {space && !space.archived ? (
+                    <a className="dashboard-button secondary episode-list-open-space" href={spaceHrefBuilder(space)}>
+                      Open Space
+                    </a>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -273,7 +316,10 @@ export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnostics
       {selectedEpisodeID ? (
         <EpisodeDetailPanel
           episode={selectedEpisode}
-          spaceName={selectedEpisode ? spaceNames.get(selectedEpisode.space_id) : undefined}
+          spaceName={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.name : undefined}
+          spaceSlug={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.slug : undefined}
+          spaceArchived={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.archived : undefined}
+          spaceHrefBuilder={spaceHrefBuilder}
           state={detailState}
           error={detailError}
           onRetry={() => setEpisodes((current) => [...current])}

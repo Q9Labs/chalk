@@ -52,7 +52,7 @@ describe("Episodes page", () => {
   it("renders the Tenant-wide history contract and optional start language", () => {
     const markup = renderToStaticMarkup(<EpisodesPage tenantID={tenantID} api={client()} />);
     expect(markup).toContain("Tenant-wide history");
-    expect(markup).toContain("Start an Episode");
+    expect(markup).toContain("Start and join");
     expect(markup).toContain("Starting an Episode is optional");
   });
 
@@ -68,6 +68,14 @@ describe("Episodes page", () => {
     expect(getEpisode).toHaveBeenCalledWith({ tenantID, spaceID: space.id, episodeID: "episode-1" });
   });
 
+  it("shows the Space slug and an injectable Open Space link while keeping history read-only", async () => {
+    render(<EpisodesPage tenantID={tenantID} api={client()} spaceHrefBuilder={(item) => `/custom-space/${item.slug}`} />);
+
+    await screen.findByRole("button", { name: /Product studio/ });
+    expect(screen.getByText("product-studio")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Space" }).getAttribute("href")).toBe("/custom-space/product-studio");
+  });
+
   it("opens diagnostics from the selected Episode without making the operator find a reference", async () => {
     vi.stubGlobal("__EPISODE_DIAGNOSTICS_ROUTE_ENABLED__", true);
     const diagnosticsApi = { resolveAlternate: vi.fn().mockResolvedValue("chalkdiag:v1:localhost:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") };
@@ -79,19 +87,19 @@ describe("Episodes page", () => {
     expect(link.getAttribute("href")).toContain(encodeURIComponent("chalk.episode:episode-1"));
   });
 
-  it("starts an Episode from the selected Space and opens its detail", async () => {
+  it("starts an Episode from the selected Space and opens the Space", async () => {
     const createEpisode = vi.fn().mockResolvedValue(episode({ id: "episode-new", status: "active", ended_at: null, end_reason: null }));
     const getEpisode = vi.fn().mockImplementation(({ episodeID }: { episodeID: string }) => Promise.resolve(episode({ id: episodeID, status: "active", ended_at: null, end_reason: null })));
+    const navigateToSpace = vi.fn();
     const api = client({ createEpisode, getEpisode });
-    render(<EpisodesPage tenantID={tenantID} api={api} />);
+    render(<EpisodesPage tenantID={tenantID} api={api} navigateToSpace={navigateToSpace} />);
 
     await screen.findByRole("button", { name: /Product studio/ });
-    fireEvent.click(screen.getByRole("button", { name: "Start an Episode" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start Episode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start and join" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Start and join" }));
 
     await waitFor(() => expect(createEpisode).toHaveBeenCalledWith({ tenantID, spaceID: space.id }));
-    expect((await screen.findAllByText("Live now")).length).toBeGreaterThan(0);
-    expect(window.location.search).toContain("episode=episode-new");
+    expect(navigateToSpace).toHaveBeenCalledWith("/space/product-studio");
   });
 
   it("does not offer archived Spaces as Episode start choices", async () => {
@@ -101,7 +109,7 @@ describe("Episodes page", () => {
     });
     render(<EpisodesPage tenantID={tenantID} api={api} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Start an Episode" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Start and join" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("option", { name: "Product studio" })).toBeTruthy();
     expect(within(dialog).queryByRole("option", { name: "Archived studio" })).toBeNull();

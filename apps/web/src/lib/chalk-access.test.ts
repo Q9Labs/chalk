@@ -1,7 +1,7 @@
 import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential } from "./chalk-access";
+import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, joinDashboardSpace } from "./chalk-access";
 
 const participantCredential = {
   apiBaseURL: "https://api.chalk.test",
@@ -124,6 +124,37 @@ describe("local Chalk access client", () => {
 
     const [, init] = requests[0] ?? [];
     expect(init).toMatchObject({ keepalive: true });
+  });
+
+  it("joins, refreshes, and leaves a Dashboard Space through the account boundary", async () => {
+    vi.stubGlobal("location", { origin: "https://chalkmeet.com" });
+    const requests: Array<Parameters<typeof fetch>> = [];
+    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-2" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-3" }, 200), new Response(null, { status: 204 })];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (...input) => {
+        requests.push(input);
+        return responses.shift() ?? new Response(null, { status: 500 });
+      }),
+    );
+
+    const spaceAccess = await joinDashboardSpace("tenant-1", "design-lab", "Ada");
+    await expect(spaceAccess.connectionAccess({ reason: "join", replaceMediaConnection: false })).resolves.toEqual(access);
+    await expect(spaceAccess.connectionAccess({ reason: "scheduled_refresh", replaceMediaConnection: false, currentMediaToken: access.media.token as never, expectedParticipantGeneration: 3 })).resolves.toEqual(access);
+    await expect(spaceAccess.leave({ keepalive: true })).resolves.toBeUndefined();
+
+    expect(requests.map(([url]) => url)).toEqual([
+      "/api/auth/csrf",
+      "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self",
+      "/api/auth/csrf",
+      "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self/access-grants",
+      "/api/auth/csrf",
+      "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self",
+    ]);
+    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ display_name: "Ada" });
+    expect(JSON.parse(String(requests[3]?.[1]?.body))).toEqual({ current_media_token: access.media.token, participant_generation: 3, replace_media_connection: false });
+    expect(requests[5]?.[1]).toMatchObject({ method: "DELETE", keepalive: true });
+    expect(JSON.parse(String(requests[5]?.[1]?.body))).toEqual({ participant_generation: 3 });
   });
 });
 

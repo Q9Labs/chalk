@@ -4,8 +4,9 @@ import { Icon, ResourcePageHeader } from "./DashboardShell";
 import { EditSpaceDialog } from "./EditSpaceDialog";
 import { NewSpaceDialog } from "./NewSpaceDialog";
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
+import { defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
 
-type SpacesPageProps = { tenantID?: string };
+type SpacesPageProps = { tenantID?: string; spaceHrefBuilder?: SpaceHrefBuilder };
 export type SpaceFilter = "all" | "active" | "archived";
 
 function matchesSpaceFilter(space: Space, filter: SpaceFilter): boolean {
@@ -22,7 +23,7 @@ export function reconcileSpaceItems(current: Space[], next: Space, filter: Space
   return updated;
 }
 
-export function SpacesPage({ tenantID }: SpacesPageProps) {
+export function SpacesPage({ tenantID, spaceHrefBuilder = defaultSpaceHrefBuilder }: SpacesPageProps) {
   const [spaceItems, setSpaceItems] = useState<Space[]>([]);
   const [filter, setFilter] = useState<SpaceFilter>("all");
   const [query, setQuery] = useState("");
@@ -33,6 +34,7 @@ export function SpacesPage({ tenantID }: SpacesPageProps) {
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [hasMore, setHasMore] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createdSpace, setCreatedSpace] = useState<Space | null>(null);
   const [editSpace, setEditSpace] = useState<Space | null>(null);
   const [lifecycle, setLifecycle] = useState<{ space: Space; action: "archive" | "restore" } | null>(null);
 
@@ -122,6 +124,20 @@ export function SpacesPage({ tenantID }: SpacesPageProps) {
     <div className="dashboard-page resource-page">
       <ResourcePageHeader eyebrow="Durable collaboration places" title="Spaces" description="Places for recurring Episodes, Members, and shared context." actionLabel="New Space" onAction={() => setCreateOpen(true)} />
 
+      {createdSpace ? (
+        <div className="space-created-notice" role="status">
+          <span>
+            <strong>{createdSpace.name}</strong> is ready.
+          </span>
+          <a className="dashboard-button secondary" href={spaceHrefBuilder(createdSpace)}>
+            Open Space
+          </a>
+          <button type="button" className="space-created-dismiss" aria-label="Dismiss Space created notice" onClick={() => setCreatedSpace(null)}>
+            ×
+          </button>
+        </div>
+      ) : null}
+
       <div className="resource-toolbar">
         <label className="resource-search">
           <span className="sr-only">Search Spaces</span>
@@ -148,21 +164,29 @@ export function SpacesPage({ tenantID }: SpacesPageProps) {
         <>
           <div className="space-list" aria-live="polite">
             {visibleSpaces.map((space, index) => (
-              <SpaceListItem key={space.id} space={space} accent={accentFor(index)} onEdit={() => setEditSpace(space)} onArchive={() => setLifecycle({ space, action: "archive" })} onRestore={() => setLifecycle({ space, action: "restore" })} />
+              <SpaceListItem key={space.id} space={space} accent={accentFor(index)} spaceHrefBuilder={spaceHrefBuilder} onEdit={() => setEditSpace(space)} onArchive={() => setLifecycle({ space, action: "archive" })} onRestore={() => setLifecycle({ space, action: "restore" })} />
             ))}
           </div>
           <SpaceLoadMoreButton hasMore={hasMore} loadingMore={loadingMore} onLoadMore={() => void loadMore()} />
         </>
       ) : null}
 
-      <NewSpaceDialog open={createOpen} tenantID={tenantID} onClose={() => setCreateOpen(false)} onCreated={addSpace} />
+      <NewSpaceDialog
+        open={createOpen}
+        tenantID={tenantID}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(space) => {
+          addSpace(space);
+          setCreatedSpace(space);
+        }}
+      />
       <EditSpaceDialog open={editSpace !== null} tenantID={tenantID} space={editSpace} onClose={() => setEditSpace(null)} onSaved={replaceSpace} />
       <SpaceLifecycleDialog open={lifecycle !== null} tenantID={tenantID} space={lifecycle?.space ?? null} action={lifecycle?.action ?? "archive"} onClose={() => setLifecycle(null)} onChanged={replaceSpace} />
     </div>
   );
 }
 
-function SpaceListItem({ space, accent, onEdit, onArchive, onRestore }: { space: Space; accent: "green" | "blue" | "yellow" | "pink"; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
+function SpaceListItem({ space, accent, spaceHrefBuilder, onEdit, onArchive, onRestore }: { space: Space; accent: "green" | "blue" | "yellow" | "pink"; spaceHrefBuilder: SpaceHrefBuilder; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
   const archived = space.archived;
   return (
     <article className={`space-list-item accent-${accent} ${archived ? "is-archived" : ""}`}>
@@ -181,6 +205,11 @@ function SpaceListItem({ space, accent, onEdit, onArchive, onRestore }: { space:
       </div>
       <time dateTime={space.updated_at}>{relativeDate(space.updated_at)}</time>
       <div className="space-row-actions">
+        {!archived ? (
+          <a className="dashboard-button primary" href={spaceHrefBuilder(space)}>
+            Open Space
+          </a>
+        ) : null}
         <button type="button" className="dashboard-button secondary" onClick={onEdit}>
           Edit
         </button>

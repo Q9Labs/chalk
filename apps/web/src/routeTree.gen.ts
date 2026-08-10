@@ -21,6 +21,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
 import { Route as AppTenantRouteImport } from './routes/_app.tenant'
 import { Route as AppSpacesRouteImport } from './routes/_app.spaces'
 import { Route as AppPeopleRouteImport } from './routes/_app.people'
@@ -90,6 +91,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpaceSlugRoute = SpaceSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => SpaceRoute,
+} as any)
 const AppTenantRoute = AppTenantRouteImport.update({
   id: '/tenant',
   path: '/tenant',
@@ -144,7 +150,7 @@ export interface FileRoutesByFullPath {
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/space': typeof SpaceRoute
+  '/space': typeof SpaceRouteWithChildren
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/people': typeof AppPeopleRoute
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
+  '/space/$slug': typeof SpaceSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -166,7 +173,7 @@ export interface FileRoutesByTo {
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/space': typeof SpaceRoute
+  '/space': typeof SpaceRouteWithChildren
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/people': typeof AppPeopleRoute
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
+  '/space/$slug': typeof SpaceSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -190,7 +198,7 @@ export interface FileRoutesById {
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/space': typeof SpaceRoute
+  '/space': typeof SpaceRouteWithChildren
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   '/_app/people': typeof AppPeopleRoute
   '/_app/spaces': typeof AppSpacesRoute
   '/_app/tenant': typeof AppTenantRoute
+  '/space/$slug': typeof SpaceSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/people'
     | '/spaces'
     | '/tenant'
+    | '/space/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/people'
     | '/spaces'
     | '/tenant'
+    | '/space/$slug'
   id:
     | '__root__'
     | '/'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/_app/people'
     | '/_app/spaces'
     | '/_app/tenant'
+    | '/space/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -283,7 +295,7 @@ export interface RootRouteChildren {
   SdkPreviewRoute: typeof SdkPreviewRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
-  SpaceRoute: typeof SpaceRoute
+  SpaceRoute: typeof SpaceRouteWithChildren
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
   WhiteboardRoute: typeof WhiteboardRoute
@@ -374,6 +386,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/space/$slug': {
+      id: '/space/$slug'
+      path: '/$slug'
+      fullPath: '/space/$slug'
+      preLoaderRoute: typeof SpaceSlugRouteImport
+      parentRoute: typeof SpaceRoute
     }
     '/_app/tenant': {
       id: '/_app/tenant'
@@ -467,6 +486,16 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface SpaceRouteChildren {
+  SpaceSlugRoute: typeof SpaceSlugRoute
+}
+
+const SpaceRouteChildren: SpaceRouteChildren = {
+  SpaceSlugRoute: SpaceSlugRoute,
+}
+
+const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
@@ -476,7 +505,7 @@ const rootRouteChildren: RootRouteChildren = {
   SdkPreviewRoute: SdkPreviewRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
-  SpaceRoute: SpaceRoute,
+  SpaceRoute: SpaceRouteWithChildren,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
   WhiteboardRoute: WhiteboardRoute,

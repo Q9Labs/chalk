@@ -1444,6 +1444,57 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.post("joinDashboardSpaceSelf", "/v1/tenants/:tenant_id/spaces/by-slug/:space_slug/participants/self", {
+      params: S.JoinDashboardSpaceSelfPathParamsSchema,
+      headers: S.JoinDashboardSpaceSelfRequestHeadersSchema,
+      payload: S.JoinDashboardSpaceSelfRequestBodySchema,
+      success: S.JoinDashboardSpaceSelfResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidSlugErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ParticipantNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("leaveDashboardSpaceSelf", "/v1/tenants/:tenant_id/spaces/by-slug/:space_slug/participants/self", {
+      params: S.LeaveDashboardSpaceSelfPathParamsSchema,
+      headers: S.LeaveDashboardSpaceSelfRequestHeadersSchema,
+      payload: S.LeaveDashboardSpaceSelfRequestBodySchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidSlugErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ParticipantNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listSpaces", "/v1/tenants/:tenant_id/spaces", {
       params: S.ListSpacesPathParamsSchema,
       query: S.ListSpacesQueryParamsSchema,
@@ -1456,6 +1507,29 @@ const spacesGroup = HttpApiGroup.make("spaces")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("refreshDashboardSpaceSelfAccess", "/v1/tenants/:tenant_id/spaces/by-slug/:space_slug/participants/self/access-grants", {
+      params: S.RefreshDashboardSpaceSelfAccessPathParamsSchema,
+      payload: S.RefreshDashboardSpaceSelfAccessRequestBodySchema,
+      success: S.RefreshDashboardSpaceSelfAccessResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidSlugErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),

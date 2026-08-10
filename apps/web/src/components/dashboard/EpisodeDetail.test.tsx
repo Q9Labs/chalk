@@ -62,6 +62,19 @@ describe("EpisodeDetailPanel", () => {
     expect(screen.queryByText("Immutable history")).toBeNull();
   });
 
+  it("shows the Space slug and an injectable Open Space link", () => {
+    render(<EpisodeDetailPanel episode={episode()} spaceName="Product studio" spaceSlug="product-studio" spaceHrefBuilder={(space) => `/custom/${space.slug}`} state="ready" error={null} onRetry={vi.fn()} onClose={vi.fn()} onEnd={vi.fn()} />);
+
+    expect(screen.getByText("product-studio")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Space" }).getAttribute("href")).toBe("/custom/product-studio");
+  });
+
+  it("does not offer Open Space for archived Spaces", () => {
+    render(<EpisodeDetailPanel episode={episode()} spaceName="Archived studio" spaceSlug="archived-studio" spaceArchived state="ready" error={null} onRetry={vi.fn()} onClose={vi.fn()} onEnd={vi.fn()} />);
+
+    expect(screen.queryByRole("link", { name: "Open Space" })).toBeNull();
+  });
+
   it("marks ended Episodes as immutable and shows their end reason", () => {
     render(<EpisodeDetailPanel episode={episode({ status: "ended", ended_at: "2026-08-04T09:42:00Z", end_reason: "deadline_exceeded" })} spaceName="Product studio" state="ready" error={null} onRetry={vi.fn()} onClose={vi.fn()} onEnd={vi.fn()} />);
 

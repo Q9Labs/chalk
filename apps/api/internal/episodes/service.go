@@ -43,6 +43,8 @@ var (
 	ErrCapacityExceeded                   = errors.New("episode capacity exceeded")
 	ErrEpisodeAlreadyExists               = errors.New("episode already exists")
 	ErrSynchronousCommit                  = errors.New("synchronous commit is not enabled for episode transaction")
+	ErrInvalidAccountID                   = errors.New("invalid dashboard account id")
+	ErrInvalidSpaceSlug                   = errors.New("invalid episode space slug")
 )
 
 const (
@@ -101,6 +103,16 @@ type Repository interface {
 	SetDeadline(context.Context, SetDeadlineInput) (ControlRequest, error)
 }
 
+// SelfJoinRepository owns the Dashboard Account boundary. It deliberately
+// sits beside Repository so legacy lifecycle callers keep their existing
+// seams while the account-bound join can resolve a Space slug, live Episode,
+// and stable account Participant in one transaction.
+type SelfJoinRepository interface {
+	JoinSelf(context.Context, SelfJoinInput) (SelfJoinResult, error)
+	FindSelf(context.Context, SelfAccessInput) (SelfJoinResult, error)
+	LeaveSelf(context.Context, SelfLeaveInput) (SelfLeaveResult, error)
+}
+
 type DeadlineSchedulerRepository interface {
 	EnqueueDueEpisodeDeadlines(context.Context, int32) (int, error)
 }
@@ -115,6 +127,40 @@ type CommitObserver interface {
 type Service struct {
 	repository Repository
 	observer   CommitObserver
+}
+
+type SelfJoinInput struct {
+	TenantID    utilities.ID
+	AccountID   utilities.ID
+	SpaceSlug   string
+	DisplayName string
+	Request     Request
+}
+
+type SelfAccessInput struct {
+	TenantID  utilities.ID
+	AccountID utilities.ID
+	SpaceSlug string
+}
+
+type SelfLeaveInput struct {
+	TenantID              utilities.ID
+	AccountID             utilities.ID
+	SpaceSlug             string
+	ParticipantGeneration int64
+	Request               Request
+}
+
+type SelfJoinResult struct {
+	Episode     Episode
+	Participant Participant
+	Intent      Intent
+}
+
+type SelfLeaveResult struct {
+	Episode     Episode
+	Participant Participant
+	Removed     bool
 }
 
 type EpisodeList struct {
@@ -224,6 +270,7 @@ type Participant struct {
 	TenantID     utilities.ID
 	SpaceID      utilities.ID
 	EpisodeID    utilities.ID
+	AccountID    utilities.ID
 	IdentityID   utilities.ID
 	Role         string
 	Capabilities []string
@@ -287,6 +334,39 @@ type ControlRequest struct {
 
 func NewService(repository Repository) Service {
 	return Service{repository: repository}
+}
+
+func (s Service) JoinSelf(ctx context.Context, input SelfJoinInput) (SelfJoinResult, error) {
+	if err := prepareSelfJoinInput(&input); err != nil {
+		return SelfJoinResult{}, err
+	}
+	repository, ok := s.repository.(SelfJoinRepository)
+	if !ok {
+		return SelfJoinResult{}, ErrSynchronousCommit
+	}
+	return repository.JoinSelf(ctx, input)
+}
+
+func (s Service) FindSelf(ctx context.Context, input SelfAccessInput) (SelfJoinResult, error) {
+	if err := prepareSelfAccessInput(&input); err != nil {
+		return SelfJoinResult{}, err
+	}
+	repository, ok := s.repository.(SelfJoinRepository)
+	if !ok {
+		return SelfJoinResult{}, ErrSynchronousCommit
+	}
+	return repository.FindSelf(ctx, input)
+}
+
+func (s Service) LeaveSelf(ctx context.Context, input SelfLeaveInput) (SelfLeaveResult, error) {
+	if err := prepareSelfLeaveInput(&input); err != nil {
+		return SelfLeaveResult{}, err
+	}
+	repository, ok := s.repository.(SelfJoinRepository)
+	if !ok {
+		return SelfLeaveResult{}, ErrSynchronousCommit
+	}
+	return repository.LeaveSelf(ctx, input)
 }
 
 func (s Service) WithCommitObserver(observer CommitObserver) Service {

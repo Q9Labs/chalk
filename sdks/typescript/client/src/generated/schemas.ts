@@ -472,6 +472,11 @@ export const CreateWebhookEndpointRequestSchema = Schema.Struct({
 });
 export type CreateWebhookEndpointRequest = typeof CreateWebhookEndpointRequestSchema.Type;
 
+export const DashboardSpaceSelfJoinRequestSchema = Schema.Struct({
+  display_name: Schema.String.check(Schema.isMinLength(1)),
+});
+export type DashboardSpaceSelfJoinRequest = typeof DashboardSpaceSelfJoinRequestSchema.Type;
+
 export const EpisodeSchema = Schema.Struct({
   config_snapshot: Schema.Unknown,
   created_at: DateTimeStringSchema,
@@ -671,6 +676,11 @@ export const JourneyEventIntakeSchema = Schema.Struct({
   journey_ids: Schema.Array(Schema.String),
 });
 export type JourneyEventIntake = typeof JourneyEventIntakeSchema.Type;
+
+export const LeaveDashboardSpaceSelfRequestSchema = Schema.Struct({
+  participant_generation: Schema.Number,
+});
+export type LeaveDashboardSpaceSelfRequest = typeof LeaveDashboardSpaceSelfRequestSchema.Type;
 
 export const LoginRequestSchema = Schema.Struct({
   email: EmailSchema,
@@ -892,9 +902,7 @@ export const RegisterRequestSchema = Schema.Struct({
 });
 export type RegisterRequest = typeof RegisterRequestSchema.Type;
 
-export const RemoveEpisodeParticipantRequestSchema = Schema.Struct({
-  participant_generation: Schema.Number,
-});
+export const RemoveEpisodeParticipantRequestSchema = LeaveDashboardSpaceSelfRequestSchema;
 export type RemoveEpisodeParticipantRequest = typeof RemoveEpisodeParticipantRequestSchema.Type;
 
 export const RequestTranscriptRequestSchema = Schema.Struct({
@@ -2000,6 +2008,51 @@ export const IssueRecentAuthProof429ResponseHeadersSchema = Schema.Struct({
 });
 export type IssueRecentAuthProof429ResponseHeaders = typeof IssueRecentAuthProof429ResponseHeadersSchema.Type;
 
+export const JoinDashboardSpaceSelfPathParamsSchema = Schema.Struct({
+  space_slug: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"))),
+  tenant_id: TenantIdSchema,
+});
+export type JoinDashboardSpaceSelfPathParams = typeof JoinDashboardSpaceSelfPathParamsSchema.Type;
+
+export const JoinDashboardSpaceSelfRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type JoinDashboardSpaceSelfRequestHeaders = typeof JoinDashboardSpaceSelfRequestHeadersSchema.Type;
+
+export const JoinDashboardSpaceSelfRequestBodySchema = DashboardSpaceSelfJoinRequestSchema;
+export type JoinDashboardSpaceSelfRequestBody = typeof JoinDashboardSpaceSelfRequestBodySchema.Type;
+
+export const JoinDashboardSpaceSelfResponseSchema = AccessGrantSchema;
+export type JoinDashboardSpaceSelfResponse = typeof JoinDashboardSpaceSelfResponseSchema.Type;
+
+export const JoinDashboardSpaceSelf429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type JoinDashboardSpaceSelf429ResponseHeaders = typeof JoinDashboardSpaceSelf429ResponseHeadersSchema.Type;
+
+export const LeaveDashboardSpaceSelfPathParamsSchema = Schema.Struct({
+  space_slug: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"))),
+  tenant_id: TenantIdSchema,
+});
+export type LeaveDashboardSpaceSelfPathParams = typeof LeaveDashboardSpaceSelfPathParamsSchema.Type;
+
+export const LeaveDashboardSpaceSelfRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type LeaveDashboardSpaceSelfRequestHeaders = typeof LeaveDashboardSpaceSelfRequestHeadersSchema.Type;
+
+export const LeaveDashboardSpaceSelfRequestBodySchema = LeaveDashboardSpaceSelfRequestSchema;
+export type LeaveDashboardSpaceSelfRequestBody = typeof LeaveDashboardSpaceSelfRequestBodySchema.Type;
+
+export const LeaveDashboardSpaceSelf429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type LeaveDashboardSpaceSelf429ResponseHeaders = typeof LeaveDashboardSpaceSelf429ResponseHeadersSchema.Type;
+
 export const ListAPIKeysPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -2295,6 +2348,25 @@ export const RedeliverWebhookDelivery429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RedeliverWebhookDelivery429ResponseHeaders = typeof RedeliverWebhookDelivery429ResponseHeadersSchema.Type;
+
+export const RefreshDashboardSpaceSelfAccessPathParamsSchema = Schema.Struct({
+  space_slug: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"))),
+  tenant_id: TenantIdSchema,
+});
+export type RefreshDashboardSpaceSelfAccessPathParams = typeof RefreshDashboardSpaceSelfAccessPathParamsSchema.Type;
+
+export const RefreshDashboardSpaceSelfAccessRequestBodySchema = IssueAccessGrantRequestSchema;
+export type RefreshDashboardSpaceSelfAccessRequestBody = typeof RefreshDashboardSpaceSelfAccessRequestBodySchema.Type;
+
+export const RefreshDashboardSpaceSelfAccessResponseSchema = AccessGrantSchema;
+export type RefreshDashboardSpaceSelfAccessResponse = typeof RefreshDashboardSpaceSelfAccessResponseSchema.Type;
+
+export const RefreshDashboardSpaceSelfAccess429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RefreshDashboardSpaceSelfAccess429ResponseHeaders = typeof RefreshDashboardSpaceSelfAccess429ResponseHeadersSchema.Type;
 
 export const RefreshIntegrationConnectionPathParamsSchema = Schema.Struct({
   connection_id: UUIDSchema,
@@ -4183,6 +4255,25 @@ export const SpaceInvalidIdErrorSchema = SpaceInvalidIdErrorWireSchema.pipe(
   }),
 );
 
+export class SpaceInvalidSlugError extends Schema.TaggedErrorClass<SpaceInvalidSlugError>()("SpaceInvalidSlugError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_slug"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceInvalidSlugErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_slug"),
+    message: Schema.String,
+  }),
+});
+export const SpaceInvalidSlugErrorSchema = SpaceInvalidSlugErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceInvalidSlugError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidSlugError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class SpaceNotFoundError extends Schema.TaggedErrorClass<SpaceNotFoundError>()("SpaceNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("space.not_found"),
@@ -5612,6 +5703,45 @@ export type IssueEpisodeParticipantSyncTokenError = typeof IssueEpisodeParticipa
 export const IssueRecentAuthProofErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, AuthInvalidRecentAuthErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type IssueRecentAuthProofError = typeof IssueRecentAuthProofErrorSchema.Type;
 
+export const JoinDashboardSpaceSelfErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeCapacityExceededErrorSchema,
+  EpisodeNotActiveErrorSchema,
+  MediaUnavailableErrorSchema,
+  ParticipantNotActiveErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidSlugErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type JoinDashboardSpaceSelfError = typeof JoinDashboardSpaceSelfErrorSchema.Type;
+
+export const LeaveDashboardSpaceSelfErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeNotActiveErrorSchema,
+  ParticipantGenerationMismatchErrorSchema,
+  ParticipantNotActiveErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidSlugErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type LeaveDashboardSpaceSelfError = typeof LeaveDashboardSpaceSelfErrorSchema.Type;
+
 export const ListAPIKeysErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListAPIKeysError = typeof ListAPIKeysErrorSchema.Type;
 
@@ -5805,6 +5935,24 @@ export const RedeliverWebhookDeliveryErrorSchema = Schema.Union([
   WebhookUnsafeUrlErrorSchema,
 ]);
 export type RedeliverWebhookDeliveryError = typeof RedeliverWebhookDeliveryErrorSchema.Type;
+
+export const RefreshDashboardSpaceSelfAccessErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
+  ParticipantGenerationMismatchErrorSchema,
+  ParticipantNotFoundErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidSlugErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type RefreshDashboardSpaceSelfAccessError = typeof RefreshDashboardSpaceSelfAccessErrorSchema.Type;
 
 export const RefreshIntegrationConnectionErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6172,12 +6320,15 @@ export const ChalkOperationPolicies = {
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueRecentAuthProof: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.recent_auth", windowSeconds: 60 } },
+  joinDashboardSpaceSelf: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  leaveDashboardSpaceSelf: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
   onboardTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  refreshDashboardSpaceSelfAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   releaseRecordingReservation: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

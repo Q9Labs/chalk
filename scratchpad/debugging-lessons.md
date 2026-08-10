@@ -157,6 +157,14 @@ boundary may deliberately remove credentials or add CSRF and cookie behavior.
 Keep those security transformations at the boundary adapter, then use the
 generated client for resource calls whose response shape remains exact.
 
+## Access Grant Adapters Must Preserve Optional Credentials
+
+An API can issue a valid diagnostics credential while the browser still records
+no evidence if an SDK adapter rebuilds the AccessGrant and drops that optional
+field. Test the normalized grant after every adapter boundary, not only the
+upstream wire response, because silent field loss looks like a healthy but empty
+diagnostics pipeline.
+
 ## Public Status Needs A Narrow Projection
 
 An anonymous status page should receive only the stable component summary it

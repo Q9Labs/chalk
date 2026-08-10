@@ -216,6 +216,37 @@ describe("account boundary", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("forwards a slug-based Dashboard Space grant without stripping its opaque credentials", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const grant = {
+      subject: { tenant_id: tenantID, space_id: "space", episode_id: "episode", participant_id: "participant", participant_generation: 1 },
+      sync: { token: "opaque-sync", expires_at: "2030-01-01T00:00:00Z" },
+      media: { token: "opaque-media", expires_at: "2030-01-01T00:00:00Z", provider: "cloudflare_sfu", client_payload: {} },
+    };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/by-slug/design-lab/participants/self`);
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
+      return Response.json(grant, { status: 201 });
+    });
+
+    const response = await handleAccountBoundary(
+      jsonRequest(
+        `/api/tenants/${tenantID}/spaces/by-slug/design-lab/participants/self`,
+        { display_name: "Ada" },
+        {
+          Origin: secureOrigin,
+          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+          "X-Chalk-CSRF": "csrf-token",
+        },
+      ),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual(grant);
+  });
+
   it("routes PostgreSQL UUID-shaped tenant, Space, Episode, and API-key IDs", async () => {
     const tenantID = "00000000-0000-0000-c000-000000000001";
     const spaceID = "00000000-0000-0000-c000-000000000002";

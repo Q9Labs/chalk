@@ -2,7 +2,7 @@ import type { GetAccess, SpaceClient, SpaceClientOptions } from "@q9labsai/chalk
 import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 
-import type { ParticipantCredential } from "./chalk-access";
+import type { DashboardSpaceCredential, ParticipantCredential } from "./chalk-access";
 
 const localSpace = "local-space";
 
@@ -10,8 +10,9 @@ type SpaceOperationJourney = Pick<TelemetryJourney, "recordDiagnostic"> & { read
 type CreateSpaceClient = (options: SpaceClientOptions, platform: SpaceClientPlatform) => SpaceClient;
 
 export type LocalSpaceClientOptions = {
-  readonly credential: ParticipantCredential;
+  readonly credential: ParticipantCredential | DashboardSpaceCredential;
   readonly getAccess: GetAccess;
+  readonly connectionAccess?: SpaceClientPlatform["connectionAccess"];
   readonly journey: SpaceOperationJourney;
 };
 
@@ -21,8 +22,13 @@ type LocalSpaceClientDependencies = {
 };
 
 /** Creates the app-owned public client so its broker-selected API and sync endpoints stay paired. */
-export function createLocalSpaceClient({ credential, getAccess, journey }: LocalSpaceClientOptions, dependencies: LocalSpaceClientDependencies = {}): SpaceClient {
-  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)({ space: localSpace, getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL, telemetry: journey.context });
+export function createLocalSpaceClient({ credential, getAccess, connectionAccess, journey }: LocalSpaceClientOptions, dependencies: LocalSpaceClientDependencies = {}): SpaceClient {
+  const dashboard = "space" in credential;
+  const syncURL = "syncURL" in credential ? credential.syncURL : undefined;
+  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)(
+    { space: dashboard ? credential.space : localSpace, getAccess, baseUrl: credential.apiBaseURL },
+    { ...(syncURL ? { syncUrl: syncURL } : {}), ...(connectionAccess ? { connectionAccess } : {}), telemetry: journey.context },
+  );
   return instrumentSpaceClient(client, journey, dependencies.now ?? Date.now);
 }
 

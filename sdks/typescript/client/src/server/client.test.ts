@@ -94,6 +94,26 @@ describe("createChalkServerClient", () => {
     expect(ended).toEqual(episodeEnd());
   });
 
+  it("preserves diagnostics credentials on admission and access refresh grants", async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/participants")) return jsonResponse({ ...lifecycle(), access: accessWire(true) }, 201);
+      return jsonResponse(accessWire(true), 201);
+    });
+    const client = createChalkServerClient({ apiKey: "chalk_sk_secret.value", tenantId, apiBaseURL: "https://api.example.test", fetch });
+
+    const admission = await client.participants.admit(spaceId, episodeId, { name: "Guest", participantId, role: "collaborator" });
+    const access = await client.participants.issueAccess(spaceId, episodeId, participantId, { participantGeneration: 2, currentMediaToken: "current-media-token" });
+    const expectedDiagnostics = {
+      token: expect.any(String),
+      expires_at: "2026-01-01T00:05:00Z",
+      generation: 2,
+      intake_path: "/_internal/episode-diagnostic-events",
+    };
+
+    expect(admission.access).toMatchObject({ diagnostics: expectedDiagnostics });
+    expect(access).toMatchObject({ diagnostics: expectedDiagnostics });
+  });
+
   it("uses the exact bounded retry matrix and preserves a supplied idempotency key", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const calls: RequestInit[] = [];
@@ -246,15 +266,20 @@ function removal() {
   };
 }
 
-function accessWire() {
+function accessWire(withDiagnostics = false) {
   return {
     subject: { tenant_id: tenantId, space_id: spaceId, episode_id: episodeId, participant_id: participantId, participant_generation: 2 },
     sync: { token: accessToken("chalk-sync"), expires_at: "2026-01-01T00:05:00Z" },
     media: { token: accessToken("chalk-media"), expires_at: "2026-01-01T00:05:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection", stunServer: "stun:example.test" } },
+    ...(withDiagnostics ? { diagnostics: diagnosticsWire() } : {}),
   };
 }
 
-function accessToken(audience: "chalk-sync" | "chalk-media"): string {
+function diagnosticsWire() {
+  return { token: accessToken("chalk-diagnostics"), expires_at: "2026-01-01T00:05:00Z", generation: 2, intake_path: "/_internal/episode-diagnostic-events" };
+}
+
+function accessToken(audience: "chalk-sync" | "chalk-media" | "chalk-diagnostics"): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
   return `${encode({ alg: "EdDSA", typ: "JWT" })}.${encode({ aud: audience })}.signature`;
 }

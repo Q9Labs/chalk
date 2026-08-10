@@ -3,10 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { DashboardAPIError, listEpisodes, listSpaces, type DashboardEpisode, type DashboardSpace } from "../../lib/dashboard-api";
 import { useDashboardAccount } from "./DashboardAccount";
 import { Icon } from "./DashboardShell";
+import { defaultSpaceHrefBuilder, episodeHistoryHref, type SpaceHrefBuilder } from "./space-links";
 
 type HomeState = { spaces: DashboardSpace[]; episodes: DashboardEpisode[] };
 
-export function ProductHome() {
+export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { spaceHrefBuilder?: SpaceHrefBuilder } = {}) {
   const { current } = useDashboardAccount();
   const tenantID = current.tenant.id;
   const [state, setState] = useState<HomeState | null>(null);
@@ -94,9 +95,9 @@ export function ProductHome() {
                   <p>{spaceDescription(space)}</p>
                   <footer>
                     <span>{episodes.length === 1 ? "1 Episode" : `${episodes.length} Episodes`}</span>
-                    <Link to="/spaces">
-                      Open <Icon name="arrow" />
-                    </Link>
+                    <a href={spaceHrefBuilder(space)}>
+                      Open Space <Icon name="arrow" />
+                    </a>
                   </footer>
                 </article>
               );
@@ -116,14 +117,18 @@ export function ProductHome() {
           {recentEpisodes.length ? (
             <div className="timeline-list">
               {recentEpisodes.map((episode, index) => (
-                <article key={episode.id}>
+                <a className="timeline-list-card" key={episode.id} href={episodeHistoryHref(episode)}>
                   <span className={`timeline-dot dot-${(index % 3) + 1}`} />
                   <div>
                     <h3>{spacesByID.get(episode.space_id)?.name ?? "Space Episode"}</h3>
+                    <small>{spacesByID.get(episode.space_id)?.slug ?? "Space slug unavailable"}</small>
                     <p>{episode.status === "ended" ? "Ended Episode" : "Live Episode"}</p>
                   </div>
                   <time dateTime={episode.started_at}>{relativeTime(episode.started_at)}</time>
-                </article>
+                  <span className="timeline-list-card-action">
+                    Open history <Icon name="arrow" />
+                  </span>
+                </a>
               ))}
             </div>
           ) : null}

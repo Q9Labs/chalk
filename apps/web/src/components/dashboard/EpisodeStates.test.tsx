@@ -37,14 +37,14 @@ describe("Episode loading and empty states", () => {
 
     expect(screen.getByText("No matching history")).toBeTruthy();
     expect(screen.getByText("Try another filter.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Start an Episode" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start and join" })).toBeNull();
   });
 
   it("offers starting an Episode when there is no history", () => {
     const onStart = vi.fn();
     render(<EpisodeEmptyState filtered={false} onStart={onStart} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Start an Episode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start and join" }));
     expect(onStart).toHaveBeenCalledOnce();
   });
 });

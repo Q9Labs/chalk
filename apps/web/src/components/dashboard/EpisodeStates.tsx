@@ -58,7 +58,7 @@ export function EpisodeEmptyState({ filtered, onStart }: { filtered: boolean; on
       <p>{filtered ? "Nothing in the current history matches those filters. The Episode itself is never edited after it ends." : "Starting is optional—someone joining an authorized Space can begin an Episode automatically."}</p>
       {!filtered ? (
         <button className="dashboard-button secondary" type="button" onClick={onStart}>
-          Start an Episode
+          Start and join
         </button>
       ) : null}
     </section>

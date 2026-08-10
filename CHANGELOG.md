@@ -14,12 +14,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added authenticated Dashboard Space entry by slug. Opening a Space now reuses
+  its live Episode or starts one, admits the Dashboard Account as a stable
+  Participant, and leaves only that Participant when the page closes.
 - Added account-scoped Episode Debugger launch links to Episode details and the
   Developer page, with safe Episode references that resolve to canonical
   diagnostics only after tenant authorization.
 
 ### Fixed
 
+- Fixed Dashboard Space and Episode navigation so active Spaces are directly
+  openable, Episode history links back to its Space, duplicate Space names show
+  their slug, and empty diagnostic references no longer claim healthy evidence.
+- Fixed server SDK AccessGrants dropping the optional diagnostics credential,
+  which prevented browser Episode evidence from being captured.
 - Fixed the hosted Episode Debugger so canonical diagnostic snapshots load
   directly after an alternate Episode reference resolves, including Episodes
   whose empty projections serialize required arrays.

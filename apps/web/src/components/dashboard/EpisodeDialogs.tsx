@@ -29,8 +29,8 @@ export function StartEpisodeDialog({
           ×
         </button>
         <p className="eyebrow">A bounded run of activity</p>
-        <h2>Start an Episode</h2>
-        <p className="dialog-intro">This takes a snapshot of the selected Space configuration. Joining can start an Episode automatically, so this action is optional.</p>
+        <h2>Start and join</h2>
+        <p className="dialog-intro">This starts the selected Space now and then opens it. You can also open a Space directly and let the Episode begin automatically.</p>
         <label htmlFor="episode-space">Space</label>
         <select id="episode-space" value={selectedSpaceID} onChange={(event) => onSpaceChange(event.target.value)} disabled={busy} required>
           <option value="" disabled>
@@ -52,7 +52,7 @@ export function StartEpisodeDialog({
             Cancel
           </button>
           <button className="dashboard-button primary" type="submit" disabled={busy || !selectedSpaceID}>
-            {busy ? "Starting…" : "Start Episode"}
+            {busy ? "Starting…" : "Start and join"}
           </button>
         </div>
       </form>

@@ -477,6 +477,7 @@ type Participant struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	SpaceID      pgtype.UUID        `json:"space_id"`
 	EpisodeID    pgtype.UUID        `json:"episode_id"`
+	AccountID    pgtype.UUID        `json:"account_id"`
 	IdentityID   pgtype.UUID        `json:"identity_id"`
 	Generation   int64              `json:"generation"`
 	Status       string             `json:"status"`

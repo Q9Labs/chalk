@@ -1,12 +1,16 @@
 import { formatDateTime, formatJSON, humanizeReason, statusLabel } from "./episode-utils";
 import type { DashboardEpisode } from "../../lib/dashboard-api";
 import { EpisodeDiagnosticsDeveloperLink, type EpisodeDiagnosticsAvailabilityClient } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
+import { defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
 
 export type EpisodeDetailLoadState = "idle" | "loading" | "ready" | "error";
 
 export function EpisodeDetailPanel({
   episode,
   spaceName,
+  spaceSlug,
+  spaceArchived = false,
+  spaceHrefBuilder = defaultSpaceHrefBuilder,
   state,
   error,
   onRetry,
@@ -16,6 +20,9 @@ export function EpisodeDetailPanel({
 }: {
   episode: DashboardEpisode | null;
   spaceName?: string;
+  spaceSlug?: string;
+  spaceArchived?: boolean;
+  spaceHrefBuilder?: SpaceHrefBuilder;
   state: EpisodeDetailLoadState;
   error: string | null;
   onRetry: () => void;
@@ -29,7 +36,13 @@ export function EpisodeDetailPanel({
         <div>
           <p className="eyebrow">Episode detail</p>
           <h2>{spaceName ?? "Space"}</h2>
+          {spaceSlug ? <code className="episode-detail-space-slug">{spaceSlug}</code> : null}
         </div>
+        {spaceSlug && !spaceArchived ? (
+          <a className="dashboard-button secondary episode-detail-open-space" href={spaceHrefBuilder({ slug: spaceSlug })}>
+            Open Space
+          </a>
+        ) : null}
         <button className="episode-detail-close" type="button" aria-label="Close Episode details" onClick={onClose}>
           ×
         </button>

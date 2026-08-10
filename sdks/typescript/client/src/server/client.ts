@@ -176,6 +176,12 @@ type AccessGrantWire = {
     readonly provider: string;
     readonly client_payload: Record<string, unknown>;
   };
+  readonly diagnostics?: {
+    readonly token: string;
+    readonly expires_at: string;
+    readonly generation: number;
+    readonly intake_path: string;
+  } | null;
 };
 
 type ParticipantLifecycleWire = Omit<ParticipantLifecycle, "access"> & { readonly access?: AccessGrantWire | null };
@@ -203,6 +209,7 @@ function accessGrant(value: AccessGrantWire): AccessGrant {
       provider: "cloudflare_sfu",
       client_payload: payload,
     },
+    diagnostics: value.diagnostics,
   });
 }
 

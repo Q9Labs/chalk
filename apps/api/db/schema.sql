@@ -403,6 +403,7 @@ create table participants (
     tenant_id uuid not null references tenants(id),
     space_id uuid not null,
     episode_id uuid not null,
+    account_id uuid references users(id) on delete restrict,
     identity_id uuid,
     generation bigint not null check (generation > 0),
     status text not null check (status in ('joining', 'active', 'leaving', 'left')),
@@ -424,6 +425,12 @@ create table participants (
 create index participants_sync_active_episode_capacity_idx
     on participants(tenant_id, space_id, episode_id)
     where status in ('joining', 'active', 'leaving');
+create unique index participants_dashboard_account_episode_idx
+    on participants(tenant_id, episode_id, account_id)
+    where account_id is not null;
+create index participants_dashboard_account_space_idx
+    on participants(tenant_id, space_id, account_id, created_at desc)
+    where account_id is not null;
 
 create table sync_chat_streams (
     tenant_id uuid not null,
