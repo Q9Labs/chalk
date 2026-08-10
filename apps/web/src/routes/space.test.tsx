@@ -26,7 +26,7 @@ describe("public SDK Space route", () => {
     expect(mocks.telemetry.configureApiBaseURL).toHaveBeenCalledWith(spacePageTestCredential.apiBaseURL);
     expect(mocks.createLocalSpaceClient).toHaveBeenCalledOnce();
     expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: spacePageTestCredential, getAccess: mocks.getAccess, journey: mocks.journey });
-    expect(mocks.Chalk).toHaveBeenCalledWith(expect.objectContaining({ client: mocks.client, entrance: false, displayName: "Ada" }), undefined);
+    expect(mocks.Chalk).toHaveBeenCalledWith(expect.objectContaining({ client: mocks.client, entrance: true, displayName: "Ada" }), undefined);
   });
 
   it("clears the invite fragment only after cleanup succeeds", async () => {

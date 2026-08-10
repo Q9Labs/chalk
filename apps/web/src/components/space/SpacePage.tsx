@@ -103,7 +103,11 @@ function LocalSpace({
     [release],
   );
 
-  return <Chalk client={client} entrance={false} displayName={displayName} defaults={{ microphone: true, camera: true }} logoUrl="/brand/chalk/chalk-logo.svg" spaceName="Local Space" inviteLink={globalThis.location?.href} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />;
+  return (
+    <main className="h-dvh min-h-0 w-full overflow-hidden">
+      <Chalk client={client} entrance displayName={displayName} defaults={{ microphone: true, camera: true }} logoUrl="/brand/chalk/chalk-logo.svg" spaceName="Local Space" inviteLink={globalThis.location?.href} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+    </main>
+  );
 }
 
 function SpaceArrival({ displayName, error, preparing, onDisplayNameChange, onEnter }: { readonly displayName: string; readonly error: string | null; readonly preparing: boolean; readonly onDisplayNameChange: (displayName: string) => void; readonly onEnter: () => void }) {

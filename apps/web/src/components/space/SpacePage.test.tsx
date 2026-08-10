@@ -31,7 +31,8 @@ describe("SpacePage", () => {
     expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", undefined, mocks.journey);
     expect(mocks.telemetry.configureApiBaseURL).toHaveBeenCalledWith(spacePageTestCredential.apiBaseURL);
     expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: spacePageTestCredential, getAccess: mocks.getAccess, journey: mocks.journey });
-    expect(mocks.holder.chalkProps).toMatchObject({ client: mocks.client, displayName: "Ada", entrance: false, spaceName: "Local Space" });
+    expect(mocks.holder.chalkProps).toMatchObject({ client: mocks.client, displayName: "Ada", entrance: true, spaceName: "Local Space" });
+    expect(document.querySelector("main")?.className).toContain("h-dvh");
   });
 
   it("surfaces a failed credential request while keeping the arrival form available", async () => {

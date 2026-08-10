@@ -255,7 +255,21 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const bindSync = (scope: Scope.Closeable, sync: ConnectionSyncClient): Effect.Effect<void> =>
         Effect.gen(function* () {
           model.syncBindingCleanup?.();
-          const unsubscribe = sync.subscribe((snapshot) => enqueueBackground(handleSyncSnapshot(sync, snapshot)));
+          let latestSnapshot: V1EpisodeSnapshot | null = null;
+          let snapshotQueued = false;
+          const unsubscribe = sync.subscribe((snapshot) => {
+            latestSnapshot = snapshot;
+            if (snapshotQueued) return;
+            snapshotQueued = true;
+            enqueueBackground(
+              Effect.suspend(() => {
+                snapshotQueued = false;
+                const current = latestSnapshot;
+                latestSnapshot = null;
+                return current ? handleSyncSnapshot(sync, current) : Effect.void;
+              }),
+            );
+          });
           let cleaned = false;
           const cleanup = () => {
             if (cleaned) return;

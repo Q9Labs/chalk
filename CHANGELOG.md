@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fixed browser Sync startup recovery so a healthy connection is not replaced by
+  stale queued snapshots, and restored the full-viewport Space Entrance.
 - Fixed the guarded npm publish workflow for pnpm 10 and made release dispatches
   target `Q9Labs/chalk` explicitly.
 

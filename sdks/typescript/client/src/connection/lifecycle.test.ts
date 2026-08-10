@@ -174,6 +174,20 @@ describe("ConnectionLifecycleService", () => {
     await harness.runtime.dispose();
   });
 
+  it("coalesces startup snapshots before evaluating Sync recovery", async () => {
+    const sync = fakeSync({ startPhases: ["connecting", "recovering", "live"] });
+    const harness = makeHarness(() => Effect.succeed(accessGrant(START + 300_000, "sync-startup")), { syncFactory: () => sync });
+
+    await startHarness(harness);
+    await settle(harness);
+
+    expect(harness.syncs).toHaveLength(1);
+    expect(sync.stops).toBe(0);
+    expect(harness.lifecycle.getSnapshot().state).toBe("live");
+    expect(harness.lifecycle.getDiagnostics().filter((event) => event.event === "recovery_attempt")).toEqual([]);
+    await harness.runtime.dispose();
+  });
+
   it("coalesces repeated media recovery signals from the same active port", async () => {
     const initial = accessGrant(START + 300_000, "coalesced-initial");
     const replacement = accessGrant(START + 300_000, "coalesced-replacement", "connection-2");
@@ -459,7 +473,7 @@ type FakeSync = {
   emit: (snapshot: V1EpisodeSnapshot) => void;
 };
 
-function fakeSync(options: { readonly startError?: unknown; readonly startLive?: boolean; readonly leaveError?: unknown } = {}): FakeSync {
+function fakeSync(options: { readonly startError?: unknown; readonly startLive?: boolean; readonly startPhases?: readonly V1EpisodeSnapshot["connection"]["phase"][]; readonly leaveError?: unknown } = {}): FakeSync {
   let snapshot = syncSnapshot("idle");
   let starts = 0;
   let stops = 0;
@@ -474,7 +488,11 @@ function fakeSync(options: { readonly startError?: unknown; readonly startLive?:
     start: async () => {
       starts += 1;
       if (options.startError) throw options.startError;
-      if (options.startLive !== false) emit(syncSnapshot("live"));
+      if (options.startPhases) {
+        for (const phase of options.startPhases) emit(syncSnapshot(phase));
+      } else if (options.startLive !== false) {
+        emit(syncSnapshot("live"));
+      }
     },
     stop: () => {
       stops += 1;
