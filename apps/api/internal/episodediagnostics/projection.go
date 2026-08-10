@@ -781,7 +781,7 @@ func (state ProjectionState) Snapshot(reference string, capturedAt time.Time) Di
 	if capturedAt.IsZero() {
 		capturedAt = time.Now().UTC()
 	}
-	snapshot := DiagnosticSnapshotV1{SchemaVersion: "DiagnosticSnapshot/v1", Reference: reference, Environment: state.Diagnostic.Environment, State: state.Diagnostic.State, CapturedAt: capturedAt.UTC(), CommittedCursor: state.Diagnostic.CommittedCursor, ProjectedCursor: state.Diagnostic.ProjectedCursor, RunEndCursor: state.Diagnostic.RunEndCursor, Summary: DiagnosticSummary{EventCount: int64(len(state.Events)), OperationCount: int64(len(state.Operations)), IssueCount: int64(len(state.Issues)), ParticipantCount: int64(len(state.Participants))}}
+	snapshot := DiagnosticSnapshotV1{SchemaVersion: "DiagnosticSnapshot/v1", Reference: reference, Environment: state.Diagnostic.Environment, State: state.Diagnostic.State, CapturedAt: capturedAt.UTC(), CommittedCursor: state.Diagnostic.CommittedCursor, ProjectedCursor: state.Diagnostic.ProjectedCursor, RunEndCursor: state.Diagnostic.RunEndCursor, Summary: DiagnosticSummary{EventCount: int64(len(state.Events)), OperationCount: int64(len(state.Operations)), IssueCount: int64(len(state.Issues)), ParticipantCount: int64(len(state.Participants))}, Operations: make([]DiagnosticOperationDetail, 0, len(state.Operations)), Issues: make([]DiagnosticIssueDetail, 0, len(state.Issues)), Branches: make([]DiagnosticBranchDetail, 0, len(state.Branches))}
 	for _, operation := range state.Operations {
 		snapshot.Operations = append(snapshot.Operations, operation)
 	}
@@ -907,6 +907,12 @@ func graphProjection(state ProjectionState) GraphProjectionV1 {
 				from, to := string(parent.Source), string(operation.Source)
 				edgeID := from + "->" + to
 				edge := edges[edgeID]
+				if edge.OperationIDs == nil {
+					edge.OperationIDs = []string{}
+				}
+				if edge.IssueIDs == nil {
+					edge.IssueIDs = []string{}
+				}
 				edge.ID = edgeID
 				edge.From = from
 				edge.To = to
@@ -926,7 +932,7 @@ func graphProjection(state ProjectionState) GraphProjectionV1 {
 			nodes[string(operation.Source)] = node
 		}
 	}
-	projection := GraphProjectionV1{SchemaVersion: "GraphProjection/v1"}
+	projection := GraphProjectionV1{SchemaVersion: "GraphProjection/v1", Nodes: []GraphNode{}, Edges: []GraphEdge{}}
 	for _, node := range nodes {
 		projection.Nodes = append(projection.Nodes, node)
 	}
@@ -998,7 +1004,7 @@ func flameProjection(state ProjectionState) FlameProjectionV1 {
 		lane.Bars = append(lane.Bars, bar)
 		lanes[laneID] = lane
 	}
-	projection := FlameProjectionV1{}
+	projection := FlameProjectionV1{SchemaVersion: "FlameProjection/v1", Lanes: []FlameLane{}, Buckets: []FlameBucket{}, Heat: []FlameHeat{}}
 	for _, lane := range lanes {
 		sort.Slice(lane.Bars, func(left, right int) bool {
 			if lane.Bars[left].StartAt.Equal(lane.Bars[right].StartAt) {
@@ -1013,7 +1019,7 @@ func flameProjection(state ProjectionState) FlameProjectionV1 {
 }
 
 func epilogueProjection(state ProjectionState) EpilogueProjectionV1 {
-	projection := EpilogueProjectionV1{SchemaVersion: "EpilogueProjection/v1", State: "pending"}
+	projection := EpilogueProjectionV1{SchemaVersion: "EpilogueProjection/v1", State: "pending", Branches: []DiagnosticBranchDetail{}}
 	for _, branch := range state.Branches {
 		projection.Branches = append(projection.Branches, branch)
 		if branch.State == BranchPending || branch.State == BranchRunning {

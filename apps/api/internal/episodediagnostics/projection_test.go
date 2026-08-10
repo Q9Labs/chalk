@@ -1,6 +1,7 @@
 package episodediagnostics
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +76,39 @@ func TestReduceProjectionStallLateObservationAndSnapshot(t *testing.T) {
 	snapshot := state.Snapshot("chalkdiag:v1:development:diag01@3", deadline.Add(2*time.Second))
 	if snapshot.SchemaVersion != "DiagnosticSnapshot/v1" || snapshot.Summary.EventCount != 2 || snapshot.Summary.OperationCount != 1 || snapshot.Summary.OpenIssueCount != 0 || snapshot.Run == nil || snapshot.Graph == nil || snapshot.Flame == nil || snapshot.Epilogue == nil {
 		t.Fatalf("snapshot projection incomplete: %+v", snapshot)
+	}
+}
+
+func TestSnapshotUsesContractArraysForEmptyProjections(t *testing.T) {
+	state := NewProjectionState(EpisodeDiagnostic{ID: "diag01", Environment: EnvironmentDevelopment, State: DiagnosticLive})
+	state.Operations["parent"] = DiagnosticOperationDetail{ID: "parent", Source: SourceSDK}
+	state.Operations["child"] = DiagnosticOperationDetail{ID: "child", ParentID: "parent", Source: SourceAPI}
+
+	snapshot := state.Snapshot("chalkdiag:v1:development:diag01", time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC))
+	if snapshot.Operations == nil || snapshot.Issues == nil || snapshot.Branches == nil {
+		t.Fatalf("snapshot arrays must be present: operations=%v issues=%v branches=%v", snapshot.Operations, snapshot.Issues, snapshot.Branches)
+	}
+	if snapshot.Graph == nil || snapshot.Graph.Nodes == nil || snapshot.Graph.Edges == nil {
+		t.Fatalf("graph arrays must be present: %+v", snapshot.Graph)
+	}
+	if len(snapshot.Graph.Edges) != 1 || snapshot.Graph.Edges[0].OperationIDs == nil || snapshot.Graph.Edges[0].IssueIDs == nil {
+		t.Fatalf("graph edge arrays must be present: %+v", snapshot.Graph.Edges)
+	}
+	if snapshot.Flame == nil || snapshot.Flame.SchemaVersion != "FlameProjection/v1" || snapshot.Flame.Lanes == nil || snapshot.Flame.Buckets == nil || snapshot.Flame.Heat == nil {
+		t.Fatalf("flame projection contract fields are incomplete: %+v", snapshot.Flame)
+	}
+	if snapshot.Epilogue == nil || snapshot.Epilogue.Branches == nil {
+		t.Fatalf("epilogue branches must be present: %+v", snapshot.Epilogue)
+	}
+
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	for _, field := range []string{`"operations":null`, `"issues":null`, `"branches":null`, `"nodes":null`, `"edges":null`, `"lanes":null`, `"buckets":null`, `"heat":null`} {
+		if strings.Contains(string(payload), field) {
+			t.Fatalf("snapshot encoded a null contract array %s: %s", field, payload)
+		}
 	}
 }
 
