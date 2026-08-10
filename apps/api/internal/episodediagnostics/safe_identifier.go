@@ -39,6 +39,7 @@ var safeIdentifierClassRegistry = map[string]SafeIdentifierClassRule{
 	"chalk.request":     {Storage: SafeIdentifierStorageRaw, Copyable: true, MaxLength: 128, Alphabet: SafeIdentifierAlphabetToken},
 	"chalk.command":     {Storage: SafeIdentifierStorageRaw, Copyable: true, MaxLength: 128, Alphabet: SafeIdentifierAlphabetToken},
 	"chalk.journey":     {Storage: SafeIdentifierStorageRaw, Copyable: true, MaxLength: 128, Alphabet: SafeIdentifierAlphabetToken},
+	"chalk.episode":     {Storage: SafeIdentifierStorageRaw, Copyable: true, MaxLength: 128, Alphabet: SafeIdentifierAlphabetToken},
 	"chalk.participant": {Storage: SafeIdentifierStorageRaw, Copyable: true, MaxLength: 128, Alphabet: SafeIdentifierAlphabetToken},
 	"chalk.service":     {Storage: SafeIdentifierStorageRaw, Copyable: true, MaxLength: 64, Alphabet: SafeIdentifierAlphabetToken},
 	"chalk.retry":       {Storage: SafeIdentifierStorageRaw, Copyable: true, MaxLength: 128, Alphabet: SafeIdentifierAlphabetToken},

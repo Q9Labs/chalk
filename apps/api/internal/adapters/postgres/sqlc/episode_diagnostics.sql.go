@@ -3183,6 +3183,56 @@ func (q *Queries) ListDiagnosticParticipantsAfter(ctx context.Context, arg ListD
 	return items, nil
 }
 
+const listEpisodeDiagnosticsMissingEpisodeReference = `-- name: ListEpisodeDiagnosticsMissingEpisodeReference :many
+select d.tenant_id, d.id as diagnostic_id, d.episode_id
+from episode_diagnostics d
+where d.environment = $1
+  and d.state <> 'expired'
+  and not exists (
+      select 1
+      from diagnostic_references r
+      where r.tenant_id = d.tenant_id
+        and r.diagnostic_id = d.id
+        and r.id_class = 'chalk.episode'
+        and r.raw_value = d.episode_id::text
+  )
+order by d.created_at asc, d.tenant_id asc, d.id asc
+limit $2::int
+`
+
+type ListEpisodeDiagnosticsMissingEpisodeReferenceParams struct {
+	Environment string `json:"environment"`
+	PageLimit   int32  `json:"page_limit"`
+}
+
+type ListEpisodeDiagnosticsMissingEpisodeReferenceRow struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	DiagnosticID pgtype.UUID `json:"diagnostic_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
+}
+
+// Existing roots created before Episode references were introduced need the
+// same bounded, idempotent reference as newly observed Episodes.
+func (q *Queries) ListEpisodeDiagnosticsMissingEpisodeReference(ctx context.Context, arg ListEpisodeDiagnosticsMissingEpisodeReferenceParams) ([]ListEpisodeDiagnosticsMissingEpisodeReferenceRow, error) {
+	rows, err := q.db.Query(ctx, listEpisodeDiagnosticsMissingEpisodeReference, arg.Environment, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEpisodeDiagnosticsMissingEpisodeReferenceRow
+	for rows.Next() {
+		var i ListEpisodeDiagnosticsMissingEpisodeReferenceRow
+		if err := rows.Scan(&i.TenantID, &i.DiagnosticID, &i.EpisodeID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEventsAfterCursor = `-- name: ListEventsAfterCursor :many
 select tenant_id, diagnostic_id, cursor, event_id, event_fingerprint, event_version, operation_id, producer_operation_ref, parent_producer_operation_ref, participant_id, source, name, phase, state, expectation_name, expectation_version, checkpoint_key, checkpoint_class, deadline_at, journey_id, trace_id, span_id, request_id, command_id, provider_id, retry_group_ref, attempt, release_id, source_commit, occurred_at, received_at, producer_sequence, safe_attributes
 from diagnostic_events

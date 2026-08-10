@@ -43,7 +43,10 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/episodes");
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("Episodes page", () => {
   it("renders the Tenant-wide history contract and optional start language", () => {
@@ -63,6 +66,16 @@ describe("Episodes page", () => {
     expect(await screen.findByText("Immutable history")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "End Episode" })).toBeNull();
     expect(getEpisode).toHaveBeenCalledWith({ tenantID, spaceID: space.id, episodeID: "episode-1" });
+  });
+
+  it("opens diagnostics from the selected Episode without making the operator find a reference", async () => {
+    vi.stubGlobal("__EPISODE_DIAGNOSTICS_ROUTE_ENABLED__", true);
+    render(<EpisodesPage tenantID={tenantID} api={client()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Product studio/ }));
+
+    const link = await screen.findByRole("link", { name: "Open Episode Debugger" });
+    expect(link.getAttribute("href")).toContain(encodeURIComponent("chalk.episode:episode-1"));
   });
 
   it("starts an Episode from the selected Space and opens its detail", async () => {

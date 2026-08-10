@@ -92,6 +92,14 @@ func (r *episodeDiagnosticsTraceRepository) Resolve(context.Context, episodediag
 	return r.diagnostic, nil
 }
 
+func (r *episodeDiagnosticsTraceRepository) ResolveAlternate(_ context.Context, idClass, value, version string) (episodediagnostics.DiagnosticReference, error) {
+	r.recorder.Add("database", "SELECT diagnostic_references", "resolve the account-scoped Episode reference without exposing its value", map[string]any{
+		"id_class": idClass,
+		"version":  version,
+	})
+	return episodediagnostics.DiagnosticReference{Version: 1, Environment: r.diagnostic.Environment, DiagnosticID: r.diagnostic.ID}, nil
+}
+
 func (r *episodeDiagnosticsTraceRepository) ReadSnapshot(_ context.Context, _ episodediagnostics.EpisodeDiagnostic, _ episodediagnostics.DiagnosticFilterV1, _ int) (episodediagnostics.DiagnosticSnapshotV1, error) {
 	projectedCursor := r.projection.Diagnostic.ProjectedCursor
 	r.projection.Diagnostic = r.diagnostic

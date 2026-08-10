@@ -212,6 +212,9 @@ type Querier interface {
 	ListDiagnosticOperationsByIDs(ctx context.Context, arg ListDiagnosticOperationsByIDsParams) ([]DiagnosticOperation, error)
 	ListDiagnosticParticipants(ctx context.Context, arg ListDiagnosticParticipantsParams) ([]ListDiagnosticParticipantsRow, error)
 	ListDiagnosticParticipantsAfter(ctx context.Context, arg ListDiagnosticParticipantsAfterParams) ([]ListDiagnosticParticipantsAfterRow, error)
+	// Existing roots created before Episode references were introduced need the
+	// same bounded, idempotent reference as newly observed Episodes.
+	ListEpisodeDiagnosticsMissingEpisodeReference(ctx context.Context, arg ListEpisodeDiagnosticsMissingEpisodeReferenceParams) ([]ListEpisodeDiagnosticsMissingEpisodeReferenceRow, error)
 	ListEventsAfterCursor(ctx context.Context, arg ListEventsAfterCursorParams) ([]DiagnosticEvent, error)
 	ListIntegrationConnections(ctx context.Context, arg ListIntegrationConnectionsParams) ([]IntegrationConnection, error)
 	ListJourneyEvents(ctx context.Context, journeyID pgtype.UUID) ([]ObservabilityJourneyEvent, error)

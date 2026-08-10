@@ -472,6 +472,30 @@ func TestServiceAlternateReferenceAuditsSuccessfulHostedRead(t *testing.T) {
 	}
 }
 
+func TestServiceAlternateReferenceResolvesEpisode(t *testing.T) {
+	const episodeID = "33333333-3333-4333-8333-333333333333"
+	repository := &repositoryStub{
+		resolveAlternateFn: func(_ context.Context, idClass, lookup, version string) (DiagnosticReference, error) {
+			if idClass != "chalk.episode" || lookup != episodeID || version != "" {
+				t.Fatalf("alternate Episode lookup = %s/%s/%s", idClass, lookup, version)
+			}
+			return DiagnosticReference{Version: 1, Environment: EnvironmentDevelopment, DiagnosticID: "diag01"}, nil
+		},
+		resolveFn: func(context.Context, DiagnosticReference) (EpisodeDiagnostic, error) {
+			return serviceDiagnosticFixture(), nil
+		},
+	}
+	service := NewService(repository, EnvironmentDevelopment, nil, &auditWriterStub{}, nil)
+	operator := serviceOperator()
+	operator.AuthorizedTenantIDs = []string{serviceDiagnosticFixture().TenantID}
+	operator.TenantScopeRequired = true
+
+	reference, err := service.AlternateReference(context.Background(), operator, "chalk.episode", episodeID)
+	if err != nil || reference.DiagnosticID != "diag01" {
+		t.Fatalf("Episode alternate reference = %+v, err=%v", reference, err)
+	}
+}
+
 func TestServiceAlternateReferenceFailsClosedWhenAuditWriteFails(t *testing.T) {
 	repository := &repositoryStub{
 		resolveAlternateFn: func(context.Context, string, string, string) (DiagnosticReference, error) {

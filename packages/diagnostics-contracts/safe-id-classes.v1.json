@@ -11,6 +11,7 @@
     { "idClass": "chalk.request", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
     { "idClass": "chalk.command", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
     { "idClass": "chalk.journey", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
+    { "idClass": "chalk.episode", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
     { "idClass": "chalk.participant", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },
     { "idClass": "chalk.service", "storage": "raw", "copyable": true, "maxLength": 64, "alphabet": "token" },
     { "idClass": "chalk.retry", "storage": "raw", "copyable": true, "maxLength": 128, "alphabet": "token" },

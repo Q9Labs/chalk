@@ -490,7 +490,10 @@ func insertDiagnosticReference(ctx context.Context, queries *sqlc.Queries, tenan
 		TenantID: tenantID, DiagnosticID: diagnosticID,
 		ReferenceID: diagnosticReferenceID(diagnosticID, idClass, hmacVersion, value),
 		IDClass:     idClass, Copyable: copyable,
-		EventCursor: pgtype.Int8{Int64: cursor, Valid: true}, OperationID: optionalUUID(operationID),
+		OperationID: optionalUUID(operationID),
+	}
+	if cursor > 0 {
+		params.EventCursor = pgtype.Int8{Int64: cursor, Valid: true}
 	}
 	if hmacVersion == "" {
 		params.RawValue = diagnosticText(value)

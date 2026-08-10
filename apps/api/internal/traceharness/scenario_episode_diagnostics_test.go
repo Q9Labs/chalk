@@ -80,6 +80,8 @@ func TestRunServiceEpisodeDiagnosticsScenario(t *testing.T) {
 		{"service", "episodediagnostics.Service.Ensure"},
 		{"database", "INSERT episode_diagnostics"},
 		{"database", "SELECT episode_diagnostics"},
+		{"service", "episodediagnostics.Service.AlternateReference"},
+		{"database", "SELECT diagnostic_references"},
 		{"service", "episodediagnostics.Service.Append"},
 		{"database", "INSERT diagnostic_events"},
 		{"service", "episodediagnostics.Project"},

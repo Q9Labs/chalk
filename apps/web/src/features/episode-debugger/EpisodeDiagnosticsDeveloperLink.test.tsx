@@ -13,8 +13,14 @@ describe("EpisodeDiagnosticsDeveloperLink", () => {
     expect(container.childElementCount).toBe(0);
   });
 
-  it("links only an authoritative canonical Diagnostic Reference", () => {
+  it("links an authoritative canonical Diagnostic Reference", () => {
     render(<EpisodeDiagnosticsDeveloperLink diagnosticReference={TEST_REFERENCE} enabled />);
     expect(screen.getByRole("link", { name: "Open Episode Debugger" }).getAttribute("href")).toContain(encodeURIComponent(TEST_REFERENCE));
+  });
+
+  it("links a safe Episode alternate reference", () => {
+    const episodeReference = "chalk.episode:33333333-3333-4333-8333-333333333333";
+    render(<EpisodeDiagnosticsDeveloperLink diagnosticReference={episodeReference} enabled />);
+    expect(screen.getByRole("link", { name: "Open Episode Debugger" }).getAttribute("href")).toContain(encodeURIComponent(episodeReference));
   });
 });

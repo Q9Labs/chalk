@@ -129,5 +129,6 @@ describe("EpisodeDebuggerScreen", () => {
     expect(screen.getByText("Resolving Diagnostic Reference")).toBeTruthy();
     await screen.findByText("Participant lanes");
     expect(api.resolveAlternate).toHaveBeenCalledWith("chalk.journey:journey01", expect.any(AbortSignal));
+    expect(screen.getAllByTitle(TEST_REFERENCE).some((element) => element.tagName === "CODE" && element.textContent === TEST_REFERENCE)).toBe(true);
   });
 });

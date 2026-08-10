@@ -12,10 +12,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added account-scoped Episode Debugger launch links to Episode details and the
+  Developer page, with safe Episode references that resolve to canonical
+  diagnostics only after tenant authorization.
+
 ### Fixed
 
 - Fixed browser Sync startup recovery so a healthy connection is not replaced by
-  stale queued snapshots, and restored the full-viewport Space Entrance.
+  stale queued snapshots, restored the Space Entrance, expanded the live Space
+  across its host viewport, and made creator cleanup survive page unloads.
 - Fixed the guarded npm publish workflow for pnpm 10 and made release dispatches
   target `Q9Labs/chalk` explicitly.
 

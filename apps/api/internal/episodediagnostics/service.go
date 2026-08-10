@@ -495,7 +495,7 @@ func (s Service) AlternateReference(ctx context.Context, operator OperatorPrinci
 
 func (s Service) alternateLookup(idClass, value string) (string, string, error) {
 	switch idClass {
-	case "chalk.request", "chalk.command", "chalk.journey":
+	case "chalk.request", "chalk.command", "chalk.journey", "chalk.episode":
 		if !ValidSafeIdentifierValue(idClass, value) {
 			return "", "", ErrInvalidReference
 		}

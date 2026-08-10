@@ -1,15 +1,12 @@
 import { buttonVariants } from "@q9labsai/chalk-ui";
-import { parseDiagnosticReference } from "@q9labsai/diagnostics-contracts";
+import { episodeDebuggerPath } from "./reference";
 
 export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__ }: { diagnosticReference?: string; enabled?: boolean }) {
   if (!enabled || !diagnosticReference) return null;
-  try {
-    parseDiagnosticReference(diagnosticReference);
-  } catch {
-    return null;
-  }
+  const path = episodeDebuggerPath(diagnosticReference);
+  if (!path) return null;
   return (
-    <a className={buttonVariants({ variant: "outline", size: "sm" })} href={`/developer/episode-diagnostics/${encodeURIComponent(diagnosticReference)}`}>
+    <a className={buttonVariants({ variant: "outline", size: "sm" })} href={path}>
       Open Episode Debugger
     </a>
   );

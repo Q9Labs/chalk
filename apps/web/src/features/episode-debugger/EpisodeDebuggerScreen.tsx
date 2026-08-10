@@ -1,7 +1,7 @@
 import { Button, Input, ToastProvider, ToastViewport, toast } from "@q9labsai/chalk-ui";
 import { formatDiagnosticReference, parseDiagnosticReference, parseDiagnosticFilter, renderAgentBriefMarkdown, type DiagnosticFilterV1 } from "@q9labsai/diagnostics-contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EpisodeDiagnosticsApiClient } from "./api-client";
 import { selectClipboardFallback, writeClipboardText } from "./clipboard";
 import { DetailsPanel } from "./DetailsPanel";
@@ -9,6 +9,7 @@ import { EpilogueView, IssuesView, ParticipantsView } from "./EntityViews";
 import { DiagnosticExportController, type DiagnosticExportState } from "./export-controller";
 import { DiagnosticLiveController, type DiagnosticLiveState } from "./live-controller";
 import { DEBUGGER_VIEWS, formatDuration, type DebuggerSelection, type DebuggerView } from "./model";
+import { isAlternateDiagnosticReference } from "./reference";
 import { GraphView, RunView } from "./RunGraphViews";
 import { StatusPill } from "./StatusPill";
 import { FlameView, TraceView } from "./TraceFlameViews";
@@ -49,7 +50,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
       return undefined;
     }
   }, [reference]);
-  const alternateReference = !canonicalInputReference && /^[a-z][a-z0-9._-]{0,63}[:/][A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(reference) ? reference : undefined;
+  const alternateReference = !canonicalInputReference && isAlternateDiagnosticReference(reference) ? reference : undefined;
   const effectiveReference = canonicalInputReference ?? resolvedAlternateReference;
   const parsedReference = useMemo(() => {
     try {
@@ -189,7 +190,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
         </div>
         <div className="episode-reference-block">
           <span className="episode-eyebrow">Diagnostic Reference</span>
-          <code title={reference}>{reference}</code>
+          <code title={normalizedReference}>{normalizedReference}</code>
         </div>
         <div className="episode-top-status">
           <span className="episode-environment">{snapshot?.environment ?? "resolving"}</span>

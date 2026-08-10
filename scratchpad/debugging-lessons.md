@@ -179,6 +179,20 @@ Luna workers. The root thread owns the task map, seam decisions, integration,
 final verification, and production authorization. Do not drift back into
 hands-on diagnosis merely because a gate fails.
 
+## Live State Queues Must Prefer The Newest Snapshot
+
+A connection callback can enqueue an older recovery snapshot after a direct
+waiter has already observed the live state. Coalesce queued snapshots and read
+the latest connection state before starting recovery, or the lifecycle can stop
+a healthy client and loop until recovery is exhausted.
+
+## Debugger Entry Points Should Start From Product Records
+
+Operators should not hunt through logs for an internal diagnostic reference.
+Link the debugger from the authorized Episode record, resolve its safe Episode
+reference inside the tenant boundary, and show the canonical diagnostic
+reference after resolution for precise handoffs.
+
 ## GitHub Workflow Dispatch Needs An Explicit Repository
 
 `gh repo view` can infer a repository from a local Git remote, while

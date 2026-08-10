@@ -68,6 +68,18 @@ func runServiceEpisodeDiagnostics(ctx context.Context) (ScenarioResult, error) {
 		return ScenarioResult{}, err
 	}
 
+	resolveSpan := recorder.Start("service", "episodediagnostics.Service.AlternateReference", "open the debugger from the selected Episode", map[string]any{
+		"id_class": "chalk.episode",
+		"scope":    "authorized tenant",
+	})
+	episodeReference, err := service.AlternateReference(ctx, diagnosticsOperatorFixture(), "chalk.episode", episode.ID.String())
+	resolveSpan.End("canonical diagnostic reference resolved", map[string]any{
+		"same_diagnostic": episodeReference.DiagnosticID == firstDiagnostic.ID,
+	}, err)
+	if err != nil {
+		return ScenarioResult{}, err
+	}
+
 	producer := diagnosticsProducerFixture(episode)
 	event := diagnosticsEventFixture(startedAt, deadline)
 	appendRequest := episodediagnostics.AppendDiagnosticEventsRequest{

@@ -100,7 +100,7 @@ func TestSafeIdentifierUnknownAndInvalidValuesAreOpaque(t *testing.T) {
 }
 
 func TestSafeIdentifierRegistryIncludesNewChalkClasses(t *testing.T) {
-	for _, idClass := range []string{"chalk.participant", "chalk.service", "chalk.retry"} {
+	for _, idClass := range []string{"chalk.episode", "chalk.participant", "chalk.service", "chalk.retry"} {
 		identifier, ok := SafeIdentifierFor(idClass, "chalk-id_01").(SafeIdentifier)
 		if !ok || identifier.IDClass != idClass || identifier.Value != "chalk-id_01" || !identifier.Copyable || identifier.UnknownReason != "" {
 			t.Fatalf("%s projection = %+v, want raw copyable identifier", idClass, identifier)

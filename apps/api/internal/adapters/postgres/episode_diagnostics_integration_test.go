@@ -65,6 +65,12 @@ func TestEpisodeDiagnosticsPostgresAppendProjectionFiltersAndExportOwnership(t *
 	if strings.Contains(storedConfig, "private_note") || strings.Contains(storedConfig, "must-not-persist") || !strings.Contains(storedConfig, "EpisodeConfigSummary/v1") {
 		t.Fatalf("stored config is not a bounded summary: %s", storedConfig)
 	}
+	if _, err := pool.Exec(ctx, `delete from diagnostic_references where tenant_id = $1 and diagnostic_id = $2 and id_class = 'chalk.episode'`, tenantID.Bytes(), mustParseDiagnosticIntegrationID(t, diagnostic.ID).Bytes()); err != nil {
+		t.Fatalf("remove Episode reference before reconciliation proof: %v", err)
+	}
+	if _, err := repository.Reconcile(ctx, episodediagnostics.EnvironmentLocalhost, time.Now().UTC(), 100); err != nil {
+		t.Fatalf("backfill Episode reference: %v", err)
+	}
 
 	hmacKey := []byte("episode-diagnostics-integration-hmac-key")
 	service := episodediagnostics.NewService(repository, episodediagnostics.EnvironmentLocalhost, hmacKey, nil, nil)
@@ -115,7 +121,11 @@ func TestEpisodeDiagnosticsPostgresAppendProjectionFiltersAndExportOwnership(t *
 	}
 	operator := episodediagnostics.OperatorPrincipal{
 		SubjectHash: strings.Repeat("a", 64), Environment: episodediagnostics.EnvironmentLocalhost,
-		Capabilities: map[string]struct{}{"read": {}, "stream": {}, "export": {}},
+		Capabilities: map[string]struct{}{"read": {}, "stream": {}, "export": {}}, AuthorizedTenantIDs: []string{tenantID.String()}, TenantScopeRequired: true,
+	}
+	episodeReference, err := service.AlternateReference(ctx, operator, "chalk.episode", episodeID.String())
+	if err != nil || episodeReference.DiagnosticID != diagnostic.ID || episodeReference.Focus != nil {
+		t.Fatalf("Episode alternate reference = %+v, err=%v", episodeReference, err)
 	}
 	reference, err := episodediagnostics.FormatReference(episodediagnostics.DiagnosticReference{Version: 1, Environment: diagnostic.Environment, DiagnosticID: diagnostic.ID})
 	if err != nil {

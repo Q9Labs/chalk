@@ -1,5 +1,6 @@
 import { formatDateTime, formatJSON, humanizeReason, statusLabel } from "./episode-utils";
 import type { DashboardEpisode } from "../../lib/dashboard-api";
+import { EpisodeDiagnosticsDeveloperLink } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 
 export type EpisodeDetailLoadState = "idle" | "loading" | "ready" | "error";
 
@@ -49,6 +50,9 @@ function EpisodeDetailContent({ episode, onEnd }: { episode: DashboardEpisode; o
             End Episode
           </button>
         )}
+      </div>
+      <div className="episode-detail-diagnostics">
+        <EpisodeDiagnosticsDeveloperLink diagnosticReference={`chalk.episode:${episode.id}`} />
       </div>
       <dl className="episode-detail-meta">
         <div>

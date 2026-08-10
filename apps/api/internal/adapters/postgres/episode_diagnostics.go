@@ -100,6 +100,9 @@ func (r *EpisodeDiagnosticsRepository) Ensure(ctx context.Context, authoritative
 		if err := queries.EnsureDiagnosticAuxiliaryRows(ctx, sqlc.EnsureDiagnosticAuxiliaryRowsParams{TenantID: row.TenantID, DiagnosticID: row.ID}); err != nil {
 			return fmt.Errorf("ensure diagnostic auxiliary rows: %w", err)
 		}
+		if err := insertDiagnosticReference(ctx, queries, row.TenantID, row.ID, 0, "", "chalk.episode", episode.ID.String(), "", true, ""); err != nil {
+			return fmt.Errorf("ensure diagnostic Episode reference: %w", err)
+		}
 
 		// The observer can see the authoritative Episode end after the initial
 		// diagnostic row was created. Advance only live rows; a completed or
@@ -146,6 +149,18 @@ func (r *EpisodeDiagnosticsRepository) Reconcile(ctx context.Context, environmen
 			return result, ensureErr
 		}
 		result = append(result, diagnostic)
+	}
+	referenceRows, referenceErr := sqlc.New(r.queryPool).ListEpisodeDiagnosticsMissingEpisodeReference(ctx, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams{
+		Environment: string(environment),
+		PageLimit:   int32(limit),
+	})
+	if referenceErr != nil {
+		return result, fmt.Errorf("list diagnostics missing Episode reference: %w", referenceErr)
+	}
+	for _, row := range referenceRows {
+		if err := insertDiagnosticReference(ctx, sqlc.New(r.queryPool), row.TenantID, row.DiagnosticID, 0, "", "chalk.episode", idString(row.EpisodeID), "", true, ""); err != nil {
+			return result, fmt.Errorf("backfill diagnostic Episode reference: %w", err)
+		}
 	}
 	// Repair roots whose authoritative Episode ended after the observer created
 	// the diagnostic. This path is bounded and does not trust client Events to

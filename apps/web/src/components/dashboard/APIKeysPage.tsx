@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createAPIKey, createRecentAuthProof, DashboardAPIError, type DashboardAPIKey, type DashboardPagination, type RecentAuthProof, listAPIKeys, revokeAPIKey, rotateAPIKey, startRecentAuthGoogle } from "../../lib/dashboard-api";
 import { Icon, ResourcePageHeader } from "./DashboardShell";
 import { useModalDialog } from "./SpaceDialogPrimitives";
+import { EpisodeDiagnosticsLauncher } from "../../features/episode-debugger/EpisodeDiagnosticsLauncher";
 
 type SecretState = { action: "created" | "rotated"; key: DashboardAPIKey; secret: string } | null;
 type PendingAction = { kind: "create" | "rotate" | "revoke"; key?: Pick<DashboardAPIKey, "id" | "name">; requestKey?: string } | null;
@@ -167,6 +168,8 @@ export function APIKeysPage({ tenantID }: { tenantID: string }) {
   return (
     <div className="dashboard-page resource-page">
       <ResourcePageHeader eyebrow="Build with Chalk" title="Developer" description="Credentials and integration tools for the product you are building on top of Chalk." actionLabel="New API key" onAction={() => setCreateOpen(true)} />
+
+      <EpisodeDiagnosticsLauncher />
 
       <section className="contract-state api-key-panel" aria-labelledby="api-keys-heading">
         <div className="dashboard-page-header">

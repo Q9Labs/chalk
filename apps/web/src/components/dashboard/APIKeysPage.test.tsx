@@ -59,6 +59,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("API keys page", () => {
@@ -68,6 +69,15 @@ describe("API keys page", () => {
     expect(markup).toContain("API keys");
     expect(markup).toContain("New API key");
     expect(markup).toContain("Secrets appear once");
+  });
+
+  it("offers the Alpha Episode Debugger when hosted diagnostics are enabled", () => {
+    vi.stubGlobal("__EPISODE_DIAGNOSTICS_ROUTE_ENABLED__", true);
+    vi.mocked(dashboardAPI.listAPIKeys).mockResolvedValue(page([], null, false));
+    render(<APIKeysPage tenantID="tenant-1" />);
+
+    expect(screen.getByRole("heading", { name: "Episode Debugger" })).toBeTruthy();
+    expect(screen.getByLabelText("Diagnostic reference")).toBeTruthy();
   });
 
   it("documents one-time secret handling and step-up controls in the UI", () => {

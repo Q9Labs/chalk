@@ -93,6 +93,24 @@ where d.id is null
 order by e.created_at asc, e.tenant_id asc, e.id asc
 limit sqlc.arg(page_limit)::int;
 
+-- Existing roots created before Episode references were introduced need the
+-- same bounded, idempotent reference as newly observed Episodes.
+-- name: ListEpisodeDiagnosticsMissingEpisodeReference :many
+select d.tenant_id, d.id as diagnostic_id, d.episode_id
+from episode_diagnostics d
+where d.environment = sqlc.arg(environment)
+  and d.state <> 'expired'
+  and not exists (
+      select 1
+      from diagnostic_references r
+      where r.tenant_id = d.tenant_id
+        and r.diagnostic_id = d.id
+        and r.id_class = 'chalk.episode'
+        and r.raw_value = d.episode_id::text
+  )
+order by d.created_at asc, d.tenant_id asc, d.id asc
+limit sqlc.arg(page_limit)::int;
+
 -- Existing diagnostics can outlive the observer callback. Reconcile compares
 -- the durable root with the authoritative Episode row and repairs ended_at
 -- drift in bounded batches.

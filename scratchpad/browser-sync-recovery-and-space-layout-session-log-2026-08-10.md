@@ -10,3 +10,10 @@
 - Corrected the React test runner's diagnostics-contracts source alias after the clean M4 gate exposed the wrong package scope.
 - Focused client and web tests, type checks, formatting, diff checks, and the full staged M4 smart gate passed.
 - The local commit hook later failed on three unrelated shared-worktree web tests (two timeouts and one duplicate diagnostics route); the clean staged M4 gate remained green. Filed complaint #4000.
+- Deployed commit `31be5ef5` to the production Pages project after exact-SHA CI, CodeQL, packed-consumer, clean production build, and artifact checksum gates passed.
+- Live Chrome showed the restored Entrance and full-viewport layout, then exposed one older synthetic Episode left active when its creator page unloaded; later attempts were correctly rejected by the one-live-Episode guard before reaching Sync.
+- Added unload-safe, back-forward-cache-aware creator cleanup so leaving the page cannot strand the Episode; focused web tests pass.
+- A clean post-cleanup Chrome journey reached the live Space without Sync recovery. Its wide-screen screenshot exposed the remaining SDK caps and single-Participant aspect constraint, so the SDK Space chrome/stage now use the full host viewport and the single tile fills the stage; focused React and web tests and type checks pass.
+- Confirmed that production diagnostics already collect and stream the current Episode, but the canonical reference is not discoverable from the dashboard.
+- Added an account-scoped `chalk.episode` alternate reference, direct Episode detail launch link, Developer launcher, and execution-trace coverage. The debugger still resolves to and displays the canonical reference for authorized sharing.
+- Added a bounded, idempotent reconciler backfill so diagnostics created before the safe Episode reference become directly openable without an operator database update.

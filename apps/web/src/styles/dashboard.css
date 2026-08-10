@@ -1155,6 +1155,47 @@
   margin-top: 0;
   padding: clamp(24px, 4vw, 40px);
 }
+
+.episode-debugger-launcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.8fr) auto;
+  align-items: end;
+  gap: 1rem;
+}
+
+.episode-debugger-launcher > div p:last-child,
+.episode-debugger-launcher > .fixture-note {
+  color: var(--dashboard-muted);
+}
+
+.episode-debugger-launcher label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--dashboard-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.episode-debugger-launcher input {
+  min-width: 0;
+}
+
+.episode-debugger-launcher > .fixture-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.episode-detail-diagnostics {
+  display: flex;
+  margin-top: -0.25rem;
+}
+
+@media (max-width: 900px) {
+  .episode-debugger-launcher {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
 .api-key-panel > .dashboard-page-header {
   align-items: flex-start;
   padding-bottom: 24px;

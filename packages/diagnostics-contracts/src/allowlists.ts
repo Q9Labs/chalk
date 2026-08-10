@@ -122,6 +122,7 @@ export const SAFE_ID_CLASSES = {
   "chalk.request": { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
   "chalk.command": { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
   "chalk.journey": { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
+  "chalk.episode": { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
   "chalk.participant": { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
   "chalk.service": { storage: "raw", copyable: true, maxLength: 64, alphabet: "token" },
   "chalk.retry": { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
