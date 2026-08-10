@@ -46,15 +46,7 @@ describe("createChalkServerClient", () => {
 
     const createdSpace = await client.spaces.create(spaceInput());
     const createdEpisode = await client.episodes.create(spaceId, episodeInput());
-    const admission = await client.participants.admit(spaceId, episodeId, {
-      name: "Guest",
-      participantId,
-      role: "collaborator",
-    });
-    const access = await client.participants.issueAccess(spaceId, episodeId, participantId, {
-      participantGeneration: 2,
-      currentMediaToken: "current-media-token",
-    });
+    const { admission, access } = await admitAndIssueAccess(client);
     const removed = await client.participants.remove(spaceId, episodeId, participantId, { participantGeneration: 2 }, { idempotencyKey: "remove-participant" });
     const ended = await client.episodes.end(spaceId, episodeId, { idempotencyKey: "end-episode" });
 
@@ -101,8 +93,7 @@ describe("createChalkServerClient", () => {
     });
     const client = createChalkServerClient({ apiKey: "chalk_sk_secret.value", tenantId, apiBaseURL: "https://api.example.test", fetch });
 
-    const admission = await client.participants.admit(spaceId, episodeId, { name: "Guest", participantId, role: "collaborator" });
-    const access = await client.participants.issueAccess(spaceId, episodeId, participantId, { participantGeneration: 2, currentMediaToken: "current-media-token" });
+    const { admission, access } = await admitAndIssueAccess(client);
     const expectedDiagnostics = {
       token: expect.any(String),
       expires_at: "2026-01-01T00:05:00Z",
@@ -273,6 +264,12 @@ function accessWire(withDiagnostics = false) {
     media: { token: accessToken("chalk-media"), expires_at: "2026-01-01T00:05:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection", stunServer: "stun:example.test" } },
     ...(withDiagnostics ? { diagnostics: diagnosticsWire() } : {}),
   };
+}
+
+async function admitAndIssueAccess(client: ReturnType<typeof createChalkServerClient>) {
+  const admission = await client.participants.admit(spaceId, episodeId, { name: "Guest", participantId, role: "collaborator" });
+  const access = await client.participants.issueAccess(spaceId, episodeId, participantId, { participantGeneration: 2, currentMediaToken: "current-media-token" });
+  return { admission, access };
 }
 
 function diagnosticsWire() {

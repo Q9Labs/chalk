@@ -368,7 +368,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
   );
 }
 
-export function hasDiagnosticEvidence(snapshot: { summary: { eventCount: number; operationCount: number; participantCount?: number }; operations?: readonly unknown[]; participants?: readonly unknown[] }, liveState: Pick<DiagnosticLiveState, "events" | "operations">): boolean {
+function hasDiagnosticEvidence(snapshot: { summary: { eventCount: number; operationCount: number; participantCount?: number }; operations?: readonly unknown[]; participants?: readonly unknown[] }, liveState: Pick<DiagnosticLiveState, "events" | "operations">): boolean {
   return snapshot.summary.eventCount > 0 || snapshot.summary.operationCount > 0 || (snapshot.summary.participantCount ?? 0) > 0 || (snapshot.operations?.length ?? 0) > 0 || (snapshot.participants?.length ?? 0) > 0 || liveState.events.length > 0 || liveState.operations.length > 0;
 }
 
