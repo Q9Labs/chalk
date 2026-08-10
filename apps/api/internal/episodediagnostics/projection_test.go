@@ -80,9 +80,10 @@ func TestReduceProjectionStallLateObservationAndSnapshot(t *testing.T) {
 }
 
 func TestSnapshotUsesContractArraysForEmptyProjections(t *testing.T) {
-	state := NewProjectionState(EpisodeDiagnostic{ID: "diag01", Environment: EnvironmentDevelopment, State: DiagnosticLive})
-	state.Operations["parent"] = DiagnosticOperationDetail{ID: "parent", Source: SourceSDK}
-	state.Operations["child"] = DiagnosticOperationDetail{ID: "child", ParentID: "parent", Source: SourceAPI}
+	startedAt := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
+	state := NewProjectionState(EpisodeDiagnostic{ID: "diag01", Environment: EnvironmentDevelopment, State: DiagnosticLive, EpisodeStartedAt: startedAt})
+	state.Operations["parent"] = DiagnosticOperationDetail{SchemaVersion: "OperationDetail/v1", ID: "parent", Kind: "operation", ExpectationVersion: 1, State: OperationRunning, StartedAt: startedAt, Checkpoints: []DiagnosticCheckpointDetail{}, Source: SourceSDK}
+	state.Operations["child"] = DiagnosticOperationDetail{SchemaVersion: "OperationDetail/v1", ID: "child", Kind: "operation", ExpectationVersion: 1, State: OperationRunning, StartedAt: startedAt, Checkpoints: []DiagnosticCheckpointDetail{}, ParentID: "parent", Source: SourceAPI}
 
 	snapshot := state.Snapshot("chalkdiag:v1:development:diag01", time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC))
 	if snapshot.Operations == nil || snapshot.Issues == nil || snapshot.Branches == nil {
