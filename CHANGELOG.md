@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fixed the hosted Episode Debugger so canonical diagnostic snapshots load
+  directly after an alternate Episode reference resolves.
 - Fixed browser Sync startup recovery so a healthy connection is not replaced by
   stale queued snapshots, restored the Space Entrance, expanded the live Space
   across its host viewport, and made creator cleanup survive page unloads.

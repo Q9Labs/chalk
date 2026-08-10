@@ -91,7 +91,9 @@ export class EpisodeDiagnosticsApiClient {
   async readSnapshot(reference: string, filter?: DiagnosticFilterV1, signal?: AbortSignal): Promise<DiagnosticSnapshotV1> {
     const url = this.referenceUrl(reference);
     addQuery(url, { filters: encodeFilter(filter) });
-    const response = parseDiagnosticResolverResponse(await this.fetchJson(url, { signal }));
+    const input = await this.fetchJson(url, { signal });
+    if (isDiagnosticSnapshotPayload(input)) return parseDiagnosticSnapshot(input);
+    const response = parseDiagnosticResolverResponse(input);
     if (response.kind === "not_found") {
       throw new EpisodeDiagnosticsApiError(`Diagnostic evidence is unavailable: ${response.reason}`, 404, response.reason);
     }
@@ -304,4 +306,8 @@ export class EpisodeDiagnosticsApiClient {
     this.csrfExpiresAt = Date.now() + CSRF_REFRESH_MS;
     return value.csrf_token;
   }
+}
+
+function isDiagnosticSnapshotPayload(input: unknown): input is DiagnosticSnapshotV1 {
+  return Boolean(input && typeof input === "object" && (input as Record<string, unknown>).schemaVersion === "DiagnosticSnapshot/v1");
 }

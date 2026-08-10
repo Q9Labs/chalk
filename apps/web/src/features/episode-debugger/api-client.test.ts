@@ -59,6 +59,14 @@ describe("EpisodeDiagnosticsApiClient", () => {
     expect(String(fetch.mock.calls[0]?.[0])).toContain("filters=");
   });
 
+  it("accepts the raw canonical DiagnosticSnapshot response", async () => {
+    const snapshot = snapshotFixture(4);
+    const fetch = vi.fn().mockResolvedValue(Response.json(snapshot));
+    const client = new EpisodeDiagnosticsApiClient({ fetch });
+
+    await expect(client.readSnapshot(TEST_REFERENCE)).resolves.toEqual(snapshot);
+  });
+
   it("returns an export download URL instead of fetching a giant Blob", () => {
     const fetch = vi.fn();
     const client = new EpisodeDiagnosticsApiClient({ fetch });
