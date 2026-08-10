@@ -54,6 +54,13 @@ describe("request safety helpers", () => {
     expect(validJourneyID(null)).toBeUndefined();
   });
 
+  it("accepts PostgreSQL UUID-shaped journey IDs while rejecting malformed values", () => {
+    expect(validJourneyID("00000000-0000-0000-c000-000000000001")).toBe("00000000-0000-0000-c000-000000000001");
+    for (const value of ["00000000-0000-0000-c000-00000000000g", "00000000-0000-0000-c000-0000000000000", "000000000000000000000000000000000000"]) {
+      expect(validJourneyID(value)).toBeUndefined();
+    }
+  });
+
   it("strips token-shaped fields recursively while honoring caller-specific keys", () => {
     const value = {
       token: "root-token",

@@ -216,6 +216,46 @@ describe("account boundary", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("routes PostgreSQL UUID-shaped tenant, Space, Episode, and API-key IDs", async () => {
+    const tenantID = "00000000-0000-0000-c000-000000000001";
+    const spaceID = "00000000-0000-0000-c000-000000000002";
+    const episodeID = "00000000-0000-0000-c000-000000000003";
+    const apiKeyID = "00000000-0000-0000-c000-000000000004";
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/api-keys/${apiKeyID}`);
+        return new Response(null, { status: 204 });
+      }
+      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/episodes/${episodeID}`);
+      return Response.json({ episode: { id: episodeID } });
+    });
+
+    const episodeResponse = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/episodes/${episodeID}`, {
+        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+    expect(episodeResponse.status).toBe(200);
+
+    const apiKeyResponse = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/tenants/${tenantID}/api-keys/${apiKeyID}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: secureOrigin,
+          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+          "X-Chalk-CSRF": "csrf-token",
+        },
+      }),
+      upstream,
+      fetcher,
+    );
+    expect(apiKeyResponse.status).toBe(204);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it("requires same-origin CSRF proof for API-key revocation", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const apiKeyID = "33333333-3333-4333-8333-333333333333";
