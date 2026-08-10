@@ -177,7 +177,7 @@ export function SpaceView({
   return (
     <ParticipantVolumeProvider>
       <main data-chalk data-chalk-theme={getThemeMode(palette)} data-chalk-palette={palette} data-chalk-texture={texture} className={cn("chalk-root chalk-textured-surface relative h-full min-h-0 overflow-hidden bg-[var(--chalk-app-canvas)] text-[var(--chalk-app-text)]", className)}>
-        <section className="chalk-textured-surface relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)]">
+        <section className="chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-chrome)]">
           <AudioOutput />
           <SpaceHeader
             spaceName={spaceName}
@@ -197,7 +197,7 @@ export function SpaceView({
             className="relative z-20"
           />
 
-          <div className={cn("relative mx-auto flex min-h-0 w-full max-w-[1320px] flex-1 gap-3 overflow-hidden px-3 pt-5 pb-3 sm:px-5 sm:pt-6 lg:px-8", activePanel && "lg:grid lg:grid-cols-[minmax(0,1fr)_340px]")}>
+          <div className={cn("relative flex min-h-0 w-full flex-1 gap-3 overflow-hidden px-3 pt-5 pb-3 sm:px-5 sm:pt-6 lg:px-8", activePanel && "lg:grid lg:grid-cols-[minmax(0,1fr)_340px]")}>
             <section className="chalk-textured-surface min-h-0 min-w-0 overflow-hidden rounded-[10px] bg-[var(--chalk-app-stage)]" aria-label="Space stage">
               {whiteboard?.isOpen ? <WhiteboardView {...whiteboard.props} className={cn("h-full min-h-0", whiteboard.props.className)} /> : hasActiveScreenShare ? <ScreenShareView className="h-full" /> : <ParticipantGrid layout={renderedLayout} className="h-full" />}
             </section>

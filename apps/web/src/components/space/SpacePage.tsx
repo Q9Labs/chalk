@@ -1,7 +1,7 @@
 import { Chalk } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isTerminalParticipantCredentialCleanupError, type ParticipantCredential } from "../../lib/chalk-access";
+import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isTerminalParticipantCredentialCleanupError, type ParticipantCredential, type ParticipantCredentialCleanupOptions } from "../../lib/chalk-access";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";
 
@@ -44,24 +44,27 @@ export function SpacePage() {
       });
   }, [credential, displayName, journey, preparing, telemetry]);
 
-  const finish = useCallback(() => {
-    if (cleanupPromise.current) return cleanupPromise.current;
-    const attempt = cleanupParticipantCredential(journey).then(
-      () => {
-        clearSpaceInviteToken();
-      },
-      (cause: unknown) => {
-        if (isTerminalParticipantCredentialCleanupError(cause)) {
+  const finish = useCallback(
+    (options: ParticipantCredentialCleanupOptions = {}) => {
+      if (cleanupPromise.current) return cleanupPromise.current;
+      const attempt = cleanupParticipantCredential(journey, options).then(
+        () => {
           clearSpaceInviteToken();
-          return;
-        }
-        cleanupPromise.current = undefined;
-        throw cause;
-      },
-    );
-    cleanupPromise.current = attempt;
-    return attempt;
-  }, [journey]);
+        },
+        (cause: unknown) => {
+          if (isTerminalParticipantCredentialCleanupError(cause)) {
+            clearSpaceInviteToken();
+            return;
+          }
+          cleanupPromise.current = undefined;
+          throw cause;
+        },
+      );
+      cleanupPromise.current = attempt;
+      return attempt;
+    },
+    [journey],
+  );
 
   useEffect(
     () => () => {
@@ -88,10 +91,10 @@ function LocalSpace({
   readonly displayName: string;
   readonly getAccess: ReturnType<typeof createAccessGrantProvider>;
   readonly journey: ReturnType<typeof useWebTelemetry>["journey"];
-  readonly onFinish: () => Promise<void>;
+  readonly onFinish: (options?: ParticipantCredentialCleanupOptions) => Promise<void>;
 }) {
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, journey }), [credential, getAccess, journey]);
-  const release = useMemo(() => createLocalSpaceRelease(client, onFinish), [client, onFinish]);
+  const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const releaseFromLifecycle = useCallback(() => {
     void release().catch(() => undefined);
   }, [release]);
@@ -102,6 +105,14 @@ function LocalSpace({
     },
     [release],
   );
+
+  useEffect(() => {
+    const releaseOnPageHide = (event: PageTransitionEvent) => {
+      if (!event.persisted) void onFinish({ keepalive: true }).catch(() => undefined);
+    };
+    globalThis.addEventListener("pagehide", releaseOnPageHide);
+    return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
+  }, [onFinish]);
 
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">

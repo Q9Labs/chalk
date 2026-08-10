@@ -116,6 +116,15 @@ describe("local Chalk access client", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "The local participant credential is missing or expired." }, 401));
     await expect(cleanupParticipantCredential()).rejects.toThrow("The local participant credential is missing or expired.");
   });
+
+  it("keeps cleanup alive while the page unloads", async () => {
+    const { requests } = stubFetch(new Response(null, { status: 204 }));
+
+    await cleanupParticipantCredential(undefined, { keepalive: true });
+
+    const [, init] = requests[0] ?? [];
+    expect(init).toMatchObject({ keepalive: true });
+  });
 });
 
 function credential(audience: "chalk-sync" | "chalk-media"): string {

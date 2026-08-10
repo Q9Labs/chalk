@@ -11,6 +11,10 @@ export type ParticipantCredential = {
 
 type JourneyBrokerTelemetry = Pick<TelemetryJourney, "headers" | "recordHttpRequest">;
 
+export type ParticipantCredentialCleanupOptions = {
+  readonly keepalive?: boolean;
+};
+
 export async function createParticipantCredential(displayName: string, spaceInviteToken?: string, journey?: JourneyBrokerTelemetry): Promise<ParticipantCredential> {
   try {
     return await request(
@@ -32,13 +36,11 @@ export function createAccessGrantProvider(journey?: JourneyBrokerTelemetry): Get
   return async (): Promise<AccessGrant> => request<AccessGrant>("/access-grants", undefined, journey);
 }
 
-export async function cleanupParticipantCredential(journey?: JourneyBrokerTelemetry): Promise<void> {
-  await request<void>("/participant-credentials/cleanup", undefined, journey);
+export async function cleanupParticipantCredential(journey?: JourneyBrokerTelemetry, options: ParticipantCredentialCleanupOptions = {}): Promise<void> {
+  await request<void>("/participant-credentials/cleanup", undefined, journey, undefined, options);
 }
 
-async function request<T>(path: string, body: unknown, journey: JourneyBrokerTelemetry | undefined, parse: (value: unknown) => T): Promise<T>;
-async function request<T>(path: string, body: unknown, journey: JourneyBrokerTelemetry | undefined, parse?: undefined): Promise<T>;
-async function request<T>(path: string, body: unknown = {}, journey?: JourneyBrokerTelemetry, parse?: (value: unknown) => T): Promise<T> {
+async function request<T>(path: string, body: unknown = {}, journey?: JourneyBrokerTelemetry, parse?: (value: unknown) => T, options: ParticipantCredentialCleanupOptions = {}): Promise<T> {
   const startedAt = Date.now();
   let response: Response | undefined;
 
@@ -48,6 +50,7 @@ async function request<T>(path: string, body: unknown = {}, journey?: JourneyBro
       credentials: "same-origin",
       headers: { "content-type": "application/json", ...journey?.headers },
       body: JSON.stringify(body ?? {}),
+      keepalive: options.keepalive,
     });
     if (!response.ok) {
       journey?.recordHttpRequest({

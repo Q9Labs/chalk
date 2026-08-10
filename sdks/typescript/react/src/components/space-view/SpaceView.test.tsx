@@ -68,6 +68,17 @@ describe("SpaceView", () => {
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-texture", "paper");
   });
 
+  it("uses the full host viewport instead of capping the Space chrome and stage", () => {
+    const { container } = renderView();
+    const chrome = container.querySelector("main > section");
+    const stageLayout = screen.getByRole("region", { name: "Space stage" }).parentElement;
+
+    expect(chrome).toHaveClass("h-full", "w-full");
+    expect(chrome?.className).not.toContain("max-w-");
+    expect(stageLayout).toHaveClass("w-full");
+    expect(stageLayout?.className).not.toContain("max-w-");
+  });
+
   it("opens the provider-backed participant panel from the control bar", () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     renderView(client, { features: { participants: true } });

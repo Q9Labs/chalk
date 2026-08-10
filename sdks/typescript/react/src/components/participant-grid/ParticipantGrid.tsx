@@ -343,7 +343,7 @@ const ParticipantGridSurface = React.memo(
       const p = visibleParticipants[0]!;
       return (
         <div className={cn("h-full w-full flex items-center justify-center", className)} data-tour="video-grid">
-          <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" />
+          <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} aspectRatio="fill" className="h-full w-full" />
         </div>
       );
     }

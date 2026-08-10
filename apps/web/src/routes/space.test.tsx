@@ -71,6 +71,24 @@ describe("public SDK Space route", () => {
     await waitFor(() => expect(mocks.cleanupParticipantCredential).toHaveBeenCalledTimes(2));
     expect(window.location.hash).toBe("");
   });
+
+  it("uses unload-safe cleanup when the page closes", async () => {
+    await enterInvitedSpace();
+
+    act(() => window.dispatchEvent(pageHideEvent(false)));
+
+    await waitFor(() => expect(mocks.cleanupParticipantCredential).toHaveBeenCalledWith(mocks.journey, { keepalive: true }));
+    expect(window.location.hash).toBe("");
+  });
+
+  it("keeps the credential when the page enters the back-forward cache", async () => {
+    await enterInvitedSpace();
+
+    act(() => window.dispatchEvent(pageHideEvent(true)));
+
+    expect(mocks.cleanupParticipantCredential).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe(`#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}`);
+  });
 });
 
 async function enterSpace(): Promise<void> {
@@ -110,4 +128,10 @@ async function finishDeferredCleanup(cleanupPromise: Promise<void>, resolveClean
     await cleanupPromise;
   });
   expect(window.location.hash).toBe("");
+}
+
+function pageHideEvent(persisted: boolean): Event {
+  const event = new Event("pagehide");
+  Object.defineProperty(event, "persisted", { value: persisted });
+  return event;
 }

@@ -34,4 +34,20 @@ describe("ParticipantGrid", () => {
     );
     expect(screen.getByRole("button", { name: "Video tile for Hasan" })).toBeInTheDocument();
   });
+
+  it("fills the stage for a single Participant", () => {
+    const client = createTestClient(createSnapshot());
+    client.setSnapshot({
+      ...client.getSnapshot(),
+      self: { ...client.getSnapshot().self, participantId: "hasan", displayName: "Hasan" },
+      participants: { roster: [{ participantId: "hasan", displayName: "Hasan", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "active", screenShare: "inactive" } }], admissionQueue: [] },
+    });
+    render(
+      <ChalkProvider client={client}>
+        <ParticipantGrid layout="grid" />
+      </ChalkProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Video tile for Hasan" })).not.toHaveClass("aspect-video");
+  });
 });
