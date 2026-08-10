@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -29,15 +30,16 @@ const (
 // with viewer queries; projector, query, export, and retention work use the
 // query pool.
 type EpisodeDiagnosticsRepository struct {
-	appendPool *pgxpool.Pool
-	queryPool  *pgxpool.Pool
+	appendPool        *pgxpool.Pool
+	queryPool         *pgxpool.Pool
+	referenceBackfill episodeReferenceBackfillState
 }
 
 func NewEpisodeDiagnosticsRepository(appendPool, queryPool *pgxpool.Pool) *EpisodeDiagnosticsRepository {
 	if queryPool == nil {
 		queryPool = appendPool
 	}
-	return &EpisodeDiagnosticsRepository{appendPool: appendPool, queryPool: queryPool}
+	return &EpisodeDiagnosticsRepository{appendPool: appendPool, queryPool: queryPool, referenceBackfill: newEpisodeReferenceBackfillState()}
 }
 
 var _ episodediagnostics.Repository = (*EpisodeDiagnosticsRepository)(nil)
@@ -150,17 +152,8 @@ func (r *EpisodeDiagnosticsRepository) Reconcile(ctx context.Context, environmen
 		}
 		result = append(result, diagnostic)
 	}
-	referenceRows, referenceErr := sqlc.New(r.queryPool).ListEpisodeDiagnosticsMissingEpisodeReference(ctx, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams{
-		Environment: string(environment),
-		PageLimit:   int32(limit),
-	})
-	if referenceErr != nil {
-		return result, fmt.Errorf("list diagnostics missing Episode reference: %w", referenceErr)
-	}
-	for _, row := range referenceRows {
-		if err := insertDiagnosticReference(ctx, sqlc.New(r.queryPool), row.TenantID, row.DiagnosticID, 0, "", "chalk.episode", idString(row.EpisodeID), "", true, ""); err != nil {
-			return result, fmt.Errorf("backfill diagnostic Episode reference: %w", err)
-		}
+	if err := r.reconcileEpisodeReferenceBackfill(ctx, environment, limit); err != nil {
+		return result, err
 	}
 	// Repair roots whose authoritative Episode ended after the observer created
 	// the diagnostic. This path is bounded and does not trust client Events to
@@ -234,6 +227,58 @@ func (r *EpisodeDiagnosticsRepository) Reconcile(ctx context.Context, environmen
 		result = append(result, next)
 	}
 	return result, nil
+}
+
+func (r *EpisodeDiagnosticsRepository) reconcileEpisodeReferenceBackfill(ctx context.Context, environment episodediagnostics.Environment, limit int) error {
+	queries := sqlc.New(r.queryPool)
+	return r.referenceBackfill.run(ctx, environment, limit,
+		func(ctx context.Context, params sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams) ([]sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow, error) {
+			return queries.ListEpisodeDiagnosticsMissingEpisodeReference(ctx, params)
+		},
+		func(ctx context.Context, row sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow) error {
+			return insertDiagnosticReference(ctx, queries, row.TenantID, row.DiagnosticID, 0, "", "chalk.episode", idString(row.EpisodeID), "", true, "")
+		},
+	)
+}
+
+type episodeReferenceBackfillState struct {
+	mu       sync.Mutex
+	complete map[episodediagnostics.Environment]struct{}
+}
+
+func newEpisodeReferenceBackfillState() episodeReferenceBackfillState {
+	return episodeReferenceBackfillState{complete: make(map[episodediagnostics.Environment]struct{})}
+}
+
+func (s *episodeReferenceBackfillState) run(
+	ctx context.Context,
+	environment episodediagnostics.Environment,
+	limit int,
+	list func(context.Context, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams) ([]sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow, error),
+	insert func(context.Context, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow) error,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.complete[environment]; ok {
+		return nil
+	}
+	rows, err := list(ctx, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams{Environment: string(environment), PageLimit: int32(limit)})
+	if err != nil {
+		return fmt.Errorf("list diagnostics missing Episode reference: %w", err)
+	}
+	for _, row := range rows {
+		if err := insert(ctx, row); err != nil {
+			return fmt.Errorf("backfill diagnostic Episode reference: %w", err)
+		}
+	}
+	if len(rows) == 0 {
+		if s.complete == nil {
+			s.complete = make(map[episodediagnostics.Environment]struct{})
+		}
+		s.complete[environment] = struct{}{}
+	}
+	return nil
 }
 
 func (r *EpisodeDiagnosticsRepository) ResolveScope(ctx context.Context, scope episodediagnostics.AppendScope, participantGeneration int64) (episodediagnostics.EpisodeDiagnostic, error) {

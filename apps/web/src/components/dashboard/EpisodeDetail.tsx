@@ -1,10 +1,10 @@
 import { formatDateTime, formatJSON, humanizeReason, statusLabel } from "./episode-utils";
 import type { DashboardEpisode } from "../../lib/dashboard-api";
-import { EpisodeDiagnosticsDeveloperLink } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
+import { EpisodeDiagnosticsDeveloperLink, type EpisodeDiagnosticsAvailabilityClient } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 
 export type EpisodeDetailLoadState = "idle" | "loading" | "ready" | "error";
 
-export function EpisodeDetailPanel({ episode, spaceName, state, error, onRetry, onClose, onEnd }: { episode: DashboardEpisode | null; spaceName?: string; state: EpisodeDetailLoadState; error: string | null; onRetry: () => void; onClose: () => void; onEnd: () => void }) {
+export function EpisodeDetailPanel({ episode, spaceName, state, error, onRetry, onClose, onEnd, diagnosticsApi }: { episode: DashboardEpisode | null; spaceName?: string; state: EpisodeDetailLoadState; error: string | null; onRetry: () => void; onClose: () => void; onEnd: () => void; diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient }) {
   return (
     <aside className="episode-detail-panel" aria-label="Episode details">
       <div className="episode-detail-heading">
@@ -29,12 +29,12 @@ export function EpisodeDetailPanel({ episode, spaceName, state, error, onRetry, 
           </button>
         </div>
       ) : null}
-      {state === "ready" && episode ? <EpisodeDetailContent episode={episode} onEnd={onEnd} /> : null}
+      {state === "ready" && episode ? <EpisodeDetailContent episode={episode} onEnd={onEnd} diagnosticsApi={diagnosticsApi} /> : null}
     </aside>
   );
 }
 
-function EpisodeDetailContent({ episode, onEnd }: { episode: DashboardEpisode; onEnd: () => void }) {
+function EpisodeDetailContent({ episode, onEnd, diagnosticsApi }: { episode: DashboardEpisode; onEnd: () => void; diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient }) {
   const ended = episode.status === "ended";
   return (
     <>
@@ -52,7 +52,7 @@ function EpisodeDetailContent({ episode, onEnd }: { episode: DashboardEpisode; o
         )}
       </div>
       <div className="episode-detail-diagnostics">
-        <EpisodeDiagnosticsDeveloperLink diagnosticReference={`chalk.episode:${episode.id}`} />
+        <EpisodeDiagnosticsDeveloperLink diagnosticReference={`chalk.episode:${episode.id}`} api={diagnosticsApi} />
       </div>
       <dl className="episode-detail-meta">
         <div>

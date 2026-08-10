@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import type { EpisodeDiagnosticsAvailabilityClient } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { Icon } from "./DashboardShell";
 import { EpisodeDetailPanel, type EpisodeDetailLoadState } from "./EpisodeDetail";
 import { EndEpisodeDialog, StartEpisodeDialog } from "./EpisodeDialogs";
@@ -18,7 +19,7 @@ export type EpisodeClient = {
 
 const defaultEpisodeClient: EpisodeClient = { listSpaces, listEpisodes, getEpisode, createEpisode, endEpisode };
 
-export function EpisodesPage({ tenantID, api = defaultEpisodeClient }: { tenantID: string; api?: EpisodeClient }) {
+export function EpisodesPage({ tenantID, api = defaultEpisodeClient, diagnosticsApi }: { tenantID: string; api?: EpisodeClient; diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient }) {
   const [spaces, setSpaces] = useState<DashboardSpace[]>([]);
   const [episodes, setEpisodes] = useState<DashboardEpisode[]>([]);
   const [pagination, setPagination] = useState<DashboardPagination | null>(null);
@@ -285,6 +286,7 @@ export function EpisodesPage({ tenantID, api = defaultEpisodeClient }: { tenantI
             setEndError(null);
             setEndOpen(true);
           }}
+          diagnosticsApi={diagnosticsApi}
         />
       ) : null}
 

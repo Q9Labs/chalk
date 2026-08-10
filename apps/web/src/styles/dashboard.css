@@ -1187,7 +1187,22 @@
 
 .episode-detail-diagnostics {
   display: flex;
+  align-items: center;
+  min-height: 30px;
+  gap: 8px;
   margin-top: -0.25rem;
+}
+.episode-diagnostics-availability {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.episode-diagnostics-availability .dashboard-button {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 10px;
 }
 
 @media (max-width: 900px) {

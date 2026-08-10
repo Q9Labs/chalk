@@ -70,7 +70,8 @@ describe("Episodes page", () => {
 
   it("opens diagnostics from the selected Episode without making the operator find a reference", async () => {
     vi.stubGlobal("__EPISODE_DIAGNOSTICS_ROUTE_ENABLED__", true);
-    render(<EpisodesPage tenantID={tenantID} api={client()} />);
+    const diagnosticsApi = { resolveAlternate: vi.fn().mockResolvedValue("chalkdiag:v1:localhost:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") };
+    render(<EpisodesPage tenantID={tenantID} api={client()} diagnosticsApi={diagnosticsApi} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /Product studio/ }));
 

@@ -17,3 +17,6 @@
 - Confirmed that production diagnostics already collect and stream the current Episode, but the canonical reference is not discoverable from the dashboard.
 - Added an account-scoped `chalk.episode` alternate reference, direct Episode detail launch link, Developer launcher, and execution-trace coverage. The debugger still resolves to and displays the canonical reference for authorized sharing.
 - Added a bounded, idempotent reconciler backfill so diagnostics created before the safe Episode reference become directly openable without an operator database update.
+- The first bounded Sol review found two P2 release issues: a selected Episode could briefly expose a debugger link before its reference existed, and the completed reference backfill would still scan once per second.
+- The dashboard now verifies the alternate reference through the signed-in same-origin gateway before rendering the debugger link, retries the short creation race, and leaves expired or unavailable diagnostics non-clickable with a manual Retry action.
+- The API repository now serializes the legacy reference backfill, retries list or insert failures, and marks each environment complete only after an empty batch; later reconcile cycles skip the query. Focused Go tests, the race detector, focused web tests, and web type checking pass.
