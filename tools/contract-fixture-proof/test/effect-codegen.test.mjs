@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { Schema } from "effect";
+import { AuditLogIdSchema, EpisodeIdSchema, MembershipIdSchema, ParticipantIdSchema, RecordingIdSchema, SpaceIdSchema, TenantIdSchema, TranscriptIdSchema, UUIDSchema, UserIdSchema } from "../../../sdks/typescript/client/src/generated/schemas.ts";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const openApiPath = resolve(repositoryRoot, "contract/generated/openapi.json");
@@ -56,6 +58,31 @@ describe("Effect HTTP API generation", () => {
   "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
 });`);
       expect(httpApi).toContain(`headers: S.${operationName}RequestHeadersSchema`);
+    }
+  });
+
+  it("accepts PostgreSQL UUID-shaped values across branded ID schemas", () => {
+    const brandedIDSchemas = {
+      AuditLogId: AuditLogIdSchema,
+      EpisodeId: EpisodeIdSchema,
+      MembershipId: MembershipIdSchema,
+      ParticipantId: ParticipantIdSchema,
+      RecordingId: RecordingIdSchema,
+      SpaceId: SpaceIdSchema,
+      TenantId: TenantIdSchema,
+      TranscriptId: TranscriptIdSchema,
+      UUID: UUIDSchema,
+      UserId: UserIdSchema,
+    };
+    const valid = "00000000-0000-0000-0000-000000000001";
+    const invalid = ["00000000-0000-0000-0000-00000000000g", "00000000-0000-0000-0000-0000000000000", "000000000000000000000000000000000000"];
+
+    for (const [name, schema] of Object.entries(brandedIDSchemas)) {
+      const decode = Schema.decodeUnknownSync(schema);
+      expect(() => decode(valid), name).not.toThrow();
+      for (const value of invalid) {
+        expect(() => decode(value), `${name}: ${value}`).toThrow();
+      }
     }
   });
 });

@@ -193,6 +193,13 @@ Link the debugger from the authorized Episode record, resolve its safe Episode
 reference inside the tenant boundary, and show the canonical diagnostic
 reference after resolution for precise handoffs.
 
+## Generated UUID Validators Must Match The API Parser
+
+Do not make generated browser schemas stricter than the API's accepted UUID
+text contract. If the API accepts PostgreSQL-shaped hexadecimal UUID values,
+test every branded generated ID against that same shape so valid production
+records cannot make an otherwise successful list response fail in the browser.
+
 ## GitHub Workflow Dispatch Needs An Explicit Repository
 
 `gh repo view` can infer a repository from a local Git remote, while

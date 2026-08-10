@@ -23,13 +23,13 @@ export type AIProviderConfig = typeof AIProviderConfigSchema.Type;
 export const DateTimeStringSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString"));
 export type DateTimeString = typeof DateTimeStringSchema.Type;
 
-export const UserIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UserId"));
+export const UserIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UserId"));
 export type UserId = typeof UserIdSchema.Type;
 
-export const UUIDSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UUID"));
+export const UUIDSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UUID"));
 export type UUID = typeof UUIDSchema.Type;
 
-export const TenantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TenantId"));
+export const TenantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TenantId"));
 export type TenantId = typeof TenantIdSchema.Type;
 
 export const PaginationSchema = Schema.Struct({
@@ -78,13 +78,13 @@ export const APIKeyWithSecretSchema = Schema.Struct({
 });
 export type APIKeyWithSecret = typeof APIKeyWithSecretSchema.Type;
 
-export const EpisodeIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("EpisodeId"));
+export const EpisodeIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("EpisodeId"));
 export type EpisodeId = typeof EpisodeIdSchema.Type;
 
-export const ParticipantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("ParticipantId"));
+export const ParticipantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("ParticipantId"));
 export type ParticipantId = typeof ParticipantIdSchema.Type;
 
-export const SpaceIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("SpaceId"));
+export const SpaceIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("SpaceId"));
 export type SpaceId = typeof SpaceIdSchema.Type;
 
 export const AccessGrantSchema = Schema.Struct({
@@ -198,7 +198,7 @@ export const AdmitEpisodeParticipantRequestSchema = Schema.Struct({
 });
 export type AdmitEpisodeParticipantRequest = typeof AdmitEpisodeParticipantRequestSchema.Type;
 
-export const AuditLogIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId"));
+export const AuditLogIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId"));
 export type AuditLogId = typeof AuditLogIdSchema.Type;
 
 export const AuditLogSchema = Schema.Struct({
@@ -678,7 +678,7 @@ export const LoginRequestSchema = Schema.Struct({
 });
 export type LoginRequest = typeof LoginRequestSchema.Type;
 
-export const MembershipIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("MembershipId"));
+export const MembershipIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("MembershipId"));
 export type MembershipId = typeof MembershipIdSchema.Type;
 
 export const MembershipSchema = Schema.Struct({
@@ -814,7 +814,7 @@ export const RecentAuthRequestSchema = Schema.Struct({
 });
 export type RecentAuthRequest = typeof RecentAuthRequestSchema.Type;
 
-export const RecordingIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId"));
+export const RecordingIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId"));
 export type RecordingId = typeof RecordingIdSchema.Type;
 
 export const RecordingSchema = Schema.Struct({
@@ -1013,7 +1013,7 @@ export const TenantListSchema = Schema.Struct({
 });
 export type TenantList = typeof TenantListSchema.Type;
 
-export const TranscriptIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TranscriptId"));
+export const TranscriptIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TranscriptId"));
 export type TranscriptId = typeof TranscriptIdSchema.Type;
 
 export const TranscriptSchema = Schema.Struct({
