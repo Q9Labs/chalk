@@ -71,7 +71,14 @@ export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled =
     return (
       <span className="episode-diagnostics-availability" role="status">
         <span>Episode Debugger unavailable.</span>
-        <button className="dashboard-button secondary" type="button" onClick={() => { setRetryAttempt(0); setRetryGeneration((current) => current + 1); }}>
+        <button
+          className="dashboard-button secondary"
+          type="button"
+          onClick={() => {
+            setRetryAttempt(0);
+            setRetryGeneration((current) => current + 1);
+          }}
+        >
           Retry
         </button>
       </span>

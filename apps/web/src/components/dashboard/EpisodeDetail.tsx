@@ -4,7 +4,25 @@ import { EpisodeDiagnosticsDeveloperLink, type EpisodeDiagnosticsAvailabilityCli
 
 export type EpisodeDetailLoadState = "idle" | "loading" | "ready" | "error";
 
-export function EpisodeDetailPanel({ episode, spaceName, state, error, onRetry, onClose, onEnd, diagnosticsApi }: { episode: DashboardEpisode | null; spaceName?: string; state: EpisodeDetailLoadState; error: string | null; onRetry: () => void; onClose: () => void; onEnd: () => void; diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient }) {
+export function EpisodeDetailPanel({
+  episode,
+  spaceName,
+  state,
+  error,
+  onRetry,
+  onClose,
+  onEnd,
+  diagnosticsApi,
+}: {
+  episode: DashboardEpisode | null;
+  spaceName?: string;
+  state: EpisodeDetailLoadState;
+  error: string | null;
+  onRetry: () => void;
+  onClose: () => void;
+  onEnd: () => void;
+  diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient;
+}) {
   return (
     <aside className="episode-detail-panel" aria-label="Episode details">
       <div className="episode-detail-heading">
