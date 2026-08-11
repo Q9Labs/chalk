@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' && github.ref != 'refs/heads/master' }}
 
 jobs:
   gate:
@@ -57,6 +57,12 @@ jobs:
         with:
           tofu_version: 1.12.3
 
+      - name: Cache Semgrep downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: semgrep-${{ runner.os }}-${{ runner.arch }}-py3.12-1.166.0
+
       - name: Install Semgrep
         run: pipx install semgrep==1.166.0
 
@@ -74,3 +80,75 @@ jobs:
           else
             pnpm run gate
           fi
+
+  deploy-web:
+    name: Deploy web
+    needs: gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_ACCOUNT_ID: "5281943bd26d5bdcf4c3915606cd6bfb"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web workspace dependencies
+        run: pnpm --filter "web^..." run build
+
+      - name: Build production web
+        env:
+          CHALK_ENVIRONMENT: production
+          CHALK_EPISODE_DIAGNOSTICS: hosted
+          CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN: "true"
+          CHALK_EPISODE_DIAGNOSTICS_GATEWAY: verified
+          VITE_API_URL: https://api.chalkmeet.com
+          VITE_CHALK_TELEMETRY_ENABLED: "false"
+        run: pnpm --filter web run build
+
+      - name: Deploy staging web
+        id: deploy-staging
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          deployment_output="$(npx wrangler pages deploy dist/client --project-name chalk-staging --branch staging --commit-hash "$GITHUB_SHA" --commit-dirty=false)"
+          printf '%s\n' "$deployment_output"
+          deployment_url="$(printf '%s\n' "$deployment_output" | grep 'Take a peek over at' | grep -Eo 'https://[[:alnum:]-]+\.chalk-staging\.pages\.dev' | tail -n 1 || true)"
+          if [[ -z "$deployment_url" ]]; then
+            echo "Wrangler did not print an exact staging deployment URL." >&2
+            exit 1
+          fi
+          printf 'url=%s\n' "$deployment_url" >> "$GITHUB_OUTPUT"
+
+      - name: Verify staging web
+        run: node scripts/deploy/verify-web-deploy.mjs "${{ steps.deploy-staging.outputs.url }}" "$GITHUB_SHA"
+
+      - name: Deploy production web
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler pages deploy dist/client --project-name chalk --branch master --commit-hash "$GITHUB_SHA" --commit-dirty=false
+
+      - name: Verify production web
+        run: node scripts/deploy/verify-web-deploy.mjs https://chalkmeet.com "$GITHUB_SHA" --production
