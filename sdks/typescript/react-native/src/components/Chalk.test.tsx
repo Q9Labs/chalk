@@ -13,6 +13,7 @@ const testingLibrary = createRequire(import.meta.url)(join(process.cwd(), "../re
 const { act, cleanup, render } = testingLibrary;
 
 const nativeClientFactory = vi.hoisted(() => vi.fn());
+const spaceViewSpy = vi.hoisted(() => vi.fn(() => <div data-testid="space" />));
 
 vi.mock("react-native", () => ({
   StyleSheet: { create: <T,>(styles: T) => styles },
@@ -21,7 +22,7 @@ vi.mock("react-native", () => ({
   Pressable: ({ children }: { readonly children?: ReactNode }) => children,
 }));
 vi.mock("../space-client/create-native-space-client", () => ({ createNativeSpaceClient: nativeClientFactory }));
-vi.mock("./SpaceView", () => ({ SpaceView: () => <div data-testid="space" /> }));
+vi.mock("./SpaceView", () => ({ SpaceView: spaceViewSpy }));
 vi.mock("./Entrance", () => ({ Entrance: () => <div data-testid="entrance" /> }));
 
 import { Chalk } from "./Chalk";
@@ -29,6 +30,7 @@ import { Chalk } from "./Chalk";
 afterEach(() => {
   cleanup();
   nativeClientFactory.mockReset();
+  spaceViewSpy.mockClear();
 });
 
 describe("Chalk", () => {
@@ -53,6 +55,14 @@ describe("Chalk", () => {
     render(<Chalk client={client.client} entrance={false} onJoined={onJoined} />);
 
     expect(onJoined).not.toHaveBeenCalled();
+  });
+
+  it("forwards the optional diagnostics action to the live Space", () => {
+    const client = createClient("live");
+    const onOpenDiagnostics = vi.fn();
+    render(<Chalk client={client.client} onOpenDiagnostics={onOpenDiagnostics} />);
+
+    expect(spaceViewSpy).toHaveBeenCalledWith(expect.objectContaining({ onOpenDiagnostics }), undefined);
   });
 
   it("forwards canonical client events and cleans their subscriptions up", () => {

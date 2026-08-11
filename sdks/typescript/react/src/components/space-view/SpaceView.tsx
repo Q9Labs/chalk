@@ -71,6 +71,7 @@ export interface SpaceViewProps {
   readonly infoDialog?: SpaceViewInfoDialogProps;
   readonly inviteDialog?: SpaceViewInviteDialogProps;
   readonly settingsDialog?: React.ReactNode;
+  readonly onOpenDiagnostics?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
@@ -97,6 +98,7 @@ export function SpaceView({
   infoDialog,
   inviteDialog,
   settingsDialog,
+  onOpenDiagnostics,
   onOpenSettings,
   onToggleWhiteboard,
   whiteboard,
@@ -141,6 +143,7 @@ export function SpaceView({
     ...(feature("handRaise") ? ["handraise" as const] : []),
     ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
+    ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
     ...(feature("info") && infoDialog ? ["info" as const] : []),
     ...(feature("settings") ? ["settings" as const] : []),
     "leave",
@@ -225,6 +228,7 @@ export function SpaceView({
                 onToggleWhiteboard={onToggleWhiteboard}
                 onOpenReactions={() => setReactionPickerOpen(true)}
                 onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
+                onOpenDiagnostics={onOpenDiagnostics}
                 onOpenSettings={() => {
                   setActivePanel("settings");
                   onOpenSettings?.();
@@ -244,6 +248,7 @@ export function SpaceView({
                 onToggleWhiteboard={onToggleWhiteboard}
                 onOpenReactions={() => setReactionPickerOpen(true)}
                 onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
+                onOpenDiagnostics={onOpenDiagnostics}
                 onOpenSettings={() => {
                   setActivePanel("settings");
                   onOpenSettings?.();

@@ -56,6 +56,7 @@ export type ChalkProps = SpaceIntegration &
     readonly inviteLink?: string;
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
+    readonly onOpenDiagnostics?: () => void;
   };
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
@@ -242,6 +243,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
         props.onLayoutChange?.(nextLayout);
       }}
       features={props.features}
+      onOpenDiagnostics={props.onOpenDiagnostics}
       whiteboard={whiteboard}
       onToggleWhiteboard={() => setWhiteboardOpen((open) => !open)}
       infoDialog={props.features?.info !== false && props.inviteLink ? { isOpen: infoOpen, onOpenChange: setInfoOpen, spaceName: props.spaceName, inviteLink: props.inviteLink, onCopyLink: () => void navigator.clipboard?.writeText(props.inviteLink!) } : undefined}

@@ -1,5 +1,5 @@
 import { buttonVariants } from "@q9labsai/chalk-ui";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EpisodeDiagnosticsApiClient, EpisodeDiagnosticsApiError } from "./api-client";
 import { episodeDebuggerPath, isAlternateDiagnosticReference } from "./reference";
 
@@ -9,12 +9,18 @@ export type EpisodeDiagnosticsAvailabilityClient = Pick<EpisodeDiagnosticsApiCli
 
 type AvailabilityState = "available" | "checking" | "unavailable";
 
+type EpisodeDiagnosticsAvailabilityOptions = {
+  readonly diagnosticReference?: string;
+  readonly enabled?: boolean;
+  readonly api?: EpisodeDiagnosticsAvailabilityClient;
+};
+
 function shouldRetryAvailability(error: unknown): boolean {
   if (!(error instanceof EpisodeDiagnosticsApiError)) return true;
   return ![400, 401, 403].includes(error.status ?? 0);
 }
 
-export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__, api: apiInput }: { diagnosticReference?: string; enabled?: boolean; api?: EpisodeDiagnosticsAvailabilityClient }) {
+export function useEpisodeDiagnosticsAvailability({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__, api: apiInput }: EpisodeDiagnosticsAvailabilityOptions): { readonly path?: string; readonly status: AvailabilityState; readonly supported: boolean; readonly retry: () => void } {
   const reference = diagnosticReference?.trim() ?? "";
   const path = episodeDebuggerPath(reference);
   const alternateReference = isAlternateDiagnosticReference(reference) ? reference : undefined;
@@ -59,26 +65,30 @@ export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled =
     };
   }, [alternateReference, api, enabled, path, retryAttempt, retryGeneration]);
 
-  if (!enabled || !diagnosticReference || !path) return null;
-  if (availability === "checking") {
+  const retry = useCallback(() => {
+    setRetryAttempt(0);
+    setRetryGeneration((current) => current + 1);
+  }, []);
+
+  return { path: enabled && availability === "available" ? path : undefined, status: availability, supported: Boolean(path), retry };
+}
+
+export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__, api }: EpisodeDiagnosticsAvailabilityOptions) {
+  const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference, enabled, api });
+
+  if (!enabled || !diagnosticReference || !diagnostics.supported) return null;
+  if (diagnostics.status === "checking") {
     return (
       <span className="episode-diagnostics-availability" role="status">
         Checking Episode Debugger availability…
       </span>
     );
   }
-  if (availability === "unavailable") {
+  if (diagnostics.status === "unavailable") {
     return (
       <span className="episode-diagnostics-availability" role="status">
         <span>Episode Debugger unavailable.</span>
-        <button
-          className="dashboard-button secondary"
-          type="button"
-          onClick={() => {
-            setRetryAttempt(0);
-            setRetryGeneration((current) => current + 1);
-          }}
-        >
+        <button className="dashboard-button secondary" type="button" onClick={diagnostics.retry}>
           Retry
         </button>
       </span>
@@ -86,7 +96,7 @@ export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled =
   }
 
   return (
-    <a className={buttonVariants({ variant: "outline", size: "sm" })} href={path}>
+    <a className={buttonVariants({ variant: "outline", size: "sm" })} href={diagnostics.path}>
       Open Episode Debugger
     </a>
   );

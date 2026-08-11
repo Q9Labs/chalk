@@ -29,6 +29,7 @@ export interface SpaceViewProps {
   features?: SpaceViewFeatures;
   onLeave: () => void | Promise<void>;
   onEndEpisode?: () => void | Promise<void>;
+  onOpenDiagnostics?: () => void;
   onDiagnosticsChange?: (snapshot: SpaceViewDiagnosticsSnapshot) => void;
   /** Selects files; the SDK owns bounds, upload, and send sequencing. */
   pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;

@@ -1,6 +1,7 @@
 import { Chalk } from "@q9labsai/chalk-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
+import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isTerminalParticipantCredentialCleanupError, joinDashboardSpace, type DashboardSpaceAccess, type ParticipantCredential, type ParticipantCredentialCleanupOptions } from "../../lib/chalk-access";
 import { listAllAccountTenants } from "../../lib/dashboard-api";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
@@ -161,6 +162,11 @@ function LocalSpace({
 }) {
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess, journey }), [connectionAccess, credential, getAccess, journey]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
+  const episodeID = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection.episode?.id;
+  const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
+  const openDiagnostics = useCallback(() => {
+    if (diagnostics.path) globalThis.open(diagnostics.path, "_blank", "noopener");
+  }, [diagnostics.path]);
   const releaseFromLifecycle = useCallback(() => {
     void release().catch(() => undefined);
   }, [release]);
@@ -182,7 +188,18 @@ function LocalSpace({
 
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance displayName={displayName} defaults={{ microphone: true, camera: true }} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName ?? "Local Space"} inviteLink={globalThis.location?.href} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      <Chalk
+        client={client}
+        entrance
+        displayName={displayName}
+        defaults={{ microphone: true, camera: true }}
+        logoUrl="/brand/chalk/chalk-logo.svg"
+        spaceName={spaceName ?? "Local Space"}
+        inviteLink={globalThis.location?.href}
+        onEpisodeEnded={releaseFromLifecycle}
+        onLeft={releaseFromLifecycle}
+        onOpenDiagnostics={diagnostics.path ? openDiagnostics : undefined}
+      />
     </main>
   );
 }

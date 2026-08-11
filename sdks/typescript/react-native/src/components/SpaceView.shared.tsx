@@ -72,7 +72,7 @@ export function SpaceViewShared(props: SpaceViewProps): React.JSX.Element {
         simulatorMediaDisabled={controller.simulatorMediaDisabled}
         unreadChatCount={controller.chat.unreadCount}
       />
-      <SpaceActionMenu controller={controller} />
+      <SpaceActionMenu controller={controller} onOpenDiagnostics={props.onOpenDiagnostics} />
       {controller.panel === "settings" ? <SettingsSheet controller={controller} isOpen onClose={controller.closePanel} /> : <SpacePanelSheet controller={controller} />}
       <ReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={(reaction) => selectSpaceReaction(controller, reaction)} />
     </View>
