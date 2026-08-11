@@ -11,6 +11,10 @@ const spacePageTestMocks = vi.hoisted(() => {
   const getAccess = vi.fn();
   const dashboardGetAccess = vi.fn();
   const connectionAccess = { access: "dashboard" };
+  const dashboardConnectionAccess = vi.fn();
+  const dashboardLeave = vi.fn(async (): Promise<void> => undefined);
+  const listAllAccountTenants = vi.fn();
+  const joinDashboardSpace = vi.fn();
   return {
     holder,
     journey,
@@ -24,6 +28,10 @@ const spacePageTestMocks = vi.hoisted(() => {
     localStorage: { getItem: vi.fn(), setItem: vi.fn() },
     open: vi.fn(),
     useEpisodeDiagnosticsAvailability: vi.fn(() => ({ path: diagnosticsPath, status: "available", supported: true, retry: vi.fn() }) as { readonly path?: string; readonly status: "available" | "checking" | "unavailable"; readonly supported: boolean; readonly retry: () => void }),
+    dashboardConnectionAccess,
+    dashboardLeave,
+    listAllAccountTenants,
+    joinDashboardSpace,
     Chalk: vi.fn((props: Record<string, unknown>) => {
       holder.chalkProps = props;
       return null;
@@ -31,8 +39,7 @@ const spacePageTestMocks = vi.hoisted(() => {
     cleanupParticipantCredential: vi.fn(async (): Promise<void> => undefined),
     createAccessGrantProvider: vi.fn(() => getAccess),
     createParticipantCredential: vi.fn(),
-    joinDashboardSpace: vi.fn(),
-    listAllAccountTenants: vi.fn(),
+    isUnauthenticatedDashboardSpaceError: vi.fn((cause: unknown) => cause instanceof Error && "status" in cause && Number((cause as { readonly status?: unknown }).status) === 401),
     createLocalSpaceClient: vi.fn(() => client),
     createLocalSpaceRelease: vi.fn((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup)),
   };
@@ -44,9 +51,21 @@ vi.mock("../lib/chalk-access", () => ({
   createAccessGrantProvider: getSpacePageTestMocks().createAccessGrantProvider,
   createParticipantCredential: getSpacePageTestMocks().createParticipantCredential,
   isTerminalParticipantCredentialCleanupError,
+  isUnauthenticatedDashboardSpaceError: getSpacePageTestMocks().isUnauthenticatedDashboardSpaceError,
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
 }));
-vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants }));
+vi.mock("../lib/dashboard-api", () => {
+  class DashboardAPIError extends Error {
+    constructor(
+      readonly status: number,
+      readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  }
+  return { DashboardAPIError, listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants };
+});
 vi.mock("../lib/local-space-client", () => ({ createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient, createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease }));
 vi.mock("../lib/web-telemetry-context", () => ({ useWebTelemetry: () => ({ journey: getSpacePageTestMocks().journey, telemetry: getSpacePageTestMocks().telemetry }) }));
 vi.mock("../features/episode-debugger/EpisodeDiagnosticsDeveloperLink", () => ({ useEpisodeDiagnosticsAvailability: getSpacePageTestMocks().useEpisodeDiagnosticsAvailability }));
@@ -61,6 +80,18 @@ export const spacePageTestCredential = {
   spaceInviteToken: "i".repeat(43),
 };
 
+export const dashboardSpaceTestAccess = {
+  credential: {
+    apiBaseURL: "https://api.chalk.test",
+    space: "design-lab",
+    access: {},
+    participantGeneration: 1,
+  },
+  getAccess: spacePageTestMocks.dashboardGetAccess,
+  connectionAccess: spacePageTestMocks.dashboardConnectionAccess,
+  leave: spacePageTestMocks.dashboardLeave,
+};
+
 function isTerminalParticipantCredentialCleanupError(cause: unknown): boolean {
   return cause instanceof Error && "status" in cause && [401, 404, 410].includes(Number((cause as { readonly status?: unknown }).status));
 }
@@ -71,12 +102,14 @@ export function resetSpacePageTestMocks(): void {
   vi.stubGlobal("open", spacePageTestMocks.open);
   spacePageTestMocks.holder.chalkProps = undefined;
   spacePageTestMocks.createParticipantCredential.mockReset().mockResolvedValue(spacePageTestCredential);
+  spacePageTestMocks.listAllAccountTenants.mockReset().mockResolvedValue([{ tenant: { id: "tenant-1" } }]);
+  spacePageTestMocks.joinDashboardSpace.mockReset().mockResolvedValue(dashboardSpaceTestAccess);
+  spacePageTestMocks.dashboardLeave.mockReset().mockResolvedValue(undefined);
+  spacePageTestMocks.isUnauthenticatedDashboardSpaceError.mockClear();
   spacePageTestMocks.cleanupParticipantCredential.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.createAccessGrantProvider.mockReset().mockReturnValue(spacePageTestMocks.getAccess);
   spacePageTestMocks.createLocalSpaceClient.mockReset().mockReturnValue(spacePageTestMocks.client);
   spacePageTestMocks.createLocalSpaceRelease.mockReset().mockImplementation((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup));
-  spacePageTestMocks.joinDashboardSpace.mockReset().mockResolvedValue({ credential: spacePageTestCredential, getAccess: spacePageTestMocks.dashboardGetAccess, connectionAccess: spacePageTestMocks.connectionAccess, leave: vi.fn(async () => undefined) });
-  spacePageTestMocks.listAllAccountTenants.mockReset().mockResolvedValue([]);
   spacePageTestMocks.localStorage.getItem.mockReset().mockReturnValue(null);
   spacePageTestMocks.localStorage.setItem.mockReset();
   spacePageTestMocks.useEpisodeDiagnosticsAvailability.mockReset().mockReturnValue({ path: spacePageTestMocks.diagnosticsPath, status: "available", supported: true, retry: vi.fn() });
