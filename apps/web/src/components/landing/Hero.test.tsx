@@ -1,42 +1,44 @@
 /* @vitest-environment jsdom */
 
-import { renderToStaticMarkup } from "react-dom/server";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { Hero, resolveSpaceInviteLink, SiteNav } from "./Hero";
 
 describe("SiteNav", () => {
-  it("exposes product anchors and production account actions", () => {
+  it("matches the production landing navigation", () => {
     const markup = renderToStaticMarkup(<SiteNav />);
 
     expect(markup).toContain('href="#product"');
-    expect(markup).toContain('href="#performance"');
-    expect(markup).toContain('href="#self-host"');
-    expect(markup).toContain('href="#features"');
-    expect(markup).toContain('href="/home"');
+    expect(markup).toContain('href="/sdk-preview"');
+    expect(markup).toContain('href="/docs"');
     expect(markup).toContain('href="/sign-in"');
     expect(markup).toContain('href="/sign-up"');
+    expect(markup).toContain("Create account");
     expect(markup).not.toContain("import.meta.env.DEV");
   });
 });
 
 describe("Hero", () => {
-  it("frames Chalk as the collaboration product and uses local technology marks", () => {
+  it("renders the dark product-first direction and local technology marks", () => {
     const markup = renderToStaticMarkup(<Hero />);
 
-    expect(markup).toContain("Bring people together.");
-    expect(markup).toContain("dependable Space");
-    expect(markup).toContain("Create an Account");
-    expect(markup).toContain("Open Dashboard");
+    expect(markup).toContain("Real-time spaces,");
+    expect(markup).toContain("without the waiting.");
+    expect(markup).toContain("Build, join, and scale real-time experiences");
+    expect(markup).toContain("Create a Space");
+    expect(markup).toContain("Paste invite link");
+    expect(markup).toContain("Join");
     expect(markup).toContain('id="join-space"');
     expect(markup).toContain('aria-label="TypeScript"');
     expect(markup).toContain('aria-label="React Native"');
     expect(markup).toContain("/brand/technology/typescript.svg");
     expect(markup).toContain("/brand/technology/react_light.svg");
     expect(markup).toContain("/brand/technology/cloudflare.svg");
+    expect(markup).toContain("Q3 Design Sync");
     expect(markup).not.toContain("<svg");
-    expect(markup).not.toContain("hero-kicker");
+    expect(markup).not.toContain("kicker");
   });
 });
 
@@ -55,12 +57,12 @@ describe("resolveSpaceInviteLink", () => {
     expect(resolveSpaceInviteLink("/space/design/lab#token", origin)).toBeUndefined();
   });
 
-  it("shows an inline error for invalid input and navigates valid input with its hash", () => {
+  it("shows an inline error and only navigates valid input", () => {
     const assign = vi.fn();
     vi.stubGlobal("window", { location: { origin, assign } });
 
     render(<Hero />);
-    const input = screen.getByLabelText("Have an invite link?");
+    const input = screen.getByLabelText("Paste invite link");
     const form = input.closest("form");
     expect(form).not.toBeNull();
 
