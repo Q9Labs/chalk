@@ -1,6 +1,6 @@
 .dashboard-shell {
   min-height: 100vh;
-  background: radial-gradient(circle at 80% -20%, #172434 0, transparent 36rem), var(--paper);
+  background: var(--paper);
   color: var(--ink);
 }
 
@@ -8,11 +8,12 @@
   width: 242px;
   padding: 24px 16px 18px;
   border-right: 1px solid #202b36;
-  background: linear-gradient(180deg, #0b1118 0%, #0b1016 100%);
+  background: #0b1016;
 }
 
 .dashboard-shell .dashboard-brand-row {
   padding: 0 4px 22px;
+  border-bottom: 0;
 }
 
 .dashboard-shell .dashboard-brand {
@@ -120,10 +121,9 @@
 
 .dashboard-shell .dashboard-nav a.is-active,
 .dashboard-shell .dashboard-sidebar-footer > a.is-active {
-  border-color: #284d72;
+  border-color: #2b4055;
   background: #172b40;
   color: #fff;
-  box-shadow: inset 3px 0 #2a8bff;
 }
 
 .dashboard-shell .dashboard-sidebar-footer {
@@ -207,6 +207,9 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-top: 24px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .dashboard-shell .home-summary-card,
@@ -214,7 +217,7 @@
 .dashboard-shell .home-help-panel {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: linear-gradient(145deg, #171f28 0%, #141b23 100%);
+  background: var(--surface);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.13);
 }
 
@@ -324,7 +327,7 @@
   width: min(28px, 80%);
   min-height: 8px;
   border-radius: 5px 5px 2px 2px;
-  background: linear-gradient(180deg, #3a9cff 0%, #1768be 100%);
+  background: #248cf0;
   box-shadow: 0 0 18px rgba(40, 139, 255, 0.2);
 }
 

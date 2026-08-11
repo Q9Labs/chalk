@@ -174,7 +174,6 @@ export function APIKeysPage({ tenantID }: { tenantID: string }) {
       <section className="contract-state api-key-panel" aria-labelledby="api-keys-heading">
         <div className="dashboard-page-header">
           <div>
-            <p className="eyebrow">Credentials</p>
             <h2 id="api-keys-heading">API keys</h2>
             <p>Use a key from your server to call Chalk. Secrets appear once, then rotation is the recovery path.</p>
           </div>
@@ -332,7 +331,6 @@ function CreateAPIKeyDialog(props: { open: boolean; name: string; scopes: string
         <button className="dialog-close" value="cancel" aria-label="Close dialog">
           ×
         </button>
-        <p className="eyebrow">Developer access</p>
         <h2>New API key</h2>
         <p className="dialog-intro">Choose the smallest set of scopes your server needs. You will see the secret once.</p>
         <label htmlFor="api-key-name">Key name</label>
@@ -400,7 +398,6 @@ function RecentAuthDialog({
         <button className="dialog-close" type="button" onClick={onClose} aria-label="Close dialog">
           ×
         </button>
-        <p className="eyebrow">Security check</p>
         <h2>{destructive ? "Revoke this key?" : "Confirm with your password"}</h2>
         <p className="dialog-intro">{destructive ? `Anyone using ${pending.key?.name ?? "this key"} will lose access immediately.` : "This action creates a credential that is shown only once."}</p>
         <label htmlFor="recent-auth-password">Dashboard password</label>
@@ -462,9 +459,8 @@ function SecretDialog({ secret, copied, onCopied, onClose }: { secret: SecretSta
           <span />
           <span />
         </div>
-        <p className="eyebrow">One-time secret</p>
         <h2>{secret.action === "created" ? "API key created" : "API key rotated"}</h2>
-        <p className="dialog-intro">Copy this secret now. Chalk will not show it again; if it is lost, rotate the key.</p>
+        <p className="dialog-intro">One-time secret: copy it now. Chalk will not show it again; if it is lost, rotate the key.</p>
         <label htmlFor="api-key-secret">Secret</label>
         <input ref={secretRef} id="api-key-secret" value={secret.secret} readOnly aria-describedby="secret-warning secret-copy-status" />
         <p id="secret-warning" className="fixture-note">

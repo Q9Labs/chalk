@@ -8,4 +8,8 @@
 @import "./styles/sections.css";
 @import "./styles/dashboard.css";
 @import "./styles/space-detail.css";
+@import "./styles/dashboard-dark-foundation.css";
+@import "./styles/dashboard-shell-dark.css";
+@import "./styles/dashboard-spaces-dark.css";
+@import "./styles/dashboard-episodes-dark.css";
 @import "./styles/legal.css";

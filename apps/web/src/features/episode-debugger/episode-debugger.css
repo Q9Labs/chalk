@@ -1933,15 +1933,33 @@
 .episode-app-nav a.is-active > span {
   color: #55b7ff;
 }
+.episode-app-footer {
+  display: grid;
+  gap: 4px;
+  margin-block-start: auto;
+}
+.episode-tenant-link,
 .episode-account-link {
   align-items: center;
-  border-block-start: 1px solid #2a2b2d;
+  border-block-start: 0;
   color: #f5f6f7;
   display: flex;
   gap: 9px;
-  margin-block-start: auto;
-  padding: 14px 8px 0;
+  min-block-size: 40px;
+  padding: 0 8px;
   text-decoration: none;
+}
+.episode-tenant-link {
+  color: #adb0b4;
+  font-size: 0.78rem;
+}
+.episode-tenant-link:hover,
+.episode-tenant-link:focus-visible,
+.episode-account-link:hover,
+.episode-account-link:focus-visible {
+  background: #1d1f22;
+  border-radius: 6px;
+  color: #f5f6f7;
 }
 .episode-account-avatar {
   align-items: center;
@@ -2193,13 +2211,11 @@
 .episode-nav [aria-current="page"] {
   background: #202225;
   border-color: #35373a;
-  box-shadow: inset 2px 0 0 #39a9f4;
+  box-shadow: none;
   color: #f4f5f6;
 }
 .episode-nav [aria-current="page"]::after {
-  background: #39a9f4;
-  block-size: 5px;
-  inline-size: 5px;
+  display: none;
 }
 .episode-nav-icon {
   color: #93979c;

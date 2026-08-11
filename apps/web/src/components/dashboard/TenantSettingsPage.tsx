@@ -6,14 +6,12 @@ export function TenantSettingsPage() {
     <div className="dashboard-page resource-page settings-page">
       <header className="dashboard-page-header resource-heading">
         <div>
-          <p className="eyebrow">{current.tenant.name}</p>
           <h1>Tenant settings</h1>
           <p>Identity and deployment defaults for this customer boundary.</p>
         </div>
       </header>
       <section className="settings-panel">
         <div>
-          <p className="eyebrow">Tenant identity</p>
           <h2>{current.tenant.name}</h2>
           <p>Settings remain read-only until the capability and recent-auth contract lands.</p>
         </div>

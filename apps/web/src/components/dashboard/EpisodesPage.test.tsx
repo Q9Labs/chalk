@@ -83,7 +83,7 @@ describe("Episodes page", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Product studio/ }));
 
-    const link = await screen.findByRole("link", { name: "Inspect diagnostics" });
+    const link = await screen.findByRole("link", { name: "Open debugger" });
     expect(link.getAttribute("href")).toContain(encodeURIComponent("chalk.episode:episode-1"));
   });
 

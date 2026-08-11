@@ -55,7 +55,6 @@ export function TenantOnboarding() {
       </header>
       <section>
         <div className="onboarding-copy">
-          <p className="eyebrow">Your first Tenant</p>
           <h1>Name the boundary around your work.</h1>
           <p>A Tenant keeps your Spaces, access, and product defaults together. You can add more later.</p>
           <div className="onboarding-next">

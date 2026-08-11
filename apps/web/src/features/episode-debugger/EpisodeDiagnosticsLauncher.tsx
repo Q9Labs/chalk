@@ -9,7 +9,6 @@ export function EpisodeDiagnosticsLauncher({ enabled = __EPISODE_DIAGNOSTICS_ROU
   return (
     <section className="contract-state episode-debugger-launcher" aria-labelledby="episode-debugger-heading">
       <div>
-        <p className="eyebrow">Developer tool</p>
         <h2 id="episode-debugger-heading">Episode Debugger</h2>
         <p>Inspect live diagnostics, operations, issues, and traces for one Episode.</p>
       </div>

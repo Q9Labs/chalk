@@ -35,7 +35,6 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
           Chalk
         </Link>
         <div>
-          <p className="eyebrow">A place for shared work</p>
           <h1>{signingUp ? "Start with a Space, not a setup maze." : "Pick up where the work left off."}</h1>
           <p>Bring people together live, then keep the Episodes and Artifacts that matter.</p>
         </div>
@@ -43,7 +42,6 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
       </section>
       <section className="account-entry-form-wrap">
         <form className="account-entry-form" onSubmit={submit}>
-          <p className="eyebrow">{signingUp ? "Create your Account" : "Welcome back"}</p>
           <h2>{signingUp ? "Bring the work into focus." : "Sign in to Chalk."}</h2>
           <a className="google-auth-button" href="/api/auth/google/start?return_to=/home">
             Continue with Google

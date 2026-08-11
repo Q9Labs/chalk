@@ -20,19 +20,13 @@ import "./episode-debugger.css";
 const EMPTY_FILTER: DiagnosticFilterV1 = { schemaVersion: "DiagnosticFilter/v1" };
 const MAX_CLIPBOARD_MARKDOWN = 750_000;
 const APP_NAV_ITEMS = [
-  ["Home", "/home", "⌂"],
+  ["Overview", "/home", "⌂"],
   ["Spaces", "/spaces", "▣"],
   ["Episodes", "/episodes", "▷"],
-  ["Participants", "/people", "♙"],
-  ["Tenants", "/tenant", "▤"],
-  ["Messages", "/activity", "□"],
-  ["Presence", "/home", "◌"],
-  ["Files", "/artifacts", "▱"],
-  ["Streams", "/developer", "◌"],
-  ["Webhooks", "/developer", "⌁"],
-  ["Insights", "/activity", "▥"],
-  ["Alerts", "/activity", "♧"],
-  ["Settings", "/tenant", "⚙"],
+  ["Artifacts", "/artifacts", "▱"],
+  ["People", "/people", "♙"],
+  ["Developer", "/developer", "⌁"],
+  ["Activity", "/activity", "▥"],
 ] as const;
 
 export default function EpisodeDebuggerRoute() {
@@ -217,21 +211,27 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
         </a>
         <nav className="episode-app-nav" aria-label="Workspace">
           {APP_NAV_ITEMS.map(([label, href, icon]) => (
-            <a key={label} href={href} className={label === "Episodes" ? "is-active" : undefined} aria-current={label === "Episodes" ? "page" : undefined}>
+            <a key={label} href={href} className={label === "Developer" ? "is-active" : undefined} aria-current={label === "Developer" ? "page" : undefined}>
               <span aria-hidden="true">{icon}</span>
               {label}
             </a>
           ))}
         </nav>
-        <a className="episode-account-link" href="/account">
-          <span className="episode-account-avatar" aria-hidden="true">
-            DA
-          </span>
-          <span>
-            <strong>Dashboard Account</strong>
-            <small>Current Tenant</small>
-          </span>
-        </a>
+        <div className="episode-app-footer">
+          <a className="episode-tenant-link" href="/tenant">
+            <span aria-hidden="true">⚙</span>
+            Tenant settings
+          </a>
+          <a className="episode-account-link" href="/account">
+            <span className="episode-account-avatar" aria-hidden="true">
+              DA
+            </span>
+            <span>
+              <strong>Dashboard Account</strong>
+              <small>Current Tenant</small>
+            </span>
+          </a>
+        </div>
       </aside>
       <div className="episode-app-main">
         <header className="episode-topbar episode-header" aria-labelledby="episode-debugger-title">

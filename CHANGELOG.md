@@ -26,6 +26,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Developer page, with safe Episode references that resolve to canonical
   diagnostics only after tenant authorization.
 
+### Changed
+
+- Unified the landing, authentication, onboarding, Dashboard, Space inventory,
+  Space details, Episode history, settings, dialogs, and Episode Debugger around
+  one dark graphite Chalk interface with direct headings, quiet navigation,
+  compact accessible tables, and separate details and Join Space actions.
+
 ### Fixed
 
 - Stabilized the landing hero headline, removed decorative eyebrow labels from

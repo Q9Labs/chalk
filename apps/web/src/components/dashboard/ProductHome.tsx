@@ -171,7 +171,7 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
                     <Link className="home-space-details" to={dashboardSpaceHref(space)}>
                       View details
                     </Link>
-                    <a className="home-space-join" href={spaceHrefBuilder(space)} aria-label={`Join ${space.name}`}>
+                    <a className="home-space-join" href={spaceHrefBuilder(space)}>
                       Join Space <Icon name="arrow" />
                     </a>
                   </article>

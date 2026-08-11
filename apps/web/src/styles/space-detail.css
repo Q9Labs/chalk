@@ -306,7 +306,7 @@
   letter-spacing: -0.04em;
 }
 
-.space-detail-state > p:not(.eyebrow) {
+.space-detail-state > p {
   max-width: 580px;
   color: var(--ink-2);
   font-size: 14px;

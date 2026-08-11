@@ -126,7 +126,6 @@ export function SpacesPage({ tenantID, spaceHrefBuilder = defaultSpaceHrefBuilde
           <span>
             <Icon name="spaces" />
           </span>
-          <p className="eyebrow">Tenant context needed</p>
           <h1>Select a Tenant to see its Spaces.</h1>
           <p>Space identity and access are always scoped to the selected Tenant.</p>
         </div>
@@ -308,7 +307,6 @@ function SpaceErrorState({ message, onRetry }: { message: string; onRetry: () =>
       <span>
         <Icon name="activity" />
       </span>
-      <p className="eyebrow">Spaces unavailable</p>
       <h2>We could not load your Spaces.</h2>
       <p>{message}</p>
       <button type="button" className="dashboard-button secondary" onClick={onRetry}>
@@ -325,7 +323,6 @@ function SpaceEmptyState({ archived, searching, hasMore, loadingMore, onCreate, 
         <span>
           <Icon name="spaces" />
         </span>
-        <p className="eyebrow">{hasMore ? "More Spaces available" : "No matching Spaces"}</p>
         <h2>{hasMore ? "No match on this page." : "Try another search."}</h2>
         <p>{hasMore ? "Load the next page to keep searching this Tenant." : "No Space name or slug matches this search."}</p>
         <SpaceLoadMoreButton hasMore={hasMore} loadingMore={loadingMore} onLoadMore={onLoadMore} />
@@ -338,7 +335,6 @@ function SpaceEmptyState({ archived, searching, hasMore, loadingMore, onCreate, 
       <span>
         <Icon name="spaces" />
       </span>
-      <p className="eyebrow">{archived ? "No archived Spaces" : "A calm place to start"}</p>
       <h2>{archived ? "Nothing is archived." : "Create your first Space."}</h2>
       <p>{archived ? "Archived Spaces remain readable and can be restored whenever the work returns." : "Spaces are durable homes for Episodes and the people who carry them forward."}</p>
       {!archived ? (

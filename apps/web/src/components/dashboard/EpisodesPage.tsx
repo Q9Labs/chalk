@@ -297,7 +297,14 @@ export function EpisodesPage({
                     {visibleEpisodes.map((episode) => {
                       const space = spacesByID.get(episode.space_id);
                       return (
-                        <tr className={`episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} key={episode.id}>
+                        <tr
+                          className={`episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`}
+                          key={episode.id}
+                          onClick={(event) => {
+                            if ((event.target as HTMLElement).closest("a, button")) return;
+                            selectEpisode(episode);
+                          }}
+                        >
                           <th scope="row">
                             <button className="episode-name-button" type="button" onClick={() => selectEpisode(episode)} aria-label={`View details for ${space?.name ?? "Space"} Episode ${episode.id}`}>
                               <span className="episode-status-mark" aria-hidden="true" />

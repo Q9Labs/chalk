@@ -98,6 +98,7 @@
   min-height: 42px;
   padding-inline: 16px;
   border-bottom-color: var(--episodes-border);
+  background: var(--episodes-surface-raised);
   color: var(--episodes-faint);
 }
 
@@ -123,6 +124,7 @@
 
 .episodes-page .episode-table thead th {
   height: 38px;
+  background: var(--episodes-surface-raised);
   color: var(--episodes-faint);
   font: 500 10px var(--font-mono);
   letter-spacing: 0.05em;
@@ -131,6 +133,7 @@
 }
 
 .episodes-page .episode-table tbody tr {
+  cursor: pointer;
   transition: background-color 150ms ease;
 }
 
@@ -138,10 +141,6 @@
 .episodes-page .episode-table tbody tr:has(.episode-name-button:focus-visible),
 .episodes-page .episode-table tbody tr.is-selected {
   background: var(--episodes-surface-raised);
-}
-
-.episodes-page .episode-table tbody tr.is-selected {
-  box-shadow: inset 2px 0 0 var(--episodes-blue);
 }
 
 .episodes-page .episode-table tbody tr:last-child th,
@@ -298,6 +297,8 @@
 .episodes-page .episode-detail-panel {
   position: sticky;
   top: 22px;
+  width: auto;
+  min-width: 0;
   overflow: auto;
   max-height: calc(100vh - 44px);
   padding: 0;

@@ -65,7 +65,6 @@ export function DashboardAccountGate({ children }: { children: ReactNode }) {
   if (error) {
     return (
       <main className="dashboard-gate-state">
-        <p className="eyebrow">Dashboard unavailable</p>
         <h1>We could not load your Account.</h1>
         <p>{error}</p>
         <button type="button" onClick={() => window.location.reload()}>

@@ -21,7 +21,6 @@ export function EpisodeErrorState({ message, onRetry }: { message: string; onRet
       <span className="episode-state-icon" aria-hidden="true">
         <Icon name="activity" />
       </span>
-      <p className="eyebrow">Could not load history</p>
       <h2>Episodes are temporarily unavailable.</h2>
       <p>{message}</p>
       <button className="dashboard-button secondary" type="button" onClick={onRetry}>
@@ -37,7 +36,6 @@ export function NoSpacesState() {
       <span className="episode-state-icon" aria-hidden="true">
         <Icon name="spaces" />
       </span>
-      <p className="eyebrow">No Spaces yet</p>
       <h2>Create a Space before starting an Episode.</h2>
       <p>Episodes belong to a Space and capture the configuration that was active when the run began.</p>
       <a className="dashboard-button primary" href="/spaces">
@@ -53,9 +51,8 @@ export function EpisodeEmptyState({ filtered, onStart }: { filtered: boolean; on
       <span className="episode-state-icon" aria-hidden="true">
         <Icon name="episodes" />
       </span>
-      <p className="eyebrow">{filtered ? "No matching history" : "No Episodes yet"}</p>
-      <h2>{filtered ? "Try another filter." : "Your first Episode starts with a Space."}</h2>
-      <p>{filtered ? "Nothing in the current history matches those filters. The Episode itself is never edited after it ends." : "Starting is optional—someone joining an authorized Space can begin an Episode automatically."}</p>
+      <h2>{filtered ? "No matching history" : "Your first Episode starts with a Space."}</h2>
+      <p>{filtered ? "Try another filter." : "Starting is optional—someone joining an authorized Space can begin an Episode automatically."}</p>
       {!filtered ? (
         <button className="dashboard-button secondary" type="button" onClick={onStart}>
           Start and join

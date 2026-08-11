@@ -1,0 +1,358 @@
+.dashboard-shell,
+.dashboard-gate-state,
+.account-entry,
+.tenant-onboarding {
+  --paper: #0a0f15;
+  --paper-2: #0f151d;
+  --surface: #131a22;
+  --surface-muted: #171f28;
+  --ink: #f3f6fa;
+  --ink-2: #a7b0ba;
+  --ink-3: #737f8c;
+  --line: #27313c;
+  --line-strong: #3a4652;
+  --chalk-blue: #168cff;
+  --chalk-blue-light: #14395b;
+  --wash-blue: #10263b;
+  --wash-green: #102b22;
+  --wash-yellow: #302610;
+  --wash-pink: #351c20;
+  --success: #31ca83;
+  --danger: #ff6b6b;
+  --warning: #f3b84b;
+  color-scheme: dark;
+}
+
+.dashboard-shell {
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.dashboard-shell :focus-visible,
+.dashboard-gate-state :focus-visible,
+.account-entry :focus-visible,
+.tenant-onboarding :focus-visible {
+  outline-color: var(--chalk-blue);
+}
+
+.dashboard-shell .eyebrow,
+.dashboard-gate-state .eyebrow,
+.account-entry .eyebrow,
+.tenant-onboarding .eyebrow {
+  display: none;
+}
+
+.dashboard-shell .dashboard-nav > p,
+.dashboard-shell .dashboard-nav a.is-active::after {
+  display: none;
+}
+
+.dashboard-shell .dashboard-nav-utility {
+  margin-top: 4px;
+}
+
+.dashboard-shell .dashboard-sidebar-footer {
+  border-top: 0;
+}
+
+.dashboard-main,
+.dashboard-page,
+.resource-page {
+  background: transparent;
+  color: var(--ink);
+}
+
+.dashboard-page {
+  width: min(100%, 1480px);
+  padding: 32px clamp(22px, 3vw, 44px) 56px;
+}
+
+.dashboard-page-header h1 {
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: clamp(28px, 2.5vw, 38px);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+}
+
+.dashboard-page-header > div > p:last-child {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.dashboard-button {
+  min-height: 40px;
+  border-radius: 8px;
+  color: var(--ink);
+}
+
+.dashboard-button.primary {
+  border-color: #168cff;
+  background: #168cff;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(22, 140, 255, 0.16);
+}
+
+.dashboard-button.primary:hover {
+  border-color: #369cff;
+  background: #369cff;
+}
+
+.dashboard-button.secondary {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.dashboard-button.secondary:hover {
+  border-color: #607080;
+  background: var(--surface-muted);
+}
+
+.dashboard-shell input,
+.dashboard-shell select,
+.dashboard-shell textarea {
+  border-color: var(--line-strong);
+  background: #0f151d;
+  color: var(--ink);
+}
+
+.dashboard-shell input::placeholder,
+.dashboard-shell textarea::placeholder {
+  color: var(--ink-3);
+}
+
+.contract-state,
+.settings-panel,
+.resource-toolbar,
+.space-list,
+.episode-list-panel,
+.api-key-panel,
+.dashboard-state {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.contract-state > span,
+.api-key-panel > .dashboard-page-header > span {
+  background: var(--wash-blue);
+  color: #6cb8ff;
+}
+
+.contract-state > p,
+.contract-rule span,
+.settings-panel > div > p:last-child,
+.settings-signout p,
+.fixture-note {
+  color: var(--ink-2);
+}
+
+.contract-rule,
+.settings-panel,
+.settings-panel dl > div,
+.api-key-panel > .dashboard-page-header {
+  border-color: var(--line);
+}
+
+.settings-panel {
+  margin-top: 14px;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.settings-panel dt {
+  color: var(--ink-3);
+}
+
+.settings-panel dd,
+.settings-panel h2 {
+  color: var(--ink);
+}
+
+.space-dialog,
+.episode-dialog {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.56);
+}
+
+.space-dialog::backdrop,
+.episode-dialog::backdrop {
+  background: rgba(2, 6, 10, 0.74);
+  backdrop-filter: blur(4px);
+}
+
+.space-dialog-accent {
+  display: none;
+}
+
+.space-dialog h2,
+.episode-dialog h2,
+.space-dialog > form > label,
+.space-dialog legend,
+.visibility-option strong {
+  color: var(--ink);
+}
+
+.dialog-close,
+.dialog-intro,
+.visibility-option small {
+  color: var(--ink-2);
+}
+
+.space-dialog input:not([type="radio"]):not([type="checkbox"]),
+.space-dialog textarea,
+.space-dialog select,
+.episode-dialog select,
+.visibility-option {
+  border-color: var(--line-strong);
+  background: #0f151d;
+  color: var(--ink);
+}
+
+.dashboard-gate-state {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.dashboard-gate-state > p:not(.eyebrow) {
+  color: var(--ink-2);
+}
+
+.dashboard-gate-state button,
+.dashboard-loading-mark {
+  background: #168cff;
+  color: #fff;
+}
+
+.account-entry {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.account-entry-story {
+  background: #080d13;
+  color: var(--ink);
+}
+
+.account-entry-story::before,
+.account-entry-story::after {
+  display: none;
+}
+
+.account-entry-story h1 {
+  max-width: 700px;
+  margin-top: 0;
+  font-family: var(--font-body);
+  font-size: clamp(48px, 5.5vw, 82px);
+  line-height: 0.98;
+}
+
+.account-entry-story > div > p:last-child,
+.account-entry-footnote {
+  color: var(--ink-2);
+}
+
+.account-entry-form-wrap {
+  background: #0c1219;
+}
+
+.account-entry-form h2 {
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+.account-entry-form label,
+.onboarding-card label {
+  color: var(--ink-2);
+}
+
+.account-entry-form input,
+.onboarding-card input,
+.onboarding-card select,
+.google-auth-button {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.auth-divider {
+  color: var(--ink-3);
+}
+
+.auth-divider::before {
+  background: var(--line);
+}
+
+.auth-divider span {
+  background: #0c1219;
+}
+
+.auth-switch,
+.auth-legal-links {
+  color: var(--ink-2);
+}
+
+.auth-switch a,
+.auth-legal-links a {
+  color: #62b5ff;
+}
+
+.auth-error {
+  border-color: #743f46;
+  background: #311b20;
+  color: #ffb2b2;
+}
+
+.tenant-onboarding {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.tenant-onboarding > header,
+.onboarding-copy > p:not(.eyebrow),
+.onboarding-help {
+  color: var(--ink-2);
+}
+
+.tenant-onboarding-step,
+.onboarding-copy h1,
+.onboarding-next strong {
+  color: var(--ink);
+}
+
+.onboarding-copy h1 {
+  font-family: var(--font-body);
+}
+
+.onboarding-next {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.onboarding-next span {
+  color: var(--ink-3);
+}
+
+.onboarding-card {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .dashboard-page {
+    padding: 22px 14px 44px;
+  }
+
+  .settings-panel {
+    padding: 20px;
+  }
+}

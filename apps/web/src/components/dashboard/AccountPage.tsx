@@ -21,14 +21,12 @@ export function AccountPage() {
     <div className="dashboard-page resource-page settings-page">
       <header className="dashboard-page-header resource-heading">
         <div>
-          <p className="eyebrow">Your dashboard identity</p>
           <h1>Account</h1>
           <p>Chalk sign-in stays separate from customer Users, Agents, Guests, Members, and Participants.</p>
         </div>
       </header>
       <section className="settings-panel">
         <div>
-          <p className="eyebrow">Profile</p>
           <h2>{account.name}</h2>
           <p>{account.email}</p>
         </div>
