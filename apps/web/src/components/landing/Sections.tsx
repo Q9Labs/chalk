@@ -36,29 +36,43 @@ const STACK = [
 
 export function FrontDoors() {
   return (
-    <section className="section product-story" id="sdk">
+    <section className="section product-story" id="product">
       <div className="container">
         <header className="section-head section-head-wide">
-          <h2>One real-time core. Use it your way.</h2>
-          <p>The TypeScript client owns the hard real-time boundaries. React and React Native turn that core into product-ready Space surfaces.</p>
+          <p className="section-kicker">A clear path for every team</p>
+          <h2>Start with the product. Go deeper when you need to.</h2>
+          <p>Use Chalk to manage and create Spaces, join a Space from an invite, or bring dependable collaboration into your own product.</p>
         </header>
 
         <div className="entry-list">
           <article className="entry-row entry-row-blue">
             <span className="entry-index">01</span>
             <div>
-              <h3>Start with the SDKs</h3>
-              <p>Bring Chalk into an existing product and keep control of identity, Space creation, and the surrounding experience.</p>
+              <h3>Manage and create</h3>
+              <p>Create an Account, choose a Tenant, and manage durable Spaces from the Dashboard.</p>
             </div>
-            <code>pnpm add @q9labsai/chalk-react</code>
+            <div className="entry-row-actions">
+              <a className="entry-action-primary" href="/sign-up">
+                Create an Account
+              </a>
+              <a href="/home">Open Dashboard</a>
+            </div>
           </article>
           <article className="entry-row entry-row-green">
             <span className="entry-index">02</span>
             <div>
-              <h3>Shape the whole Space</h3>
-              <p>Compose Entrance, the media stage, Participant tools, whiteboard, chat, and diagnostics without replacing the real-time core.</p>
+              <h3>Join a Space</h3>
+              <p>Paste an invite link to enter the current Episode as a Participant, with the Space keeping its durable context around you.</p>
             </div>
-            {import.meta.env.DEV ? <a href="/sdk-preview">Open the component preview</a> : null}
+            <a href="#join-space">Paste an invite link</a>
+          </article>
+          <article className="entry-row entry-row-yellow">
+            <span className="entry-index">03</span>
+            <div>
+              <h3>Build your product</h3>
+              <p>When you are ready to shape every surface, use the SDK as a secondary route with the same Space and Episode model.</p>
+            </div>
+            <a href="/sdk-preview">Explore the SDK</a>
           </article>
         </div>
       </div>

@@ -16,7 +16,7 @@ describe("EpisodeDiagnosticsDeveloperLink", () => {
 
   it("links an authoritative canonical Diagnostic Reference", () => {
     render(<EpisodeDiagnosticsDeveloperLink diagnosticReference={TEST_REFERENCE} enabled />);
-    expect(screen.getByRole("link", { name: "Open Episode Debugger" }).getAttribute("href")).toContain(encodeURIComponent(TEST_REFERENCE));
+    expect(screen.getByRole("link", { name: "Inspect diagnostics" }).getAttribute("href")).toContain(encodeURIComponent(TEST_REFERENCE));
   });
 
   it("waits for an Episode alternate reference to be available before linking", async () => {
@@ -25,7 +25,7 @@ describe("EpisodeDiagnosticsDeveloperLink", () => {
     render(<EpisodeDiagnosticsDeveloperLink diagnosticReference={episodeReference} enabled api={api} />);
 
     expect(screen.getByRole("status").textContent).toContain("Checking Episode Debugger availability");
-    const link = await screen.findByRole("link", { name: "Open Episode Debugger" });
+    const link = await screen.findByRole("link", { name: "Inspect diagnostics" });
     expect(link.getAttribute("href")).toContain(encodeURIComponent(episodeReference));
     expect(api.resolveAlternate).toHaveBeenCalledWith(episodeReference, expect.any(AbortSignal));
   });
@@ -38,11 +38,11 @@ describe("EpisodeDiagnosticsDeveloperLink", () => {
 
     const status = await screen.findByRole("status");
     await waitFor(() => expect(status.textContent).toContain("Episode Debugger unavailable."), { timeout: 3_000 });
-    expect(screen.queryByRole("link", { name: "Open Episode Debugger" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Inspect diagnostics" })).toBeNull();
 
     resolveAlternate.mockResolvedValue(TEST_REFERENCE);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(screen.getByRole("link", { name: "Open Episode Debugger" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("link", { name: "Inspect diagnostics" })).toBeTruthy());
     expect(resolveAlternate).toHaveBeenCalledTimes(4);
   });
 });

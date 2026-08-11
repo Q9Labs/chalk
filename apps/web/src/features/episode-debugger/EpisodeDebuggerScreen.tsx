@@ -179,51 +179,96 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
   const evidenceInactive = snapshot !== undefined && !evidenceAvailable;
 
   return (
-    <main className="chalk-root episode-debugger" data-chalk data-chalk-theme="light" data-chalk-palette="light" data-episode-stream-state={evidenceInactive ? "inactive" : liveState.phase} data-episode-evidence-state={evidenceInactive ? "inactive" : "available"}>
-      <header className="episode-topbar">
-        <div className="episode-brand">
-          <span className="episode-brand-mark" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span>chalk</span>
-          <span className="episode-product-name">Episode Debugger</span>
+    <div className="chalk-root episode-debugger" data-chalk data-chalk-theme="dark" data-chalk-palette="cool-graphite" data-episode-stream-state={evidenceInactive ? "inactive" : liveState.phase} data-episode-evidence-state={evidenceInactive ? "inactive" : "available"}>
+      <a className="episode-skip-link" href="#episode-content">
+        Skip to evidence content
+      </a>
+      <header className="episode-topbar episode-header" aria-labelledby="episode-debugger-title">
+        <div className="episode-contextbar">
+          <div className="episode-brand">
+            <a className="episode-back-link" href="/home" aria-label="Back to dashboard">
+              <span aria-hidden="true">←</span>
+              <span>Dashboard</span>
+            </a>
+            <span className="episode-brand-mark" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            <span>chalk</span>
+            <span className="episode-product-name">Episode Debugger</span>
+          </div>
+          <div className="episode-context-status" aria-label="Episode status">
+            <span className="episode-environment">
+              <span>Environment</span>
+              <strong>{snapshot?.environment ?? "resolving"}</strong>
+            </span>
+            <StatusPill state={evidenceInactive ? "not_observable" : (snapshot?.state ?? "loading")} label={evidenceInactive ? "Snapshot inactive" : snapshot ? undefined : "Snapshot loading"} />
+            <StatusPill state={evidenceInactive ? "not_observable" : liveState.phase} label={evidenceInactive ? "Evidence unavailable" : `Evidence ${streamLabel(liveState)}`} />
+          </div>
         </div>
-        <div className="episode-reference-block">
-          <span className="episode-eyebrow">Diagnostic Reference</span>
-          <code title={normalizedReference}>{normalizedReference}</code>
-        </div>
-        <div className="episode-top-status">
-          <span className="episode-environment">{snapshot?.environment ?? "resolving"}</span>
-          <StatusPill state={evidenceInactive ? "not_observable" : (snapshot?.state ?? "loading")} label={evidenceInactive ? "Evidence inactive" : undefined} />
-          <span className="episode-mono">{formatDuration(snapshot?.run?.elapsedMilliseconds)}</span>
-          <span className="episode-mono">
-            c {snapshot?.committedCursor ?? "—"} / p {snapshot?.projectedCursor ?? "—"}
-          </span>
-          <span className="episode-mono">lag {snapshot ? Math.max(0, snapshot.committedCursor - snapshot.projectedCursor) : "—"}</span>
-          <span className="episode-heartbeat">activity {liveState.lastActivityAt ? new Date(liveState.lastActivityAt).toLocaleTimeString() : "waiting"}</span>
-          <span className="episode-retention">Retention · 7 days after completion</span>
-          <StatusPill state={evidenceInactive ? "not_observable" : liveState.phase} label={evidenceInactive ? "Evidence unavailable" : streamLabel(liveState)} />
-        </div>
-        <div className="episode-top-actions">
-          <Button variant="outline" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
-            Copy reference
-          </Button>
-          <Button variant="outline" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
-            Copy all
-          </Button>
-          <Button variant="outline" data-episode-action="download-json" onClick={() => void exportController?.start(liveState.lastAppliedCursor)} disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}>
-            Download JSON
-          </Button>
-          <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact")}>
-            Copy for Agent
-          </Button>
+        <div className="episode-titlebar">
+          <div className="episode-title-block">
+            <p className="episode-eyebrow">Live Episode diagnostics</p>
+            <h1 id="episode-debugger-title">Episode Debugger</h1>
+            <div className="episode-reference-block">
+              <span className="episode-eyebrow">Diagnostic Reference</span>
+              <code title={normalizedReference}>{normalizedReference}</code>
+            </div>
+          </div>
+          <dl className="episode-runtime-facts" aria-label="Episode runtime facts">
+            <div>
+              <dt>Elapsed</dt>
+              <dd className="episode-mono">{formatDuration(snapshot?.run?.elapsedMilliseconds)}</dd>
+            </div>
+            <div>
+              <dt>Cursor</dt>
+              <dd className="episode-mono">
+                {snapshot?.committedCursor ?? "—"} / {snapshot?.projectedCursor ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>Activity</dt>
+              <dd>{liveState.lastActivityAt ? new Date(liveState.lastActivityAt).toLocaleTimeString() : "waiting"}</dd>
+            </div>
+            <div>
+              <dt>Retention</dt>
+              <dd>7 days after completion</dd>
+            </div>
+          </dl>
+          <div className="episode-top-actions" role="group" aria-label="Diagnostic export and copy actions">
+            <Button variant="outline" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
+              Copy reference
+            </Button>
+            <Button variant="outline" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
+              Copy all
+            </Button>
+            <Button variant="outline" data-episode-action="download-json" onClick={() => void exportController?.start(liveState.lastAppliedCursor)} disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}>
+              Download JSON
+            </Button>
+            <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact")}>
+              Copy for Agent
+            </Button>
+          </div>
         </div>
       </header>
 
+      <section className="episode-summary" aria-labelledby="episode-summary-title">
+        <div className="episode-summary-heading">
+          <p className="episode-eyebrow">At a glance</p>
+          <h2 id="episode-summary-title">Evidence summary</h2>
+        </div>
+        <div className="episode-summary-grid">
+          <SummaryMetric label="Events" value={evidenceInactive ? "—" : String(snapshot?.summary.eventCount ?? "—")} detail="Projected event evidence" />
+          <SummaryMetric label="Operations" value={evidenceInactive ? "—" : String(snapshot?.summary.operationCount ?? "—")} detail="Bounded operation evidence" />
+          <SummaryMetric label="Participants" value={evidenceInactive ? "—" : String(snapshot?.summary.participantCount ?? "—")} detail="Observable participants" />
+          <SummaryMetric label="Open issues" value={evidenceInactive ? "—" : String(snapshot?.summary.openIssueCount ?? "—")} detail="Requires attention" tone={snapshot && !evidenceInactive ? (snapshot.summary.openIssueCount ? "danger" : "success") : "neutral"} />
+        </div>
+      </section>
+
       <div className="episode-shell">
         <nav className="episode-nav" aria-label="Debugger views">
+          <p className="episode-nav-heading">Views</p>
           {DEBUGGER_VIEWS.map((item) => (
             <Button key={item} data-episode-view={item} variant={view === item ? "secondary" : "ghost"} aria-current={view === item ? "page" : undefined} onClick={() => setView(item)}>
               <span className="episode-nav-icon" aria-hidden="true">
@@ -234,11 +279,11 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
             </Button>
           ))}
         </nav>
-        <section className="episode-canvas" aria-label={`${viewLabel(view)} view`}>
+        <section className="episode-canvas" id="episode-content" role="region" aria-label={`${viewLabel(view)} view`}>
           <div className="episode-canvas-header">
             <div>
               <p className="episode-eyebrow">{evidenceInactive ? "Evidence unavailable" : "Live semantic evidence"}</p>
-              <h1>{viewLabel(view)}</h1>
+              <h2 id="episode-current-view-title">{viewLabel(view)}</h2>
               <p>{viewDescription(view)}</p>
             </div>
             <div className="episode-time-controls">
@@ -269,9 +314,9 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
               }}
             />
           )}
-          {filterStatus !== "idle" && (
-            <p className="episode-filter-status" role={filterStatus === "error" ? "alert" : "status"} data-state={filterStatus}>
-              {filterStatus === "loading" ? "Loading filtered evidence…" : filterStatus === "error" ? (liveState.error ?? announcement) : `Filters ready at projected cursor ${snapshot?.projectedCursor ?? "—"}.`}
+          {(filterStatus === "loading" || filterStatus === "ready") && (
+            <p className="episode-filter-status" role="status" data-state={filterStatus}>
+              {filterStatus === "loading" ? "Loading filtered evidence…" : `Filters ready at projected cursor ${snapshot?.projectedCursor ?? "—"}.`}
             </p>
           )}
           {liveState.fillingGap && (
@@ -290,9 +335,9 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
               {liveState.phase === "stalled" ? "Stream heartbeat is late. The product state is separate; evidence may be delayed." : `Reconnecting from confirmed cursor ${liveState.lastAppliedCursor}.`}
             </div>
           )}
-          {(liveState.phase === "disconnected" || liveState.phase === "failed") && (
+          {liveState.phase === "disconnected" && (
             <div className="episode-stream-banner" data-tone="warning" role="status">
-              <span>{liveState.phase === "failed" ? (liveState.error ?? "Evidence loading failed.") : "The evidence stream is disconnected."}</span>
+              <span>The evidence stream is disconnected.</span>
               <Button data-episode-action="retry-stream" size="sm" variant="outline" onClick={() => setRetryGeneration((value) => value + 1)}>
                 Retry evidence
               </Button>
@@ -364,7 +409,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
       <ToastProvider>
         <ToastViewport />
       </ToastProvider>
-    </main>
+    </div>
   );
 }
 
@@ -395,6 +440,16 @@ function loadMoreEvents(controller: DiagnosticLiveController): void {
 
 function loadMoreOperations(controller: DiagnosticLiveController): void {
   void controller.loadMoreOperations();
+}
+
+function SummaryMetric({ label, value, detail, tone = "neutral" }: { label: string; value: string; detail: string; tone?: "neutral" | "success" | "danger" }) {
+  return (
+    <article className="episode-summary-card" data-tone={tone} aria-label={`${label}: ${value}`}>
+      <span>{label}</span>
+      <strong className="episode-mono">{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
 }
 
 function FilterPanel({ draft, setDraft, apply, clear }: { draft: Record<string, string>; setDraft: (value: Record<string, string>) => void; apply: () => void; clear: () => void }) {
@@ -545,7 +600,7 @@ function viewDescription(view: DebuggerView): string {
 
 function Refusal({ title, detail }: { title: string; detail: string }) {
   return (
-    <main className="chalk-root episode-refusal" data-chalk data-chalk-theme="light" data-chalk-palette="light">
+    <section className="chalk-root episode-refusal" data-chalk data-chalk-theme="light" data-chalk-palette="light" role="alert" aria-labelledby="episode-refusal-title">
       <div>
         <span className="episode-brand-mark" aria-hidden="true">
           <i />
@@ -553,10 +608,10 @@ function Refusal({ title, detail }: { title: string; detail: string }) {
           <i />
         </span>
         <p className="episode-eyebrow">Episode Debugger</p>
-        <h1>{title}</h1>
+        <h1 id="episode-refusal-title">{title}</h1>
         <p>{detail}</p>
       </div>
-    </main>
+    </section>
   );
 }
 

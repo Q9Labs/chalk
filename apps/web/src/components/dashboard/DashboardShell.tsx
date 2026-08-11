@@ -1,24 +1,20 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDashboardAccount } from "./DashboardAccount";
 import { NewSpaceDialog } from "./NewSpaceDialog";
 
 const primaryNavigation = [
-  { to: "/home", label: "Home", icon: "home" },
+  { to: "/home", label: "Overview", icon: "home" },
   { to: "/spaces", label: "Spaces", icon: "spaces" },
   { to: "/episodes", label: "Episodes", icon: "episodes" },
-  { to: "/artifacts", label: "Artifacts", icon: "artifacts" },
-  { to: "/people", label: "People", icon: "people" },
 ] as const;
 
-const utilityNavigation = [
-  { to: "/developer", label: "Developer", icon: "developer" },
-  { to: "/activity", label: "Activity", icon: "activity" },
-] as const;
+const utilityNavigation = [{ to: "/developer", label: "Developer", icon: "developer" }] as const;
 
 export function DashboardShell() {
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [tenantMenuOpen, setTenantMenuOpen] = useState(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { account, current, tenants, selectTenant } = useDashboardAccount();
@@ -29,15 +25,35 @@ export function DashboardShell() {
     .join("")
     .toUpperCase();
 
+  useEffect(() => {
+    const openCreateDialog = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (event.key.toLowerCase() !== "n" || event.metaKey || event.ctrlKey || event.altKey || (target instanceof HTMLElement && target.matches("input, textarea, select, [contenteditable='true']"))) return;
+      event.preventDefault();
+      setCreateOpen(true);
+    };
+    window.addEventListener("keydown", openCreateDialog);
+    return () => window.removeEventListener("keydown", openCreateDialog);
+  }, []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
   return (
     <div className="dashboard-shell">
-      <aside className="dashboard-sidebar">
+      <a className="dashboard-skip-link" href="#dashboard-content">
+        Skip to dashboard content
+      </a>
+      <aside className={`dashboard-sidebar${mobileNavOpen ? " is-open" : ""}`} aria-label="Dashboard navigation">
         <div className="dashboard-brand-row">
           <Link to="/home" className="dashboard-brand" aria-label="Chalk home">
             <img src="/brand/chalk/chalk-logo.svg" alt="" />
             <span>Chalk</span>
           </Link>
-          <span className="dashboard-preview-label">Preview</span>
+          <button className="dashboard-sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}>
+            ×
+          </button>
         </div>
 
         <div className="tenant-switcher-wrap">
@@ -82,7 +98,8 @@ export function DashboardShell() {
           <kbd>N</kbd>
         </button>
 
-        <nav className="dashboard-nav" aria-label="Product">
+        <nav className="dashboard-nav" aria-label="Workspace">
+          <p>Workspace</p>
           {primaryNavigation.map((item) => (
             <DashboardLink key={item.to} {...item} pathname={pathname} />
           ))}
@@ -111,12 +128,17 @@ export function DashboardShell() {
         </div>
       </aside>
 
-      <main className="dashboard-main">
+      {mobileNavOpen ? <button className="dashboard-sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} /> : null}
+
+      <main className="dashboard-main" id="dashboard-content">
         <header className="dashboard-mobile-header">
+          <button className="dashboard-mobile-menu" type="button" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}>
+            <Icon name="menu" />
+          </button>
           <Link to="/home" className="dashboard-brand">
             <span>Chalk</span>
           </Link>
-          <button type="button" onClick={() => setCreateOpen(true)}>
+          <button className="dashboard-mobile-create" type="button" onClick={() => setCreateOpen(true)}>
             New Space
           </button>
         </header>
@@ -138,8 +160,9 @@ export function DashboardShell() {
 }
 
 function DashboardLink({ to, label, icon, pathname }: { to: string; label: string; icon: string; pathname: string }) {
+  const active = pathname === to || pathname.startsWith(`${to}/`);
   return (
-    <Link to={to} className={pathname === to ? "is-active" : ""}>
+    <Link to={to} className={active ? "is-active" : ""} aria-current={active ? "page" : undefined}>
       <Icon name={icon} />
       {label}
     </Link>
@@ -220,6 +243,11 @@ export function Icon({ name }: { name: string }) {
     chevrons: (
       <>
         <path d="m8 9 4-4 4 4M16 15l-4 4-4-4" />
+      </>
+    ),
+    menu: (
+      <>
+        <path d="M4 7h16M4 12h16M4 17h16" />
       </>
     ),
     dots: (

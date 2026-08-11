@@ -73,6 +73,13 @@ describe("EpisodeDebuggerScreen", () => {
     const { container } = render(<EpisodeDebuggerScreen reference={TEST_REFERENCE} api={appApi()} mode="localhost" />);
     await screen.findByRole("region", { name: "Run view" });
 
+    expect(screen.getByRole("heading", { name: "Episode Debugger", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to dashboard" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Evidence summary" })).toBeTruthy();
+    expect(container.querySelectorAll(".episode-summary-card")).toHaveLength(4);
+    expect(container.querySelector(".episode-contextbar")).toBeTruthy();
+    expect(container.querySelector(".episode-titlebar")).toBeTruthy();
+
     for (const view of ["run", "graph", "trace", "flame", "issues", "participants", "epilogue"]) {
       const button = container.querySelector(`[data-episode-view="${view}"]`);
       expect(button).toBeTruthy();
@@ -80,7 +87,7 @@ describe("EpisodeDebuggerScreen", () => {
       expect(screen.getByRole("region", { name: `${view === "epilogue" ? "Epilogue" : `${view[0]?.toUpperCase()}${view.slice(1)}`} view` })).toBeTruthy();
     }
     for (const action of ["copy-all", "copy-agent", "download-json", "copy-reference"]) expect(container.querySelector(`[data-episode-action="${action}"]`)).toBeTruthy();
-    expect(container.querySelector("main.episode-debugger[data-chalk][data-episode-stream-state]")).toBeTruthy();
+    expect(container.querySelector(".episode-debugger[data-chalk][data-episode-stream-state]")).toBeTruthy();
   });
 
   it("shows failed evidence explicitly and retries through a fresh controller", async () => {
@@ -89,9 +96,9 @@ describe("EpisodeDebuggerScreen", () => {
     const { container } = render(<EpisodeDebuggerScreen reference={TEST_REFERENCE} api={api as unknown as EpisodeDiagnosticsApiClient} mode="localhost" />);
 
     await screen.findAllByText("gateway unavailable");
-    expect(container.querySelector('main[data-episode-stream-state="failed"]')).toBeTruthy();
+    expect(container.querySelector('[data-episode-stream-state="failed"]')).toBeTruthy();
     expect(container.querySelector('[data-episode-action="retry-stream"]')).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("button", { name: "Retry evidence" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Retry evidence" }));
 
     await waitFor(() => expect(api.readSnapshot).toHaveBeenCalledTimes(2));
     await screen.findByText("Participant lanes");
@@ -111,7 +118,7 @@ describe("EpisodeDebuggerScreen", () => {
     const { container } = render(<EpisodeDebuggerScreen reference={TEST_REFERENCE} api={gapApi} mode="localhost" />);
 
     await waitFor(() => expect(container.querySelector("[data-episode-gap]")).toBeTruthy());
-    expect(container.querySelector('main[data-episode-stream-state="live"]')).toBeTruthy();
+    expect(container.querySelector('[data-episode-stream-state="live"]')).toBeTruthy();
     expect(screen.getByText(/Preserved visibility gap 9–9/)).toBeTruthy();
   });
 

@@ -1,3 +1,33 @@
+import { useState, type FormEvent } from "react";
+
+const TECHNOLOGY_MARKS = {
+  typescript: { src: "/brand/technology/typescript.svg", label: "TypeScript" },
+  react: { src: "/brand/technology/react_light.svg", label: "React" },
+  "react-native": { src: "/brand/technology/react_light.svg", label: "React Native" },
+  cloudflare: { src: "/brand/technology/cloudflare.svg", label: "Cloudflare" },
+} as const;
+
+type Technology = keyof typeof TECHNOLOGY_MARKS;
+
+/** Returns a safe Space URL without moving invite credentials into a query string. */
+export function resolveSpaceInviteLink(value: string, origin: string): string | undefined {
+  const input = value.trim();
+  if (!input || input.startsWith("//") || (!input.startsWith("/") && !/^https?:\/\//i.test(input))) return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(input, origin);
+  } catch {
+    return undefined;
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+  if (url.search || url.username || url.password) return undefined;
+  if (!/^\/space\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(url.pathname)) return undefined;
+
+  return url.toString();
+}
+
 export function SiteNav() {
   return (
     <header className="nav">
@@ -5,56 +35,85 @@ export function SiteNav() {
         <a href="/" className="nav-logo" aria-label="Chalk home">
           <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
         </a>
-        <nav className="nav-links" aria-label="Main navigation">
-          <a href="#sdk">SDK</a>
+        <nav className="nav-links" aria-label="Product navigation">
+          <a href="#product">Product</a>
           <a href="#performance">Performance</a>
           <a href="#self-host">Self-host</a>
           <a href="#features">Features</a>
         </nav>
-        {import.meta.env.DEV ? (
-          <a href="/sdk-preview" className="btn btn-primary nav-cta">
-            View SDK preview
+        <nav className="nav-actions" aria-label="Account navigation">
+          <a className="nav-dashboard" href="/home">
+            Dashboard
           </a>
-        ) : null}
+          <a className="nav-sign-in" href="/sign-in">
+            Sign in
+          </a>
+          <a href="/sign-up" className="btn btn-primary nav-cta">
+            Get started
+          </a>
+        </nav>
       </div>
     </header>
   );
 }
 
-function TechnologyMark({ technology }: { technology: "typescript" | "react" | "react-native" | "cloudflare" }) {
-  if (technology === "typescript") {
-    return (
-      <span className="hero-tech-mark hero-tech-typescript" role="img" aria-label="TypeScript">
-        <svg viewBox="0 0 48 48" aria-hidden="true">
-          <rect width="48" height="48" rx="6" />
-          <path d="M8 22h25v5h-9v17h-6V27H8zm26 8c-3.8 0-6.4 2.1-6.4 5.2 0 3.4 2.5 4.6 5.5 5.6 2 .7 2.6 1.1 2.6 2 0 .8-.7 1.3-2.2 1.3-1.9 0-3.8-.7-5.3-1.9v4.7c1.7.8 3.7 1.2 5.7 1.2 4.2 0 6.9-2.1 6.9-5.5 0-3.2-1.9-4.6-5.4-5.8-2.1-.7-2.9-1.1-2.9-2 0-.7.7-1.2 2-1.2 1.7 0 3.4.5 4.8 1.4v-4.4a12 12 0 0 0-5.3-.6Z" />
-        </svg>
-      </span>
-    );
-  }
+function TechnologyMark({ technology }: { technology: Technology }) {
+  const mark = TECHNOLOGY_MARKS[technology];
 
-  if (technology === "cloudflare") {
-    return (
-      <span className="hero-tech-mark hero-tech-cloudflare" role="img" aria-label="Cloudflare">
-        <svg viewBox="0 0 64 42" aria-hidden="true">
-          <path d="M26.2 36.8h30.7c1.8 0 3.2-1.4 3.2-3.2 0-1.5-1.1-2.8-2.6-3.1a11.3 11.3 0 0 0-21-4.9 8.9 8.9 0 0 0-14.1 7.2c0 1.5.4 2.8 1 4Z" />
-          <path d="M5.4 36.8h15.4a12.5 12.5 0 0 1-.7-4c0-2.2.6-4.3 1.6-6.1a9.2 9.2 0 0 0-16.3 5.8c-2 .2-3.5 1.8-3.5 3.8 0 .2 0 .3.1.5h3.4Z" />
-        </svg>
-      </span>
-    );
-  }
-
-  const isNative = technology === "react-native";
   return (
-    <span className={`hero-tech-mark hero-tech-react${isNative ? " hero-tech-react-native" : ""}`} role="img" aria-label={isNative ? "React Native" : "React"}>
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        {isNative ? <rect x="14" y="5" width="36" height="54" rx="7" className="hero-tech-device" /> : null}
-        <circle cx="32" cy="32" r="4.5" className="hero-tech-react-core" />
-        <ellipse cx="32" cy="32" rx="25" ry="9.5" />
-        <ellipse cx="32" cy="32" rx="25" ry="9.5" transform="rotate(60 32 32)" />
-        <ellipse cx="32" cy="32" rx="25" ry="9.5" transform="rotate(120 32 32)" />
-      </svg>
+    <span className={`hero-tech-mark hero-tech-${technology}`} role="img" aria-label={mark.label}>
+      <img src={mark.src} alt="" aria-hidden="true" />
     </span>
+  );
+}
+
+function InviteLinkForm() {
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteError, setInviteError] = useState<string | undefined>();
+
+  function submitInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const destination = resolveSpaceInviteLink(inviteLink, window.location.origin);
+    if (!destination) {
+      setInviteError("Paste a valid Space invite link, such as /space/design-lab#your-invite-token.");
+      return;
+    }
+
+    window.location.assign(destination);
+  }
+
+  return (
+    <form className="hero-invite" id="join-space" onSubmit={submitInvite} noValidate aria-describedby={inviteError ? "invite-link-error" : "invite-link-help"}>
+      <label htmlFor="invite-link">Have an invite link?</label>
+      <div className="hero-invite-row">
+        <input
+          id="invite-link"
+          name="invite-link"
+          type="url"
+          value={inviteLink}
+          onChange={(event) => {
+            setInviteLink(event.target.value);
+            if (inviteError) setInviteError(undefined);
+          }}
+          placeholder="Paste a Space invite link"
+          autoComplete="url"
+          spellCheck={false}
+          aria-invalid={inviteError ? "true" : "false"}
+          aria-describedby={inviteError ? "invite-link-help invite-link-error" : "invite-link-help"}
+        />
+        <button type="submit" className="btn btn-secondary">
+          Join a Space
+        </button>
+      </div>
+      <p className="hero-invite-help" id="invite-link-help">
+        Use a link with a <code>/space/&lt;slug&gt;</code> path. The invite token stays in the link hash.
+      </p>
+      {inviteError ? (
+        <p className="hero-invite-error" id="invite-link-error" role="alert">
+          {inviteError}
+        </p>
+      ) : null}
+    </form>
   );
 }
 
@@ -63,21 +122,21 @@ export function Hero() {
     <section className="hero">
       <div className="container hero-inner">
         <div className="hero-copy">
+          <p className="hero-kicker">Real-time collaboration, made dependable.</p>
           <h1>
-            Real-time Spaces.
-            <span className="hero-highlight">Your way.</span>
+            Bring people together.
+            <span className="hero-highlight">Keep them in flow.</span>
           </h1>
-          <p className="hero-sub">Open-source real-time collaboration infrastructure for TypeScript, React, and React Native.</p>
+          <p className="hero-sub">Chalk gives your product a dependable Space for every conversation, shared artifact, and live moment.</p>
           <div className="hero-ctas">
-            {import.meta.env.DEV ? (
-              <a href="/sdk-preview" className="btn btn-primary">
-                View SDK preview
-              </a>
-            ) : null}
-            <a href="#sdk" className="btn btn-secondary">
-              Explore the SDKs
+            <a href="/sign-up" className="btn btn-primary">
+              Create an Account
+            </a>
+            <a href="/home" className="btn btn-secondary">
+              Open Dashboard
             </a>
           </div>
+          <InviteLinkForm />
         </div>
 
         <figure className="hero-product">

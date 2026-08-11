@@ -3,12 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { DashboardAPIError, listEpisodes, listSpaces, type DashboardEpisode, type DashboardSpace } from "../../lib/dashboard-api";
 import { useDashboardAccount } from "./DashboardAccount";
 import { Icon } from "./DashboardShell";
-import { defaultSpaceHrefBuilder, episodeHistoryHref, type SpaceHrefBuilder } from "./space-links";
+import { dashboardSpaceHref, defaultSpaceHrefBuilder, episodeHistoryHref, type SpaceHrefBuilder } from "./space-links";
 
 type HomeState = { spaces: DashboardSpace[]; episodes: DashboardEpisode[] };
 
 export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { spaceHrefBuilder?: SpaceHrefBuilder } = {}) {
-  const { current } = useDashboardAccount();
+  const { account, current } = useDashboardAccount();
   const tenantID = current.tenant.id;
   const [state, setState] = useState<HomeState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,17 +37,20 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
   }, [state]);
   const spacesByID = useMemo(() => new Map((state?.spaces ?? []).map((space) => [space.id, space])), [state]);
   const recentEpisodes = state?.episodes.slice(0, 5) ?? [];
+  const liveEpisodeCount = state?.episodes.filter((episode) => episode.status !== "ended").length ?? 0;
 
   return (
     <div className="dashboard-page home-page">
       <header className="dashboard-page-header home-heading">
         <div>
           <p className="eyebrow">{formatToday()}</p>
-          <h1>Continue where you left off.</h1>
-          <p>Spaces keep the work together. Episodes move it forward.</p>
+          <h1>
+            Good {dayPeriod()}, {firstName(account.name)}.
+          </h1>
+          <p>Continue where you left off across your Spaces and Episodes.</p>
         </div>
-        <Link className="dashboard-button secondary home-quick-link" to="/spaces">
-          Browse Spaces <Icon name="arrow" />
+        <Link className="dashboard-button primary home-quick-link" to="/spaces">
+          Open Spaces <Icon name="arrow" />
         </Link>
       </header>
 
@@ -60,6 +63,12 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
           </button>
         </section>
       ) : null}
+
+      <section className="home-summary" aria-label="Tenant overview">
+        <SummaryCard label="Spaces in view" value={state ? String(state.spaces.length) : "—"} detail="Durable places for recurring work" />
+        <SummaryCard label="Live now" value={state ? String(liveEpisodeCount) : "—"} detail={liveEpisodeCount === 1 ? "1 Episode is active" : `${liveEpisodeCount} Episodes are active`} tone="live" />
+        <SummaryCard label="Recent Episodes" value={state ? String(state.episodes.length) : "—"} detail="Loaded from the selected Tenant" />
+      </section>
 
       <section className="home-section">
         <div className="section-title-row">
@@ -91,13 +100,18 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
                     </span>
                     <span className={live ? "status-live" : "status-idle"}>{live ? "Episode live" : "Ready"}</span>
                   </div>
-                  <h3>{space.name}</h3>
+                  <h3>
+                    <Link to={dashboardSpaceHref(space)}>{space.name}</Link>
+                  </h3>
                   <p>{spaceDescription(space)}</p>
                   <footer>
                     <span>{episodes.length === 1 ? "1 Episode" : `${episodes.length} Episodes`}</span>
-                    <a href={spaceHrefBuilder(space)}>
-                      Open Space <Icon name="arrow" />
-                    </a>
+                    <span className="space-card-actions">
+                      <Link to={dashboardSpaceHref(space)}>View details</Link>
+                      <a className="space-card-join" href={spaceHrefBuilder(space)}>
+                        Join Space <Icon name="arrow" />
+                      </a>
+                    </span>
                   </footer>
                 </article>
               );
@@ -133,32 +147,61 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
             </div>
           ) : null}
         </section>
-        <section className="home-section artifact-panel">
+        <aside className="home-section home-help-panel" aria-labelledby="home-help-title">
           <div className="section-title-row">
-            <h2>Latest Artifacts</h2>
-            <Link to="/artifacts">Browse</Link>
+            <h2 id="home-help-title">Quick actions</h2>
           </div>
-          <div className="dashboard-state dashboard-state-quiet">
-            <span className="artifact-icon">
-              <Icon name="artifacts" />
-            </span>
+          <div className="home-action-list">
+            <Link to="/spaces">
+              <span className="home-action-icon">
+                <Icon name="plus" />
+              </span>
+              <span>
+                <strong>Create or manage a Space</strong>
+                <small>Change access, timing, and join settings.</small>
+              </span>
+              <Icon name="arrow" />
+            </Link>
+            <Link to="/episodes">
+              <span className="home-action-icon">
+                <Icon name="episodes" />
+              </span>
+              <span>
+                <strong>Review Episode history</strong>
+                <small>Open immutable details and diagnostics.</small>
+              </span>
+              <Icon name="arrow" />
+            </Link>
+            <Link to="/developer">
+              <span className="home-action-icon">
+                <Icon name="developer" />
+              </span>
+              <span>
+                <strong>Set up the SDK</strong>
+                <small>Manage API keys and developer tools.</small>
+              </span>
+              <Icon name="arrow" />
+            </Link>
+          </div>
+          <div className="dashboard-state dashboard-state-quiet home-help-note">
             <div>
-              <h3>Artifacts stay attached to their Episode.</h3>
-              <p>Recordings, transcripts, and notes will collect here as they finish processing.</p>
+              <h3>Joining is separate from managing.</h3>
+              <p>Use Join Space to enter live work. Use View details to manage the durable Space.</p>
             </div>
           </div>
-          <div className="developer-nudge">
-            <div>
-              <span>&lt;/&gt;</span>
-              <p>
-                <strong>Building with Chalk?</strong> API keys and SDK setup live in Developer.
-              </p>
-            </div>
-            <Link to="/developer">Open Developer</Link>
-          </div>
-        </section>
+        </aside>
       </div>
     </div>
+  );
+}
+
+function SummaryCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: "live" }) {
+  return (
+    <article className={`home-summary-card${tone ? ` is-${tone}` : ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
   );
 }
 
@@ -172,6 +215,17 @@ function HomeLoading({ label }: { label: string }) {
 
 function formatToday(): string {
   return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(new Date());
+}
+
+function dayPeriod(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
+
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || "there";
 }
 
 function relativeTime(value: string): string {

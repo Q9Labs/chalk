@@ -31,16 +31,18 @@ describe("Spaces index", () => {
     expect(markup).toContain("Archived");
   });
 
-  it("keeps Open Space injectable and hides it for archived rows", async () => {
+  it("separates injectable join links from details and hides join for archived rows", async () => {
     const active = dashboardTestSpace();
     const archived = dashboardTestSpace({ id: "space-archived", name: "Archived studio", slug: "archived-studio", archived: true, archived_at: "2026-08-04T10:00:00Z" });
     listSpacesMock.mockResolvedValue({ spaces: [active, archived], pagination: { page_size: 50, next_cursor: null, has_more: false } });
 
     render(<SpacesPage tenantID="tenant-1" spaceHrefBuilder={(space) => `/custom/${space.slug}`} />);
 
-    expect((await screen.findByRole("link", { name: "Open Space" })).getAttribute("href")).toBe("/custom/product-studio");
+    expect((await screen.findByRole("link", { name: "Join Space" })).getAttribute("href")).toBe("/custom/product-studio");
     expect(screen.getAllByText("Archived studio").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Open Space" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Join Space" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "View details" })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "View details for Product studio" }).getAttribute("href")).toBe("/spaces/space-1");
   });
 
   it("reconciles lifecycle changes with the active filter instead of leaving stale rows", () => {

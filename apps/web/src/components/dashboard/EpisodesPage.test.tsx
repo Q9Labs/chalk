@@ -73,7 +73,7 @@ describe("Episodes page", () => {
 
     await screen.findByRole("button", { name: /Product studio/ });
     expect(screen.getByText("product-studio")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open Space" }).getAttribute("href")).toBe("/custom-space/product-studio");
+    expect(screen.getByRole("link", { name: "Join Space" }).getAttribute("href")).toBe("/custom-space/product-studio");
   });
 
   it("opens diagnostics from the selected Episode without making the operator find a reference", async () => {
@@ -83,7 +83,7 @@ describe("Episodes page", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Product studio/ }));
 
-    const link = await screen.findByRole("link", { name: "Open Episode Debugger" });
+    const link = await screen.findByRole("link", { name: "Inspect diagnostics" });
     expect(link.getAttribute("href")).toContain(encodeURIComponent("chalk.episode:episode-1"));
   });
 

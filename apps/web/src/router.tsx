@@ -4,6 +4,7 @@ import { routeTree } from "./routeTree.gen";
 import { Route as AppRouteImport } from "./routes/_app";
 
 const diagnosticsRouteEnabled = typeof __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__ === "undefined" ? false : __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__;
+const diagnosticsRoutePath = "developer/episode-diagnostics/$reference";
 
 const activeRouteTree = (() => {
   if (!diagnosticsRouteEnabled) return routeTree;
@@ -15,12 +16,15 @@ const activeRouteTree = (() => {
   const dashboardRoute = rootChildren.find((route) => route === AppRouteImport);
   if (!dashboardRoute) throw new Error("Episode Diagnostics route is enabled, but the /_app route was not found");
 
+  const dashboardChildren = (dashboardRoute.children ?? []) as readonly AnyRoute[];
+  const diagnosticsAlreadyRegistered = dashboardChildren.some((route) => "path" in route.options && route.options.path === diagnosticsRoutePath);
+  if (diagnosticsAlreadyRegistered) return routeTree;
+
   const episodeDiagnosticsRoute = createRoute({
     getParentRoute: () => dashboardRoute,
-    path: "developer/episode-diagnostics/$reference",
+    path: diagnosticsRoutePath,
     component: lazyRouteComponent(() => import("./features/episode-debugger/EpisodeDebuggerScreen")),
   });
-  const dashboardChildren = (dashboardRoute.children ?? []) as readonly AnyRoute[];
   const activeDashboardRoute = dashboardRoute.addChildren([...dashboardChildren, episodeDiagnosticsRoute]);
   const activeRootChildren = rootChildren.map((route) => (route === dashboardRoute ? activeDashboardRoute : route));
   return routeTree.addChildren(activeRootChildren);

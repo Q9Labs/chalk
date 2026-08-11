@@ -6,5 +6,8 @@ describe("dashboard shell contract", () => {
     const source = dashboardSource("DashboardShell.tsx");
     expect(source.indexOf('label: "Spaces"')).toBeLessThan(source.indexOf('label: "Developer"'));
     expect(source).toContain('aria-label="Switch Tenant"');
+    expect(source).toContain('aria-label="Open navigation"');
+    expect(source).toContain("Skip to dashboard content");
+    expect(source).toContain('event.key.toLowerCase() !== "n"');
   });
 });

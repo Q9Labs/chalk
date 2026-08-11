@@ -17,14 +17,14 @@ describe("EpisodeDiagnosticsLauncher", () => {
     render(<EpisodeDiagnosticsLauncher enabled />);
     fireEvent.change(screen.getByLabelText("Diagnostic reference"), { target: { value: reference } });
 
-    expect(screen.getByRole("link", { name: "Open Episode Debugger" }).getAttribute("href")).toContain(encodeURIComponent(reference));
+    expect(screen.getByRole("link", { name: "Inspect diagnostics" }).getAttribute("href")).toContain(encodeURIComponent(reference));
   });
 
   it("does not link malformed input", () => {
     render(<EpisodeDiagnosticsLauncher enabled />);
     fireEvent.change(screen.getByLabelText("Diagnostic reference"), { target: { value: "not a reference" } });
 
-    expect(screen.queryByRole("link", { name: "Open Episode Debugger" })).toBeNull();
-    expect((screen.getByRole("button", { name: "Open Episode Debugger" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("link", { name: "Inspect diagnostics" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Inspect diagnostics" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

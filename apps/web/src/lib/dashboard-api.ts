@@ -102,6 +102,10 @@ export function listSpaces(input: { tenantID: string; cursor?: string; pageSize?
   return generatedRequest((client) => client.spaces.listSpaces({ params: { tenant_id: input.tenantID as GeneratedTenant["id"] }, query: { cursor: input.cursor, page_size: input.pageSize, archived: input.archived } }));
 }
 
+export function getSpace(input: { tenantID: string; spaceID: string }): Promise<DashboardSpace> {
+  return generatedRequest((client) => client.spaces.getSpace({ params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] } }));
+}
+
 export async function createSpace(input: {
   tenantID: string;
   name: string;

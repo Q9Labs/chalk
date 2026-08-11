@@ -432,11 +432,22 @@ function RecentAuthDialog({
 
 function SecretDialog({ secret, copied, onCopied, onClose }: { secret: SecretState; copied: boolean; onCopied: () => void; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const secretRef = useRef<HTMLInputElement>(null);
+  const [copyFallback, setCopyFallback] = useState(false);
   useModalDialog(dialogRef, Boolean(secret));
   if (!secret) return null;
   const copySecret = async () => {
-    await navigator.clipboard.writeText(secret.secret);
-    onCopied();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(secret.secret);
+      setCopyFallback(false);
+      onCopied();
+    } catch {
+      secretRef.current?.focus();
+      secretRef.current?.select();
+      setCopyFallback(true);
+      onCopied();
+    }
   };
   return (
     <dialog ref={dialogRef} className="space-dialog api-key-dialog" onClose={onClose} onCancel={onClose}>
@@ -455,13 +466,16 @@ function SecretDialog({ secret, copied, onCopied, onClose }: { secret: SecretSta
         <h2>{secret.action === "created" ? "API key created" : "API key rotated"}</h2>
         <p className="dialog-intro">Copy this secret now. Chalk will not show it again; if it is lost, rotate the key.</p>
         <label htmlFor="api-key-secret">Secret</label>
-        <input id="api-key-secret" value={secret.secret} readOnly aria-describedby="secret-warning" />
+        <input ref={secretRef} id="api-key-secret" value={secret.secret} readOnly aria-describedby="secret-warning secret-copy-status" />
         <p id="secret-warning" className="fixture-note">
           Never put this value in source control, browser storage, analytics, or a client bundle.
         </p>
+        <p id="secret-copy-status" className="fixture-note" role="status">
+          {copyFallback ? "Clipboard access is unavailable. The secret is selected; use your keyboard copy command." : copied ? "Secret copied." : ""}
+        </p>
         <div className="dialog-actions">
           <button className="dashboard-button secondary" type="button" onClick={copySecret}>
-            {copied ? "Copied" : "Copy secret"}
+            {copyFallback ? "Selected" : copied ? "Copied" : "Copy secret"}
           </button>
           <button className="dashboard-button primary" type="submit" disabled={!copied}>
             Done — I copied it

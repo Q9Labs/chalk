@@ -7,9 +7,13 @@ export function useModalDialog(dialogRef: RefObject<HTMLDialogElement | null>, o
     if (!dialog) return;
     if (open && !dialog.open) {
       onOpen?.();
-      dialog.showModal();
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
     }
-    if (!open && dialog.open) dialog.close();
+    if (!open && dialog.open) {
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    }
   }, [dialogRef, onOpen, open]);
 }
 

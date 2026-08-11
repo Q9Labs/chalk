@@ -17,12 +17,17 @@ describe("FeatureGrid", () => {
 });
 
 describe("Closing", () => {
-  it("links to implemented preview content", () => {
+  it("links to dashboard and account actions", () => {
     const markup = renderToStaticMarkup(<Closing />);
 
-    expect(markup).toContain("View SDK preview");
-    expect(markup).toContain("Explore the SDKs");
+    expect(markup).toContain("Create an Account");
+    expect(markup).toContain("Open Dashboard");
+    expect(markup).toContain("Sign in");
+    expect(markup).toContain('href="/home"');
+    expect(markup).toContain('href="/sign-up"');
+    expect(markup).toContain('href="/sign-in"');
+    expect(markup).toContain('href="#product"');
     expect(markup).toContain("Under active development");
-    expect(markup).not.toContain('href="/new"');
+    expect(markup).not.toContain('href="/sdk-preview"');
   });
 });

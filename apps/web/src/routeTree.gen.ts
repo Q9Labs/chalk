@@ -31,6 +31,7 @@ import { Route as AppDeveloperRouteImport } from './routes/_app.developer'
 import { Route as AppArtifactsRouteImport } from './routes/_app.artifacts'
 import { Route as AppActivityRouteImport } from './routes/_app.activity'
 import { Route as AppAccountRouteImport } from './routes/_app.account'
+import { Route as AppSpacesSpaceIdRouteImport } from './routes/_app.spaces_.$spaceId'
 
 const WhiteboardRoute = WhiteboardRouteImport.update({
   id: '/whiteboard',
@@ -141,6 +142,11 @@ const AppAccountRoute = AppAccountRouteImport.update({
   path: '/account',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSpacesSpaceIdRoute = AppSpacesSpaceIdRouteImport.update({
+  id: '/spaces_/$spaceId',
+  path: '/spaces/$spaceId',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/_app/spaces': typeof AppSpacesRoute
   '/_app/tenant': typeof AppTenantRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/_app/spaces_/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/spaces'
     | '/tenant'
     | '/space/$slug'
+    | '/spaces/$spaceId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/spaces'
     | '/tenant'
     | '/space/$slug'
+    | '/spaces/$spaceId'
   id:
     | '__root__'
     | '/'
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | '/_app/spaces'
     | '/_app/tenant'
     | '/space/$slug'
+    | '/_app/spaces_/$spaceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -457,6 +469,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAccountRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/spaces_/$spaceId': {
+      id: '/_app/spaces_/$spaceId'
+      path: '/spaces/$spaceId'
+      fullPath: '/spaces/$spaceId'
+      preLoaderRoute: typeof AppSpacesSpaceIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -470,6 +489,7 @@ interface AppRouteChildren {
   AppPeopleRoute: typeof AppPeopleRoute
   AppSpacesRoute: typeof AppSpacesRoute
   AppTenantRoute: typeof AppTenantRoute
+  AppSpacesSpaceIdRoute: typeof AppSpacesSpaceIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -482,6 +502,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPeopleRoute: AppPeopleRoute,
   AppSpacesRoute: AppSpacesRoute,
   AppTenantRoute: AppTenantRoute,
+  AppSpacesSpaceIdRoute: AppSpacesSpaceIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

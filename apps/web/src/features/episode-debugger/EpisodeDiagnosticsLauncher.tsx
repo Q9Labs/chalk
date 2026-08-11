@@ -9,9 +9,9 @@ export function EpisodeDiagnosticsLauncher({ enabled = __EPISODE_DIAGNOSTICS_ROU
   return (
     <section className="contract-state episode-debugger-launcher" aria-labelledby="episode-debugger-heading">
       <div>
-        <p className="eyebrow">Alpha tooling</p>
+        <p className="eyebrow">Developer tool</p>
         <h2 id="episode-debugger-heading">Episode Debugger</h2>
-        <p>Follow live diagnostics, operations, issues, and traces for one Episode.</p>
+        <p>Inspect live diagnostics, operations, issues, and traces for one Episode.</p>
       </div>
       <label htmlFor="episode-diagnostic-reference">
         <span>Diagnostic reference</span>
@@ -19,14 +19,14 @@ export function EpisodeDiagnosticsLauncher({ enabled = __EPISODE_DIAGNOSTICS_ROU
       </label>
       {path ? (
         <a className="dashboard-button secondary" href={path}>
-          Open Episode Debugger
+          Inspect diagnostics
         </a>
       ) : (
         <button className="dashboard-button secondary" type="button" disabled>
-          Open Episode Debugger
+          Inspect diagnostics
         </button>
       )}
-      <p className="fixture-note">You can also open an Episode from Episodes and choose Open Episode Debugger. Chalk carries its reference for you.</p>
+      <p className="fixture-note">You can also open an Episode from its history and inspect diagnostics without copying a reference.</p>
     </section>
   );
 }

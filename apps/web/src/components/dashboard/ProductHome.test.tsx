@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { dashboardSource } from "./__tests__/source";
 
 describe("product Home contract", () => {
-  it("centers continuation and Quick join instead of operational metrics", () => {
+  it("separates Space management from joining without fake business metrics", () => {
     const source = dashboardSource("ProductHome.tsx");
     expect(source).toContain("Continue where you left off");
-    expect(source).toContain("Browse Spaces");
+    expect(source).toContain("Open Spaces");
     expect(source).toContain("listEpisodes");
-    expect(source).toContain("Open Space");
+    expect(source).toContain("View details");
+    expect(source).toContain("Join Space");
+    expect(source).toContain("dashboardSpaceHref");
     expect(source).toContain("Open history");
     expect(source).toContain("episodeHistoryHref");
     expect(source).toContain("!state && !error");

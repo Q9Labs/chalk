@@ -8,6 +8,10 @@ export type SpaceHrefBuilder = (space: Pick<DashboardSpace, "slug">) => string;
  */
 export const defaultSpaceHrefBuilder: SpaceHrefBuilder = (space) => `/space/${encodeURIComponent(space.slug)}`;
 
+export function dashboardSpaceHref(space: Pick<DashboardSpace, "id">): string {
+  return `/spaces/${encodeURIComponent(space.id)}`;
+}
+
 export function episodeHistoryHref(episode: { space_id: string; id: string }): string {
   const params = new URLSearchParams({ space: episode.space_id, episode: episode.id });
   return `/episodes?${params.toString()}`;

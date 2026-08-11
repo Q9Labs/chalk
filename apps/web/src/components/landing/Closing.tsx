@@ -38,17 +38,19 @@ export function Closing() {
       <section className="closing">
         <div className="container closing-inner">
           <div>
-            <h2>Build the Space your product needs.</h2>
-            <p>Explore the current React surface and the architecture around it.</p>
+            <p className="section-kicker">Make better work possible</p>
+            <h2>Give every Participant a dependable Space.</h2>
+            <p>Start with an Account, open the Dashboard, or sign in to keep moving.</p>
           </div>
           <div className="closing-actions">
-            {import.meta.env.DEV ? (
-              <a href="/sdk-preview" className="btn btn-primary">
-                View SDK preview
-              </a>
-            ) : null}
-            <a href="#sdk" className="btn btn-secondary">
-              Explore the SDKs
+            <a href="/sign-up" className="btn btn-primary">
+              Create an Account
+            </a>
+            <a href="/home" className="btn btn-secondary">
+              Open Dashboard
+            </a>
+            <a href="/sign-in" className="btn btn-tertiary">
+              Sign in
             </a>
           </div>
         </div>
@@ -57,9 +59,13 @@ export function Closing() {
         <div className="container footer-inner">
           <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
           <nav className="footer-links" aria-label="Footer navigation">
-            <a href="#sdk">SDK</a>
+            <a href="#product">Product</a>
             <a href="#performance">Performance</a>
             <a href="#self-host">Self-host</a>
+            <a href="#features">Features</a>
+            <a href="/home">Dashboard</a>
+            <a href="/sign-in">Sign in</a>
+            <a href="/sign-up">Get started</a>
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
           </nav>

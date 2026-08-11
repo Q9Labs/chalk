@@ -46,7 +46,7 @@ describe("EpisodeDetailPanel", () => {
     expect(screen.getByRole("alert").textContent).toContain("The detail request failed");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledOnce();
-    expect(screen.queryByText("Config snapshot")).toBeNull();
+    expect(screen.queryByText("Configuration snapshot")).toBeNull();
   });
 
   it("renders an active Episode snapshot and allows ending it", () => {
@@ -62,17 +62,26 @@ describe("EpisodeDetailPanel", () => {
     expect(screen.queryByText("Immutable history")).toBeNull();
   });
 
-  it("shows the Space slug and an injectable Open Space link", () => {
+  it("turns technical snapshot values into readable labels", () => {
+    render(<EpisodeDetailPanel episode={episode({ config_snapshot: { media_plane: "cf_rtk", default_episode_duration_seconds: 86_400 } })} spaceName="Product studio" state="ready" error={null} onRetry={vi.fn()} onClose={vi.fn()} onEnd={vi.fn()} />);
+
+    expect(screen.getByText("Media plane")).toBeTruthy();
+    expect(screen.getByText("Cloudflare RealtimeKit")).toBeTruthy();
+    expect(screen.getByText("Default episode duration")).toBeTruthy();
+    expect(screen.getByText("1 day")).toBeTruthy();
+  });
+
+  it("shows the Space slug and an injectable Join Space link", () => {
     render(<EpisodeDetailPanel episode={episode()} spaceName="Product studio" spaceSlug="product-studio" spaceHrefBuilder={(space) => `/custom/${space.slug}`} state="ready" error={null} onRetry={vi.fn()} onClose={vi.fn()} onEnd={vi.fn()} />);
 
     expect(screen.getByText("product-studio")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open Space" }).getAttribute("href")).toBe("/custom/product-studio");
+    expect(screen.getByRole("link", { name: "Join Space" }).getAttribute("href")).toBe("/custom/product-studio");
   });
 
-  it("does not offer Open Space for archived Spaces", () => {
+  it("does not offer Join Space for archived Spaces", () => {
     render(<EpisodeDetailPanel episode={episode()} spaceName="Archived studio" spaceSlug="archived-studio" spaceArchived state="ready" error={null} onRetry={vi.fn()} onClose={vi.fn()} onEnd={vi.fn()} />);
 
-    expect(screen.queryByRole("link", { name: "Open Space" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Join Space" })).toBeNull();
   });
 
   it("marks ended Episodes as immutable and shows their end reason", () => {

@@ -278,33 +278,60 @@ export function EpisodesPage({
             <span>{spaceFilter ? "Episodes in this Space" : "All Spaces"}</span>
             <span>{visibleEpisodes.length} shown</span>
           </div>
-          <div className="episode-list">
-            {visibleEpisodes.map((episode) => {
-              const space = spacesByID.get(episode.space_id);
-              return (
-                <article className={`episode-list-item episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} key={episode.id}>
-                  <button className="episode-list-select" type="button" onClick={() => selectEpisode(episode)}>
-                    <span className="episode-status-mark" aria-hidden="true" />
-                    <span className="episode-list-copy">
-                      <strong>{space?.name ?? "Space"}</strong>
-                      <small>
-                        <code>{space?.slug ?? "Space slug unavailable"}</code> · {formatDateTime(episode.started_at)}
-                      </small>
-                    </span>
-                    <span className="episode-list-state">
-                      <strong>{statusLabel(episode.status)}</strong>
-                      <small>{episode.status === "active" ? `Ends ${formatDateTime(episode.deadline_at)}` : episode.end_reason ? humanizeReason(episode.end_reason) : durationLabel(episode)}</small>
-                    </span>
-                    <Icon name="arrow" />
-                  </button>
-                  {space && !space.archived ? (
-                    <a className="dashboard-button secondary episode-list-open-space" href={spaceHrefBuilder(space)}>
-                      Open Space
-                    </a>
-                  ) : null}
-                </article>
-              );
-            })}
+          <div className="episode-table-scroll">
+            <table className="episode-table">
+              <thead>
+                <tr>
+                  <th scope="col">Space</th>
+                  <th scope="col">Started</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Timing</th>
+                  <th scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleEpisodes.map((episode) => {
+                  const space = spacesByID.get(episode.space_id);
+                  return (
+                    <tr className={`episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} key={episode.id}>
+                      <th scope="row">
+                        <button className="episode-name-button" type="button" onClick={() => selectEpisode(episode)} aria-label={`View details for ${space?.name ?? "Space"} Episode`}>
+                          <span className="episode-status-mark" aria-hidden="true" />
+                          <span>
+                            <strong>{space?.name ?? "Space"}</strong>
+                            <code>{space?.slug ?? "Space slug unavailable"}</code>
+                          </span>
+                        </button>
+                      </th>
+                      <td>
+                        <time dateTime={episode.started_at}>{formatDateTime(episode.started_at)}</time>
+                      </td>
+                      <td>
+                        <span className={`episode-status-chip episode-status-chip-${episode.status}`}>
+                          <span aria-hidden="true" />
+                          {statusLabel(episode.status)}
+                        </span>
+                      </td>
+                      <td>{episode.status === "active" ? `Ends ${formatDateTime(episode.deadline_at)}` : episode.end_reason ? humanizeReason(episode.end_reason) : durationLabel(episode)}</td>
+                      <td>
+                        <div className="episode-row-actions">
+                          <button className="dashboard-button secondary" type="button" onClick={() => selectEpisode(episode)}>
+                            View details
+                          </button>
+                          {space && !space.archived ? (
+                            <a className="dashboard-button primary" href={spaceHrefBuilder(space)}>
+                              Join Space
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
       ) : null}

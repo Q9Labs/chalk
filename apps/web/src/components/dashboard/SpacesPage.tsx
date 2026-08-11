@@ -4,7 +4,7 @@ import { Icon, ResourcePageHeader } from "./DashboardShell";
 import { EditSpaceDialog } from "./EditSpaceDialog";
 import { NewSpaceDialog } from "./NewSpaceDialog";
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
-import { defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
+import { dashboardSpaceHref, defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
 
 type SpacesPageProps = { tenantID?: string; spaceHrefBuilder?: SpaceHrefBuilder };
 export type SpaceFilter = "all" | "active" | "archived";
@@ -130,7 +130,7 @@ export function SpacesPage({ tenantID, spaceHrefBuilder = defaultSpaceHrefBuilde
             <strong>{createdSpace.name}</strong> is ready.
           </span>
           <a className="dashboard-button secondary" href={spaceHrefBuilder(createdSpace)}>
-            Open Space
+            Join Space
           </a>
           <button type="button" className="space-created-dismiss" aria-label="Dismiss Space created notice" onClick={() => setCreatedSpace(null)}>
             ×
@@ -190,15 +190,15 @@ function SpaceListItem({ space, accent, spaceHrefBuilder, onEdit, onArchive, onR
   const archived = space.archived;
   return (
     <article className={`space-list-item accent-${accent} ${archived ? "is-archived" : ""}`}>
-      <span className="space-glyph" aria-hidden="true">
-        {space.name.slice(0, 1).toUpperCase()}
-      </span>
-      <div className="space-list-copy">
-        <h2>{space.name}</h2>
-        <p>
+      <a className="space-list-primary-link" href={dashboardSpaceHref(space)} aria-label={`View details for ${space.name}`}>
+        <span className="space-glyph" aria-hidden="true">
+          {space.name.slice(0, 1).toUpperCase()}
+        </span>
+        <span className="space-list-copy">
+          <h2>{space.name}</h2>
           <code>{space.slug}</code>
-        </p>
-      </div>
+        </span>
+      </a>
       <div className="space-list-state">
         <span className={archived ? "status-idle" : "status-live"}>{archived ? "Archived" : "Ready to join"}</span>
         <small>{archived ? "New joins paused" : "Dormant until an Episode starts"}</small>
@@ -207,21 +207,31 @@ function SpaceListItem({ space, accent, spaceHrefBuilder, onEdit, onArchive, onR
       <div className="space-row-actions">
         {!archived ? (
           <a className="dashboard-button primary" href={spaceHrefBuilder(space)}>
-            Open Space
+            Join Space
           </a>
         ) : null}
-        <button type="button" className="dashboard-button secondary" onClick={onEdit}>
-          Edit
-        </button>
-        {archived ? (
-          <button type="button" className="dashboard-button secondary" onClick={onRestore}>
-            Restore
-          </button>
-        ) : (
-          <button type="button" className="dashboard-button secondary" onClick={onArchive}>
-            Archive
-          </button>
-        )}
+        <a className="dashboard-button secondary" href={dashboardSpaceHref(space)}>
+          View details
+        </a>
+        <details className="space-row-menu">
+          <summary aria-label={`More actions for ${space.name}`}>
+            <Icon name="dots" />
+          </summary>
+          <div>
+            <button type="button" onClick={onEdit}>
+              Edit Space
+            </button>
+            {archived ? (
+              <button type="button" onClick={onRestore}>
+                Restore Space
+              </button>
+            ) : (
+              <button type="button" onClick={onArchive}>
+                Archive Space
+              </button>
+            )}
+          </div>
+        </details>
       </div>
     </article>
   );

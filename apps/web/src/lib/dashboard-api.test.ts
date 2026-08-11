@@ -279,6 +279,17 @@ describe("dashboard API client", () => {
     expect(fetcher).toHaveBeenCalledTimes(6);
   });
 
+  it("gets one Space by Tenant and Space id", async () => {
+    const spaceID = "22222222-2222-4222-8222-222222222222";
+    const fetched = space(spaceID, "Product studio");
+    const fetcher = vi.fn().mockResolvedValue(Response.json(fetched));
+    vi.stubGlobal("fetch", fetcher);
+    const { getSpace } = await import("./dashboard-api");
+
+    await expect(getSpace({ tenantID, spaceID })).resolves.toMatchObject({ id: spaceID, name: "Product studio" });
+    expect(fetcher).toHaveBeenCalledWith(`/api/tenants/${tenantID}/spaces/${spaceID}`, expect.objectContaining({ method: "GET" }));
+  });
+
   it("reuses an Episode creation key after an ambiguous failure", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const spaceID = "22222222-2222-4222-8222-222222222222";

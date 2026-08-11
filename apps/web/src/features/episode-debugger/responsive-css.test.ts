@@ -15,4 +15,21 @@ describe("Episode Debugger responsive contract", () => {
     expect(css).not.toContain("var(--danger)");
     expect(css).toContain("var(--danger-foreground)");
   });
+
+  it("keeps the two-level shell and controls usable on narrow screens", () => {
+    expect(css).toContain(".episode-contextbar");
+    expect(css).toContain(".episode-titlebar");
+    expect(css).toContain(".episode-summary-grid");
+    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain("overflow-x: auto");
+    expect(css).toContain("min-block-size: 42px");
+    expect(css).toContain(".episode-debugger > *");
+    expect(css).toContain("max-inline-size: 100%");
+  });
+
+  it("provides a visible focus treatment for every interactive debugger control", () => {
+    expect(css).toContain("button:focus-visible");
+    expect(css).toContain("outline-offset: 3px");
+    expect(css).toContain("box-shadow: 0 0 0 4px");
+  });
 });

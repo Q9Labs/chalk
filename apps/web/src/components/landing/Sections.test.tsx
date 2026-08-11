@@ -4,13 +4,19 @@ import { describe, expect, it } from "vitest";
 import { FrontDoors, PerfBudget, SelfHost } from "./Sections";
 
 describe("FrontDoors", () => {
-  it("renders app and SDK entry points", () => {
+  it("renders product, join, and SDK entry points", () => {
     const markup = renderToStaticMarkup(<FrontDoors />);
 
-    expect(markup).toContain("Start with the SDKs");
-    expect(markup).toContain("Shape the whole Space");
-    expect(markup).toContain("@q9labsai/chalk-react");
-    expect(markup).not.toContain("eyebrow");
+    expect(markup).toContain('id="product"');
+    expect(markup).toContain("Manage and create");
+    expect(markup).toContain("Join a Space");
+    expect(markup).toContain("Build your product");
+    expect(markup).toContain("Create an Account");
+    expect(markup).toContain('href="#join-space"');
+    expect(markup).toContain('href="/sdk-preview"');
+    expect(markup).toContain("Tenant");
+    expect(markup).toContain("Episode");
+    expect(markup).toContain("Participant");
   });
 });
 

@@ -1,4 +1,3 @@
-import { buttonVariants } from "@q9labsai/chalk-ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EpisodeDiagnosticsApiClient, EpisodeDiagnosticsApiError } from "./api-client";
 import { episodeDebuggerPath, isAlternateDiagnosticReference } from "./reference";
@@ -96,8 +95,8 @@ export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled =
   }
 
   return (
-    <a className={buttonVariants({ variant: "outline", size: "sm" })} href={diagnostics.path}>
-      Open Episode Debugger
+    <a className="dashboard-button secondary" href={diagnostics.path}>
+      Inspect diagnostics
     </a>
   );
 }

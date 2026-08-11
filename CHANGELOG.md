@@ -14,6 +14,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added a product-first landing journey for Account creation, dashboard entry,
+  invite-link joining, and SDK discovery, backed by the official technology
+  marks distributed through SVGL.
+- Added routed Space administration pages with readable configuration,
+  Episode history, and separate details and Join Space actions.
 - Added authenticated Dashboard Space entry by slug. Opening a Space now reuses
   its live Episode or starts one, admits the Dashboard Account as a stable
   Participant, and leaves only that Participant when the page closes.
@@ -23,6 +28,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Rebuilt the Dashboard and Episode Debugger into responsive, keyboard-friendly
+  product surfaces with dependable navigation, readable tables and dialogs,
+  complete-row affordances, and accessible mobile controls.
 - Fixed Dashboard Space access refresh so scheduled renewal preserves current
   media proof and rejected credentials recover with a replacement connection.
 - Fixed Dashboard Space and Episode navigation so active Spaces are directly

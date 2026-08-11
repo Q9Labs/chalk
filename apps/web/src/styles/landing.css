@@ -10,7 +10,7 @@
 .nav-inner {
   display: flex;
   align-items: center;
-  gap: 34px;
+  gap: 28px;
   min-height: 74px;
 }
 
@@ -21,7 +21,7 @@
 
 .nav-links {
   display: flex;
-  gap: 30px;
+  gap: 26px;
   margin-left: auto;
 }
 
@@ -33,6 +33,23 @@
 }
 
 .nav-links a:hover {
+  color: var(--ink);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-actions a:not(.btn) {
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.nav-actions a:not(.btn):hover {
   color: var(--ink);
 }
 
@@ -63,8 +80,20 @@
   z-index: 1;
 }
 
+.hero-kicker,
+.section-kicker {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
 .hero-copy h1 {
   max-width: 720px;
+  margin-top: 20px;
   font-size: clamp(58px, 7vw, 100px);
   letter-spacing: -0.055em;
 }
@@ -73,15 +102,14 @@
   position: relative;
   display: block;
   width: fit-content;
-  isolation: isolate;
 }
 
 .hero-highlight::before {
   position: absolute;
-  inset: 50% -0.08em 0.03em;
+  inset: 42% -0.14em -0.08em;
   z-index: -1;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--chalk-blue-light) 72%, transparent), color-mix(in srgb, var(--chalk-blue-light) 96%, transparent) 58%, color-mix(in srgb, var(--chalk-blue-light) 62%, transparent));
-  clip-path: polygon(0 10%, 98% 0, 100% 88%, 3% 100%);
+  background: url("/images/marketing/chalk-stroke-blue-20260807.webp") center / 100% 100% no-repeat;
+  mix-blend-mode: multiply;
   content: "";
 }
 
@@ -98,6 +126,64 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 34px;
+}
+
+.hero-invite {
+  max-width: 560px;
+  margin-top: 38px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.hero-invite > label {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.hero-invite-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.hero-invite input {
+  min-width: 0;
+  flex: 1;
+  height: 50px;
+  padding: 0 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.hero-invite input::placeholder {
+  color: var(--ink-3);
+}
+
+.hero-invite input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.hero-invite-help,
+.hero-invite-error {
+  margin-top: 9px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hero-invite-help code {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+}
+
+.hero-invite-error {
+  color: #a84646;
+  font-weight: 600;
 }
 
 .hero-product {
@@ -135,22 +221,16 @@
 
 .hero-tech-mark {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   place-items: center;
+  opacity: 0.88;
 }
 
-.hero-tech-mark svg {
+.hero-tech-mark img {
   width: 100%;
   height: 100%;
-}
-
-.hero-tech-typescript rect {
-  fill: #3178c6;
-}
-
-.hero-tech-typescript path {
-  fill: #fff;
+  object-fit: contain;
 }
 
 .hero-tech-react {
@@ -158,37 +238,23 @@
   height: 48px;
 }
 
-.hero-tech-react svg {
-  fill: none;
-  stroke: #149eca;
-  stroke-width: 2.5;
-}
-
-.hero-tech-react-core {
-  fill: #149eca;
-  stroke: none;
-}
-
 .hero-tech-react-native {
-  width: 42px;
   height: 42px;
-}
-
-.hero-tech-device {
-  stroke: #0c0e12;
-  stroke-width: 2.2;
 }
 
 .hero-tech-cloudflare {
   width: 58px;
 }
 
-.hero-tech-cloudflare path:first-child {
-  fill: #f38020;
+.btn-tertiary {
+  min-height: 50px;
+  border: 1px solid transparent;
+  color: var(--ink-2);
 }
 
-.hero-tech-cloudflare path:last-child {
-  fill: #faae40;
+.btn-tertiary:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
 @media (max-width: 1040px) {
@@ -216,6 +282,10 @@
     justify-content: space-between;
   }
 
+  .nav-actions {
+    gap: 10px;
+  }
+
   .hero-inner {
     grid-template-columns: minmax(0, 1fr);
     gap: 54px;
@@ -237,8 +307,21 @@
     height: 25px;
   }
 
+  .nav-actions {
+    gap: 7px;
+  }
+
+  .nav-actions a:not(.btn) {
+    font-size: 13px;
+  }
+
   .nav-cta {
-    padding-inline: 12px;
+    padding-inline: 11px;
+  }
+
+  .hero-invite-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .hero-ctas .btn {
