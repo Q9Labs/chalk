@@ -23,6 +23,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fixed Dashboard Space access refresh so scheduled renewal preserves current
+  media proof and rejected credentials recover with a replacement connection.
 - Fixed Dashboard Space and Episode navigation so active Spaces are directly
   openable, Episode history links back to its Space, duplicate Space names show
   their slug, and empty diagnostic references no longer claim healthy evidence.

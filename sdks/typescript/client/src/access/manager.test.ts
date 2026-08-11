@@ -37,6 +37,24 @@ describe("ConnectionAccessService", () => {
     await harness.runtime.dispose();
   });
 
+  it("replaces the media connection after access is rejected", async () => {
+    const first = accessGrant(START + 300_000, "first", "connection-1");
+    const replacement = accessGrant(START + 300_000, "replacement", "connection-2");
+    const requests: unknown[] = [];
+    const harness = accessHarness((request) =>
+      Effect.sync(() => {
+        requests.push(request);
+        return requests.length === 1 ? first : replacement;
+      }),
+    );
+
+    await harness.initialize();
+    await expect(harness.runtime.runPromise(harness.service.refreshAfterRejection())).resolves.toEqual(replacement);
+    expect(requests[1]).toEqual({ reason: "access_retry", replaceMediaConnection: true, currentMediaToken: first.media.token, expectedParticipantGeneration: 1 });
+
+    await harness.runtime.dispose();
+  });
+
   it("replaces one expired Join grant before publishing it", async () => {
     let calls = 0;
     const harness = accessHarness(() => Effect.sync(() => (calls++ === 0 ? accessGrant(START - 1, "expired", "connection-1") : accessGrant(START + 300_000, "fresh", "connection-1"))));

@@ -75,14 +75,18 @@ export async function joinDashboardSpace(tenantID: string, spaceSlug: string, di
       {
         participant_generation: current.participantGeneration,
         replace_media_connection: request?.replaceMediaConnection ?? false,
-        ...(request?.currentMediaToken ? { current_media_token: request.currentMediaToken } : {}),
+        ...(request?.replaceMediaConnection ? {} : { current_media_token: request?.currentMediaToken ?? current.mediaToken }),
       },
       journey,
     );
     current = parseDashboardGrant(refreshed);
     return current.access;
   };
-  const getAccess: GetAccess = async () => connectionAccess();
+  const getAccess: GetAccess = async ({ reason }) =>
+    connectionAccess({
+      reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry",
+      replaceMediaConnection: reason === "retry",
+    });
   const leave = async (options: ParticipantCredentialCleanupOptions = {}): Promise<void> => {
     if (left) return;
     left = true;
@@ -190,11 +194,11 @@ async function dashboardRequest(path: string, method: "POST" | "DELETE", body: u
   return response.json();
 }
 
-function parseDashboardGrant(value: unknown): { readonly access: AccessGrant; readonly participantGeneration: number } {
+function parseDashboardGrant(value: unknown): { readonly access: AccessGrant; readonly mediaToken: string; readonly participantGeneration: number } {
   if (!isRecord(value) || !isRecord(value.subject) || !isRecord(value.sync) || !isRecord(value.media)) throw new Error("The Dashboard access grant response was invalid.");
   const generation = value.subject.participant_generation;
   if (typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1 || typeof value.sync.token !== "string" || typeof value.media.token !== "string") throw new Error("The Dashboard access grant response was invalid.");
-  return { access: value as AccessGrant, participantGeneration: generation };
+  return { access: value as AccessGrant, mediaToken: value.media.token, participantGeneration: generation };
 }
 
 function dashboardAPIBaseURL(): string {
