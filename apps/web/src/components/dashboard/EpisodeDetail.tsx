@@ -1,6 +1,6 @@
 import { formatDateTime, formatJSON, humanizeReason, statusLabel } from "./episode-utils";
 import type { DashboardEpisode } from "../../lib/dashboard-api";
-import { EpisodeDiagnosticsDeveloperLink, type EpisodeDiagnosticsAvailabilityClient } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
+import { EpisodeDiagnosticsDeveloperLink, type EpisodeDiagnosticsAvailabilityClient, useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
 
 export type EpisodeDetailLoadState = "idle" | "loading" | "ready" | "error";
@@ -30,23 +30,19 @@ export function EpisodeDetailPanel({
   onEnd: () => void;
   diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient;
 }) {
+  const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episode ? `chalk.episode:${episode.id}` : undefined, api: diagnosticsApi });
+
   return (
     <aside className="episode-detail-panel" aria-label="Episode details">
       <div className="episode-detail-heading">
         <div>
-          <h2>{spaceName ?? "Space"}</h2>
-          {spaceSlug ? <code className="episode-detail-space-slug">{spaceSlug}</code> : null}
+          <h2>Episode details</h2>
+          <h3 className="sr-only">{spaceName ?? "Space"}</h3>
+          {episode ? <code className="episode-detail-episode-id">{episode.id}</code> : null}
         </div>
-        <div className="episode-detail-heading-actions">
-          {spaceSlug && !spaceArchived ? (
-            <a className="dashboard-button primary episode-detail-open-space" href={spaceHrefBuilder({ slug: spaceSlug })}>
-              Join Space
-            </a>
-          ) : null}
-          <button className="episode-detail-close" type="button" aria-label="Close Episode details" onClick={onClose}>
-            ×
-          </button>
-        </div>
+        <button className="episode-detail-close" type="button" aria-label="Close Episode details" onClick={onClose}>
+          ×
+        </button>
       </div>
       {state === "loading" ? (
         <p className="episode-detail-loading" aria-live="polite">
@@ -61,20 +57,109 @@ export function EpisodeDetailPanel({
           </button>
         </div>
       ) : null}
-      {state === "ready" && episode ? <EpisodeDetailContent episode={episode} onEnd={onEnd} diagnosticsApi={diagnosticsApi} /> : null}
+      {state === "ready" && episode ? <EpisodeDetailContent episode={episode} spaceName={spaceName} spaceSlug={spaceSlug} spaceArchived={spaceArchived} spaceHrefBuilder={spaceHrefBuilder} onEnd={onEnd} diagnosticsApi={diagnosticsApi} diagnostics={diagnostics} /> : null}
     </aside>
   );
 }
 
-function EpisodeDetailContent({ episode, onEnd, diagnosticsApi }: { episode: DashboardEpisode; onEnd: () => void; diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient }) {
+function EpisodeDetailContent({
+  episode,
+  spaceName,
+  spaceSlug,
+  spaceArchived,
+  spaceHrefBuilder,
+  onEnd,
+  diagnosticsApi,
+  diagnostics,
+}: {
+  episode: DashboardEpisode;
+  spaceName?: string;
+  spaceSlug?: string;
+  spaceArchived: boolean;
+  spaceHrefBuilder: SpaceHrefBuilder;
+  onEnd: () => void;
+  diagnosticsApi?: EpisodeDiagnosticsAvailabilityClient;
+  diagnostics: ReturnType<typeof useEpisodeDiagnosticsAvailability>;
+}) {
   const ended = episode.status === "ended";
   return (
     <>
+      <section className="episode-detail-summary" aria-label="Episode summary">
+        <div className="episode-detail-summary-heading">
+          <span className="episode-detail-summary-icon" aria-hidden="true">
+            ⌁
+          </span>
+          <div>
+            <strong>{episode.id}</strong>
+            <span className={`episode-status-chip episode-status-chip-${episode.status}`}>
+              <span aria-hidden="true" />
+              {statusLabel(episode.status)}
+            </span>
+            <p>{spaceName ?? "Space"}</p>
+            {spaceSlug ? <code className="episode-detail-space-slug">{spaceSlug}</code> : null}
+            <small>Started {formatDateTime(episode.started_at)}</small>
+          </div>
+        </div>
+        <div className="episode-detail-primary-actions">
+          <EpisodeDebuggerAction diagnostics={diagnostics} />
+          {spaceSlug && !spaceArchived ? (
+            <a className="dashboard-button secondary episode-detail-open-space" href={spaceHrefBuilder({ slug: spaceSlug })}>
+              Join Space
+            </a>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="episode-timeline" aria-labelledby="episode-timeline-title">
+        <div className="episode-section-heading">
+          <h3 id="episode-timeline-title">Timeline</h3>
+          <span>{ended ? "Complete" : "Live"}</span>
+        </div>
+        <ol>
+          <li>
+            <span className="episode-timeline-marker episode-timeline-marker-start" aria-hidden="true">
+              ▷
+            </span>
+            <div>
+              <strong>Episode started</strong>
+              <time dateTime={episode.started_at}>{formatTimelineTime(episode.started_at)}</time>
+              <p>{spaceName ?? "Space"} Episode began</p>
+            </div>
+          </li>
+          <li>
+            <span className={`episode-timeline-marker ${ended ? "episode-timeline-marker-end" : "episode-timeline-marker-deadline"}`} aria-hidden="true">
+              {ended ? "✓" : "◷"}
+            </span>
+            <div>
+              <strong>
+                {ended ? "Episode ended" : "Episode deadline"}
+                <span className="sr-only">{ended ? "Ended" : "Deadline"}</span>
+              </strong>
+              <time dateTime={(ended ? episode.ended_at : episode.deadline_at) ?? undefined}>{formatTimelineTime(ended ? episode.ended_at : episode.deadline_at)}</time>
+              <p>{ended ? (episode.end_reason ? humanizeReason(episode.end_reason) : "Episode completed") : "The Episode remains live until this deadline."}</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <details className="episode-configuration-section">
+        <summary>
+          <span>
+            <strong>Configuration</strong>
+            <small>Configuration snapshot · Read-only</small>
+          </span>
+          <span aria-hidden="true">⌄</span>
+        </summary>
+        <section className="episode-snapshot-section">
+          <SnapshotOverview value={episode.config_snapshot} />
+          <details className="episode-raw-details">
+            <summary>View raw configuration</summary>
+            <pre>{formatJSON(episode.config_snapshot)}</pre>
+          </details>
+        </section>
+      </details>
+
       <div className="episode-detail-status-row">
-        <span className={`episode-status-chip episode-status-chip-${episode.status}`}>
-          <span aria-hidden="true" />
-          {statusLabel(episode.status)}
-        </span>
         {ended ? (
           <span className="episode-immutable-label">Immutable history</span>
         ) : (
@@ -83,35 +168,6 @@ function EpisodeDetailContent({ episode, onEnd, diagnosticsApi }: { episode: Das
           </button>
         )}
       </div>
-      <dl className="episode-detail-meta">
-        <div>
-          <dt>Started</dt>
-          <dd>{formatDateTime(episode.started_at)}</dd>
-        </div>
-        <div>
-          <dt>{ended ? "Ended" : "Deadline"}</dt>
-          <dd>{formatDateTime(ended ? episode.ended_at : episode.deadline_at)}</dd>
-        </div>
-        {episode.end_reason ? (
-          <div>
-            <dt>End reason</dt>
-            <dd>{humanizeReason(episode.end_reason)}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <section className="episode-snapshot-section">
-        <div className="episode-section-heading">
-          <div>
-            <h3>Configuration snapshot</h3>
-          </div>
-          <span>Read-only</span>
-        </div>
-        <SnapshotOverview value={episode.config_snapshot} />
-        <details className="episode-raw-details">
-          <summary>View raw configuration</summary>
-          <pre>{formatJSON(episode.config_snapshot)}</pre>
-        </details>
-      </section>
       <details className="episode-advanced-section">
         <summary>Advanced details</summary>
         <section className="episode-snapshot-section">
@@ -131,6 +187,24 @@ function EpisodeDetailContent({ episode, onEnd, diagnosticsApi }: { episode: Das
       </details>
     </>
   );
+}
+
+function EpisodeDebuggerAction({ diagnostics }: { diagnostics: ReturnType<typeof useEpisodeDiagnosticsAvailability> }) {
+  if (diagnostics.path) {
+    return (
+      <a className="dashboard-button primary episode-debugger-action" href={diagnostics.path}>
+        Open debugger
+      </a>
+    );
+  }
+  return null;
+}
+
+function formatTimelineTime(value: string | null | undefined): string {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Unknown time";
+  return new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(date);
 }
 
 function SnapshotOverview({ value }: { value: unknown }) {

@@ -4,7 +4,7 @@ import { Icon } from "./DashboardShell";
 import { EpisodeDetailPanel, type EpisodeDetailLoadState } from "./EpisodeDetail";
 import { EndEpisodeDialog, StartEpisodeDialog } from "./EpisodeDialogs";
 import { EpisodeEmptyState, EpisodeErrorState, EpisodeListLoading, EpisodePagination, NoSpacesState } from "./EpisodeStates";
-import { durationLabel, formatDateTime, humanizeReason, messageForError, readSearchParam, statusLabel, updateSearch } from "./episode-utils";
+import { durationLabel, formatDateTime, messageForError, readSearchParam, statusLabel, updateSearch } from "./episode-utils";
 import { clearEpisodeEndRequest, createEpisode, endEpisode, getEpisode, listEpisodes, listSpaces, type DashboardEpisode, type DashboardEpisodePage, type DashboardPagination, type DashboardSpace, type DashboardSpacePage } from "../../lib/dashboard-api";
 import { defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
 
@@ -243,124 +243,132 @@ export function EpisodesPage({
         </button>
       </header>
 
-      <div className="resource-toolbar episodes-toolbar" aria-label="Episode filters">
-        <label className="episodes-filter">
-          <span>Space</span>
-          <select value={spaceFilter} onChange={(event) => selectSpace(event.target.value)} disabled={listState === "loading"}>
-            <option value="">All Spaces</option>
-            {spaces.map((space) => (
-              <option value={space.id} key={space.id}>
-                {space.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="episodes-filter">
-          <span>Status</span>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as EpisodeStatus | "all")}>
-            <option value="all">All states</option>
-            <option value="active">Live now</option>
-            <option value="ending">Ending</option>
-            <option value="ended">Ended</option>
-          </select>
-        </label>
-        <span className="episodes-filter-summary">{spaceFilter ? "Space history · pagination" : "Tenant-wide history"}</span>
-      </div>
-
-      {listState === "loading" ? <EpisodeListLoading /> : null}
-      {listState === "error" ? <EpisodeErrorState message={listError ?? "Episodes could not load"} onRetry={() => setCursorHistory((current) => [...current])} /> : null}
-      {listState === "ready" && spaces.length === 0 ? <NoSpacesState /> : null}
-      {listState === "ready" && spaces.length > 0 && visibleEpisodes.length === 0 ? <EpisodeEmptyState filtered={statusFilter !== "all" || Boolean(spaceFilter) || activeSpaces.length === 0} onStart={openCreate} /> : null}
-      {listState === "ready" && visibleEpisodes.length > 0 ? (
-        <section className="episode-list-panel" aria-label="Episodes">
-          <div className="episode-list-heading">
-            <span>{spaceFilter ? "Episodes in this Space" : "All Spaces"}</span>
-            <span>{visibleEpisodes.length} shown</span>
+      <div className={`episodes-layout${selectedEpisodeID ? " has-detail" : ""}`}>
+        <div className="episodes-main">
+          <div className="resource-toolbar episodes-toolbar" aria-label="Episode filters">
+            <label className="episodes-filter">
+              <span>Space</span>
+              <select value={spaceFilter} onChange={(event) => selectSpace(event.target.value)} disabled={listState === "loading"}>
+                <option value="">All Spaces</option>
+                {spaces.map((space) => (
+                  <option value={space.id} key={space.id}>
+                    {space.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="episodes-filter">
+              <span>Status</span>
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as EpisodeStatus | "all")}>
+                <option value="all">All states</option>
+                <option value="active">Live now</option>
+                <option value="ending">Ending</option>
+                <option value="ended">Ended</option>
+              </select>
+            </label>
+            <span className="episodes-filter-summary">{spaceFilter ? "Space history · pagination" : "Tenant-wide history"}</span>
           </div>
-          <div className="episode-table-scroll">
-            <table className="episode-table">
-              <thead>
-                <tr>
-                  <th scope="col">Space</th>
-                  <th scope="col">Started</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Timing</th>
-                  <th scope="col">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleEpisodes.map((episode) => {
-                  const space = spacesByID.get(episode.space_id);
-                  return (
-                    <tr className={`episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} key={episode.id}>
-                      <th scope="row">
-                        <button className="episode-name-button" type="button" onClick={() => selectEpisode(episode)} aria-label={`View details for ${space?.name ?? "Space"} Episode`}>
-                          <span className="episode-status-mark" aria-hidden="true" />
-                          <span>
-                            <strong>{space?.name ?? "Space"}</strong>
-                            <code>{space?.slug ?? "Space slug unavailable"}</code>
-                          </span>
-                        </button>
+
+          {listState === "loading" ? <EpisodeListLoading /> : null}
+          {listState === "error" ? <EpisodeErrorState message={listError ?? "Episodes could not load"} onRetry={() => setCursorHistory((current) => [...current])} /> : null}
+          {listState === "ready" && spaces.length === 0 ? <NoSpacesState /> : null}
+          {listState === "ready" && spaces.length > 0 && visibleEpisodes.length === 0 ? <EpisodeEmptyState filtered={statusFilter !== "all" || Boolean(spaceFilter) || activeSpaces.length === 0} onStart={openCreate} /> : null}
+          {listState === "ready" && visibleEpisodes.length > 0 ? (
+            <section className="episode-list-panel" aria-label="Episodes">
+              <div className="episode-list-heading">
+                <span>{spaceFilter ? "Episodes in this Space" : "All Spaces"}</span>
+                <span>{visibleEpisodes.length} shown</span>
+              </div>
+              <div className="episode-table-scroll">
+                <table className="episode-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Episode</th>
+                      <th scope="col">Space</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Started</th>
+                      <th scope="col">Duration</th>
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
                       </th>
-                      <td>
-                        <time dateTime={episode.started_at}>{formatDateTime(episode.started_at)}</time>
-                      </td>
-                      <td>
-                        <span className={`episode-status-chip episode-status-chip-${episode.status}`}>
-                          <span aria-hidden="true" />
-                          {statusLabel(episode.status)}
-                        </span>
-                      </td>
-                      <td>{episode.status === "active" ? `Ends ${formatDateTime(episode.deadline_at)}` : episode.end_reason ? humanizeReason(episode.end_reason) : durationLabel(episode)}</td>
-                      <td>
-                        <div className="episode-row-actions">
-                          <button className="dashboard-button secondary" type="button" onClick={() => selectEpisode(episode)}>
-                            View details
-                          </button>
-                          {space && !space.archived ? (
-                            <a className="dashboard-button primary" href={spaceHrefBuilder(space)}>
-                              Join Space
-                            </a>
-                          ) : null}
-                        </div>
-                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
+                  </thead>
+                  <tbody>
+                    {visibleEpisodes.map((episode) => {
+                      const space = spacesByID.get(episode.space_id);
+                      return (
+                        <tr className={`episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} key={episode.id}>
+                          <th scope="row">
+                            <button className="episode-name-button" type="button" onClick={() => selectEpisode(episode)} aria-label={`View details for ${space?.name ?? "Space"} Episode ${episode.id}`}>
+                              <span className="episode-status-mark" aria-hidden="true" />
+                              <code>{episode.id}</code>
+                            </button>
+                          </th>
+                          <td>
+                            <span className="episode-space-cell">
+                              <strong>{space?.name ?? "Space"}</strong>
+                              <code>{space?.slug ?? "Space slug unavailable"}</code>
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`episode-status-chip episode-status-chip-${episode.status}`}>
+                              <span aria-hidden="true" />
+                              {statusLabel(episode.status)}
+                            </span>
+                          </td>
+                          <td>
+                            <time dateTime={episode.started_at}>{formatDateTime(episode.started_at)}</time>
+                          </td>
+                          <td>{episode.status === "active" ? `Ends ${formatDateTime(episode.deadline_at)}` : durationLabel(episode)}</td>
+                          <td>
+                            <div className="episode-row-actions">
+                              <button className="dashboard-button secondary" type="button" onClick={() => selectEpisode(episode)}>
+                                View details
+                              </button>
+                              {space && !space.archived ? (
+                                <a className="dashboard-button primary" href={spaceHrefBuilder(space)}>
+                                  Join Space
+                                </a>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
-      {listState === "ready" && spaces.length > 0 ? (
-        <EpisodePagination pagination={pagination} cursorHistory={cursorHistory} onPrevious={() => setCursorHistory((current) => current.slice(0, -1))} onNext={() => pagination?.next_cursor && setCursorHistory((current) => [...current, pagination.next_cursor as string])} />
-      ) : null}
+          {listState === "ready" && spaces.length > 0 ? (
+            <EpisodePagination pagination={pagination} cursorHistory={cursorHistory} onPrevious={() => setCursorHistory((current) => current.slice(0, -1))} onNext={() => pagination?.next_cursor && setCursorHistory((current) => [...current, pagination.next_cursor as string])} />
+          ) : null}
+        </div>
 
-      {selectedEpisodeID ? (
-        <EpisodeDetailPanel
-          episode={selectedEpisode}
-          spaceName={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.name : undefined}
-          spaceSlug={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.slug : undefined}
-          spaceArchived={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.archived : undefined}
-          spaceHrefBuilder={spaceHrefBuilder}
-          state={detailState}
-          error={detailError}
-          onRetry={() => setEpisodes((current) => [...current])}
-          onClose={() => {
-            setSelectedEpisodeID(null);
-            setDetail(null);
-            updateSearch({ episode: null });
-          }}
-          onEnd={() => {
-            setEndError(null);
-            setEndOpen(true);
-          }}
-          diagnosticsApi={diagnosticsApi}
-        />
-      ) : null}
+        {selectedEpisodeID ? (
+          <EpisodeDetailPanel
+            episode={selectedEpisode}
+            spaceName={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.name : undefined}
+            spaceSlug={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.slug : undefined}
+            spaceArchived={selectedEpisode ? spacesByID.get(selectedEpisode.space_id)?.archived : undefined}
+            spaceHrefBuilder={spaceHrefBuilder}
+            state={detailState}
+            error={detailError}
+            onRetry={() => setEpisodes((current) => [...current])}
+            onClose={() => {
+              setSelectedEpisodeID(null);
+              setDetail(null);
+              updateSearch({ episode: null });
+            }}
+            onEnd={() => {
+              setEndError(null);
+              setEndOpen(true);
+            }}
+            diagnosticsApi={diagnosticsApi}
+          />
+        ) : null}
+      </div>
 
       <StartEpisodeDialog open={createOpen} spaces={activeSpaces} selectedSpaceID={createSpaceID} busy={createBusy} error={createError} onClose={() => setCreateOpen(false)} onSpaceChange={setCreateSpaceID} onSubmit={submitCreate} />
       <EndEpisodeDialog open={endOpen} episode={selectedEpisode} busy={endBusy} error={endError} onClose={() => setEndOpen(false)} onConfirm={() => void confirmEnd()} />
