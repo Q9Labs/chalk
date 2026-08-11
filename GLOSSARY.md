@@ -146,6 +146,43 @@ whiteboard are not artifacts: they are the Space's living content, which
 Episodes write into while live and reference by range or capture afterward.
 Space content is never derived by merging per-episode copies.
 
+### Spinoff
+
+A new Space derived from a live or ending Episode, seeded with invited
+Participants from it. The word for branching off: mid-Episode or at the
+end, a Participant with the capability spins off and continues with a
+chosen subset in a fresh Space.
+
+- Identity: a full Space in its own right — its own slug, config, members,
+  and content. Derivation is provenance, not a lifecycle tie; the source
+  Episode ends or continues on its own terms.
+- Behavior: spinning off never ends the source Episode for those who stay.
+  Invited Participants present in the source Episode are asked in place;
+  absent Members are Buzzed.
+- Not: a breakout, a huddle, a branch (git owns that word), or a parallel
+  Episode — a Spinoff is a separate Space, honoring one live Episode per
+  Space.
+- Reserved neighbor: **Aside** is held for a possible future in-Episode
+  private lane. An Aside would stay inside the Episode; a Spinoff leaves
+  it.
+
+### Buzz
+
+A real-time summons that rings a Member's devices and deep-links them
+into a Space: what a phone product would call ringing someone.
+
+- Delivery: native call surfaces where available (CallKit, Telecom),
+  push otherwise, email as the durable fallback. Vendored call-stack
+  vocabulary (CallKit, ConnectionService) stays foreign at adapter
+  seams.
+- Semantics: a Buzz is an invitation, not an obligation — accepted,
+  declined, or expired. Accepting joins the Space; join still targets
+  the Space, never an Episode.
+- Relations: a Spinoff Buzzes invited Members who are not in the source
+  Episode.
+- Not: a call, a ring, a page, or a notification (a Buzz may travel as
+  one, but the concept is the summons).
+
 ### `<Chalk />`
 
 The turnkey UI component: the complete embedded experience dropped into a
@@ -280,6 +317,8 @@ Every name is a domain root crossed with a layer shape:
 | signal (for availability)   | Banned; the word is Presence                                                     |
 | VideoConference             | Replaced by `<Chalk />`                                                          |
 | pre-join, lobby, green room | Banned; the place is the Entrance                                                |
+| breakout, huddle            | Banned; the branch-off concept is a Spinoff                                      |
+| ring (as a summons)         | Banned as a domain word; the summons is a Buzz                                   |
 | ParticipantAccess           | Replaced by AccessGrant                                                          |
 | ChalkSession                | Replaced by SpaceClient                                                          |
 

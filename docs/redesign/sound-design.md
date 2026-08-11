@@ -101,8 +101,8 @@ The **gesture phrase** below is inserted verbatim into every set's prompt. `dur`
 | `connection-lost`     | 1.0 | `a single quiet low tone bending slightly downward in pitch, subdued and soft, like a light dimming`             |
 | `connection-restored` | 1.0 | `a single quiet low tone bending upward back to pitch, warm and relieved, like a light returning`                |
 | `applause`            | 1.5 | `a soft shimmering swell of many tiny overlapping high notes, gentle sparkling celebration`                      |
-| `breakout-open`       | 1.2 | `two soft chords moving upward and outward, doors opening onto smaller spaces`                                   |
-| `breakout-return`     | 1.2 | `two soft chords resolving back home, warm and settling`                                                         |
+| `spinoff-open`        | 1.2 | `two soft chords moving upward and outward, doors opening onto smaller spaces`                                   |
+| `spinoff-return`      | 1.2 | `two soft chords resolving back home, warm and settling`                                                         |
 | `episode-end`         | 2.0 | `a gentle descending four-note cadence coming to complete rest, a soft unhurried goodbye`                        |
 
 ---

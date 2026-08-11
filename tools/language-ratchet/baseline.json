@@ -9,7 +9,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "apps/sync": {
     "meeting": 1,
@@ -21,7 +23,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "apps/web": {
     "meeting": 0,
@@ -33,7 +37,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "apps/mobile": {
     "meeting": 0,
@@ -45,7 +51,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "apps/docs": {
     "meeting": 0,
@@ -57,7 +65,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "sdks/typescript/client": {
     "meeting": 0,
@@ -69,7 +79,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "sdks/typescript/react": {
     "meeting": 0,
@@ -81,7 +93,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "sdks/typescript/react-native": {
     "meeting": 0,
@@ -93,7 +107,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "packages": {
     "meeting": 0,
@@ -105,7 +121,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "infrastructure": {
     "meeting": 0,
@@ -117,7 +135,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   },
   "tools": {
     "meeting": 2,
@@ -129,7 +149,9 @@
     "lobby": 3,
     "waitingroom": 3,
     "waiting_room": 3,
-    "waiting-room": 3
+    "waiting-room": 3,
+    "breakout": 1,
+    "huddle": 1
   },
   "docs": {
     "meeting": 0,
@@ -141,7 +163,9 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 1
   },
   "root": {
     "meeting": 0,
@@ -153,6 +177,8 @@
     "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 0
+    "waiting-room": 0,
+    "breakout": 0,
+    "huddle": 0
   }
 }

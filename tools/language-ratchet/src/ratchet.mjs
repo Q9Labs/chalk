@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import path from "node:path";
 
-export const TERMS = Object.freeze(["meeting", "conference", "videoconference", "room", "session", "attendee", "lobby", "waitingroom", "waiting_room", "waiting-room"]);
+export const TERMS = Object.freeze(["meeting", "conference", "videoconference", "room", "session", "attendee", "lobby", "waitingroom", "waiting_room", "waiting-room", "breakout", "huddle"]);
 
 const SURFACES = Object.freeze(["apps/api", "apps/sync", "apps/web", "apps/mobile", "apps/docs", "sdks/typescript/client", "sdks/typescript/react", "sdks/typescript/react-native", "packages", "infrastructure", "tools", "docs", "root"]);
 

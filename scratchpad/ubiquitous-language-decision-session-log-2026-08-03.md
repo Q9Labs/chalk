@@ -467,3 +467,26 @@ chores (done), the execution brief, and the marketing + docs passes
 (docs written spec-first from the ratified sheets are acceptance canon).
 C1: waves 5 ∥ 6 approved. C2: UI-pass scheduling dropped from the map.
 The handoff artifact is `scratchpad/wave-execution-brief-2026-08-03.md`.
+
+## 2026-08-11 addendum: Spinoff and Buzz
+
+Hasan ratified two forward-looking platform nouns; both entries are now
+in GLOSSARY.md and the ratchet bans their rivals.
+
+**Spinoff** — a new Space derived from a live or ending Episode, seeded
+with invited Participants. Extends the Episode register (broadcast
+vocabulary: a spinoff is a new show carrying over part of the cast).
+Rejected: breakout (Zoom's word), huddle (Slack's), branch (git owns it
+and it is grep-poison in a repo full of git tooling). **Aside** is
+deliberately reserved, unused, for a possible in-Episode private lane —
+an Aside stays inside the Episode, a Spinoff leaves it.
+
+**Buzz** — a real-time summons that rings a Member's devices and
+deep-links them into a Space. Rejected: cue (Hasan vetoed; queue
+homophone), ring/call (telephone vocabulary the platform does not
+speak), tap (touchscreen-gesture collision), hail (register drift),
+page, knock, chime, beckon. OS call chrome (CallKit, Telecom) still
+says "call" in system UI; that is vendored vocabulary at an adapter
+seam, not ours. Ratchet: breakout and huddle added to TERMS; "huddle"
+baselines at 1 in docs (a deliberate store-listing ASO search keyword,
+not domain prose) and the tools surface counts the term list itself.
