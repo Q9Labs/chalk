@@ -169,11 +169,10 @@ function DashboardLink({ to, label, icon, pathname }: { to: string; label: strin
   );
 }
 
-export function ResourcePageHeader({ eyebrow, title, description, actionLabel, onAction }: { eyebrow: string; title: string; description: string; actionLabel: string; onAction: () => void }) {
+export function ResourcePageHeader({ title, description, actionLabel, onAction }: { title: string; description: string; actionLabel: string; onAction: () => void }) {
   return (
     <header className="dashboard-page-header resource-heading">
       <div>
-        <p className="eyebrow">{eyebrow}</p>
         <h1>{title}</h1>
         <p>{description}</p>
       </div>

@@ -28,7 +28,6 @@ export function StartEpisodeDialog({
         <button className="dialog-close" type="button" aria-label="Close dialog" onClick={onClose}>
           ×
         </button>
-        <p className="eyebrow">A bounded run of activity</p>
         <h2>Start and join</h2>
         <p className="dialog-intro">This starts the selected Space now and then opens it. You can also open a Space directly and let the Episode begin automatically.</p>
         <label htmlFor="episode-space">Space</label>
@@ -75,7 +74,6 @@ export function EndEpisodeDialog({ open, episode, busy, error, onClose, onConfir
         <button className="dialog-close" type="button" aria-label="Close dialog" onClick={onClose}>
           ×
         </button>
-        <p className="eyebrow">This cannot be undone</p>
         <h2>End this Episode?</h2>
         <p className="dialog-intro">Ending freezes the Episode identity, attendance, and configuration snapshot forever. The Space remains available for a future Episode.</p>
         {episode?.status === "ending" ? <p className="episode-warning-note">This Episode is already ending. We’ll safely retry the same operation if needed.</p> : null}

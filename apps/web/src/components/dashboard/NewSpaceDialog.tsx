@@ -55,7 +55,7 @@ export function NewSpaceDialog({ open, onClose, tenantID, onCreated }: NewSpaceD
 
   return (
     <SpaceDialogFrame dialogRef={dialogRef} onClose={onClose} onSubmit={(event) => void handleSubmit(event)}>
-      <SpaceDialogHeading eyebrow="A durable place to gather" title="Create a Space" description="A Space holds your team’s recurring Episodes and shared context." />
+      <SpaceDialogHeading title="Create a Space" description="A Space holds your team’s recurring Episodes and shared context." />
 
       <label htmlFor="space-name">Space name</label>
       <input id="space-name" name="space-name" value={name} onChange={(event) => changeName(event.target.value)} placeholder="e.g. Product studio" autoFocus />

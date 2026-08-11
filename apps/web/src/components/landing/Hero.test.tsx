@@ -36,6 +36,7 @@ describe("Hero", () => {
     expect(markup).toContain("/brand/technology/react_light.svg");
     expect(markup).toContain("/brand/technology/cloudflare.svg");
     expect(markup).not.toContain("<svg");
+    expect(markup).not.toContain("hero-kicker");
   });
 });
 

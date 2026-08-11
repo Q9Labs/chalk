@@ -29,5 +29,6 @@ describe("Closing", () => {
     expect(markup).toContain('href="#product"');
     expect(markup).toContain("Under active development");
     expect(markup).not.toContain('href="/sdk-preview"');
+    expect(markup).not.toContain("section-kicker");
   });
 });

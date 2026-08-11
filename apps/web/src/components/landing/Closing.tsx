@@ -38,7 +38,6 @@ export function Closing() {
       <section className="closing">
         <div className="container closing-inner">
           <div>
-            <p className="section-kicker">Make better work possible</p>
             <h2>Give every Participant a dependable Space.</h2>
             <p>Start with an Account, open the Dashboard, or sign in to keep moving.</p>
           </div>

@@ -17,6 +17,7 @@ describe("FrontDoors", () => {
     expect(markup).toContain("Tenant");
     expect(markup).toContain("Episode");
     expect(markup).toContain("Participant");
+    expect(markup).not.toContain("section-kicker");
   });
 });
 

@@ -45,7 +45,7 @@ export function EditSpaceDialog({ open, tenantID, space, onClose, onSaved }: Edi
 
   return (
     <SpaceDialogFrame dialogRef={dialogRef} onClose={onClose} onSubmit={(event) => void handleSubmit(event)}>
-      <SpaceDialogHeading eyebrow="Space settings" title="Edit Space" description="Changes apply to the next Episode. A live Episode keeps its immutable configuration snapshot." />
+      <SpaceDialogHeading title="Edit Space" description="Changes apply to the next Episode. A live Episode keeps its immutable configuration snapshot." />
 
       <label htmlFor="edit-space-name">Space name</label>
       <input id="edit-space-name" value={name} onChange={(event) => setName(event.target.value)} autoFocus />

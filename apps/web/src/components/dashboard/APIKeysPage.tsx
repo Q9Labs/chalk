@@ -167,7 +167,7 @@ export function APIKeysPage({ tenantID }: { tenantID: string }) {
 
   return (
     <div className="dashboard-page resource-page">
-      <ResourcePageHeader eyebrow="Build with Chalk" title="Developer" description="Credentials and integration tools for the product you are building on top of Chalk." actionLabel="New API key" onAction={() => setCreateOpen(true)} />
+      <ResourcePageHeader title="Developer" description="Credentials and integration tools for the product you are building on top of Chalk." actionLabel="New API key" onAction={() => setCreateOpen(true)} />
 
       <EpisodeDiagnosticsLauncher />
 

@@ -122,7 +122,7 @@ export function SpacesPage({ tenantID, spaceHrefBuilder = defaultSpaceHrefBuilde
 
   return (
     <div className="dashboard-page resource-page">
-      <ResourcePageHeader eyebrow="Durable collaboration places" title="Spaces" description="Places for recurring Episodes, Members, and shared context." actionLabel="New Space" onAction={() => setCreateOpen(true)} />
+      <ResourcePageHeader title="Spaces" description="Places for recurring Episodes, Members, and shared context." actionLabel="New Space" onAction={() => setCreateOpen(true)} />
 
       {createdSpace ? (
         <div className="space-created-notice" role="status">

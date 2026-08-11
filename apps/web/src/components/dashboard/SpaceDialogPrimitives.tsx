@@ -32,10 +32,9 @@ function SpaceDialogChrome({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SpaceDialogHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+export function SpaceDialogHeading({ title, description }: { title: string; description: string }) {
   return (
     <>
-      <p className="eyebrow">{eyebrow}</p>
       <h2>{title}</h2>
       <p className="dialog-intro">{description}</p>
     </>

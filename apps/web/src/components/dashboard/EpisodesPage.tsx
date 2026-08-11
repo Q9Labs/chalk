@@ -233,7 +233,6 @@ export function EpisodesPage({
     <div className="dashboard-page resource-page episodes-page">
       <header className="dashboard-page-header resource-heading episodes-page-header">
         <div>
-          <p className="eyebrow">History</p>
           <h1>Episodes</h1>
           <p>Tenant-wide history of the bounded runs that move work forward.</p>
           <p className="episodes-prerequisite-note">Starting an Episode is optional. Joining a Space can begin one automatically.</p>

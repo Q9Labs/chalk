@@ -44,7 +44,6 @@ export function SpaceLifecycleDialog({ open, tenantID, space, action, onClose, o
         void confirmLifecycle();
       }}
     >
-      <p className="eyebrow">{archive ? "Pause new activity" : "Make it available again"}</p>
       <h2>{archive ? "Archive this Space?" : "Restore this Space?"}</h2>
       <p className="dialog-intro">{archive ? "The Space stays readable and all Episode history remains intact. New Episodes and joins stop until you restore it." : "This Space becomes joinable again. Its existing Episodes and history are unchanged."}</p>
       {space ? (

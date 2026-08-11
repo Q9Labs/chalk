@@ -82,7 +82,6 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
 
       <header className="space-detail-header">
         <div className="space-detail-title">
-          <p className="eyebrow">Space administration</p>
           <h1>{space.name}</h1>
           <div className="space-detail-identity">
             <code>{space.slug}</code>
@@ -111,7 +110,6 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
       <section className="space-detail-overview" aria-labelledby="space-overview-heading">
         <div className="space-detail-section-heading">
           <div>
-            <p className="eyebrow">Configuration</p>
             <h2 id="space-overview-heading">Space overview</h2>
           </div>
           <span className="space-detail-slug-label">/{space.slug}</span>
@@ -128,7 +126,6 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
       <section className="space-detail-episodes" aria-labelledby="space-episodes-heading">
         <div className="space-detail-section-heading">
           <div>
-            <p className="eyebrow">History</p>
             <h2 id="space-episodes-heading">Recent Episodes</h2>
           </div>
           <a className="space-detail-history-link" href={`/episodes?space=${encodeURIComponent(space.id)}`}>
@@ -206,7 +203,6 @@ function SpaceDetailState({ kind, message, onRetry }: { kind: "loading" | "error
   if (kind === "loading") {
     return (
       <div className="dashboard-page resource-page space-detail-state" role="status" aria-busy="true" aria-live="polite">
-        <p className="eyebrow">Space administration</p>
         <h1>Loading Space…</h1>
         <p>Getting the Space configuration and latest Episode history.</p>
       </div>
@@ -216,7 +212,6 @@ function SpaceDetailState({ kind, message, onRetry }: { kind: "loading" | "error
   if (kind === "not-found") {
     return (
       <div className="dashboard-page resource-page space-detail-state" role="status">
-        <p className="eyebrow">Space not found</p>
         <h1>That Space is not available.</h1>
         <p>It may have been removed, or you may no longer have access to this Tenant.</p>
         <a className="dashboard-button secondary" href="/spaces">
@@ -228,7 +223,6 @@ function SpaceDetailState({ kind, message, onRetry }: { kind: "loading" | "error
 
   return (
     <div className="dashboard-page resource-page space-detail-state" role="alert">
-      <p className="eyebrow">Space unavailable</p>
       <h1>We could not load this Space.</h1>
       <p>{message ?? "The Space could not load."}</p>
       <div className="space-detail-state-actions">

@@ -39,7 +39,6 @@ export function FrontDoors() {
     <section className="section product-story" id="product">
       <div className="container">
         <header className="section-head section-head-wide">
-          <p className="section-kicker">A clear path for every team</p>
           <h2>Start with the product. Go deeper when you need to.</h2>
           <p>Use Chalk to manage and create Spaces, join a Space from an invite, or bring dependable collaboration into your own product.</p>
         </header>

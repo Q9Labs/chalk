@@ -14,6 +14,7 @@ describe("product Home contract", () => {
     expect(source).toContain("episodeHistoryHref");
     expect(source).toContain("!state && !error");
     expect(source).not.toContain('from "./dashboard-data"');
+    expect(source).not.toContain('className="eyebrow"');
     expect(source).not.toMatch(/revenue|conversion|monthly active|API usage/iu);
   });
 });

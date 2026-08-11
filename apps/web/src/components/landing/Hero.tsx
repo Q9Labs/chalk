@@ -121,28 +121,32 @@ export function Hero() {
   return (
     <section className="hero">
       <div className="container hero-inner">
-        <div className="hero-copy">
-          <p className="hero-kicker">Real-time collaboration, made dependable.</p>
+        <header className="hero-heading">
           <h1>
-            Bring people together.
+            <span>Bring people together.</span>
             <span className="hero-highlight">Keep them in flow.</span>
           </h1>
-          <p className="hero-sub">Chalk gives your product a dependable Space for every conversation, shared artifact, and live moment.</p>
-          <div className="hero-ctas">
-            <a href="/sign-up" className="btn btn-primary">
-              Create an Account
-            </a>
-            <a href="/home" className="btn btn-secondary">
-              Open Dashboard
-            </a>
-          </div>
-          <InviteLinkForm />
-        </div>
+        </header>
 
-        <figure className="hero-product">
-          <div className="hero-product-wash" aria-hidden="true" />
-          <img src="/images/marketing/chalk-speaker-view-20260801.webp" width={1586} height={992} alt="Chalk Space interface with an active speaker, Participant filmstrip, and media controls." />
-        </figure>
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <p className="hero-sub">Chalk gives your product a dependable Space for every conversation, shared artifact, and live moment.</p>
+            <div className="hero-ctas">
+              <a href="/sign-up" className="btn btn-primary">
+                Create an Account
+              </a>
+              <a href="/home" className="btn btn-secondary">
+                Open Dashboard
+              </a>
+            </div>
+            <InviteLinkForm />
+          </div>
+
+          <figure className="hero-product">
+            <div className="hero-product-wash" aria-hidden="true" />
+            <img src="/images/marketing/chalk-speaker-view-20260801.webp" width={1586} height={992} alt="Chalk Space interface with an active speaker, Participant filmstrip, and media controls." />
+          </figure>
+        </div>
       </div>
 
       <div className="container hero-proof" aria-label="Technologies used by Chalk">

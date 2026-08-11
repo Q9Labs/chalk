@@ -28,6 +28,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Stabilized the landing hero headline, removed decorative eyebrow labels from
+  the primary product surfaces, and made the local SVGL marks valid standalone
+  browser assets.
 - Rebuilt the Dashboard and Episode Debugger into responsive, keyboard-friendly
   product surfaces with dependable navigation, readable tables and dialogs,
   complete-row affordances, and accessible mobile controls.

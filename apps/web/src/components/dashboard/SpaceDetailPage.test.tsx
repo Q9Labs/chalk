@@ -50,13 +50,14 @@ afterEach(cleanup);
 
 describe("SpaceDetailPage", () => {
   it("keeps the participant Join Space link separate from dashboard details", async () => {
-    render(<SpaceDetailPage tenantID={tenantID} spaceID="space-1" client={clientFor()} />);
+    const { container } = render(<SpaceDetailPage tenantID={tenantID} spaceID="space-1" client={clientFor()} />);
 
     expect(await screen.findByRole("heading", { name: "Product studio" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Join Space" }).getAttribute("href")).toBe("/space/product-studio");
     expect(screen.getByRole("link", { name: "Spaces" }).getAttribute("href")).toBe("/spaces");
     expect(screen.getByRole("link", { name: "Join Space" }).getAttribute("href")).not.toContain("/spaces/");
     expect(screen.getByText("Tenant access")).toBeTruthy();
+    expect(container.querySelector(".eyebrow")).toBeNull();
   });
 
   it("hides Join Space and offers Restore for an archived Space", async () => {

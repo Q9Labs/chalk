@@ -43,7 +43,6 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
     <div className="dashboard-page home-page">
       <header className="dashboard-page-header home-heading">
         <div>
-          <p className="eyebrow">{formatToday()}</p>
           <h1>
             Good {dayPeriod()}, {firstName(account.name)}.
           </h1>
@@ -211,10 +210,6 @@ function HomeLoading({ label }: { label: string }) {
       <span /> {label}…
     </div>
   );
-}
-
-function formatToday(): string {
-  return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 }
 
 function dayPeriod(): string {

@@ -34,7 +34,6 @@ export function EpisodeDetailPanel({
     <aside className="episode-detail-panel" aria-label="Episode details">
       <div className="episode-detail-heading">
         <div>
-          <p className="eyebrow">Episode detail</p>
           <h2>{spaceName ?? "Space"}</h2>
           {spaceSlug ? <code className="episode-detail-space-slug">{spaceSlug}</code> : null}
         </div>
@@ -103,7 +102,6 @@ function EpisodeDetailContent({ episode, onEnd, diagnosticsApi }: { episode: Das
       <section className="episode-snapshot-section">
         <div className="episode-section-heading">
           <div>
-            <p className="eyebrow">Frozen at start</p>
             <h3>Configuration snapshot</h3>
           </div>
           <span>Read-only</span>

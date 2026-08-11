@@ -67,41 +67,28 @@
 }
 
 .hero-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 0.82fr) minmax(520px, 1.18fr);
-  align-items: center;
-  gap: clamp(52px, 6vw, 90px);
   min-height: min(820px, calc(100svh - 74px));
   padding-block: clamp(68px, 8vw, 112px);
 }
 
-.hero-copy {
-  position: relative;
-  z-index: 1;
-}
-
-.hero-kicker,
-.section-kicker {
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-  line-height: 1.4;
-  text-transform: uppercase;
-}
-
-.hero-copy h1 {
-  max-width: 720px;
-  margin-top: 20px;
-  font-size: clamp(58px, 7vw, 100px);
+.hero-heading h1 {
+  max-width: 1180px;
+  font-size: clamp(68px, 7.4vw, 108px);
   letter-spacing: -0.055em;
+  line-height: 0.91;
+}
+
+.hero-heading h1 > span {
+  display: block;
+  width: fit-content;
+}
+
+.hero-heading h1 > span:first-child {
+  white-space: nowrap;
 }
 
 .hero-highlight {
   position: relative;
-  display: block;
-  width: fit-content;
 }
 
 .hero-highlight::before {
@@ -113,9 +100,22 @@
   content: "";
 }
 
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.8fr) minmax(560px, 1.2fr);
+  align-items: center;
+  gap: clamp(48px, 6vw, 88px);
+  margin-top: clamp(54px, 6vw, 82px);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
 .hero-sub {
   max-width: 530px;
-  margin-top: 34px;
+  margin-top: 0;
   color: var(--ink-2);
   font-size: clamp(19px, 1.7vw, 23px);
   line-height: 1.48;
@@ -258,12 +258,15 @@
 }
 
 @media (max-width: 1040px) {
-  .hero-inner {
+  .hero-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero-inner {
     min-height: auto;
   }
 
-  .hero-copy h1,
+  .hero-heading h1,
   .hero-sub {
     max-width: 760px;
   }
@@ -286,13 +289,16 @@
     gap: 10px;
   }
 
-  .hero-inner {
-    grid-template-columns: minmax(0, 1fr);
+  .hero-grid {
     gap: 54px;
   }
 
-  .hero-copy h1 {
-    font-size: clamp(50px, 16vw, 72px);
+  .hero-heading h1 {
+    font-size: clamp(48px, 14vw, 68px);
+  }
+
+  .hero-heading h1 > span:first-child {
+    white-space: normal;
   }
 
   .hero-proof {
