@@ -9,6 +9,7 @@ const spacePageTestMocks = vi.hoisted(() => {
   const clientSnapshot = { connection: { episode: { id: episodeID } } };
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined) };
   const getAccess = vi.fn();
+  const brokerConnectionAccess = vi.fn();
   const dashboardGetAccess = vi.fn();
   const connectionAccess = { access: "dashboard" };
   const dashboardConnectionAccess = vi.fn();
@@ -19,6 +20,7 @@ const spacePageTestMocks = vi.hoisted(() => {
     holder,
     journey,
     telemetry,
+    brokerConnectionAccess,
     client,
     connectionAccess,
     dashboardGetAccess,
@@ -38,6 +40,7 @@ const spacePageTestMocks = vi.hoisted(() => {
     }),
     cleanupParticipantCredential: vi.fn(async (): Promise<void> => undefined),
     createAccessGrantProvider: vi.fn(() => getAccess),
+    createBrokerConnectionAccess: vi.fn(() => brokerConnectionAccess),
     createParticipantCredential: vi.fn(),
     isUnauthenticatedDashboardSpaceError: vi.fn((cause: unknown) => cause instanceof Error && "status" in cause && Number((cause as { readonly status?: unknown }).status) === 401),
     createLocalSpaceClient: vi.fn(() => client),
@@ -49,6 +52,7 @@ vi.mock("@q9labsai/chalk-react", () => ({ Chalk: getSpacePageTestMocks().Chalk }
 vi.mock("../lib/chalk-access", () => ({
   cleanupParticipantCredential: getSpacePageTestMocks().cleanupParticipantCredential,
   createAccessGrantProvider: getSpacePageTestMocks().createAccessGrantProvider,
+  createBrokerConnectionAccess: getSpacePageTestMocks().createBrokerConnectionAccess,
   createParticipantCredential: getSpacePageTestMocks().createParticipantCredential,
   isTerminalParticipantCredentialCleanupError,
   isUnauthenticatedDashboardSpaceError: getSpacePageTestMocks().isUnauthenticatedDashboardSpaceError,
@@ -108,6 +112,7 @@ export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.isUnauthenticatedDashboardSpaceError.mockClear();
   spacePageTestMocks.cleanupParticipantCredential.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.createAccessGrantProvider.mockReset().mockReturnValue(spacePageTestMocks.getAccess);
+  spacePageTestMocks.createBrokerConnectionAccess.mockReset().mockReturnValue(spacePageTestMocks.brokerConnectionAccess);
   spacePageTestMocks.createLocalSpaceClient.mockReset().mockReturnValue(spacePageTestMocks.client);
   spacePageTestMocks.createLocalSpaceRelease.mockReset().mockImplementation((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup));
   spacePageTestMocks.localStorage.getItem.mockReset().mockReturnValue(null);

@@ -25,7 +25,7 @@ describe("public SDK Space route", () => {
     expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", undefined, mocks.journey);
     expect(mocks.telemetry.configureApiBaseURL).toHaveBeenCalledWith(spacePageTestCredential.apiBaseURL);
     expect(mocks.createLocalSpaceClient).toHaveBeenCalledOnce();
-    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: spacePageTestCredential, getAccess: mocks.getAccess, journey: mocks.journey });
+    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: spacePageTestCredential, getAccess: mocks.getAccess, connectionAccess: mocks.brokerConnectionAccess, journey: mocks.journey });
     expect(mocks.Chalk).toHaveBeenCalledWith(expect.objectContaining({ client: mocks.client, entrance: true, displayName: "Ada" }), undefined);
   });
 

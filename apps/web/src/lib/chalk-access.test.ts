@@ -1,7 +1,7 @@
 import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isUnauthenticatedDashboardSpaceError, joinDashboardSpace } from "./chalk-access";
+import { cleanupParticipantCredential, createAccessGrantProvider, createBrokerConnectionAccess, createParticipantCredential, isUnauthenticatedDashboardSpaceError, joinDashboardSpace } from "./chalk-access";
 
 const participantCredential = {
   apiBaseURL: "https://api.chalk.test",
@@ -195,6 +195,26 @@ describe("local Chalk access client", () => {
 
     expect(JSON.parse(String(requests[3]?.[1]?.body))).toEqual({ current_media_token: access.media.token, participant_generation: 3, replace_media_connection: false });
     expect(JSON.parse(String(requests[5]?.[1]?.body))).toEqual({ participant_generation: 3, replace_media_connection: true });
+  });
+
+  it("forwards media proof and replacement intent to the broker connection access", async () => {
+    const requests: Array<Parameters<typeof fetch>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (...input) => {
+        requests.push(input);
+        return jsonResponse(access, 201);
+      }),
+    );
+    const connectionAccess = createBrokerConnectionAccess();
+
+    await expect(connectionAccess({ reason: "scheduled_refresh", replaceMediaConnection: false, currentMediaToken: access.media.token as never, expectedParticipantGeneration: 3 })).resolves.toEqual(access);
+    await expect(connectionAccess({ reason: "access_retry", replaceMediaConnection: true, currentMediaToken: access.media.token as never, expectedParticipantGeneration: 3 })).resolves.toEqual(access);
+    await expect(connectionAccess()).resolves.toEqual(access);
+
+    expect(JSON.parse(String(requests[0]?.[1]?.body))).toEqual({ replaceMediaConnection: false, currentMediaToken: access.media.token });
+    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ replaceMediaConnection: true });
+    expect(JSON.parse(String(requests[2]?.[1]?.body))).toEqual({ replaceMediaConnection: false });
   });
 });
 

@@ -51,6 +51,19 @@ export function createAccessGrantProvider(journey?: JourneyBrokerTelemetry): Get
   return async (): Promise<AccessGrant> => request<AccessGrant>("/access-grants", undefined, journey);
 }
 
+/** Forwards refresh intent and media proof so the broker renews without replacing the media connection. */
+export function createBrokerConnectionAccess(journey?: JourneyBrokerTelemetry): NonNullable<SpaceClientPlatform["connectionAccess"]> {
+  return async (accessRequest) =>
+    request<AccessGrant>(
+      "/access-grants",
+      {
+        replaceMediaConnection: accessRequest?.replaceMediaConnection ?? false,
+        ...(accessRequest?.currentMediaToken && !accessRequest.replaceMediaConnection ? { currentMediaToken: accessRequest.currentMediaToken } : {}),
+      },
+      journey,
+    );
+}
+
 export async function cleanupParticipantCredential(journey?: JourneyBrokerTelemetry, options: ParticipantCredentialCleanupOptions = {}): Promise<void> {
   await request<void>("/participant-credentials/cleanup", undefined, journey, undefined, options);
 }

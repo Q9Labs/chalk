@@ -32,7 +32,7 @@ describe("SpacePage", () => {
 
     expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", undefined, mocks.journey);
     expect(mocks.telemetry.configureApiBaseURL).toHaveBeenCalledWith(spacePageTestCredential.apiBaseURL);
-    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: spacePageTestCredential, getAccess: mocks.getAccess, journey: mocks.journey });
+    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: spacePageTestCredential, getAccess: mocks.getAccess, connectionAccess: mocks.brokerConnectionAccess, journey: mocks.journey });
     expect(mocks.holder.chalkProps).toMatchObject({ client: mocks.client, displayName: "Ada", entrance: true, spaceName: "Local Space" });
     expect(mocks.useEpisodeDiagnosticsAvailability).toHaveBeenCalledWith({ diagnosticReference: `chalk.episode:${mocks.episodeID}` });
     (mocks.holder.chalkProps?.onOpenDiagnostics as (() => void) | undefined)?.();

@@ -5,6 +5,7 @@ import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugg
 import {
   cleanupParticipantCredential,
   createAccessGrantProvider,
+  createBrokerConnectionAccess,
   createParticipantCredential,
   isTerminalParticipantCredentialCleanupError,
   isUnauthenticatedDashboardSpaceError,
@@ -183,6 +184,7 @@ async function prepareParticipantCredential(displayName: string, inviteToken: st
   return {
     credential,
     getAccess,
+    connectionAccess: createBrokerConnectionAccess(journey),
     finish: async (options = {}) => {
       try {
         await cleanupParticipantCredential(journey, options);

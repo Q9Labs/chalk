@@ -31,6 +31,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Rebuilt the Dashboard and Episode Debugger into responsive, keyboard-friendly
   product surfaces with dependable navigation, readable tables and dialogs,
   complete-row affordances, and accessible mobile controls.
+- Fixed visitor Space access refresh so the browser forwards media proof to the
+  broker. Proof-less renewals made the broker replace the media connection,
+  which the client rejected at the first refresh window as an invalid grant.
 - Fixed Dashboard Space access refresh so scheduled renewal preserves current
   media proof and rejected credentials recover with a replacement connection.
 - Fixed Dashboard Space and Episode navigation so active Spaces are directly
