@@ -10,7 +10,7 @@ import { SpaceView } from "./SpaceView";
 
 const audioOutputSpy = vi.hoisted(() => vi.fn(() => null));
 const controlBarSpy = vi.hoisted(() =>
-  vi.fn((props: { readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
+  vi.fn((props: { readonly buttons?: readonly string[]; readonly onOpenDiagnostics?: () => void; readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
     <>
       <button type="button" onClick={props.onToggleParticipants}>
         People
@@ -59,6 +59,19 @@ describe("SpaceView", () => {
     expect(participantGridSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ layout: "grid" }));
     expect(participantGridSpy.mock.calls[0]?.[0]).not.toHaveProperty("participants");
     expect(controlBarSpy.mock.calls[0]?.[0]).not.toHaveProperty("controls");
+  });
+
+  it("omits diagnostics unless an open handler is provided", () => {
+    renderView();
+
+    expect(controlBarSpy.mock.calls[0]?.[0].buttons).not.toContain("diagnostics");
+  });
+
+  it("adds diagnostics and forwards its open handler together", () => {
+    const onOpenDiagnostics = vi.fn();
+    renderView(createTestClient(), { onOpenDiagnostics });
+
+    expect(controlBarSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ buttons: expect.arrayContaining(["diagnostics"]), onOpenDiagnostics }));
   });
 
   it("keeps the theme-only palette and texture attributes on the layout", () => {

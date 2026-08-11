@@ -59,6 +59,22 @@ describe("SpaceActionMenu", () => {
     expect(sendReaction).toHaveBeenCalledWith("🎉");
   });
 
+  it("shows diagnostics only when its open handler is provided", () => {
+    const setActionsOpen = vi.fn();
+    const onOpenDiagnostics = vi.fn();
+    const controller = actionController({ setActionsOpen });
+
+    expect(findText(SpaceActionMenu({ controller }))).not.toContain("Diagnostics");
+
+    const tree = SpaceActionMenu({ controller, onOpenDiagnostics });
+    const diagnostics = findElements(tree, "Pressable").find((element) => findText(element).length === 1 && findText(element).includes("Diagnostics"));
+    const onPress = diagnostics?.props?.onPress;
+    if (typeof onPress === "function") onPress();
+
+    expect(setActionsOpen).toHaveBeenCalledWith(false);
+    expect(onOpenDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves chat and settings panel ownership to canonical mounted sheets", () => {
     expect(source).not.toContain("ChatPanel");
     expect(source).not.toContain("<SpacePanel");

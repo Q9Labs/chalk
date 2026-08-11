@@ -67,13 +67,14 @@ describe("SpaceViewShared", () => {
   });
 
   it("passes reconnecting state and capability-gated controls to the native surface", () => {
-    const props = { onLeave: vi.fn(), reconnecting: true, logoUrl: "https://cdn.example.test/logo.png", spaceName: "Design space" };
+    const props = { onLeave: vi.fn(), onOpenDiagnostics: vi.fn(), reconnecting: true, logoUrl: "https://cdn.example.test/logo.png", spaceName: "Design space" };
     const tree = SpaceViewShared(props);
 
     expect(state.useSpaceViewController).toHaveBeenCalledWith(props);
     expect(findText(tree)).toContain("Reconnecting… controls will resume shortly.");
     expect(findElement(tree, "SpaceTopBarAndroid")).toMatchObject({ props: { logoUrl: props.logoUrl, spaceName: props.spaceName } });
     expect(findElement(tree, "SpaceBottomDockAndroid")).toMatchObject({ props: { onOpenChat: expect.any(Function), unreadChatCount: 0 } });
+    expect(findElement(tree, "SpaceActionMenu")).toMatchObject({ props: { onOpenDiagnostics: props.onOpenDiagnostics } });
   });
 
   it("renders the whiteboard surface instead of a stage or grid when it is open", () => {

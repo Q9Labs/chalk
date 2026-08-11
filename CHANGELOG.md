@@ -34,6 +34,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed browser Sync startup recovery so a healthy connection is not replaced by
   stale queued snapshots, restored the Space Entrance, expanded the live Space
   across its host viewport, and made creator cleanup survive page unloads.
+- Fixed the live Space diagnostics action so embedding apps can open the current
+  Episode in the gated Episode Debugger on React and React Native.
 - Fixed the guarded npm publish workflow for pnpm 10 and made release dispatches
   target `Q9Labs/chalk` explicitly.
 

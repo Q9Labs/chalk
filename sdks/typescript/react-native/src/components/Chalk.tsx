@@ -64,6 +64,7 @@ type ChalkCommonProps = ChalkCallbacks & {
   readonly inviteLink?: string;
   readonly layout?: SpaceLayout;
   readonly onLayoutChange?: (layout: SpaceLayout) => void;
+  readonly onOpenDiagnostics?: () => void;
 };
 
 export type ChalkProps = ChalkCommonProps &
@@ -264,7 +265,19 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
       </AppearanceLayer>
     );
 
-  return <NativeSpaceView features={props.features} inviteLink={props.inviteLink} layout={props.layout} logoUrl={props.logoUrl} onLayoutChange={props.onLayoutChange} pickChatFiles={props.pickChatFiles} reconnecting={connection.status === "reconnecting"} spaceName={spaceName} />;
+  return (
+    <NativeSpaceView
+      features={props.features}
+      inviteLink={props.inviteLink}
+      layout={props.layout}
+      logoUrl={props.logoUrl}
+      onLayoutChange={props.onLayoutChange}
+      onOpenDiagnostics={props.onOpenDiagnostics}
+      pickChatFiles={props.pickChatFiles}
+      reconnecting={connection.status === "reconnecting"}
+      spaceName={spaceName}
+    />
+  );
 }
 
 function defaultJoinOptions(props: ChalkProps): Parameters<SpaceClient["join"]>[0] {
@@ -282,18 +295,31 @@ type NativeSpaceViewProps = {
   readonly layout?: SpaceLayout;
   readonly logoUrl?: string;
   readonly onLayoutChange?: (layout: SpaceLayout) => void;
+  readonly onOpenDiagnostics?: () => void;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly reconnecting: boolean;
   readonly spaceName: string;
 };
 
-function NativeSpaceView({ features, inviteLink, layout, logoUrl, onLayoutChange, pickChatFiles, reconnecting, spaceName }: NativeSpaceViewProps): React.JSX.Element {
+function NativeSpaceView({ features, inviteLink, layout, logoUrl, onLayoutChange, onOpenDiagnostics, pickChatFiles, reconnecting, spaceName }: NativeSpaceViewProps): React.JSX.Element {
   const client = useSpaceClient();
   const theme = useNativeTheme();
 
   return (
     <View style={[styles.space, { backgroundColor: theme.colors.background }]}>
-      <SpaceView features={features} inviteLink={inviteLink} layout={layout} logoUrl={logoUrl} onEndEpisode={() => client.endEpisode()} onLayoutChange={onLayoutChange} onLeave={() => client.leave()} pickChatFiles={pickChatFiles} reconnecting={reconnecting} spaceName={spaceName} />
+      <SpaceView
+        features={features}
+        inviteLink={inviteLink}
+        layout={layout}
+        logoUrl={logoUrl}
+        onEndEpisode={() => client.endEpisode()}
+        onLayoutChange={onLayoutChange}
+        onLeave={() => client.leave()}
+        onOpenDiagnostics={onOpenDiagnostics}
+        pickChatFiles={pickChatFiles}
+        reconnecting={reconnecting}
+        spaceName={spaceName}
+      />
       <NativeTextureOverlay />
     </View>
   );

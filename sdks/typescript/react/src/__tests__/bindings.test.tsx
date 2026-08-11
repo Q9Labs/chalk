@@ -457,6 +457,17 @@ describe("React bindings", () => {
     expect(within(disabledView.container).queryByRole("button", { name: "Settings" })).not.toBeInTheDocument();
   });
 
+  it("opens diagnostics from the live Space when the embedding app provides the action", () => {
+    const client = createTestClient();
+    const onOpenDiagnostics = vi.fn();
+    client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
+    const view = render(<Chalk client={client} onOpenDiagnostics={onOpenDiagnostics} />);
+
+    fireEvent.click(within(view.container).getAllByRole("button", { name: "Diagnostics" })[0]!);
+
+    expect(onOpenDiagnostics).toHaveBeenCalledOnce();
+  });
+
   it("clears the settings sidebar when turnkey Settings closes", async () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
