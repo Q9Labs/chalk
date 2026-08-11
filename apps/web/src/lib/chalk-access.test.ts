@@ -156,6 +156,26 @@ describe("local Chalk access client", () => {
     expect(requests[5]?.[1]).toMatchObject({ method: "DELETE", keepalive: true });
     expect(JSON.parse(String(requests[5]?.[1]?.body))).toEqual({ participant_generation: 3 });
   });
+
+  it("uses stored media proof when the public Dashboard provider refreshes access", async () => {
+    const requests: Array<Parameters<typeof fetch>> = [];
+    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-2" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-3" }, 200), jsonResponse(access, 201)];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (...input) => {
+        requests.push(input);
+        return responses.shift() ?? new Response(null, { status: 500 });
+      }),
+    );
+
+    const spaceAccess = await joinDashboardSpace("tenant-1", "design-lab", "Ada");
+    await spaceAccess.connectionAccess({ reason: "join", replaceMediaConnection: false });
+    await expect(spaceAccess.getAccess({ space: "design-lab", reason: "refresh" })).resolves.toEqual(access);
+    await expect(spaceAccess.getAccess({ space: "design-lab", reason: "retry" })).resolves.toEqual(access);
+
+    expect(JSON.parse(String(requests[3]?.[1]?.body))).toEqual({ current_media_token: access.media.token, participant_generation: 3, replace_media_connection: false });
+    expect(JSON.parse(String(requests[5]?.[1]?.body))).toEqual({ participant_generation: 3, replace_media_connection: true });
+  });
 });
 
 function credential(audience: "chalk-sync" | "chalk-media"): string {

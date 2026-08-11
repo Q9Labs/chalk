@@ -78,7 +78,7 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
         initialize,
         ensureFresh,
         refresh: (reason, replaceMediaConnection) => fetch(reason, replaceMediaConnection, true),
-        refreshAfterRejection: () => fetch("access_retry", false, true),
+        refreshAfterRejection: () => fetch("access_retry", true, true),
         getSyncToken: (reason = "sync_recovery") => ensureFresh(reason).pipe(Effect.map((access) => access.sync.token)),
         getMediaToken: () => ensureFresh("scheduled_refresh").pipe(Effect.map((access) => access.media.token)),
         requiresRefresh: millisecondsUntilRefresh.pipe(Effect.map((milliseconds) => milliseconds === null || milliseconds === 0)),

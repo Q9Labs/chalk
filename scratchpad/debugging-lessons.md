@@ -165,6 +165,14 @@ field. Test the normalized grant after every adapter boundary, not only the
 upstream wire response, because silent field loss looks like a healthy but empty
 diagnostics pipeline.
 
+## Access Refresh Adapters Must Preserve Current Proof
+
+A compatibility access provider may expose less refresh context than its
+internal adapter. Keep the current credential proof inside the adapter and test
+scheduled renewal through both provider surfaces. Recovery after rejection must
+request a replacement connection because the current proof may already be
+expired.
+
 ## Public Status Needs A Narrow Projection
 
 An anonymous status page should receive only the stable component summary it
