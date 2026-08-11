@@ -96,6 +96,10 @@ export async function joinDashboardSpace(tenantID: string, spaceSlug: string, di
   };
 }
 
+export function isUnauthenticatedDashboardSpaceError(cause: unknown): boolean {
+  return cause instanceof DashboardSpaceRequestError && cause.status === 401;
+}
+
 async function request<T>(path: string, body: unknown = {}, journey?: JourneyBrokerTelemetry, parse?: (value: unknown) => T, options: ParticipantCredentialCleanupOptions = {}): Promise<T> {
   const startedAt = Date.now();
   let response: Response | undefined;
@@ -169,7 +173,7 @@ async function dashboardRequest(path: string, method: "POST" | "DELETE", body: u
   const startedAt = Date.now();
   const key = requestKey();
   const tokenResponse = await fetch("/api/auth/csrf", { credentials: "same-origin" });
-  if (!tokenResponse.ok) throw new Error("Could not establish secure Dashboard access.");
+  if (!tokenResponse.ok) throw new DashboardSpaceRequestError("Could not establish secure Dashboard access.", tokenResponse.status);
   const tokenBody = (await tokenResponse.json()) as { readonly csrf_token?: unknown };
   csrfToken = typeof tokenBody.csrf_token === "string" ? tokenBody.csrf_token : csrfToken;
   if (!csrfToken) throw new Error("Could not establish secure Dashboard access.");
@@ -181,7 +185,7 @@ async function dashboardRequest(path: string, method: "POST" | "DELETE", body: u
     keepalive: options.keepalive,
   });
   journey?.recordHttpRequest({ method, route: path, statusCode: response.status, durationMs: Date.now() - startedAt, state: response.ok ? "succeeded" : "failed" });
-  if (!response.ok) throw new Error(await errorMessage(response));
+  if (!response.ok) throw new DashboardSpaceRequestError(await errorMessage(response), response.status);
   if (response.status === 204) return undefined;
   return response.json();
 }
@@ -245,6 +249,16 @@ class ParticipantCredentialRequestError extends Error {
   ) {
     super(message);
     this.name = "ParticipantCredentialRequestError";
+  }
+}
+
+class DashboardSpaceRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "DashboardSpaceRequestError";
   }
 }
 

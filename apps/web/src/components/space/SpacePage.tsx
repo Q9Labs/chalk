@@ -1,16 +1,35 @@
 import { Chalk } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isTerminalParticipantCredentialCleanupError, joinDashboardSpace, type DashboardSpaceAccess, type ParticipantCredential, type ParticipantCredentialCleanupOptions } from "../../lib/chalk-access";
-import { listAllAccountTenants } from "../../lib/dashboard-api";
+import {
+  cleanupParticipantCredential,
+  createAccessGrantProvider,
+  createParticipantCredential,
+  isTerminalParticipantCredentialCleanupError,
+  isUnauthenticatedDashboardSpaceError,
+  joinDashboardSpace,
+  type DashboardSpaceAccess,
+  type ParticipantCredential,
+  type ParticipantCredentialCleanupOptions,
+} from "../../lib/chalk-access";
+import { DashboardAPIError, listAllAccountTenants } from "../../lib/dashboard-api";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";
 
 export function SpacePage() {
+  return <JoinSpacePage />;
+}
+
+/** Account-bound Dashboard entry. The slug is the only browser route state. */
+export function DashboardSpacePage({ slug }: { readonly slug: string }) {
+  return <JoinSpacePage slug={slug} />;
+}
+
+function JoinSpacePage({ slug }: { readonly slug?: string }) {
   const { journey, telemetry } = useWebTelemetry();
-  const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
+  const initialDisplayName = useMemo(() => (slug ? "" : (new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "")), [slug]);
   const [displayName, setDisplayName] = useState(initialDisplayName);
-  const [credential, setCredential] = useState<ParticipantCredential | null>(null);
+  const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const active = useRef(true);
@@ -19,23 +38,23 @@ export function SpacePage() {
 
   const enter = useCallback(() => {
     const normalizedDisplayName = displayName.trim();
-    if (!normalizedDisplayName || credential || preparing) return;
+    if (!normalizedDisplayName || spaceAccess || preparing) return;
     setError(null);
     setPreparing(true);
-    void createParticipantCredential(normalizedDisplayName, spaceInviteToken(), journey)
-      .then((nextCredential) => {
+    void prepareSpaceAccess(slug, normalizedDisplayName, getAccess, journey)
+      .then((nextAccess) => {
         if (!active.current) {
-          void cleanupParticipantCredential(journey).catch(() => undefined);
+          void nextAccess.finish().catch(() => undefined);
           return;
         }
         try {
-          telemetry.configureApiBaseURL(nextCredential.apiBaseURL);
+          telemetry.configureApiBaseURL(nextAccess.credential.apiBaseURL);
         } catch (cause) {
-          void cleanupParticipantCredential(journey).catch(() => undefined);
+          void nextAccess.finish().catch(() => undefined);
           throw cause;
         }
-        if (nextCredential.spaceInviteToken) setSpaceInviteToken(nextCredential.spaceInviteToken);
-        setCredential(nextCredential);
+        if ("spaceInviteToken" in nextAccess.credential && nextAccess.credential.spaceInviteToken) setSpaceInviteToken(nextAccess.credential.spaceInviteToken);
+        setSpaceAccess(nextAccess);
       })
       .catch((cause: unknown) => {
         if (active.current) setError(cause instanceof Error ? cause.message : "Could not prepare this Space.");
@@ -43,85 +62,13 @@ export function SpacePage() {
       .finally(() => {
         if (active.current) setPreparing(false);
       });
-  }, [credential, displayName, journey, preparing, telemetry]);
-
-  const finish = useCallback(
-    (options: ParticipantCredentialCleanupOptions = {}) => {
-      if (cleanupPromise.current) return cleanupPromise.current;
-      const attempt = cleanupParticipantCredential(journey, options).then(
-        () => {
-          clearSpaceInviteToken();
-        },
-        (cause: unknown) => {
-          if (isTerminalParticipantCredentialCleanupError(cause)) {
-            clearSpaceInviteToken();
-            return;
-          }
-          cleanupPromise.current = undefined;
-          throw cause;
-        },
-      );
-      cleanupPromise.current = attempt;
-      return attempt;
-    },
-    [journey],
-  );
-
-  useEffect(
-    () => () => {
-      active.current = false;
-    },
-    [],
-  );
-
-  if (credential) {
-    return <LocalSpace credential={credential} displayName={displayName.trim()} getAccess={getAccess} journey={journey} onFinish={finish} />;
-  }
-
-  return <SpaceArrival displayName={displayName} error={error} preparing={preparing} onDisplayNameChange={setDisplayName} onEnter={enter} />;
-}
-
-/** Account-bound Dashboard entry. The slug is the only browser route state. */
-export function DashboardSpacePage({ slug }: { readonly slug: string }) {
-  const { journey, telemetry } = useWebTelemetry();
-  const [displayName, setDisplayName] = useState("");
-  const [spaceAccess, setSpaceAccess] = useState<DashboardSpaceAccess | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [preparing, setPreparing] = useState(false);
-  const active = useRef(true);
-  const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
-
-  const enter = useCallback(() => {
-    const normalized = displayName.trim();
-    if (!normalized || spaceAccess || preparing) return;
-    setPreparing(true);
-    setError(null);
-    void resolveTenantID()
-      .then((tenantID) => {
-        if (!tenantID) throw new Error("Select a Tenant in the Dashboard before entering this Space.");
-        return joinDashboardSpace(tenantID, slug, normalized, journey);
-      })
-      .then((next) => {
-        if (!active.current) {
-          void next.leave().catch(() => undefined);
-          return;
-        }
-        telemetry.configureApiBaseURL(next.credential.apiBaseURL);
-        setSpaceAccess(next);
-      })
-      .catch((cause: unknown) => {
-        if (active.current) setError(cause instanceof Error ? cause.message : "Could not join this Space.");
-      })
-      .finally(() => {
-        if (active.current) setPreparing(false);
-      });
-  }, [displayName, journey, preparing, slug, spaceAccess, telemetry]);
+  }, [displayName, getAccess, journey, preparing, slug, spaceAccess, telemetry]);
 
   const finish = useCallback(
     (options: ParticipantCredentialCleanupOptions = {}) => {
       if (cleanupPromise.current) return cleanupPromise.current;
       const attempt =
-        spaceAccess?.leave(options).catch((cause: unknown) => {
+        spaceAccess?.finish(options).catch((cause: unknown) => {
           cleanupPromise.current = undefined;
           throw cause;
         }) ?? Promise.resolve();
@@ -138,7 +85,10 @@ export function DashboardSpacePage({ slug }: { readonly slug: string }) {
     [],
   );
 
-  if (spaceAccess) return <LocalSpace credential={spaceAccess.credential} displayName={displayName.trim()} getAccess={spaceAccess.getAccess} connectionAccess={spaceAccess.connectionAccess} journey={journey} onFinish={finish} spaceName={slug} />;
+  if (spaceAccess) {
+    return <LocalSpace credential={spaceAccess.credential} displayName={displayName.trim()} getAccess={spaceAccess.getAccess} connectionAccess={spaceAccess.connectionAccess} inviteLink={spaceInviteLink()} journey={journey} onFinish={finish} spaceName={slug ?? localSpaceName()} />;
+  }
+
   return <SpaceArrival displayName={displayName} error={error} preparing={preparing} onDisplayNameChange={setDisplayName} onEnter={enter} />;
 }
 
@@ -147,6 +97,7 @@ function LocalSpace({
   displayName,
   getAccess,
   connectionAccess,
+  inviteLink,
   journey,
   onFinish,
   spaceName,
@@ -155,6 +106,7 @@ function LocalSpace({
   readonly displayName: string;
   readonly getAccess: ReturnType<typeof createAccessGrantProvider>;
   readonly connectionAccess?: DashboardSpaceAccess["connectionAccess"];
+  readonly inviteLink?: string;
   readonly journey: ReturnType<typeof useWebTelemetry>["journey"];
   readonly onFinish: (options?: ParticipantCredentialCleanupOptions) => Promise<void>;
   readonly spaceName?: string;
@@ -182,9 +134,56 @@ function LocalSpace({
 
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance displayName={displayName} defaults={{ microphone: true, camera: true }} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName ?? "Local Space"} inviteLink={globalThis.location?.href} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      <Chalk client={client} entrance displayName={displayName} defaults={{ microphone: true, camera: true }} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName} inviteLink={inviteLink} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
     </main>
   );
+}
+
+type JoinedSpaceAccess = {
+  readonly credential: ParticipantCredential | DashboardSpaceAccess["credential"];
+  readonly getAccess: ReturnType<typeof createAccessGrantProvider>;
+  readonly connectionAccess?: DashboardSpaceAccess["connectionAccess"];
+  readonly finish: (options?: ParticipantCredentialCleanupOptions) => Promise<void>;
+};
+
+async function prepareSpaceAccess(slug: string | undefined, displayName: string, getAccess: ReturnType<typeof createAccessGrantProvider>, journey: ReturnType<typeof useWebTelemetry>["journey"]): Promise<JoinedSpaceAccess> {
+  if (!slug) return prepareParticipantCredential(displayName, spaceInviteToken(), getAccess, journey);
+
+  const inviteToken = spaceInviteToken();
+  try {
+    const tenantID = await resolveTenantID();
+    if (!tenantID) throw new Error("Select a Tenant in the Dashboard before entering this Space.");
+    const access = await joinDashboardSpace(tenantID, slug, displayName, journey);
+    return { credential: access.credential, getAccess: access.getAccess, connectionAccess: access.connectionAccess, finish: access.leave };
+  } catch (cause) {
+    if (!inviteToken || !isUnauthenticatedAccountError(cause)) throw cause;
+    return prepareParticipantCredential(displayName, inviteToken, getAccess, journey);
+  }
+}
+
+async function prepareParticipantCredential(displayName: string, inviteToken: string | undefined, getAccess: ReturnType<typeof createAccessGrantProvider>, journey: ReturnType<typeof useWebTelemetry>["journey"]): Promise<JoinedSpaceAccess> {
+  const credential = await createParticipantCredential(displayName, inviteToken, journey);
+  return {
+    credential,
+    getAccess,
+    finish: async (options = {}) => {
+      try {
+        await cleanupParticipantCredential(journey, options);
+      } catch (cause) {
+        if (!isTerminalParticipantCredentialCleanupError(cause)) throw cause;
+      }
+      clearSpaceInviteToken();
+    },
+  };
+}
+
+function isUnauthenticatedAccountError(cause: unknown): boolean {
+  return (cause instanceof DashboardAPIError && cause.status === 401) || isUnauthenticatedDashboardSpaceError(cause);
+}
+
+function localSpaceName(): string | undefined {
+  const hostname = globalThis.location?.hostname;
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" ? "Local Space" : undefined;
 }
 
 function tenantIDFromPage(): string {
@@ -247,6 +246,15 @@ function spaceInviteToken(): string | undefined {
   const hash = globalThis.location?.hash;
   if (!hash) return undefined;
   return new URLSearchParams(hash.slice(1)).get("spaceInviteToken") ?? undefined;
+}
+
+function spaceInviteLink(): string | undefined {
+  const token = spaceInviteToken();
+  if (!token || !globalThis.location) return undefined;
+  const url = new URL(globalThis.location.href);
+  url.search = "";
+  url.hash = new URLSearchParams({ spaceInviteToken: token }).toString();
+  return url.href;
 }
 
 function setSpaceInviteToken(value: string): void {

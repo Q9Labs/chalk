@@ -1,7 +1,7 @@
 import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, joinDashboardSpace } from "./chalk-access";
+import { cleanupParticipantCredential, createAccessGrantProvider, createParticipantCredential, isUnauthenticatedDashboardSpaceError, joinDashboardSpace } from "./chalk-access";
 
 const participantCredential = {
   apiBaseURL: "https://api.chalk.test",
@@ -155,6 +155,26 @@ describe("local Chalk access client", () => {
     expect(JSON.parse(String(requests[3]?.[1]?.body))).toEqual({ current_media_token: access.media.token, participant_generation: 3, replace_media_connection: false });
     expect(requests[5]?.[1]).toMatchObject({ method: "DELETE", keepalive: true });
     expect(JSON.parse(String(requests[5]?.[1]?.body))).toEqual({ participant_generation: 3 });
+  });
+
+  it("identifies an unauthenticated Dashboard Space response for invite fallback", async () => {
+    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse({ error: "Authentication required" }, 401)];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => responses.shift() ?? new Response(null, { status: 500 })),
+    );
+
+    const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
+
+    expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
+  });
+
+  it("identifies an unauthenticated CSRF response for invite fallback", async () => {
+    stubFetch(jsonResponse({ error: "Authentication required" }, 401));
+
+    const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
+
+    expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
   });
 });
 

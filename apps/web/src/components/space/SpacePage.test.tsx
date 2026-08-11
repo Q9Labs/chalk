@@ -3,9 +3,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestCredential } from "../../__tests__/space-page.test-support";
+import { dashboardSpaceTestAccess, getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestCredential } from "../../__tests__/space-page.test-support";
+import { DashboardAPIError } from "../../lib/dashboard-api";
 
-import { SpacePage } from "./SpacePage";
+import { DashboardSpacePage, SpacePage } from "./SpacePage";
 
 const mocks = getSpacePageTestMocks();
 
@@ -47,3 +48,106 @@ describe("SpacePage", () => {
     expect(mocks.createLocalSpaceClient).not.toHaveBeenCalled();
   });
 });
+
+describe("DashboardSpacePage", () => {
+  it("keeps the signed-in by-slug join and names the Space from its slug", async () => {
+    render(<DashboardSpacePage slug="design-lab" />);
+    enterName(" Ada ");
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+
+    expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-lab", "Ada", mocks.journey);
+    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
+    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: dashboardSpaceTestAccess.credential, getAccess: mocks.dashboardGetAccess, connectionAccess: mocks.dashboardConnectionAccess, journey: mocks.journey });
+    expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "design-lab" });
+    expect(mocks.holder.chalkProps?.inviteLink).toBeUndefined();
+  });
+
+  it("keeps a token-bearing invite link while a signed-in Account joins by slug", async () => {
+    window.history.replaceState({}, "", `/space/design-lab?name=Private#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}&ignored=value`);
+    render(<DashboardSpacePage slug="design-lab" />);
+    enterName("Ada");
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+
+    expect(mocks.joinDashboardSpace).toHaveBeenCalledOnce();
+    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
+    expect(mocks.holder.chalkProps?.inviteLink).toBe(`${window.location.origin}/space/design-lab#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}`);
+  });
+
+  it("uses the invite token when the visitor has no signed-in Account", async () => {
+    setNamedInviteLocation();
+    mocks.listAllAccountTenants.mockRejectedValueOnce(new DashboardAPIError(401, "access.unauthenticated", "Authentication required"));
+
+    render(<DashboardSpacePage slug="design-lab" />);
+    enterName("Ada");
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+
+    expect(mocks.joinDashboardSpace).not.toHaveBeenCalled();
+    expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", spacePageTestCredential.spaceInviteToken, mocks.journey);
+    expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "design-lab", inviteLink: window.location.href });
+  });
+
+  it("uses the invite token when a stale Tenant hint reaches an unauthenticated join", async () => {
+    setNamedInviteLocation();
+    window.localStorage.setItem("chalk.tenant-hint", "tenant-old");
+    mocks.joinDashboardSpace.mockRejectedValueOnce(Object.assign(new Error("Authentication required"), { status: 401 }));
+
+    render(<DashboardSpacePage slug="design-lab" />);
+    enterName("Ada");
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+
+    expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-old", "design-lab", "Ada", mocks.journey);
+    expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", spacePageTestCredential.spaceInviteToken, mocks.journey);
+  });
+
+  it("does not use broker access when an unauthenticated request has no invite token", async () => {
+    window.history.replaceState({}, "", "/space/design-lab");
+    mocks.listAllAccountTenants.mockRejectedValueOnce(new DashboardAPIError(401, "access.unauthenticated", "Authentication required"));
+
+    render(<DashboardSpacePage slug="design-lab" />);
+    enterName("Ada");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Authentication required");
+    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
+    expect(mocks.createLocalSpaceClient).not.toHaveBeenCalled();
+  });
+
+  it("does not use the invite token when the Account lacks Tenant access", async () => {
+    setNamedInviteLocation();
+    mocks.joinDashboardSpace.mockRejectedValueOnce(Object.assign(new Error("Tenant access required"), { status: 403 }));
+
+    render(<DashboardSpacePage slug="design-lab" />);
+    enterName("Ada");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Tenant access required");
+    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
+    expect(mocks.createLocalSpaceClient).not.toHaveBeenCalled();
+  });
+
+  it("clears a visitor invite only after credential cleanup succeeds", async () => {
+    setNamedInviteLocation();
+    mocks.listAllAccountTenants.mockRejectedValueOnce(new DashboardAPIError(401, "access.unauthenticated", "Authentication required"));
+    let resolveCleanup!: () => void;
+    const cleanupPromise = new Promise<void>((resolve) => {
+      resolveCleanup = resolve;
+    });
+    mocks.cleanupParticipantCredential.mockReturnValueOnce(cleanupPromise);
+
+    render(<DashboardSpacePage slug="design-lab" />);
+    enterName("Ada");
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+
+    (mocks.holder.chalkProps?.onLeft as () => void)();
+    expect(window.location.hash).toBe(`#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}`);
+    resolveCleanup();
+    await waitFor(() => expect(window.location.hash).toBe(""));
+  });
+});
+
+function enterName(displayName: string): void {
+  fireEvent.change(screen.getByLabelText("Your name"), { target: { value: displayName } });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+}
+
+function setNamedInviteLocation(): void {
+  window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}`);
+}
