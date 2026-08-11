@@ -227,7 +227,7 @@ func (r EpisodeLifecycleRepository) LeaveSelf(ctx context.Context, input episode
 		if input.ParticipantGeneration > 0 && participant.Generation != input.ParticipantGeneration {
 			return episodes.ErrParticipantGenerationMismatch
 		}
-		operation, err := lockTenantExternalOperation(ctx, queries, input.TenantID, utilities.IDFromBytes(space.ID.Bytes), utilities.IDFromBytes(participant.EpisodeID.Bytes), episodes.OperationRemoveParticipant, input.Request)
+		_, err = lockTenantExternalOperation(ctx, queries, input.TenantID, utilities.IDFromBytes(space.ID.Bytes), utilities.IDFromBytes(participant.EpisodeID.Bytes), episodes.OperationRemoveParticipant, input.Request)
 		if err == nil {
 			result.Removed = true
 			return nil

@@ -140,6 +140,9 @@ func dashboardSpaceSelfAccessEndpoint(service DashboardSpaceJoinService, refresh
 				return accessGrantResponse{}, err
 			}
 			subject, err = accessGrantSubjectForJoin(grantRequest, join)
+			if err != nil {
+				return accessGrantResponse{}, accessGrantRefreshError(err)
+			}
 		} else {
 			if strings.TrimSpace(request.Body.CurrentMediaToken) == "" {
 				return accessGrantResponse{}, apiErrorInvalidRequest
