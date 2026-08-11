@@ -355,3 +355,251 @@
     flex-direction: column;
   }
 }
+
+/* Space details uses a two-column admin canvas on wide screens. */
+.space-detail-page {
+  max-width: 1580px;
+}
+
+.space-detail-breadcrumb {
+  margin-bottom: 12px;
+}
+
+.space-detail-header {
+  align-items: center;
+  min-height: 120px;
+  padding: 0 0 24px;
+}
+
+.space-detail-title h1 {
+  margin: 0;
+  font-size: clamp(34px, 3.2vw, 46px);
+}
+
+.space-detail-identity {
+  margin-top: 10px;
+}
+
+.space-detail-status-copy {
+  max-width: 580px;
+  margin-top: 7px;
+}
+
+.space-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.85fr);
+  align-items: start;
+  gap: 24px;
+  margin-top: 28px;
+}
+
+.space-detail-main-column {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+
+.space-detail-panel,
+.space-detail-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.space-detail-episodes.space-detail-panel {
+  margin-top: 0;
+  padding: 26px 20px 12px;
+}
+
+.space-detail-episodes .space-detail-section-heading {
+  margin-bottom: 20px;
+}
+
+.space-detail-section-heading h2,
+.space-detail-card h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+
+.space-detail-table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+
+.space-detail-table {
+  min-width: 640px;
+}
+
+.space-detail-table th,
+.space-detail-table td {
+  height: 56px;
+  padding: 11px 7px;
+  border-bottom-color: var(--line);
+}
+
+.space-detail-table thead th {
+  height: 38px;
+  padding-top: 0;
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.space-detail-table tbody th {
+  color: var(--ink);
+  font: 12px var(--font-mono);
+}
+
+.space-detail-table tbody th code {
+  color: inherit;
+  font: inherit;
+}
+
+.space-detail-table tbody td {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.space-detail-table tbody td > small,
+.space-detail-episode-state {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font: 10px var(--font-mono);
+}
+
+.space-detail-table-muted {
+  color: var(--ink-2) !important;
+}
+
+.space-detail-row-link {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--ink) !important;
+  font: 12px var(--font-body);
+  text-decoration: none;
+}
+
+.space-detail-row-link:hover {
+  border-color: var(--chalk-blue);
+  background: color-mix(in srgb, var(--chalk-blue) 12%, transparent);
+  text-decoration: none !important;
+}
+
+.space-detail-empty {
+  padding: 30px 0 22px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  text-align: left;
+}
+
+.space-detail-card {
+  min-height: 100%;
+  padding: 26px 22px;
+}
+
+.space-detail-card h2 {
+  margin-bottom: 28px;
+}
+
+.space-detail-card dl {
+  margin: 0;
+}
+
+.space-detail-card-row {
+  display: grid;
+  grid-template-columns: 122px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 104px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.space-detail-card-row:last-child {
+  border-bottom: 0;
+}
+
+.space-detail-card-row dt {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.space-detail-card-row dd {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.space-detail-card-row dd strong {
+  font-weight: 500;
+}
+
+.space-detail-card-row dd > span {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.space-detail-card-row dd code {
+  font: 10px var(--font-mono);
+}
+
+.space-detail-admission-badge {
+  padding: 4px 9px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success) !important;
+  font-size: 12px !important;
+}
+
+.space-detail-advanced.space-detail-panel {
+  margin-top: 0;
+  border-radius: 10px;
+}
+
+.space-detail-advanced summary {
+  padding: 20px;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.space-detail-advanced-body {
+  padding: 0 20px 20px;
+}
+
+@media (max-width: 960px) {
+  .space-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .space-detail-card {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .space-detail-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .space-detail-actions {
+    justify-content: flex-start;
+  }
+
+  .space-detail-card-row {
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
+}

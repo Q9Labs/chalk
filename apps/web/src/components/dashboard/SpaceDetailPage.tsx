@@ -3,7 +3,7 @@ import { DashboardAPIError, getSpace, listEpisodes, type DashboardEpisode, type 
 import { EditSpaceDialog } from "./EditSpaceDialog";
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
 import { episodeHistoryHref, defaultSpaceHrefBuilder } from "./space-links";
-import { formatDateTime, formatJSON, statusLabel } from "./episode-utils";
+import { durationLabel as episodeDurationLabel, formatDateTime, formatJSON, statusLabel } from "./episode-utils";
 
 export type SpaceDetailClient = {
   getSpace: (input: { tenantID: string; spaceID: string }) => Promise<Space>;
@@ -84,7 +84,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
         <div className="space-detail-title">
           <h1>{space.name}</h1>
           <div className="space-detail-identity">
-            <code>{space.slug}</code>
+            <code>/{space.slug}</code>
             <span className={`space-detail-status ${archived ? "is-archived" : "is-active"}`}>
               <span aria-hidden="true" />
               {archived ? "Archived" : "Active"}
@@ -107,41 +107,39 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
         </div>
       </header>
 
-      <section className="space-detail-overview" aria-labelledby="space-overview-heading">
-        <div className="space-detail-section-heading">
-          <div>
-            <h2 id="space-overview-heading">Space overview</h2>
-          </div>
-          <span className="space-detail-slug-label">/{space.slug}</span>
-        </div>
-        <dl className="space-detail-definition-grid">
-          <DefinitionCard label="Admission mode" value={admissionLabel(space.admission_policy)} />
-          <DefinitionCard label="Media plane" value={mediaPlaneLabel(space.media_plane)} detail={space.media_plane} />
-          <DefinitionCard label="Default Episode duration" value={durationLabel(space.default_episode_duration_seconds)} />
-          <DefinitionCard label="Maximum Episode duration" value={durationLabel(space.maximum_episode_duration_seconds)} />
-          <DefinitionCard label="Linger window" value={durationLabel(space.linger_window_seconds, true)} />
-        </dl>
-      </section>
+      <div className="space-detail-layout">
+        <div className="space-detail-main-column">
+          <section className="space-detail-episodes space-detail-panel" aria-labelledby="space-episodes-heading">
+            <div className="space-detail-section-heading">
+              <h2 id="space-episodes-heading">Recent Episodes</h2>
+              <a className="space-detail-history-link" href={`/episodes?space=${encodeURIComponent(space.id)}`}>
+                View all history
+              </a>
+            </div>
+            {episodes.length > 0 ? <RecentEpisodesTable episodes={episodes} /> : <p className="space-detail-empty">No Episodes have started in this Space yet.</p>}
+          </section>
 
-      <section className="space-detail-episodes" aria-labelledby="space-episodes-heading">
-        <div className="space-detail-section-heading">
-          <div>
-            <h2 id="space-episodes-heading">Recent Episodes</h2>
-          </div>
-          <a className="space-detail-history-link" href={`/episodes?space=${encodeURIComponent(space.id)}`}>
-            View all history
-          </a>
+          <details className="space-detail-advanced space-detail-panel">
+            <summary>Advanced configuration</summary>
+            <div className="space-detail-advanced-body">
+              <p>Raw policies and metadata are kept here for troubleshooting. Expand only when you need the underlying values.</p>
+              <pre>
+                {formatJSON({
+                  metadata: space.metadata,
+                  recurring_policy: space.recurring_policy,
+                  admission_policy: space.admission_policy,
+                  roles: space.roles,
+                  default_episode_duration_seconds: space.default_episode_duration_seconds,
+                  maximum_episode_duration_seconds: space.maximum_episode_duration_seconds,
+                  linger_window_seconds: space.linger_window_seconds,
+                })}
+              </pre>
+            </div>
+          </details>
         </div>
-        {episodes.length > 0 ? <RecentEpisodesTable episodes={episodes} /> : <p className="space-detail-empty">No Episodes have started in this Space yet.</p>}
-      </section>
 
-      <details className="space-detail-advanced">
-        <summary>Advanced configuration</summary>
-        <div className="space-detail-advanced-body">
-          <p>Raw policies and metadata are kept here for troubleshooting. Expand only when you need the underlying values.</p>
-          <pre>{formatJSON({ metadata: space.metadata, recurring_policy: space.recurring_policy, admission_policy: space.admission_policy, roles: space.roles })}</pre>
-        </div>
-      </details>
+        <SpaceDetailsCard space={space} />
+      </div>
 
       <EditSpaceDialog open={editOpen} tenantID={tenantID} space={space} onClose={() => setEditOpen(false)} onSaved={replaceSpace} />
       <SpaceLifecycleDialog open={lifecycle !== null} tenantID={tenantID} space={space} action={lifecycle ?? "archive"} onClose={() => setLifecycle(null)} onChanged={replaceSpace} />
@@ -156,25 +154,28 @@ function RecentEpisodesTable({ episodes }: { episodes: DashboardEpisode[] }) {
         <caption className="sr-only">Recent Episodes</caption>
         <thead>
           <tr>
+            <th scope="col">Episode ID</th>
             <th scope="col">Started</th>
-            <th scope="col">Status</th>
-            <th scope="col">Ended</th>
-            <th scope="col">
-              <span className="sr-only">Open</span>
-            </th>
+            <th scope="col">Duration</th>
+            <th scope="col">Participants</th>
+            <th scope="col">Action</th>
           </tr>
         </thead>
         <tbody>
           {episodes.map((episode) => (
             <tr key={episode.id}>
-              <th scope="row">{formatDateTime(episode.started_at)}</th>
+              <th scope="row">
+                <code>{episode.id}</code>
+              </th>
               <td>
-                <span className={`space-detail-episode-status status-${episode.status}`}>{statusLabel(episode.status)}</span>
+                <span>{formatDateTime(episode.started_at)}</span>
+                <small className="space-detail-episode-state">{statusLabel(episode.status)}</small>
               </td>
-              <td>{formatDateTime(episode.ended_at)}</td>
+              <td>{episodeDurationLabel(episode)}</td>
+              <td className="space-detail-table-muted">—</td>
               <td>
                 <a className="space-detail-row-link" href={episodeHistoryHref(episode)}>
-                  Open Episode
+                  Open <span aria-hidden="true">↗</span>
                 </a>
               </td>
             </tr>
@@ -185,17 +186,64 @@ function RecentEpisodesTable({ episodes }: { episodes: DashboardEpisode[] }) {
   );
 }
 
-function DefinitionCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function SpaceDetailsCard({ space }: { space: Space }) {
   return (
-    <div className="space-detail-definition-card">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-      {detail ? (
-        <small>
-          <code>{detail}</code>
-        </small>
-      ) : null}
-    </div>
+    <aside className="space-detail-card" aria-labelledby="space-details-heading">
+      <h2 id="space-details-heading">Space details</h2>
+      <dl>
+        <div className="space-detail-card-row">
+          <dt>Admission</dt>
+          <dd>
+            <strong className="space-detail-admission-badge">{admissionLabel(space.admission_policy)}</strong>
+            <span>{admissionDescription(space.admission_policy)}</span>
+          </dd>
+        </div>
+        <div className="space-detail-card-row">
+          <dt>Media plane</dt>
+          <dd>
+            <strong>{mediaPlaneLabel(space.media_plane)}</strong>
+            <span>{space.media_plane || "Not configured"}</span>
+          </dd>
+        </div>
+        <div className="space-detail-card-row">
+          <dt>Default Episode duration</dt>
+          <dd>
+            <strong>{spaceDurationLabel(space.default_episode_duration_seconds)}</strong>
+            <span>Used when an Episode does not provide a limit.</span>
+          </dd>
+        </div>
+        <div className="space-detail-card-row">
+          <dt>Maximum Episode duration</dt>
+          <dd>
+            <strong>{spaceDurationLabel(space.maximum_episode_duration_seconds)}</strong>
+            <span>Hard limit for every Episode in this Space.</span>
+          </dd>
+        </div>
+        <div className="space-detail-card-row">
+          <dt>Linger window</dt>
+          <dd>
+            <strong>{spaceDurationLabel(space.linger_window_seconds, true)}</strong>
+            <span>Time kept open after the last Participant leaves.</span>
+          </dd>
+        </div>
+        <div className="space-detail-card-row">
+          <dt>Created</dt>
+          <dd>
+            <strong>
+              <time dateTime={space.created_at}>{formatDateTime(space.created_at)}</time>
+            </strong>
+            <span>{relativeDate(space.created_at)}</span>
+          </dd>
+        </div>
+        <div className="space-detail-card-row">
+          <dt>Owner</dt>
+          <dd>
+            <strong>{space.created_by_user_id ? "Account owner" : "Not recorded"}</strong>
+            <span>{space.created_by_user_id ? <code>{space.created_by_user_id}</code> : "Owner identity unavailable"}</span>
+          </dd>
+        </div>
+      </dl>
+    </aside>
   );
 }
 
@@ -258,12 +306,28 @@ function admissionLabel(value: unknown): string {
   return value === null || value === undefined ? "Default" : "Custom";
 }
 
+function admissionDescription(value: unknown): string {
+  const mode = value && typeof value === "object" && "mode" in value ? (value as { mode?: unknown }).mode : undefined;
+  if (mode === "knock") return "People request access before entering.";
+  if (mode === "members_only") return "Only Space Members can enter.";
+  return "Anyone with Tenant access can enter.";
+}
+
 function mediaPlaneLabel(value: string): string {
   if (value === "cf_rtk") return "Cloudflare RealtimeKit";
   return value || "Not configured";
 }
 
-function durationLabel(value: number | null | undefined, zeroAsNone = false): string {
+function relativeDate(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "—";
+  const days = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
+  if (days === 0) return "Updated today";
+  if (days === 1) return "Updated yesterday";
+  return `Updated ${days} days ago`;
+}
+
+function spaceDurationLabel(value: number | null | undefined, zeroAsNone = false): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "Not set";
   if (value === 0 && zeroAsNone) return "None";
   if (value < 60) return `${value} seconds`;
