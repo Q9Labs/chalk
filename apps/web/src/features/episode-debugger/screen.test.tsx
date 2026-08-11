@@ -75,10 +75,12 @@ describe("EpisodeDebuggerScreen", () => {
 
     expect(screen.getByRole("heading", { name: "Episode Debugger", level: 1 })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to dashboard" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Evidence summary" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Episode summary" })).toBeTruthy();
     expect(container.querySelectorAll(".episode-summary-card")).toHaveLength(4);
-    expect(container.querySelector(".episode-contextbar")).toBeTruthy();
-    expect(container.querySelector(".episode-titlebar")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Chalk home" })).toBeTruthy();
+    expect(container.querySelector(".episode-app-sidebar")).toBeTruthy();
+    expect(container.querySelector(".episode-filter-rail")).toBeTruthy();
+    expect(container.querySelector(".episode-evidence-table")).toBeTruthy();
 
     for (const view of ["run", "graph", "trace", "flame", "issues", "participants", "epilogue"]) {
       const button = container.querySelector(`[data-episode-view="${view}"]`);

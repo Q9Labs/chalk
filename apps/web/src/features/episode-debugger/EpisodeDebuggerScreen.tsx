@@ -1,5 +1,5 @@
 import { Button, Input, ToastProvider, ToastViewport, toast } from "@q9labsai/chalk-ui";
-import { formatDiagnosticReference, parseDiagnosticReference, parseDiagnosticFilter, renderAgentBriefMarkdown, type DiagnosticFilterV1 } from "@q9labsai/diagnostics-contracts";
+import { formatDiagnosticReference, parseDiagnosticReference, parseDiagnosticFilter, renderAgentBriefMarkdown, type AcceptedDiagnosticEvent, type DiagnosticFilterV1, type DiagnosticOperationDetail, type DiagnosticSnapshotV1 } from "@q9labsai/diagnostics-contracts";
 import { useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EpisodeDiagnosticsApiClient } from "./api-client";
@@ -8,7 +8,7 @@ import { DetailsPanel } from "./DetailsPanel";
 import { EpilogueView, IssuesView, ParticipantsView } from "./EntityViews";
 import { DiagnosticExportController, type DiagnosticExportState } from "./export-controller";
 import { DiagnosticLiveController, type DiagnosticLiveState } from "./live-controller";
-import { DEBUGGER_VIEWS, formatDuration, type DebuggerSelection, type DebuggerView } from "./model";
+import { DEBUGGER_VIEWS, formatDuration, formatTime, type DebuggerSelection, type DebuggerView } from "./model";
 import { isAlternateDiagnosticReference } from "./reference";
 import { GraphView, RunView } from "./RunGraphViews";
 import { StatusPill } from "./StatusPill";
@@ -19,6 +19,21 @@ import "./episode-debugger.css";
 
 const EMPTY_FILTER: DiagnosticFilterV1 = { schemaVersion: "DiagnosticFilter/v1" };
 const MAX_CLIPBOARD_MARKDOWN = 750_000;
+const APP_NAV_ITEMS = [
+  ["Home", "/home", "⌂"],
+  ["Spaces", "/spaces", "▣"],
+  ["Episodes", "/episodes", "▷"],
+  ["Participants", "/people", "♙"],
+  ["Tenants", "/tenant", "▤"],
+  ["Messages", "/activity", "□"],
+  ["Presence", "/home", "◌"],
+  ["Files", "/artifacts", "▱"],
+  ["Streams", "/developer", "◌"],
+  ["Webhooks", "/developer", "⌁"],
+  ["Insights", "/activity", "▥"],
+  ["Alerts", "/activity", "♧"],
+  ["Settings", "/tenant", "⚙"],
+] as const;
 
 export default function EpisodeDebuggerRoute() {
   const params = useParams({ strict: false }) as { reference?: string };
@@ -178,238 +193,275 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
   const evidenceAvailable = snapshot ? hasDiagnosticEvidence(snapshot, liveState) : false;
   const evidenceInactive = snapshot !== undefined && !evidenceAvailable;
 
+  const episodeId = parsedReference?.parsed.diagnosticId ?? normalizedReference;
+  const participantCount = snapshot?.run?.participantCount ?? snapshot?.summary.participantCount;
+  const errorCount = snapshot?.summary.openIssueCount;
+
   return (
-    <div className="chalk-root episode-debugger" data-chalk data-chalk-theme="dark" data-chalk-palette="cool-graphite" data-episode-stream-state={evidenceInactive ? "inactive" : liveState.phase} data-episode-evidence-state={evidenceInactive ? "inactive" : "available"}>
+    <main className="chalk-root episode-debugger" data-chalk data-chalk-theme="dark" data-chalk-palette="cool-graphite" data-episode-stream-state={evidenceInactive ? "inactive" : liveState.phase} data-episode-evidence-state={evidenceInactive ? "inactive" : "available"}>
       <a className="episode-skip-link" href="#episode-content">
         Skip to evidence content
       </a>
-      <header className="episode-topbar episode-header" aria-labelledby="episode-debugger-title">
-        <div className="episode-contextbar">
-          <div className="episode-brand">
-            <a className="episode-back-link" href="/home" aria-label="Back to dashboard">
-              <span aria-hidden="true">←</span>
-              <span>Dashboard</span>
+      <aside className="episode-app-sidebar" aria-label="Chalk navigation">
+        <a className="episode-app-brand" href="/home" aria-label="Chalk home">
+          <span className="episode-brand-mark" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <strong>Chalk</strong>
+        </a>
+        <a className="episode-back-link" href="/home" aria-label="Back to dashboard">
+          <span aria-hidden="true">←</span>
+          <span>Dashboard</span>
+        </a>
+        <nav className="episode-app-nav" aria-label="Workspace">
+          {APP_NAV_ITEMS.map(([label, href, icon]) => (
+            <a key={label} href={href} className={label === "Episodes" ? "is-active" : undefined} aria-current={label === "Episodes" ? "page" : undefined}>
+              <span aria-hidden="true">{icon}</span>
+              {label}
             </a>
-            <span className="episode-brand-mark" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
-            <span>chalk</span>
-            <span className="episode-product-name">Episode Debugger</span>
-          </div>
-          <div className="episode-context-status" aria-label="Episode status">
-            <span className="episode-environment">
-              <span>Environment</span>
-              <strong>{snapshot?.environment ?? "resolving"}</strong>
-            </span>
-            <StatusPill state={evidenceInactive ? "not_observable" : (snapshot?.state ?? "loading")} label={evidenceInactive ? "Snapshot inactive" : snapshot ? undefined : "Snapshot loading"} />
-            <StatusPill state={evidenceInactive ? "not_observable" : liveState.phase} label={evidenceInactive ? "Evidence unavailable" : `Evidence ${streamLabel(liveState)}`} />
-          </div>
-        </div>
-        <div className="episode-titlebar">
-          <div className="episode-title-block">
-            <p className="episode-eyebrow">Live Episode diagnostics</p>
-            <h1 id="episode-debugger-title">Episode Debugger</h1>
-            <div className="episode-reference-block">
-              <span className="episode-eyebrow">Diagnostic Reference</span>
-              <code title={normalizedReference}>{normalizedReference}</code>
-            </div>
-          </div>
-          <dl className="episode-runtime-facts" aria-label="Episode runtime facts">
-            <div>
-              <dt>Elapsed</dt>
-              <dd className="episode-mono">{formatDuration(snapshot?.run?.elapsedMilliseconds)}</dd>
-            </div>
-            <div>
-              <dt>Cursor</dt>
-              <dd className="episode-mono">
-                {snapshot?.committedCursor ?? "—"} / {snapshot?.projectedCursor ?? "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>Activity</dt>
-              <dd>{liveState.lastActivityAt ? new Date(liveState.lastActivityAt).toLocaleTimeString() : "waiting"}</dd>
-            </div>
-            <div>
-              <dt>Retention</dt>
-              <dd>7 days after completion</dd>
-            </div>
-          </dl>
-          <div className="episode-top-actions" role="group" aria-label="Diagnostic export and copy actions">
-            <Button variant="outline" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
-              Copy reference
-            </Button>
-            <Button variant="outline" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
-              Copy all
-            </Button>
-            <Button variant="outline" data-episode-action="download-json" onClick={() => void exportController?.start(liveState.lastAppliedCursor)} disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}>
-              Download JSON
-            </Button>
-            <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact")}>
-              Copy for Agent
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <section className="episode-summary" aria-labelledby="episode-summary-title">
-        <div className="episode-summary-heading">
-          <p className="episode-eyebrow">At a glance</p>
-          <h2 id="episode-summary-title">Evidence summary</h2>
-        </div>
-        <div className="episode-summary-grid">
-          <SummaryMetric label="Events" value={evidenceInactive ? "—" : String(snapshot?.summary.eventCount ?? "—")} detail="Projected event evidence" />
-          <SummaryMetric label="Operations" value={evidenceInactive ? "—" : String(snapshot?.summary.operationCount ?? "—")} detail="Bounded operation evidence" />
-          <SummaryMetric label="Participants" value={evidenceInactive ? "—" : String(snapshot?.summary.participantCount ?? "—")} detail="Observable participants" />
-          <SummaryMetric label="Open issues" value={evidenceInactive ? "—" : String(snapshot?.summary.openIssueCount ?? "—")} detail="Requires attention" tone={snapshot && !evidenceInactive ? (snapshot.summary.openIssueCount ? "danger" : "success") : "neutral"} />
-        </div>
-      </section>
-
-      <div className="episode-shell">
-        <nav className="episode-nav" aria-label="Debugger views">
-          <p className="episode-nav-heading">Views</p>
-          {DEBUGGER_VIEWS.map((item) => (
-            <Button key={item} data-episode-view={item} variant={view === item ? "secondary" : "ghost"} aria-current={view === item ? "page" : undefined} onClick={() => setView(item)}>
-              <span className="episode-nav-icon" aria-hidden="true">
-                {viewIcon(item)}
-              </span>
-              <span>{viewLabel(item)}</span>
-              {item === "issues" && snapshot?.summary.openIssueCount ? <b>{snapshot.summary.openIssueCount}</b> : null}
-            </Button>
           ))}
         </nav>
-        <section className="episode-canvas" id="episode-content" role="region" aria-label={`${viewLabel(view)} view`}>
-          <div className="episode-canvas-header">
-            <div>
-              <p className="episode-eyebrow">{evidenceInactive ? "Evidence unavailable" : "Live semantic evidence"}</p>
-              <h2 id="episode-current-view-title">{viewLabel(view)}</h2>
-              <p>{viewDescription(view)}</p>
+        <a className="episode-account-link" href="/account">
+          <span className="episode-account-avatar" aria-hidden="true">
+            DA
+          </span>
+          <span>
+            <strong>Dashboard Account</strong>
+            <small>Current Tenant</small>
+          </span>
+        </a>
+      </aside>
+      <div className="episode-app-main">
+        <header className="episode-topbar episode-header" aria-labelledby="episode-debugger-title">
+          <div className="episode-titlebar">
+            <div className="episode-title-block">
+              <div className="episode-title-line">
+                <h1 id="episode-debugger-title">Episode Debugger</h1>
+                <code className="episode-episode-id" title={normalizedReference}>
+                  {episodeId}
+                </code>
+              </div>
+              <div className="episode-reference-block">
+                <span className="episode-caption">Diagnostic Reference</span>
+                <code title={normalizedReference}>{normalizedReference}</code>
+                <span className="episode-environment">
+                  <strong>{snapshot?.environment ?? "resolving"}</strong>
+                </span>
+                <StatusPill state={evidenceInactive ? "not_observable" : (snapshot?.state ?? "loading")} label={evidenceInactive ? "Inactive" : snapshot ? snapshot.state : "Loading"} />
+              </div>
+              <div className="episode-runtime-inline" aria-label="Episode runtime facts">
+                <span>
+                  cursor{" "}
+                  <b>
+                    {snapshot?.committedCursor ?? "—"}/{snapshot?.projectedCursor ?? "—"}
+                  </b>
+                </span>
+                <span>
+                  activity <b>{liveState.lastActivityAt ? new Date(liveState.lastActivityAt).toLocaleTimeString() : "waiting"}</b>
+                </span>
+                <span>
+                  retention <b>7 days after completion</b>
+                </span>
+              </div>
             </div>
-            <div className="episode-time-controls">
-              <span className="episode-mono">projected {snapshot?.projectedCursor ?? "—"}</span>
-              <Button variant="outline" size="sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>
-                Filters{Object.keys(filter).length > 1 ? ` · ${Object.keys(filter).length - 1}` : ""}
+            <div className="episode-top-actions" role="group" aria-label="Diagnostic actions">
+              <Button variant="outline" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
+                <span aria-hidden="true">↗</span> Copy link
+              </Button>
+              <Button variant="outline" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
+                Copy all
+              </Button>
+              <Button variant="outline" data-episode-action="download-json" onClick={() => void exportController?.start(liveState.lastAppliedCursor)} disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}>
+                <span aria-hidden="true">⇩</span> Export
+              </Button>
+              <StatusPill state={evidenceInactive ? "not_observable" : liveState.phase} label={evidenceInactive ? "Evidence unavailable" : liveState.phase === "live" ? "Live" : streamLabel(liveState)} />
+              <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact")}>
+                Copy for Agent
               </Button>
             </div>
           </div>
-          {filtersOpen && (
-            <FilterPanel
-              draft={filterDraft}
-              setDraft={setFilterDraft}
-              apply={() => {
-                try {
-                  setFilter(buildFilter(filterDraft));
-                  setFilterStatus("loading");
-                  setAnnouncement("Applying filters and loading a fresh bounded snapshot.");
-                } catch (error) {
-                  setFilterStatus("error");
-                  setAnnouncement(error instanceof Error ? error.message : "The filters are invalid.");
-                }
-              }}
-              clear={() => {
-                setFilterDraft({});
-                setFilter(EMPTY_FILTER);
-                setFilterStatus("loading");
-              }}
-            />
-          )}
-          {(filterStatus === "loading" || filterStatus === "ready") && (
-            <p className="episode-filter-status" role="status" data-state={filterStatus}>
-              {filterStatus === "loading" ? "Loading filtered evidence…" : `Filters ready at projected cursor ${snapshot?.projectedCursor ?? "—"}.`}
-            </p>
-          )}
-          {liveState.fillingGap && (
-            <div className="episode-stream-banner" data-episode-gap role="status">
-              <span className="episode-spinner" aria-hidden="true" />
-              Filling durable cursor gap {liveState.fillingGap.fromCursor}–{liveState.fillingGap.toCursor}. Selection, filters, and zoom are preserved.
-            </div>
-          )}
-          {!liveState.fillingGap && liveState.visibleGaps.at(-1) && (
-            <div className="episode-stream-banner" data-episode-gap data-tone="warning" role="status">
-              Preserved visibility gap {liveState.visibleGaps.at(-1)?.fromCursor}–{liveState.visibleGaps.at(-1)?.toCursor}: {liveState.visibleGaps.at(-1)?.reason.replaceAll("_", " ")}.
-            </div>
-          )}
-          {(liveState.phase === "reconnecting" || liveState.phase === "stalled") && (
-            <div className="episode-stream-banner" data-tone="warning" role="status">
-              {liveState.phase === "stalled" ? "Stream heartbeat is late. The product state is separate; evidence may be delayed." : `Reconnecting from confirmed cursor ${liveState.lastAppliedCursor}.`}
-            </div>
-          )}
-          {liveState.phase === "disconnected" && (
-            <div className="episode-stream-banner" data-tone="warning" role="status">
-              <span>The evidence stream is disconnected.</span>
-              <Button data-episode-action="retry-stream" size="sm" variant="outline" onClick={() => setRetryGeneration((value) => value + 1)}>
-                Retry evidence
-              </Button>
-            </div>
-          )}
-          {evidenceInactive ? (
-            <div className="episode-stream-banner" data-tone="warning" role="status">
-              Evidence unavailable: this Diagnostic Reference has no Events, Operations, or Participants to show. The Episode may be inactive or outside the retained evidence window.
-            </div>
-          ) : null}
-          <div className="episode-canvas-body">
-            {snapshot && !evidenceInactive ? (
-              renderView(
-                view,
-                liveState,
-                selection,
-                setSelection,
-                () => {
-                  const controller = controllerRef.current;
-                  if (controller) loadMoreEvents(controller);
-                },
-                () => {
-                  const controller = controllerRef.current;
-                  if (controller) loadMoreOperations(controller);
-                },
-                (nextFilter) => {
-                  setFilterDraft(filterToDraft(nextFilter));
-                  setFilter(nextFilter);
-                  setFilterStatus("loading");
-                  setView("trace");
-                },
-              )
-            ) : evidenceInactive ? (
-              <EvidenceUnavailableView />
-            ) : liveState.phase === "failed" ? (
-              <FailureView error={liveState.error} onRetry={() => setRetryGeneration((value) => value + 1)} />
-            ) : (
-              <LoadingView />
-            )}
+        </header>
+
+        <section className="episode-summary" aria-labelledby="episode-summary-title">
+          <h2 id="episode-summary-title" className="sr-only">
+            Episode summary
+          </h2>
+          <div className="episode-summary-grid">
+            <SummaryMetric label="Duration" value={evidenceInactive ? "—" : formatDuration(snapshot?.run?.elapsedMilliseconds)} detail="Elapsed Episode time" />
+            <SummaryMetric label="Participants" value={evidenceInactive ? "—" : String(participantCount ?? "—")} detail="Observable Participants" />
+            <SummaryMetric label="Errors" value={evidenceInactive ? "—" : String(errorCount ?? "—")} detail="Open diagnostic issues" tone={snapshot && !evidenceInactive && errorCount ? "danger" : "neutral"} />
+            <SummaryMetric label="Dropped frames" value="—" detail="Not projected by this reference" />
           </div>
         </section>
-        {snapshot && !evidenceInactive ? (
-          <DetailsPanel
-            snapshot={snapshot}
-            selection={selection}
-            onSelect={setSelection}
-            onCopy={(text, label) => void copyText(text, label)}
-            onOpenRelated={(nextFilter) => {
-              setFilterDraft(filterToDraft(nextFilter));
-              setFilter(nextFilter);
-              setFilterStatus("loading");
-              setView("trace");
-            }}
-          />
-        ) : evidenceInactive ? (
-          <InactiveDetailsPanel />
-        ) : (
-          <aside className="episode-details-panel">
-            <LoadingLines />
-          </aside>
-        )}
-      </div>
 
-      {exportState.phase !== "idle" && <ExportToast state={exportState} downloadUrl={exportController?.downloadUrl()} onCancel={() => void exportController?.cancel()} />}
-      <div className="episode-announcement" role="status" aria-live="polite">
-        {announcement}
+        <div className="episode-shell">
+          <aside className="episode-filter-rail" aria-labelledby="episode-filter-title">
+            <div className="episode-filter-heading">
+              <h2 id="episode-filter-title">Filters</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterDraft({});
+                  setFilter(EMPTY_FILTER);
+                  setFilterStatus("loading");
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+            <p className="episode-filter-summary">Bounded evidence filters apply to the live stream and paged trace.</p>
+            <Button variant="outline" className="episode-filter-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>
+              {filtersOpen ? "Hide filter fields" : "Filter evidence"}
+              {Object.keys(filter).length > 1 ? ` · ${Object.keys(filter).length - 1}` : ""}
+            </Button>
+            <nav className="episode-nav" aria-label="Debugger views">
+              {DEBUGGER_VIEWS.map((item) => (
+                <Button key={item} data-episode-view={item} variant={view === item ? "secondary" : "ghost"} aria-current={view === item ? "page" : undefined} onClick={() => setView(item)}>
+                  <span className="episode-nav-icon" aria-hidden="true">
+                    {viewIcon(item)}
+                  </span>
+                  <span>{viewLabel(item)}</span>
+                  {item === "issues" && snapshot?.summary.openIssueCount ? <b>{snapshot.summary.openIssueCount}</b> : null}
+                </Button>
+              ))}
+            </nav>
+          </aside>
+          <section className="episode-canvas" id="episode-content" role="region" aria-label={`${viewLabel(view)} view`}>
+            <div className="episode-canvas-header">
+              <div>
+                <h2 id="episode-current-view-title">{viewLabel(view)}</h2>
+                <p>{viewDescription(view)}</p>
+              </div>
+              <div className="episode-time-controls">
+                <span className="episode-mono">projected {snapshot?.projectedCursor ?? "—"}</span>
+                <Button variant="outline" size="sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>
+                  Filters{Object.keys(filter).length > 1 ? ` · ${Object.keys(filter).length - 1}` : ""}
+                </Button>
+              </div>
+            </div>
+            {filtersOpen && (
+              <FilterPanel
+                draft={filterDraft}
+                setDraft={setFilterDraft}
+                apply={() => {
+                  try {
+                    setFilter(buildFilter(filterDraft));
+                    setFilterStatus("loading");
+                    setAnnouncement("Applying filters and loading a fresh bounded snapshot.");
+                  } catch (error) {
+                    setFilterStatus("error");
+                    setAnnouncement(error instanceof Error ? error.message : "The filters are invalid.");
+                  }
+                }}
+                clear={() => {
+                  setFilterDraft({});
+                  setFilter(EMPTY_FILTER);
+                  setFilterStatus("loading");
+                }}
+              />
+            )}
+            {(filterStatus === "loading" || filterStatus === "ready") && (
+              <p className="episode-filter-status" role="status" data-state={filterStatus}>
+                {filterStatus === "loading" ? "Loading filtered evidence…" : `Filters ready at projected cursor ${snapshot?.projectedCursor ?? "—"}.`}
+              </p>
+            )}
+            {liveState.fillingGap && (
+              <div className="episode-stream-banner" data-episode-gap role="status">
+                <span className="episode-spinner" aria-hidden="true" />
+                Filling durable cursor gap {liveState.fillingGap.fromCursor}–{liveState.fillingGap.toCursor}. Selection, filters, and zoom are preserved.
+              </div>
+            )}
+            {!liveState.fillingGap && liveState.visibleGaps.at(-1) && (
+              <div className="episode-stream-banner" data-episode-gap data-tone="warning" role="status">
+                Preserved visibility gap {liveState.visibleGaps.at(-1)?.fromCursor}–{liveState.visibleGaps.at(-1)?.toCursor}: {liveState.visibleGaps.at(-1)?.reason.replaceAll("_", " ")}.
+              </div>
+            )}
+            {(liveState.phase === "reconnecting" || liveState.phase === "stalled") && (
+              <div className="episode-stream-banner" data-tone="warning" role="status">
+                {liveState.phase === "stalled" ? "Stream heartbeat is late. The product state is separate; evidence may be delayed." : `Reconnecting from confirmed cursor ${liveState.lastAppliedCursor}.`}
+              </div>
+            )}
+            {liveState.phase === "disconnected" && (
+              <div className="episode-stream-banner" data-tone="warning" role="status">
+                <span>The evidence stream is disconnected.</span>
+                <Button data-episode-action="retry-stream" size="sm" variant="outline" onClick={() => setRetryGeneration((value) => value + 1)}>
+                  Retry evidence
+                </Button>
+              </div>
+            )}
+            {evidenceInactive ? (
+              <div className="episode-stream-banner" data-tone="warning" role="status">
+                Evidence unavailable: this Diagnostic Reference has no Events, Operations, or Participants to show. The Episode may be inactive or outside the retained evidence window.
+              </div>
+            ) : null}
+            <div className="episode-canvas-body">
+              {snapshot && !evidenceInactive ? (
+                renderView(
+                  view,
+                  liveState,
+                  selection,
+                  setSelection,
+                  () => {
+                    const controller = controllerRef.current;
+                    if (controller) loadMoreEvents(controller);
+                  },
+                  () => {
+                    const controller = controllerRef.current;
+                    if (controller) loadMoreOperations(controller);
+                  },
+                  (nextFilter) => {
+                    setFilterDraft(filterToDraft(nextFilter));
+                    setFilter(nextFilter);
+                    setFilterStatus("loading");
+                    setView("trace");
+                  },
+                )
+              ) : evidenceInactive ? (
+                <EvidenceUnavailableView />
+              ) : liveState.phase === "failed" ? (
+                <FailureView error={liveState.error} onRetry={() => setRetryGeneration((value) => value + 1)} />
+              ) : (
+                <LoadingView />
+              )}
+            </div>
+          </section>
+          {snapshot && !evidenceInactive ? (
+            <DetailsPanel
+              snapshot={snapshot}
+              selection={selection}
+              onSelect={setSelection}
+              onCopy={(text, label) => void copyText(text, label)}
+              onOpenRelated={(nextFilter) => {
+                setFilterDraft(filterToDraft(nextFilter));
+                setFilter(nextFilter);
+                setFilterStatus("loading");
+                setView("trace");
+              }}
+            />
+          ) : evidenceInactive ? (
+            <InactiveDetailsPanel />
+          ) : (
+            <aside className="episode-details-panel">
+              <LoadingLines />
+            </aside>
+          )}
+        </div>
+
+        <EvidenceTable snapshot={snapshot} operations={liveState.operations} events={liveState.events} selection={selection} onSelect={setSelection} onShowView={setView} />
+
+        {exportState.phase !== "idle" && <ExportToast state={exportState} downloadUrl={exportController?.downloadUrl()} onCancel={() => void exportController?.cancel()} />}
+        <div className="episode-announcement" role="status" aria-live="polite">
+          {announcement}
+        </div>
+        <textarea ref={fallbackRef} className="episode-clipboard-fallback" aria-label="Selected copy fallback" readOnly value={fallbackText} onChange={() => undefined} />
+        <ToastProvider>
+          <ToastViewport />
+        </ToastProvider>
       </div>
-      <textarea ref={fallbackRef} className="episode-clipboard-fallback" aria-label="Selected copy fallback" readOnly value={fallbackText} onChange={() => undefined} />
-      <ToastProvider>
-        <ToastViewport />
-      </ToastProvider>
-    </div>
+    </main>
   );
 }
 
@@ -449,6 +501,119 @@ function SummaryMetric({ label, value, detail, tone = "neutral" }: { label: stri
       <strong className="episode-mono">{value}</strong>
       <small>{detail}</small>
     </article>
+  );
+}
+
+function EvidenceTable({
+  snapshot,
+  operations,
+  events,
+  selection,
+  onSelect,
+  onShowView,
+}: {
+  snapshot?: DiagnosticSnapshotV1;
+  operations: readonly DiagnosticOperationDetail[];
+  events: readonly AcceptedDiagnosticEvent[];
+  selection?: DebuggerSelection;
+  onSelect: (selection: DebuggerSelection) => void;
+  onShowView: (view: DebuggerView) => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"traces" | "events" | "entities">("traces");
+  const rows = [
+    ...operations.map((operation) => ({ kind: "operation" as const, key: `operation-${operation.id}`, time: operation.startedAt, name: operation.kind, id: operation.id, source: operation.source, state: operation.state, duration: formatDuration(operation.durationMilliseconds), value: operation })),
+    ...events.map((event) => ({ kind: "event" as const, key: `event-${event.eventId}`, time: event.occurredAt, name: event.name, id: event.eventId, source: event.source, state: event.state, duration: "unknown: not available", value: event })),
+  ].sort((left, right) => Date.parse(left.time) - Date.parse(right.time));
+  const tabRows = activeTab === "events" ? rows.filter((row) => row.kind === "event") : activeTab === "traces" ? rows : [];
+  const visibleRows = tabRows.slice(0, 25);
+  const totalRows = activeTab === "entities" ? (snapshot?.participants?.length ?? 0) : tabRows.length;
+
+  return (
+    <section className="episode-evidence-table" aria-label="Episode evidence table">
+      <div className="episode-evidence-table-heading">
+        <div className="episode-evidence-tabs" role="tablist" aria-label="Evidence tables">
+          <Button
+            role="tab"
+            aria-selected={activeTab === "traces"}
+            data-episode-table-tab="traces"
+            variant={activeTab === "traces" ? "secondary" : "ghost"}
+            onClick={() => {
+              setActiveTab("traces");
+              onShowView("trace");
+            }}
+          >
+            Traces
+          </Button>
+          <Button
+            role="tab"
+            aria-selected={activeTab === "events"}
+            data-episode-table-tab="events"
+            variant={activeTab === "events" ? "secondary" : "ghost"}
+            onClick={() => {
+              setActiveTab("events");
+              onShowView("trace");
+            }}
+          >
+            Events
+          </Button>
+          <Button
+            role="tab"
+            aria-selected={activeTab === "entities"}
+            data-episode-table-tab="entities"
+            variant={activeTab === "entities" ? "secondary" : "ghost"}
+            onClick={() => {
+              setActiveTab("entities");
+              onShowView("participants");
+            }}
+          >
+            Entities
+          </Button>
+        </div>
+        <span className="episode-table-count">
+          {visibleRows.length} of {totalRows} bounded rows
+        </span>
+      </div>
+      <div className="episode-table-wrap episode-evidence-table-wrap">
+        {visibleRows.length === 0 ? (
+          <p className="episode-table-empty">{activeTab === "entities" ? "Entity projections are available in the Participants view." : "No bounded Event or Operation evidence is available for this reference."}</p>
+        ) : (
+          <table>
+            <caption className="sr-only">Episode evidence table</caption>
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Type</th>
+                <th scope="col">Evidence</th>
+                <th scope="col">Source</th>
+                <th scope="col">Duration</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row) => {
+                const selected = row.kind === "operation" ? selection?.kind === "operation" && selection.value.id === row.id : selection?.kind === "event" && selection.value.eventId === row.id;
+                return (
+                  <tr key={row.key} aria-selected={selected}>
+                    <td className="episode-mono">{formatTime(row.time)}</td>
+                    <td>{row.kind}</td>
+                    <td>
+                      <Button size="xs" variant="ghost" onClick={() => onSelect({ kind: row.kind, value: row.value } as DebuggerSelection)}>
+                        {row.name}
+                      </Button>
+                    </td>
+                    <td>{row.source}</td>
+                    <td className="episode-mono">{row.duration}</td>
+                    <td>
+                      <StatusPill state={row.state} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -607,7 +772,7 @@ function Refusal({ title, detail }: { title: string; detail: string }) {
           <i />
           <i />
         </span>
-        <p className="episode-eyebrow">Episode Debugger</p>
+        <p className="episode-caption">Episode Debugger</p>
         <h1 id="episode-refusal-title">{title}</h1>
         <p>{detail}</p>
       </div>
@@ -668,7 +833,7 @@ function InactiveDetailsPanel() {
   return (
     <aside className="episode-details-panel" aria-label="Diagnostic details">
       <section className="episode-empty" data-episode-evidence-state="inactive">
-        <p className="episode-eyebrow">Evidence state</p>
+        <p className="episode-caption">Evidence state</p>
         <h2>Evidence inactive</h2>
         <p>No Events, Operations, or Participants are available. No positive state is claimed without evidence.</p>
       </section>

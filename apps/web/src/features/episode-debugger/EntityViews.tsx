@@ -128,7 +128,7 @@ export function EpilogueView({ snapshot, onSelect }: { snapshot: DiagnosticSnaps
     <div className="episode-view-stack">
       <div className="episode-epilogue-summary">
         <div>
-          <p className="episode-eyebrow">Post-Episode work</p>
+          <p className="episode-caption">Post-Episode work</p>
           <h2>Epilogue</h2>
         </div>
         <StatusPill state={epilogue?.state ?? "pending"} />

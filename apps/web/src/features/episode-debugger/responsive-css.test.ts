@@ -16,15 +16,22 @@ describe("Episode Debugger responsive contract", () => {
     expect(css).toContain("var(--danger-foreground)");
   });
 
-  it("keeps the two-level shell and controls usable on narrow screens", () => {
-    expect(css).toContain(".episode-contextbar");
+  it("keeps the app shell and three-column workspace usable on narrow screens", () => {
+    expect(css).toContain(".episode-app-sidebar");
+    expect(css).toContain(".episode-filter-rail");
+    expect(css).toContain(".episode-evidence-table");
     expect(css).toContain(".episode-titlebar");
     expect(css).toContain(".episode-summary-grid");
-    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain("@media (max-width: 620px)");
     expect(css).toContain("overflow-x: auto");
     expect(css).toContain("min-block-size: 42px");
     expect(css).toContain(".episode-debugger > *");
     expect(css).toContain("max-inline-size: 100%");
+  });
+
+  it("does not ship the eyebrow or sidebar section-bar patterns", () => {
+    expect(css).not.toContain(".episode-eyebrow");
+    expect(css).not.toContain(".episode-nav-heading");
   });
 
   it("provides a visible focus treatment for every interactive debugger control", () => {

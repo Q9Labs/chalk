@@ -45,7 +45,7 @@ function IssuesSummary({ snapshot, selection, onSelect }: { snapshot: Diagnostic
     <section className="episode-details-issues" aria-labelledby="persistent-issues-title">
       <div className="episode-details-heading">
         <div>
-          <p className="episode-eyebrow">Persistent feed</p>
+          <p className="episode-caption">Persistent feed</p>
           <h2 id="persistent-issues-title">Issues</h2>
         </div>
         <span className="episode-issue-count">{open.length}</span>
@@ -73,7 +73,7 @@ function Overview({ snapshot }: { snapshot: DiagnosticSnapshotV1 }) {
     <section>
       <div className="episode-details-heading">
         <div>
-          <p className="episode-eyebrow">Selection</p>
+          <p className="episode-caption">Selection</p>
           <h2>Episode overview</h2>
         </div>
         <StatusPill state={snapshot.state} />
@@ -108,7 +108,7 @@ function OperationDetails({ operation, onCopy, onOpenRelated }: { operation: Ext
   ] as const;
   return (
     <section>
-      <DetailsTitle eyebrow="OperationDetail/v1" title={operation.kind} state={operation.state} />
+      <DetailsTitle caption="OperationDetail/v1" title={operation.kind} state={operation.state} />
       <FieldList
         fields={[
           ["Operation ID", operation.id],
@@ -177,7 +177,7 @@ function IssueDetails({ issue, onCopy, onOpenRelated }: { issue: Extract<Debugge
   const affected = (issue as typeof issue & { affected?: Readonly<{ kind: "participant" | "service"; identifier: SafeIdentifier }> }).affected;
   return (
     <section>
-      <DetailsTitle eyebrow="IssueDetail/v1" title={issue.summary} state={issue.severity} />
+      <DetailsTitle caption="IssueDetail/v1" title={issue.summary} state={issue.severity} />
       <FieldList
         fields={[
           ["Issue state", issue.state],
@@ -210,7 +210,7 @@ function IssueDetails({ issue, onCopy, onOpenRelated }: { issue: Extract<Debugge
 function EventDetails({ event, onCopy, onOpenRelated }: { event: Extract<DebuggerSelection, { kind: "event" }>["value"]; onCopy: (text: string, label: string) => void; onOpenRelated: (filter: DiagnosticFilterV1) => void }) {
   return (
     <section>
-      <DetailsTitle eyebrow={`Event cursor ${event.cursor}`} title={event.name} state={event.state} />
+      <DetailsTitle caption={`Event cursor ${event.cursor}`} title={event.name} state={event.state} />
       <FieldList
         fields={[
           ["Phase", event.phase],
@@ -252,7 +252,7 @@ function EventDetails({ event, onCopy, onOpenRelated }: { event: Extract<Debugge
 function BranchDetails({ branch, onCopy }: { branch: Extract<DebuggerSelection, { kind: "branch" }>["value"]; onCopy: (text: string, label: string) => void }) {
   return (
     <section>
-      <DetailsTitle eyebrow="BranchDetail/v1" title={branch.kind} state={branch.state} />
+      <DetailsTitle caption="BranchDetail/v1" title={branch.kind} state={branch.state} />
       <FieldList
         fields={[
           ["Lease ends", formatTime(branch.leaseEndsAt)],
@@ -277,7 +277,7 @@ function BranchDetails({ branch, onCopy }: { branch: Extract<DebuggerSelection, 
 function ParticipantDetails({ participant, onOpenRelated }: { participant: Extract<DebuggerSelection, { kind: "participant" }>["value"]; onOpenRelated: (filter: DiagnosticFilterV1) => void }) {
   return (
     <section>
-      <DetailsTitle eyebrow="ParticipantProjection/v1" title={participant.anonymousLabel} state={participant.state} />
+      <DetailsTitle caption="ParticipantProjection/v1" title={participant.anonymousLabel} state={participant.state} />
       <FieldList
         fields={[
           ["Visibility", participant.visibility],
@@ -296,7 +296,7 @@ function ParticipantDetails({ participant, onOpenRelated }: { participant: Extra
 function EdgeDetails({ snapshot, edge, onSelect }: { snapshot: DiagnosticSnapshotV1; edge: Extract<DebuggerSelection, { kind: "edge" }>["value"]; onSelect: (selection: DebuggerSelection) => void }) {
   return (
     <section>
-      <DetailsTitle eyebrow="Causal edge" title={edge.id} state={edge.state} />
+      <DetailsTitle caption="Causal edge" title={edge.id} state={edge.state} />
       <FieldList
         fields={[
           ["State", edge.state],
@@ -334,11 +334,11 @@ function EdgeDetails({ snapshot, edge, onSelect }: { snapshot: DiagnosticSnapsho
   );
 }
 
-function DetailsTitle({ eyebrow, title, state }: { eyebrow: string; title: string; state: string }) {
+function DetailsTitle({ caption, title, state }: { caption: string; title: string; state: string }) {
   return (
     <div className="episode-details-heading">
       <div>
-        <p className="episode-eyebrow">{eyebrow}</p>
+        <p className="episode-caption">{caption}</p>
         <h2>{title}</h2>
       </div>
       <StatusPill state={state} />

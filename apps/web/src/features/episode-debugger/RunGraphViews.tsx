@@ -58,7 +58,7 @@ export function RunView({ snapshot, onSelect }: { snapshot: DiagnosticSnapshotV1
       <section aria-labelledby="participant-lanes-title">
         <div className="episode-section-heading">
           <div>
-            <p className="episode-eyebrow">Receive order</p>
+            <p className="episode-caption">Receive order</p>
             <h2 id="participant-lanes-title">Participant lanes</h2>
           </div>
           <span className="episode-mono">cursor {snapshot.projectedCursor}</span>
