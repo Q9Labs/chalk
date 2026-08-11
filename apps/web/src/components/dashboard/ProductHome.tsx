@@ -38,15 +38,17 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
   const spacesByID = useMemo(() => new Map((state?.spaces ?? []).map((space) => [space.id, space])), [state]);
   const recentEpisodes = state?.episodes.slice(0, 5) ?? [];
   const liveEpisodeCount = state?.episodes.filter((episode) => episode.status !== "ended").length ?? 0;
+  const liveEpisodes = state?.episodes.filter((episode) => episode.status !== "ended").slice(0, 5) ?? [];
+  const activity = useMemo(() => activityPoints(state?.episodes ?? []), [state]);
 
   return (
     <div className="dashboard-page home-page">
       <header className="dashboard-page-header home-heading">
         <div>
-          <h1>
-            Good {dayPeriod()}, {firstName(account.name)}.
-          </h1>
-          <p>Continue where you left off across your Spaces and Episodes.</p>
+          <h1>Overview</h1>
+          <p>
+            Good {dayPeriod()}, {firstName(account.name)}. Continue where you left off across your Spaces and Episodes.
+          </p>
         </div>
         <Link className="dashboard-button primary home-quick-link" to="/spaces">
           Open Spaces <Icon name="arrow" />
@@ -64,66 +66,61 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
       ) : null}
 
       <section className="home-summary" aria-label="Tenant overview">
-        <SummaryCard label="Spaces in view" value={state ? String(state.spaces.length) : "—"} detail="Durable places for recurring work" />
-        <SummaryCard label="Live now" value={state ? String(liveEpisodeCount) : "—"} detail={liveEpisodeCount === 1 ? "1 Episode is active" : `${liveEpisodeCount} Episodes are active`} tone="live" />
-        <SummaryCard label="Recent Episodes" value={state ? String(state.episodes.length) : "—"} detail="Loaded from the selected Tenant" />
+        <SummaryCard icon="spaces" label="Spaces in view" value={state ? String(state.spaces.length) : "—"} detail="Durable places for recurring work" />
+        <SummaryCard icon="episodes" label="Live Episodes" value={state ? String(liveEpisodeCount) : "—"} detail={liveEpisodeCount === 1 ? "1 Episode is active" : `${liveEpisodeCount} Episodes are active`} tone="live" />
+        <SummaryCard icon="activity" label="Recent Episodes" value={state ? String(state.episodes.length) : "—"} detail="Loaded from the selected Tenant" />
       </section>
 
-      <section className="home-section">
-        <div className="section-title-row">
-          <h2>Your Spaces</h2>
-          <Link to="/spaces">
-            See all <Icon name="arrow" />
-          </Link>
-        </div>
-        {!state && !error ? <HomeLoading label="Loading Spaces" /> : null}
-        {state?.spaces.length === 0 ? (
-          <div className="dashboard-state dashboard-state-empty">
-            <h3>Create the first place your work can return to.</h3>
-            <p>A Space stays available between live Episodes and keeps its configuration and history together.</p>
-            <Link className="dashboard-button primary" to="/spaces">
-              Create a Space
+      <div className="home-overview-grid">
+        <section className="home-panel home-activity-panel" aria-labelledby="activity-heading">
+          <div className="section-title-row">
+            <div>
+              <h2 id="activity-heading">Activity</h2>
+              <p>Episodes started over the last seven days.</p>
+            </div>
+            <Link to="/episodes">
+              View history <Icon name="arrow" />
             </Link>
           </div>
-        ) : null}
-        {state?.spaces.length ? (
-          <div className="space-card-grid">
-            {state.spaces.slice(0, 4).map((space, index) => {
-              const episodes = episodesBySpace.get(space.id) ?? [];
-              const live = episodes.some((episode) => episode.status !== "ended");
-              return (
-                <article className={`space-card accent-${accent(index)}`} key={space.id}>
-                  <div className="space-card-top">
-                    <span className="space-glyph" aria-hidden="true">
-                      {space.name.slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className={live ? "status-live" : "status-idle"}>{live ? "Episode live" : "Ready"}</span>
-                  </div>
-                  <h3>
-                    <Link to={dashboardSpaceHref(space)}>{space.name}</Link>
-                  </h3>
-                  <p>{spaceDescription(space)}</p>
-                  <footer>
-                    <span>{episodes.length === 1 ? "1 Episode" : `${episodes.length} Episodes`}</span>
-                    <span className="space-card-actions">
-                      <Link to={dashboardSpaceHref(space)}>View details</Link>
-                      <a className="space-card-join" href={spaceHrefBuilder(space)}>
-                        Join Space <Icon name="arrow" />
-                      </a>
-                    </span>
-                  </footer>
-                </article>
-              );
-            })}
+          {!state && !error ? <HomeLoading label="Loading activity" /> : null}
+          {state ? <ActivityChart points={activity} /> : null}
+        </section>
+
+        <section className="home-panel home-live-panel" aria-labelledby="live-heading">
+          <div className="section-title-row">
+            <h2 id="live-heading">Live now</h2>
+            <Link to="/episodes">View all</Link>
           </div>
-        ) : null}
-      </section>
+          {!state && !error ? <HomeLoading label="Loading live Episodes" /> : null}
+          {state && liveEpisodes.length === 0 ? <p className="dashboard-muted-copy">No live Episodes right now.</p> : null}
+          {liveEpisodes.length ? (
+            <div className="home-live-list">
+              {liveEpisodes.map((episode) => {
+                const space = spacesByID.get(episode.space_id);
+                return (
+                  <a className="home-live-row" href={episodeHistoryHref(episode)} key={episode.id}>
+                    <span className="home-live-icon">
+                      <Icon name="episodes" />
+                    </span>
+                    <span className="home-live-copy">
+                      <strong>{space?.name ?? "Space Episode"}</strong>
+                      <small>{space?.slug ?? "Space slug unavailable"}</small>
+                    </span>
+                    <span className="status-live">{episode.status === "ending" ? "Ending" : "Live"}</span>
+                    <Icon name="arrow" />
+                  </a>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+      </div>
 
       <div className="home-lower-grid">
-        <section className="home-section recent-panel">
+        <section className="home-panel recent-panel" aria-labelledby="recent-heading">
           <div className="section-title-row">
-            <h2>Recent Episodes</h2>
-            <Link to="/episodes">History</Link>
+            <h2 id="recent-heading">Recent Episodes</h2>
+            <Link to="/episodes">View all</Link>
           </div>
           {!state && !error ? <HomeLoading label="Loading Episodes" /> : null}
           {state && recentEpisodes.length === 0 ? <p className="dashboard-muted-copy">Your first live Episode will appear here.</p> : null}
@@ -146,62 +143,131 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
             </div>
           ) : null}
         </section>
-        <aside className="home-section home-help-panel" aria-labelledby="home-help-title">
+
+        <section className="home-panel spaces-panel" aria-labelledby="spaces-heading">
           <div className="section-title-row">
-            <h2 id="home-help-title">Quick actions</h2>
+            <h2 id="spaces-heading">Spaces</h2>
+            <Link to="/spaces">View all</Link>
           </div>
-          <div className="home-action-list">
-            <Link to="/spaces">
-              <span className="home-action-icon">
-                <Icon name="plus" />
-              </span>
-              <span>
-                <strong>Create or manage a Space</strong>
-                <small>Change access, timing, and join settings.</small>
-              </span>
-              <Icon name="arrow" />
-            </Link>
-            <Link to="/episodes">
-              <span className="home-action-icon">
-                <Icon name="episodes" />
-              </span>
-              <span>
-                <strong>Review Episode history</strong>
-                <small>Open immutable details and diagnostics.</small>
-              </span>
-              <Icon name="arrow" />
-            </Link>
-            <Link to="/developer">
-              <span className="home-action-icon">
-                <Icon name="developer" />
-              </span>
-              <span>
-                <strong>Set up the SDK</strong>
-                <small>Manage API keys and developer tools.</small>
-              </span>
-              <Icon name="arrow" />
-            </Link>
-          </div>
-          <div className="dashboard-state dashboard-state-quiet home-help-note">
-            <div>
-              <h3>Joining is separate from managing.</h3>
-              <p>Use Join Space to enter live work. Use View details to manage the durable Space.</p>
+          {!state && !error ? <HomeLoading label="Loading Spaces" /> : null}
+          {state?.spaces.length === 0 ? <p className="dashboard-muted-copy">Create your first Space to give recurring work a home.</p> : null}
+          {state?.spaces.length ? (
+            <div className="home-spaces-list">
+              {state.spaces.slice(0, 5).map((space) => {
+                const episodes = episodesBySpace.get(space.id) ?? [];
+                const live = episodes.some((episode) => episode.status !== "ended");
+                return (
+                  <article className="home-space-row" key={space.id}>
+                    <span className="space-glyph" aria-hidden="true">
+                      {space.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="home-space-copy">
+                      <Link to={dashboardSpaceHref(space)}>
+                        <strong>{space.name}</strong>
+                      </Link>
+                      <small>{space.slug}</small>
+                    </span>
+                    <span className={live ? "status-live" : "status-idle"}>{live ? "Live" : "Ready"}</span>
+                    <Link className="home-space-details" to={dashboardSpaceHref(space)}>
+                      View details
+                    </Link>
+                    <a className="home-space-join" href={spaceHrefBuilder(space)} aria-label={`Join ${space.name}`}>
+                      Join Space <Icon name="arrow" />
+                    </a>
+                  </article>
+                );
+              })}
             </div>
-          </div>
-        </aside>
+          ) : null}
+        </section>
       </div>
+
+      <aside className="home-help-panel" aria-labelledby="home-help-title">
+        <div className="section-title-row">
+          <h2 id="home-help-title">Quick actions</h2>
+        </div>
+        <div className="home-action-list">
+          <Link to="/spaces">
+            <span className="home-action-icon">
+              <Icon name="plus" />
+            </span>
+            <span>
+              <strong>Create or manage a Space</strong>
+              <small>Change access, timing, and join settings.</small>
+            </span>
+            <Icon name="arrow" />
+          </Link>
+          <Link to="/episodes">
+            <span className="home-action-icon">
+              <Icon name="episodes" />
+            </span>
+            <span>
+              <strong>Review Episode history</strong>
+              <small>Open immutable details and diagnostics.</small>
+            </span>
+            <Icon name="arrow" />
+          </Link>
+          <Link to="/developer">
+            <span className="home-action-icon">
+              <Icon name="developer" />
+            </span>
+            <span>
+              <strong>Set up the SDK</strong>
+              <small>Manage API keys and developer tools.</small>
+            </span>
+            <Icon name="arrow" />
+          </Link>
+        </div>
+      </aside>
     </div>
   );
 }
 
-function SummaryCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: "live" }) {
+function SummaryCard({ icon, label, value, detail, tone }: { icon: string; label: string; value: string; detail: string; tone?: "live" }) {
   return (
     <article className={`home-summary-card${tone ? ` is-${tone}` : ""}`}>
+      <span className="home-summary-icon">
+        <Icon name={icon} />
+      </span>
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
     </article>
   );
+}
+
+function ActivityChart({ points }: { points: readonly ActivityPoint[] }) {
+  const max = Math.max(1, ...points.map((point) => point.count));
+  return (
+    <div className="home-activity-chart" role="img" aria-label={`Episode activity chart with ${points.reduce((total, point) => total + point.count, 0)} Episodes over seven days`}>
+      {points.map((point) => (
+        <div className="home-activity-point" key={point.key}>
+          <span style={{ blockSize: `${Math.max(8, (point.count / max) * 100)}%` }} title={`${point.count} Episodes`} />
+          <small>{point.label}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type ActivityPoint = { key: string; label: string; count: number };
+
+function activityPoints(episodes: readonly DashboardEpisode[]): ActivityPoint[] {
+  const today = new Date();
+  const points: ActivityPoint[] = [];
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const date = new Date(today);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(today.getDate() - offset);
+    const key = date.toISOString().slice(0, 10);
+    points.push({ key, label: new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date), count: episodes.filter((episode) => sameCalendarDay(episode.started_at, date)).length });
+  }
+  return points;
+}
+
+function sameCalendarDay(value: string, date: Date): boolean {
+  const episodeDate = new Date(value);
+  return episodeDate.getFullYear() === date.getFullYear() && episodeDate.getMonth() === date.getMonth() && episodeDate.getDate() === date.getDate();
 }
 
 function HomeLoading({ label }: { label: string }) {
@@ -231,16 +297,4 @@ function relativeTime(value: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
-}
-
-function spaceDescription(space: DashboardSpace): string {
-  if (space.metadata && typeof space.metadata === "object" && !Array.isArray(space.metadata)) {
-    const description = (space.metadata as Record<string, unknown>).description;
-    if (typeof description === "string" && description.trim()) return description;
-  }
-  return `A durable home for recurring Episodes at /${space.slug}.`;
-}
-
-function accent(index: number): "green" | "blue" | "yellow" | "pink" {
-  return (["green", "blue", "yellow", "pink"] as const)[index % 4]!;
 }

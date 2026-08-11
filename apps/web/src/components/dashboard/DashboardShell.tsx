@@ -3,13 +3,15 @@ import { useEffect, useState } from "react";
 import { useDashboardAccount } from "./DashboardAccount";
 import { NewSpaceDialog } from "./NewSpaceDialog";
 
-const primaryNavigation = [
+const dashboardNavigation = [
   { to: "/home", label: "Overview", icon: "home" },
   { to: "/spaces", label: "Spaces", icon: "spaces" },
   { to: "/episodes", label: "Episodes", icon: "episodes" },
+  { to: "/artifacts", label: "Artifacts", icon: "artifacts" },
+  { to: "/people", label: "People", icon: "people" },
+  { to: "/developer", label: "Developer", icon: "developer" },
+  { to: "/activity", label: "Activity", icon: "activity" },
 ] as const;
-
-const utilityNavigation = [{ to: "/developer", label: "Developer", icon: "developer" }] as const;
 
 export function DashboardShell() {
   const navigate = useNavigate();
@@ -40,12 +42,23 @@ export function DashboardShell() {
     setMobileNavOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileNavOpen(false);
+        setTenantMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
+
   return (
     <div className="dashboard-shell">
       <a className="dashboard-skip-link" href="#dashboard-content">
         Skip to dashboard content
       </a>
-      <aside className={`dashboard-sidebar${mobileNavOpen ? " is-open" : ""}`} aria-label="Dashboard navigation">
+      <aside id="dashboard-sidebar" className={`dashboard-sidebar${mobileNavOpen ? " is-open" : ""}`} aria-label="Dashboard navigation">
         <div className="dashboard-brand-row">
           <Link to="/home" className="dashboard-brand" aria-label="Chalk home">
             <img src="/brand/chalk/chalk-logo.svg" alt="" />
@@ -98,16 +111,8 @@ export function DashboardShell() {
           <kbd>N</kbd>
         </button>
 
-        <nav className="dashboard-nav" aria-label="Workspace">
-          <p>Workspace</p>
-          {primaryNavigation.map((item) => (
-            <DashboardLink key={item.to} {...item} pathname={pathname} />
-          ))}
-        </nav>
-
-        <nav className="dashboard-nav dashboard-nav-utility" aria-label="Tools">
-          <p>Tools</p>
-          {utilityNavigation.map((item) => (
+        <nav className="dashboard-nav" aria-label="Dashboard">
+          {dashboardNavigation.map((item) => (
             <DashboardLink key={item.to} {...item} pathname={pathname} />
           ))}
         </nav>
@@ -132,7 +137,7 @@ export function DashboardShell() {
 
       <main className="dashboard-main" id="dashboard-content">
         <header className="dashboard-mobile-header">
-          <button className="dashboard-mobile-menu" type="button" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}>
+          <button className="dashboard-mobile-menu" type="button" aria-label="Open navigation" aria-controls="dashboard-sidebar" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}>
             <Icon name="menu" />
           </button>
           <Link to="/home" className="dashboard-brand">

@@ -12,6 +12,9 @@ describe("product Home contract", () => {
     expect(source).toContain("dashboardSpaceHref");
     expect(source).toContain("Open history");
     expect(source).toContain("episodeHistoryHref");
+    expect(source).toContain("ActivityChart");
+    expect(source).toContain("home-summary");
+    expect(source).toContain("Live now");
     expect(source).toContain("!state && !error");
     expect(source).not.toContain('from "./dashboard-data"');
     expect(source).not.toContain('className="eyebrow"');
