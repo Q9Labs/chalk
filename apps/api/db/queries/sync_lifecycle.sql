@@ -41,7 +41,7 @@ insert into episodes (
     spaces.id,
     spaces.tenant_id,
     sqlc.narg(created_by_user_id),
-    sqlc.narg(started_at),
+    coalesce(sqlc.narg(started_at)::timestamptz, now()),
     sqlc.arg(deadline_at),
     jsonb_build_object(
         'roles', coalesce((

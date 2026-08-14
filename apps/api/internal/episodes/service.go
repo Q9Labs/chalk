@@ -152,9 +152,10 @@ type SelfLeaveInput struct {
 }
 
 type SelfJoinResult struct {
-	Episode     Episode
-	Participant Participant
-	Intent      Intent
+	Episode        Episode
+	Participant    Participant
+	Intent         Intent
+	EpisodeCreated bool
 }
 
 type SelfLeaveResult struct {
@@ -344,7 +345,14 @@ func (s Service) JoinSelf(ctx context.Context, input SelfJoinInput) (SelfJoinRes
 	if !ok {
 		return SelfJoinResult{}, ErrSynchronousCommit
 	}
-	return repository.JoinSelf(ctx, input)
+	result, err := repository.JoinSelf(ctx, input)
+	if err != nil {
+		return SelfJoinResult{}, err
+	}
+	if result.EpisodeCreated {
+		s.observeEpisodeCommitted(result.Episode)
+	}
+	return result, nil
 }
 
 func (s Service) FindSelf(ctx context.Context, input SelfAccessInput) (SelfJoinResult, error) {
@@ -389,13 +397,16 @@ func (s Service) CreateEpisode(ctx context.Context, input CreateEpisodeInput) (E
 	if err != nil {
 		return Episode{}, err
 	}
-	if s.observer != nil {
-		func() {
-			defer func() { _ = recover() }()
-			s.observer.EpisodeCommitted(episode)
-		}()
-	}
+	s.observeEpisodeCommitted(episode)
 	return episode, nil
+}
+
+func (s Service) observeEpisodeCommitted(episode Episode) {
+	if s.observer == nil {
+		return
+	}
+	defer func() { _ = recover() }()
+	s.observer.EpisodeCommitted(episode)
 }
 
 func (s Service) GetEpisode(ctx context.Context, tenantID, spaceID, episodeID utilities.ID) (Episode, error) {

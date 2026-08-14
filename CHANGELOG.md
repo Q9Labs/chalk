@@ -28,6 +28,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fixed named Dashboard joins so broker invite capabilities cannot silently
+  connect Participants to a different Space, and ensured every Episode's
+  authoritative start time, webhook Event, history row, and Episode Diagnostics
+  root commit together.
 - Stabilized the landing hero headline, removed decorative eyebrow labels from
   the primary product surfaces, and made the local SVGL marks valid standalone
   browser assets.

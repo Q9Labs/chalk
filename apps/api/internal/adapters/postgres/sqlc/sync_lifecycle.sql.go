@@ -268,7 +268,7 @@ insert into episodes (
     spaces.id,
     spaces.tenant_id,
     $3,
-    $4,
+    coalesce($4::timestamptz, now()),
     $5,
     jsonb_build_object(
         'roles', coalesce((

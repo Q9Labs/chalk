@@ -12,6 +12,7 @@ import (
 
 type selfRepository struct {
 	joinInput   episodes.SelfJoinInput
+	joinResult  episodes.SelfJoinResult
 	accessInput episodes.SelfAccessInput
 	leaveInput  episodes.SelfLeaveInput
 }
@@ -39,6 +40,9 @@ func (r *selfRepository) SetDeadline(context.Context, episodes.SetDeadlineInput)
 }
 func (r *selfRepository) JoinSelf(_ context.Context, input episodes.SelfJoinInput) (episodes.SelfJoinResult, error) {
 	r.joinInput = input
+	if !r.joinResult.Episode.TenantID.IsZero() {
+		return r.joinResult, nil
+	}
 	return episodes.SelfJoinResult{Episode: episodes.Episode{TenantID: input.TenantID}, Participant: episodes.Participant{AccountID: input.AccountID}}, nil
 }
 func (r *selfRepository) FindSelf(_ context.Context, input episodes.SelfAccessInput) (episodes.SelfJoinResult, error) {
@@ -66,6 +70,46 @@ func TestServiceSelfJoinNormalizesAndDelegates(t *testing.T) {
 	}
 	if repository.joinInput.Request.Fingerprint == ([32]byte{}) {
 		t.Fatal("self join did not derive a fingerprint")
+	}
+}
+
+type selfJoinCommitObserver struct {
+	count   int
+	episode episodes.Episode
+}
+
+func (o *selfJoinCommitObserver) EpisodeCommitted(episode episodes.Episode) {
+	o.count++
+	o.episode = episode
+}
+
+func TestServiceSelfJoinObservesOnlyNewEpisode(t *testing.T) {
+	episode := episodes.Episode{
+		ID:       mustID(t, "33333333-3333-4333-8333-333333333333"),
+		TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
+		SpaceID:  mustID(t, "44444444-4444-4444-8444-444444444444"),
+	}
+	observer := &selfJoinCommitObserver{}
+	repository := &selfRepository{joinResult: episodes.SelfJoinResult{Episode: episode, EpisodeCreated: true}}
+	service := episodes.NewService(repository).WithCommitObserver(observer)
+	input := episodes.SelfJoinInput{
+		TenantID: episode.TenantID, AccountID: mustID(t, "22222222-2222-4222-8222-222222222222"),
+		SpaceSlug: "studio", DisplayName: "Ada", Request: episodes.Request{Key: "dashboard-self-join-0001"},
+	}
+
+	if _, err := service.JoinSelf(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
+	if observer.count != 1 || observer.episode.ID != episode.ID {
+		t.Fatalf("observer = %d / %s, want one notification for %s", observer.count, observer.episode.ID, episode.ID)
+	}
+
+	repository.joinResult.EpisodeCreated = false
+	if _, err := service.JoinSelf(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
+	if observer.count != 1 {
+		t.Fatalf("observer count after reused Episode = %d, want 1", observer.count)
 	}
 }
 

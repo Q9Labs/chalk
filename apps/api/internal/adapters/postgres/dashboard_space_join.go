@@ -21,6 +21,7 @@ import (
 func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes.SelfJoinInput) (episodes.SelfJoinResult, error) {
 	var result episodes.SelfJoinResult
 	var commitMetric webhookCommitMetric
+	episodeCreated := false
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
 		space, err := queries.LockTenantSpaceBySlugForUpdate(ctx, sqlc.LockTenantSpaceBySlugForUpdateParams{TenantID: uuid(input.TenantID), Slug: input.SpaceSlug})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -50,6 +51,7 @@ func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes
 			if err != nil {
 				return fmt.Errorf("create dashboard Episode: %w", err)
 			}
+			episodeCreated = true
 			initialControl, controlErr := episodes.NewInitialControlState(episodes.InitialControlPolicy{ConfigSnapshot: episode.ConfigSnapshot, DeadlineAt: timestamp(episode.DeadlineAt), DeadlineGeneration: episode.DeadlineGeneration})
 			if controlErr != nil {
 				return controlErr
@@ -91,7 +93,7 @@ func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes
 			if participant.Status == episodes.ParticipantStatusLeft || participant.Status == episodes.ParticipantStatusLeaving {
 				return episodes.ErrParticipantNotActive
 			}
-			result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent)}
+			result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent), EpisodeCreated: episodeCreated}
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -142,7 +144,7 @@ func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes
 		if err != nil {
 			return fmt.Errorf("create dashboard participant intent: %w", err)
 		}
-		result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent)}
+		result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent), EpisodeCreated: episodeCreated}
 		return nil
 	})
 	if err != nil {

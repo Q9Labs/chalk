@@ -53,7 +53,7 @@ describe("SpaceDetailPage", () => {
     const { container } = render(<SpaceDetailPage tenantID={tenantID} spaceID="space-1" client={clientFor()} />);
 
     expect(await screen.findByRole("heading", { name: "Product studio" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Join Space" }).getAttribute("href")).toBe("/space/product-studio");
+    expect(screen.getByRole("link", { name: "Join Space" }).getAttribute("href")).toBe("/space/product-studio?entry=dashboard");
     expect(screen.getByRole("link", { name: "Spaces" }).getAttribute("href")).toBe("/spaces");
     expect(screen.getByRole("link", { name: "Join Space" }).getAttribute("href")).not.toContain("/spaces/");
     expect(screen.getByText("Tenant access")).toBeTruthy();

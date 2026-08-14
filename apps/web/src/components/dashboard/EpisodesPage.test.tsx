@@ -99,7 +99,7 @@ describe("Episodes page", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Start and join" }));
 
     await waitFor(() => expect(createEpisode).toHaveBeenCalledWith({ tenantID, spaceID: space.id }));
-    expect(navigateToSpace).toHaveBeenCalledWith("/space/product-studio");
+    expect(navigateToSpace).toHaveBeenCalledWith("/space/product-studio?entry=dashboard");
   });
 
   it("does not offer archived Spaces as Episode start choices", async () => {
