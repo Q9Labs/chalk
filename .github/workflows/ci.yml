@@ -163,17 +163,19 @@ jobs:
         run: |
           for repo_digest in "chalk-api ${{ steps.build-api.outputs.digest }}" "chalk-sync ${{ steps.build-sync.outputs.digest }}"; do
             read -r repo digest <<<"$repo_digest"
-            for attempt in $(seq 1 30); do
-              status="$(aws ecr describe-image-signing-status --repository-name "$repo" --image-id imageDigest="$digest" --query status --output text 2>/dev/null || echo PENDING)"
+            for attempt in $(seq 1 60); do
+              status="$(aws ecr describe-image-signing-status --repository-name "$repo" --image-id imageDigest="$digest" --query 'signingStatuses[0].status' --output text 2>/dev/null || echo PENDING)"
               if [[ "$status" == "COMPLETE" ]]; then
                 echo "$repo@$digest signing COMPLETE"
                 break
               fi
               if [[ "$status" == "FAILED" ]]; then
                 echo "Managed signing FAILED for $repo@$digest" >&2
+                aws ecr describe-image-signing-status --repository-name "$repo" --image-id imageDigest="$digest" \
+                  --query 'signingStatuses[0].failureReason' --output text >&2 || true
                 exit 1
               fi
-              if [[ "$attempt" == 30 ]]; then
+              if [[ "$attempt" == 60 ]]; then
                 echo "Managed signing did not reach COMPLETE for $repo@$digest (last status: $status)" >&2
                 exit 1
               fi
