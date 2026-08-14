@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
 fi
-export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}"
+export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.13+auto}"
 
 describe() {
   cat <<'EOF'
