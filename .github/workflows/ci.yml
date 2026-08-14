@@ -134,6 +134,8 @@ jobs:
             --platform linux/arm64 \
             --provenance=mode=max \
             --build-context api_source=apps/api \
+            --cache-from type=gha,scope=chalk-api \
+            --cache-to type=gha,scope=chalk-api,mode=max \
             --file infrastructure/managed-episode/images/api.Dockerfile \
             --build-arg RELEASE_ID="${{ steps.release.outputs.id }}" \
             --build-arg SOURCE_REVISION="$GITHUB_SHA" \
@@ -150,6 +152,8 @@ jobs:
             --platform linux/arm64 \
             --provenance=mode=max \
             --build-context sync_source=apps/sync \
+            --cache-from type=gha,scope=chalk-sync \
+            --cache-to type=gha,scope=chalk-sync,mode=max \
             --file infrastructure/managed-episode/images/sync.Dockerfile \
             --build-arg RELEASE_ID="${{ steps.release.outputs.id }}" \
             --build-arg SOURCE_REVISION="$GITHUB_SHA" \
