@@ -21,23 +21,32 @@ multi-gigabyte working tree to BuildKit. The official Go 1.25.12 and Elixir
 matches the current `apps/api/go.mod`; the repository's older helper-script
 default of `go1.25.11+auto` is no longer the module's exact toolchain.
 
+Production images are published by the `publish-api-images` job in
+`.github/workflows/ci.yml` on every green master push: `linux/arm64` only,
+pushed to the immutable ECR repositories `chalk-api` and `chalk-sync` in
+`ap-southeast-1`, signed server-side by the ECR managed-signing rule
+(`chalk_production_ecr` Notation profile), with a BuildKit SLSA provenance
+attestation embedded in each OCI index. For a local validation build:
+
 ```bash
 docker buildx build \
-  --platform linux/amd64,linux/arm64 \
+  --platform linux/arm64 \
+  --provenance=mode=max \
   --build-context api_source=apps/api \
   --file infrastructure/managed-episode/images/api.Dockerfile \
   --build-arg RELEASE_ID="$RELEASE_ID" \
   --build-arg SOURCE_REVISION="$GIT_SHA" \
-  --tag "ghcr.io/q9labs/chalk-api:$RELEASE_ID" \
+  --tag "688819141892.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api:$RELEASE_ID" \
   infrastructure/managed-episode
 
 docker buildx build \
-  --platform linux/amd64,linux/arm64 \
+  --platform linux/arm64 \
+  --provenance=mode=max \
   --build-context sync_source=apps/sync \
   --file infrastructure/managed-episode/images/sync.Dockerfile \
   --build-arg RELEASE_ID="$RELEASE_ID" \
   --build-arg SOURCE_REVISION="$GIT_SHA" \
-  --tag "ghcr.io/q9labs/chalk-sync:$RELEASE_ID" \
+  --tag "688819141892.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync:$RELEASE_ID" \
   infrastructure/managed-episode
 ```
 

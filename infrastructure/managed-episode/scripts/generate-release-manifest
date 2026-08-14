@@ -12,8 +12,10 @@ allow_dirty=false
 architectures_json='["linux/amd64","linux/arm64"]'
 source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
 
+release_id_override=""
+
 usage() {
-  echo "usage: generate-release-manifest --api-image <digest-ref> --sync-image <digest-ref> --output <file> [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--allow-dirty]" >&2
+  echo "usage: generate-release-manifest --api-image <digest-ref> --sync-image <digest-ref> --output <file> [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--release-id <managed-episode-...>] [--allow-dirty]" >&2
 }
 
 while (($# > 0)); do
@@ -32,6 +34,7 @@ while (($# > 0)); do
       shift 2
       ;;
     --source-revision) source_revision="${2:-}"; shift 2 ;;
+    --release-id) release_id_override="${2:-}"; shift 2 ;;
     --allow-dirty) allow_dirty=true; shift ;;
     *) usage; exit 2 ;;
   esac
@@ -92,6 +95,18 @@ generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 entropy="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
 release_id="managed-episode-${timestamp}-${source_revision:0:12}-${entropy}"
+if [[ -n "${release_id_override}" ]]; then
+  if [[ ! "${release_id_override}" =~ ^managed-episode-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8,12}-[0-9a-f]{8}$ ]]; then
+    echo "release id override does not match the managed-episode release format" >&2
+    exit 1
+  fi
+  override_sha="$(cut -d- -f4 <<<"${release_id_override}")"
+  if [[ "${source_revision}" != "${override_sha}"* ]]; then
+    echo "release id override embeds a SHA prefix that does not match the source revision" >&2
+    exit 1
+  fi
+  release_id="${release_id_override}"
+fi
 mkdir -p "$(dirname "${output}")"
 jq -n \
   --arg release_id "${release_id}" \

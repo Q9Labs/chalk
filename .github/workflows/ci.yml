@@ -81,6 +81,133 @@ jobs:
             pnpm run gate
           fi
 
+  publish-api-images:
+    name: Publish API images
+    needs: gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: publish-api-images
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ap-southeast-1
+      ECR_REGISTRY: 688819141892.dkr.ecr.ap-southeast-1.amazonaws.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::688819141892:role/chalk-ci-image-publish
+          aws-region: ap-southeast-1
+
+      - name: Verify signing profile is active
+        run: |
+          status="$(aws signer get-signing-profile --profile-name chalk_production_ecr --query status --output text)"
+          if [[ "$status" != "Active" ]]; then
+            echo "Signer profile chalk_production_ecr is not Active (status: $status); refusing to publish unsigned images." >&2
+            exit 1
+          fi
+
+      - name: Login to ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute release id
+        id: release
+        run: |
+          release_id="managed-episode-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA:0:8}-$(openssl rand -hex 4)"
+          printf 'id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push API image
+        id: build-api
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --provenance=mode=max \
+            --build-context api_source=apps/api \
+            --file infrastructure/managed-episode/images/api.Dockerfile \
+            --build-arg RELEASE_ID="${{ steps.release.outputs.id }}" \
+            --build-arg SOURCE_REVISION="$GITHUB_SHA" \
+            --tag "$ECR_REGISTRY/chalk-api:${{ steps.release.outputs.id }}" \
+            --metadata-file /tmp/api-metadata.json \
+            --push \
+            infrastructure/managed-episode
+          printf 'digest=%s\n' "$(jq -r '."containerimage.digest"' /tmp/api-metadata.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Sync image
+        id: build-sync
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --provenance=mode=max \
+            --build-context sync_source=apps/sync \
+            --file infrastructure/managed-episode/images/sync.Dockerfile \
+            --build-arg RELEASE_ID="${{ steps.release.outputs.id }}" \
+            --build-arg SOURCE_REVISION="$GITHUB_SHA" \
+            --tag "$ECR_REGISTRY/chalk-sync:${{ steps.release.outputs.id }}" \
+            --metadata-file /tmp/sync-metadata.json \
+            --push \
+            infrastructure/managed-episode
+          printf 'digest=%s\n' "$(jq -r '."containerimage.digest"' /tmp/sync-metadata.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for managed signing
+        run: |
+          for repo_digest in "chalk-api ${{ steps.build-api.outputs.digest }}" "chalk-sync ${{ steps.build-sync.outputs.digest }}"; do
+            read -r repo digest <<<"$repo_digest"
+            for attempt in $(seq 1 30); do
+              status="$(aws ecr describe-image-signing-status --repository-name "$repo" --image-id imageDigest="$digest" --query status --output text 2>/dev/null || echo PENDING)"
+              if [[ "$status" == "COMPLETE" ]]; then
+                echo "$repo@$digest signing COMPLETE"
+                break
+              fi
+              if [[ "$status" == "FAILED" ]]; then
+                echo "Managed signing FAILED for $repo@$digest" >&2
+                exit 1
+              fi
+              if [[ "$attempt" == 30 ]]; then
+                echo "Managed signing did not reach COMPLETE for $repo@$digest (last status: $status)" >&2
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+
+      - name: Generate release manifest
+        run: |
+          ./infrastructure/managed-episode/scripts/generate-release-manifest \
+            --api-image "$ECR_REGISTRY/chalk-api@${{ steps.build-api.outputs.digest }}" \
+            --sync-image "$ECR_REGISTRY/chalk-sync@${{ steps.build-sync.outputs.digest }}" \
+            --architectures linux/arm64 \
+            --source-revision "$GITHUB_SHA" \
+            --release-id "${{ steps.release.outputs.id }}" \
+            --output "infrastructure/managed-episode/generated/${{ steps.release.outputs.id }}.json"
+
+      - name: Upload release manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ steps.release.outputs.id }}
+          path: infrastructure/managed-episode/generated/${{ steps.release.outputs.id }}.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Release summary
+        run: |
+          {
+            echo "## Release ${{ steps.release.outputs.id }}"
+            echo "- source: \`$GITHUB_SHA\`"
+            echo "- api: \`$ECR_REGISTRY/chalk-api@${{ steps.build-api.outputs.digest }}\`"
+            echo "- sync: \`$ECR_REGISTRY/chalk-sync@${{ steps.build-sync.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy-web:
     name: Deploy web
     needs: gate
