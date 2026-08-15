@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import type { ComponentType, ReactNode } from "react";

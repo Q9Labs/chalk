@@ -167,10 +167,10 @@
     "@q9labsai/facehash": "workspace:^4.0.1"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "@types/react": "^19.0.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
     "react-native-webview": "13.16.1",
-    "typescript": "^5.7.2"
+    "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "@cloudflare/react-native-webrtc": "~125.0.1 || ~125.0.3",

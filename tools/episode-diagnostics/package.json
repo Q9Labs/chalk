@@ -25,6 +25,6 @@
     "@q9labsai/diagnostics-contracts": "workspace:^0.1.0"
   },
   "devDependencies": {
-    "playwright": "^1.57.0"
+    "playwright": "^1.62.1"
   }
 }

@@ -12,7 +12,7 @@
   "dependencies": {
     "@q9labsai/chalk-client": "workspace:^4.0.1",
     "@q9labsai/chalk-react": "workspace:^4.0.1",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "ws": "8.18.3"
