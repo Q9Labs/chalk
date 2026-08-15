@@ -244,14 +244,34 @@ for component in api sync redis cloudflared; do
   image="$(jq -er ".images.${component}" "${manifest}")" || fail "manifest is missing the ${component} image"
   [[ "${image}" =~ ${image_pattern} ]] || fail "manifest ${component} image is not digest-addressed"
 done
-jq -e '
-  .schema_version == 1 and
-  (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
-  .database_compatibility == {
-    engine: "postgresql", major: 18, minimum_migration: 20260713130000, maximum_migration: null
-  } and
-  .protocol_compatibility.sync == 1
-' "${manifest}" >/dev/null || fail "release manifest compatibility contract is invalid"
+manifest_schema_version="$(jq -er '.schema_version' "${manifest}")" || fail "release manifest schema version is missing"
+case "${manifest_schema_version}" in
+  1)
+    jq -e '
+      .schema_version == 1 and
+      (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
+      .database_compatibility == {
+        engine: "postgresql", major: 18, minimum_migration: 20260713130000, maximum_migration: null
+      } and
+      .protocol_compatibility.sync == 1
+    ' "${manifest}" >/dev/null || fail "release manifest v1 compatibility contract is invalid"
+    ;;
+  2)
+    jq -e '
+      .schema_version == 2 and
+      (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
+      (.affected_components | type == "array" and length >= 1 and length <= 2 and unique == . and (length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
+      (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | test("^[0-9a-f]{40}$")))) and
+      .database_compatibility == {
+        engine: "postgresql", major: 18, minimum_migration: 20260713130000, maximum_migration: null
+      } and
+      .protocol_compatibility.sync == 1
+    ' "${manifest}" >/dev/null || fail "release manifest v2 component compatibility contract is invalid"
+    ;;
+  *)
+    fail "release manifest schema version is unsupported"
+    ;;
+esac
 if [[ "${allow_dirty}" != true && "$(jq -r '.source_tree_state' "${manifest}")" != clean ]]; then
   fail "dirty source manifests cannot be promoted"
 fi

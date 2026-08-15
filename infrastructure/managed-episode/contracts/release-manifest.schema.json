@@ -1,17 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://chalkmeet.com/schemas/managed-episode-release-manifest-v1.json",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "release_id", "generated_at", "source_revision", "source_tree_state", "architectures", "images", "database_compatibility", "protocol_compatibility", "runtime_artifacts"],
-  "properties": {
-    "schema_version": { "const": 1 },
-    "release_id": { "type": "string", "minLength": 1 },
-    "generated_at": { "type": "string", "format": "date-time" },
-    "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-    "source_tree_state": { "enum": ["clean", "dirty"] },
+  "$id": "https://chalkmeet.com/schemas/managed-episode-release-manifest-v2.json",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/v1"
+    },
+    {
+      "$ref": "#/$defs/v2"
+    }
+  ],
+  "$defs": {
+    "image": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"
+    },
     "architectures": {
-      "oneOf": [{ "const": ["linux/arm64"] }, { "const": ["linux/amd64", "linux/arm64"] }]
+      "oneOf": [
+        { "const": ["linux/arm64"] },
+        { "const": ["linux/amd64", "linux/arm64"] }
+      ]
     },
     "images": {
       "type": "object",
@@ -48,12 +55,81 @@
         "type": "string",
         "pattern": "^[0-9a-f]{64}$"
       }
-    }
-  },
-  "$defs": {
-    "image": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"
+    },
+    "common": {
+      "type": "object",
+      "required": [
+        "release_id",
+        "generated_at",
+        "source_revision",
+        "source_tree_state",
+        "architectures",
+        "images",
+        "database_compatibility",
+        "protocol_compatibility",
+        "runtime_artifacts"
+      ],
+      "properties": {
+        "release_id": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "source_tree_state": { "enum": ["clean", "dirty"] },
+        "architectures": { "$ref": "#/$defs/architectures" },
+        "images": { "$ref": "#/$defs/images" },
+        "database_compatibility": { "$ref": "#/$defs/database_compatibility" },
+        "protocol_compatibility": { "$ref": "#/$defs/protocol_compatibility" },
+        "runtime_artifacts": { "$ref": "#/$defs/runtime_artifacts" }
+      }
+    },
+    "v1": {
+      "allOf": [
+        { "$ref": "#/$defs/common" },
+        {
+          "type": "object",
+          "required": ["schema_version"],
+          "properties": { "schema_version": { "const": 1 } }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "component_release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_id", "source_revision"],
+      "properties": {
+        "release_id": { "type": "string", "minLength": 1 },
+        "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "component_releases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api", "sync"],
+      "properties": {
+        "api": { "$ref": "#/$defs/component_release" },
+        "sync": { "$ref": "#/$defs/component_release" }
+      }
+    },
+    "v2": {
+      "allOf": [
+        { "$ref": "#/$defs/common" },
+        {
+          "type": "object",
+          "required": ["schema_version", "affected_components", "component_releases"],
+          "properties": {
+            "schema_version": { "const": 2 },
+            "affected_components": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": { "enum": ["api", "sync"] }
+            },
+            "component_releases": { "$ref": "#/$defs/component_releases" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
     }
   }
 }

@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: plan-release-components [--component api|sync|both|shared|redis] [--runtime-dependency] [changed-path ...]" >&2
+  echo "       echo changed-path | plan-release-components" >&2
+}
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+command -v jq >/dev/null || fail "jq is required"
+
+explicit_components=()
+paths=()
+runtime_dependency=false
+while (($# > 0)); do
+  case "$1" in
+    --component)
+      case "${2:-}" in
+        api|sync|both|shared|redis) explicit_components+=("$2") ;;
+        *) fail "unknown component: ${2:-}" ;;
+      esac
+      shift 2
+      ;;
+    --runtime-dependency)
+      runtime_dependency=true
+      shift
+      ;;
+    --)
+      shift
+      paths+=("$@")
+      break
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown option: $1"
+      ;;
+    *)
+      paths+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if ((${#paths[@]} == 0)) && [[ ! -t 0 ]]; then
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] && paths+=("${path}")
+  done
+fi
+
+classifications=()
+runtime_paths=()
+classify_path() {
+  local path="$1"
+  case "${path}" in
+    apps/api|apps/api/*|infrastructure/managed-episode/images/api.Dockerfile)
+      classifications+=(api)
+      ;;
+    apps/sync|apps/sync/*|infrastructure/managed-episode/images/sync.Dockerfile)
+      classifications+=(sync)
+      ;;
+    infrastructure/managed-episode/quadlet/chalk-redis.container.in)
+      classifications+=(redis)
+      runtime_paths+=("${path}")
+      ;;
+    infrastructure/managed-episode/*|GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|packages/*|sdks/*|apps/web/*|apps/docs/*|apps/mobile/*)
+      classifications+=(shared)
+      ;;
+    *)
+      fail "cannot classify changed path: ${path}"
+      ;;
+  esac
+}
+
+for component in "${explicit_components[@]}"; do
+  case "${component}" in
+    api) classifications+=(api) ;;
+    sync) classifications+=(sync) ;;
+    both|shared) classifications+=(shared) ;;
+    redis) classifications+=(redis) ;;
+  esac
+done
+for path in "${paths[@]}"; do
+  classify_path "${path}"
+done
+((${#classifications[@]} > 0)) || fail "at least one component or changed path is required"
+
+has_api=false
+has_sync=false
+has_shared=false
+has_redis=false
+for classification in "${classifications[@]}"; do
+  case "${classification}" in
+    api) has_api=true ;;
+    sync) has_sync=true ;;
+    shared) has_shared=true ;;
+    redis) has_redis=true ;;
+    *) fail "cannot classify component: ${classification}" ;;
+  esac
+done
+if [[ "${runtime_dependency}" == true || ${#runtime_paths[@]} -gt 0 ]]; then
+  has_redis=true
+fi
+
+affected_components_json='["api"]'
+build_set_json='["api"]'
+restart_components_json='["api","sync","tunnel"]'
+restart_units_json='["chalk-api.service","chalk-sync.service","chalk-cloudflared.service"]'
+classification="api"
+
+if [[ "${has_shared}" == true || ("${has_api}" == true && "${has_sync}" == true) ]]; then
+  classification="both"
+  affected_components_json='["api","sync"]'
+  build_set_json='["api","sync"]'
+  restart_components_json='["api","sync","tunnel"]'
+  restart_units_json='["chalk-api.service","chalk-sync.service","chalk-cloudflared.service"]'
+elif [[ "${has_sync}" == true ]]; then
+  classification="sync"
+  affected_components_json='["sync"]'
+  build_set_json='["sync"]'
+  restart_components_json='["sync","tunnel"]'
+  restart_units_json='["chalk-sync.service","chalk-cloudflared.service"]'
+elif [[ "${has_redis}" == true ]]; then
+  classification="redis"
+  affected_components_json='["api","sync"]'
+  build_set_json='[]'
+  restart_components_json='["redis","api","sync","tunnel"]'
+  restart_units_json='["chalk-redis.service","chalk-api.service","chalk-sync.service","chalk-cloudflared.service"]'
+fi
+
+if [[ "${has_redis}" == true ]]; then
+  case "${classification}" in
+    api) build_set_json='["api","redis"]' ;;
+    sync) build_set_json='["sync","redis"]' ;;
+    both) build_set_json='["api","sync","redis"]' ;;
+    redis) build_set_json='["redis"]' ;;
+  esac
+  restart_components_json='["redis","api","sync","tunnel"]'
+  restart_units_json='["chalk-redis.service","chalk-api.service","chalk-sync.service","chalk-cloudflared.service"]'
+fi
+
+jq -n \
+  --arg classification "${classification}" \
+  --argjson affected_components "${affected_components_json}" \
+  --argjson build_set "${build_set_json}" \
+  --argjson restart_components "${restart_components_json}" \
+  --argjson restart_closure "${restart_units_json}" \
+  --argjson runtime_dependency_changed "${has_redis}" \
+  '{
+    classification: $classification,
+    affected_components: $affected_components,
+    build_set: $build_set,
+    restart_components: $restart_components,
+    restart_closure: $restart_closure,
+    runtime_dependency_changed: $runtime_dependency_changed
+  }'

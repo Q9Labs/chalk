@@ -3,71 +3,223 @@ set -euo pipefail
 
 managed_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_root="$(cd "${managed_root}/../.." && pwd)"
-cloudflared_image="docker.io/cloudflare/cloudflared@sha256:5e49861633763e8933475477c20bae6039ed47f32c1d267a34babc347f28f0df"
-redis_image="docker.io/library/redis@sha256:82db05459fb850cc3fe2bfa510a054323247bbd0ecb8831272e41fe14b9ead82"
+default_cloudflared_image="docker.io/cloudflare/cloudflared@sha256:5e49861633763e8933475477c20bae6039ed47f32c1d267a34babc347f28f0df"
+default_redis_image="docker.io/library/redis@sha256:82db05459fb850cc3fe2bfa510a054323247bbd0ecb8831272e41fe14b9ead82"
 api_image=""
 sync_image=""
+api_image_set=false
+sync_image_set=false
+cloudflared_image="${default_cloudflared_image}"
+redis_image="${default_redis_image}"
+cloudflared_image_set=false
+redis_image_set=false
+stable_manifest=""
+affected_components_arg=""
 output=""
 allow_dirty=false
 architectures_json='["linux/amd64","linux/arm64"]'
+architectures_set=false
 source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
-
 release_id_override=""
 
 usage() {
-  echo "usage: generate-release-manifest --api-image <digest-ref> --sync-image <digest-ref> --output <file> [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--release-id <managed-episode-...>] [--allow-dirty]" >&2
+  echo "usage: generate-release-manifest --output <file> [--api-image <digest-ref>] [--sync-image <digest-ref>] [--stable-manifest <file>] [--affected-components api|sync|api,sync] [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--release-id <managed-episode-...>] [--allow-dirty]" >&2
+}
+
+fail() {
+  echo "$1" >&2
+  exit 1
 }
 
 while (($# > 0)); do
   case "$1" in
-    --api-image) api_image="${2:-}"; shift 2 ;;
-    --sync-image) sync_image="${2:-}"; shift 2 ;;
-    --cloudflared-image) cloudflared_image="${2:-}"; shift 2 ;;
-    --redis-image) redis_image="${2:-}"; shift 2 ;;
-    --output) output="${2:-}"; shift 2 ;;
+    --api-image)
+      api_image="${2:-}"
+      api_image_set=true
+      shift 2
+      ;;
+    --sync-image)
+      sync_image="${2:-}"
+      sync_image_set=true
+      shift 2
+      ;;
+    --cloudflared-image)
+      cloudflared_image="${2:-}"
+      cloudflared_image_set=true
+      shift 2
+      ;;
+    --redis-image)
+      redis_image="${2:-}"
+      redis_image_set=true
+      shift 2
+      ;;
+    --stable-manifest|--manifest)
+      stable_manifest="${2:-}"
+      shift 2
+      ;;
+    --affected-components)
+      affected_components_arg="${2:-}"
+      shift 2
+      ;;
+    --output)
+      output="${2:-}"
+      shift 2
+      ;;
     --architectures)
       case "${2:-}" in
         linux/arm64) architectures_json='["linux/arm64"]' ;;
         linux/amd64,linux/arm64) architectures_json='["linux/amd64","linux/arm64"]' ;;
-        *) echo "unsupported architecture set: ${2:-}" >&2; exit 2 ;;
+        *) fail "unsupported architecture set: ${2:-}" ;;
       esac
+      architectures_set=true
       shift 2
       ;;
-    --source-revision) source_revision="${2:-}"; shift 2 ;;
-    --release-id) release_id_override="${2:-}"; shift 2 ;;
-    --allow-dirty) allow_dirty=true; shift ;;
-    *) usage; exit 2 ;;
+    --source-revision)
+      source_revision="${2:-}"
+      shift 2
+      ;;
+    --release-id)
+      release_id_override="${2:-}"
+      shift 2
+      ;;
+    --allow-dirty)
+      allow_dirty=true
+      shift
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
   esac
 done
 
-command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
-if [[ ! "${source_revision}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "source revision must be a 40-character lowercase Git SHA" >&2
-  exit 1
-fi
+command -v jq >/dev/null || fail "jq is required"
+[[ -n "${output}" ]] || { usage; exit 2; }
+[[ "${source_revision}" =~ ^[0-9a-f]{40}$ ]] || fail "source revision must be a 40-character lowercase Git SHA"
+[[ ! -e "${output}" ]] || fail "refusing to overwrite release manifest: ${output}"
+
 image_pattern='^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$'
-for image in "${api_image}" "${sync_image}" "${cloudflared_image}" "${redis_image}"; do
-  if [[ ! "${image}" =~ ${image_pattern} ]]; then
-    echo "every image must be a fully qualified sha256 digest reference" >&2
-    exit 1
+validate_image() {
+  local name="$1"
+  local image="$2"
+  [[ "${image}" =~ ${image_pattern} ]] || fail "${name} image must be a fully qualified sha256 digest reference"
+}
+
+validate_stable_manifest() {
+  local file="$1"
+  [[ -f "${file}" && ! -L "${file}" ]] || fail "stable manifest is not a regular file"
+  local version
+  version="$(jq -er '.schema_version' "${file}")" || fail "stable manifest is not valid JSON"
+  case "${version}" in
+    1)
+      jq -e '
+        type == "object" and
+        (.release_id | type == "string" and length > 0) and
+        (.generated_at | type == "string" and length > 0) and
+        (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+        (.source_tree_state == "clean" or .source_tree_state == "dirty") and
+        (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
+        (.images | type == "object" and (["api", "sync", "redis", "cloudflared"] - keys | length == 0)) and
+        (.database_compatibility == {engine:"postgresql", major:18, minimum_migration:20260713130000, maximum_migration:null}) and
+        (.protocol_compatibility == {sync:1}) and
+        (.runtime_artifacts | type == "object" and length > 0)
+      ' "${file}" >/dev/null || fail "stable manifest v1 contract is invalid"
+      ;;
+    2)
+      jq -e '
+        type == "object" and
+        (.release_id | type == "string" and length > 0) and
+        (.generated_at | type == "string" and length > 0) and
+        (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+        (.source_tree_state == "clean" or .source_tree_state == "dirty") and
+        (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
+        (.images | type == "object" and (["api", "sync", "redis", "cloudflared"] - keys | length == 0)) and
+        (.affected_components | type == "array" and length >= 1 and length <= 2 and unique == . and (length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
+        (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | test("^[0-9a-f]{40}$")))) and
+        (.database_compatibility == {engine:"postgresql", major:18, minimum_migration:20260713130000, maximum_migration:null}) and
+        (.protocol_compatibility == {sync:1}) and
+        (.runtime_artifacts | type == "object" and length > 0)
+      ' "${file}" >/dev/null || fail "stable manifest v2 contract is invalid"
+      ;;
+    *)
+      fail "stable manifest schema version must be 1 or 2"
+      ;;
+  esac
+  for component in api sync redis cloudflared; do
+    validate_image "stable ${component}" "$(jq -er ".images.${component}" "${file}")"
+  done
+}
+
+parse_affected_components() {
+  local value="$1"
+  local -a components
+  IFS=',' read -r -a components <<<"${value}"
+  ((${#components[@]} >= 1 && ${#components[@]} <= 2)) || fail "affected components must contain api, sync, or api,sync"
+  for component in "${components[@]}"; do
+    [[ "${component}" == api || "${component}" == sync ]] || fail "unknown affected component: ${component}"
+  done
+  if ((${#components[@]} == 2)); then
+    [[ "${components[0]}" == api && "${components[1]}" == sync ]] || fail "affected components must be sorted as api,sync"
   fi
-done
-if [[ -z "${output}" ]]; then
-  usage
-  exit 2
+  affected_components_arg="$(IFS=,; echo "${components[*]}")"
+}
+
+if [[ -n "${stable_manifest}" ]]; then
+  validate_stable_manifest "${stable_manifest}"
 fi
-if [[ -e "${output}" ]]; then
-  echo "refusing to overwrite release manifest: ${output}" >&2
-  exit 1
+
+if [[ -n "${affected_components_arg}" ]]; then
+  parse_affected_components "${affected_components_arg}"
+elif [[ -z "${stable_manifest}" ]]; then
+  affected_components_arg="api,sync"
+elif [[ "${api_image_set}" == true && "${sync_image_set}" == true ]]; then
+  affected_components_arg="api,sync"
+elif [[ "${api_image_set}" == true ]]; then
+  affected_components_arg="api"
+elif [[ "${sync_image_set}" == true ]]; then
+  affected_components_arg="sync"
+else
+  fail "single-component release requires --affected-components and a new image"
 fi
+parse_affected_components "${affected_components_arg}"
+
+if [[ -z "${stable_manifest}" ]]; then
+  [[ "${affected_components_arg}" == api,sync ]] || fail "an initial release must affect both api and sync"
+  [[ "${api_image_set}" == true && "${sync_image_set}" == true ]] || fail "initial release requires both --api-image and --sync-image"
+else
+  if [[ "${affected_components_arg}" == api ]]; then
+    [[ "${api_image_set}" == true ]] || fail "api is affected but --api-image is missing"
+    [[ "${sync_image_set}" == false ]] || fail "sync image supplied although sync is not affected"
+  elif [[ "${affected_components_arg}" == sync ]]; then
+    [[ "${sync_image_set}" == true ]] || fail "sync is affected but --sync-image is missing"
+    [[ "${api_image_set}" == false ]] || fail "api image supplied although api is not affected"
+  else
+    [[ "${api_image_set}" == true && "${sync_image_set}" == true ]] || fail "both affected components require both application images"
+  fi
+fi
+
+if [[ -n "${stable_manifest}" ]]; then
+  api_image="${api_image:-$(jq -er '.images.api' "${stable_manifest}")}"
+  sync_image="${sync_image:-$(jq -er '.images.sync' "${stable_manifest}")}"
+  if [[ "${cloudflared_image_set}" == false ]]; then
+    cloudflared_image="$(jq -er '.images.cloudflared' "${stable_manifest}")"
+  fi
+  if [[ "${redis_image_set}" == false ]]; then
+    redis_image="$(jq -er '.images.redis' "${stable_manifest}")"
+  fi
+  if [[ "${architectures_set}" == false ]]; then
+    architectures_json="$(jq -c '.architectures' "${stable_manifest}")"
+  fi
+fi
+validate_image api "${api_image}"
+validate_image sync "${sync_image}"
+validate_image redis "${redis_image}"
+validate_image cloudflared "${cloudflared_image}"
 
 source_tree_state=clean
 if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
   source_tree_state=dirty
-  if [[ "${allow_dirty}" != true ]]; then
-    echo "release manifests require a clean source tree; --allow-dirty is for local validation only" >&2
-    exit 1
-  fi
+  [[ "${allow_dirty}" == true ]] || fail "release manifests require a clean source tree; --allow-dirty is for local validation only"
 fi
 
 sha256_file() {
@@ -78,35 +230,61 @@ sha256_file() {
   fi
 }
 
-artifacts_json="$(
+artifacts_json="$({
   find "${managed_root}" -type f \
     ! -path '*/generated/*' \
+    ! -path '*/.private/*' \
     ! -name '.DS_Store' \
-    -print0 |
-    sort -z |
-    while IFS= read -r -d '' file; do
-      relative="${file#"${managed_root}/"}"
-      jq -cn --arg path "${relative}" --arg digest "$(sha256_file "${file}")" '{key:$path,value:$digest}'
-    done |
-    jq -s 'from_entries'
-)"
+    -print0
+} | sort -z | while IFS= read -r -d '' file; do
+  relative="${file#"${managed_root}/"}"
+  jq -cn --arg path "${relative}" --arg digest "$(sha256_file "${file}")" '{key:$path,value:$digest}'
+done | jq -s 'from_entries')"
 
 generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 entropy="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
 release_id="managed-episode-${timestamp}-${source_revision:0:12}-${entropy}"
 if [[ -n "${release_id_override}" ]]; then
-  if [[ ! "${release_id_override}" =~ ^managed-episode-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8,12}-[0-9a-f]{8}$ ]]; then
-    echo "release id override does not match the managed-episode release format" >&2
-    exit 1
-  fi
+  [[ "${release_id_override}" =~ ^managed-episode-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8,12}-[0-9a-f]{8}$ ]] || fail "release id override does not match the managed-episode release format"
   override_sha="$(cut -d- -f4 <<<"${release_id_override}")"
-  if [[ "${source_revision}" != "${override_sha}"* ]]; then
-    echo "release id override embeds a SHA prefix that does not match the source revision" >&2
-    exit 1
-  fi
+  [[ "${source_revision}" == "${override_sha}"* ]] || fail "release id override embeds a SHA prefix that does not match the source revision"
   release_id="${release_id_override}"
 fi
+
+if [[ -n "${stable_manifest}" ]]; then
+  stable_api_release_id="$(jq -er '.component_releases.api.release_id // .release_id' "${stable_manifest}")"
+  stable_api_source_revision="$(jq -er '.component_releases.api.source_revision // .source_revision' "${stable_manifest}")"
+  stable_sync_release_id="$(jq -er '.component_releases.sync.release_id // .release_id' "${stable_manifest}")"
+  stable_sync_source_revision="$(jq -er '.component_releases.sync.source_revision // .source_revision' "${stable_manifest}")"
+else
+  stable_api_release_id=""
+  stable_api_source_revision=""
+  stable_sync_release_id=""
+  stable_sync_source_revision=""
+fi
+
+component_releases_json="$({
+  if [[ "${affected_components_arg}" == api || "${affected_components_arg}" == api,sync ]]; then
+    jq -cn --arg release_id "${release_id}" --arg source_revision "${source_revision}" '{release_id:$release_id,source_revision:$source_revision}'
+  else
+    jq -cn --arg release_id "${stable_api_release_id}" --arg source_revision "${stable_api_source_revision}" '{release_id:$release_id,source_revision:$source_revision}'
+  fi
+  if [[ "${affected_components_arg}" == sync || "${affected_components_arg}" == api,sync ]]; then
+    jq -cn --arg release_id "${release_id}" --arg source_revision "${source_revision}" '{release_id:$release_id,source_revision:$source_revision}'
+  else
+    jq -cn --arg release_id "${stable_sync_release_id}" --arg source_revision "${stable_sync_source_revision}" '{release_id:$release_id,source_revision:$source_revision}'
+  fi
+} | jq -s '{api:.[0],sync:.[1]}')"
+affected_components_json="$(jq -cn --arg value "${affected_components_arg}" '$value | split(",")')"
+
+database_compatibility_json='{ "engine": "postgresql", "major": 18, "minimum_migration": 20260713130000, "maximum_migration": null }'
+protocol_compatibility_json='{ "sync": 1 }'
+if [[ -n "${stable_manifest}" ]]; then
+  database_compatibility_json="$(jq -c '.database_compatibility' "${stable_manifest}")"
+  protocol_compatibility_json="$(jq -c '.protocol_compatibility' "${stable_manifest}")"
+fi
+
 mkdir -p "$(dirname "${output}")"
 jq -n \
   --arg release_id "${release_id}" \
@@ -118,28 +296,29 @@ jq -n \
   --arg redis_image "${redis_image}" \
   --arg cloudflared_image "${cloudflared_image}" \
   --argjson architectures "${architectures_json}" \
+  --argjson affected_components "${affected_components_json}" \
+  --argjson component_releases "${component_releases_json}" \
+  --argjson database_compatibility "${database_compatibility_json}" \
+  --argjson protocol_compatibility "${protocol_compatibility_json}" \
   --argjson runtime_artifacts "${artifacts_json}" \
   '{
-    schema_version: 1,
+    schema_version: 2,
     release_id: $release_id,
     generated_at: $generated_at,
     source_revision: $source_revision,
     source_tree_state: $source_tree_state,
     architectures: $architectures,
+    affected_components: $affected_components,
     images: {
       api: $api_image,
       sync: $sync_image,
       redis: $redis_image,
       cloudflared: $cloudflared_image
     },
-    database_compatibility: {
-      engine: "postgresql",
-      major: 18,
-      minimum_migration: 20260713130000,
-      maximum_migration: null
-    },
-      protocol_compatibility: {sync: 1},
+    component_releases: $component_releases,
+    database_compatibility: $database_compatibility,
+    protocol_compatibility: $protocol_compatibility,
     runtime_artifacts: $runtime_artifacts
   }' >"${output}"
 
-echo "PASS release_manifest=${output} release_id=${release_id}"
+echo "PASS release_manifest=${output} release_id=${release_id} affected_components=${affected_components_arg}"

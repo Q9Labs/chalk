@@ -59,11 +59,14 @@ emulator on Apple Silicon.
 
 ## Release and runtime rendering
 
-After publishing and signing the two application image indexes, generate the
+After publishing and signing the application image indexes, generate the
 manifest from their index digests. The generator refuses a dirty source tree by
 default, refuses mutable image references, records every runtime artifact
 checksum, and creates a unique release ID without recording environment values
-or secrets.
+or secrets. New manifests use schema version 2. They retain the complete API,
+Sync, Redis, and Tunnel topology while recording a sorted `affected_components`
+set and a `component_releases` provenance envelope for API and Sync. Schema
+version 1 manifests remain valid stable baselines.
 
 ```bash
 infrastructure/managed-episode/scripts/generate-release-manifest \
@@ -71,6 +74,13 @@ infrastructure/managed-episode/scripts/generate-release-manifest \
   --sync-image "ghcr.io/q9labs/chalk-sync@sha256:<index-digest>" \
   --architectures linux/amd64,linux/arm64 \
   --output "/tmp/chalk-release/release-manifest.json"
+
+# Carry the unchanged Sync digest and provenance into an API-only release.
+infrastructure/managed-episode/scripts/generate-release-manifest \
+  --stable-manifest "/run/chalk/release/release-manifest.json" \
+  --affected-components api \
+  --api-image "ghcr.io/q9labs/chalk-api@sha256:<new-index-digest>" \
+  --output "/tmp/chalk-release/api-release-manifest.json"
 
 infrastructure/managed-episode/scripts/render-runtime \
   /tmp/chalk-release/release-manifest.json \
@@ -87,6 +97,19 @@ from SSM according to [`env/api.env.example`](env/api.env.example),
 [`contracts/secret-files.md`](contracts/secret-files.md). Those host steps are
 outside this package because they require the pinned machine image, SSM paths,
 and deployment controller.
+
+Component selection is intentionally a public, pure contract. Use
+`scripts/plan-release-components` with changed paths (or `--component api`,
+`sync`, `both`, or `shared`) to obtain JSON build and restart sets. An API
+change rebuilds API and restarts API, Sync, and the Tunnel because of the
+current Quadlet `Requires=` graph. A Sync change restarts Sync and the Tunnel.
+Both/shared changes restart the full application closure. Redis is included
+only when a runtime dependency changes. Unknown paths fail closed.
+
+The private release controller owns staging, approvals, host installation,
+registry attestation checks, and its durable release ledger. Those control-plane
+records are deliberately outside this public package; this contract only
+describes immutable runtime inputs and the deterministic component plan.
 
 For a single-architecture Graviton release, build both application images for
 `linux/arm64` and pass `--architectures linux/arm64`. The manifest must describe

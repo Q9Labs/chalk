@@ -94,6 +94,63 @@ digest_b="$(printf 'b%.0s' {1..64})"
   --rendered-root "${fixture_root}/rendered" \
   --allow-dirty >/dev/null
 
+jq -e '
+  .schema_version == 2 and
+  .affected_components == ["api", "sync"] and
+  (.component_releases | (keys | sort) == ["api", "sync"])
+' "${fixture_root}/release-manifest.json" >/dev/null
+
+component_digest="$(printf 'c%.0s' {1..64})"
+"${managed_root}/scripts/generate-release-manifest" \
+  --stable-manifest "${fixture_root}/release-manifest.json" \
+  --affected-components api \
+  --api-image "ghcr.io/q9labs/chalk-api@sha256:${component_digest}" \
+  --output "${fixture_root}/api-release-manifest.json" \
+  --source-revision "$(git -C "${repo_root}" rev-parse HEAD)" \
+  --release-id "managed-episode-20260815T120000Z-$(git -C "${repo_root}" rev-parse --short=8 HEAD)-abcdef12" \
+  --allow-dirty >/dev/null
+jq -e --slurpfile stable "${fixture_root}/release-manifest.json" '
+  .schema_version == 2 and .affected_components == ["api"] and
+  .images.api == "ghcr.io/q9labs/chalk-api@sha256-c" + ("c" * 63) and
+  .images.sync == $stable[0].images.sync and
+  .component_releases.sync == $stable[0].component_releases.sync and
+  .component_releases.api != $stable[0].component_releases.api
+' "${fixture_root}/api-release-manifest.json" >/dev/null
+
+if "${managed_root}/scripts/generate-release-manifest" \
+  --stable-manifest "${fixture_root}/release-manifest.json" \
+  --affected-components sync,api \
+  --api-image "ghcr.io/q9labs/chalk-api@sha256:${component_digest}" \
+  --sync-image "ghcr.io/q9labs/chalk-sync@sha256:${digest_b}" \
+  --output "${fixture_root}/unsorted-release-manifest.json" \
+  --source-revision "$(git -C "${repo_root}" rev-parse HEAD)" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "unsorted affected components were accepted" >&2
+  exit 1
+fi
+if "${managed_root}/scripts/generate-release-manifest" \
+  --stable-manifest "${fixture_root}/release-manifest.json" \
+  --affected-components api \
+  --output "${fixture_root}/missing-image-release-manifest.json" \
+  --source-revision "$(git -C "${repo_root}" rev-parse HEAD)" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "missing affected component image was accepted" >&2
+  exit 1
+fi
+
+"${managed_root}/scripts/plan-release-components" apps/api/internal/httpapi/routes.go |
+  jq -e '.classification == "api" and .build_set == ["api"] and .restart_closure == ["chalk-api.service", "chalk-sync.service", "chalk-cloudflared.service"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" apps/sync/lib/chalk_sync/protocol.ex |
+  jq -e '.classification == "sync" and .build_set == ["sync"] and .restart_closure == ["chalk-sync.service", "chalk-cloudflared.service"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" --component shared |
+  jq -e '.classification == "both" and .affected_components == ["api", "sync"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" --runtime-dependency --component api |
+  jq -e '.build_set == ["api", "redis"] and .restart_closure[0] == "chalk-redis.service"' >/dev/null
+if "${managed_root}/scripts/plan-release-components" unknown/path >/dev/null 2>&1; then
+  echo "unknown changed path was accepted" >&2
+  exit 1
+fi
+
 cp -R "${fixture_root}/env" "${fixture_root}/weak-ops-token-env"
 sed -i.bak 's/^CHALK_OPS_INGEST_TOKEN=.*/CHALK_OPS_INGEST_TOKEN=too-short/' \
   "${fixture_root}/weak-ops-token-env/api.env"
