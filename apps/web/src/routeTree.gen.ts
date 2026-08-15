@@ -21,6 +21,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SpaceIndexRouteImport } from './routes/space.index'
 import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
 import { Route as AppTenantRouteImport } from './routes/_app.tenant'
 import { Route as AppSpacesRouteImport } from './routes/_app.spaces'
@@ -91,6 +92,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SpaceIndexRoute = SpaceIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SpaceRoute,
 } as any)
 const SpaceSlugRoute = SpaceSlugRouteImport.update({
   id: '/$slug',
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/space/': typeof SpaceIndexRoute
   '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRoutesByTo {
@@ -180,7 +187,6 @@ export interface FileRoutesByTo {
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/space': typeof SpaceRouteWithChildren
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -194,6 +200,7 @@ export interface FileRoutesByTo {
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/space': typeof SpaceIndexRoute
   '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRoutesById {
@@ -220,6 +227,7 @@ export interface FileRoutesById {
   '/_app/spaces': typeof AppSpacesRoute
   '/_app/tenant': typeof AppTenantRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/space/': typeof SpaceIndexRoute
   '/_app/spaces_/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRouteTypes {
@@ -246,6 +254,7 @@ export interface FileRouteTypes {
     | '/spaces'
     | '/tenant'
     | '/space/$slug'
+    | '/space/'
     | '/spaces/$spaceId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -256,7 +265,6 @@ export interface FileRouteTypes {
     | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
-    | '/space'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -270,6 +278,7 @@ export interface FileRouteTypes {
     | '/spaces'
     | '/tenant'
     | '/space/$slug'
+    | '/space'
     | '/spaces/$spaceId'
   id:
     | '__root__'
@@ -295,6 +304,7 @@ export interface FileRouteTypes {
     | '/_app/spaces'
     | '/_app/tenant'
     | '/space/$slug'
+    | '/space/'
     | '/_app/spaces_/$spaceId'
   fileRoutesById: FileRoutesById
 }
@@ -398,6 +408,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/space/': {
+      id: '/space/'
+      path: '/'
+      fullPath: '/space/'
+      preLoaderRoute: typeof SpaceIndexRouteImport
+      parentRoute: typeof SpaceRoute
     }
     '/space/$slug': {
       id: '/space/$slug'
@@ -509,10 +526,12 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface SpaceRouteChildren {
   SpaceSlugRoute: typeof SpaceSlugRoute
+  SpaceIndexRoute: typeof SpaceIndexRoute
 }
 
 const SpaceRouteChildren: SpaceRouteChildren = {
   SpaceSlugRoute: SpaceSlugRoute,
+  SpaceIndexRoute: SpaceIndexRoute,
 }
 
 const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)

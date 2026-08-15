@@ -1,5 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 
-import { SpacePage } from "../components/space/SpacePage";
+export const Route = createFileRoute("/space")({ component: SpaceRoute });
 
-export const Route = createFileRoute("/space")({ component: SpacePage });
+function SpaceRoute() {
+  return <Outlet />;
+}

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { vi } from "vitest";
 
 const spacePageTestMocks = vi.hoisted(() => {
@@ -71,7 +72,10 @@ vi.mock("../lib/dashboard-api", () => {
   return { DashboardAPIError, listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants };
 });
 vi.mock("../lib/local-space-client", () => ({ createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient, createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease }));
-vi.mock("../lib/web-telemetry-context", () => ({ useWebTelemetry: () => ({ journey: getSpacePageTestMocks().journey, telemetry: getSpacePageTestMocks().telemetry }) }));
+vi.mock("../lib/web-telemetry-context", () => ({
+  WebTelemetryProvider: ({ children }: { readonly children: ReactNode }) => children,
+  useWebTelemetry: () => ({ journey: getSpacePageTestMocks().journey, telemetry: getSpacePageTestMocks().telemetry }),
+}));
 vi.mock("../features/episode-debugger/EpisodeDiagnosticsDeveloperLink", () => ({ useEpisodeDiagnosticsAvailability: getSpacePageTestMocks().useEpisodeDiagnosticsAvailability }));
 
 export function getSpacePageTestMocks(): typeof spacePageTestMocks {
