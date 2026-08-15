@@ -120,7 +120,7 @@ export async function createSpace(input: {
 }): Promise<DashboardSpace> {
   const { tenantID, ...values } = input;
   const body = {
-    media_plane: "cf_rtk",
+    media_plane: "cf_sfu",
     default_episode_duration_seconds: 86_400,
     maximum_episode_duration_seconds: 86_400,
     linger_window_seconds: 0,

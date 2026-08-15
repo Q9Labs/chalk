@@ -139,6 +139,7 @@ type Querier interface {
 	GetDiagnosticExportJobForOperator(ctx context.Context, arg GetDiagnosticExportJobForOperatorParams) (DiagnosticExportJob, error)
 	// Durable event pages and stream catch-up.
 	GetDiagnosticParticipant(ctx context.Context, arg GetDiagnosticParticipantParams) (GetDiagnosticParticipantRow, error)
+	GetDiagnosticParticipantProjection(ctx context.Context, arg GetDiagnosticParticipantProjectionParams) (GetDiagnosticParticipantProjectionRow, error)
 	GetDiagnosticProjectorOffset(ctx context.Context, arg GetDiagnosticProjectorOffsetParams) (DiagnosticProjectorOffset, error)
 	// Snapshot, operation/checkpoint/issue/branch pages, and counts.
 	GetDiagnosticSnapshot(ctx context.Context, arg GetDiagnosticSnapshotParams) (GetDiagnosticSnapshotRow, error)

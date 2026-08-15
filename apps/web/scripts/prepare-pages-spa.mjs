@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -23,7 +23,10 @@ if (!existsSync(shellPath)) {
 
 // Cloudflare Pages: ensure deep-link loads SPA shell (even if rewrites are not applied).
 cpSync(shellPath, indexPath);
-cpSync(shellPath, fallback404Path);
+// A top-level 404.html disables Cloudflare Pages' automatic SPA fallback and
+// makes valid client routes return HTTP 404. Remove stale output so every
+// Dashboard deep link is served from / with HTTP 200.
+rmSync(fallback404Path, { force: true });
 mkdirSync(spaceDirPath, { recursive: true });
 cpSync(shellPath, spaceIndexPath);
 mkdirSync(statusDirPath, { recursive: true });
@@ -55,7 +58,7 @@ function collectClientFiles(dir) {
   });
 }
 
-const precacheUrls = Array.from(new Set(["/", "/index.html", "/404.html", ...collectClientFiles(clientDir)])).sort();
+const precacheUrls = Array.from(new Set(["/", "/index.html", ...collectClientFiles(clientDir)])).sort();
 
 const swSource = `
 const BUILD_META = ${JSON.stringify(buildMeta, null, 2)};

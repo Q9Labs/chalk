@@ -35,7 +35,6 @@ export function NewSpaceDialog({ open, onClose, tenantID, onCreated }: NewSpaceD
           tenantID,
           name: name.trim(),
           slug: slug.trim(),
-          media_plane: "cf_rtk",
           metadata: trimmedDescription ? { description: trimmedDescription } : undefined,
           admission_policy: { mode: admission },
         }),
