@@ -647,7 +647,7 @@ insert into sync_chat_attachments (
 select
     reservation.tenant_id,
     reservation.space_id,
-    reservation.episode_id,
+    authority.episode_id,
     $1,
     authority.id,
     authority.generation,

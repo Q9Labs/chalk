@@ -65,7 +65,7 @@ insert into sync_chat_attachments (
 select
     reservation.tenant_id,
     reservation.space_id,
-    reservation.episode_id,
+    authority.episode_id,
     sqlc.arg(attachment_id),
     authority.id,
     authority.generation,

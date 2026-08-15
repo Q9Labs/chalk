@@ -280,17 +280,6 @@ local profiling, it also defaults request logs to `all` unless
 `CHALK_API_REQUEST_LOGS` is explicitly set. `CHALK_API_PROFILER=1` mounts Go
 profiling handlers under `/debug/pprof`; do not expose it publicly.
 
-For an end-to-end local performance pass:
-
-```bash
-apps/api/scripts/perf-local.sh
-```
-
-The script verifies local Postgres, applies migrations, builds the API and perf
-runner, measures startup/shutdown, samples process footprint, and runs weighted
-load against the implemented endpoints. Raw logs stay under `.private/`; the
-sanitized Markdown and HTML summaries are written to `scratchpad/`.
-
 ## gopls MCP
 
 `gopls MCP` is semantic assistance for Codex work. It is useful for

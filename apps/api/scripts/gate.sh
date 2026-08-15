@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+script_directory="$(cd "$(dirname "$0")" && pwd)"
+api_root="$(cd "${script_directory}/.." && pwd)"
+repository_root="$(cd "${api_root}/../.." && pwd)"
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
 fi
-export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}"
+export CHALK_API_GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.13+auto}"
+export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN}"
+export CHALK_API_ENV=local
 
 describe() {
   cat <<'EOF'
@@ -24,19 +28,17 @@ Checks:
   - gofmt check, non-mutating
   - go mod tidy -diff
   - go tool sqlc vet
-  - go test ./...
-  - lifecycle smoke test: build binary, wait for /healthz, send SIGTERM
-  - go vet ./...
-  - go tool staticcheck ./...
-  - go tool govulncheck ./...
+  - go test -vet=off ./... and lifecycle smoke test in one lane
+  - go vet ./..., staticcheck, and govulncheck in parallel lanes
 
 Optional:
   CHALK_API_RACE=1 apps/api/scripts/gate.sh
-    Also runs: go test -race ./...
+    Also runs: go test -race -vet=off ./...
 
 Notes:
-  This gate prepends /usr/local/go/bin when present and sets
-  GOTOOLCHAIN=${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}.
+  This gate prepends /usr/local/go/bin when present, sets
+  CHALK_API_ENV=local, and sets
+  GOTOOLCHAIN=${CHALK_API_GOTOOLCHAIN:-go1.25.13+auto}.
 EOF
 }
 
@@ -56,6 +58,12 @@ case "$command" in
     ;;
 esac
 
+if [[ "${CHALK_GATE_POSTGRES_READY:-0}" != "1" ]]; then
+  exec "${repository_root}/scripts/gates/with-postgres.sh" -- "${script_directory}/gate.sh" "$@"
+fi
+
+cd "${api_root}"
+
 run() {
   local label="$1"
   shift
@@ -66,7 +74,10 @@ run() {
 run "Go version" go version
 
 printf '\n==> Format check\n'
-mapfile -t go_files < <(find . -name '*.go' -not -path './vendor/*' | sort)
+go_files=()
+while IFS= read -r go_file; do
+  go_files[${#go_files[@]}]="${go_file}"
+done < <(find . -name '*.go' -not -path './vendor/*' | sort)
 if ((${#go_files[@]} > 0)); then
   unformatted="$(gofmt -l "${go_files[@]}")"
   if [[ -n "$unformatted" ]]; then
@@ -80,14 +91,120 @@ fi
 
 run "Module tidy check" go mod tidy -diff
 run "sqlc vet" go tool sqlc vet
-run "Tests" go test ./...
-run "Lifecycle smoke test" ./scripts/smoke-lifecycle.mjs
-run "go vet" go vet ./...
-run "Staticcheck" go tool staticcheck ./...
-run "Vulnerability check" go tool govulncheck ./...
+
+lane_status_dir="$(mktemp -d "${TMPDIR:-/tmp}/chalk-api-gate.XXXXXX")"
+lane_pids=()
+lane_labels=()
+lane_status_files=()
+lane_seen=()
+lane_count=0
+lane_cleanup_done=0
+lane_child_pid=""
+
+lane_signal() {
+  if [[ -n "${lane_child_pid}" ]]; then
+    kill -TERM "${lane_child_pid}" >/dev/null 2>&1 || true
+  fi
+  printf '143\n' > "${lane_status_file}.tmp"
+  mv "${lane_status_file}.tmp" "${lane_status_file}"
+  exit 143
+}
+
+run_lane_command() {
+  local label="$1"
+  shift
+  printf '\n==> %s\n' "${label}"
+  "$@" &
+  lane_child_pid="$!"
+  wait "${lane_child_pid}"
+  local status="$?"
+  lane_child_pid=""
+  return "${status}"
+}
+
+database_tests_and_lifecycle() {
+  run_lane_command "Tests" go test -vet=off ./... || return "$?"
+  run_lane_command "Lifecycle smoke test" ./scripts/smoke-lifecycle.mjs
+}
+
+start_lane() {
+  local label="$1"
+  shift
+  local index="${lane_count}"
+  local status_file="${lane_status_dir}/lane-${index}.status"
+  lane_labels[index]="${label}"
+  lane_status_files[index]="${status_file}"
+  (
+    set +e
+    lane_status_file="${status_file}"
+    trap lane_signal INT TERM
+    "$@"
+    status="$?"
+    printf '%s\n' "${status}" > "${status_file}.tmp"
+    mv "${status_file}.tmp" "${status_file}"
+    exit "${status}"
+  ) &
+  lane_pids[index]="$!"
+  lane_count=$((lane_count + 1))
+}
+
+cleanup_lanes() {
+  if ((lane_cleanup_done)); then
+    return
+  fi
+  lane_cleanup_done=1
+
+  local pid
+  for pid in "${lane_pids[@]}"; do
+    if kill -0 "${pid}" >/dev/null 2>&1; then
+      kill -TERM "${pid}" >/dev/null 2>&1 || true
+    fi
+  done
+  for pid in "${lane_pids[@]}"; do
+    wait "${pid}" >/dev/null 2>&1 || true
+  done
+  if [[ -d "${lane_status_dir}" ]]; then
+    find "${lane_status_dir}" -depth -delete
+  fi
+}
+
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap cleanup_lanes EXIT
+
+start_lane "Database tests + lifecycle" database_tests_and_lifecycle
+start_lane "go vet" run_lane_command "go vet" go vet ./...
+start_lane "Staticcheck" run_lane_command "Staticcheck" go tool staticcheck ./...
+start_lane "Vulnerability check" run_lane_command "Vulnerability check" go tool govulncheck ./...
+
+completed_lanes=0
+while ((completed_lanes < lane_count)); do
+  lane_progress=0
+  lane_index=0
+  while ((lane_index < lane_count)); do
+    status_file="${lane_status_files[${lane_index}]}"
+    if [[ -f "${status_file}" && -z "${lane_seen[${lane_index}]:-}" ]]; then
+      status="$(<"${status_file}")"
+      lane_seen[lane_index]=1
+      completed_lanes=$((completed_lanes + 1))
+      lane_progress=1
+      if [[ "${status}" != "0" ]]; then
+        echo "Lane failed: ${lane_labels[${lane_index}]} (status ${status})" >&2
+        cleanup_lanes
+        exit "${status}"
+      fi
+    fi
+    lane_index=$((lane_index + 1))
+  done
+  if ((completed_lanes < lane_count && lane_progress == 0)); then
+    sleep 0.05
+  fi
+done
+
+cleanup_lanes
 
 if [[ "${CHALK_API_RACE:-0}" == "1" ]]; then
-  run "Race tests" go test -race ./...
+  run "Race tests" go test -race -vet=off ./...
 fi
 
 printf '\nGo API gate passed.\n'

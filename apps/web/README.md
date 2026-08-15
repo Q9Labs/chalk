@@ -51,3 +51,43 @@ pnpm --dir apps/web test
 pnpm --dir apps/web check-types
 pnpm --dir apps/web build
 ```
+
+## Web release
+
+The shared release runner builds the web app once, uploads that same
+`dist/client` artifact to staging, verifies it, then uploads and verifies
+production. It requires an exact 40-character commit SHA and a clean detached
+checkout. The local command creates that checkout automatically, so unrelated
+work in the shared repository cannot enter a release. Staging is the default
+safety gate; use `--skip-staging` only for an explicitly approved fast
+production repair.
+
+For a local release, keep the Cloudflare credentials in a 1Password-backed
+environment file (the file contains `op://...` references, never secret
+values), then let `op run` inject them for one process:
+
+```bash
+# .private/chalk-web-release.env (untracked; use your vault item references)
+# CLOUDFLARE_API_TOKEN=op://dev/<cloudflare-item>/api-token
+# CLOUDFLARE_ACCOUNT_ID=op://dev/<cloudflare-item>/account-id
+op run --env-file=.private/chalk-web-release.env -- pnpm run release:web
+```
+
+Use `--dry-run` to inspect the preflight and command plan without building,
+uploading, or verifying anything:
+
+```bash
+pnpm run release:web -- --dry-run
+```
+
+CI should inject `CLOUDFLARE_API_TOKEN` from its encrypted secret store and
+call the CI alias with the workflow SHA:
+
+```bash
+pnpm run release:web:ci -- --sha "$GITHUB_SHA"
+```
+
+The runner requires Node 22 or newer, pins pnpm and Wrangler, installs from the
+local pnpm store when possible, and uses Turbo's build cache. It passes the full
+SHA into the build metadata and service worker and always invokes the existing
+deployment verifier after each upload.

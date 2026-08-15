@@ -8,7 +8,7 @@
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*", "!**/*.md", "!**/*.test.*", "!**/*.spec.*"],
       "outputs": ["dist/**", ".output/**"],
-      "env": ["DATABASE_URL", "API_URL", "CLOUDFLARE_API_TOKEN", "VITE_*"]
+      "env": ["DATABASE_URL", "API_URL", "CLOUDFLARE_API_TOKEN", "VITE_*", "CHALK_*"]
     },
     "dev": {
       "cache": false,

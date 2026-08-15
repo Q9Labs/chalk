@@ -148,10 +148,19 @@ export_database_url() {
     CHALK_DATABASE_URL="${database_url}" "${repository_root}/apps/api/scripts/db-migrate.sh" up
   fi
 
+  export CHALK_API_ENV=local
+  export CHALK_GATE_POSTGRES_READY=1
   export CHALK_DATABASE_URL="${database_url}"
-  export CHALK_TENANT_ONBOARDING_TEST_DATABASE_URL="${database_url}"
+  export CHALK_CHAT_ATTACHMENT_TEST_DATABASE_URL="${database_url}"
+  export CHALK_EPISODE_DIAGNOSTICS_TEST_DATABASE_URL="${database_url}"
+  export CHALK_PROVIDER_BRIDGE_E2E_DATABASE_URL="${database_url}"
+  export CHALK_SPACE_LIFECYCLE_TEST_DATABASE_URL="${database_url}"
+  export CHALK_STATUS_TEST_DATABASE_URL="${database_url}"
   export CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL="${database_url}"
   export CHALK_SYNC_TEST_DATABASE_URL="${database_url}"
+  export CHALK_TENANT_ONBOARDING_TEST_DATABASE_URL="${database_url}"
+  export CHALK_WEBHOOK_TEST_DATABASE_URL="${database_url}"
+  export CHALK_WHITEBOARD_TEST_DATABASE_URL="${database_url}"
 }
 
 if docker_bin="$(docker_binary)"; then

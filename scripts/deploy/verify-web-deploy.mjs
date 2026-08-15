@@ -36,7 +36,7 @@ export function parseArguments(arguments_) {
     throw new Error("Usage: node scripts/deploy/verify-web-deploy.mjs <base-url> <expected-sha> [--production]");
   }
 
-  return { baseURL: positional[0], expectedSHA: positional[1], production };
+  return { baseURL: positional[0], expectedSHA: normalizeSHA(positional[1]), production };
 }
 
 async function verifyOnce(baseURL, expectedSHA, production, requestTimeoutMs) {
@@ -52,8 +52,8 @@ async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
   const serviceWorker = await request(serviceWorkerURL, requestTimeoutMs);
   requireStatus(serviceWorker, 200, "service worker");
   const serviceWorkerSource = await serviceWorker.text();
-  const deployedSHA = serviceWorkerSource.match(/"commitHash"\s*:\s*"([0-9a-f]{7,40})"/i)?.[1]?.toLowerCase();
-  if (!deployedSHA || !expectedSHA.startsWith(deployedSHA)) {
+  const deployedSHA = serviceWorkerSource.match(/"commitHash"\s*:\s*"([0-9a-f]{40})"/i)?.[1]?.toLowerCase();
+  if (deployedSHA !== expectedSHA) {
     throw new Error(`service worker has commit ${deployedSHA ?? "unknown"}, expected ${expectedSHA}`);
   }
 }
@@ -128,7 +128,7 @@ function isAllowedProtocol(url) {
 
 function normalizeSHA(rawSHA) {
   const sha = rawSHA?.trim().toLowerCase();
-  if (!sha || !/^[0-9a-f]{7,40}$/.test(sha)) throw new Error(`Invalid commit SHA: ${rawSHA}`);
+  if (!sha || !/^[0-9a-f]{40}$/.test(sha)) throw new Error(`Invalid commit SHA: ${rawSHA}`);
   return sha;
 }
 

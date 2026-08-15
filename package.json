@@ -49,6 +49,8 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "dev:web:pages": "pnpm --dir apps/web run dev:pages",
+    "release:web": "node scripts/deploy/deploy-web-release.mjs",
+    "release:web:ci": "node scripts/deploy/deploy-web-release.mjs",
     "gate": "bash scripts/gates/commit.sh",
     "gate:explain": "sed -n '1,240p' scripts/gates/README.md",
     "language:ratchet": "node tools/language-ratchet/src/cli.mjs",

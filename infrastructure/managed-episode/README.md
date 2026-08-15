@@ -20,12 +20,16 @@ multi-gigabyte working tree to BuildKit. The official Go 1.25.13 and Elixir
 1.19.5/OTP 28 image indexes are pinned by multi-architecture digest. Go 1.25.13
 matches the current `apps/api/go.mod` and the `db-migrate.sh` helper default.
 
-Production images are published by the `publish-api-images` job in
-`.github/workflows/ci.yml` on every green master push: `linux/arm64` only,
-pushed to the immutable ECR repositories `chalk-api` and `chalk-sync` in
-`ap-southeast-1`, signed server-side by the ECR managed-signing rule
-(`chalk_production_ecr` Notation profile), with a BuildKit SLSA provenance
-attestation embedded in each OCI index. For a local validation build:
+Production images are published by the manually dispatched release workflow in
+`.github/workflows/ci.yml` after the target commit passes its local gate. The
+workflow compares the exact target SHA with the supplied stable release
+manifest, builds only the affected API or Sync image, and carries the unchanged
+digest and component provenance into the new manifest. Unknown or shared
+runtime changes fail closed to both images. Builds are `linux/arm64` only,
+pushed to immutable ECR repositories, signed server-side, and include a
+BuildKit SLSA provenance attestation. The API and Sync image jobs share remote
+BuildKit caches and run in parallel when both are affected. For a local
+validation build:
 
 ```bash
 docker buildx build \
@@ -101,10 +105,12 @@ and deployment controller.
 Component selection is intentionally a public, pure contract. Use
 `scripts/plan-release-components` with changed paths (or `--component api`,
 `sync`, `both`, or `shared`) to obtain JSON build and restart sets. An API
-change rebuilds API and restarts API, Sync, and the Tunnel because of the
-current Quadlet `Requires=` graph. A Sync change restarts Sync and the Tunnel.
-Both/shared changes restart the full application closure. Redis is included
-only when a runtime dependency changes. Unknown paths fail closed.
+change rebuilds and restarts only API. A Sync change rebuilds and restarts only
+Sync. The units keep boot ordering through `Wants=` and `After=` without making
+one component restart stop the others. Both/shared changes restart the two
+application components. Redis is included only when a runtime dependency
+changes. Aggregate runtime health still gates promotion. Unknown paths fail
+closed.
 
 The private release controller owns staging, approvals, host installation,
 registry attestation checks, and its durable release ledger. Those control-plane

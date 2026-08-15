@@ -35,7 +35,7 @@ function handleRequest(request, response) {
 
 function respondServiceWorker(response) {
   serviceWorkerRequests += 1;
-  const commitHash = staleServiceWorkerResponses > 0 ? "aaaaaaa" : fullSHA.slice(0, 7);
+  const commitHash = staleServiceWorkerResponses > 0 ? fullSHA.slice(0, 7) : fullSHA;
   staleServiceWorkerResponses = Math.max(0, staleServiceWorkerResponses - 1);
   response.writeHead(200, { "Content-Type": "text/javascript" });
   response.end(`const BUILD_META = { "commitHash": "${commitHash}" };`);
@@ -64,7 +64,7 @@ after(async () => {
 test("verifies the Pages asset, account boundary, and diagnostics gateway", async () => {
   serviceWorkerRequests = 0;
   localChalkHealthRequests = 0;
-  await verifyWebDeploy({ baseURL, expectedSHA: fullSHA, deadlineMs: 100, retryDelayMs: 5, requestTimeoutMs: 50 });
+  await verifyWebDeploy({ baseURL, expectedSHA: fullSHA, deadlineMs: 500, retryDelayMs: 5, requestTimeoutMs: 200 });
   assert.equal(serviceWorkerRequests, 1);
   assert.equal(localChalkHealthRequests, 0);
 });
@@ -85,4 +85,10 @@ test("parses the production CLI flag and rejects unknown flags", () => {
     production: true,
   });
   assert.throws(() => parseArguments(["https://chalkmeet.com", fullSHA, "--force"]), /Usage:/);
+});
+
+test("requires the verifier input and service-worker metadata to use the full SHA", async () => {
+  assert.throws(() => parseArguments([baseURL, fullSHA.slice(0, 7)]), /Invalid commit SHA/);
+  staleServiceWorkerResponses = 1;
+  await assert.rejects(verifyWebDeploy({ baseURL, expectedSHA: fullSHA, deadlineMs: 1, retryDelayMs: 0, requestTimeoutMs: 50 }), /service worker has commit unknown/);
 });

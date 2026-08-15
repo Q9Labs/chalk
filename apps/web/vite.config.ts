@@ -9,7 +9,7 @@ import sdkReactPkg from "../../sdks/typescript/react/package.json";
 import { accountBoundaryVitePlugin } from "./scripts/account-boundary-vite";
 import { isLoopbackHostname, resolveEpisodeDiagnosticsConfig } from "./src/lib/episode-diagnostics-config";
 
-const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
+const commitHash = resolveCommitHash(process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim());
 const buildTime = new Date().toISOString();
 const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
 const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
@@ -49,6 +49,14 @@ const buildEpisodeDiagnosticsProxy = (environment: NodeJS.ProcessEnv): ProxyOpti
 };
 
 const diagnosticsProxy = buildEpisodeDiagnosticsProxy(process.env);
+
+function resolveCommitHash(configuredHash: string | undefined): string {
+  const candidate = configuredHash || execSync("git rev-parse HEAD").toString().trim();
+  if (!/^[0-9a-f]{40}$/.test(candidate)) {
+    throw new Error(`CHALK_COMMIT_SHA must be a full 40-character lowercase commit SHA; received ${candidate || "unknown"}`);
+  }
+  return candidate;
+}
 
 // SPA mode for Cloudflare Pages deployment
 // SSR requires Cloudflare Workers, but our token only has Pages permission

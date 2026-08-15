@@ -65,14 +65,34 @@ func TestChatAttachmentRepositoryReservesFirstStreamAndPreservesIdempotency(t *t
 		t.Fatalf("changed fingerprint error = %v", err)
 	}
 
+	var storedAttachmentCount int64
+	if err := pool.QueryRow(
+		ctx,
+		`select count(*)
+		 from sync_chat_attachments
+		 where tenant_id = $1
+		   and space_id = $2
+		   and episode_id = $3
+		   and upload_id = $4`,
+		uuid(subject.TenantID),
+		uuid(subject.SpaceID),
+		uuid(subject.EpisodeID),
+		uuid(input.Upload.UploadID),
+	).Scan(&storedAttachmentCount); err != nil {
+		t.Fatal(err)
+	}
+	if storedAttachmentCount != 1 {
+		t.Fatalf("stored attachment rows = %d, want 1", storedAttachmentCount)
+	}
+
 	var attachmentCount, attachmentBytes int64
 	if err := pool.QueryRow(
 		ctx,
 		`select attachment_count, attachment_bytes
 		 from sync_chat_streams
-		 where tenant_id = $1 and episode_id = $2`,
+		 where tenant_id = $1 and space_id = $2`,
 		uuid(subject.TenantID),
-		uuid(subject.EpisodeID),
+		uuid(subject.SpaceID),
 	).Scan(&attachmentCount, &attachmentBytes); err != nil {
 		t.Fatal(err)
 	}

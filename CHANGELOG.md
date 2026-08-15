@@ -14,6 +14,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added exact-SHA, component-aware managed release manifests and a manual
+  release workflow that builds only the changed API or Sync image while
+  carrying the stable component digest and provenance forward.
+- Added a local-first web release runner that builds one cached artifact,
+  verifies staging by default, supports an explicit staging bypass, and reuses
+  the same path as the CI fallback.
 - Added a product-first landing journey for Account creation, dashboard entry,
   invite-link joining, and SDK discovery, backed by the official technology
   marks distributed through SVGL.
@@ -26,8 +32,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Developer page, with safe Episode references that resolve to canonical
   diagnostics only after tenant authorization.
 
+### Changed
+
+- Made the local API gate own its isolated migrated PostgreSQL database, expose
+  every integration-test database alias, run independent checks in parallel,
+  and avoid duplicate vet work in `go test`.
+- Removed the unfinished standalone API performance harness. A replacement can
+  return when it has stable workload, latency, and regression contracts.
+
 ### Fixed
 
+- Fixed chat attachment reservation against the Space-scoped stream schema and
+  corrected cleanup fixtures so historical Whiteboard scenes do not violate
+  the one-current-scene constraint.
 - Fixed named Dashboard joins so broker invite capabilities cannot silently
   connect Participants to a different Space, and ensured every Episode's
   authoritative start time, webhook Event, history row, and Episode Diagnostics

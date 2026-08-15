@@ -111,7 +111,7 @@ component_digest="$(printf 'c%.0s' {1..64})"
   --allow-dirty >/dev/null
 jq -e --slurpfile stable "${fixture_root}/release-manifest.json" '
   .schema_version == 2 and .affected_components == ["api"] and
-  .images.api == "ghcr.io/q9labs/chalk-api@sha256-c" + ("c" * 63) and
+  .images.api == ("ghcr.io/q9labs/chalk-api@sha256:" + ("c" * 64)) and
   .images.sync == $stable[0].images.sync and
   .component_releases.sync == $stable[0].component_releases.sync and
   .component_releases.api != $stable[0].component_releases.api
@@ -139,15 +139,23 @@ if "${managed_root}/scripts/generate-release-manifest" \
 fi
 
 "${managed_root}/scripts/plan-release-components" apps/api/internal/httpapi/routes.go |
-  jq -e '.classification == "api" and .build_set == ["api"] and .restart_closure == ["chalk-api.service", "chalk-sync.service", "chalk-cloudflared.service"]' >/dev/null
+  jq -e '.classification == "api" and .build_set == ["api"] and .restart_closure == ["chalk-api.service"]' >/dev/null
 "${managed_root}/scripts/plan-release-components" apps/sync/lib/chalk_sync/protocol.ex |
-  jq -e '.classification == "sync" and .build_set == ["sync"] and .restart_closure == ["chalk-sync.service", "chalk-cloudflared.service"]' >/dev/null
+  jq -e '.classification == "sync" and .build_set == ["sync"] and .restart_closure == ["chalk-sync.service"]' >/dev/null
 "${managed_root}/scripts/plan-release-components" --component shared |
   jq -e '.classification == "both" and .affected_components == ["api", "sync"]' >/dev/null
 "${managed_root}/scripts/plan-release-components" --runtime-dependency --component api |
-  jq -e '.build_set == ["api", "redis"] and .restart_closure[0] == "chalk-redis.service"' >/dev/null
-if "${managed_root}/scripts/plan-release-components" unknown/path >/dev/null 2>&1; then
-  echo "unknown changed path was accepted" >&2
+  jq -e '.build_set == ["api"] and .restart_closure == ["chalk-redis.service", "chalk-api.service"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" infrastructure/managed-episode/README.md |
+  jq -e '.classification == "both" and .build_set == ["api", "sync"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" package.json |
+  jq -e '.classification == "none" and .build_set == [] and .restart_closure == []' >/dev/null
+"${managed_root}/scripts/plan-release-components" --component none |
+  jq -e '.classification == "none" and .affected_components == []' >/dev/null
+"${managed_root}/scripts/plan-release-components" unknown/path |
+  jq -e '.classification == "both" and .unknown_paths == true and .build_set == ["api", "sync"]' >/dev/null
+if "${managed_root}/scripts/plan-release-components" --component nope >/dev/null 2>&1; then
+  echo "unknown component input was accepted" >&2
   exit 1
 fi
 

@@ -17,6 +17,14 @@ const STATUS_DESCRIPTION = "Live system status, incidents, uptime, and maintenan
 const STATUS_CANONICAL = "https://chalkmeet.com/status";
 const STATUS_IMAGE = "https://chalkmeet.com/brand/chalk/chalk-icon-512.png";
 
+function resolveCommitHash() {
+  const commitHash = process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || execSync("git rev-parse HEAD").toString().trim();
+  if (!/^[0-9a-f]{40}$/.test(commitHash)) {
+    throw new Error(`CHALK_COMMIT_SHA must be a full 40-character lowercase commit SHA; received ${commitHash || "unknown"}`);
+  }
+  return commitHash;
+}
+
 if (!existsSync(shellPath)) {
   throw new Error(`missing ${shellPath}; expected TanStack Start SPA build output to include _shell.html`);
 }
@@ -33,7 +41,7 @@ writeFileSync(statusIndexPath, injectStatusMeta(statusHtml));
 
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 const buildMeta = {
-  commitHash: execSync("git rev-parse --short HEAD").toString().trim(),
+  commitHash: resolveCommitHash(),
   version: packageJson.version || "0.0.0",
 };
 

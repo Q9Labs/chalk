@@ -1,105 +1,167 @@
-name: CI
+name: Release
 
 on:
-  pull_request:
-    branches:
-      - main
-      - master
-  push:
-    branches:
-      - main
-      - master
-  schedule:
-    - cron: "23 2 * * *"
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Full 40-character commit SHA that already passed its local gate
+        required: true
+        type: string
+      release_managed:
+        description: Build the changed API or Sync image and emit a managed release manifest
+        required: true
+        default: true
+        type: boolean
+      stable_manifest_run_id:
+        description: Run ID whose release manifest is the current stable baseline; omit only for the first release
+        required: false
+        type: string
+      deploy_web:
+        description: Run the CI web deployment fallback
+        required: true
+        default: false
+        type: boolean
+      skip_staging:
+        description: Skip the staging web upload for this release
+        required: true
+        default: false
+        type: boolean
+
+run-name: Release ${{ inputs.target_sha }}
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  TARGET_SHA: ${{ inputs.target_sha }}
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' && github.ref != 'refs/heads/master' }}
+  group: release-${{ inputs.target_sha }}
+  cancel-in-progress: false
 
 jobs:
-  gate:
-    name: Smart gate
+  plan-managed:
+    name: Plan managed components
+    if: inputs.release_managed
     runs-on: ubuntu-24.04
+    outputs:
+      build_set: ${{ steps.plan.outputs.build_set }}
+      release_id: ${{ steps.plan.outputs.release_id }}
+      should_publish: ${{ steps.plan.outputs.should_publish }}
     steps:
-      - name: Checkout
+      - name: Checkout exact release
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.target_sha }}
           fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.26.2
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.14.0
-          cache: pnpm
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.13
-          cache-dependency-path: apps/api/go.sum
-
-      - name: Setup Erlang and Elixir
-        uses: erlef/setup-beam@v1
-        with:
-          otp-version: "28"
-          elixir-version: 1.19.5
-
-      - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
-        with:
-          tofu_version: 1.12.3
-
-      - name: Cache Semgrep downloads
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: semgrep-${{ runner.os }}-${{ runner.arch }}-py3.12-1.166.0
-
-      - name: Install Semgrep
-        run: pipx install semgrep==1.166.0
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run smart gate
-        env:
-          CHALK_E2E_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
-          GATE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-          GATE_HEAD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact release SHA
         run: |
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            pnpm run gate -- --full
-          else
-            pnpm run gate
+          if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "target_sha must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse HEAD)" != "$TARGET_SHA" ]]; then
+            echo "checkout does not match target_sha" >&2
+            exit 1
           fi
 
-  publish-api-images:
-    name: Publish API images
-    needs: gate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      - name: Download stable release manifest
+        if: inputs.stable_manifest_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.stable_manifest_run_id }}
+          pattern: release-manifest-*
+          path: ${{ runner.temp }}/stable-download
+          merge-multiple: true
+
+      - name: Plan changed components
+        id: plan
+        env:
+          PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
+        run: |
+          set -euo pipefail
+          mkdir -p "$PLAN_ROOT"
+
+          stable_manifest=""
+          if [[ -n "${{ inputs.stable_manifest_run_id }}" ]]; then
+            mapfile -t manifests < <(find "${{ runner.temp }}/stable-download" -type f -name '*.json' | sort)
+            if [[ "${#manifests[@]}" != 1 ]]; then
+              echo "expected exactly one stable release manifest, found ${#manifests[@]}" >&2
+              exit 1
+            fi
+            stable_manifest="$PLAN_ROOT/stable-manifest.json"
+            cp "${manifests[0]}" "$stable_manifest"
+            base_sha="$(jq -er '.source_revision' "$stable_manifest")"
+            git cat-file -e "${base_sha}^{commit}"
+            git merge-base --is-ancestor "$base_sha" "$TARGET_SHA" || {
+              echo "stable manifest source is not an ancestor of target_sha" >&2
+              exit 1
+            }
+            mapfile -d '' changed_paths < <(git diff --name-only -z "$base_sha...$TARGET_SHA")
+            if [[ "${#changed_paths[@]}" == 0 ]]; then
+              infrastructure/managed-episode/scripts/plan-release-components --component none > "$PLAN_ROOT/plan.json"
+            else
+              infrastructure/managed-episode/scripts/plan-release-components -- "${changed_paths[@]}" > "$PLAN_ROOT/plan.json"
+            fi
+          else
+            infrastructure/managed-episode/scripts/plan-release-components --component both > "$PLAN_ROOT/plan.json"
+          fi
+
+          jq -e '.build_set == [] or .build_set == ["api"] or .build_set == ["sync"] or .build_set == ["api", "sync"]' "$PLAN_ROOT/plan.json" >/dev/null
+          build_set="$(jq -c '.build_set' "$PLAN_ROOT/plan.json")"
+          should_publish="$(jq -r 'if (.build_set | length) > 0 then "true" else "false" end' "$PLAN_ROOT/plan.json")"
+          release_id="managed-episode-$(date -u +%Y%m%dT%H%M%SZ)-${TARGET_SHA:0:8}-$(openssl rand -hex 4)"
+          {
+            printf 'build_set=%s\n' "$build_set"
+            printf 'should_publish=%s\n' "$should_publish"
+            printf 'release_id=%s\n' "$release_id"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload release plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-release-plan-${{ steps.plan.outputs.release_id }}
+          path: ${{ runner.temp }}/managed-release-plan
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Plan summary
+        env:
+          PLAN_FILE: ${{ runner.temp }}/managed-release-plan/plan.json
+        run: |
+          {
+            echo "## Managed release plan"
+            echo "- source: \`$TARGET_SHA\`"
+            echo "- classification: \`$(jq -r '.classification' "$PLAN_FILE")\`"
+            echo "- build: \`$(jq -c '.build_set' "$PLAN_FILE")\`"
+            echo "- restart closure: \`$(jq -c '.restart_closure' "$PLAN_FILE")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-managed-images:
+    name: Build ${{ matrix.component }} image
+    needs: plan-managed
+    if: needs.plan-managed.outputs.should_publish == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.plan-managed.outputs.build_set) }}
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       id-token: write
-    concurrency:
-      group: publish-api-images
-      cancel-in-progress: false
     env:
       AWS_REGION: ap-southeast-1
       ECR_REGISTRY: 688819141892.dkr.ecr.ap-southeast-1.amazonaws.com
+      COMPONENT: ${{ matrix.component }}
+      RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
     steps:
-      - name: Checkout
+      - name: Checkout exact release
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.target_sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -111,7 +173,7 @@ jobs:
         run: |
           status="$(aws signer get-signing-profile --profile-name chalk_production_ecr --query status --output text)"
           if [[ "$status" != "Active" ]]; then
-            echo "Signer profile chalk_production_ecr is not Active (status: $status); refusing to publish unsigned images." >&2
+            echo "managed signing profile is not active (status: $status)" >&2
             exit 1
           fi
 
@@ -121,116 +183,145 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Compute release id
-        id: release
+      - name: Build and push immutable image
+        id: build
         run: |
-          release_id="managed-episode-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA:0:8}-$(openssl rand -hex 4)"
-          printf 'id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
+          case "$COMPONENT" in
+            api)
+              source_context="api_source=apps/api"
+              dockerfile="infrastructure/managed-episode/images/api.Dockerfile"
+              repository="chalk-api"
+              ;;
+            sync)
+              source_context="sync_source=apps/sync"
+              dockerfile="infrastructure/managed-episode/images/sync.Dockerfile"
+              repository="chalk-sync"
+              ;;
+            *)
+              echo "unsupported component: $COMPONENT" >&2
+              exit 1
+              ;;
+          esac
 
-      - name: Build and push API image
-        id: build-api
-        run: |
+          metadata_file="${RUNNER_TEMP}/${COMPONENT}-metadata.json"
           docker buildx build \
             --platform linux/arm64 \
             --provenance=mode=max \
-            --build-context api_source=apps/api \
-            --cache-from type=gha,scope=chalk-api \
-            --cache-to type=gha,scope=chalk-api,mode=max \
-            --file infrastructure/managed-episode/images/api.Dockerfile \
-            --build-arg RELEASE_ID="${{ steps.release.outputs.id }}" \
-            --build-arg SOURCE_REVISION="$GITHUB_SHA" \
-            --tag "$ECR_REGISTRY/chalk-api:${{ steps.release.outputs.id }}" \
-            --metadata-file /tmp/api-metadata.json \
+            --build-context "$source_context" \
+            --cache-from "type=gha,scope=chalk-${COMPONENT}" \
+            --cache-to "type=gha,scope=chalk-${COMPONENT},mode=max" \
+            --file "$dockerfile" \
+            --build-arg RELEASE_ID="$RELEASE_ID" \
+            --build-arg SOURCE_REVISION="$TARGET_SHA" \
+            --tag "$ECR_REGISTRY/${repository}:$RELEASE_ID" \
+            --metadata-file "$metadata_file" \
             --push \
             infrastructure/managed-episode
-          printf 'digest=%s\n' "$(jq -r '."containerimage.digest"' /tmp/api-metadata.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push Sync image
-        id: build-sync
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            --provenance=mode=max \
-            --build-context sync_source=apps/sync \
-            --cache-from type=gha,scope=chalk-sync \
-            --cache-to type=gha,scope=chalk-sync,mode=max \
-            --file infrastructure/managed-episode/images/sync.Dockerfile \
-            --build-arg RELEASE_ID="${{ steps.release.outputs.id }}" \
-            --build-arg SOURCE_REVISION="$GITHUB_SHA" \
-            --tag "$ECR_REGISTRY/chalk-sync:${{ steps.release.outputs.id }}" \
-            --metadata-file /tmp/sync-metadata.json \
-            --push \
-            infrastructure/managed-episode
-          printf 'digest=%s\n' "$(jq -r '."containerimage.digest"' /tmp/sync-metadata.json)" >> "$GITHUB_OUTPUT"
+          digest="$(jq -er '."containerimage.digest"' "$metadata_file")"
+          printf '%s\n' "$ECR_REGISTRY/${repository}@$digest" > "${RUNNER_TEMP}/${COMPONENT}-image.txt"
+          printf 'repository=%s\n' "$repository" >> "$GITHUB_OUTPUT"
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
 
       - name: Wait for managed signing
         run: |
-          for repo_digest in "chalk-api ${{ steps.build-api.outputs.digest }}" "chalk-sync ${{ steps.build-sync.outputs.digest }}"; do
-            read -r repo digest <<<"$repo_digest"
-            for attempt in $(seq 1 60); do
-              status="$(aws ecr describe-image-signing-status --repository-name "$repo" --image-id imageDigest="$digest" --query 'signingStatuses[0].status' --output text 2>/dev/null || echo PENDING)"
-              if [[ "$status" == "COMPLETE" ]]; then
-                echo "$repo@$digest signing COMPLETE"
-                break
-              fi
-              if [[ "$status" == "FAILED" ]]; then
-                echo "Managed signing FAILED for $repo@$digest" >&2
-                aws ecr describe-image-signing-status --repository-name "$repo" --image-id imageDigest="$digest" \
-                  --query 'signingStatuses[0].failureReason' --output text >&2 || true
-                exit 1
-              fi
-              if [[ "$attempt" == 60 ]]; then
-                echo "Managed signing did not reach COMPLETE for $repo@$digest (last status: $status)" >&2
-                exit 1
-              fi
-              sleep 10
-            done
+          for attempt in $(seq 1 60); do
+            status="$(aws ecr describe-image-signing-status --repository-name "${{ steps.build.outputs.repository }}" --image-id imageDigest="${{ steps.build.outputs.digest }}" --query 'signingStatuses[0].status' --output text 2>/dev/null || echo PENDING)"
+            if [[ "$status" == "COMPLETE" ]]; then
+              exit 0
+            fi
+            if [[ "$status" == "FAILED" ]]; then
+              echo "managed signing failed for $COMPONENT" >&2
+              exit 1
+            fi
+            if [[ "$attempt" == 60 ]]; then
+              echo "managed signing did not complete for $COMPONENT (last status: $status)" >&2
+              exit 1
+            fi
+            sleep 10
           done
 
-      - name: Generate release manifest
+      - name: Upload immutable image reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-image-${{ matrix.component }}-${{ env.RELEASE_ID }}
+          path: ${{ runner.temp }}/${{ matrix.component }}-image.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  publish-managed-manifest:
+    name: Publish managed release manifest
+    needs: [plan-managed, build-managed-images]
+    if: needs.plan-managed.outputs.should_publish == 'true' && needs.build-managed-images.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_sha }}
+
+      - name: Download release plan
+        uses: actions/download-artifact@v4
+        with:
+          pattern: managed-release-plan-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/managed-release-plan
+          merge-multiple: true
+
+      - name: Download built image references
+        uses: actions/download-artifact@v4
+        with:
+          pattern: managed-image-*-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/managed-images
+          merge-multiple: true
+
+      - name: Generate component-aware manifest
+        env:
+          RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+          PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
+          IMAGE_ROOT: ${{ runner.temp }}/managed-images
         run: |
-          ./infrastructure/managed-episode/scripts/generate-release-manifest \
-            --api-image "$ECR_REGISTRY/chalk-api@${{ steps.build-api.outputs.digest }}" \
-            --sync-image "$ECR_REGISTRY/chalk-sync@${{ steps.build-sync.outputs.digest }}" \
-            --architectures linux/arm64 \
-            --source-revision "$GITHUB_SHA" \
-            --release-id "${{ steps.release.outputs.id }}" \
-            --output "infrastructure/managed-episode/generated/${{ steps.release.outputs.id }}.json"
+          set -euo pipefail
+          plan="$PLAN_ROOT/plan.json"
+          affected="$(jq -r '.affected_components | join(",")' "$plan")"
+          output="infrastructure/managed-episode/generated/${RELEASE_ID}.json"
+          args=(
+            --affected-components "$affected"
+            --architectures linux/arm64
+            --source-revision "$TARGET_SHA"
+            --release-id "$RELEASE_ID"
+            --output "$output"
+          )
+          if [[ -f "$PLAN_ROOT/stable-manifest.json" ]]; then
+            args+=(--stable-manifest "$PLAN_ROOT/stable-manifest.json")
+          fi
+          if jq -e '.affected_components | index("api") != null' "$plan" >/dev/null; then
+            args+=(--api-image "$(<"$IMAGE_ROOT/api-image.txt")")
+          fi
+          if jq -e '.affected_components | index("sync") != null' "$plan" >/dev/null; then
+            args+=(--sync-image "$(<"$IMAGE_ROOT/sync-image.txt")")
+          fi
+          infrastructure/managed-episode/scripts/generate-release-manifest "${args[@]}"
 
       - name: Upload release manifest
         uses: actions/upload-artifact@v4
         with:
-          name: release-manifest-${{ steps.release.outputs.id }}
-          path: infrastructure/managed-episode/generated/${{ steps.release.outputs.id }}.json
+          name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
+          path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}.json
           retention-days: 90
           if-no-files-found: error
 
-      - name: Release summary
-        run: |
-          {
-            echo "## Release ${{ steps.release.outputs.id }}"
-            echo "- source: \`$GITHUB_SHA\`"
-            echo "- api: \`$ECR_REGISTRY/chalk-api@${{ steps.build-api.outputs.digest }}\`"
-            echo "- sync: \`$ECR_REGISTRY/chalk-sync@${{ steps.build-sync.outputs.digest }}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   deploy-web:
-    name: Deploy web
-    needs: gate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    name: Deploy web fallback
+    if: inputs.deploy_web
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    concurrency:
-      group: deploy-web
-      cancel-in-progress: false
     env:
       CLOUDFLARE_ACCOUNT_ID: "5281943bd26d5bdcf4c3915606cd6bfb"
     steps:
-      - name: Checkout
+      - name: Checkout exact release
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.target_sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -243,45 +334,20 @@ jobs:
           node-version: 22.14.0
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Restore Turbo build cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: web-release-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.target_sha }}
+          restore-keys: |
+            web-release-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
-      - name: Build web workspace dependencies
-        run: pnpm --filter "web^..." run build
-
-      - name: Build production web
-        env:
-          CHALK_ENVIRONMENT: production
-          CHALK_EPISODE_DIAGNOSTICS: hosted
-          CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN: "true"
-          CHALK_EPISODE_DIAGNOSTICS_GATEWAY: verified
-          VITE_API_URL: https://api.chalkmeet.com
-          VITE_CHALK_TELEMETRY_ENABLED: "false"
-        run: pnpm --filter web run build
-
-      - name: Deploy staging web
-        id: deploy-staging
-        working-directory: apps/web
+      - name: Build once, upload, and verify
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          deployment_output="$(npx wrangler pages deploy dist/client --project-name chalk-staging --branch staging --commit-hash "$GITHUB_SHA" --commit-dirty=false)"
-          printf '%s\n' "$deployment_output"
-          deployment_url="$(printf '%s\n' "$deployment_output" | grep 'Take a peek over at' | grep -Eo 'https://[[:alnum:]-]+\.chalk-staging\.pages\.dev' | tail -n 1 || true)"
-          if [[ -z "$deployment_url" ]]; then
-            echo "Wrangler did not print an exact staging deployment URL." >&2
-            exit 1
+          args=(--sha "$TARGET_SHA")
+          if [[ "${{ inputs.skip_staging }}" == "true" ]]; then
+            args+=(--skip-staging)
           fi
-          printf 'url=%s\n' "$deployment_url" >> "$GITHUB_OUTPUT"
-
-      - name: Verify staging web
-        run: node scripts/deploy/verify-web-deploy.mjs "${{ steps.deploy-staging.outputs.url }}" "$GITHUB_SHA"
-
-      - name: Deploy production web
-        working-directory: apps/web
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler pages deploy dist/client --project-name chalk --branch master --commit-hash "$GITHUB_SHA" --commit-dirty=false
-
-      - name: Verify production web
-        run: node scripts/deploy/verify-web-deploy.mjs https://chalkmeet.com "$GITHUB_SHA" --production
+          pnpm run release:web:ci -- "${args[@]}"
