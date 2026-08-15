@@ -15,10 +15,7 @@
       "pattern": "^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"
     },
     "architectures": {
-      "oneOf": [
-        { "const": ["linux/arm64"] },
-        { "const": ["linux/amd64", "linux/arm64"] }
-      ]
+      "oneOf": [{ "const": ["linux/arm64"] }, { "const": ["linux/amd64", "linux/arm64"] }]
     },
     "images": {
       "type": "object",
@@ -58,17 +55,7 @@
     },
     "common": {
       "type": "object",
-      "required": [
-        "release_id",
-        "generated_at",
-        "source_revision",
-        "source_tree_state",
-        "architectures",
-        "images",
-        "database_compatibility",
-        "protocol_compatibility",
-        "runtime_artifacts"
-      ],
+      "required": ["release_id", "generated_at", "source_revision", "source_tree_state", "architectures", "images", "database_compatibility", "protocol_compatibility", "runtime_artifacts"],
       "properties": {
         "release_id": { "type": "string", "minLength": 1 },
         "generated_at": { "type": "string", "format": "date-time" },
@@ -119,11 +106,7 @@
           "properties": {
             "schema_version": { "const": 2 },
             "affected_components": {
-              "type": "array",
-              "minItems": 1,
-              "maxItems": 2,
-              "uniqueItems": true,
-              "items": { "enum": ["api", "sync"] }
+              "oneOf": [{ "const": ["api"] }, { "const": ["sync"] }, { "const": ["api", "sync"] }]
             },
             "component_releases": { "$ref": "#/$defs/component_releases" }
           }

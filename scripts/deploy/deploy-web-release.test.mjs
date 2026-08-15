@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
-import { buildReleasePlan, parseArguments, parseDeploymentURL, runWebRelease } from "./deploy-web-release.mjs";
+import { buildReleasePlan, parseArguments, parseDeploymentURL, recoverStaleReleaseLock, runWebRelease, withReleaseLock } from "./deploy-web-release.mjs";
 
 const fullSHA = "040a7c52698f8cf9b87b0ef48f918b681de9bc35";
 const temporaryDirectories = [];
@@ -17,19 +17,48 @@ test("parses the explicit release controls and enforces a full SHA in CI", () =>
     sha: undefined,
     skipStaging: false,
     dryRun: true,
+    recoverStaleLock: false,
   });
   assert.deepEqual(parseArguments(["--sha", fullSHA, "--skip-staging"]), {
     sha: fullSHA,
     skipStaging: true,
     dryRun: false,
+    recoverStaleLock: false,
   });
   assert.deepEqual(parseArguments(["--sha=" + fullSHA, "--dry-run"], { isCI: true }), {
     sha: fullSHA,
     skipStaging: false,
     dryRun: true,
+    recoverStaleLock: false,
   });
   assert.throws(() => parseArguments([], { isCI: true }), /required in CI/);
+  assert.throws(() => parseArguments(["--sha", fullSHA, "--recover-stale-lock"], { isCI: true }), /only available for local releases/);
   assert.throws(() => parseArguments(["--sha", fullSHA.slice(0, 7)]), /full 40-character/);
+});
+
+test("recovers an explicitly requested stale release lock but protects a live owner", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "chalk-web-release-lock-test-"));
+  temporaryDirectories.push(directory);
+  const staleLock = join(directory, "stale.lock");
+  await mkdir(staleLock);
+  await writeFile(join(staleLock, "owner.json"), JSON.stringify({ pid: 99_999_999, acquiredAt: new Date().toISOString() }));
+
+  await recoverStaleReleaseLock(staleLock);
+  let ran = false;
+  await withReleaseLock(staleLock, async () => {
+    ran = true;
+  });
+  assert.equal(ran, true);
+
+  const liveLock = join(directory, "live.lock");
+  await mkdir(liveLock);
+  await writeFile(join(liveLock, "owner.json"), JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }));
+  await assert.rejects(() => recoverStaleReleaseLock(liveLock), /still running/);
+
+  const invalidLock = join(directory, "invalid.lock");
+  await mkdir(invalidLock);
+  await writeFile(join(invalidLock, "owner.json"), "null");
+  await assert.rejects(() => recoverStaleReleaseLock(invalidLock), /owner PID is invalid/);
 });
 
 test("defaults to the exact local HEAD SHA when no CI SHA is supplied", async () => {

@@ -80,6 +80,15 @@ uploading, or verifying anything:
 pnpm run release:web -- --dry-run
 ```
 
+If the prior local release was force-killed and left its lock behind, recover
+it only after checking that no release process is still running:
+
+```bash
+op run --env-file=.private/chalk-web-release.env -- pnpm run release:web -- --recover-stale-lock
+```
+
+The runner reads the recorded owner PID and refuses to remove a live lock.
+
 CI should inject `CLOUDFLARE_API_TOKEN` from its encrypted secret store and
 call the CI alias with the workflow SHA:
 

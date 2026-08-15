@@ -3,6 +3,7 @@
 - 2026-08-15: Mapped the local API gate, web release job, managed release artifacts, and private cutover controller. The current API gate is serial and duplicates the curated vet pass inside `go test`; the current release always builds both API and Sync; the current private cutover is release-specific and restarts the complete runtime.
 - 2026-08-15: Measured the API performance harness at 177.62 seconds cold and 57.46 seconds warm. It reports throughput and errors without enforcing a performance contract, so the unfinished harness will be removed instead of remaining a release gate.
 - 2026-08-15: Agreed target: one deterministic local API gate with isolated migrated Postgres, safe parallel analysis, no duplicate vet; component-aware API/Sync build and restart planning; preferred local web release with staging by default, explicit emergency bypass, exact-SHA production verification, and CI fallback through the same implementation.
+
 ## Integration
 
 - Removed the unfinished API performance harness and folded API verification
@@ -23,3 +24,6 @@
   integration contracts that had been skipped by the old database aliases.
 - Repaired those chat attachment and Whiteboard fixture contracts. The full API
   gate then passed, including migrated database tests and lifecycle smoke.
+- The bounded reviews found three final hardening gaps. Web deploys now serialize
+  across release SHAs, local stale-lock recovery refuses a live owner, and the
+  manifest schema accepts only the component orders the runtime accepts.

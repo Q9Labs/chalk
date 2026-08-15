@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -34,6 +34,7 @@ export function parseArguments(arguments_, { isCI = false } = {}) {
   let sha;
   let skipStaging = false;
   let dryRun = false;
+  let recoverStaleLock = false;
 
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -61,13 +62,21 @@ export function parseArguments(arguments_, { isCI = false } = {}) {
       dryRun = true;
       continue;
     }
+    if (argument === "--recover-stale-lock") {
+      if (recoverStaleLock) throw usageError();
+      recoverStaleLock = true;
+      continue;
+    }
     throw usageError();
   }
 
   if (isCI && sha === undefined) {
     throw new Error("--sha <40-character SHA> is required in CI");
   }
-  return { sha, skipStaging, dryRun };
+  if (isCI && recoverStaleLock) {
+    throw new Error("--recover-stale-lock is only available for local releases");
+  }
+  return { sha, skipStaging, dryRun, recoverStaleLock };
 }
 
 export function parseDeploymentURL(output, projectName = STAGING_PROJECT) {
@@ -160,6 +169,10 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
     return { sha: expectedSHA, dryRun: true, plan };
   }
 
+  if (options.recoverStaleLock) {
+    await recoverStaleReleaseLock(lockPath);
+  }
+
   return withReleaseLock(lockPath, async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "chalk-web-release-"));
     const worktreePath = join(workspaceRoot, "checkout");
@@ -193,6 +206,36 @@ export async function withReleaseLock(lockPath, operation) {
     return await operation();
   } finally {
     await rm(lockPath, { recursive: true, force: true });
+  }
+}
+
+export async function recoverStaleReleaseLock(lockPath) {
+  let owner;
+  try {
+    owner = JSON.parse(await readFile(join(lockPath, "owner.json"), "utf8"));
+  } catch (error) {
+    throw new Error(`Cannot safely recover release lock ${lockPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const ownerPID = owner?.pid;
+  if (!Number.isInteger(ownerPID) || ownerPID <= 0) {
+    throw new Error(`Cannot safely recover release lock ${lockPath}: owner PID is invalid`);
+  }
+  if (isProcessRunning(ownerPID)) {
+    throw new Error(`Cannot recover release lock ${lockPath}: owner process ${ownerPID} is still running`);
+  }
+
+  await rm(lockPath, { recursive: true, force: false });
+}
+
+function isProcessRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "ESRCH") return false;
+    if (error?.code === "EPERM") return true;
+    throw error;
   }
 }
 
@@ -281,7 +324,7 @@ function printDryRun(expectedSHA, releasePlan) {
 }
 
 function usageError() {
-  return new Error("Usage: pnpm run release:web [--sha <40-char-sha>] [--skip-staging] [--dry-run]");
+  return new Error("Usage: pnpm run release:web [--sha <40-char-sha>] [--skip-staging] [--recover-stale-lock] [--dry-run]");
 }
 
 function escapeRegExp(value) {

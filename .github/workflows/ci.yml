@@ -313,6 +313,9 @@ jobs:
     name: Deploy web fallback
     if: inputs.deploy_web
     runs-on: ubuntu-24.04
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
     permissions:
       contents: read
     env:
