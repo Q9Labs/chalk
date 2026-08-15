@@ -36,6 +36,8 @@ export type CreateSpaceInput = {
 
 export type Space = {
   readonly admission_policy: unknown;
+  readonly archived: boolean;
+  readonly archived_at?: string;
   readonly created_at: string;
   readonly created_by_user_id: string | null;
   readonly default_episode_duration_seconds: number;
@@ -55,6 +57,13 @@ export type Space = {
   readonly tenant_id: string;
   readonly updated_at: string;
 };
+
+export type SpaceList = {
+  readonly spaces: readonly Space[];
+  readonly pagination: { readonly has_more: boolean; readonly next_cursor: string | null; readonly page_size: number };
+};
+
+export type ListSpacesInput = { readonly archived?: boolean; readonly cursor?: string; readonly pageSize?: number };
 
 export type CreateEpisodeInput = {
   readonly metadata?: unknown;
@@ -176,7 +185,13 @@ export type ListAPIKeysInput = { readonly cursor?: string; readonly pageSize?: n
 export type RotateAPIKeyInput = { readonly expiresAt?: string | null };
 
 export type ChalkServerClient = {
-  readonly spaces: { create(input: CreateSpaceInput): Promise<Space> };
+  readonly spaces: {
+    archive(spaceId: string): Promise<Space>;
+    create(input: CreateSpaceInput): Promise<Space>;
+    get(spaceId: string): Promise<Space>;
+    list(input?: ListSpacesInput): Promise<SpaceList>;
+    restore(spaceId: string): Promise<Space>;
+  };
   readonly episodes: {
     create(spaceId: string, input: CreateEpisodeInput, options?: ChalkIdempotencyOptions): Promise<Episode>;
     end(spaceId: string, episodeId: string, options?: ChalkIdempotencyOptions): Promise<EpisodeEnd>;

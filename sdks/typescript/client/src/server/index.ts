@@ -17,10 +17,12 @@ export type {
   EpisodeEnd,
   IssueAccessGrantInput,
   ListAPIKeysInput,
+  ListSpacesInput,
   AccessGrant,
   ParticipantLifecycle,
   ParticipantRemoval,
   RemoveParticipantInput,
   RotateAPIKeyInput,
   Space,
+  SpaceList,
 } from "./types.js";

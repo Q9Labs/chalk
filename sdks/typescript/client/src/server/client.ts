@@ -15,10 +15,12 @@ import type {
   EpisodeEnd,
   IssueAccessGrantInput,
   ListAPIKeysInput,
+  ListSpacesInput,
   ParticipantLifecycle,
   ParticipantRemoval,
   RemoveParticipantInput,
   Space,
+  SpaceList,
 } from "./types.js";
 
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
@@ -33,7 +35,11 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
 
   return {
     spaces: {
+      archive: (spaceId) => request<Space>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/archive`, expectedStatus: 200, retry: "always" }),
       create: (input) => request<Space>({ method: "POST", path: `${tenantPath}/spaces`, body: createSpaceRequest(input), expectedStatus: 201, retry: "never" }),
+      get: (spaceId) => request<Space>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}`, expectedStatus: 200, retry: "always" }),
+      list: (input) => request<SpaceList>({ method: "GET", path: `${tenantPath}/spaces${spaceQuery(input)}`, expectedStatus: 200, retry: "always" }),
+      restore: (spaceId) => request<Space>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/restore`, expectedStatus: 200, retry: "always" }),
     },
     episodes: {
       create: (spaceId, input, idempotency) => request<Episode>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/episodes`, body: createEpisodeRequest(input), expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
@@ -127,6 +133,14 @@ function apiKeyCreateRequest(input: CreateAPIKeyInput): Record<string, unknown> 
   return { expires_at: input.expiresAt, name: input.name, scopes: [...input.scopes] };
 }
 
+function spaceQuery(input: ListSpacesInput | undefined): string {
+  const query = new URLSearchParams();
+  setQueryValue(query, "archived", input?.archived);
+  setQueryValue(query, "cursor", input?.cursor);
+  setQueryValue(query, "page_size", input?.pageSize);
+  return prefixedQuery(query.toString());
+}
+
 function apiKeyQuery(input: ListAPIKeysInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "cursor", input?.cursor);
@@ -134,7 +148,7 @@ function apiKeyQuery(input: ListAPIKeysInput | undefined): string {
   return prefixedQuery(query.toString());
 }
 
-function setQueryValue(query: URLSearchParams, name: string, value: number | string | undefined): void {
+function setQueryValue(query: URLSearchParams, name: string, value: boolean | number | string | undefined): void {
   if (value !== undefined) query.set(name, String(value));
 }
 

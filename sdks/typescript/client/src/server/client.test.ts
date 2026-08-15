@@ -152,6 +152,32 @@ describe("createChalkServerClient", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("reads, lists, archives, and restores Spaces through the canonical routes", async () => {
+    const requests: Array<{ init?: RequestInit; url: string }> = [];
+    const archivedSpace = { ...space(), archived: true, archived_at: "2026-01-02T00:00:00Z" };
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ init, url: String(input) });
+      if (String(input).endsWith("/archive")) return jsonResponse(archivedSpace, 200);
+      if (String(input).includes("?")) return jsonResponse({ spaces: [archivedSpace], pagination: { has_more: false, next_cursor: null, page_size: 10 } }, 200);
+      return jsonResponse(space(), 200);
+    });
+    const client = createChalkServerClient({ apiKey: "chalk_sk_secret.value", tenantId, apiBaseURL: "https://api.example.test", fetch });
+
+    await expect(client.spaces.get(spaceId)).resolves.toMatchObject({ archived: false, id: spaceId });
+    await expect(client.spaces.list({ archived: true, cursor: "next", pageSize: 10 })).resolves.toMatchObject({ pagination: { has_more: false }, spaces: [{ archived: true }] });
+    await expect(client.spaces.archive(spaceId)).resolves.toMatchObject({ archived: true, archived_at: "2026-01-02T00:00:00Z" });
+    await expect(client.spaces.restore(spaceId)).resolves.toMatchObject({ archived: false });
+
+    expect(requests.map(({ url }) => url)).toEqual([
+      `https://api.example.test/v1/tenants/${tenantId}/spaces/${spaceId}`,
+      `https://api.example.test/v1/tenants/${tenantId}/spaces?archived=true&cursor=next&page_size=10`,
+      `https://api.example.test/v1/tenants/${tenantId}/spaces/${spaceId}/archive`,
+      `https://api.example.test/v1/tenants/${tenantId}/spaces/${spaceId}/restore`,
+    ]);
+    expect(requests.map(({ init }) => init?.method)).toEqual(["GET", "GET", "POST", "POST"]);
+    expect(requests.every(({ init }) => init?.body === undefined)).toBe(true);
+  });
+
   it("does not retry a lost media-connection replacement response", async () => {
     const fetch = vi.fn(async () => {
       throw new Error("response lost after the server replaced the connection");
@@ -198,6 +224,7 @@ function spaceInput() {
 function space() {
   return {
     admission_policy: null,
+    archived: false,
     created_at: "2026-01-01T00:00:00Z",
     created_by_user_id: null,
     default_episode_duration_seconds: 3600,
