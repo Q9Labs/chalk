@@ -1,19 +1,23 @@
 import { Link } from "@tanstack/react-router";
 import { HugeiconsIcon } from "@hugeicons/react";
+import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
 import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
 import Home01Icon from "@hugeicons/core-free-icons/Home01Icon";
 import Logout03Icon from "@hugeicons/core-free-icons/Logout03Icon";
+import Moon02Icon from "@hugeicons/core-free-icons/Moon02Icon";
 import MoreHorizontalIcon from "@hugeicons/core-free-icons/MoreHorizontalIcon";
 import PlayCircleIcon from "@hugeicons/core-free-icons/PlayCircleIcon";
 import PlusSignIcon from "@hugeicons/core-free-icons/PlusSignIcon";
 import Settings02Icon from "@hugeicons/core-free-icons/Settings02Icon";
 import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
+import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
 import UnfoldMoreIcon from "@hugeicons/core-free-icons/UnfoldMoreIcon";
 import UserCircleIcon from "@hugeicons/core-free-icons/UserCircleIcon";
 import type { IconSvgElement } from "@hugeicons/react";
 import {
   Menu,
   MenuContent,
+  MenuGroup,
   MenuGroupLabel,
   MenuItem,
   MenuRadioGroup,
@@ -34,7 +38,15 @@ import {
   cn,
   useSidebar,
 } from "@q9labsai/chalk-ui";
+import { parseThemePreference, type ThemePreference } from "../../lib/theme";
+import { useTheme } from "../../lib/theme-context";
 import { useDashboardAccount } from "./DashboardAccount";
+
+const themeOptions = [
+  { value: "system", label: "System", icon: ComputerIcon },
+  { value: "light", label: "Light", icon: Sun03Icon },
+  { value: "dark", label: "Dark", icon: Moon02Icon },
+] as const satisfies readonly { value: ThemePreference; label: string; icon: IconSvgElement }[];
 
 const primaryNavigation = [
   { to: "/home", label: "Overview", icon: Home01Icon },
@@ -109,6 +121,8 @@ export function DashboardSidebar({ pathname, onCreateSpace }: { pathname: string
                   Account settings
                 </MenuItem>
                 <MenuSeparator />
+                <ThemePicker />
+                <MenuSeparator />
                 <MenuItem onClick={() => void signOut()}>
                   <HugeiconsIcon icon={Logout03Icon} strokeWidth={1.6} />
                   Sign out
@@ -121,6 +135,30 @@ export function DashboardSidebar({ pathname, onCreateSpace }: { pathname: string
 
       <SidebarRail />
     </Sidebar>
+  );
+}
+
+/** Stays open while you try the three modes, so the change is visible behind the menu. */
+function ThemePicker() {
+  const { preference, setPreference } = useTheme();
+
+  return (
+    <MenuGroup>
+      <MenuGroupLabel>Theme</MenuGroupLabel>
+      <MenuRadioGroup
+        value={preference}
+        onValueChange={(value: unknown) => {
+          if (typeof value === "string") setPreference(parseThemePreference(value));
+        }}
+      >
+        {themeOptions.map((option) => (
+          <MenuRadioItem key={option.value} value={option.value} closeOnClick={false}>
+            <HugeiconsIcon icon={option.icon} strokeWidth={1.6} />
+            {option.label}
+          </MenuRadioItem>
+        ))}
+      </MenuRadioGroup>
+    </MenuGroup>
   );
 }
 
@@ -166,23 +204,25 @@ function TenantSwitcher({ currentTenantID, tenantName, role, tenants, onSelect }
         <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={1.6} className={collapsedHidden} />
       </SidebarMenuButton>
       <MenuContent tone="sidebar" align="start" className="min-w-(--anchor-width)">
-        <MenuGroupLabel>Your Tenants</MenuGroupLabel>
-        <MenuRadioGroup
-          value={currentTenantID}
-          onValueChange={(value: unknown) => {
-            if (typeof value === "string") onSelect(value);
-          }}
-        >
-          {tenants.map((item) => (
-            <MenuRadioItem key={item.tenant.id} value={item.tenant.id} closeOnClick>
-              <span className="bg-sidebar-accent text-sidebar-accent-foreground flex size-6 shrink-0 items-center justify-center rounded font-mono text-[11px]">{item.tenant.name.slice(0, 1).toUpperCase()}</span>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{item.tenant.name}</span>
-                <span className="truncate text-xs opacity-60">{item.access.role}</span>
-              </span>
-            </MenuRadioItem>
-          ))}
-        </MenuRadioGroup>
+        <MenuGroup>
+          <MenuGroupLabel>Your Tenants</MenuGroupLabel>
+          <MenuRadioGroup
+            value={currentTenantID}
+            onValueChange={(value: unknown) => {
+              if (typeof value === "string") onSelect(value);
+            }}
+          >
+            {tenants.map((item) => (
+              <MenuRadioItem key={item.tenant.id} value={item.tenant.id} closeOnClick>
+                <span className="bg-sidebar-accent text-sidebar-accent-foreground flex size-6 shrink-0 items-center justify-center rounded font-mono text-[11px]">{item.tenant.name.slice(0, 1).toUpperCase()}</span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{item.tenant.name}</span>
+                  <span className="truncate text-xs opacity-60">{item.access.role}</span>
+                </span>
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
         <MenuSeparator />
         <MenuItem render={<Link to="/tenant" />}>Manage current Tenant</MenuItem>
       </MenuContent>

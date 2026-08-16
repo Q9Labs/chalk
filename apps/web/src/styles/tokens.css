@@ -9,6 +9,7 @@
   --ink: #0c0e12;
   --ink-2: #555b65;
   --ink-3: #858a92;
+  --ink-inverse: #ffffff;
 
   --line: #deddd7;
   --line-strong: #c9c8c2;
@@ -30,6 +31,46 @@
   --success: #4f8c4a;
   --danger: #b94c4c;
 
+  --select-bg: var(--chalk-blue-light);
+  --select-ink: var(--ink);
+
+  /* App chrome: the dashboard and Space pages run cooler and denser than the
+     marketing paper palette, and they are the only surfaces that go dark. */
+  --app-paper: #f5f6f7;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f8f9f9;
+  --app-surface-strong: #f1f3f4;
+
+  --app-ink-2: #59616a;
+  --app-ink-3: #747c85;
+
+  --app-line: #e0e3e5;
+  --app-line-soft: #e9ebed;
+  --app-line-strong: #d9dde0;
+
+  --app-accent: #171a18;
+  --app-accent-hover: #2a2e2b;
+  --app-accent-ink: #ffffff;
+
+  --app-positive-ink: #347a4d;
+  --app-positive-line: #b9d9b5;
+
+  --app-critical: #b94c4c;
+  --app-critical-ink: #7b3027;
+  --app-critical-line: #dfaaa1;
+  --app-critical-wash: #fff7f5;
+
+  --app-caution-ink: #765f13;
+  --app-caution-line: #e4cd86;
+
+  --app-info-ink: #315f72;
+  --app-info-line: #bedce7;
+
+  --app-shadow-sm: 0 1px 2px rgba(12, 14, 18, 0.05);
+  --app-shadow-md: 0 12px 36px rgba(22, 27, 31, 0.14);
+  --app-shadow-lg: 0 28px 90px rgba(10, 13, 15, 0.24);
+  --app-scrim: rgba(15, 18, 16, 0.58);
+
   --font-display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
   --font-body: "Figtree", system-ui, sans-serif;
   --font-mono: "Spline Sans Mono", ui-monospace, "SF Mono", monospace;
@@ -42,4 +83,73 @@
   --shadow-md: 0 2px 4px rgba(12, 14, 18, 0.05), 0 20px 50px rgba(12, 14, 18, 0.09);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Chalkboard dark, pitched to sit under the sidebar's `#121719` panel. The class
+   only lands on `<html>` for app routes, so the landing and legal pages —
+   which are drawn on paper and only on paper — never see it. */
+:root.dark {
+  color-scheme: dark;
+
+  --paper: #101416;
+  --paper-2: #161b1e;
+  --surface: #171c1f;
+  --surface-muted: #12171a;
+
+  --ink: #e9ece9;
+  --ink-2: #a8b2b0;
+  --ink-3: #7e8987;
+  --ink-inverse: #10151a;
+
+  --line: #262d31;
+  --line-strong: #39434a;
+
+  --wash-green: #17251d;
+  --wash-yellow: #262115;
+  --wash-blue: #142229;
+  --wash-pink: #271a1c;
+
+  --success: #7cc47a;
+  --danger: #e08b8b;
+
+  --select-bg: #2f5568;
+  --select-ink: #eef4f6;
+
+  --app-paper: #0f1315;
+  --app-surface: #171c1f;
+  --app-surface-muted: #141a1d;
+  --app-surface-strong: #1d2427;
+
+  --app-ink-2: #a8b2b0;
+  --app-ink-3: #8d9896;
+
+  --app-line: #262d31;
+  --app-line-soft: #1f2528;
+  --app-line-strong: #39434a;
+
+  --app-accent: #e2e8e2;
+  --app-accent-hover: #f1f5f0;
+  --app-accent-ink: #12171a;
+
+  --app-positive-ink: #86c98f;
+  --app-positive-line: #2f5c3a;
+
+  --app-critical: #c85c5c;
+  --app-critical-ink: #f0a79c;
+  --app-critical-line: #6b3a35;
+  --app-critical-wash: #2a1a18;
+
+  --app-caution-ink: #e0c877;
+  --app-caution-line: #6a5a2a;
+
+  --app-info-ink: #8fc6dd;
+  --app-info-line: #2c4a58;
+
+  --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --app-shadow-md: 0 12px 36px rgba(0, 0, 0, 0.55);
+  --app-shadow-lg: 0 28px 90px rgba(0, 0, 0, 0.7);
+  --app-scrim: rgba(0, 0, 0, 0.72);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45), 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.45), 0 20px 50px rgba(0, 0, 0, 0.55);
 }

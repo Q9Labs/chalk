@@ -7,7 +7,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "./lib/utils";
 import { useIsMobile } from "./lib/use-is-mobile";
-import { resolvePortalThemeFromDocument } from "./lib/theme";
+import { usePortalTheme } from "./lib/use-portal-theme";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 const SIDEBAR_COOKIE_NAME = "chalk_sidebar_state";
@@ -95,9 +95,9 @@ interface SidebarProps extends React.ComponentPropsWithRef<"div"> {
 
 function Sidebar({ side = "left", variant = "sidebar", collapsible = "icon", title = "Navigation", className, children, ...props }: SidebarProps) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const portalTheme = usePortalTheme();
 
   if (isMobile) {
-    const portalTheme = resolvePortalThemeFromDocument();
     return (
       <Drawer.Root open={openMobile} onOpenChange={setOpenMobile} swipeDirection={side}>
         <Drawer.Portal>

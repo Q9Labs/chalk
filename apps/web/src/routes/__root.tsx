@@ -1,5 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
+import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
+import { ThemeProvider } from "../lib/theme-context";
 import { WebTelemetryProvider } from "../lib/web-telemetry-context";
 import appCss from "../styles.css?url";
 
@@ -28,14 +30,25 @@ export const Route = createRootRoute({
     ],
   }),
   shellComponent: RootDocument,
-  component: Outlet,
+  component: RootComponent,
 });
+
+function RootComponent() {
+  return (
+    <ThemeProvider>
+      <Outlet />
+    </ThemeProvider>
+  );
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // The bootstrap script writes the theme onto this element before React
+    // hydrates, so its class and attributes are expected to differ from the HTML.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
         <WebTelemetryProvider>{children}</WebTelemetryProvider>

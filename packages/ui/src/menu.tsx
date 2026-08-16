@@ -4,7 +4,7 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "./lib/utils";
-import { resolvePortalThemeFromDocument } from "./lib/theme";
+import { usePortalTheme } from "./lib/use-portal-theme";
 
 function Menu(props: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="menu" {...props} />;
@@ -27,7 +27,7 @@ const menuContentVariants = cva("z-50 min-w-(--anchor-width) origin-(--transform
 type MenuContentProps = MenuPrimitive.Popup.Props & Pick<MenuPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset"> & VariantProps<typeof menuContentVariants>;
 
 function MenuContent({ className, tone, side = "bottom", sideOffset = 6, align = "start", alignOffset = 0, children, ...props }: MenuContentProps) {
-  const portalTheme = resolvePortalThemeFromDocument();
+  const portalTheme = usePortalTheme();
 
   return (
     <MenuPrimitive.Portal>
@@ -64,6 +64,11 @@ function MenuRadioItem({ className, children, ...props }: MenuPrimitive.RadioIte
   );
 }
 
+/** Owns the labelled section a `MenuGroupLabel` names; the label throws without it. */
+function MenuGroup(props: MenuPrimitive.Group.Props) {
+  return <MenuPrimitive.Group data-slot="menu-group" {...props} />;
+}
+
 function MenuGroupLabel({ className, ...props }: MenuPrimitive.GroupLabel.Props) {
   return <MenuPrimitive.GroupLabel data-slot="menu-group-label" className={cn("px-2 pt-1.5 pb-1 font-mono text-[10px] tracking-[0.08em] uppercase opacity-60", className)} {...props} />;
 }
@@ -72,4 +77,4 @@ function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
   return <MenuPrimitive.Separator data-slot="menu-separator" className={cn("bg-current/10 -mx-1 my-1 h-px", className)} {...props} />;
 }
 
-export { Menu, MenuContent, MenuGroupLabel, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger };
+export { Menu, MenuContent, MenuGroup, MenuGroupLabel, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger };

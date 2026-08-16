@@ -14,6 +14,7 @@ vi.mock("@tanstack/react-router", () => ({
       {children}
     </a>
   ),
+  useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => unknown }) => select({ location: { pathname: "/home" } }),
 }));
 
 vi.mock("./DashboardAccount", () => ({
@@ -29,13 +30,16 @@ vi.mock("./DashboardAccount", () => ({
   }),
 }));
 
+const { ThemeProvider } = await import("../../lib/theme-context");
 const { DashboardSidebar } = await import("./DashboardSidebar");
 
 function renderSidebar(pathname: string, onCreateSpace = vi.fn()) {
   render(
-    <SidebarProvider>
-      <DashboardSidebar pathname={pathname} onCreateSpace={onCreateSpace} />
-    </SidebarProvider>,
+    <ThemeProvider>
+      <SidebarProvider>
+        <DashboardSidebar pathname={pathname} onCreateSpace={onCreateSpace} />
+      </SidebarProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -44,6 +48,9 @@ describe("DashboardSidebar", () => {
     cleanup();
     vi.clearAllMocks();
     document.cookie = "chalk_sidebar_state=; path=/; max-age=0";
+    document.cookie = "chalk_theme=; path=/; max-age=0";
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-chalk-theme");
   });
 
   it("keeps Developer secondary to the collaboration product", () => {
@@ -74,6 +81,31 @@ describe("DashboardSidebar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /New Space/ }));
     expect(onCreateSpace).toHaveBeenCalledOnce();
+  });
+
+  it("opens the tenant switcher and hands back the chosen Tenant", async () => {
+    renderSidebar("/home");
+
+    fireEvent.click(screen.getByRole("button", { name: /Switch Tenant/ }));
+
+    expect(await screen.findByText("Your Tenants")).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Bletchley/ }));
+    expect(mocks.selectTenant).toHaveBeenCalledWith("tenant-2");
+  });
+
+  it("switches the theme from the account menu and remembers it", async () => {
+    renderSidebar("/home");
+
+    fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: "Dark" }));
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.getAttribute("data-chalk-theme")).toBe("dark");
+    expect(document.cookie).toContain("chalk_theme=dark");
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Light" }));
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(document.documentElement.getAttribute("data-chalk-theme")).toBe("light");
   });
 
   it("collapses to the icon rail from its own trigger", () => {

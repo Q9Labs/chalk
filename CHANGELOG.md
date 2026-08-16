@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added a System, Light, and Dark theme choice to the dashboard account menu.
+  The preference is remembered across visits and applied before the first
+  paint, and it covers the dashboard, Space administration, and every chalk
+  popup. Landing and legal pages stay on the paper palette.
 - Added exact-SHA, component-aware managed release manifests and a manual
   release workflow that builds only the changed API or Sync image while
   carrying the stable component digest and provenance forward.
@@ -45,6 +49,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fixed the sidebar navigation labels, which the chalk reset drew over the
+  utility classes that were meant to colour them, leaving them barely legible
+  on the dark panel.
+- Fixed the tenant switcher, which threw when it labelled its group of Tenants
+  outside a menu group.
+- Fixed chalk popups reading the theme once when they opened, so a menu, a
+  tooltip, or a toast no longer keeps the old palette after the theme changes
+  underneath it.
 - Serialized web releases across SHAs, added guarded stale-lock recovery, and
   made manifest component ordering match runtime validation.
 - Fixed the web release preflight, which read the pinned Wrangler version from

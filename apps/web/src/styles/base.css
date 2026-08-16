@@ -26,8 +26,8 @@ body {
 }
 
 ::selection {
-  background: var(--chalk-blue-light);
-  color: var(--ink);
+  background: var(--select-bg);
+  color: var(--select-ink);
 }
 
 img,
@@ -120,7 +120,7 @@ p {
 
 .btn-primary {
   background: var(--ink);
-  color: #fff;
+  color: var(--ink-inverse);
 }
 
 .btn-primary:hover {
