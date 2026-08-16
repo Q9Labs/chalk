@@ -9,8 +9,10 @@ describe("appearance metadata", () => {
     expect(new Set(values).size).toBe(values.length);
     expect(getThemeMode("warm-porcelain")).toBe("light");
     expect(getThemeMode("oled-signal")).toBe("dark");
+    expect(getThemeMode("cosmic-chalk")).toBe("dark");
+    expect(THEME_PALETTES.find((palette) => palette.value === "cosmic-chalk")).toMatchObject({ family: "Cosmic", swatch: ["#080f20", "#10182b", "#8fdcff"] });
     expect(THEME_PALETTES.filter((palette) => palette.mode === "light")).toHaveLength(8);
-    expect(THEME_PALETTES.filter((palette) => palette.mode === "dark")).toHaveLength(7);
+    expect(THEME_PALETTES.filter((palette) => palette.mode === "dark")).toHaveLength(8);
     expect(THEME_TEXTURES.map((texture) => texture.value)).toEqual(["none", "paper", "slate"]);
   });
 });

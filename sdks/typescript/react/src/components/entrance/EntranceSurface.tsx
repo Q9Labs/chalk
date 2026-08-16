@@ -3,6 +3,9 @@
 import { useEffect, useRef } from "react";
 import type React from "react";
 
+import { chalkThemeStyle, type ChalkTheme } from "../../theme";
+import { getThemeMode } from "../theme";
+
 /**
  * Internal presentational surface shared by production Entrance and the
  * permission-free SDK preview fixture. It deliberately owns no media access.
@@ -15,6 +18,7 @@ export type EntranceSurfaceProps = {
   readonly camera: boolean;
   readonly joining: boolean;
   readonly error?: string;
+  readonly theme?: ChalkTheme;
   readonly previewError?: string | null;
   readonly previewStream?: MediaStream | null;
   readonly onDisplayNameChange: (displayName: string) => void;
@@ -24,7 +28,7 @@ export type EntranceSurfaceProps = {
   readonly onCancel?: () => void;
 };
 
-export function EntranceSurface({ spaceName, logoUrl, displayName, microphone, camera, joining, error, previewError, previewStream = null, onDisplayNameChange, onMicrophoneChange, onCameraChange, onSubmit, onCancel }: EntranceSurfaceProps): React.JSX.Element {
+export function EntranceSurface({ spaceName, logoUrl, displayName, microphone, camera, joining, error, theme, previewError, previewStream = null, onDisplayNameChange, onMicrophoneChange, onCameraChange, onSubmit, onCancel }: EntranceSurfaceProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -35,9 +39,18 @@ export function EntranceSurface({ spaceName, logoUrl, displayName, microphone, c
   }, [previewStream]);
 
   const hasVideoPreview = camera && Boolean(previewStream?.getVideoTracks().length);
+  const colorScheme = theme?.palette ? getThemeMode(theme.palette) : theme?.colorScheme === "dark" ? "dark" : "light";
 
   return (
-    <main data-chalk className="chalk-root grid h-full min-h-0 w-full place-items-center bg-[var(--chalk-canvas)] p-4 text-[var(--chalk-text)]">
+    <main
+      data-chalk
+      data-chalk-theme={colorScheme}
+      data-chalk-palette={theme?.palette}
+      data-chalk-texture={theme?.texture}
+      aria-busy={joining}
+      style={chalkThemeStyle(theme, colorScheme)}
+      className="chalk-root chalk-textured-surface relative grid h-full min-h-0 w-full place-items-center overflow-hidden bg-[var(--chalk-canvas)] p-4 text-[var(--chalk-text)]"
+    >
       <section className="grid w-full max-w-5xl overflow-hidden rounded-lg border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)] lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="border-b border-[var(--chalk-line)] p-5 lg:border-r lg:border-b-0">
           <header className="mb-5 flex items-center gap-3">
@@ -50,8 +63,8 @@ export function EntranceSurface({ spaceName, logoUrl, displayName, microphone, c
             <span className="absolute bottom-3 left-3 rounded bg-[var(--chalk-text)] px-2 py-1 text-xs text-[var(--chalk-accent-text)]">{displayName.trim() || "You"}</span>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Toggle label="Microphone" enabled={microphone} onChange={onMicrophoneChange} />
-            <Toggle label="Camera" enabled={camera} onChange={onCameraChange} />
+            <Toggle label="Microphone" enabled={microphone} disabled={joining} onChange={onMicrophoneChange} />
+            <Toggle label="Camera" enabled={camera} disabled={joining} onChange={onCameraChange} />
           </div>
         </div>
         <div className="flex flex-col justify-center p-6">
@@ -104,9 +117,15 @@ export function EntranceSurface({ spaceName, logoUrl, displayName, microphone, c
   );
 }
 
-function Toggle({ label, enabled, onChange }: { readonly label: string; readonly enabled: boolean; readonly onChange: (enabled: boolean) => void }): React.JSX.Element {
+function Toggle({ label, enabled, disabled = false, onChange }: { readonly label: string; readonly enabled: boolean; readonly disabled?: boolean; readonly onChange: (enabled: boolean) => void }): React.JSX.Element {
   return (
-    <button type="button" aria-pressed={enabled} onClick={() => onChange(!enabled)} className="flex items-center justify-between rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-4 py-3 text-left text-sm hover:bg-[var(--chalk-canvas)]">
+    <button
+      type="button"
+      aria-pressed={enabled}
+      disabled={disabled}
+      onClick={() => onChange(!enabled)}
+      className="flex items-center justify-between rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-4 py-3 text-left text-sm outline-none hover:bg-[var(--chalk-canvas)] disabled:cursor-not-allowed disabled:opacity-60"
+    >
       <span>{label}</span>
       <span className={enabled ? "text-[var(--chalk-positive)]" : "text-[var(--chalk-danger)]"}>{enabled ? "On" : "Off"}</span>
     </button>

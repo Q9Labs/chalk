@@ -237,12 +237,20 @@ const ParticipantGridSurface = React.memo(
       }
 
       return (
-        <div className={cn("flex flex-col h-full w-full", className)} data-tour="video-grid">
+        <div className={cn("relative flex h-full min-w-0 w-full flex-col", className)} data-tour="video-grid">
           {/* Carousel container */}
-          <div ref={carouselRef} className="flex-1 min-h-0 overflow-x-auto snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-            <div className="flex h-full" style={{ width: `${pages.length * 100}%` }}>
+          <div
+            ref={carouselRef}
+            data-testid="participant-grid-carousel"
+            className="min-h-0 min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain scrollbar-hide"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="flex h-full min-w-0" style={{ width: `${pages.length * 100}%` }}>
               {pages.map((page, pageIndex) => (
-                <div key={pageIndex} className="grid grid-cols-2 grid-rows-2 gap-1 snap-center" style={{ width: `${100 / pages.length}%` }}>
+                <div key={pageIndex} data-testid="participant-grid-page" className="grid h-full min-w-0 shrink-0 snap-center grid-cols-2 grid-rows-2 gap-1" style={{ width: `${100 / pages.length}%` }}>
                   {page.map((p) => (
                     <ParticipantTile key={p.id} participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} aspectRatio="fill" className="w-full h-full" />
                   ))}
@@ -255,9 +263,18 @@ const ParticipantGridSurface = React.memo(
 
           {/* Page indicators */}
           {pages.length > 1 && (
-            <div className="flex justify-center gap-1.5 py-2">
+            <div className="pointer-events-auto absolute bottom-16 left-1/2 z-40 flex -translate-x-1/2 justify-center gap-0.5 rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-stage)] px-1 py-0.5 shadow-[var(--chalk-app-shadow-xs)]" role="group" aria-label="Participant pages">
               {pages.map((_, i) => (
-                <button key={i} type="button" onClick={() => goToPage(i)} className={cn("h-2 w-2 rounded-full bg-[var(--chalk-app-control)] transition-all", i === carouselIndex && "w-4")} aria-label={`Go to page ${i + 1}`} />
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => goToPage(i)}
+                  className="grid h-8 w-8 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-app-stage)]"
+                  aria-label={`Go to page ${i + 1}`}
+                  aria-current={i === carouselIndex ? "page" : undefined}
+                >
+                  <span aria-hidden="true" className={cn("block h-2 w-2 rounded-full bg-[var(--chalk-app-line-strong)] transition-all", i === carouselIndex && "w-4 bg-[var(--chalk-app-control-active-line)]")} />
+                </button>
               ))}
             </div>
           )}

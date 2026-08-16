@@ -634,6 +634,36 @@
   --chalk-app-shadow-control: 0 6px 18px rgba(0, 0, 0, 0.7);
 }
 
+[data-chalk][data-chalk-palette="cosmic-chalk"] {
+  --chalk-app-canvas: #080f20;
+  --chalk-app-chrome: #10182b;
+  --chalk-app-stage: #0b1427;
+  --chalk-app-panel: #10182b;
+  --chalk-app-tile-base: #10182b;
+  --chalk-app-tile-color-strength: 18%;
+  --chalk-app-text: #f4ecd7;
+  --chalk-app-text-muted: #aeb8c9;
+  --chalk-app-line: #2c3d59;
+  --chalk-app-line-strong: #415571;
+  --chalk-app-control: #121e34;
+  --chalk-app-control-hover: #192944;
+  --chalk-app-control-group: #0c162a;
+  --chalk-app-control-primary: #1b3953;
+  --chalk-app-control-primary-hover: #244b68;
+  --chalk-app-control-active: #172b45;
+  --chalk-app-control-active-line: #8fdcff;
+  --chalk-app-control-active-text: #f4ecd7;
+  --chalk-app-message-remote: #17243c;
+  --chalk-app-message-local: #1b3953;
+  --chalk-app-message-local-text: #f4ecd7;
+  --chalk-app-input: #0c1629;
+  --chalk-app-danger: #ff9ba8;
+  --chalk-app-danger-hover: #ffb4be;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --chalk-app-shadow-sm: 0 12px 36px rgba(0, 0, 0, 0.34);
+  --chalk-app-shadow-control: 0 7px 22px rgba(0, 0, 0, 0.42);
+}
+
 [data-chalk][data-chalk-palette] {
   --background: var(--chalk-app-canvas);
   --foreground: var(--chalk-app-text);
@@ -685,6 +715,49 @@
 
 .chalk-participant-wash {
   background-color: color-mix(in srgb, var(--chalk-participant-color) var(--chalk-app-tile-color-strength), var(--chalk-app-tile-base));
+}
+
+[data-chalk][data-chalk-palette="cosmic-chalk"] :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px dashed var(--chalk-focus, #8fdcff);
+  outline-offset: 2px;
+}
+
+main[data-chalk][data-chalk-palette="cosmic-chalk"]::before,
+main[data-chalk][data-chalk-palette="cosmic-chalk"]::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+main[data-chalk][data-chalk-palette="cosmic-chalk"]::before {
+  inset: 0;
+  opacity: 0.28;
+  background:
+    radial-gradient(circle at 12% 18%, #8fdcff 0 1px, transparent 1.7px),
+    radial-gradient(circle at 76% 13%, #f5d88c 0 1px, transparent 1.7px),
+    radial-gradient(circle at 88% 72%, #8fdcff 0 1px, transparent 1.7px),
+    radial-gradient(circle at 22% 84%, #f4ecd7 0 1px, transparent 1.7px);
+}
+
+main[data-chalk][data-chalk-palette="cosmic-chalk"]::after {
+  inset: 9% 7%;
+  opacity: 0.14;
+  background:
+    linear-gradient(24deg, transparent 0 49.4%, #8fdcff 49.6% 49.9%, transparent 50.1%),
+    linear-gradient(156deg, transparent 0 49.6%, #f5d88c 49.8% 50%, transparent 50.2%);
+}
+
+main[data-chalk][data-chalk-palette="cosmic-chalk"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main[data-chalk][data-chalk-palette="cosmic-chalk"]::before,
+  main[data-chalk][data-chalk-palette="cosmic-chalk"]::after {
+    opacity: 0.18;
+  }
 }
 
 /* =============================================================================

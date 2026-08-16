@@ -15,5 +15,6 @@ describe("React SDK public surface contract", () => {
     expect(sdk.Chalk).toBeTypeOf("function");
     expect(sdk.ChalkProvider).toBeTypeOf("function");
     expect(sdk.Entrance).toBeTypeOf("function");
+    expect(sdk.COSMIC_CHALK_THEME).toMatchObject({ palette: "cosmic-chalk", texture: "slate" });
   });
 });

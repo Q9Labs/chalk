@@ -149,6 +149,12 @@ const PRISM_DARK_SHADOWS = createShadows("#000000", {
   control: [7, 24, 0.46, 7],
 });
 
+const COSMIC_DARK_SHADOWS = createShadows("#000000", {
+  xs: [1, 2, 0.32, 1],
+  sm: [12, 40, 0.3, 10],
+  control: [6, 20, 0.4, 6],
+});
+
 const OLED_SHADOWS = createShadows("#000000", {
   xs: [0, 0, 0, 0],
   sm: [0, 0, 0, 0],
@@ -630,6 +636,38 @@ export const THEME_PALETTES = [
       messageLocalText: "#f5f0fa",
       input: "#17111f",
       shadows: PRISM_DARK_SHADOWS,
+    }),
+  },
+  {
+    value: "cosmic-chalk",
+    label: "Cosmic Chalk",
+    family: "Cosmic",
+    mode: "dark",
+    swatch: ["#080f20", "#10182b", "#8fdcff"],
+    tokens: createTokens({
+      canvas: "#080f20",
+      chrome: "#10182b",
+      stage: "#0b1427",
+      panel: "#10182b",
+      tileBase: "#0f1d35",
+      tileColorStrength: 0.2,
+      text: "#f4ecd7",
+      textMuted: "#aeb8c9",
+      line: "#2c3d59",
+      lineStrong: "#435a7d",
+      control: "#10182b",
+      controlHover: "#192845",
+      controlGroup: "#0d172b",
+      controlPrimary: "#8fdcff",
+      controlPrimaryHover: "#b5edff",
+      controlActive: "#18354c",
+      controlActiveLine: "#8fdcff",
+      controlActiveText: "#f4ecd7",
+      messageRemote: "#13223a",
+      messageLocal: "#8fdcff",
+      messageLocalText: "#080f20",
+      input: "#0d172b",
+      shadows: COSMIC_DARK_SHADOWS,
     }),
   },
   {

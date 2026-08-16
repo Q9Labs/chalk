@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as publicEntry from "../index";
 import { PreviewEntrance, PreviewSpaceView } from "./preview-fixtures";
 import { createTestClient } from "./test-client";
+import { COSMIC_CHALK_THEME } from "../theme";
 
 afterEach(() => {
   cleanup();
@@ -32,6 +33,13 @@ describe("preview fixtures", () => {
 
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(document.querySelectorAll('button[aria-pressed="true"]')).toHaveLength(2);
+  });
+
+  it("passes the production theme through the permission-free Entrance adapter", () => {
+    render(<PreviewEntrance spaceName="Design review" theme={COSMIC_CHALK_THEME} onJoin={() => undefined} />);
+
+    expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-palette", "cosmic-chalk");
+    expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-texture", "slate");
   });
 
   it("accepts caller-owned state for the presentational SpaceView", () => {

@@ -20,6 +20,7 @@ describe("SDK preview fixtures", () => {
   it("maps panels and appearance values to production props", () => {
     expect(panelFor(DEFAULT_PREVIEW_SEARCH)).toBeNull();
     expect(panelFor({ ...DEFAULT_PREVIEW_SEARCH, panel: "admission" })).toBe("admission");
+    expect(productionPalette("cosmic")).toBe("cosmic-chalk");
     expect(productionPalette("midnight")).toBe("oled-signal");
     expect(productionTexture("soft-dots")).toBe("slate");
   });

@@ -7,6 +7,7 @@ import { SettingsDialog, type SettingsDialogValue } from "../../../../../sdks/ty
 import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
 import { ToastStack } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
 import { createPreviewClient, createSnapshot } from "../../../../../sdks/typescript/react/src/test-support/preview-client";
+import { COSMIC_CHALK_THEME } from "../../../../../sdks/typescript/react/src/theme";
 
 import { PreviewGalleryToolbar } from "./PreviewGalleryToolbar";
 import {
@@ -39,6 +40,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   const [displayName, setDisplayName] = useState(DISPLAY_NAME);
   const mappedPalette: ThemePalette = productionPalette(search.palette);
   const mappedTexture: ThemeTexture = productionTexture(search.texture);
+  const entranceTheme = mappedPalette === "cosmic-chalk" ? { ...COSMIC_CHALK_THEME, texture: mappedTexture } : { palette: mappedPalette, texture: mappedTexture };
   const [settings, setSettings] = useState<SettingsDialogValue>(() => ({
     ...INITIAL_SETTINGS,
     appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, palette: mappedPalette, texture: mappedTexture },
@@ -87,6 +89,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
             defaultDisplayName={displayName}
             microphone={search.mic}
             camera={search.camera}
+            theme={entranceTheme}
             error={search.state === "warning" ? "Camera or microphone access failed. Turn both devices off or try again." : undefined}
             onJoin={(nextSettings) => {
               setDisplayName(nextSettings.displayName);

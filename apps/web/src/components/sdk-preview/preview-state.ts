@@ -29,7 +29,7 @@ export type PreviewStage = (typeof PREVIEW_STAGES)[number];
 export const PREVIEW_DIALOGS = ["none", "info", "settings", "invite"] as const;
 export type PreviewDialog = (typeof PREVIEW_DIALOGS)[number];
 
-export const PREVIEW_PALETTES = ["warm-charcoal", "midnight", "slate", "paper"] as const;
+export const PREVIEW_PALETTES = ["warm-charcoal", "midnight", "slate", "paper", "cosmic"] as const;
 export type PreviewPalette = (typeof PREVIEW_PALETTES)[number];
 
 export const PREVIEW_TEXTURES = ["soft-grid", "soft-dots", "none"] as const;

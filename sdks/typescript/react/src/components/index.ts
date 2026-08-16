@@ -19,3 +19,4 @@ export type { ScreenShareViewProps } from "./composite/ScreenShareView";
 export { Entrance } from "./entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./entrance/Entrance";
 export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./theme";
+export { COSMIC_CHALK_THEME } from "../theme";

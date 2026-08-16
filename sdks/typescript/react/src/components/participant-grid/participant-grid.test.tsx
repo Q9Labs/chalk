@@ -2,6 +2,7 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 
 import { ChalkProvider } from "../../bindings/context";
 import { createSnapshot, createTestClient } from "../../test-support/test-client";
@@ -49,5 +50,34 @@ describe("ParticipantGrid", () => {
     );
 
     expect(screen.getByRole("button", { name: "Video tile for Hasan" })).not.toHaveClass("aspect-video");
+  });
+
+  it("keeps mobile pages reachable for five Participants", () => {
+    const client = createTestClient(createSnapshot());
+    const roster: SpaceSnapshot["participants"]["roster"] = ["hasan", "ada", "grace", "linus", "margaret"].map((participantId) => ({
+      participantId,
+      displayName: participantId,
+      role: "member",
+      eligibleRoles: [],
+      capabilities: [],
+      handRaised: false,
+      media: { microphone: "inactive", camera: "active", screenShare: "inactive" },
+    }));
+    client.setSnapshot({
+      ...client.getSnapshot(),
+      self: { ...client.getSnapshot().self, participantId: "hasan", displayName: "Hasan" },
+      participants: { roster, admissionQueue: [] },
+    });
+
+    render(
+      <ChalkProvider client={client}>
+        <ParticipantGrid variant="mobile" />
+      </ChalkProvider>,
+    );
+
+    expect(screen.getAllByRole("button", { name: /^Go to page \d+$/ })).toHaveLength(2);
+    expect(screen.getByTestId("participant-grid-carousel")).toHaveClass("min-w-0", "overscroll-x-contain");
+    expect(screen.getAllByTestId("participant-grid-page")).toHaveLength(2);
+    expect(screen.getAllByTestId("participant-grid-page")[0]).toHaveClass("shrink-0");
   });
 });

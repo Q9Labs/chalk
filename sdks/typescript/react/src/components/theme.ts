@@ -13,6 +13,7 @@ export const THEME_PALETTES = [
   { value: "espresso-night", label: "Espresso Night", family: "Espresso", mode: "dark", swatch: ["#15110f", "#2c211d", "#c98656"] },
   { value: "chalkboard-atelier", label: "Chalkboard Atelier", family: "Atelier", mode: "dark", swatch: ["#0d1714", "#20332c", "#76bed1"] },
   { value: "prism-nocturne", label: "Prism Nocturne", family: "Prism", mode: "dark", swatch: ["#100d17", "#231b30", "#9a63e6"] },
+  { value: "cosmic-chalk", label: "Cosmic Chalk", family: "Cosmic", mode: "dark", swatch: ["#080f20", "#10182b", "#8fdcff"] },
   { value: "oled-signal", label: "OLED Signal", family: "Signal", mode: "dark", swatch: ["#000000", "#11151a", "#2f86ff"] },
 ] as const;
 

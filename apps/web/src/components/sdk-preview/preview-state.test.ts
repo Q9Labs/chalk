@@ -14,6 +14,10 @@ describe("preview URL state", () => {
     expect(SPACE_STATES).toContain(parsePreviewSearch("?view=space").state);
   });
 
+  it("keeps the Cosmic Chalk palette addressable from direct links", () => {
+    expect(parsePreviewSearch("?view=space&palette=cosmic").palette).toBe("cosmic");
+  });
+
   it("clamps invalid enums, participant counts, booleans, and numbers", () => {
     const parsed = normalizePreviewSearch({ view: "SPACE", layout: "nope", participants: "99", mic: "0", camera: "false", hand: "on" });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chalkThemeStyle } from "./theme";
+import { chalkThemeStyle, COSMIC_CHALK_THEME } from "./theme";
 
 describe("chalkThemeStyle", () => {
   it("maps the light palette to CSS custom properties by default", () => {
@@ -22,5 +22,18 @@ describe("chalkThemeStyle", () => {
     });
 
     expect(chalkThemeStyle({ colorScheme: "dark" }, "light")).toHaveProperty("--chalk-canvas", "#f7f6f2");
+  });
+
+  it("ships the Cosmic Chalk convenience preset with its midnight tokens", () => {
+    expect(COSMIC_CHALK_THEME).toMatchObject({ palette: "cosmic-chalk", texture: "slate", colorScheme: "dark" });
+    expect(chalkThemeStyle(COSMIC_CHALK_THEME)).toMatchObject({
+      "--chalk-canvas": "#080f20",
+      "--chalk-surface": "#10182b",
+      "--chalk-text": "#f4ecd7",
+      "--chalk-muted-text": "#aeb8c9",
+      "--chalk-accent": "#8fdcff",
+      "--chalk-positive": "#93e6c0",
+      "--chalk-danger": "#ff9ba8",
+    });
   });
 });

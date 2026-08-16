@@ -15,8 +15,8 @@ vi.mock("./PreviewGalleryToolbar", () => ({
 
 vi.mock("../../../../../sdks/typescript/react/src/test-support/preview-fixtures", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../../../sdks/typescript/react/src/test-support/preview-fixtures")>();
-  const MockPreviewEntrance = ({ error, onJoin }: { readonly error?: string; readonly onJoin: (settings: { displayName: string; microphone: boolean; camera: boolean }) => void }) => (
-    <section data-testid="entrance-screen">
+  const MockPreviewEntrance = ({ error, onJoin, theme }: { readonly error?: string; readonly onJoin: (settings: { displayName: string; microphone: boolean; camera: boolean }) => void; readonly theme?: { readonly palette?: string; readonly texture?: string } }) => (
+    <section data-testid="entrance-screen" data-theme-palette={theme?.palette} data-theme-texture={theme?.texture}>
       <h1>Entrance</h1>
       {error ? <p role="alert">{error}</p> : null}
       <button type="button" onClick={() => onJoin({ displayName: "Ada", microphone: true, camera: true })}>
@@ -92,6 +92,13 @@ describe("SdkPreviewGallery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enter Space" }));
 
     expect(onSearchChange).toHaveBeenCalledWith({ view: "space", state: "happy", mic: true, camera: true, panel: "none", dialog: "none" });
+  });
+
+  it("passes the mapped Cosmic Chalk theme into Entrance", () => {
+    render(<SdkPreviewGallery search={search({ view: "entrance", state: "ready", palette: "cosmic" })} onSearchChange={vi.fn()} />);
+
+    expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-palette")).toBe("cosmic-chalk");
+    expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-texture")).toBe("paper");
   });
 
   it.each([

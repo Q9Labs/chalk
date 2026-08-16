@@ -58,6 +58,18 @@ the browser preference while keeping explicit token overrides in place.
 />
 ```
 
+Cosmic Chalk is a ready-made dark theme with a midnight board, moon-white text,
+comet-blue focus states, and a slate grain. The same preset works on the full
+Space and the standalone Entrance.
+
+```tsx
+import { Chalk, COSMIC_CHALK_THEME, Entrance } from "@q9labsai/chalk-react";
+
+<Chalk client={spaceClient} theme={COSMIC_CHALK_THEME} />;
+
+<Entrance spaceName="Design review" theme={COSMIC_CHALK_THEME} onJoin={(settings) => spaceClient.join(settings)} />;
+```
+
 ## Custom UI
 
 `ChalkProvider` only shares a `SpaceClient` with React. It does not join,

@@ -1,5 +1,5 @@
 import type React from "react";
-import type { ThemePalette, ThemeTexture } from "./components/theme";
+import { getThemeMode, type ThemePalette, type ThemeTexture } from "./components/theme";
 
 /** The default light palette used when no color scheme is requested. */
 export const LIGHT_CHALK_THEME_TOKENS = {
@@ -54,8 +54,31 @@ export type ChalkTheme = {
   readonly tokens?: Partial<ChalkThemeTokens>;
 };
 
+/** The Cosmic Chalk preset combines the midnight board, slate grain, and chalk accents. */
+export const COSMIC_CHALK_THEME = {
+  colorScheme: "dark",
+  palette: "cosmic-chalk",
+  texture: "slate",
+  tokens: {
+    canvas: "#080f20",
+    chrome: "#10182b",
+    surface: "#10182b",
+    stage: "#080f20",
+    text: "#f4ecd7",
+    mutedText: "#aeb8c9",
+    line: "#2c3d59",
+    accent: "#8fdcff",
+    accentText: "#080f20",
+    positive: "#93e6c0",
+    danger: "#ff9ba8",
+    dangerSurface: "#351d2b",
+    focus: "#8fdcff",
+    shadow: "0 22px 54px rgba(0, 0, 0, 0.42)",
+  },
+} satisfies ChalkTheme;
+
 export function chalkThemeStyle(theme?: ChalkTheme, colorScheme?: Exclude<ChalkColorScheme, "system">): React.CSSProperties {
-  const resolvedColorScheme = colorScheme ?? (theme?.colorScheme === "dark" ? "dark" : "light");
+  const resolvedColorScheme = colorScheme ?? (theme?.palette ? getThemeMode(theme.palette) : theme?.colorScheme === "dark" ? "dark" : "light");
   const defaults = resolvedColorScheme === "dark" ? DARK_CHALK_THEME_TOKENS : LIGHT_CHALK_THEME_TOKENS;
   const tokens = { ...defaults, ...theme?.tokens, ...(theme?.accent ? { accent: theme.accent, focus: theme.accent } : {}) };
 

@@ -74,6 +74,14 @@ describe("EntranceSurface", () => {
     expect(screen.getByRole("button", { name: "Enter Space" })).toBeEnabled();
   });
 
+  it("disables device toggles while access is loading", () => {
+    render(<EntranceSurface {...surfaceProps({ displayName: "Ada", joining: true })} />);
+
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: /Microphone/u })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Camera/u })).toBeDisabled();
+  });
+
   it("shows a video preview only when camera is enabled and the stream has video tracks", () => {
     const videoTrack = {} as MediaStreamTrack;
     const previewStream = { getVideoTracks: () => [videoTrack] } as unknown as MediaStream;

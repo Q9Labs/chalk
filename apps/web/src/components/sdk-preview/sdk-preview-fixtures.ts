@@ -112,6 +112,8 @@ export const REACTIONS: readonly ChalkReactionEvent[] = [{ eventId: "preview-rea
 
 export function productionPalette(palette: PreviewSearch["palette"]): ThemePalette {
   switch (palette) {
+    case "cosmic":
+      return "cosmic-chalk";
     case "midnight":
       return "oled-signal";
     case "slate":
@@ -136,6 +138,8 @@ export function productionTexture(texture: PreviewSearch["texture"]): ThemeTextu
 
 export function previewPalette(palette: ThemePalette): PreviewSearch["palette"] {
   switch (palette) {
+    case "cosmic-chalk":
+      return "cosmic";
     case "oled-signal":
       return "midnight";
     case "cool-graphite":

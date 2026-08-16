@@ -29,7 +29,7 @@ export type PreviewEntranceProps = Omit<EntranceProps, "defaults"> & {
  * never mounts production media acquisition effects, so URL-driven gallery
  * states remain deterministic in browsers, tests, and documentation embeds.
  */
-export function PreviewEntrance({ microphone = true, camera = true, defaultDisplayName = "", joining = false, error, onJoin, onCancel, spaceName, logoUrl }: PreviewEntranceProps): React.JSX.Element {
+export function PreviewEntrance({ microphone = true, camera = true, defaultDisplayName = "", joining = false, error, onJoin, onCancel, spaceName, logoUrl, theme }: PreviewEntranceProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(microphone);
   const [cameraEnabled, setCameraEnabled] = useState(camera);
@@ -53,6 +53,7 @@ export function PreviewEntrance({ microphone = true, camera = true, defaultDispl
       camera={cameraEnabled}
       joining={joining}
       error={error}
+      theme={theme}
       onDisplayNameChange={setDisplayName}
       onMicrophoneChange={setMicrophoneEnabled}
       onCameraChange={setCameraEnabled}

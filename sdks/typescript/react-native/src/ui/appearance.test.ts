@@ -8,9 +8,9 @@ describe("React Native appearance catalog", () => {
   it("keeps palette and texture metadata in parity with React", () => {
     expect(THEME_PALETTES.map(({ value, label, family, mode, swatch }) => ({ value, label, family, mode, swatch }))).toEqual(REACT_THEME_PALETTES);
     expect(THEME_TEXTURES.map(({ value, label, description }) => ({ value, label, description }))).toEqual(REACT_THEME_TEXTURES);
-    expect(THEME_PALETTES).toHaveLength(15);
+    expect(THEME_PALETTES).toHaveLength(16);
     expect(THEME_PALETTES.filter((palette) => palette.mode === "light")).toHaveLength(8);
-    expect(THEME_PALETTES.filter((palette) => palette.mode === "dark")).toHaveLength(7);
+    expect(THEME_PALETTES.filter((palette) => palette.mode === "dark")).toHaveLength(8);
     expect(THEME_TEXTURES.map((texture) => texture.value)).toEqual(["none", "paper", "slate"]);
   });
 
@@ -26,6 +26,17 @@ describe("React Native appearance catalog", () => {
 
     expect(THEME_PALETTES[0].tokens).toMatchObject({ canvas: "#f7f6f2", panel: "#ffffff", controlPrimary: "#202329", input: "#fbfaf7" });
     expect(THEME_PALETTES.find((palette) => palette.value === "warm-porcelain")?.tokens).toMatchObject({ canvas: "#f2ebe2", stage: "#eee4dc", controlPrimary: "#51443c" });
+    expect(THEME_PALETTES.find((palette) => palette.value === "cosmic-chalk")?.tokens).toMatchObject({
+      canvas: "#080f20",
+      chrome: "#10182b",
+      panel: "#10182b",
+      stage: "#0b1427",
+      text: "#f4ecd7",
+      textMuted: "#aeb8c9",
+      controlActiveLine: "#8fdcff",
+      controlPrimary: "#8fdcff",
+      messageLocalText: "#080f20",
+    });
     expect(THEME_PALETTES.find((palette) => palette.value === "oled-signal")?.tokens).toMatchObject({ canvas: "#000000", stage: "#000000", shadows: { xs: { opacity: 0 }, sm: { opacity: 0 } } });
   });
 

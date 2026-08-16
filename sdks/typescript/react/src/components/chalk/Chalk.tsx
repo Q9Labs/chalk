@@ -13,7 +13,7 @@ import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsD
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
-import type { ThemePalette, ThemeTexture } from "../theme";
+import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 
 export type SpaceLayout = "focus" | "grid" | "presentation";
@@ -60,7 +60,7 @@ export type ChalkProps = SpaceIntegration &
   };
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
-  const colorScheme = useResolvedColorScheme(props.theme?.colorScheme);
+  const colorScheme = useResolvedColorScheme(props.theme?.palette ? getThemeMode(props.theme.palette) : props.theme?.colorScheme);
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -87,7 +87,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   }, [ownedClient]);
 
   return (
-    <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
+    <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
       <ChalkProvider client={client}>
         <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
       </ChalkProvider>
@@ -151,11 +151,12 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
 
   if (connection.status === "idle") {
     if (!entrance) return <StatusView message={joinError ?? `Entering ${spaceName}…`} onRetry={joinError ? retryAutomaticJoin : undefined} />;
-    return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} onJoin={join} />;
+    return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} theme={props.theme} onJoin={join} />;
   }
-  if (connection.status === "joining") return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} onJoin={join} /> : <StatusView message={`Entering ${spaceName}…`} />;
+  if (connection.status === "joining")
+    return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} /> : <StatusView message={`Entering ${spaceName}…`} />;
   if (connection.status === "failed") {
-    if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={connection.lastError?.message ?? joinError ?? "Unable to enter this Space."} onJoin={join} />;
+    if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={connection.lastError?.message ?? joinError ?? "Unable to enter this Space."} theme={props.theme} onJoin={join} />;
     return <StatusView message={connection.lastError?.message ?? joinError ?? "This Space is unavailable."} onRetry={() => void join(defaultJoinOptions(props))} />;
   }
   if (connection.status === "leaving") return <StatusView message={`Leaving ${spaceName}…`} />;

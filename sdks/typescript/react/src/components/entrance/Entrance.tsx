@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type React from "react";
 
+import type { ChalkTheme } from "../../theme";
 import { EntranceSurface } from "./EntranceSurface";
 
 export type EntranceSettings = {
@@ -21,11 +22,12 @@ export type EntranceProps = {
   };
   readonly joining?: boolean;
   readonly error?: string;
+  readonly theme?: ChalkTheme;
   readonly onJoin: (settings: EntranceSettings) => void | Promise<void>;
   readonly onCancel?: () => void;
 };
 
-export function Entrance({ spaceName, logoUrl, defaultDisplayName = "", defaults, joining = false, error, onJoin, onCancel }: EntranceProps): React.JSX.Element {
+export function Entrance({ spaceName, logoUrl, defaultDisplayName = "", defaults, joining = false, error, theme, onJoin, onCancel }: EntranceProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [microphone, setMicrophone] = useState(defaults?.microphone ?? true);
   const [camera, setCamera] = useState(defaults?.camera ?? true);
@@ -84,6 +86,7 @@ export function Entrance({ spaceName, logoUrl, defaultDisplayName = "", defaults
       camera={camera}
       joining={joining}
       error={error}
+      theme={theme}
       previewError={previewError}
       previewStream={previewStream}
       onDisplayNameChange={setDisplayName}
