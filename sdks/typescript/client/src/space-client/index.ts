@@ -3,6 +3,7 @@ export { createSpaceClient } from "./space-client";
 export type { AccessGrant } from "../access/grant";
 export type {
   AccessContext,
+  AccessGrantSource,
   AccessReason,
   ActiveReaction,
   AdmissionRequest,

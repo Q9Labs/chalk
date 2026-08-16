@@ -29,23 +29,21 @@ Return the grant with `cache-control: no-store`. Your endpoint owns admission an
 
 ## Create the access callback
 
-`GetAccess` is exported by `@q9labsai/chalk-client`. The callback receives the Space slug and the reason for the request. The cast below is safe only because the authenticated endpoint returns a server-minted `AccessGrant` unchanged; do not construct one in browser code.
+`GetAccess` is exported by `@q9labsai/chalk-client`. The callback receives the Space slug and the reason for the request and resolves with the server-minted grant returned unchanged: either the fetch `Response` that carries it or its decoded JSON (`AccessGrantSource`). Chalk validates the grant before use and fails the join with `Access was rejected` on a non-OK response or a malformed body. Do not construct or inspect a grant in browser code.
 
 ```ts
 // browser/access.ts
-import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
+import type { GetAccess } from "@q9labsai/chalk-client";
 
-export const getAccess: GetAccess = async ({ space, reason }) => {
-  const response = await fetch("/api/chalk/access", {
+export const getAccess: GetAccess = ({ space, reason }) =>
+  fetch("/api/chalk/access", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ space, reason }),
   });
-
-  if (!response.ok) throw new Error(`Access request failed with HTTP ${response.status}`);
-  return (await response.json()) as AccessGrant;
-};
 ```
+
+If your endpoint wraps the grant in a larger payload, return the grant field instead of the `Response`.
 
 ## Create a SpaceClient
 

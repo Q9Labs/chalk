@@ -1,4 +1,4 @@
-import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
+import type { GetAccess } from "@q9labsai/chalk-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { cleanupParticipantCredential, createAccessGrantProvider, createBrokerConnectionAccess, createParticipantCredential, isUnauthenticatedDashboardSpaceError, joinDashboardSpace } from "./chalk-access";
@@ -78,7 +78,7 @@ describe("local Chalk access client", () => {
 
     const provider = createAccessGrantProvider();
     expect(requests).toEqual([]);
-    const grant: AccessGrant = await provider({ space: "local-space", reason: "join" });
+    const grant = await provider({ space: "local-space", reason: "join" });
     expect(grant).toEqual(access);
     expectRequest(requests, "/local-chalk/access-grants", {});
   });

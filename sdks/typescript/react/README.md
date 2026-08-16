@@ -18,13 +18,12 @@ unmounts.
 
 ```tsx
 import { Chalk } from "@q9labsai/chalk-react";
-import type { AccessGrant } from "@q9labsai/chalk-client";
 
 export function SpacePage() {
   return (
     <Chalk
       space="design-review"
-      getAccess={async ({ space, reason }): Promise<AccessGrant> => fetchAccess({ space, reason })}
+      getAccess={({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`)}
       defaults={{ microphone: true, camera: true }}
       features={{ chat: true, screenShare: true, reactions: true }}
       spaceName="Design review"

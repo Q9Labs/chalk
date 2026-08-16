@@ -42,6 +42,30 @@ describe("SpaceClientCore", () => {
     expect(getAccess).toHaveBeenCalledWith({ space: "demo", reason: "join" });
     await runtime.dispose();
   });
+
+  it("accepts the grant as the fetch Response or its decoded JSON without a public parser", async () => {
+    const wire: object = { ...opaqueAccessGrant("wire") };
+    for (const source of [wire, Response.json(wire)]) {
+      const runtime = ManagedRuntime.make(makeSpaceClientCoreLayer({ space: "demo", getAccess: async () => source }, platformWithConnectionAccess()));
+      const core = runtime.runSync(Effect.service(SpaceClientCoreService));
+
+      await runtime.runPromise(core.join({ microphone: false, camera: false }));
+
+      expect(core.getSnapshot().connection.status).not.toBe("idle");
+      await runtime.dispose();
+    }
+  });
+
+  it("fails access loudly when the Response is not ok or the body is not a grant", async () => {
+    for (const source of [new Response("nope", { status: 403 }), { not: "a grant" }]) {
+      const runtime = ManagedRuntime.make(makeSpaceClientCoreLayer({ space: "demo", getAccess: async () => source }, platformWithConnectionAccess()));
+      const core = runtime.runSync(Effect.service(SpaceClientCoreService));
+
+      await expect(runtime.runPromise(core.join({ microphone: false, camera: false }))).rejects.toThrow("Access was rejected");
+      expect(core.getSnapshot().connection.status).toBe("failed");
+      await runtime.dispose();
+    }
+  });
 });
 
 function platformWithConnectionAccess(connectionAccess?: NonNullable<SpaceClientPlatform["connectionAccess"]>): SpaceClientPlatform {

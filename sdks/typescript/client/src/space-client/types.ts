@@ -18,7 +18,14 @@ export type AccessContext = {
   readonly reason: AccessReason;
 };
 
-export type GetAccess = (context: AccessContext) => Promise<AccessGrant>;
+/**
+ * What `getAccess` resolves with: the server-minted grant returned unchanged, either as the
+ * `Response` that carries it or as its decoded JSON. Chalk validates it before use; the
+ * application never constructs or inspects a grant.
+ */
+export type AccessGrantSource = AccessGrant | Response | object;
+
+export type GetAccess = (context: AccessContext) => Promise<AccessGrantSource>;
 
 export type Logger = {
   readonly debug?: (message: string, attributes?: Readonly<Record<string, unknown>>) => void;

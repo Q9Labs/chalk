@@ -19,18 +19,16 @@ pnpm add @q9labsai/chalk-client
 
 Your backend mints an `AccessGrant` with the server SDK. Pass it through to the
 client unchanged: it is an opaque signed envelope, so application code does
-not construct or inspect it.
+not construct or inspect it. `getAccess` may resolve with the fetch `Response`
+that carries the grant or with its decoded JSON; the client validates it and
+fails the join on a non-OK response or a malformed body.
 
 ```ts
-import { createSpaceClient, type AccessGrant } from "@q9labsai/chalk-client";
+import { createSpaceClient } from "@q9labsai/chalk-client";
 
 const client = createSpaceClient({
   space: "design-review",
-  getAccess: async ({ space, reason }): Promise<AccessGrant> => {
-    const response = await fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`);
-    if (!response.ok) throw new Error("Could not get access");
-    return response.json() as Promise<AccessGrant>;
-  },
+  getAccess: ({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
 });
 
 await client.join({

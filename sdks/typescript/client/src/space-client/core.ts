@@ -1,5 +1,5 @@
 import { Clock, Context, Duration, Effect, Layer } from "effect";
-import { parseParsedAccessGrant, type AccessGrant, type ParsedAccessGrant } from "../access/grant";
+import { requireParsedAccessGrant, type AccessGrant, type ParsedAccessGrant } from "../access/grant";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../connection";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies, type ConnectionSyncClient } from "../connection/dependencies";
 import type { ConnectionDiagnostic } from "../connection/diagnostics";
@@ -352,7 +352,7 @@ async function resolveAccessGrant(input: { readonly request?: ConnectionAccessRe
   const { operationName, reason } = diagnosticAccessOperation(input.request);
   const operationBeforeRotation = input.diagnostics.activeContext() ? input.diagnostics.startOperation(operationName, { reason }) : undefined;
   try {
-    const grant = parseParsedAccessGrant(await fetchAccessGrant(input));
+    const grant = await requireParsedAccessGrant(await fetchAccessGrant(input));
     input.diagnostics.rotateCredential(grant.diagnostics ?? null);
     (operationBeforeRotation ?? input.diagnostics.startOperation(operationName, { reason }))?.succeed({ result: "bound" });
     return grant;
