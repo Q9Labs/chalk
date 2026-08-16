@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { Badge, Button, IconButton, Input } from "@q9labsai/chalk-ui";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { ChalkBadge, ChalkButton, ChalkChrome, ChalkEmptyState, ChalkIconButton, ChalkInput, ChalkPanel } from "../chalk-ui";
 import { ParticipantRow } from "./participant-row";
 import { useParticipantVolumeContext } from "./participant-volume-context";
 
@@ -93,13 +93,12 @@ const ParticipantsPanelSurface = React.memo(
       return sorted;
     }, [participants, searchQuery]);
 
-    const listSpacingClassName = variant === "sidebar" ? "divide-y divide-[var(--chalk-app-line)]" : "space-y-1";
-    const emptyTextClassName = "text-[var(--chalk-app-text-muted)]";
+    const listSpacingClassName = "space-y-1";
 
     const rows = (
       <div className={listSpacingClassName}>
         {filteredParticipants.length === 0 ? (
-          <div className={cn("p-8 text-center text-sm", emptyTextClassName)}>No participants found</div>
+          <ChalkEmptyState className="p-8 text-sm text-[var(--chalk-app-text-muted)]" title="No participants found" />
         ) : (
           filteredParticipants.map((participant) => (
             <ParticipantRow
@@ -128,13 +127,13 @@ const ParticipantsPanelSurface = React.memo(
     // Mobile variant - fills container, no header (the parent provides it)
     if (variant === "mobile") {
       return (
-        <div className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
+        <ChalkPanel className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] p-0 font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {onAddPeople && (
-              <Button onClick={onAddPeople} className="mb-4 min-h-[48px] w-full rounded-full bg-[var(--chalk-app-control-primary)] px-4 py-3 !text-white shadow-[var(--chalk-app-shadow-control)] hover:bg-[var(--chalk-app-control-primary-hover)]">
+              <ChalkButton variant="solid" tone="accent" onClick={onAddPeople} className="mb-4 min-h-[48px] w-full rounded-full px-4 py-3 !text-[var(--chalk-app-control-active-text)]">
                 <UserGroupIcon className="w-4 h-4" />
                 <span>Add people</span>
-              </Button>
+              </ChalkButton>
             )}
 
             {/* Section Label */}
@@ -145,83 +144,88 @@ const ParticipantsPanelSurface = React.memo(
             {/* Participants List */}
             {rows}
           </div>
-        </div>
+        </ChalkPanel>
       );
     }
 
     if (variant === "sidebar") {
       return (
-        <div
-          className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)}
+        <ChalkPanel
+          className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] p-0 font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)}
           style={themeVariables as React.CSSProperties}
           data-tour="participants-panel"
           role="complementary"
           aria-label="Participants list"
         >
-          <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-5 py-[18px]">
+          <header className="group relative flex items-center justify-between px-5 py-[18px]">
+            <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-panel))" part="participants-header" />
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title === "Participants" ? "People" : title}</h2>
-              <span className="grid min-w-6 place-items-center rounded-full bg-[var(--chalk-app-control-group)] px-1.5 py-0.5 text-xs font-semibold text-[var(--chalk-app-text-muted)]">{participants.length}</span>
+              <ChalkBadge count={participants.length} className="min-w-6 rounded-full px-1.5 py-0.5 text-xs text-[var(--chalk-app-text-muted)]" />
             </div>
 
             <div className="flex items-center gap-2">
               {onAddPeople && (
-                <Button onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] border-0 bg-[var(--chalk-app-control-primary)] px-3 text-sm font-semibold !text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)]">
+                <ChalkButton variant="solid" tone="accent" onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] px-3 text-sm font-semibold !text-[var(--chalk-app-control-active-text)]">
                   <UserGroupIcon className="w-4 h-4" />
                   <span>Invite</span>
-                </Button>
+                </ChalkButton>
               )}
               {onClose && (
-                <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--chalk-app-line)] text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" aria-label="Close">
+                <ChalkIconButton type="button" size="sm" onClick={onClose} className="rounded-full text-[var(--chalk-app-text-muted)]" aria-label="Close">
                   <Cancel01Icon className="w-5 h-5" />
-                </button>
+                </ChalkIconButton>
               )}
             </div>
-          </div>
+          </header>
 
           {searchable && (
             <div className="px-5 py-4">
-              <Input
-                placeholder="Search people"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search01Icon className="h-4 w-4 text-[var(--chalk-app-text-muted)]" />}
-                iconPosition="left"
-                className="w-full rounded-[7px] border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] transition-all placeholder:text-[var(--chalk-app-text-muted)] focus:border-[var(--chalk-app-control-active-line)] focus:bg-[var(--chalk-app-panel)]"
-              />
+              <div className="relative">
+                <Search01Icon className="pointer-events-none absolute left-3 top-1/2 z-[2] h-4 w-4 -translate-y-1/2 text-[var(--chalk-app-text-muted)]" />
+                <ChalkInput placeholder="Search people" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} wrapperClassName="w-full" className="w-full rounded-[7px] bg-[var(--chalk-app-input)] pl-9 transition-all placeholder:text-[var(--chalk-app-text-muted)]" />
+              </div>
             </div>
           )}
 
           <div className="flex-1 overflow-y-auto px-5 pb-5">{rows}</div>
-        </div>
+        </ChalkPanel>
       );
     }
 
     // Default rendering (preserving exact existing structure/classes)
     return (
-      <div
-        className={cn("chalk-textured-surface flex h-full w-80 flex-col border-l border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
+      <ChalkPanel
+        className={cn("flex h-full w-80 flex-col overflow-hidden bg-[var(--chalk-app-panel)] p-0 shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
         style={themeVariables as React.CSSProperties}
         data-tour="participants-panel"
         role="complementary"
         aria-label="Participants list"
       >
-        <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] p-4">
+        <header className="group relative flex items-center justify-between p-4">
+          <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-panel))" part="participants-header" />
           <div className="flex items-center gap-2">
             <h2 className="text-[var(--chalk-app-text)] text-sm font-semibold">{title}</h2>
-            <Badge variant="default" count={participants.length} />
+            <ChalkBadge count={participants.length} />
           </div>
-          {onClose && <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close participant list" />}
-        </div>
+          {onClose && (
+            <ChalkIconButton size="sm" onClick={onClose} aria-label="Close participant list">
+              <Cancel01Icon className="w-4 h-4" />
+            </ChalkIconButton>
+          )}
+        </header>
 
         {searchable && (
           <div className="p-4 pb-2">
-            <Input placeholder="Search participants..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} icon={<Search01Icon className="w-4 h-4" />} iconPosition="left" className="w-full" />
+            <div className="relative">
+              <Search01Icon className="pointer-events-none absolute left-3 top-1/2 z-[2] h-4 w-4 -translate-y-1/2" />
+              <ChalkInput placeholder="Search participants..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} wrapperClassName="w-full" className="w-full pl-9" />
+            </div>
           </div>
         )}
 
         <div className="flex-1 overflow-y-auto p-2">{rows}</div>
-      </div>
+      </ChalkPanel>
     );
   },
 );

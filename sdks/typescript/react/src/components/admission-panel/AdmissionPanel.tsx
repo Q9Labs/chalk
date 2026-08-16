@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Badge, IconButton, Spinner } from "@q9labsai/chalk-ui";
 import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { Tick01Icon, Cancel01Icon, UserGroupIcon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
+import { ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 
 export interface AdmissionParticipant {
   id: string;
@@ -44,78 +44,71 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
   const hasPendingAdmission = participants.length > 0;
 
   return (
-    <div className={cn("flex flex-col w-80 overflow-hidden rounded-lg shadow-lg", "bg-[var(--chalk-surface)]", "border border-[var(--chalk-line)]", className)} role="complementary" aria-label="Admission requests">
-      <div className={cn("flex items-center justify-between p-4", "border-b border-[var(--chalk-line)]", "bg-[var(--chalk-stage)]")}>
-        <div className="flex items-center gap-2" aria-live="polite">
-          <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Admission</h2>
-          <Badge variant="default" count={participants.length} />
-        </div>
-        {loading && <Spinner size="sm" />}
-      </div>
+    <ChalkPanel className={cn("w-80 overflow-hidden rounded-lg p-0 shadow-lg", "bg-[var(--chalk-surface)]", className)} role="complementary" aria-label="Admission requests">
+      <div className="flex h-full w-full flex-col">
+        <header className={cn("group relative flex items-center justify-between p-4", "bg-[var(--chalk-stage)]")}>
+          <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-stage))" part="admission-header" />
+          <div className="relative z-[1] flex items-center gap-2" aria-live="polite">
+            <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Admission</h2>
+            <ChalkBadge count={participants.length} />
+          </div>
+          {loading && <ChalkSpinner className="relative z-[1] size-5" />}
+        </header>
 
-      {(onAdmitAll || onDenyAll) && (
-        <div className="p-2 border-b border-[var(--chalk-line)] flex gap-2">
-          {onAdmitAll && (
-            <button
-              type="button"
-              onClick={onAdmitAll}
-              disabled={!hasPendingAdmission}
-              className={cn(
-                "flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-              )}
-            >
-              Admit All
-            </button>
-          )}
-          {onDenyAll && (
-            <button
-              type="button"
-              onClick={onDenyAll}
-              disabled={!hasPendingAdmission}
-              className={cn(
-                "flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                "bg-[var(--chalk-stage)] text-[var(--chalk-danger)] hover:bg-[var(--chalk-danger-surface)]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-              )}
-            >
-              Deny All
-            </button>
-          )}
-        </div>
-      )}
-
-      <ul className="max-h-80 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
-        {!hasPendingAdmission ? (
-          <li className="flex flex-col items-center gap-2 p-8 text-center">
-            <UserGroupIcon size={24} className="text-[var(--chalk-muted-text)]" />
-            <span className="text-sm text-[var(--chalk-muted-text)]">No admission requests</span>
-          </li>
-        ) : (
-          participants.map((p) => (
-            <li key={p.id} className={cn("flex items-center justify-between p-2 rounded-md transition-colors", "hover:bg-[var(--chalk-stage)]")}>
-              <div className="flex items-center gap-3 min-w-0">
-                <Avatar src={p.avatarUrl} name={p.displayName} size="sm" />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium truncate text-[var(--chalk-text)]" title={p.displayName}>
-                    {p.displayName}
-                  </span>
-                  <span className="text-xs text-[var(--chalk-muted-text)]">{getAdmissionLabel(p.joinedAt)}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                <IconButton icon={<Tick01Icon className="w-4 h-4" />} size="sm" variant="ghost" className="text-[var(--chalk-positive)] hover:bg-[var(--chalk-positive)]" onClick={() => onAdmit(p.id)} aria-label={`Admit ${p.displayName}`} />
-                <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" className="text-[var(--chalk-danger)] hover:bg-[var(--chalk-danger)]" onClick={() => onDeny(p.id)} aria-label={`Deny ${p.displayName}`} />
-              </div>
-            </li>
-          ))
+        {(onAdmitAll || onDenyAll) && (
+          <div className="flex gap-2 p-2">
+            {onAdmitAll && (
+              <ChalkButton type="button" onClick={onAdmitAll} disabled={!hasPendingAdmission} variant="solid" tone="accent" className="min-h-8 flex-1 rounded-md px-3 py-1.5 text-xs font-medium">
+                Admit All
+              </ChalkButton>
+            )}
+            {onDenyAll && (
+              <ChalkButton type="button" onClick={onDenyAll} disabled={!hasPendingAdmission} tone="danger" className="min-h-8 flex-1 rounded-md px-3 py-1.5 text-xs font-medium text-[var(--chalk-danger)]">
+                Deny All
+              </ChalkButton>
+            )}
+          </div>
         )}
-      </ul>
-    </div>
+        {(onAdmitAll || onDenyAll) && <ChalkDivider className="m-0 h-3" />}
+
+        <ul className="max-h-80 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
+          {!hasPendingAdmission ? (
+            <li>
+              <ChalkEmptyState className="px-4 py-8" title="No admission requests">
+                <UserGroupIcon size={24} className="mt-2 text-[var(--chalk-muted-text)]" aria-hidden="true" />
+              </ChalkEmptyState>
+            </li>
+          ) : (
+            participants.map((p) => (
+              <li key={p.id}>
+                <ChalkPanel className={cn("rounded-md p-2 transition-colors", "hover:bg-[var(--chalk-stage)]")}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar src={p.avatarUrl} name={p.displayName} size="sm" />
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate text-sm font-medium text-[var(--chalk-text)]" title={p.displayName}>
+                          {p.displayName}
+                        </span>
+                        <span className="text-xs text-[var(--chalk-muted-text)]">{getAdmissionLabel(p.joinedAt)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      <ChalkIconButton size="sm" tone="success" onClick={() => onAdmit(p.id)} aria-label={`Admit ${p.displayName}`}>
+                        <Tick01Icon className="w-4 h-4" />
+                      </ChalkIconButton>
+                      <ChalkIconButton size="sm" tone="danger" onClick={() => onDeny(p.id)} aria-label={`Deny ${p.displayName}`}>
+                        <Cancel01Icon className="w-4 h-4" />
+                      </ChalkIconButton>
+                    </div>
+                  </div>
+                </ChalkPanel>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+    </ChalkPanel>
   );
 });
 

@@ -98,6 +98,7 @@ describe("participant volume contracts", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Options for Remote" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mute volume" }));
 
     expect(screen.getByText("0%")).toBeInTheDocument();

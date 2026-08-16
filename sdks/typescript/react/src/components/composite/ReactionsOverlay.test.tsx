@@ -27,5 +27,6 @@ describe("ReactionsOverlay", () => {
     );
 
     expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent("Grace reacted 🎉");
+    expect(document.querySelector('svg[data-chalk-chrome="true"]')).toBeInTheDocument();
   });
 });

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Spinner } from "@q9labsai/chalk-ui";
 import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
+import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -226,136 +226,126 @@ const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, par
 
   return (
     <div className={cn("flex h-full w-full gap-2 transition-all duration-500", thumbnailPosition === "bottom" ? "flex-col" : "flex-row", className)}>
-      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-[var(--chalk-text)] group" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
-        {/* Loading State */}
-        {isLoading && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[var(--chalk-canvas)] transition-opacity duration-500">
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-full bg-[var(--chalk-accent)] blur-xl animate-pulse" />
-              <Spinner size="lg" className="text-[var(--chalk-accent)] relative z-10" />
-            </div>
-            <div className="mt-6 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-              <div className="flex items-center gap-2 text-[var(--chalk-accent-text)] font-medium">
-                <Monitor01Icon size={18} className="text-[var(--chalk-accent)]" />
-                <span>Connecting to {sharedByName}'s screen...</span>
+      <ChalkPanel tone="neutral" filled className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full">
+        <div ref={containerRef} className="group relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--chalk-text)]" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
+          {/* Loading State */}
+          {isLoading && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[var(--chalk-canvas)] transition-opacity duration-500">
+              <div className="relative">
+                <div className="absolute -inset-4 rounded-full bg-[var(--chalk-accent)] blur-xl animate-pulse" />
+                <ChalkSpinner className="relative z-10 size-12 text-[var(--chalk-accent)]" label="Connecting" />
               </div>
-              <p className="text-xs text-[var(--chalk-accent-text)]">Setting up the high-quality stream</p>
+              <div className="mt-6 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+                <div className="flex items-center gap-2 text-[var(--chalk-accent-text)] font-medium">
+                  <Monitor01Icon size={18} className="text-[var(--chalk-accent)]" />
+                  <span>Connecting to {sharedByName}'s screen...</span>
+                </div>
+                <p className="text-xs text-[var(--chalk-accent-text)]">Setting up the high-quality stream</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="absolute left-1/2 top-1/2" style={stageStyle}>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            onLoadedData={handleVideoLoaded}
-            onLoadedMetadata={handleVideoLoaded}
-            className={cn("h-full w-full rounded-xl bg-[var(--chalk-text)] transition-all duration-700", isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100", zoom > 1 && isDragging && "cursor-grabbing", zoom > 1 && !isDragging && "cursor-grab")}
-          />
+          <div className="absolute left-1/2 top-1/2" style={stageStyle}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              onLoadedData={handleVideoLoaded}
+              onLoadedMetadata={handleVideoLoaded}
+              className={cn("h-full w-full rounded-xl bg-[var(--chalk-text)] transition-all duration-700", isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100", zoom > 1 && isDragging && "cursor-grabbing", zoom > 1 && !isDragging && "cursor-grab")}
+            />
+          </div>
+
+          <ChalkBadge tone="accent" className={cn("absolute top-3 left-3 text-xs font-medium transition-opacity duration-500", isLoading ? "opacity-0" : "opacity-100")}>
+            Shared by {sharedByName}
+          </ChalkBadge>
+
+          {/* Zoom controls */}
+          {enableZoom && (
+            <ChalkControlGroup className="absolute top-3 right-3 opacity-0 transition-opacity group-hover:opacity-100">
+              <ChalkIconButton size="sm" tone={rotation !== 0 ? "accent" : "neutral"} onClick={toggleRotation} className="rounded-full p-1.5" aria-label="Rotate view">
+                <RefreshIcon size={14} style={{ transform: `rotate(${-rotation}deg)` }} className="transition-transform duration-500 ease-in-out" />
+              </ChalkIconButton>
+              <ChalkDivider className="mx-0 my-0 h-8 w-2" aria-hidden="true" />
+              <ChalkIconButton size="sm" tone="neutral" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM} className="rounded-full p-1.5" aria-label="Zoom out">
+                <ZoomOutIcon size={14} />
+              </ChalkIconButton>
+              <ChalkBadge tone="neutral" className="min-w-[2.5rem] justify-center text-xs font-medium">
+                {Math.round(zoom * 100)}%
+              </ChalkBadge>
+              <ChalkIconButton size="sm" tone="neutral" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM} className="rounded-full p-1.5" aria-label="Zoom in">
+                <ZoomInIcon size={14} />
+              </ChalkIconButton>
+              {(zoom > 1 || rotation !== 0) && (
+                <ChalkIconButton size="sm" tone="accent" onClick={handleResetZoom} className="rounded-full p-1.5" aria-label="Reset zoom">
+                  <Maximize01Icon size={14} />
+                </ChalkIconButton>
+              )}
+            </ChalkControlGroup>
+          )}
+
+          {/* Zoom indicator when zoomed */}
+          {zoom > 1 && (
+            <ChalkBadge tone="neutral" className="absolute bottom-3 right-3 rounded text-[10px]">
+              Drag to pan • Scroll to zoom
+            </ChalkBadge>
+          )}
+
+          {onStopShare && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <ChalkButton type="button" onClick={onStopShare} tone="danger" variant="solid" className="font-medium shadow-lg">
+                Stop Sharing
+              </ChalkButton>
+            </div>
+          )}
+
+          {/* Collapse/Expand Toggle Button */}
+          {showThumbnails && participants.length > 0 && (
+            <ChalkIconButton
+              size="sm"
+              tone="neutral"
+              onClick={toggleThumbnails}
+              className={cn("absolute z-20 rounded-full p-0 shadow-lg transition-all duration-300", thumbnailPosition === "right" ? "top-1/2 right-1 h-12 w-8 -translate-y-1/2" : "bottom-1 left-1/2 h-8 w-12 -translate-x-1/2")}
+              aria-label={isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              {thumbnailPosition === "right" ? isThumbnailsOpen ? <ArrowRight01Icon size={16} /> : <ArrowLeft01Icon size={16} /> : isThumbnailsOpen ? <ArrowDown01Icon size={16} /> : <ArrowUp01Icon size={16} />}
+            </ChalkIconButton>
+          )}
         </div>
-
-        <div className={cn("absolute top-3 left-3 px-2 py-1 rounded-full bg-[var(--chalk-stage)] backdrop-blur-sm text-[var(--chalk-text)] text-xs font-medium transition-opacity duration-500", isLoading ? "opacity-0" : "opacity-100")}>Shared by {sharedByName}</div>
-
-        {/* Zoom controls */}
-        {enableZoom && (
-          <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              type="button"
-              onClick={toggleRotation}
-              className={cn("p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-all mr-1", rotation !== 0 && "text-[var(--chalk-accent)] border-[var(--chalk-accent)]")}
-              aria-label="Rotate view"
-            >
-              <RefreshIcon size={14} style={{ transform: `rotate(${-rotation}deg)` }} className="transition-transform duration-500 ease-in-out" />
-            </button>
-            <div className="w-px h-4 bg-[var(--chalk-surface)] mx-1" />
-            <button
-              type="button"
-              onClick={handleZoomOut}
-              disabled={zoom <= MIN_ZOOM}
-              className="p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Zoom out"
-            >
-              <ZoomOutIcon size={14} />
-            </button>
-            <span className="px-1.5 py-0.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] text-xs font-medium min-w-[2.5rem] text-center">{Math.round(zoom * 100)}%</span>
-            <button
-              type="button"
-              onClick={handleZoomIn}
-              disabled={zoom >= MAX_ZOOM}
-              className="p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Zoom in"
-            >
-              <ZoomInIcon size={14} />
-            </button>
-            {(zoom > 1 || rotation !== 0) && (
-              <button type="button" onClick={handleResetZoom} className="p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-colors ml-0.5" aria-label="Reset zoom">
-                <Maximize01Icon size={14} />
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Zoom indicator when zoomed */}
-        {zoom > 1 && <div className="absolute bottom-3 right-3 px-1.5 py-0.5 rounded bg-[var(--chalk-stage)] backdrop-blur-sm text-[var(--chalk-text)] text-[10px]">Drag to pan • Scroll to zoom</div>}
-
-        {onStopShare && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button type="button" onClick={onStopShare} className="px-4 py-2 bg-[var(--chalk-danger)] hover:bg-[var(--chalk-danger)] text-[var(--chalk-accent-text)] rounded-md font-medium shadow-lg transition-colors">
-              Stop Sharing
-            </button>
-          </div>
-        )}
-
-        {/* Collapse/Expand Toggle Button */}
-        {showThumbnails && participants.length > 0 && (
-          <button
-            type="button"
-            onClick={toggleThumbnails}
-            className={cn(
-              "absolute z-20 flex items-center justify-center bg-[var(--chalk-text)] backdrop-blur-md border border-[var(--chalk-line)] text-[var(--chalk-accent-text)] hover:text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-text)] transition-all duration-300 shadow-lg",
-              thumbnailPosition === "right" ? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl" : "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl",
-            )}
-            aria-label={isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"}
-          >
-            {thumbnailPosition === "right" ? isThumbnailsOpen ? <ArrowRight01Icon size={16} /> : <ArrowLeft01Icon size={16} /> : isThumbnailsOpen ? <ArrowDown01Icon size={16} /> : <ArrowUp01Icon size={16} />}
-          </button>
-        )}
-      </div>
+      </ChalkPanel>
 
       {showThumbnails && participants.length > 0 && (
-        <div
-          className={cn(
-            "flex gap-2 transition-all duration-500 ease-in-out",
-            thumbnailPosition === "bottom" ? "flex-row items-center px-2 overflow-auto" : "flex-col py-2 overflow-y-auto overflow-x-hidden",
-            !isThumbnailsOpen && (thumbnailPosition === "bottom" ? "h-0 opacity-0" : "w-0 opacity-0 px-0"),
-            isThumbnailsOpen && (thumbnailPosition === "bottom" ? "h-36 w-full" : "w-56 h-full"),
-          )}
+        <ChalkPanel
+          tone="neutral"
+          filled
+          className={cn("p-1 transition-all duration-500 ease-in-out [&>div]:h-full [&>div]:w-full", !isThumbnailsOpen && (thumbnailPosition === "bottom" ? "h-0 opacity-0" : "w-0 opacity-0 px-0"), isThumbnailsOpen && (thumbnailPosition === "bottom" ? "h-36 w-full" : "w-56 h-full"))}
         >
-          {participants.map((p) => (
-            <div key={p.id} className={cn("shrink-0 rounded-xl overflow-hidden relative transition-all duration-500", thumbnailPosition === "bottom" ? "aspect-video h-full" : "aspect-video w-full", !isThumbnailsOpen && "scale-0 opacity-0")}>
-              <ParticipantTile
-                participant={{
-                  id: p.id,
-                  displayName: p.displayName,
-                  isLocal: p.isLocal,
-                  isSpeaking: p.isSpeaking,
-                  isMuted: p.isMuted,
-                  isVideoEnabled: p.isVideoEnabled,
-                  isScreenSharing: p.isScreenSharing,
-                  isHandRaised: p.isHandRaised,
-                  connectionQuality: p.connectionQuality && p.connectionQuality > 0 ? (p.connectionQuality as 1 | 2 | 3 | 4) : undefined,
-                  avatarUrl: p.avatarUrl,
-                }}
-                videoTrack={p.videoTrack}
-                className="w-full h-full"
-                showName={true}
-                showStatus={true}
-              />
-            </div>
-          ))}
-        </div>
+          <ChalkControlGroup orientation={thumbnailPosition === "bottom" ? "horizontal" : "vertical"} className={cn("h-full w-full gap-2", thumbnailPosition === "bottom" ? "items-center overflow-auto px-1" : "overflow-y-auto overflow-x-hidden py-1")} role="presentation">
+            {participants.map((p) => (
+              <div key={p.id} className={cn("shrink-0 rounded-xl overflow-hidden relative transition-all duration-500", thumbnailPosition === "bottom" ? "aspect-video h-full" : "aspect-video w-full", !isThumbnailsOpen && "scale-0 opacity-0")}>
+                <ParticipantTile
+                  participant={{
+                    id: p.id,
+                    displayName: p.displayName,
+                    isLocal: p.isLocal,
+                    isSpeaking: p.isSpeaking,
+                    isMuted: p.isMuted,
+                    isVideoEnabled: p.isVideoEnabled,
+                    isScreenSharing: p.isScreenSharing,
+                    isHandRaised: p.isHandRaised,
+                    connectionQuality: p.connectionQuality && p.connectionQuality > 0 ? (p.connectionQuality as 1 | 2 | 3 | 4) : undefined,
+                    avatarUrl: p.avatarUrl,
+                  }}
+                  videoTrack={p.videoTrack}
+                  className="w-full h-full"
+                  showName={true}
+                  showStatus={true}
+                />
+              </div>
+            ))}
+          </ChalkControlGroup>
+        </ChalkPanel>
       )}
     </div>
   );
@@ -371,11 +361,7 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
   const active = participants.find((participant) => participant.isScreenSharing && participant.screenShareTrack);
 
   if (!active?.screenShareTrack) {
-    return (
-      <div className="grid h-full place-items-center text-sm text-[var(--chalk-app-text-muted)]" role="status">
-        No active screen share
-      </div>
-    );
+    return <ChalkEmptyState className="grid h-full place-items-center text-sm text-[var(--chalk-app-text-muted)]" title="No active screen share" />;
   }
 
   return (

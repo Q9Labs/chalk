@@ -5,6 +5,7 @@ import type React from "react";
 
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 import { getThemeMode } from "../theme";
+import { ChalkAlert, ChalkBadge, ChalkButton, ChalkInput, ChalkPanel } from "../chalk-ui";
 
 /**
  * Internal presentational surface shared by production Entrance and the
@@ -51,67 +52,68 @@ export function EntranceSurface({ spaceName, logoUrl, displayName, microphone, c
       style={chalkThemeStyle(theme, colorScheme)}
       className="chalk-root chalk-textured-surface relative grid h-full min-h-0 w-full place-items-center overflow-hidden bg-[var(--chalk-canvas)] p-4 text-[var(--chalk-text)]"
     >
-      <section className="grid w-full max-w-5xl overflow-hidden rounded-lg border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)] lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="border-b border-[var(--chalk-line)] p-5 lg:border-r lg:border-b-0">
-          <header className="mb-5 flex items-center gap-3">
-            {logoUrl ? <img src={logoUrl} alt="Chalk" className="h-auto w-28" draggable={false} /> : <span className="text-xl font-bold">Chalk</span>}
-            <span className="truncate text-sm text-[var(--chalk-muted-text)]">{spaceName}</span>
-          </header>
-          <div className="relative aspect-video overflow-hidden rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-stage)]">
-            <video ref={videoRef} autoPlay playsInline muted className={hasVideoPreview ? "h-full w-full -scale-x-100 object-cover" : "hidden"} />
-            {!hasVideoPreview ? <div className="grid h-full place-items-center text-sm text-[var(--chalk-muted-text)]">Camera preview</div> : null}
-            <span className="absolute bottom-3 left-3 rounded bg-[var(--chalk-text)] px-2 py-1 text-xs text-[var(--chalk-accent-text)]">{displayName.trim() || "You"}</span>
+      <section className="w-full max-w-5xl">
+        <ChalkPanel className="grid w-full bg-[var(--chalk-surface)] p-0 lg:grid-cols-[minmax(0,1fr)_24rem]" tone="neutral">
+          <div className="p-5">
+            <header className="mb-5 flex items-center gap-3">
+              {logoUrl ? <img src={logoUrl} alt="Chalk" className="h-auto w-28" draggable={false} /> : <span className="text-xl font-bold">Chalk</span>}
+              <span className="truncate text-sm text-[var(--chalk-muted-text)]">{spaceName}</span>
+            </header>
+            <ChalkPanel className="relative aspect-video overflow-hidden bg-[var(--chalk-stage)] p-0" filled={false}>
+              <video ref={videoRef} autoPlay playsInline muted className={hasVideoPreview ? "h-full w-full -scale-x-100 object-cover" : "hidden"} />
+              {!hasVideoPreview ? <div className="grid h-full place-items-center text-sm text-[var(--chalk-muted-text)]">Camera preview</div> : null}
+              <ChalkBadge tone="neutral" className="absolute bottom-3 left-3 bg-[var(--chalk-text)] px-2 py-1 text-xs text-[var(--chalk-accent-text)]">
+                {displayName.trim() || "You"}
+              </ChalkBadge>
+            </ChalkPanel>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Toggle label="Microphone" enabled={microphone} disabled={joining} onChange={onMicrophoneChange} />
+              <Toggle label="Camera" enabled={camera} disabled={joining} onChange={onCameraChange} />
+            </div>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Toggle label="Microphone" enabled={microphone} disabled={joining} onChange={onMicrophoneChange} />
-            <Toggle label="Camera" enabled={camera} disabled={joining} onChange={onCameraChange} />
+          <div className="flex flex-col justify-center p-6">
+            <h1 className="text-3xl font-semibold">{joining ? "Requesting access" : "Enter this Space"}</h1>
+            <p className="mt-2 text-sm leading-6 text-[var(--chalk-muted-text)]">{joining ? `Keep this page open. You will enter ${spaceName} when access is granted.` : `Check your name and devices before you enter ${spaceName}.`}</p>
+            {!joining ? (
+              <>
+                <label className="mt-7 text-sm font-medium" htmlFor="chalk-display-name">
+                  Your name
+                </label>
+                <ChalkInput
+                  id="chalk-display-name"
+                  autoComplete="name"
+                  value={displayName}
+                  onChange={(event) => onDisplayNameChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") onSubmit();
+                  }}
+                  wrapperClassName="mt-2"
+                  className="h-11 bg-[var(--chalk-canvas)] text-sm"
+                  placeholder="Enter your name"
+                />
+              </>
+            ) : null}
+            {error || previewError ? (
+              <ChalkAlert tone="danger" className="mt-4 px-3 py-2 text-sm text-[var(--chalk-danger)]">
+                {error ?? previewError}
+              </ChalkAlert>
+            ) : null}
+            {joining ? (
+              <p className="mt-6 text-sm font-medium text-[var(--chalk-muted-text)]" role="status">
+                Access request in progress…
+              </p>
+            ) : (
+              <ChalkButton type="button" onClick={onSubmit} disabled={!displayName.trim()} variant="solid" tone="accent" className="mt-6 h-12 w-full text-sm font-semibold text-[var(--chalk-accent-text)]">
+                Enter Space
+              </ChalkButton>
+            )}
+            {onCancel ? (
+              <ChalkButton type="button" onClick={onCancel} variant="outline" tone="neutral" className="mt-3 h-11 w-full text-sm font-semibold text-[var(--chalk-text)]">
+                {joining ? "Cancel" : "Back"}
+              </ChalkButton>
+            ) : null}
           </div>
-        </div>
-        <div className="flex flex-col justify-center p-6">
-          <h1 className="text-3xl font-semibold">{joining ? "Requesting access" : "Enter this Space"}</h1>
-          <p className="mt-2 text-sm leading-6 text-[var(--chalk-muted-text)]">{joining ? `Keep this page open. You will enter ${spaceName} when access is granted.` : `Check your name and devices before you enter ${spaceName}.`}</p>
-          {!joining ? (
-            <>
-              <label className="mt-7 text-sm font-medium" htmlFor="chalk-display-name">
-                Your name
-              </label>
-              <input
-                id="chalk-display-name"
-                autoComplete="name"
-                value={displayName}
-                onChange={(event) => onDisplayNameChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") onSubmit();
-                }}
-                className="mt-2 h-11 rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-canvas)] px-3 text-sm outline-none focus-visible:border-[var(--chalk-focus)]"
-                placeholder="Enter your name"
-              />
-            </>
-          ) : null}
-          {error || previewError ? (
-            <p role="alert" className="mt-4 rounded-md border border-[var(--chalk-danger)] bg-[var(--chalk-danger-surface)] px-3 py-2 text-sm text-[var(--chalk-danger)]">
-              {error ?? previewError}
-            </p>
-          ) : null}
-          {joining ? (
-            <p className="mt-6 text-sm font-medium text-[var(--chalk-muted-text)]" role="status">
-              Access request in progress…
-            </p>
-          ) : (
-            <button type="button" onClick={onSubmit} disabled={!displayName.trim()} className="mt-6 h-12 rounded-md bg-[var(--chalk-accent)] px-4 text-sm font-semibold text-[var(--chalk-accent-text)] disabled:cursor-not-allowed disabled:opacity-50">
-              Enter Space
-            </button>
-          )}
-          {onCancel ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="mt-3 h-11 rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-4 text-sm font-semibold text-[var(--chalk-text)] outline-none transition hover:bg-[var(--chalk-canvas)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]"
-            >
-              {joining ? "Cancel" : "Back"}
-            </button>
-          ) : null}
-        </div>
+        </ChalkPanel>
       </section>
     </main>
   );
@@ -119,15 +121,9 @@ export function EntranceSurface({ spaceName, logoUrl, displayName, microphone, c
 
 function Toggle({ label, enabled, disabled = false, onChange }: { readonly label: string; readonly enabled: boolean; readonly disabled?: boolean; readonly onChange: (enabled: boolean) => void }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      aria-pressed={enabled}
-      disabled={disabled}
-      onClick={() => onChange(!enabled)}
-      className="flex items-center justify-between rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-4 py-3 text-left text-sm outline-none hover:bg-[var(--chalk-canvas)] disabled:cursor-not-allowed disabled:opacity-60"
-    >
+    <ChalkButton type="button" aria-pressed={enabled} disabled={disabled} onClick={() => onChange(!enabled)} variant={enabled ? "solid" : "outline"} tone={enabled ? "success" : "danger"} className="w-full justify-between px-4 py-3 text-left text-sm">
       <span>{label}</span>
       <span className={enabled ? "text-[var(--chalk-positive)]" : "text-[var(--chalk-danger)]"}>{enabled ? "On" : "Off"}</span>
-    </button>
+    </ChalkButton>
   );
 }

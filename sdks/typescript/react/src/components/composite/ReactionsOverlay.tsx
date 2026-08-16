@@ -1,6 +1,9 @@
 import type { ActiveReaction } from "@q9labsai/chalk-client";
 import type React from "react";
 import { useReactions } from "../../bindings/hooks";
+import { cn } from "../../utils/cn";
+import { ReactionBubble } from "../atomic";
+import { ChalkPanel } from "../chalk-ui";
 
 export interface ReactionsOverlayProps {
   readonly maxVisible?: number;
@@ -15,12 +18,12 @@ function ReactionsOverlaySurface({ reactions, maxVisible = 6, className }: React
   return (
     <div className={`pointer-events-none absolute inset-0 z-30 overflow-hidden ${className ?? ""}`} aria-live="polite" aria-atomic="false">
       {reactions.slice(-maxVisible).map((reaction, index) => (
-        <div key={reaction.eventId} className="absolute bottom-28 rounded-full bg-[var(--chalk-surface)] px-3 py-2 text-2xl shadow-xl" style={{ left: `${18 + index * 12}%` }}>
-          <span aria-hidden="true">{reaction.reaction}</span>
+        <ChalkPanel key={reaction.eventId} tone="accent" className={cn("pointer-events-none absolute bottom-28 p-1 text-2xl shadow-xl")} style={{ left: `${18 + index * 12}%` }} seed={`reaction-${reaction.eventId}`}>
+          <ReactionBubble emoji={reaction.reaction} participantName={reaction.displayName} />
           <span className="sr-only">
             {reaction.displayName} reacted {reaction.reaction}
           </span>
-        </div>
+        </ChalkPanel>
       ))}
     </div>
   );

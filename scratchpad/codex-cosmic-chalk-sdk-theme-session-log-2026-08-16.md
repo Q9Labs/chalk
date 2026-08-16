@@ -22,3 +22,17 @@
 - The first mobile pass exposed a hidden second carousel page. The SDK now shows a compact, keyboard-reachable page pill above the mobile controls.
 - Focused gates passed across React, React Native, web preview, and UI.
 - The repository gate stopped at the language ratchet because unrelated staged work increased two banned glossary terms; it did not reach this unstaged theme diff.
+
+## 2026-08-16 — corrected scope: hand-drawn components
+
+- The palette was only the backdrop. The actual request is to replace the Entrance and Space controls with hand-drawn chalk components.
+- Added a React-native chalk drawing layer with deterministic rough geometry, powder passes, native semantics, and reduced-motion behavior.
+- Added replacements for buttons, icon buttons, panels, inputs, textareas, toggles, checkboxes, radios, selects, sliders, badges, dividers, menus, dialogs, alerts, empty states, tooltips, and spinners.
+- Migrated the Entrance, Space shell, media controls, participant stage, panels, settings, dialogs, notifications, and lifecycle states to those replacements.
+
+## 2026-08-16 — corrected visual pass
+
+- Helium exposed a chalk toggle knob drawn over the Entrance labels. The two device choices now use pressed chalk buttons, so “Microphone On” and “Camera On” stay readable.
+- The preview shell now gives the SDK the full viewport instead of content height, removing the white strip from desktop evidence.
+- A fresh empty-name pass confirmed the Entrance button becomes disabled and cannot navigate. The earlier report used Control+A on macOS instead of Command+A and had left text in the field.
+- Desktop Entrance, Space, and settings/admission captures are clean with no console errors or document overflow. The Chrome plugin could not initially emulate a narrow viewport, so cropped files are not counted as responsive proof unless the CDP follow-up replaces them.

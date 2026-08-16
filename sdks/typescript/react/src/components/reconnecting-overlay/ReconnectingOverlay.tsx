@@ -1,5 +1,5 @@
 import React from "react";
-import { Spinner } from "@q9labsai/chalk-ui";
+import { ChalkBackdrop, ChalkBadge, ChalkButton, ChalkDialogPanel, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { WifiOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 
@@ -24,15 +24,15 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
 
   return (
     <div className={cn("absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
-      <div aria-hidden="true" className="absolute inset-0 bg-[var(--chalk-app-canvas)] opacity-90 backdrop-blur-[2px]" />
-      <div className="chalk-textured-surface relative flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-8 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
+      <ChalkBackdrop className="absolute inset-0 bg-[var(--chalk-app-canvas)] opacity-90 backdrop-blur-[2px]" style={{ position: "absolute" }} />
+      <ChalkDialogPanel role="presentation" className="relative flex w-full max-w-sm flex-col items-center justify-center p-8 text-[var(--chalk-app-text)]" tone="neutral">
         {status === "failed" ? (
-          <div className="mb-6 rounded-full bg-[var(--chalk-app-danger)]/10 p-4 text-[var(--chalk-app-danger)]">
+          <ChalkBadge tone="danger" className="mb-6 size-20 min-h-0 min-w-0 p-4 text-[var(--chalk-app-danger)]">
             <WifiOffIcon size={48} strokeWidth={1.5} />
-          </div>
+          </ChalkBadge>
         ) : (
           <div className="mb-6">
-            <Spinner size="lg" />
+            <ChalkSpinner tone="accent" className="size-12" />
           </div>
         )}
 
@@ -45,35 +45,27 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
         </p>
 
         {supportCode && (
-          <div className="mb-6 w-full rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-3">
+          <ChalkPanel className="mb-6 w-full p-3" tone="neutral">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--chalk-app-text-muted)]">Support Code</p>
             <p className="mt-1 break-all font-mono text-xs text-[var(--chalk-app-text)]">{supportCode}</p>
-          </div>
+          </ChalkPanel>
         )}
 
         {status === "failed" && (
           <div className="flex w-full flex-col gap-3">
             {onRetry && (
-              <button
-                type="button"
-                onClick={onRetry}
-                className="w-full rounded-[8px] bg-[var(--chalk-app-control-primary)] px-4 py-2.5 font-medium text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2"
-              >
+              <ChalkButton type="button" onClick={onRetry} variant="solid" tone="accent" className="w-full font-medium text-[var(--chalk-app-control-active-text)]">
                 Try Again
-              </button>
+              </ChalkButton>
             )}
             {onLeft && (
-              <button
-                type="button"
-                onClick={onLeft}
-                className="w-full rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] px-4 py-2.5 font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2"
-              >
+              <ChalkButton type="button" onClick={onLeft} variant="outline" tone="neutral" className="w-full font-medium text-[var(--chalk-app-text)]">
                 Leave Space
-              </button>
+              </ChalkButton>
             )}
           </div>
         )}
-      </div>
+      </ChalkDialogPanel>
     </div>
   );
 });

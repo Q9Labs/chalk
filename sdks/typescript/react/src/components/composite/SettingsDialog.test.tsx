@@ -27,6 +27,7 @@ describe("SettingsDialog appearance", () => {
 
     expect(onUpdateAppearance).toHaveBeenCalledWith({ palette: "warm-porcelain", theme: "light" });
     expect(onUpdateAppearance).toHaveBeenCalledWith({ texture: "slate" });
+    expect(document.querySelector("[data-chalk-chrome]")).toBeInTheDocument();
     expect(document.querySelector('[data-chalk-palette="warm-charcoal"]')).toHaveAttribute("data-chalk-theme", "dark");
     expect(document.querySelector('[data-chalk-palette="warm-charcoal"]')).toHaveAttribute("data-chalk-texture", "paper");
   });

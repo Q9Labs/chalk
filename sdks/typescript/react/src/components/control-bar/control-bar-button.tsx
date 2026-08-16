@@ -3,6 +3,7 @@ import { Tooltip } from "@q9labsai/chalk-ui";
 import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 import { cn } from "../../utils/cn";
+import { ChalkIconButton, type ChalkSeed } from "../chalk-ui";
 
 interface ControlBarButtonProps {
   icon: React.ReactNode;
@@ -20,12 +21,13 @@ interface ControlBarButtonProps {
   haptic?: HapticInput | false;
   /** Custom styles when active (overrides default active styles) */
   activeClassName?: string;
+  seed?: ChalkSeed;
   "data-tour"?: string;
   ref?: React.Ref<HTMLButtonElement>;
 }
 
 export const ControlBarButton = React.memo(
-  ({ icon, label, active = false, danger = false, disabled = false, size = "md", showLabel = false, inlineLabel, hideTooltip = false, noBorder = false, onClick, className, haptic = "selection", activeClassName, "data-tour": dataTour, ref }: ControlBarButtonProps) => {
+  ({ icon, label, active = false, danger = false, disabled = false, size = "md", showLabel = false, inlineLabel, hideTooltip = false, noBorder = false, onClick, className, haptic = "selection", activeClassName, seed, "data-tour": dataTour, ref }: ControlBarButtonProps) => {
     const { trigger } = useHaptics({
       enabled: !disabled && haptic !== false,
     });
@@ -39,39 +41,21 @@ export const ControlBarButton = React.memo(
     }, [haptic, onClick, trigger]);
 
     const button = (
-      <button
+      <ChalkIconButton
         ref={ref}
-        type="button"
         onClick={handleClick}
         disabled={disabled}
         data-tour={dataTour}
-        className={cn(
-          "chalk-button-tactile group relative flex items-center justify-center transition-all duration-300 ease-out",
-          inlineLabel && "gap-2.5",
-          "text-[var(--chalk-app-text)]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-app-canvas)]",
-          size === "sm" && "h-9 w-9 rounded-full",
-          size === "md" && "h-11 w-11 rounded-full",
-          size === "lg" && "h-14 w-14 rounded-full",
-          disabled && "cursor-not-allowed opacity-50",
-          // Default state
-          !disabled && !active && !danger && !noBorder && "bg-[var(--chalk-app-control)] shadow-[var(--chalk-app-shadow-control)] hover:bg-[var(--chalk-app-control-hover)]",
-          // No Border state (Ghost)
-          !disabled && !active && !danger && noBorder && "bg-[var(--chalk-app-control)]",
-          // Active state
-          !disabled && active && !activeClassName && "border-transparent bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]",
-          // Custom active state
-          !disabled && active && activeClassName && activeClassName,
-          // Danger state - vibrant red for visibility
-          danger && "border-transparent bg-[var(--chalk-app-danger)] text-white hover:bg-[var(--chalk-app-danger-hover)]",
-          className,
-        )}
+        seed={seed}
+        size={size}
+        tone={danger ? "danger" : active ? "accent" : "neutral"}
+        className={cn("chalk-button-tactile transition-all duration-300 ease-out", inlineLabel && "gap-2.5", "text-[var(--chalk-app-text)]", noBorder && "opacity-95", active && activeClassName, className)}
         aria-label={label}
         aria-pressed={active}
       >
         {icon}
         {inlineLabel ? <span className="max-sm:hidden">{inlineLabel}</span> : null}
-      </button>
+      </ChalkIconButton>
     );
 
     if (showLabel) {

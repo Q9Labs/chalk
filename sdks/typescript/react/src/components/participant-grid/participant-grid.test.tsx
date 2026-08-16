@@ -19,6 +19,7 @@ describe("ParticipantGrid", () => {
       </ChalkProvider>,
     );
     expect(screen.getByRole("status")).toHaveTextContent("The Space is quiet");
+    expect(document.querySelectorAll('svg[data-chalk-chrome="true"]').length).toBeGreaterThan(0);
   });
 
   it("derives participants from the provider store", () => {
@@ -34,6 +35,7 @@ describe("ParticipantGrid", () => {
       </ChalkProvider>,
     );
     expect(screen.getByRole("button", { name: "Video tile for Hasan" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Video tile for Hasan" }).querySelector('svg[data-chalk-chrome="true"]')).toBeInTheDocument();
   });
 
   it("fills the stage for a single Participant", () => {

@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added deterministic hand-drawn chalk controls across the React SDK Entrance
+  and Space, plus public chalk buttons, fields, toggles, panels, menus, dialogs,
+  alerts, sliders, badges, and loading primitives for custom SDK surfaces.
 - Added exact-SHA, component-aware managed release manifests and a manual
   release workflow that builds only the changed API or Sync image while
   carrying the stable component digest and provenance forward.

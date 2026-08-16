@@ -18,6 +18,7 @@ describe("MessageBubble", () => {
     render(<MessageBubble content="" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" attachments={[{ attachmentId: "attachment-1", fileName: "report.pdf", mimeType: "application/pdf", byteLength: 2048 }]} onResolveAttachmentUrl={resolveAttachment} />);
 
     expect(screen.getByText("2 KB")).toBeInTheDocument();
+    expect(document.querySelector('[data-chalk-chrome="true"]')).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Download report.pdf" }));
 
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");

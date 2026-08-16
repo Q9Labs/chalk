@@ -70,6 +70,27 @@ import { Chalk, COSMIC_CHALK_THEME, Entrance } from "@q9labsai/chalk-react";
 <Entrance spaceName="Design review" theme={COSMIC_CHALK_THEME} onJoin={(settings) => spaceClient.join(settings)} />;
 ```
 
+## Hand-drawn UI
+
+Entrance and Space use the SDK's chalk-drawn controls throughout. Their rough
+SVG edges, powder passes, and focus marks are deterministic, while buttons,
+inputs, toggles, dialogs, menus, and sliders remain native accessible controls.
+
+The same pieces are public for custom panels. Each accepts a stable `seed` when
+you want a specific stroke to stay identical across renders.
+
+```tsx
+import { ChalkButton, ChalkInput, ChalkPanel, ChalkToggle } from "@q9labsai/chalk-react";
+
+<ChalkPanel seed="participant-settings">
+  <ChalkInput aria-label="Display name" defaultValue="Hasan" seed="display-name" />
+  <ChalkToggle aria-label="Noise suppression" defaultPressed seed="noise-suppression" />
+  <ChalkButton tone="accent" variant="solid" seed="save-settings">
+    Save settings
+  </ChalkButton>
+</ChalkPanel>;
+```
+
 ## Custom UI
 
 `ChalkProvider` only shares a `SpaceClient` with React. It does not join,
@@ -77,7 +98,7 @@ leave, refresh access, or own the client’s lifetime.
 
 ```tsx
 import type { SpaceClient } from "@q9labsai/chalk-client";
-import { ChalkProvider, useCan, useParticipants, useSpaceClient } from "@q9labsai/chalk-react";
+import { ChalkButton, ChalkProvider, useCan, useParticipants, useSpaceClient } from "@q9labsai/chalk-react";
 
 function ParticipantPanel() {
   const client = useSpaceClient();
@@ -87,7 +108,7 @@ function ParticipantPanel() {
   return (
     <>
       <p>{roster.length} participants</p>
-      {canRaiseHand ? <button onClick={() => void client.participants.raiseHand()}>Raise hand</button> : null}
+      {canRaiseHand ? <ChalkButton onClick={() => void client.participants.raiseHand()}>Raise hand</ChalkButton> : null}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { IconButton, Select } from "@q9labsai/chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { AudioIndicator } from "../atomic";
+import { ChalkIconButton, ChalkPanel, ChalkSelect } from "../chalk-ui";
 import { Thumbnail } from "../../internal/thumbnail";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -93,26 +93,37 @@ export const DeviceSelector = React.memo(({ type, devices, selectedDeviceId, onC
       <div className="flex items-center justify-between">{label && <label className="text-sm font-medium text-[var(--chalk-muted-text)]">{label}</label>}</div>
 
       <div className="flex gap-2">
-        <Select options={options} value={selectedDeviceId} onChange={(e) => onChange(e.target.value)} disabled={disabled || devices.length === 0} placeholder={devices.length === 0 ? "No devices found" : "Select device"} fullWidth />
+        <ChalkSelect value={selectedDeviceId ?? ""} onChange={(event) => onChange(event.currentTarget.value)} disabled={disabled || devices.length === 0} aria-label={label ?? "Select device"}>
+          <option value="" disabled>
+            {devices.length === 0 ? "No devices found" : "Select device"}
+          </option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </ChalkSelect>
 
         {type === "audioinput" && (
-          <div className="h-10 w-10 flex items-center justify-center rounded-md shrink-0 bg-[var(--chalk-stage)]">
+          <ChalkPanel className="!m-0 !h-10 !w-10 !shrink-0 !rounded-md !p-0 flex items-center justify-center bg-[var(--chalk-stage)]">
             <AudioIndicator level={audioLevel} size="sm" />
-          </div>
+          </ChalkPanel>
         )}
 
         {type === "audiooutput" && (
           <div className="shrink-0">
             <audio ref={audioRef} className="hidden" preload="auto" onEnded={() => setIsPlayingTestSound(false)} onPause={() => setIsPlayingTestSound(false)} />
-            <IconButton icon={<VolumeHighIcon className={cn("w-4 h-4", isPlayingTestSound && "text-[var(--chalk-accent)]", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />} onClick={playTestSound} disabled={disabled} size="md" aria-label="Test speakers" />
+            <ChalkIconButton onClick={playTestSound} disabled={disabled} size="md" aria-label="Test speakers">
+              <VolumeHighIcon className={cn("w-4 h-4", isPlayingTestSound && "text-[var(--chalk-accent)]", isPlayingTestSound && !prefersReducedMotion && "animate-pulse")} />
+            </ChalkIconButton>
           </div>
         )}
       </div>
 
       {type === "videoinput" && previewTrack && (
-        <div className="mt-2 aspect-video w-full overflow-hidden rounded-md bg-[var(--chalk-text)] relative">
+        <ChalkPanel className="!relative !mt-2 !aspect-video !w-full !overflow-hidden !rounded-md !bg-[var(--chalk-text)] !p-0">
           <Thumbnail videoTrack={previewTrack} size="md" className="w-full h-full" />
-        </div>
+        </ChalkPanel>
       )}
     </div>
   );

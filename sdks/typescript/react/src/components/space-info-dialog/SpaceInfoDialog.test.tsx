@@ -28,6 +28,7 @@ describe("SpaceInfoDialog", () => {
     );
 
     expect(screen.getByRole("dialog", { name: "Space details" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Space details" }).querySelector("[data-chalk-chrome]")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Space details" })).toHaveClass("border-[var(--chalk-app-line-strong)]", "bg-[var(--chalk-app-panel)]", "text-[var(--chalk-app-text)]");
     expect(screen.getByText("Design review")).toBeInTheDocument();
     expect(screen.getByText("01:01:01")).toBeInTheDocument();

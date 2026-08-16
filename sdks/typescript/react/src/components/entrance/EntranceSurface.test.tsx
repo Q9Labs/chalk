@@ -37,6 +37,7 @@ describe("EntranceSurface", () => {
     expect(screen.getByRole("button", { name: /Microphone/u })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: /Camera/u })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Enter Space" })).toBeDisabled();
+    expect(view.container.querySelectorAll("svg[data-chalk-chrome='true']").length).toBeGreaterThan(0);
 
     const nameInput = screen.getByRole("textbox", { name: "Your name" });
     fireEvent.change(nameInput, { target: { value: "Ada" } });

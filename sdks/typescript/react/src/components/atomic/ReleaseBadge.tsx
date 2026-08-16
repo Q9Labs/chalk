@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "../../utils/cn";
+import { ChalkBadge } from "../chalk-ui";
 
 export interface ReleaseBadgeProps {
   type: "major" | "minor" | "patch";
@@ -9,22 +10,26 @@ export interface ReleaseBadgeProps {
 const typeConfig = {
   major: {
     label: "Major",
-    className: "bg-[var(--chalk-danger-surface)] text-[var(--chalk-danger)] border-[var(--chalk-danger)]",
+    tone: "danger",
   },
   minor: {
     label: "Minor",
-    className: "bg-[var(--chalk-stage)] text-[var(--chalk-accent)] border-[var(--chalk-accent)]",
+    tone: "accent",
   },
   patch: {
     label: "Patch",
-    className: "bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)] border-[var(--chalk-line)]",
+    tone: "neutral",
   },
 } as const;
 
 export const ReleaseBadge = React.memo<ReleaseBadgeProps>(({ type, className }) => {
   const config = typeConfig[type];
 
-  return <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border", config.className, className)}>{config.label}</span>;
+  return (
+    <ChalkBadge className={cn("rounded-none px-2 py-0.5 text-xs font-medium", className)} seed={`release-${type}`} tone={config.tone}>
+      {config.label}
+    </ChalkBadge>
+  );
 });
 
 ReleaseBadge.displayName = "ReleaseBadge";

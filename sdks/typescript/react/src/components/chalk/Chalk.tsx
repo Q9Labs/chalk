@@ -15,6 +15,7 @@ import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
 import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+import { ChalkButton } from "../chalk-ui";
 
 export type SpaceLayout = "focus" | "grid" | "presentation";
 
@@ -314,9 +315,9 @@ function StatusView({ message, onRetry }: { readonly message: string; readonly o
           {message}
         </p>
         {onRetry ? (
-          <button type="button" onClick={onRetry} className="rounded-md bg-[var(--chalk-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--chalk-accent-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
+          <ChalkButton type="button" onClick={onRetry} variant="solid" tone="accent" className="text-sm font-semibold text-[var(--chalk-accent-text)]">
             Try again
-          </button>
+          </ChalkButton>
         ) : null}
       </div>
     </main>

@@ -8,10 +8,11 @@ import { SpaceHeader } from "./SpaceHeader";
 afterEach(cleanup);
 
 describe("SpaceHeader", () => {
-  it("uses the app appearance tokens for dark palette chrome", () => {
+  it("renders the header with visible chalk chrome", () => {
     render(<SpaceHeader spaceName="Design review" />);
 
-    expect(screen.getByRole("banner")).toHaveClass("border-[var(--chalk-app-line)]", "bg-[var(--chalk-app-chrome)]", "text-[var(--chalk-app-text)]");
+    expect(screen.getByRole("banner")).toHaveClass("text-[var(--chalk-app-text)]");
+    expect(screen.getByRole("banner").querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
   });
 
   it("opens space information and keeps layout selection explicit", () => {
@@ -27,5 +28,6 @@ describe("SpaceHeader", () => {
     expect(onLayoutChange).toHaveBeenNthCalledWith(1, "grid");
     expect(onLayoutChange).toHaveBeenNthCalledWith(2, "presentation");
     expect(screen.getByRole("button", { name: "Spotlight layout" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Grid layout" })).toHaveAttribute("aria-pressed", "false");
   });
 });

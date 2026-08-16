@@ -4,6 +4,7 @@ import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { Tick01Icon, TickDouble01Icon, FileTextIcon, Download01Icon } from "../../utils/icons";
 import { getParticipantColor } from "../../utils/colorGenerator";
+import { ChalkBadge, ChalkButton, ChalkChrome, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 
 export interface MessageBubbleProps {
   content: string;
@@ -137,26 +138,35 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
 
             if (isImage && imageUrl) {
               return (
-                <button type="button" key={file.attachmentId} onClick={() => void handleAttachmentClick(file)} className="relative group overflow-hidden rounded-lg border border-[var(--chalk-line)] max-w-full sm:max-w-xs aspect-auto" aria-label={`Download ${file.fileName}`}>
+                <ChalkButton
+                  type="button"
+                  variant="outline"
+                  tone={isLocal ? "accent" : "neutral"}
+                  key={file.attachmentId}
+                  onClick={() => void handleAttachmentClick(file)}
+                  disabled={!onResolveAttachmentUrl}
+                  className="h-auto max-w-full overflow-hidden p-0 sm:max-w-xs"
+                  aria-label={`Download ${file.fileName}`}
+                >
+                  <ChalkChrome className="absolute inset-0 h-full w-full" filled fill={isLocal ? "var(--chalk-accent)" : "var(--chalk-surface)"} part="attachment-preview" />
                   <img src={imageUrl} alt={file.fileName} className="w-full h-auto object-cover transition-transform group-hover:scale-105" style={{ maxHeight: "240px" }} />
-                  <div className="absolute inset-0 bg-[var(--chalk-text)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center justify-center bg-[var(--chalk-text)] opacity-0 transition-opacity group-hover:opacity-100">
                     <Download01Icon className="w-8 h-8 text-[var(--chalk-accent-text)]" />
                   </div>
-                </button>
+                </ChalkButton>
               );
             }
 
             return (
-              <button
+              <ChalkButton
                 type="button"
+                variant="outline"
+                tone={isLocal ? "accent" : "neutral"}
                 key={file.attachmentId}
                 onClick={() => void handleAttachmentClick(file)}
                 disabled={!onResolveAttachmentUrl}
                 aria-label={`Download ${file.fileName}`}
-                className={cn(
-                  "flex items-center gap-3 p-3 rounded-xl border transition-all text-left max-w-full sm:max-w-sm",
-                  isLocal ? "border-[var(--chalk-accent-text)] bg-[var(--chalk-surface)] text-[var(--chalk-accent)] hover:bg-[var(--chalk-stage)]" : "border-[var(--chalk-line)] bg-[var(--chalk-stage)] text-[var(--chalk-text)] hover:bg-[var(--chalk-stage)]",
-                )}
+                className={cn("h-auto max-w-full justify-start rounded-xl p-3 text-left sm:max-w-sm", isLocal ? "text-[var(--chalk-accent)]" : "text-[var(--chalk-text)]")}
               >
                 <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center shrink-0", isLocal ? "bg-[var(--chalk-surface)] text-[var(--chalk-accent)]" : "bg-[var(--chalk-stage)] text-[var(--chalk-accent)]")}>
                   <FileTextIcon className="w-5 h-5" />
@@ -165,7 +175,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                   <p className="text-sm font-medium truncate">{file.fileName}</p>
                   <p className={cn("text-[11px]", isLocal ? "text-[var(--chalk-accent-text)]" : "text-[var(--chalk-muted-text)]")}>{formatFileSize(file.byteLength)}</p>
                 </div>
-              </button>
+              </ChalkButton>
             );
           })}
         </div>
@@ -183,12 +193,10 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
 
       return (
         <div className="flex items-center gap-1 group/status relative" title={statusTitle}>
-          {status === "pending" ? <div className="w-3 h-3 rounded-full animate-spin border-2 border-[var(--chalk-line)] border-t-transparent" /> : isRead ? <TickDouble01Icon className="w-3.5 h-3.5 text-[var(--chalk-accent)]" /> : <Tick01Icon className="w-3.5 h-3.5 text-[var(--chalk-muted-text)]" />}
+          {status === "pending" ? <ChalkSpinner className="size-3" label="Pending" /> : isRead ? <TickDouble01Icon className="w-3.5 h-3.5 text-[var(--chalk-accent)]" /> : <Tick01Icon className="w-3.5 h-3.5 text-[var(--chalk-muted-text)]" />}
           <span className={cn("text-[11px]", isRead ? "text-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)]")}>{statusLabel}</span>
 
-          {isLocal && readByCount > 0 && (
-            <div className="invisible group-hover/status:visible absolute bottom-full right-0 mb-2 whitespace-nowrap bg-[var(--chalk-surface)] text-[var(--chalk-text)] px-2 py-1 rounded text-[10px] shadow-lg border border-[var(--chalk-line)] z-10">Read by: {readers.join(", ")}</div>
-          )}
+          {isLocal && readByCount > 0 && <ChalkPanel className="invisible absolute bottom-full right-0 z-10 mb-2 whitespace-nowrap px-2 py-1 text-[10px] shadow-lg group-hover/status:visible">Read by: {readers.join(", ")}</ChalkPanel>}
         </div>
       );
     };
@@ -196,9 +204,9 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     if (isSystem) {
       return (
         <div className={cn("flex flex-col items-center gap-1 py-3", className)}>
-          <div className="px-4 py-2 rounded-full bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)]">
-            <p className="text-xs text-center">{renderContent(content)}</p>
-          </div>
+          <ChalkBadge className="rounded-full px-4 py-2 text-[var(--chalk-muted-text)]">
+            <span className="block text-center text-xs">{renderContent(content)}</span>
+          </ChalkBadge>
           {showTimestamp && <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatTime(timestamp)}</span>}
         </div>
       );
@@ -209,10 +217,10 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
         {!isLocal && <div className="w-10 shrink-0">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={Boolean(senderAvatar)} className="!h-10 !w-10" />}</div>}
 
         <div className={cn("flex flex-col max-w-[70%]", isLocal ? "items-end" : "items-start")}>
-          <div className={cn("chalk-textured-surface px-4 py-3", isLocal ? "rounded-[16px_4px_16px_16px] bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]" : "rounded-[4px_16px_16px_16px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)]")}>
+          <ChalkPanel tone={isLocal ? "accent" : "neutral"} className={cn("px-4 py-3", isLocal ? "rounded-[16px_4px_16px_16px] text-[var(--chalk-accent-text)]" : "rounded-[4px_16px_16px_16px] text-[var(--chalk-text)]")}>
             <p className="text-sm leading-relaxed break-words">{renderContent(content)}</p>
             {renderAttachments()}
-          </div>
+          </ChalkPanel>
 
           {showTimestamp && isLastInGroup && (
             <div className={cn("flex items-center gap-1.5 mt-1 px-1", isLocal ? "flex-row-reverse" : "flex-row")}>

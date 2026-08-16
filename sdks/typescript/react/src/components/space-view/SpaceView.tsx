@@ -26,6 +26,7 @@ import { TranscriptPanel } from "../transcript-panel/TranscriptPanel";
 import { WhiteboardView, type WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
+import { ChalkPanel } from "../chalk-ui";
 
 export type SpacePanel = "chat" | "participants" | "transcript" | "admission" | "settings";
 
@@ -201,17 +202,25 @@ export function SpaceView({
           />
 
           <div className={cn("relative flex min-h-0 w-full flex-1 gap-3 overflow-hidden px-3 pt-5 pb-3 sm:px-5 sm:pt-6 lg:px-8", activePanel && "lg:grid lg:grid-cols-[minmax(0,1fr)_340px]")}>
-            <section className="chalk-textured-surface min-h-0 min-w-0 overflow-hidden rounded-[10px] bg-[var(--chalk-app-stage)]" aria-label="Space stage">
-              {whiteboard?.isOpen ? <WhiteboardView {...whiteboard.props} className={cn("h-full min-h-0", whiteboard.props.className)} /> : hasActiveScreenShare ? <ScreenShareView className="h-full" /> : <ParticipantGrid layout={renderedLayout} className="h-full" />}
+            <section className="min-h-0 min-w-0 overflow-hidden" aria-label="Space stage">
+              <ChalkPanel className="h-full min-h-0 rounded-none bg-[var(--chalk-app-stage)] p-0" seed="space-stage-shell">
+                <div className="h-full min-h-0">
+                  {whiteboard?.isOpen ? <WhiteboardView {...whiteboard.props} className={cn("h-full min-h-0", whiteboard.props.className)} /> : hasActiveScreenShare ? <ScreenShareView className="h-full" /> : <ParticipantGrid layout={renderedLayout} className="h-full" />}
+                </div>
+              </ChalkPanel>
             </section>
 
             {activePanel ? (
-              <aside className="chalk-textured-surface absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] shadow-[var(--chalk-app-shadow-sm)] lg:static lg:block lg:w-[340px] lg:shrink-0">
-                {activePanel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-                {activePanel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
-                {activePanel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
-                {activePanel === "admission" && feature("admission") ? <AdmissionPanel /> : null}
-                {activePanel === "settings" && feature("settings") ? (settingsContent ?? <SettingsPanel onClose={() => setActivePanel(null)} />) : null}
+              <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden lg:static lg:block lg:w-[340px] lg:shrink-0">
+                <ChalkPanel className="h-full min-h-0 rounded-none bg-[var(--chalk-app-panel)] p-0" seed="space-side-panel-shell">
+                  <div className="h-full min-h-0">
+                    {activePanel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+                    {activePanel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
+                    {activePanel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
+                    {activePanel === "admission" && feature("admission") ? <AdmissionPanel /> : null}
+                    {activePanel === "settings" && feature("settings") ? (settingsContent ?? <SettingsPanel onClose={() => setActivePanel(null)} />) : null}
+                  </div>
+                </ChalkPanel>
               </aside>
             ) : null}
           </div>

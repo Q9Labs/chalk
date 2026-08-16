@@ -22,7 +22,9 @@ describe("ChatPanel", () => {
   it("reads chat state from the provider and uses app appearance tokens", () => {
     const client = createTestClient();
     renderPanel(client);
-    expect(screen.getByRole("complementary", { name: "Chat panel" })).toHaveClass("text-[var(--chalk-app-text)]");
+    const panel = screen.getByRole("complementary", { name: "Chat panel" });
+    expect(panel).toHaveClass("text-[var(--chalk-app-text)]");
+    expect(panel.querySelector('[data-chalk-chrome="true"]')).toBeInTheDocument();
     expect(screen.getByLabelText("Chat messages")).toHaveClass("bg-[var(--chalk-app-panel)]");
   });
 

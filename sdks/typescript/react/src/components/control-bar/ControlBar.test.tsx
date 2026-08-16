@@ -34,15 +34,16 @@ describe("ControlBar", () => {
     expect(screen.queryByRole("button", { name: "Settings" })).not.toBeInTheDocument();
   });
 
-  it("uses app control tokens for compact media controls", () => {
+  it("renders chalk chrome for compact media controls", () => {
     const { container } = render(
       <ChalkProvider client={createTestClient()}>
         <ControlBar placement="floating" density="compact" buttons={["mic", "leave"]} />
       </ChalkProvider>,
     );
 
-    expect(container.querySelector('[class*="chalk-app-control-primary"]')).toBeInTheDocument();
-    expect(container.querySelector('[class*="chalk-app-danger"]')).toBeInTheDocument();
+    expect(container.querySelectorAll("svg[data-chalk-chrome='true']").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByRole("button", { name: "Unmute" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Leave space" })).toBeInTheDocument();
   });
 
   it("surfaces bare-provider command failures", async () => {

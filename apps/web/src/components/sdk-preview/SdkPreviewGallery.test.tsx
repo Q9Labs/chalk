@@ -124,7 +124,7 @@ describe("SdkPreviewGallery", () => {
     expect(screen.getByRole("complementary", { name: "Chat panel" })).toBeTruthy();
     expect(screen.getByText("I’m sending the latest Space notes…")).toBeTruthy();
     expect(screen.getByText("The Space connection was interrupted. Reconnecting now…")).toBeTruthy();
-    expect(screen.getByText("Nora Williams")).toBeTruthy();
+    expect(screen.getAllByText("Nora Williams").length).toBeGreaterThan(0);
   });
 
   it("hydrates Settings from direct palette and texture links", () => {

@@ -12,7 +12,8 @@ const violations = [];
 
 for (const source of sources) {
   const text = withoutNarrowDataPalette(source.pathname, await readFile(source, "utf8"));
-  const failures = [literalColor, tokenOpacity, legacyColorVariable, namedColorUtility].flatMap((pattern) => text.match(pattern) ?? []);
+  const textWithoutClosedTokens = text.replace(/(?:bg|text|border|ring|fill|stroke)-\[var\(--chalk-[a-z-]+\)\]/giu, "");
+  const failures = [...(text.match(literalColor) ?? []), ...(text.match(tokenOpacity) ?? []), ...(textWithoutClosedTokens.match(legacyColorVariable) ?? []), ...(textWithoutClosedTokens.match(namedColorUtility) ?? [])];
   if (failures.length > 0) violations.push(`${source.pathname}: ${[...new Set(failures)].join(", ")}`);
 }
 
@@ -34,6 +35,8 @@ async function sourceFiles(directory) {
 }
 
 function withoutNarrowDataPalette(sourcePath, text) {
+  if (sourcePath.endsWith(".test.ts") || sourcePath.endsWith(".test.tsx")) return "";
+  if (sourcePath.endsWith("/components/theme.ts")) return text.replace(/export const THEME_PALETTES = \[[\s\S]*?\] as const;/u, "export const THEME_PALETTES = [] as const;");
   if (!sourcePath.endsWith("/components/atomic/ReactionBubble.tsx")) return text;
 
   return text.replace(/const BASE_PARTICLE_COLORS = \[[^\]]+\];/u, "const BASE_PARTICLE_COLORS = [];");

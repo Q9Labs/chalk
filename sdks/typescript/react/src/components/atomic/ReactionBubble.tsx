@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor } from "../../utils/colorGenerator";
+import { ChalkBadge, ChalkChrome } from "../chalk-ui";
 import { CELEBRATION_EMOJIS } from "@q9labsai/chalk-ui/reactions";
 
 interface ReactionBubbleProps {
@@ -103,17 +104,20 @@ export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, 
           />
         ))}
 
+      <ChalkChrome className="pointer-events-none absolute inset-0 h-full w-full" shape="circle" filled fill="var(--chalk-surface, var(--chalk-app-control))" focusStroke={participantColors.primary} radius={999} roughness={0.9} stroke={participantColors.primary} part="reaction-bubble" />
+
       {/* Main emoji */}
       <div className={cn("relative z-10 text-5xl", !prefersReducedMotion && "chalk-animate-reaction-bounce-in", !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
 
       {/* Participant name badge */}
       {participantName && participantName.toLowerCase() !== "unknown" && (
-        <div
-          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] shadow-sm", !prefersReducedMotion && "animate-in fade-in duration-300")}
+        <ChalkBadge
+          tone="accent"
+          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 text-xs font-medium text-[var(--chalk-accent-text)] shadow-sm", !prefersReducedMotion && "animate-in fade-in duration-300")}
           style={{ backgroundColor: participantColors.primary }}
         >
           {participantName}
-        </div>
+        </ChalkBadge>
       )}
     </div>
   );

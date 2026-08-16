@@ -16,11 +16,12 @@ describe("MediaRequestDialog", () => {
       expiresAt: "2026-08-01T08:00:00.000Z",
     };
 
-    render(<MediaRequestDialog request={request} onDecline={vi.fn()} onAllow={vi.fn()} />);
+    const view = render(<MediaRequestDialog request={request} onDecline={vi.fn()} onAllow={vi.fn()} />);
 
     expect(screen.getByRole("dialog", { name: "Unmute request" })).toHaveTextContent("Grace is asking you to unmute");
     expect(screen.getByRole("button", { name: "Not now" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Allow" })).toBeInTheDocument();
+    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
   });
 
   it("uses role-neutral copy when the actor name is unavailable", () => {

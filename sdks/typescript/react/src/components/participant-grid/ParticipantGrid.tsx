@@ -3,6 +3,7 @@ import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { UserGroupIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
+import { ChalkBadge, ChalkControlGroup, ChalkEmptyState, ChalkIconButton, ChalkPanel } from "../chalk-ui";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 
@@ -178,14 +179,12 @@ const ParticipantGridSurface = React.memo(
 
     if (participants.length === 0) {
       return (
-        <div className={cn("flex h-full w-full items-center justify-center px-6 py-10", className)} data-tour="video-grid" role="status" aria-live="polite" aria-atomic="true">
-          <div className="flex w-full max-w-sm flex-col items-center rounded-[14px] border border-dashed border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-7 py-10 text-center shadow-[var(--chalk-app-shadow-xs)] sm:px-10">
-            <div aria-hidden="true" className="mb-5 grid h-12 w-12 place-items-center rounded-full bg-[var(--chalk-app-control)] text-[var(--chalk-app-text-muted)]">
+        <div className={cn("flex h-full w-full items-center justify-center px-6 py-10", className)} data-tour="video-grid">
+          <ChalkEmptyState className="w-full max-w-sm px-7 py-10 sm:px-10" title="The Space is quiet" description="No other Participants are here yet." aria-live="polite" aria-atomic="true">
+            <ChalkBadge aria-hidden="true" tone="neutral" className="mx-auto mb-5 size-12 min-h-0 min-w-0 p-0 text-[var(--chalk-app-text-muted)]">
               <UserGroupIcon size={24} />
-            </div>
-            <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--chalk-app-text)]">The Space is quiet</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--chalk-app-text-muted)]">No other Participants are here yet.</p>
-          </div>
+            </ChalkBadge>
+          </ChalkEmptyState>
         </div>
       );
     }
@@ -255,7 +254,7 @@ const ParticipantGridSurface = React.memo(
                     <ParticipantTile key={p.id} participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} aspectRatio="fill" className="w-full h-full" />
                   ))}
                   {/* Fill empty slots in last page */}
-                  {pageIndex === pages.length - 1 && page.length < 4 && Array.from({ length: 4 - page.length }).map((_, i) => <div key={`empty-${i}`} className="rounded-lg bg-[var(--chalk-app-tile-base)]" />)}
+                  {pageIndex === pages.length - 1 && page.length < 4 && Array.from({ length: 4 - page.length }).map((_, i) => <ChalkPanel key={`empty-${i}`} aria-hidden="true" filled={false} className="rounded-lg p-0" />)}
                 </div>
               ))}
             </div>
@@ -263,24 +262,33 @@ const ParticipantGridSurface = React.memo(
 
           {/* Page indicators */}
           {pages.length > 1 && (
-            <div className="pointer-events-auto absolute bottom-16 left-1/2 z-40 flex -translate-x-1/2 justify-center gap-0.5 rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-stage)] px-1 py-0.5 shadow-[var(--chalk-app-shadow-xs)]" role="group" aria-label="Participant pages">
-              {pages.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => goToPage(i)}
-                  className="grid h-8 w-8 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-app-stage)]"
-                  aria-label={`Go to page ${i + 1}`}
-                  aria-current={i === carouselIndex ? "page" : undefined}
-                >
-                  <span aria-hidden="true" className={cn("block h-2 w-2 rounded-full bg-[var(--chalk-app-line-strong)] transition-all", i === carouselIndex && "w-4 bg-[var(--chalk-app-control-active-line)]")} />
-                </button>
-              ))}
-            </div>
+            <ChalkPanel className="pointer-events-auto absolute bottom-16 left-1/2 z-40 -translate-x-1/2 rounded-full p-1" role="group" aria-label="Participant pages">
+              <ChalkControlGroup className="gap-0.5" role="presentation">
+                {pages.map((_, i) => (
+                  <ChalkIconButton
+                    key={i}
+                    size="sm"
+                    tone={i === carouselIndex ? "accent" : "neutral"}
+                    type="button"
+                    onClick={() => goToPage(i)}
+                    className="rounded-full p-0 focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-app-stage)]"
+                    aria-label={`Go to page ${i + 1}`}
+                    aria-current={i === carouselIndex ? "page" : undefined}
+                    seed={`participant-page-${i}`}
+                  >
+                    <span aria-hidden="true" className={cn("block h-2 w-2 rounded-full bg-[var(--chalk-app-line-strong)] transition-all", i === carouselIndex && "w-4 bg-[var(--chalk-app-control-active-line)]")} />
+                  </ChalkIconButton>
+                ))}
+              </ChalkControlGroup>
+            </ChalkPanel>
           )}
 
           {/* Overflow indicator */}
-          {overflowCount > 0 && <div className="pb-1 text-center text-xs text-[var(--chalk-app-text)]">+{overflowCount} more</div>}
+          {overflowCount > 0 && (
+            <ChalkBadge tone="neutral" className="mx-auto mb-1 text-center text-xs">
+              +{overflowCount} more
+            </ChalkBadge>
+          )}
         </div>
       );
     }
@@ -308,7 +316,11 @@ const ParticipantGridSurface = React.memo(
                   <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" showName={true} />
                 </div>
               ))}
-              {overflowCount > 0 && <div className="flex h-full aspect-video flex-shrink-0 items-center justify-center rounded-2xl bg-[var(--chalk-app-tile-base)] text-[var(--chalk-app-text-muted)]">+{overflowCount} more</div>}
+              {overflowCount > 0 && (
+                <ChalkPanel tone="neutral" className="flex h-full aspect-video flex-shrink-0 items-center justify-center rounded-2xl p-0 text-[var(--chalk-app-text-muted)]">
+                  +{overflowCount} more
+                </ChalkPanel>
+              )}
             </div>
           )}
         </div>
@@ -323,19 +335,21 @@ const ParticipantGridSurface = React.memo(
 
       return (
         <div className={cn("flex h-full gap-2", className)} data-tour="video-grid">
-          <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[var(--chalk-app-tile-base)]">
-            {screenShareContent ??
-              (primaryParticipant && (
-                <ParticipantTile
-                  participant={mapToVideoTileParticipant(primaryParticipant)}
-                  videoTrack={primaryParticipant.screenShareTrack || primaryParticipant.videoTrack}
-                  onClick={() => onParticipantClick?.(primaryParticipant.id)}
-                  onDoubleClick={() => onParticipantDoubleClick?.(primaryParticipant.id)}
-                  className="w-full h-full"
-                  aspectRatio="16:9"
-                />
-              ))}
-          </div>
+          <ChalkPanel tone="neutral" filled className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] p-0 [&>div]:h-full [&>div]:w-full">
+            <div className="relative h-full">
+              {screenShareContent ??
+                (primaryParticipant && (
+                  <ParticipantTile
+                    participant={mapToVideoTileParticipant(primaryParticipant)}
+                    videoTrack={primaryParticipant.screenShareTrack || primaryParticipant.videoTrack}
+                    onClick={() => onParticipantClick?.(primaryParticipant.id)}
+                    onDoubleClick={() => onParticipantDoubleClick?.(primaryParticipant.id)}
+                    className="w-full h-full"
+                    aspectRatio="16:9"
+                  />
+                ))}
+            </div>
+          </ChalkPanel>
 
           {otherParticipants.length > 0 && (
             <div className="w-64 flex flex-col gap-2 overflow-y-auto">
@@ -344,7 +358,11 @@ const ParticipantGridSurface = React.memo(
                   <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" showName={true} />
                 </div>
               ))}
-              {overflowCount > 0 && <div className="flex w-full aspect-video flex-shrink-0 items-center justify-center rounded-2xl bg-[var(--chalk-app-tile-base)] text-[var(--chalk-app-text-muted)]">+{overflowCount} more</div>}
+              {overflowCount > 0 && (
+                <ChalkPanel tone="neutral" className="flex w-full aspect-video flex-shrink-0 items-center justify-center rounded-2xl p-0 text-[var(--chalk-app-text-muted)]">
+                  +{overflowCount} more
+                </ChalkPanel>
+              )}
             </div>
           )}
         </div>
@@ -381,9 +399,9 @@ const ParticipantGridSurface = React.memo(
           />
         ))}
         {overflowCount > 0 && (
-          <div className={cn("flex h-full w-full items-center justify-center rounded-2xl bg-[var(--chalk-app-tile-base)] chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: getTileDelay(visibleParticipants.length) }}>
+          <ChalkPanel tone="neutral" className={cn("flex h-full w-full items-center justify-center rounded-2xl p-0 chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: getTileDelay(visibleParticipants.length) }}>
             <span className="text-[var(--chalk-app-text-muted)] text-xl font-medium">+{overflowCount} more</span>
-          </div>
+          </ChalkPanel>
         )}
       </div>
     );

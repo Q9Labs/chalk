@@ -1,6 +1,5 @@
 import { Dialog } from "@base-ui/react/dialog";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { IconButton, Input, Toggle } from "@q9labsai/chalk-ui";
 
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -12,6 +11,7 @@ import { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_TEXTURES, type 
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
+import { ChalkBackdrop, ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkInput, ChalkPanel, ChalkToggle } from "../chalk-ui";
 
 type SectionId = "audio" | "video" | "appearance" | "experience";
 type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;
@@ -154,12 +154,14 @@ const SECTIONS = [
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-4 shadow-none sm:p-5">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[var(--chalk-app-text)]">{title}</h3>
-        <p className="mt-1 text-xs text-[var(--chalk-app-text-muted)]">{description}</p>
-      </div>
-      <div className="space-y-4">{children}</div>
+    <section>
+      <ChalkPanel className="!rounded-[10px] !border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] !p-4 shadow-none sm:!p-5">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--chalk-app-text)]">{title}</h3>
+          <p className="mt-1 text-xs text-[var(--chalk-app-text-muted)]">{description}</p>
+        </div>
+        <div className="space-y-4">{children}</div>
+      </ChalkPanel>
     </section>
   );
 }
@@ -168,15 +170,15 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
   const titleId = React.useId();
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-4">
+    <ChalkPanel className="flex items-center justify-between gap-4 !rounded-[10px] !border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] !p-4">
       <div className="min-w-0 flex-1">
         <div id={titleId} className="text-sm font-medium text-[var(--chalk-app-text)]">
           {title}
         </div>
         <div className="text-xs text-[var(--chalk-app-text-muted)]">{description}</div>
       </div>
-      <Toggle checked={checked} onChange={onChange} ariaLabelledby={titleId} />
-    </div>
+      <ChalkToggle pressed={checked} onPressedChange={onChange} aria-labelledby={titleId} />
+    </ChalkPanel>
   );
 }
 
@@ -393,19 +395,25 @@ export const SettingsDialog = React.memo(
               <SectionCard title="Palette" description="Choose a complete color family. Every palette can use any material texture.">
                 {(["light", "dark"] as const).map((mode) => (
                   <div key={mode} className="space-y-2.5">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">{mode} palettes</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--chalk-app-text-muted)]">{mode} palettes</div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {THEME_PALETTES.filter((palette) => palette.mode === mode).map((palette) => {
                         const isSelected = resolvedPalette === palette.value;
                         return (
-                          <button
+                          <ChalkButton
+                            variant="outline"
                             key={palette.value}
                             type="button"
                             onClick={() => onUpdateAppearance({ palette: palette.value, theme: palette.mode })}
                             aria-pressed={isSelected}
-                            className={cn("flex items-center gap-3 rounded-[10px] border p-3 text-left transition-colors", isSelected ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-muted/50")}
+                            className={cn(
+                              "!min-h-0 !w-full !justify-start !rounded-[10px] !border !p-3 !text-left transition-colors",
+                              isSelected
+                                ? "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]"
+                                : "border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] hover:border-[var(--chalk-app-control-active-line)] hover:bg-[var(--chalk-app-control-hover)]",
+                            )}
                           >
-                            <span className="flex shrink-0 overflow-hidden rounded-full border border-black/10 shadow-sm" aria-hidden="true">
+                            <span className="flex shrink-0 overflow-hidden rounded-full border border-[var(--chalk-app-line)] shadow-sm" aria-hidden="true">
                               {palette.swatch.map((color) => (
                                 <span key={color} className="h-7 w-3" style={{ backgroundColor: color }} />
                               ))}
@@ -414,7 +422,7 @@ export const SettingsDialog = React.memo(
                               <span className="block truncate text-sm font-semibold">{palette.label}</span>
                               <span className="block text-[11px] opacity-70">{palette.family} family</span>
                             </span>
-                          </button>
+                          </ChalkButton>
                         );
                       })}
                     </div>
@@ -427,20 +435,24 @@ export const SettingsDialog = React.memo(
                   {THEME_TEXTURES.map((texture) => {
                     const isSelected = resolvedTexture === texture.value;
                     return (
-                      <button
+                      <ChalkButton
+                        variant="outline"
                         key={texture.value}
                         type="button"
                         onClick={() => onUpdateAppearance({ texture: texture.value })}
                         aria-label={`Use ${texture.label} texture`}
                         aria-pressed={isSelected}
-                        className={cn("overflow-hidden rounded-[10px] border text-left transition-colors", isSelected ? "border-primary text-primary" : "border-border text-foreground hover:border-primary/50")}
+                        className={cn(
+                          "!min-h-0 !w-full !justify-start !overflow-hidden !rounded-[10px] !border !p-0 !text-left transition-colors",
+                          isSelected ? "border-[var(--chalk-app-control-active-line)] text-[var(--chalk-app-control-active-text)]" : "border-[var(--chalk-app-line)] text-[var(--chalk-app-text)] hover:border-[var(--chalk-app-control-active-line)]",
+                        )}
                       >
                         <span data-chalk data-chalk-theme={resolvedTheme} data-chalk-palette={resolvedPalette} data-chalk-texture={texture.value} className="chalk-root chalk-textured-surface block h-12 border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-stage)]" aria-hidden="true" />
                         <span className="block bg-[var(--chalk-app-panel)] p-2.5">
                           <span className="block text-xs font-semibold">{texture.label}</span>
                           <span className="mt-0.5 block text-[10px] leading-4 text-[var(--chalk-app-text-muted)]">{texture.description}</span>
                         </span>
-                      </button>
+                      </ChalkButton>
                     );
                   })}
                 </div>
@@ -449,11 +461,12 @@ export const SettingsDialog = React.memo(
               {usesDarkPalette && (
                 <SectionCard title="Background Gradient" description="Adjust the intensity of the background gradient.">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <button
+                    <ChalkButton
+                      variant="outline"
                       type="button"
                       onClick={() => onUpdateAppearance({ gradient: "default" })}
                       className={cn(
-                        "group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors",
+                        "group relative !min-h-0 !w-full !overflow-hidden !rounded-2xl !border !p-4 !text-left transition-colors",
                         settings.appearance.gradient === "default" ? "border-[var(--chalk-accent)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
                       )}
                     >
@@ -461,12 +474,13 @@ export const SettingsDialog = React.memo(
                       <div className="absolute inset-0 opacity-20 transition-opacity group-hover:opacity-40" style={{ background: "radial-gradient(ellipse at top left, var(--chalk-accent) 0%, transparent 70%)" }} />
                       <div className="absolute inset-0 opacity-10 transition-opacity group-hover:opacity-30" style={{ background: "radial-gradient(ellipse at bottom right, var(--chalk-focus) 0%, transparent 70%)" }} />
                       <div className="relative z-10 text-sm font-semibold">Default</div>
-                    </button>
-                    <button
+                    </ChalkButton>
+                    <ChalkButton
+                      variant="outline"
                       type="button"
                       onClick={() => onUpdateAppearance({ gradient: "darker" })}
                       className={cn(
-                        "group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors",
+                        "group relative !min-h-0 !w-full !overflow-hidden !rounded-2xl !border !p-4 !text-left transition-colors",
                         settings.appearance.gradient === "darker" ? "border-[var(--chalk-accent)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
                       )}
                     >
@@ -474,7 +488,7 @@ export const SettingsDialog = React.memo(
                       <div className="absolute inset-0 opacity-5 transition-opacity group-hover:opacity-10" style={{ background: "radial-gradient(ellipse at top left, var(--chalk-accent) 0%, transparent 70%)" }} />
                       <div className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-5" style={{ background: "radial-gradient(ellipse at bottom right, var(--chalk-focus) 0%, transparent 70%)" }} />
                       <div className="relative z-10 text-sm font-semibold">Darker</div>
-                    </button>
+                    </ChalkButton>
                   </div>
                 </SectionCard>
               )}
@@ -492,12 +506,13 @@ export const SettingsDialog = React.memo(
                   </div>
 
                   <div className="space-y-4">
-                    <button
+                    <ChalkButton
+                      variant="outline"
                       type="button"
                       onClick={() => onUpdateAppearance({ profileGradient: { mode: "auto" } })}
                       aria-label="Use automatic profile gradient"
                       className={cn(
-                        "flex w-full items-center justify-between rounded-xl border p-3.5 transition-all",
+                        "!min-h-0 !flex !w-full !items-center !justify-between !rounded-xl !border !p-3.5 transition-all",
                         profileGradientMode === "auto"
                           ? "border-[var(--chalk-accent)] bg-[var(--chalk-stage)] text-[var(--chalk-accent)] shadow-[var(--chalk-shadow)]"
                           : "border-[var(--chalk-line)] bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)] hover:border-[var(--chalk-accent)] hover:text-[var(--chalk-text)]",
@@ -510,7 +525,7 @@ export const SettingsDialog = React.memo(
                         <div className="text-left text-sm font-semibold">Automatic Identity</div>
                       </div>
                       {profileGradientMode === "auto" && <div className="rounded-full bg-[var(--chalk-accent)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--chalk-accent-text)]">Active</div>}
-                    </button>
+                    </ChalkButton>
 
                     <div className="space-y-3">
                       <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--chalk-muted-text)]">Color Presets</div>
@@ -519,20 +534,21 @@ export const SettingsDialog = React.memo(
                           const isSelected = profileGradientMode === "custom" && preset.id === selectedProfileGradientPreset?.id;
 
                           return (
-                            <button
+                            <ChalkButton
+                              variant="outline"
                               key={preset.id}
                               type="button"
                               onClick={() => selectProfileGradientPreset(preset.from, preset.to)}
                               aria-label={`Use ${preset.label} profile gradient`}
                               aria-pressed={isSelected}
                               className={cn(
-                                "group relative flex aspect-square w-full items-center justify-center rounded-xl border shadow-sm transition-all",
+                                "group relative !min-h-0 !flex !aspect-square !w-full !items-center !justify-center !rounded-xl !border !p-0 shadow-sm transition-all",
                                 isSelected ? "border-[var(--chalk-accent)] ring-2 ring-[var(--chalk-focus)] ring-offset-2 ring-offset-[var(--chalk-canvas)]" : "border-[var(--chalk-line)] hover:border-[var(--chalk-accent)]",
                               )}
                               style={{ background: `linear-gradient(135deg, ${preset.from} 0%, ${preset.to} 100%)` }}
                             >
                               <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[var(--chalk-text)] px-2 py-1 text-[10px] font-medium text-[var(--chalk-canvas)] opacity-0 transition-opacity group-hover:opacity-100">{preset.label}</span>
-                            </button>
+                            </ChalkButton>
                           );
                         })}
                       </div>
@@ -550,18 +566,19 @@ export const SettingsDialog = React.memo(
                       ["focus", ColumnIcon, "Sidebar"],
                     ] as const
                   ).map(([value, Icon, label]) => (
-                    <button
+                    <ChalkButton
+                      variant="outline"
                       key={label}
                       type="button"
                       onClick={() => onUpdateAppearance({ layout: value })}
                       className={cn(
-                        "rounded-2xl border p-4 text-left transition-colors",
+                        "!min-h-0 !w-full !rounded-2xl !border !p-4 !text-left transition-colors",
                         settings.appearance.layout === value ? "border-[var(--chalk-accent)] bg-[var(--chalk-stage)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
                       )}
                     >
                       <Icon className="mb-3 h-5 w-5" />
                       <div className="text-sm font-semibold">{label}</div>
-                    </button>
+                    </ChalkButton>
                   ))}
                 </div>
                 <ToggleRow title="Show filmstrip" description="Keep the participant strip visible by default." checked={settings.appearance.showFilmstrip} onChange={(checked) => onUpdateAppearance({ showFilmstrip: checked })} />
@@ -579,13 +596,12 @@ export const SettingsDialog = React.memo(
                   <label htmlFor="chalk-settings-display-name" className="mb-2 block text-sm font-medium text-[var(--chalk-text)]">
                     Default display name
                   </label>
-                  <Input
+                  <ChalkInput
                     id="chalk-settings-display-name"
                     value={settings.identity.displayName}
                     onChange={(event) => onUpdateIdentity({ displayName: event.target.value })}
                     placeholder="How your name appears when you join"
-                    fullWidth
-                    className="rounded-2xl border-[var(--chalk-line)] bg-[var(--chalk-canvas)]"
+                    className="!rounded-2xl !border-[var(--chalk-line)] !bg-[var(--chalk-canvas)]"
                   />
                   <p className="mt-2 text-xs text-[var(--chalk-muted-text)]">Used as the starting name in the Entrance and settings preview.</p>
                 </div>
@@ -641,22 +657,19 @@ export const SettingsDialog = React.memo(
                       </div>
                       <PictureInPictureIcon className="h-5 w-5 shrink-0 text-[var(--chalk-accent)]" />
                     </div>
-                    <button
+                    <ChalkButton
+                      variant="solid"
+                      tone="accent"
                       type="button"
                       onClick={() => {
                         void onOpenPictureInPicture?.();
                       }}
                       disabled={!isPictureInPictureSupported || isPictureInPictureActive || !onOpenPictureInPicture}
-                      className={cn(
-                        "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
-                        "focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2",
-                        "disabled:cursor-not-allowed disabled:opacity-50",
-                        "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]",
-                      )}
+                      className={cn("!h-10 !rounded-full !px-4 !text-sm !font-medium transition-colors outline-none", "focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2", "disabled:cursor-not-allowed disabled:opacity-50")}
                       aria-label="Open Picture-in-Picture now"
                     >
                       Open Picture-in-Picture now
-                    </button>
+                    </ChalkButton>
                   </div>
                 </SectionCard>
               ) : null}
@@ -678,7 +691,7 @@ export const SettingsDialog = React.memo(
         }}
       >
         <Dialog.Portal>
-          <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-[var(--chalk-stage)] backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
+          <Dialog.Backdrop render={<ChalkBackdrop className={cn("z-[100] !bg-[var(--chalk-stage)] !backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />} />
           <Dialog.Popup
             data-chalk
             data-chalk-theme={resolvedTheme}
@@ -692,74 +705,78 @@ export const SettingsDialog = React.memo(
             )}
             style={settingsChromeVariables}
           >
-            <Dialog.Title className="sr-only">Space settings</Dialog.Title>
-            <div className="flex h-full flex-col md:flex-row">
-              <aside className={cn("flex w-full shrink-0 flex-col border-[var(--chalk-app-line)] bg-[var(--chalk-app-control-group)] md:w-44 md:border-r", !showSidebar && "hidden")}>
-                <div className="p-3 pb-2">
-                  <div className="mb-5 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Settings01Icon className="h-5 w-5 text-[var(--chalk-app-text-muted)]" />
+            <ChalkDialogPanel className="!h-full !max-h-full !w-full !max-w-none !rounded-[14px] !border-0 !bg-transparent !p-0" role="presentation">
+              <Dialog.Title className="sr-only">Space settings</Dialog.Title>
+              <div className="flex h-full flex-col md:flex-row">
+                <aside className={cn("flex w-full shrink-0 flex-col border-[var(--chalk-app-line)] bg-[var(--chalk-app-control-group)] md:w-44 md:border-r", !showSidebar && "hidden")}>
+                  <div className="p-3 pb-2">
+                    <div className="mb-5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Settings01Icon className="h-5 w-5 text-[var(--chalk-app-text-muted)]" />
+                        <div>
+                          <div className="text-base font-semibold">Settings</div>
+                          <div className="text-xs text-[var(--chalk-app-text-muted)]">Local to this browser</div>
+                        </div>
+                      </div>
+                      <ChalkIconButton onClick={onClose} aria-label="Close settings" className="md:hidden">
+                        <Cancel01Icon className="h-5 w-5" />
+                      </ChalkIconButton>
+                    </div>
+                    <div className="relative">
+                      <Search01Icon className="pointer-events-none absolute left-3 top-1/2 z-[2] h-4 w-4 -translate-y-1/2 text-[var(--chalk-app-text-muted)]" />
+                      <ChalkInput value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" className="rounded-[8px] border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-input)] pl-9" aria-label="Search settings" />
+                    </div>
+                  </div>
+                  <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
+                    {filteredSections.map((section) => {
+                      const Icon = section.icon;
+                      return (
+                        <ChalkButton
+                          variant="ghost"
+                          key={section.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveSection(section.id);
+                            setIsNavOpen(false);
+                          }}
+                          className={cn(
+                            "!min-h-0 !flex !w-full !items-start !justify-start !gap-2.5 !rounded-[8px] !px-3 !py-2.5 !text-left transition-colors",
+                            activeSection === section.id ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]",
+                          )}
+                        >
+                          <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium">{section.label}</span>
+                            <span className="block text-xs opacity-80">{section.description}</span>
+                          </span>
+                        </ChalkButton>
+                      );
+                    })}
+                    {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[var(--chalk-app-line)] px-4 py-8 text-center text-sm text-[var(--chalk-app-text-muted)]">No matching settings.</div>}
+                  </nav>
+                </aside>
+
+                <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
+                  <div className="flex items-start justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-5 py-4 md:px-6">
+                    <div className="flex items-center gap-3">
+                      <ChalkIconButton onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections">
+                        <ArrowLeft02Icon className="h-5 w-5" />
+                      </ChalkIconButton>
                       <div>
-                        <div className="text-base font-semibold">Settings</div>
-                        <div className="text-xs text-[var(--chalk-app-text-muted)]">Local to this browser</div>
+                        <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                        <p className="mt-0.5 text-xs text-[var(--chalk-app-text-muted)] md:mt-1 md:text-sm">Changes apply to this device.</p>
                       </div>
                     </div>
-                    <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" className="md:hidden" />
+                    <ChalkIconButton onClick={onClose} aria-label="Close settings">
+                      <Cancel01Icon className="h-5 w-5" />
+                    </ChalkIconButton>
                   </div>
-                  <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search settings"
-                    icon={<Search01Icon className="h-4 w-4" />}
-                    fullWidth
-                    className="rounded-[8px] border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-input)]"
-                    aria-label="Search settings"
-                  />
-                </div>
-                <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
-                  {filteredSections.map((section) => {
-                    const Icon = section.icon;
-                    return (
-                      <button
-                        key={section.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveSection(section.id);
-                          setIsNavOpen(false);
-                        }}
-                        className={cn(
-                          "flex w-full items-start gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors",
-                          activeSection === section.id ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]",
-                        )}
-                      >
-                        <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span className="min-w-0">
-                          <span className="block text-sm font-medium">{section.label}</span>
-                          <span className="block text-xs opacity-80">{section.description}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[var(--chalk-app-line)] px-4 py-8 text-center text-sm text-[var(--chalk-app-text-muted)]">No matching settings.</div>}
-                </nav>
-              </aside>
-
-              <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
-                <div className="flex items-start justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-5 py-4 md:px-6">
-                  <div className="flex items-center gap-3">
-                    <IconButton icon={<ArrowLeft02Icon className="h-5 w-5" />} variant="ghost" onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections" />
-                    <div>
-                      <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
-                      <p className="mt-0.5 text-xs text-[var(--chalk-app-text-muted)] md:mt-1 md:text-sm">Changes apply to this device.</p>
-                    </div>
+                  <div className="chalk-textured-surface min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
+                    <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                   </div>
-                  <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" />
-                </div>
-                <div className="chalk-textured-surface min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
-                  <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                 </div>
               </div>
-            </div>
+            </ChalkDialogPanel>
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>

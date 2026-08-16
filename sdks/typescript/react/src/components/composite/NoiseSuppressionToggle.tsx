@@ -1,7 +1,7 @@
 import React from "react";
-import { Select, Toggle } from "@q9labsai/chalk-ui";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { ChalkPanel, ChalkSelect, ChalkToggle } from "../chalk-ui";
 
 export interface NoiseSuppressionToggleProps {
   enabled: boolean;
@@ -19,33 +19,25 @@ export const NoiseSuppressionToggle = React.memo(({ enabled, onChange, level = "
   };
 
   return (
-    <div className={cn("flex flex-col gap-2 p-3 bg-[var(--chalk-stage)] rounded-lg border border-[var(--chalk-line)]", className)}>
+    <ChalkPanel className={cn("flex flex-col gap-2 !rounded-lg !p-3 bg-[var(--chalk-stage)]", className)}>
       <div className="flex items-center justify-between">
         <div className="flex flex-col">
           <span className="text-sm font-medium text-[var(--chalk-accent)]">Noise Suppression</span>
           <span className="text-xs text-[var(--chalk-muted-text)]">Reduce background noise</span>
         </div>
-        <Toggle checked={enabled} onChange={onChange} disabled={disabled} aria-label="Enable noise suppression" />
+        <ChalkToggle pressed={enabled} onPressedChange={onChange} disabled={disabled} aria-label="Enable noise suppression" />
       </div>
 
       {enabled && onLevelChange && (
         <div className={cn("mt-1", !prefersReducedMotion && "chalk-animate-fade-in")}>
-          <Select
-            options={[
-              { label: "Low", value: "low" },
-              { label: "Medium", value: "medium" },
-              { label: "High", value: "high" },
-            ]}
-            value={level}
-            onChange={handleLevelChange}
-            size="sm"
-            disabled={disabled}
-            fullWidth
-            aria-label="Noise suppression level"
-          />
+          <ChalkSelect value={level} onChange={handleLevelChange} disabled={disabled} aria-label="Noise suppression level">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </ChalkSelect>
         </div>
       )}
-    </div>
+    </ChalkPanel>
   );
 });
 

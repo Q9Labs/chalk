@@ -7,8 +7,9 @@ import { CommandErrorAlert } from "./CommandErrorAlert";
 
 describe("CommandErrorAlert", () => {
   it("renders the command failure as an alert", () => {
-    render(<CommandErrorAlert message="Microphone update failed" />);
+    const view = render(<CommandErrorAlert message="Microphone update failed" />);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Microphone update failed");
+    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
   });
 });

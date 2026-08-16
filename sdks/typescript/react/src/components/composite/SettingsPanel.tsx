@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react";
-import { IconButton, Toggle } from "@q9labsai/chalk-ui";
 import { useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Microphone01Icon, Video01Icon, Settings01Icon, PictureInPictureIcon } from "../../utils/icons";
 import { DeviceSelector } from "./DeviceSelector";
@@ -8,6 +7,7 @@ import { VolumeSlider } from "../atomic";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkPanel, ChalkToggle } from "../chalk-ui";
 
 export interface SettingsPanelProps {
   enablePictureInPicture?: boolean;
@@ -69,7 +69,7 @@ const SettingsPanelSurface = React.memo(
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
     return (
-      <div
+      <ChalkDialogPanel
         className={cn("flex flex-col h-full w-80 shadow-xl", "bg-[var(--chalk-surface)]", "border-l border-[var(--chalk-line)]", !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
         data-tour="settings-panel"
         role="dialog"
@@ -81,40 +81,50 @@ const SettingsPanelSurface = React.memo(
             <Settings01Icon className="w-4 h-4 text-[var(--chalk-muted-text)]" />
             <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Settings</h2>
           </div>
-          {onClose && <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close settings" />}
+          {onClose && (
+            <ChalkIconButton size="sm" onClick={onClose} aria-label="Close settings">
+              <Cancel01Icon className="w-4 h-4" />
+            </ChalkIconButton>
+          )}
         </div>
 
         <div className="flex border-b border-[var(--chalk-line)]">
-          <button
+          <ChalkButton
+            variant="ghost"
             type="button"
             onClick={() => setActiveTab("audio")}
-            className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "audio" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-3 !text-sm !font-medium transition-colors", activeTab === "audio" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            aria-selected={activeTab === "audio"}
           >
             <div className="flex items-center justify-center gap-2">
               <Microphone01Icon className="w-4 h-4" />
               Audio
             </div>
-          </button>
-          <button
+          </ChalkButton>
+          <ChalkButton
+            variant="ghost"
             type="button"
             onClick={() => setActiveTab("video")}
-            className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "video" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-3 !text-sm !font-medium transition-colors", activeTab === "video" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            aria-selected={activeTab === "video"}
           >
             <div className="flex items-center justify-center gap-2">
               <Video01Icon className="w-4 h-4" />
               Video
             </div>
-          </button>
-          <button
+          </ChalkButton>
+          <ChalkButton
+            variant="ghost"
             type="button"
             onClick={() => setActiveTab("general")}
-            className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "general" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-3 !text-sm !font-medium transition-colors", activeTab === "general" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            aria-selected={activeTab === "general"}
           >
             <div className="flex items-center justify-center gap-2">
               <Settings01Icon className="w-4 h-4" />
               General
             </div>
-          </button>
+          </ChalkButton>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -154,15 +164,15 @@ const SettingsPanelSurface = React.memo(
                 <div className="space-y-4">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--chalk-muted-text)]">Picture in Picture</h3>
 
-                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
+                  <ChalkPanel className="flex items-center justify-between gap-4 !rounded-2xl !border border-[var(--chalk-line)] bg-[var(--chalk-surface)] !p-4">
                     <div>
                       <div className="text-sm font-medium text-[var(--chalk-text)]">Auto-open PiP</div>
                       <div className="text-xs text-[var(--chalk-muted-text)] text-wrap">Try to open PiP automatically on join.</div>
                     </div>
-                    <Toggle checked={autoOpenPictureInPicture} onChange={onAutoOpenPictureInPictureChange ?? (() => {})} label="Auto-open PiP" />
-                  </div>
+                    <ChalkToggle pressed={autoOpenPictureInPicture} onPressedChange={onAutoOpenPictureInPictureChange ?? (() => {})} aria-label="Auto-open PiP" />
+                  </ChalkPanel>
 
-                  <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
+                  <ChalkPanel className="!rounded-2xl !border border-[var(--chalk-line)] bg-[var(--chalk-surface)] !p-4">
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div>
                         <div className="text-sm font-medium text-[var(--chalk-text)]">Manual open</div>
@@ -170,26 +180,22 @@ const SettingsPanelSurface = React.memo(
                       </div>
                       <PictureInPictureIcon className="h-4 w-4 shrink-0 text-[var(--chalk-accent)]" />
                     </div>
-                    <button
+                    <ChalkButton
+                      variant="solid"
                       type="button"
                       onClick={() => onOpenPictureInPicture?.()}
                       disabled={!isPictureInPictureSupported || isPictureInPictureActive || !onOpenPictureInPicture}
-                      className={cn(
-                        "w-full h-9 inline-flex items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
-                        "focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
-                        "disabled:cursor-not-allowed disabled:opacity-50",
-                        "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]",
-                      )}
+                      className={cn("!h-9 !w-full !rounded-full !px-4 !text-sm !font-medium transition-colors outline-none", "focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]", "disabled:cursor-not-allowed disabled:opacity-50")}
                     >
                       Open PiP now
-                    </button>
-                  </div>
+                    </ChalkButton>
+                  </ChalkPanel>
                 </div>
               )}
             </div>
           )}
         </div>
-      </div>
+      </ChalkDialogPanel>
     );
   },
 );

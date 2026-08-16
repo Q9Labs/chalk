@@ -9,11 +9,12 @@ afterEach(cleanup);
 
 describe("JoinFailedScreen", () => {
   it("uses the canonical title and exposes the failure as an alert and status", () => {
-    render(<JoinFailedScreen message="The Space is unavailable right now." onRetry={vi.fn()} onBack={vi.fn()} />);
+    const view = render(<JoinFailedScreen message="The Space is unavailable right now." onRetry={vi.fn()} onBack={vi.fn()} />);
 
     expect(screen.getByRole("heading", { name: "Couldn’t enter the Space" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("The Space is unavailable right now.");
     expect(screen.getByRole("status")).toHaveTextContent("The Space is unavailable right now.");
+    expect(view.container.querySelectorAll("svg[data-chalk-chrome='true']").length).toBeGreaterThan(0);
   });
 
   it("renders custom title and a selectable support code", () => {
@@ -33,5 +34,6 @@ describe("JoinFailedScreen", () => {
 
     expect(onRetry).toHaveBeenCalledOnce();
     expect(onBack).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Try again" })).toHaveAttribute("data-chalk-variant", "solid");
   });
 });

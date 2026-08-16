@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { Alert02Icon } from "../../utils/icons";
+import { ChalkBadge, ChalkButton, ChalkPanel } from "../chalk-ui";
 
 export interface TranscriptLineProps {
   speaker: string;
@@ -84,8 +85,8 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
     const renderedText = useMemo(() => (searchHighlight ? highlightText(text, searchHighlight) : text), [text, searchHighlight]);
 
     return (
-      <div
-        className={cn("group relative rounded-lg transition-all duration-200", !prefersReducedMotion && !isInterim && "chalk-animate-transcript-in", isCurrentMatch && "ring-2 ring-[var(--chalk-focus)] bg-[var(--chalk-accent)]", className)}
+      <ChalkPanel
+        className={cn("group rounded-lg p-0 transition-all duration-200", !prefersReducedMotion && !isInterim && "chalk-animate-transcript-in", isCurrentMatch && "ring-2 ring-[var(--chalk-focus)] bg-[var(--chalk-accent)]", className)}
         style={speakerColor ? ({ "--primary": speakerColor } as React.CSSProperties) : undefined}
         role="listitem"
         aria-live={isInterim ? "off" : "polite"}
@@ -108,13 +109,19 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
                   {speaker}
                 </span>
 
-                {isLocalParticipant && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)]">You</span>}
+                {isLocalParticipant && <ChalkBadge className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--chalk-muted-text)]">You</ChalkBadge>}
 
                 {/* Timestamp - click to copy */}
                 {showTimestamp && (
-                  <button type="button" onClick={handleCopyTimestamp} className={cn("ml-auto text-xs transition-colors", copied ? "text-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]")} title={copied ? "Copied!" : "Click to copy timestamp"}>
+                  <ChalkButton
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCopyTimestamp}
+                    className={cn("ml-auto min-h-0 px-0 py-0 text-xs transition-colors", copied ? "text-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]")}
+                    title={copied ? "Copied!" : "Click to copy timestamp"}
+                  >
                     {copied ? "Copied!" : timeString}
-                  </button>
+                  </ChalkButton>
                 )}
               </div>
             )}
@@ -132,7 +139,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
             </div>
           </div>
         </div>
-      </div>
+      </ChalkPanel>
     );
   },
 );

@@ -92,6 +92,15 @@ describe("SpaceView", () => {
     expect(stageLayout?.className).not.toContain("max-w-");
   });
 
+  it("uses chalk chrome for the stage and an open side panel", () => {
+    const client = createTestClient(createSnapshot(["sendChat"]));
+    const { container } = renderView(client, { features: { chat: true }, initialPanel: "chat" });
+
+    expect(screen.getByRole("region", { name: "Space stage" }).querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Chat panel" }).querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
+    expect(container.querySelector("main > section svg[data-chalk-chrome='true']")).toBeInTheDocument();
+  });
+
   it("opens the provider-backed participant panel from the control bar", () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     renderView(client, { features: { participants: true } });

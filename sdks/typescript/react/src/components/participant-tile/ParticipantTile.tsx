@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { cn } from "../../utils/cn";
 import { MicrophoneOff01Icon, Monitor01Icon, HandIcon, WifiOffIcon } from "../../utils/icons";
 import { Avatar } from "../atomic/Avatar";
+import { ChalkBadge, ChalkChrome, ChalkPanel } from "../chalk-ui";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
@@ -150,7 +151,7 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[8px] border border-transparent outline-none transition-all duration-300",
+        "relative overflow-hidden rounded-[8px] border border-transparent bg-[var(--chalk-app-tile-base)] outline-none transition-all duration-300",
         aspectRatioClasses[aspectRatio],
         pinned && "ring-2",
         participant.isSpeaking && !prefersReducedMotion && "chalk-animate-harmonic-pulse",
@@ -190,49 +191,60 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
 
       {/* Poor connection warning, top-right */}
       {showStatus && hasPoorConnection && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-[var(--chalk-text)] border border-[var(--chalk-line)] pointer-events-none" role="status" aria-label={`${participant.displayName} has a poor connection`}>
+        <ChalkBadge tone="danger" className="pointer-events-none absolute top-2 right-2 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
           <WifiOffIcon size={12} className="text-[var(--chalk-danger)]" />
-        </div>
+        </ChalkBadge>
       )}
 
       {/* Compact bottom-left info chip */}
       {(showName || showStatus) && (
         <div className="pointer-events-none absolute right-2 bottom-2 left-2">
-          <div className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--chalk-line)] bg-[var(--chalk-text)] px-2 py-1">
-            {/* Small avatar when video is off */}
-            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={Boolean(participant.avatarUrl)} gradientPreference={gradientPreference} />}
+          <ChalkPanel tone="neutral" filled className="inline-flex max-w-full items-center gap-1.5 rounded-[5px] p-1.5">
+            <div className="flex max-w-full items-center gap-1.5">
+              {/* Small avatar when video is off */}
+              {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={Boolean(participant.avatarUrl)} gradientPreference={gradientPreference} />}
 
-            {/* Name */}
-            {showName && (
-              <span className="max-w-[120px] truncate text-xs font-medium !text-[var(--chalk-accent-text)]" title={participant.displayName}>
-                {participant.displayName}
-                {participant.isLocal && participant.displayName !== "You" && <span className="!text-[var(--chalk-accent-text)]"> (You)</span>}
-              </span>
-            )}
+              {/* Name */}
+              {showName && (
+                <span className="max-w-[120px] truncate text-xs font-medium !text-[var(--chalk-accent-text)]" title={participant.displayName}>
+                  {participant.displayName}
+                  {participant.isLocal && participant.displayName !== "You" && <span className="!text-[var(--chalk-accent-text)]"> (You)</span>}
+                </span>
+              )}
 
-            {/* Status icons inline */}
-            {showStatus && (
-              <div className="flex items-center gap-1 ml-auto">
-                {participant.isMuted && (
-                  <div className="rounded-full bg-[var(--chalk-danger)] p-0.5">
-                    <MicrophoneOff01Icon size={10} className="text-[var(--chalk-accent-text)]" />
-                  </div>
-                )}
-                {participant.isHandRaised && (
-                  <div className={cn("rounded-full bg-[var(--chalk-danger-surface)] p-0.5", !prefersReducedMotion && "chalk-animate-hand-bounce")}>
-                    <HandIcon size={10} className="text-[var(--chalk-accent-text)]" />
-                  </div>
-                )}
-                {participant.isScreenSharing && (
-                  <div className="rounded-full p-0.5" style={{ backgroundColor: `${participantColors.primary}CC` }}>
-                    <Monitor01Icon size={10} className="text-[var(--chalk-accent-text)]" />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+              {/* Status icons inline */}
+              {showStatus && (
+                <div className="ml-auto flex items-center gap-1">
+                  {participant.isMuted && (
+                    <ChalkBadge tone="danger" className="min-h-0 min-w-0 p-0.5">
+                      <MicrophoneOff01Icon size={10} className="text-[var(--chalk-accent-text)]" />
+                    </ChalkBadge>
+                  )}
+                  {participant.isHandRaised && (
+                    <ChalkBadge tone="accent" className={cn("min-h-0 min-w-0 p-0.5", !prefersReducedMotion && "chalk-animate-hand-bounce")}>
+                      <HandIcon size={10} className="text-[var(--chalk-accent-text)]" />
+                    </ChalkBadge>
+                  )}
+                  {participant.isScreenSharing && (
+                    <ChalkBadge tone="success" className="min-h-0 min-w-0 p-0.5" style={{ backgroundColor: `${participantColors.primary}CC` }}>
+                      <Monitor01Icon size={10} className="text-[var(--chalk-accent-text)]" />
+                    </ChalkBadge>
+                  )}
+                </div>
+              )}
+            </div>
+          </ChalkPanel>
         </div>
       )}
+
+      <ChalkChrome
+        className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+        focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))"
+        radius={8}
+        roughness={0.9}
+        stroke={participant.isSpeaking ? "var(--chalk-accent-speaking, var(--chalk-app-line-strong, currentColor))" : "var(--chalk-app-line-strong, currentColor)"}
+        part="participant-tile"
+      />
     </div>
   );
 });

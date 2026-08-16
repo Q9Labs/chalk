@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "../../utils/cn";
+import { ChalkBadge } from "../chalk-ui";
 
 export interface NameTagProps {
   name: string;
@@ -16,10 +17,10 @@ const sizeClasses = {
 
 export const NameTag = React.memo(({ name, isLocal = false, size = "md", className }: NameTagProps) => {
   return (
-    <div className={cn("inline-flex max-w-full items-center gap-2 rounded-lg text-[var(--chalk-accent-text)]", sizeClasses[size], className)}>
+    <ChalkBadge tone="neutral" className={cn("inline-flex max-w-full items-center gap-2 text-[var(--chalk-accent-text)]", sizeClasses[size], className)}>
       <span className="truncate font-semibold text-lg tracking-tight">{name}</span>
       {isLocal && <span className="text-xs text-[var(--chalk-accent-text)] whitespace-nowrap">(You)</span>}
-    </div>
+    </ChalkBadge>
   );
 });
 

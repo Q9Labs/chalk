@@ -5,7 +5,7 @@ import { useChat, useParticipants, useSelf, useSpaceClient } from "../../binding
 
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
-import { Button } from "@q9labsai/chalk-ui";
+import { ChalkAlert, ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner, ChalkTextarea } from "../chalk-ui";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
@@ -201,138 +201,148 @@ const ChatPanelSurface = React.memo(
     };
 
     return (
-      <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
-        {variant === "sidebar" ? (
-          <header className="chalk-textured-surface flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-[18px]">
-            <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
-            {onClose ? (
-              <button
-                type="button"
-                onClick={onClose}
-                className="grid h-9 w-9 place-items-center rounded-full border border-[var(--chalk-app-line)] text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]"
-                aria-label="Close chat"
-              >
-                <Cancel01Icon className="h-5 w-5" />
-              </button>
-            ) : null}
-          </header>
-        ) : null}
-
-        <div ref={scrollRef} className="chalk-textured-surface flex-1 overflow-y-auto bg-[var(--chalk-app-panel)] px-2 py-5" aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
-          {hasOlder && onLoadOlder ? (
-            <Button variant="ghost" size="sm" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void loadOlder()}>
-              {loadingOlder ? "Loading…" : "Load earlier messages"}
-            </Button>
+      <ChalkPanel className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent p-0 text-[var(--chalk-app-text)]", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
+        <div className="flex h-full min-h-0 w-full flex-col">
+          {variant === "sidebar" ? (
+            <header className="group relative flex items-center justify-between bg-[var(--chalk-app-panel)] px-5 py-[18px]">
+              <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-panel))" part="chat-header" />
+              <div className="relative z-[1] flex w-full items-center justify-between">
+                <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
+                {onClose ? (
+                  <ChalkIconButton type="button" onClick={onClose} size="sm" className="text-[var(--chalk-app-text-muted)]" aria-label="Close chat">
+                    <Cancel01Icon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
+              </div>
+            </header>
           ) : null}
-          {messages.length === 0 && pendingMessages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]">
-                <Message01Icon className="h-8 w-8" />
-              </div>
-              <h3 className="mb-1 font-medium">No messages yet</h3>
-              <p className="max-w-[220px] text-sm text-[var(--chalk-app-text-muted)]">Send a message to start the conversation.</p>
-            </div>
-          ) : (
-            grouped.map((group) => (
-              <div key={`${group.participantId}-${group.firstMessageId}`}>
-                {group.messages.map((message, index) => {
-                  const isLocal = localParticipantId !== undefined && message.participantId === localParticipantId;
-                  const readBy = isLocal ? receiptsForChatMessage(message.sequence, readReceipts, localParticipantId) : [];
-                  return (
-                    <div key={message.messageId} data-chat-sequence={message.sequence}>
-                      <MessageBubble
-                        content={message.text}
-                        senderName={message.displayName}
-                        timestamp={message.createdAt}
-                        isLocal={isLocal}
-                        isFirstInGroup={index === 0}
-                        isLastInGroup={index === group.messages.length - 1}
-                        showSender={index === 0}
-                        showTimestamp={index === group.messages.length - 1}
-                        showAvatar
-                        status={readBy.length > 0 ? "read" : "sent"}
-                        attachments={message.attachments}
-                        readBy={readBy}
-                        participantNames={participantNames}
-                        onResolveAttachmentUrl={onResolveAttachmentUrl}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ))
-          )}
-          {pendingMessages.map((pending) => (
-            <div key={pending.clientMessageId} className="my-2">
-              <MessageBubble content={pending.text} senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"} timestamp={new Date().toISOString()} isLocal status="pending" attachments={pending.attachments} onResolveAttachmentUrl={onResolveAttachmentUrl} />
-              {pending.status === "failed" ? (
-                <div className="mr-14 flex items-center justify-end gap-2 text-xs text-[var(--chalk-app-text-muted)]">
-                  <span>{pending.error?.message || "Not sent"}</span>
-                  {onRetryMessage ? (
-                    <button type="button" className="font-medium text-[var(--chalk-app-control-active-line)] hover:underline" onClick={() => void onRetryMessage(pending.clientMessageId)}>
-                      Retry
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ))}
-          <div ref={endRef} />
-        </div>
 
-        {(error || composerError) && (
-          <p role="alert" className="mx-4 mb-2 rounded-lg bg-[var(--chalk-app-danger)]/10 px-3 py-2 text-sm text-[var(--chalk-app-danger)]">
-            {composerError || error}
-          </p>
-        )}
-        {stagedFiles.length > 0 ? (
-          <div className="flex flex-wrap gap-2 border-t border-[var(--chalk-app-line)] px-4 pt-3" aria-label="Attachments">
-            {stagedFiles.map((file, index) => (
-              <div key={`${describeChatUploadFile(file).fileName}-${describeChatUploadFile(file).byteLength}-${index}`} className="flex max-w-full items-center gap-2 rounded-full bg-[var(--chalk-app-control-group)] px-3 py-1.5 text-xs">
-                <span className="max-w-52 truncate">{describeChatUploadFile(file).fileName}</span>
-                <button type="button" disabled={sending || pickingFiles} aria-label={`Remove ${describeChatUploadFile(file).fileName}`} onClick={() => setStagedFiles((current) => current.filter((_, candidate) => candidate !== index))}>
-                  <Cancel01Icon className="h-3.5 w-3.5" />
-                </button>
+          <div ref={scrollRef} className="chalk-textured-surface flex-1 overflow-y-auto bg-[var(--chalk-app-panel)] px-2 py-5" aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
+            {hasOlder && onLoadOlder ? (
+              <ChalkButton variant="ghost" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void loadOlder()}>
+                {loadingOlder ? (
+                  <>
+                    <ChalkSpinner className="size-4" label="Loading earlier messages" /> Loading…
+                  </>
+                ) : (
+                  "Load earlier messages"
+                )}
+              </ChalkButton>
+            ) : null}
+            {messages.length === 0 && pendingMessages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center">
+                <ChalkEmptyState className="w-full px-6 py-10">
+                  <div className="flex flex-col items-center">
+                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]">
+                      <Message01Icon className="h-8 w-8" />
+                    </div>
+                    <h3 className="mb-1 font-medium">No messages yet</h3>
+                    <p className="max-w-[220px] text-sm text-[var(--chalk-app-text-muted)]">Send a message to start the conversation.</p>
+                  </div>
+                </ChalkEmptyState>
+              </div>
+            ) : (
+              grouped.map((group) => (
+                <div key={`${group.participantId}-${group.firstMessageId}`}>
+                  {group.messages.map((message, index) => {
+                    const isLocal = localParticipantId !== undefined && message.participantId === localParticipantId;
+                    const readBy = isLocal ? receiptsForChatMessage(message.sequence, readReceipts, localParticipantId) : [];
+                    return (
+                      <div key={message.messageId} data-chat-sequence={message.sequence}>
+                        <MessageBubble
+                          content={message.text}
+                          senderName={message.displayName}
+                          timestamp={message.createdAt}
+                          isLocal={isLocal}
+                          isFirstInGroup={index === 0}
+                          isLastInGroup={index === group.messages.length - 1}
+                          showSender={index === 0}
+                          showTimestamp={index === group.messages.length - 1}
+                          showAvatar
+                          status={readBy.length > 0 ? "read" : "sent"}
+                          attachments={message.attachments}
+                          readBy={readBy}
+                          participantNames={participantNames}
+                          onResolveAttachmentUrl={onResolveAttachmentUrl}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ))
+            )}
+            {pendingMessages.map((pending) => (
+              <div key={pending.clientMessageId} className="my-2">
+                <MessageBubble content={pending.text} senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"} timestamp={new Date().toISOString()} isLocal status="pending" attachments={pending.attachments} onResolveAttachmentUrl={onResolveAttachmentUrl} />
+                {pending.status === "failed" ? (
+                  <div className="mr-14 flex items-center justify-end gap-2 text-xs text-[var(--chalk-app-text-muted)]">
+                    <span>{pending.error?.message || "Not sent"}</span>
+                    {onRetryMessage ? (
+                      <ChalkButton variant="ghost" className="min-h-0 px-0 py-0 font-medium text-[var(--chalk-app-control-active-line)] hover:underline" onClick={() => void onRetryMessage(pending.clientMessageId)}>
+                        Retry
+                      </ChalkButton>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))}
+            <div ref={endRef} />
           </div>
-        ) : null}
-        <div className="chalk-textured-surface flex items-end gap-2 border-t border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-4 py-4">
-          {onUploadAttachment ? (
-            <>
-              {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} /> : null}
-              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={disabled || sending || pickingFiles || stagedFiles.length >= CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} onClick={() => void chooseFiles()} aria-label="Attach files">
-                <Upload01Icon className="h-5 w-5" />
-              </Button>
-            </>
+
+          {(error || composerError) && <ChalkAlert className="mx-4 mb-2 px-3 py-2 text-sm text-[var(--chalk-app-danger)]">{composerError || error}</ChalkAlert>}
+          {stagedFiles.length > 0 ? (
+            <div className="flex flex-wrap gap-2 px-4 pt-3" aria-label="Attachments">
+              <ChalkDivider className="m-0 h-3 w-full" />
+              {stagedFiles.map((file, index) => (
+                <ChalkBadge key={`${describeChatUploadFile(file).fileName}-${describeChatUploadFile(file).byteLength}-${index}`} className="max-w-full gap-2 rounded-full px-3 py-1.5 text-xs">
+                  <span className="max-w-52 truncate">{describeChatUploadFile(file).fileName}</span>
+                  <ChalkIconButton size="sm" className="size-5 rounded-full p-0" disabled={sending || pickingFiles} aria-label={`Remove ${describeChatUploadFile(file).fileName}`} onClick={() => setStagedFiles((current) => current.filter((_, candidate) => candidate !== index))}>
+                    <Cancel01Icon className="h-3.5 w-3.5" />
+                  </ChalkIconButton>
+                </ChalkBadge>
+              ))}
+            </div>
           ) : null}
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" || event.shiftKey) return;
-              event.preventDefault();
-              void send();
-            }}
-            placeholder={placeholder}
-            disabled={disabled || sending}
-            aria-label="Message"
-            className="min-h-11 max-h-[120px] flex-1 resize-none rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] px-3.5 py-3 text-sm text-[var(--chalk-app-text)] outline-none transition placeholder:text-[var(--chalk-app-text-muted)] focus:border-[var(--chalk-app-control-active-line)]"
-            rows={1}
-          />
-          <Button
-            type="button"
-            size="icon"
-            className="h-11 w-11 shrink-0 rounded-[8px] bg-[var(--chalk-app-control-primary)] !text-white hover:bg-[var(--chalk-app-control-primary-hover)]"
-            disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
-            onClick={() => void send()}
-            aria-label="Send message"
-          >
-            <SentIcon className="h-5 w-5" />
-          </Button>
+          <div className="group relative flex items-end gap-2 bg-[var(--chalk-app-chrome)] px-4 py-4">
+            <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-chrome))" part="chat-composer" />
+            {onUploadAttachment ? (
+              <>
+                {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} /> : null}
+                <ChalkIconButton type="button" size="lg" className="relative z-[1] h-11 w-11 shrink-0 rounded-full" disabled={disabled || sending || pickingFiles || stagedFiles.length >= CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} onClick={() => void chooseFiles()} aria-label="Attach files">
+                  <Upload01Icon className="h-5 w-5" />
+                </ChalkIconButton>
+              </>
+            ) : null}
+            <ChalkTextarea
+              ref={textareaRef}
+              wrapperClassName="relative z-[1] min-h-11 max-h-[120px] flex-1"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.shiftKey) return;
+                event.preventDefault();
+                void send();
+              }}
+              placeholder={placeholder}
+              disabled={disabled || sending}
+              aria-label="Message"
+              className="min-h-11 max-h-[120px] resize-none bg-[var(--chalk-app-input)] px-3.5 py-3 text-sm text-[var(--chalk-app-text)]"
+              rows={1}
+            />
+            <ChalkButton
+              type="button"
+              variant="solid"
+              tone="accent"
+              className="relative z-[1] h-11 w-11 shrink-0 rounded-[8px] p-0 !text-[var(--chalk-app-control-active-text)]"
+              disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
+              onClick={() => void send()}
+              aria-label="Send message"
+            >
+              <SentIcon className="h-5 w-5" />
+            </ChalkButton>
+          </div>
         </div>
-      </div>
+      </ChalkPanel>
     );
   },
 );

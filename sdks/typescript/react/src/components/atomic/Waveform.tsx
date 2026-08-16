@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { ChalkChrome } from "../chalk-ui";
 
 export interface WaveformProps {
   levels: number[];
@@ -25,7 +26,8 @@ export const Waveform = React.memo(({ levels, color = "var(--chalk-focus)", anim
   }, [levels, barCount]);
 
   return (
-    <div className={cn("flex items-center gap-[2px] h-8", className)} role="img" aria-label="Audio waveform">
+    <div className={cn("relative flex items-center gap-[2px] h-8 px-1", className)} role="img" aria-label="Audio waveform">
+      <ChalkChrome className="pointer-events-none absolute inset-0 h-full w-full" radius={5} roughness={0.8} stroke={color} part="waveform" />
       {displayLevels.map((level, i) => (
         <div
           key={i}

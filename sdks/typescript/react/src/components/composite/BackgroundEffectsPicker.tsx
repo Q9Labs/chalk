@@ -2,6 +2,7 @@ import React, { useMemo, useRef } from "react";
 import { Cancel01Icon, Upload01Icon, Image01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { ChalkButton } from "../chalk-ui";
 
 export interface BackgroundEffect {
   id: string;
@@ -45,12 +46,13 @@ export const BackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, 
   return (
     <div className={cn("flex flex-col gap-3", className)} style={themeVariables as React.CSSProperties}>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="group" aria-label="Background effects">
-        <button
+        <ChalkButton
+          variant="outline"
           type="button"
           onClick={() => onSelect("none")}
           disabled={disabled}
           className={cn(
-            "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all",
+            "!relative !min-h-0 !aspect-video !rounded-md !border-2 !p-0 overflow-hidden flex flex-col items-center justify-center transition-all",
             "bg-[var(--chalk-stage)] hover:bg-[var(--chalk-stage)]",
             isSelected("none") ? "border-[var(--chalk-accent)] ring-1 ring-[var(--chalk-focus)] ring-offset-1 ring-offset-[var(--chalk-canvas)]" : "border-transparent",
             disabled && "opacity-50 cursor-not-allowed",
@@ -60,16 +62,17 @@ export const BackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, 
         >
           <Cancel01Icon className="w-6 h-6 mb-1 text-[var(--chalk-muted-text)]" />
           <span className="text-[10px] font-medium text-[var(--chalk-text)]">None</span>
-        </button>
+        </ChalkButton>
 
         {effects.map((effect) => (
-          <button
+          <ChalkButton
+            variant="outline"
             key={effect.id}
             type="button"
             onClick={() => onSelect(effect.id)}
             disabled={disabled}
             className={cn(
-              "relative aspect-video rounded-md border-2 overflow-hidden flex flex-col items-center justify-center transition-all",
+              "!relative !min-h-0 !aspect-video !rounded-md !border-2 !p-0 overflow-hidden flex flex-col items-center justify-center transition-all",
               "bg-[var(--chalk-stage)] hover:bg-[var(--chalk-stage)]",
               isSelected(effect.id) ? "border-[var(--chalk-accent)] ring-1 ring-[var(--chalk-focus)] ring-offset-1 ring-offset-[var(--chalk-canvas)]" : "border-transparent",
               disabled && "opacity-50 cursor-not-allowed",
@@ -89,21 +92,27 @@ export const BackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, 
                 <Image01Icon className="w-6 h-6 text-[var(--chalk-muted-text)]" />
               </div>
             )}
-          </button>
+          </ChalkButton>
         ))}
 
         {onCustomUpload && (
-          <button
+          <ChalkButton
+            variant="outline"
             type="button"
             onClick={handleUploadClick}
             disabled={disabled}
-            className={cn("relative aspect-video rounded-md border-2 border-dashed overflow-hidden flex flex-col items-center justify-center transition-all", "border-[var(--chalk-line)]", "hover:bg-[var(--chalk-stage)] hover:border-[var(--chalk-line)]", disabled && "opacity-50 cursor-not-allowed")}
+            className={cn(
+              "!relative !min-h-0 !aspect-video !rounded-md !border-2 !border-dashed !p-0 overflow-hidden flex flex-col items-center justify-center transition-all",
+              "border-[var(--chalk-line)]",
+              "hover:bg-[var(--chalk-stage)] hover:border-[var(--chalk-line)]",
+              disabled && "opacity-50 cursor-not-allowed",
+            )}
             aria-label="Upload custom background"
           >
             <Upload01Icon className="w-5 h-5 mb-1 text-[var(--chalk-muted-text)]" />
             <span className="text-[10px] font-medium text-[var(--chalk-muted-text)]">Upload</span>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={disabled} tabIndex={-1} />
-          </button>
+          </ChalkButton>
         )}
       </div>
     </div>

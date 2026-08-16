@@ -163,6 +163,7 @@ describe("React bindings", () => {
     await waitFor(() => expect(within(view.container).getByRole("status")).toHaveTextContent("Access expired"));
     expect(within(view.container).queryByRole("heading", { name: "Enter this Space" })).not.toBeInTheDocument();
     expect(within(view.container).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
   });
 
   it("uses the selected color scheme palette and preserves token overrides", () => {
@@ -378,12 +379,12 @@ describe("React bindings", () => {
     const view = render(<Chalk client={client} entrance={false} />);
     fireEvent.click(within(view.container).getAllByRole("button", { name: "People" })[0]!);
     fireEvent.click(within(view.container).getByRole("button", { name: "Options for Grace" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "Ask to unmute" }));
+    fireEvent.click(within(view.container).getByRole("menuitem", { name: "Ask to unmute" }));
 
     expect(requestMedia).toHaveBeenCalledWith("grace", "microphone");
 
     fireEvent.click(within(view.container).getByRole("button", { name: "Options for Grace" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "Ask to start camera" }));
+    fireEvent.click(within(view.container).getByRole("menuitem", { name: "Ask to start camera" }));
     expect(requestMedia).toHaveBeenCalledWith("grace", "camera");
   });
 

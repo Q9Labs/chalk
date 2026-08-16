@@ -2,6 +2,7 @@ import React from "react";
 import { HandIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { ChalkBadge } from "../chalk-ui";
 
 interface HandRaiseIndicatorProps {
   raised: boolean;
@@ -36,9 +37,10 @@ export const HandRaiseIndicator = React.memo(({ raised, animated = true, positio
   if (!raised) return null;
 
   return (
-    <div
+    <ChalkBadge
+      tone="accent"
       className={cn(
-        "absolute z-10 flex items-center justify-center rounded-full bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] shadow-sm ring-[var(--chalk-surface)]",
+        "absolute z-10 flex items-center justify-center min-h-0 min-w-0 rounded-full text-[var(--chalk-accent-text)] shadow-sm ring-[var(--chalk-surface)]",
         wrapperSizeMap[size],
         positionMap[position],
         !prefersReducedMotion && "chalk-animate-scale-in",
@@ -49,7 +51,7 @@ export const HandRaiseIndicator = React.memo(({ raised, animated = true, positio
       aria-label="Hand raised"
     >
       <HandIcon size={sizeMap[size]} fill="currentColor" />
-    </div>
+    </ChalkBadge>
   );
 });
 

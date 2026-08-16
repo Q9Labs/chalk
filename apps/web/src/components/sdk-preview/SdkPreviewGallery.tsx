@@ -80,7 +80,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
 
   if (search.view === "entrance") {
     return (
-      <div data-preview-view="entrance" data-preview-state={search.state} className="relative min-h-screen">
+      <div data-preview-view="entrance" data-preview-state={search.state} className="relative h-screen overflow-hidden">
         <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
         {search.state === "ready" || search.state === "warning" ? (
           <PreviewEntrance
@@ -115,7 +115,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
 
   if (search.state === "ended") {
     return (
-      <div data-preview-view="space" data-preview-state="ended" className="relative min-h-screen">
+      <div data-preview-view="space" data-preview-state="ended" className="relative h-screen overflow-hidden">
         <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
         <PreviewEpisodeEnded spaceName={SPACE_NAME} duration={episodeDuration} participantCount={search.participants} onRejoin={retrySpace} onGoHome={backToEntrance} />
       </div>
@@ -134,7 +134,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   const confirmationOverlay = search.state === "confirmation" ? <LeaveDialog isOpen onClose={retrySpace} onConfirm={backToEntrance} palette={mappedPalette} texture={mappedTexture} /> : null;
 
   return (
-    <div data-preview-view="space" data-preview-state={search.state} className="relative min-h-screen">
+    <div data-preview-view="space" data-preview-state={search.state} className="relative h-screen overflow-hidden">
       <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
       <PreviewSpaceView
         client={previewClient}

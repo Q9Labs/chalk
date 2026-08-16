@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Facehash } from "@q9labsai/facehash/react";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { ChalkBadge, ChalkChrome } from "../chalk-ui";
 
 type FacehashComponentProps = {
   name: string;
@@ -35,12 +36,12 @@ const sizeMap = {
   "2xl": { size: 120, fontSize: "2.75rem" },
 };
 
-const statusColorMap = {
-  online: "var(--chalk-positive)",
-  away: "var(--chalk-accent)",
-  busy: "var(--chalk-danger)",
-  offline: "var(--chalk-muted-text)",
-};
+const statusToneMap = {
+  online: "success",
+  away: "accent",
+  busy: "danger",
+  offline: "neutral",
+} as const;
 
 export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference, generated = true }: AvatarProps) => {
   const [imageError, setImageError] = useState(false);
@@ -67,16 +68,8 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
           {avatarRecipe.initials}
         </div>
       )}
-      {status && (
-        <span
-          className="absolute bottom-0 right-0 block rounded-full ring-2 ring-[var(--chalk-surface)]"
-          style={{
-            width: Math.max(8, pxSize / 4),
-            height: Math.max(8, pxSize / 4),
-            backgroundColor: statusColorMap[status],
-          }}
-        />
-      )}
+      <ChalkChrome className="pointer-events-none absolute inset-0 z-[2] h-full w-full" shape="circle" radius={999} roughness={0.8} stroke="var(--chalk-app-line-strong, currentColor)" focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))" part="avatar" />
+      {status && <ChalkBadge dot tone={statusToneMap[status]} className="absolute bottom-0 right-0 z-[3] rounded-full ring-2 ring-[var(--chalk-surface)]" style={{ width: Math.max(8, pxSize / 4), height: Math.max(8, pxSize / 4) }} role="status" aria-label={`Status: ${status}`} />}
     </div>
   );
 });

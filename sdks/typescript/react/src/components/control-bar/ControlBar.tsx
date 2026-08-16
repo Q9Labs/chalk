@@ -26,6 +26,7 @@ import { ControlBarButton } from "../atomic";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
+import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkIconButton, ChalkPanel } from "../chalk-ui";
 
 interface MediaDevice {
   deviceId: string;
@@ -145,23 +146,21 @@ const formatDuration = (seconds: number) => {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 };
 
-function FloatingControlBarButton({ icon, label, onClick, active = false, danger = false, badge }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick?: () => void; readonly active?: boolean; readonly danger?: boolean; readonly badge?: number }) {
+function FloatingControlBarButton({ icon, label, onClick, active = false, danger = false, badge, seed }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick?: () => void; readonly active?: boolean; readonly danger?: boolean; readonly badge?: number; readonly seed: string }) {
   return (
-    <button
-      type="button"
+    <ChalkIconButton
       onClick={onClick}
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={cn(
-        "chalk-textured-surface relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] transition hover:-translate-y-0.5 hover:border-[var(--chalk-app-line-strong)] hover:bg-[var(--chalk-app-control-hover)]",
-        active && "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]",
-        danger && "ml-2 border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] !text-white hover:border-[var(--chalk-app-danger-hover)] hover:bg-[var(--chalk-app-danger-hover)]",
-      )}
+      seed={seed}
+      size="lg"
+      tone={danger ? "danger" : active ? "accent" : "neutral"}
+      className={cn("h-[52px] w-[52px] shrink-0 text-[var(--chalk-app-text)] transition hover:-translate-y-0.5", danger && "ml-2 !text-[var(--chalk-app-control-active-text)]")}
     >
       {icon}
-      {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] !text-white">{badge > 99 ? "99+" : badge}</span> : null}
-    </button>
+      {badge && badge > 0 ? <ChalkBadge className="absolute top-1 right-1 min-h-4 min-w-4 px-1 text-[10px] !text-[var(--chalk-app-control-active-text)]" count={badge} max={99} aria-label={`${badge} unread messages`} seed={`${seed}-badge`} tone="danger" /> : null}
+    </ChalkIconButton>
   );
 }
 
@@ -254,10 +253,19 @@ const ControlBarSurface = React.memo(
     const renderButton = (type: ControlBarButtonName) => {
       switch (type) {
         case "mic":
-          return <ControlBarButton key="mic" icon={isMuted ? <MicrophoneOff01Icon className="text-[var(--chalk-app-danger)]" /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} showLabel={showLabels} data-tour="controls-mic" />;
+          return <ControlBarButton key="mic" icon={isMuted ? <MicrophoneOff01Icon className="text-[var(--chalk-app-danger)]" /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} seed="control-mic" showLabel={showLabels} data-tour="controls-mic" />;
         case "video":
           return (
-            <ControlBarButton key="video" icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[var(--chalk-app-danger)]" />} label={isVideoEnabled ? "Stop Video" : "Start Video"} onClick={onToggleVideo} active={isVideoEnabled} showLabel={showLabels} data-tour="controls-video" />
+            <ControlBarButton
+              key="video"
+              icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[var(--chalk-app-danger)]" />}
+              label={isVideoEnabled ? "Stop Video" : "Start Video"}
+              onClick={onToggleVideo}
+              active={isVideoEnabled}
+              seed="control-video"
+              showLabel={showLabels}
+              data-tour="controls-video"
+            />
           );
         case "screenshare":
           return (
@@ -267,88 +275,39 @@ const ControlBarSurface = React.memo(
               label={isScreenSharing ? "Stop Share" : "Share Screen"}
               onClick={onToggleScreenShare}
               active={isScreenSharing}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              seed="control-screenshare"
               showLabel={showLabels}
               data-tour="controls-screenshare"
             />
           );
         case "record":
           if (!onToggleRecording) return null;
-          return <ControlBarButton key="record" icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop Recording" : "Record"} onClick={onToggleRecording} active={isRecording} showLabel={showLabels} data-tour="controls-record" />;
+          return <ControlBarButton key="record" icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop Recording" : "Record"} onClick={onToggleRecording} active={isRecording} seed="control-record" showLabel={showLabels} data-tour="controls-record" />;
         case "chat":
           if (!onToggleChat) return null;
           return (
             <div key="chat" className="relative">
-              <ControlBarButton
-                icon={<Message01Icon />}
-                label="Chat"
-                onClick={onToggleChat}
-                active={isChatOpen}
-                activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
-                showLabel={showLabels}
-                data-tour="controls-chat"
-              />
-              {unreadChatCount > 0 && !isChatOpen && (
-                <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] font-semibold text-white shadow-sm">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
-              )}
+              <ControlBarButton icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} seed="control-chat" showLabel={showLabels} data-tour="controls-chat" />
+              {unreadChatCount > 0 && !isChatOpen ? (
+                <ChalkBadge className="absolute -top-1 -right-1 min-h-4 min-w-4 px-1 text-[10px] !text-[var(--chalk-app-control-active-text)]" count={unreadChatCount} max={99} aria-label={`${unreadChatCount} unread messages`} seed="control-chat-badge" tone="danger" />
+              ) : null}
             </div>
           );
         case "participants":
           if (!onToggleParticipants) return null;
-          return (
-            <ControlBarButton
-              key="participants"
-              icon={<UserGroupIcon />}
-              label="People"
-              onClick={onToggleParticipants}
-              active={isParticipantsOpen}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-              data-tour="controls-participants"
-            />
-          );
+          return <ControlBarButton key="participants" icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} seed="control-participants" showLabel={showLabels} data-tour="controls-participants" />;
         case "transcription":
           if (!onToggleTranscription) return null;
-          return (
-            <ControlBarButton
-              key="transcription"
-              icon={<FileTextIcon />}
-              label="Transcript"
-              onClick={onToggleTranscription}
-              active={isTranscriptionEnabled}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-            />
-          );
+          return <ControlBarButton key="transcription" icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} seed="control-transcription" showLabel={showLabels} />;
         case "handraise":
           if (!onToggleHandRaise) return null;
-          return (
-            <ControlBarButton
-              key="handraise"
-              icon={<HandIcon />}
-              label={isHandRaised ? "Lower Hand" : "Raise Hand"}
-              onClick={onToggleHandRaise}
-              active={isHandRaised}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-            />
-          );
+          return <ControlBarButton key="handraise" icon={<HandIcon />} label={isHandRaised ? "Lower Hand" : "Raise Hand"} onClick={onToggleHandRaise} active={isHandRaised} seed="control-handraise" showLabel={showLabels} />;
         case "reactions":
           if (!onOpenReactions) return null;
-          return <ControlBarButton key="reactions" icon={<SmileIcon />} label="Reactions" onClick={onOpenReactions} showLabel={showLabels} />;
+          return <ControlBarButton key="reactions" icon={<SmileIcon />} label="Reactions" onClick={onOpenReactions} seed="control-reactions" showLabel={showLabels} />;
         case "whiteboard":
           if (!onToggleWhiteboard) return null;
-          return (
-            <ControlBarButton
-              key="whiteboard"
-              icon={<Edit02Icon />}
-              label="Whiteboard"
-              onClick={onToggleWhiteboard}
-              active={isWhiteboardOpen}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-            />
-          );
+          return <ControlBarButton key="whiteboard" icon={<Edit02Icon />} label="Whiteboard" onClick={onToggleWhiteboard} active={isWhiteboardOpen} seed="control-whiteboard" showLabel={showLabels} />;
         case "pip":
           if (!onTogglePictureInPicture) {
             return null;
@@ -366,35 +325,34 @@ const ControlBarSurface = React.memo(
                   : undefined
               }
               active={isPictureInPictureActive}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              seed="control-pip"
               showLabel={showLabels}
             />
           );
         case "settings":
           if (!onOpenSettings) return null;
-          return <ControlBarButton key="settings" icon={<Settings01Icon size={20} />} label="Settings" onClick={onOpenSettings} showLabel={showLabels} />;
+          return <ControlBarButton key="settings" icon={<Settings01Icon size={20} />} label="Settings" onClick={onOpenSettings} seed="control-settings" showLabel={showLabels} />;
         case "diagnostics":
           if (!onOpenDiagnostics) {
             return null;
           }
-          return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} showLabel={showLabels} />;
+          return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} seed="control-diagnostics" showLabel={showLabels} />;
         case "more":
           if (!onOpenMore) return null;
-          return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} showLabel={showLabels} />;
+          return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} seed="control-more" showLabel={showLabels} />;
         case "leave":
           return null; // Handled explicitly in the layout
         case "info":
           if (!onOpenInfo) return null;
-          return <ControlBarButton key="info" icon={<InformationCircleIcon size={20} />} label="Info" onClick={onOpenInfo} noBorder />;
+          return <ControlBarButton key="info" icon={<InformationCircleIcon size={20} />} label="Info" onClick={onOpenInfo} noBorder seed="control-info" />;
         case "thumbsup":
           if (!onOpenReactions) return null;
-          return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[var(--chalk-app-control-active-text)]" />} label="Reactions" onClick={onOpenReactions} />;
+          return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[var(--chalk-app-control-active-text)]" />} label="Reactions" onClick={onOpenReactions} seed="control-thumbsup" />;
         default:
           return null;
       }
     };
 
-    // Compact floating layout matching the screenshot
     if (placement === "floating" && density === "compact") {
       return (
         <div
@@ -406,103 +364,74 @@ const ControlBarSurface = React.memo(
           role="toolbar"
           aria-label="Space controls"
         >
-          <div className="flex items-center justify-center gap-1.5 min-w-min mx-auto">
-            {/* Group 1: Media Controls */}
-            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-control-primary)] bg-[var(--chalk-app-control-primary)] p-1 shadow-[var(--chalk-app-shadow-control)]">
-              <button
-                type="button"
-                onClick={onToggleMute}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-white" : "!text-[var(--chalk-app-danger)]")}
-                aria-label={isMuted ? "Unmute" : "Mute"}
-                aria-pressed={!isMuted}
-              >
-                {isMuted ? <MicrophoneOff01Icon className="w-5 h-5" /> : <Microphone01Icon className="w-5 h-5" />}
-              </button>
+          <ChalkControlGroup className="mx-auto min-w-min items-center justify-center gap-1.5">
+            <ChalkPanel className="order-1 shrink-0 rounded-none p-1" seed="control-compact-media" tone="accent">
+              <ChalkControlGroup aria-label="Media controls" className="gap-1">
+                <ChalkIconButton aria-label={isMuted ? "Unmute" : "Mute"} aria-pressed={!isMuted} className={!isMuted ? "!text-[var(--chalk-app-control-active-text)]" : "!text-[var(--chalk-app-danger)]"} onClick={onToggleMute} seed="control-compact-mic" size="lg" tone="accent">
+                  {isMuted ? <MicrophoneOff01Icon className="h-5 w-5" /> : <Microphone01Icon className="h-5 w-5" />}
+                </ChalkIconButton>
+                <ChalkIconButton
+                  aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
+                  aria-pressed={isVideoEnabled}
+                  className={isVideoEnabled ? "!text-[var(--chalk-app-control-active-text)]" : "!text-[var(--chalk-app-danger)]"}
+                  onClick={onToggleVideo}
+                  seed="control-compact-video"
+                  size="lg"
+                  tone="accent"
+                >
+                  {isVideoEnabled ? <Video01Icon className="h-5 w-5" /> : <VideoOffIcon className="h-5 w-5" />}
+                </ChalkIconButton>
+              </ChalkControlGroup>
+            </ChalkPanel>
 
-              <button
-                type="button"
-                onClick={onToggleVideo}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-white" : "!text-[var(--chalk-app-danger)]")}
-                aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
-                aria-pressed={isVideoEnabled}
-              >
-                {isVideoEnabled ? <Video01Icon className="w-5 h-5" /> : <VideoOffIcon className="w-5 h-5" />}
-              </button>
-            </div>
+            <ChalkPanel className="order-3 shrink-0 rounded-none p-1" seed="control-compact-interactions">
+              <ChalkControlGroup aria-label="Interaction controls" className="gap-1">
+                {buttonsToRender.includes("handraise") && onToggleHandRaise ? (
+                  <ChalkIconButton aria-label={isHandRaised ? "Lower hand" : "Raise hand"} aria-pressed={isHandRaised} onClick={onToggleHandRaise} seed="control-compact-handraise" size="lg" tone={isHandRaised ? "accent" : "neutral"}>
+                    <HandIcon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
+                {buttonsToRender.includes("reactions") && onOpenReactions ? (
+                  <ChalkIconButton aria-label="Reactions" onClick={onOpenReactions} seed="control-compact-reactions" size="lg" tone="accent">
+                    <ThumbsUpIcon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
+                {buttonsToRender.includes("whiteboard") && onToggleWhiteboard ? (
+                  <ChalkIconButton aria-label="Whiteboard" aria-pressed={isWhiteboardOpen} onClick={onToggleWhiteboard} seed="control-compact-whiteboard" size="lg" tone={isWhiteboardOpen ? "accent" : "neutral"}>
+                    <Edit02Icon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
+                {buttonsToRender.includes("participants") && onToggleParticipants ? (
+                  <ChalkIconButton aria-label="People" aria-pressed={isParticipantsOpen} onClick={onToggleParticipants} seed="control-compact-participants" size="lg" tone={isParticipantsOpen ? "accent" : "neutral"}>
+                    <UserGroupIcon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
+                {buttonsToRender.includes("chat") && onToggleChat ? (
+                  <div className="relative">
+                    <ChalkIconButton aria-label="Chat" aria-pressed={isChatOpen} onClick={onToggleChat} seed="control-compact-chat" size="lg" tone={isChatOpen ? "accent" : "neutral"}>
+                      <Message01Icon className="h-5 w-5" />
+                    </ChalkIconButton>
+                    {unreadChatCount > 0 && !isChatOpen ? (
+                      <ChalkBadge className="absolute -top-1 -right-1 min-h-4 min-w-4 px-1 text-[10px] !text-[var(--chalk-app-control-active-text)]" count={unreadChatCount} max={99} aria-label={`${unreadChatCount} unread messages`} seed="control-compact-chat-badge" tone="danger" />
+                    ) : null}
+                  </div>
+                ) : null}
+              </ChalkControlGroup>
+            </ChalkPanel>
 
-            {/* Group 2: Interactions */}
-            <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
-              {buttonsToRender.includes("handraise") && onToggleHandRaise && (
-                <button
-                  type="button"
-                  onClick={onToggleHandRaise}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
-                  aria-pressed={isHandRaised}
-                >
-                  <HandIcon className="w-5 h-5" />
-                </button>
-              )}
-              {buttonsToRender.includes("reactions") && onOpenReactions && (
-                <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
-                  <ThumbsUpIcon className="w-5 h-5" />
-                </button>
-              )}
-              {buttonsToRender.includes("whiteboard") && onToggleWhiteboard && (
-                <button
-                  type="button"
-                  onClick={onToggleWhiteboard}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isWhiteboardOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label="Whiteboard"
-                  aria-pressed={isWhiteboardOpen}
-                >
-                  <Edit02Icon className="w-5 h-5" />
-                </button>
-              )}
-              {buttonsToRender.includes("participants") && onToggleParticipants && (
-                <button
-                  type="button"
-                  onClick={onToggleParticipants}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isParticipantsOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label="People"
-                  aria-pressed={isParticipantsOpen}
-                >
-                  <UserGroupIcon className="w-5 h-5" />
-                </button>
-              )}
-              {buttonsToRender.includes("chat") && onToggleChat && (
-                <button
-                  type="button"
-                  onClick={onToggleChat}
-                  className={cn("relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isChatOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label="Chat"
-                  aria-pressed={isChatOpen}
-                >
-                  <Message01Icon className="w-5 h-5" />
-                  {unreadChatCount > 0 && !isChatOpen ? (
-                    <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
-                  ) : null}
-                </button>
-              )}
-            </div>
-
-            {/* Group 3: More & Leave */}
-            <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
-              {buttonsToRender.includes("more") && onOpenMore && (
-                <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
-                  <MoreHorizontalIcon className="w-5 h-5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onLeft}
-                className="flex h-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] px-4 text-white transition active:scale-95 hover:bg-[var(--chalk-app-danger-hover)] sm:h-[46px]"
-                aria-label="Leave space"
-              >
-                <CallEnd01Icon className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+            <ChalkPanel className="order-2 shrink-0 rounded-none p-1" seed="control-compact-more-leave">
+              <ChalkControlGroup aria-label="More and leave controls" className="gap-1">
+                {buttonsToRender.includes("more") && onOpenMore ? (
+                  <ChalkIconButton aria-label="More options" onClick={onOpenMore} seed="control-compact-more" size="lg">
+                    <MoreHorizontalIcon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
+                <ChalkButton aria-label="Leave space" className="h-[46px] min-w-[46px] px-3 !text-[var(--chalk-app-control-active-text)]" onClick={onLeft} seed="control-compact-leave" tone="danger" variant="solid">
+                  <CallEnd01Icon className="h-5 w-5" />
+                </ChalkButton>
+              </ChalkControlGroup>
+            </ChalkPanel>
+          </ChalkControlGroup>
         </div>
       );
     }
@@ -511,46 +440,46 @@ const ControlBarSurface = React.memo(
       const floatingButton = (type: ControlBarButtonName): React.ReactNode => {
         switch (type) {
           case "mic":
-            return <FloatingControlBarButton key={type} icon={isMuted ? <MicrophoneOff01Icon /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} />;
+            return <FloatingControlBarButton key={type} icon={isMuted ? <MicrophoneOff01Icon /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} seed="control-floating-mic" />;
           case "video":
-            return <FloatingControlBarButton key={type} icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon />} label="Camera" onClick={onToggleVideo} active={isVideoEnabled} />;
+            return <FloatingControlBarButton key={type} icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon />} label="Camera" onClick={onToggleVideo} active={isVideoEnabled} seed="control-floating-video" />;
           case "screenshare":
-            return <FloatingControlBarButton key={type} icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />} label={isScreenSharing ? "Stop share" : "Share"} onClick={onToggleScreenShare} active={isScreenSharing} />;
+            return <FloatingControlBarButton key={type} icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />} label={isScreenSharing ? "Stop share" : "Share"} onClick={onToggleScreenShare} active={isScreenSharing} seed="control-floating-screenshare" />;
           case "whiteboard":
             if (!onToggleWhiteboard) return null;
-            return <FloatingControlBarButton key={type} icon={<Edit02Icon />} label="Board" onClick={onToggleWhiteboard} active={isWhiteboardOpen} />;
+            return <FloatingControlBarButton key={type} icon={<Edit02Icon />} label="Board" onClick={onToggleWhiteboard} active={isWhiteboardOpen} seed="control-floating-whiteboard" />;
           case "handraise":
             if (!onToggleHandRaise) return null;
-            return <FloatingControlBarButton key={type} icon={<HandIcon />} label={isHandRaised ? "Lower" : "Raise"} onClick={onToggleHandRaise} active={isHandRaised} />;
+            return <FloatingControlBarButton key={type} icon={<HandIcon />} label={isHandRaised ? "Lower" : "Raise"} onClick={onToggleHandRaise} active={isHandRaised} seed="control-floating-handraise" />;
           case "participants":
             if (!onToggleParticipants) return null;
-            return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} />;
+            return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} seed="control-floating-participants" />;
           case "chat":
             if (!onToggleChat) return null;
-            return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} />;
+            return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} seed="control-floating-chat" />;
           case "reactions":
           case "thumbsup":
             if (!onOpenReactions) return null;
-            return <FloatingControlBarButton key={type} icon={<SmileIcon />} label="React" onClick={onOpenReactions} />;
+            return <FloatingControlBarButton key={type} icon={<SmileIcon />} label="React" onClick={onOpenReactions} seed="control-floating-reactions" />;
           case "record":
             if (!onToggleRecording) return null;
-            return <FloatingControlBarButton key={type} icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop" : "Record"} onClick={onToggleRecording} active={isRecording} />;
+            return <FloatingControlBarButton key={type} icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop" : "Record"} onClick={onToggleRecording} active={isRecording} seed="control-floating-record" />;
           case "transcription":
             if (!onToggleTranscription) return null;
-            return <FloatingControlBarButton key={type} icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} />;
+            return <FloatingControlBarButton key={type} icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} seed="control-floating-transcription" />;
           case "pip":
-            return onTogglePictureInPicture ? <FloatingControlBarButton key={type} icon={<PictureInPictureIcon />} label="Picture in picture" onClick={() => void onTogglePictureInPicture()} active={isPictureInPictureActive} /> : null;
+            return onTogglePictureInPicture ? <FloatingControlBarButton key={type} icon={<PictureInPictureIcon />} label="Picture in picture" onClick={() => void onTogglePictureInPicture()} active={isPictureInPictureActive} seed="control-floating-pip" /> : null;
           case "settings":
             if (!onOpenSettings) return null;
-            return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} />;
+            return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} seed="control-floating-settings" />;
           case "diagnostics":
-            return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} /> : null;
+            return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} seed="control-floating-diagnostics" /> : null;
           case "more":
             if (!onOpenMore) return null;
-            return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} />;
+            return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} seed="control-floating-more" />;
           case "info":
             if (!onOpenInfo) return null;
-            return <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Info" onClick={onOpenInfo} />;
+            return <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Info" onClick={onOpenInfo} seed="control-floating-info" />;
           default:
             return null;
         }
@@ -558,55 +487,52 @@ const ControlBarSurface = React.memo(
 
       return (
         <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
-          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
-            {buttonsToRender.includes("mic") ? (
-              <DevicePopover
-                type="mic"
-                appearance="floating"
-                isActive={!isMuted}
-                onToggle={onToggleMute ?? (() => {})}
-                devices={effectiveAudioInputDevices}
-                selectedDeviceId={selectedAudioInput}
-                onDeviceChange={onAudioInputChange ?? (() => {})}
-                secondaryDevices={effectiveAudioOutputDevices}
-                selectedSecondaryDeviceId={selectedAudioOutput}
-                onSecondaryDeviceChange={onAudioOutputChange}
-                orientation="up"
-                haptic="medium"
-              />
-            ) : null}
-            {buttonsToRender.includes("video") ? (
-              <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
-            ) : null}
-            {buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}
-            {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger /> : null}
-          </div>
+          <ChalkPanel className={cn("pointer-events-auto max-w-full rounded-none p-2", className)} role="toolbar" aria-label="Space controls" seed="control-floating-shell" style={themeVariables as React.CSSProperties}>
+            <ChalkControlGroup className="max-w-full gap-2 overflow-visible">
+              {buttonsToRender.includes("mic") ? (
+                <DevicePopover
+                  type="mic"
+                  appearance="floating"
+                  isActive={!isMuted}
+                  onToggle={onToggleMute ?? (() => {})}
+                  devices={effectiveAudioInputDevices}
+                  selectedDeviceId={selectedAudioInput}
+                  onDeviceChange={onAudioInputChange ?? (() => {})}
+                  secondaryDevices={effectiveAudioOutputDevices}
+                  selectedSecondaryDeviceId={selectedAudioOutput}
+                  onSecondaryDeviceChange={onAudioOutputChange}
+                  orientation="up"
+                  haptic="medium"
+                />
+              ) : null}
+              {buttonsToRender.includes("video") ? (
+                <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
+              ) : null}
+              {buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}
+              {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger seed="control-floating-leave" /> : null}
+            </ChalkControlGroup>
+          </ChalkPanel>
         </div>
       );
     }
 
     return (
       <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
-        {/* Left: Timer section */}
-        <div className="flex items-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-2.5 shadow-[var(--chalk-app-shadow-xs)]">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-[var(--chalk-positive)] shadow-[0_0_14px_var(--chalk-positive)]" />
+        <ChalkPanel className="rounded-none p-2" seed="control-inline-timer">
+          <ChalkControlGroup aria-label="Episode duration" className="gap-3">
+            <ChalkBadge dot aria-label="Live" seed="control-inline-live" tone="success" />
             <span className="text-[var(--chalk-app-text)] text-[14px] font-semibold tracking-wide tabular-nums">{formatDuration(duration)}</span>
-          </div>
-        </div>
+          </ChalkControlGroup>
+        </ChalkPanel>
 
-        {/* Middle: Media controls */}
-        <div className="flex items-center gap-3">
+        <ChalkControlGroup aria-label="Media controls" className="gap-3">
           {mediaButtons.map(renderButton)}
-          {showLeave && (
-            <div className="ml-2">
-              <ControlBarButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeft} danger data-tour="controls-leave" />
-            </div>
-          )}
-        </div>
+          {showLeave ? <ControlBarButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeft} danger seed="control-leave" data-tour="controls-leave" /> : null}
+        </ChalkControlGroup>
 
-        {/* Right: Interaction controls */}
-        <div className="flex items-center gap-4">{interactionButtons.map(renderButton)}</div>
+        <ChalkControlGroup aria-label="Interaction controls" className="gap-4">
+          {interactionButtons.map(renderButton)}
+        </ChalkControlGroup>
       </div>
     );
   },
