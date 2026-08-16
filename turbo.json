@@ -8,7 +8,29 @@
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*", "!**/*.md", "!**/*.test.*", "!**/*.spec.*"],
       "outputs": ["dist/**", ".output/**"],
-      "env": ["DATABASE_URL", "API_URL", "CLOUDFLARE_API_TOKEN", "VITE_*", "CHALK_*"]
+      "env": ["DATABASE_URL", "API_URL", "CHALK_APP_VARIANT", "EAS_BUILD_PROFILE", "EXPO_PUBLIC_*"]
+    },
+    "web#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", "!**/*.md", "!**/*.test.*", "!**/*.spec.*"],
+      "outputs": ["dist/**", ".output/**"],
+      "env": [
+        "API_URL",
+        "DATABASE_URL",
+        "CHALK_COMMIT_SHA",
+        "CHALK_ENVIRONMENT",
+        "CHALK_EPISODE_DIAGNOSTICS",
+        "CHALK_EPISODE_DIAGNOSTICS_GATEWAY",
+        "CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN",
+        "CHALK_API_URL",
+        "CHALK_DEV_API_ORIGIN",
+        "CHALK_DEV_WEB_PORT",
+        "CHALK_DEV_BROKER_PORT",
+        "CHALK_DEV_BROKER_ORIGIN",
+        "GITHUB_SHA",
+        "VITE_*"
+      ],
+      "passThroughEnv": ["CHALK_EPISODE_DIAGNOSTICS_OPERATOR_TOKEN"]
     },
     "dev": {
       "cache": false,

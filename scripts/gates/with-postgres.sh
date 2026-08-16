@@ -7,6 +7,19 @@ if (($# == 0)); then
 fi
 
 command_mode=0
+api_gate_db_lane=0
+if [[ "$1" == "--api-gate-db-lane" ]]; then
+  api_gate_db_lane=1
+  shift
+  if (($# == 0)); then
+    echo "with-postgres.sh --api-gate-db-lane requires -- and a command" >&2
+    exit 2
+  fi
+  if [[ "$1" != "--" ]]; then
+    echo "with-postgres.sh --api-gate-db-lane requires -- and a command" >&2
+    exit 2
+  fi
+fi
 if [[ "$1" == "--" ]]; then
   command_mode=1
   shift
@@ -23,6 +36,7 @@ docker_bin=""
 container=""
 native_root=""
 native_pg_bin=""
+callback_pid=""
 
 docker_binary() {
   local candidate
@@ -62,6 +76,11 @@ available_port() {
 }
 
 cleanup() {
+  if [[ -n "${callback_pid}" ]]; then
+    kill -TERM "${callback_pid}" >/dev/null 2>&1 || true
+    wait "${callback_pid}" >/dev/null 2>&1 || true
+    callback_pid=""
+  fi
   if [[ "${backend}" == "docker" ]]; then
     "${docker_bin}" rm -f "${container}" >/dev/null 2>&1 || true
   elif [[ "${backend}" == "native" ]]; then
@@ -176,7 +195,18 @@ fi
 
 cd "${repository_root}"
 if ((command_mode == 1)); then
-  "$@"
+  if ((api_gate_db_lane == 0)); then
+    "$@"
+    exit "$?"
+  fi
+
+  export CHALK_GATE_POSTGRES_CALLBACK=1
+  "$@" &
+  callback_pid="$!"
+  wait "${callback_pid}"
+  status="$?"
+  callback_pid=""
+  exit "${status}"
 else
   for gate in "$@"; do
     "${gate}"

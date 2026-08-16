@@ -36,12 +36,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Made the local API gate own its isolated migrated PostgreSQL database, expose
   every integration-test database alias, run independent checks in parallel,
-  and avoid duplicate vet work in `go test`.
+  avoid duplicate vet work in `go test`, and overlap PostgreSQL preparation
+  with database-free checks.
+- Made detached local web releases reuse the main checkout's Turbo cache while
+  keeping web build inputs and the exact release SHA in the cache key.
 - Removed the unfinished standalone API performance harness. A replacement can
   return when it has stable workload, latency, and regression contracts.
 
 ### Fixed
 
+- Fixed the dependency vulnerability gate under macOS's system Bash so its
+  lockfile discovery no longer fails inside nested null-delimited reads.
 - Serialized web releases across SHAs, added guarded stale-lock recovery, and
   made manifest component ordering match runtime validation.
 - Fixed chat attachment reservation against the Space-scoped stream schema and

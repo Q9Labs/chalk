@@ -2,15 +2,13 @@
 set -euo pipefail
 
 args=(scan source --no-resolve)
-while IFS= read -r -d '' file; do
-  args+=(--lockfile "$file")
-done < <(git ls-files -z | while IFS= read -r -d '' file; do
+while IFS= read -r file; do
   case "${file}" in
     go.mod | */go.mod | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock)
-      printf '%s\0' "${file}"
+      args+=(--lockfile "$file")
       ;;
   esac
-done)
+done < <(git ls-files)
 
 if [ "${#args[@]}" -eq 3 ]; then
   args=(scan source --recursive --no-resolve --allow-no-lockfiles .)

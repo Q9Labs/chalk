@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
-import { buildReleasePlan, parseArguments, parseDeploymentURL, recoverStaleReleaseLock, runWebRelease, withReleaseLock } from "./deploy-web-release.mjs";
+import { buildReleasePlan, parseArguments, parseDeploymentURL, recoverStaleReleaseLock, resolveTurboCacheDirectory, runLocalWebRelease, runWebRelease, withReleaseLock } from "./deploy-web-release.mjs";
 
 const fullSHA = "040a7c52698f8cf9b87b0ef48f918b681de9bc35";
 const temporaryDirectories = [];
@@ -78,6 +78,27 @@ test("defaults to the exact local HEAD SHA when no CI SHA is supplied", async ()
 
   assert.equal(result.sha, fullSHA);
   assert.equal(calls.filter(({ command }) => command === "git").length, 2);
+  assert.deepEqual(result.plan[1].args.slice(-2), ["--cache-dir", "/repo/.turbo/cache"]);
+});
+
+test("keeps CI dry-run plans on the checked-out persistent cache", async () => {
+  const calls = [];
+  const result = await runWebRelease({
+    arguments_: ["--sha", fullSHA, "--dry-run"],
+    environment: { CI: "true", GITHUB_ACTIONS: "true" },
+    commandRunner: async (command) => {
+      calls.push(command);
+      if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
+      if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
+      return { stdout: "", stderr: "" };
+    },
+    rootDirectory: "/ci/release",
+    webPath: "/ci/release/apps/web",
+  });
+
+  assert.equal(result.dryRun, true);
+  assert.deepEqual(result.plan[1].args.slice(-2), ["--cache-dir", "/ci/release/.turbo/cache"]);
+  assert.equal(calls.length, 2);
 });
 
 test("extracts only the staging Pages URL and keeps the production plan on one artifact", () => {
@@ -89,6 +110,73 @@ test("extracts only the staging Pages URL and keeps the production plan on one a
   assert.equal(plan.filter(({ args }) => args.includes("pages") && args.includes("deploy")).length, 2);
   assert.equal(plan.filter(({ args }) => args.some((argument) => argument.endsWith("verify-web-deploy.mjs"))).length, 2);
   assert.equal(buildReleasePlan({ sha: fullSHA, skipStaging: true }).filter(({ args }) => args.includes("pages") && args.includes("deploy")).length, 1);
+});
+
+test("resolves local Turbo cache overrides inside the main checkout", () => {
+  assert.equal(resolveTurboCacheDirectory({ mainCheckoutRoot: "/repo", environment: {} }), "/repo/.turbo/cache");
+  assert.equal(resolveTurboCacheDirectory({ mainCheckoutRoot: "/repo", environment: { CHALK_WEB_TURBO_CACHE_DIR: "   " } }), "/repo/.turbo/cache");
+  assert.equal(resolveTurboCacheDirectory({ mainCheckoutRoot: "/repo", environment: { CHALK_WEB_TURBO_CACHE_DIR: " .cache/web " } }), "/repo/.cache/web");
+  assert.throws(() => resolveTurboCacheDirectory({ mainCheckoutRoot: "/repo", environment: { CHALK_WEB_TURBO_CACHE_DIR: "../shared-cache" } }), /inside the main checkout/);
+  assert.throws(() => resolveTurboCacheDirectory({ mainCheckoutRoot: "/repo", environment: { CHALK_WEB_TURBO_CACHE_DIR: "~/shared-cache" } }), /inside the main checkout/);
+  assert.throws(() => resolveTurboCacheDirectory({ mainCheckoutRoot: "/repo", environment: { CHALK_WEB_TURBO_CACHE_DIR: "." } }), /inside the main checkout/);
+});
+
+test("keeps release environment hashes on the web task and excludes credentials", async () => {
+  const turbo = JSON.parse(await readFile(new URL("../../turbo.json", import.meta.url), "utf8"));
+  assert.deepEqual(turbo.tasks.build.env, ["DATABASE_URL", "API_URL", "CHALK_APP_VARIANT", "EAS_BUILD_PROFILE", "EXPO_PUBLIC_*"]);
+  assert.deepEqual(turbo.tasks["web#build"].env, [
+    "API_URL",
+    "DATABASE_URL",
+    "CHALK_COMMIT_SHA",
+    "CHALK_ENVIRONMENT",
+    "CHALK_EPISODE_DIAGNOSTICS",
+    "CHALK_EPISODE_DIAGNOSTICS_GATEWAY",
+    "CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN",
+    "CHALK_API_URL",
+    "CHALK_DEV_API_ORIGIN",
+    "CHALK_DEV_WEB_PORT",
+    "CHALK_DEV_BROKER_PORT",
+    "CHALK_DEV_BROKER_ORIGIN",
+    "GITHUB_SHA",
+    "VITE_*",
+  ]);
+  assert.equal(turbo.tasks.build.env.includes("CLOUDFLARE_API_TOKEN"), false);
+  assert.equal(turbo.tasks["web#build"].env.includes("CLOUDFLARE_API_TOKEN"), false);
+  assert.deepEqual(turbo.tasks["web#build"].passThroughEnv, ["CHALK_EPISODE_DIAGNOSTICS_OPERATOR_TOKEN"]);
+  assert.equal(turbo.tasks["web#build"].passThroughEnv.includes("CLOUDFLARE_API_TOKEN"), false);
+});
+
+test("passes the main checkout cache to detached local release builds", async () => {
+  const calls = [];
+  const lockDirectory = await mkdtemp(join(tmpdir(), "chalk-web-release-cache-lock-test-"));
+  temporaryDirectories.push(lockDirectory);
+  const cacheDirectory = join(lockDirectory, "turbo-cache");
+  const commandRunner = async (command) => {
+    calls.push(command);
+    if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
+    if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
+    if (command.command === "node" && command.args[0] === "--version") return { stdout: "v22.14.0" };
+    if (command.command === "pnpm" && command.args[0] === "--version") return { stdout: "10.26.2" };
+    if (command.command === "pnpm" && command.args.at(-1) === "--version") return { stdout: "4.107.0" };
+    if (command.args.includes("--project-name") && command.args.includes("chalk-staging")) return { stdout: "https://abc123.chalk-staging.pages.dev", stderr: "" };
+    return { stdout: "", stderr: "" };
+  };
+
+  await runLocalWebRelease({
+    arguments_: ["--sha", fullSHA],
+    environment: { CLOUDFLARE_API_TOKEN: "injected-by-test", CHALK_WEB_TURBO_CACHE_DIR: cacheDirectory },
+    commandRunner,
+    rootDirectory: lockDirectory,
+    lockPath: join(lockDirectory, "release.lock"),
+  });
+
+  const build = calls.find(({ command, args }) => command === "pnpm" && args.includes("run") && args.includes("build"));
+  assert.ok(build);
+  assert.equal(build.args.at(-2), "--cache-dir");
+  assert.equal(build.args.at(-1), cacheDirectory);
+  assert.notEqual(build.cwd, lockDirectory);
+  assert.ok(build.cwd.endsWith("/checkout"));
+  assert.equal(calls.filter(({ args }) => args.includes("pages") && args.includes("deploy")).length, 2);
 });
 
 test("runs one build, both uploads, and both verifiers through structured commands", async () => {

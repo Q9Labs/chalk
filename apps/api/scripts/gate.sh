@@ -39,75 +39,53 @@ Notes:
   This gate prepends /usr/local/go/bin when present, sets
   CHALK_API_ENV=local, and sets
   GOTOOLCHAIN=${CHALK_API_GOTOOLCHAIN:-go1.25.13+auto}.
+  Isolated PostgreSQL preparation and migrations overlap database-free checks;
+  database tests and lifecycle smoke wait for that PostgreSQL to be ready.
 EOF
 }
 
 command="${1:-run}"
-case "$command" in
-  run)
-    ;;
-  describe | help | -h | --help)
-    describe
-    exit 0
-    ;;
-  *)
-    echo "Unknown command: ${command}" >&2
-    echo >&2
-    describe >&2
+internal_database_lane=0
+if [[ "${command}" == "--database-lane" ]]; then
+  if [[ "${CHALK_GATE_POSTGRES_READY:-0}" != "1" || "${CHALK_GATE_POSTGRES_CALLBACK:-0}" != "1" ]]; then
+    echo "The API database lane can only run through with-postgres.sh" >&2
     exit 2
-    ;;
-esac
-
-if [[ "${CHALK_GATE_POSTGRES_READY:-0}" != "1" ]]; then
-  exec "${repository_root}/scripts/gates/with-postgres.sh" -- "${script_directory}/gate.sh" "$@"
+  fi
+  if (($# != 1)); then
+    echo "--database-lane does not accept additional arguments" >&2
+    exit 2
+  fi
+  internal_database_lane=1
+else
+  case "$command" in
+    run)
+      ;;
+    describe | help | -h | --help)
+      describe
+      exit 0
+      ;;
+    *)
+      echo "Unknown command: ${command}" >&2
+      echo >&2
+      describe >&2
+      exit 2
+      ;;
+  esac
 fi
 
 cd "${api_root}"
+
+direct_database_lane=0
+if [[ "${CHALK_GATE_POSTGRES_READY:-0}" != "1" ]]; then
+  direct_database_lane=1
+fi
+lane_child_pid=""
 
 run() {
   local label="$1"
   shift
   printf '\n==> %s\n' "$label"
   "$@"
-}
-
-run "Go version" go version
-
-printf '\n==> Format check\n'
-go_files=()
-while IFS= read -r go_file; do
-  go_files[${#go_files[@]}]="${go_file}"
-done < <(find . -name '*.go' -not -path './vendor/*' | sort)
-if ((${#go_files[@]} > 0)); then
-  unformatted="$(gofmt -l "${go_files[@]}")"
-  if [[ -n "$unformatted" ]]; then
-    echo "These Go files need gofmt:"
-    echo "$unformatted"
-    echo
-    echo "Run: apps/api/scripts/format.sh"
-    exit 1
-  fi
-fi
-
-run "Module tidy check" go mod tidy -diff
-run "sqlc vet" go tool sqlc vet
-
-lane_status_dir="$(mktemp -d "${TMPDIR:-/tmp}/chalk-api-gate.XXXXXX")"
-lane_pids=()
-lane_labels=()
-lane_status_files=()
-lane_seen=()
-lane_count=0
-lane_cleanup_done=0
-lane_child_pid=""
-
-lane_signal() {
-  if [[ -n "${lane_child_pid}" ]]; then
-    kill -TERM "${lane_child_pid}" >/dev/null 2>&1 || true
-  fi
-  printf '143\n' > "${lane_status_file}.tmp"
-  mv "${lane_status_file}.tmp" "${lane_status_file}"
-  exit 143
 }
 
 run_lane_command() {
@@ -125,6 +103,46 @@ run_lane_command() {
 database_tests_and_lifecycle() {
   run_lane_command "Tests" go test -vet=off ./... || return "$?"
   run_lane_command "Lifecycle smoke test" ./scripts/smoke-lifecycle.mjs
+}
+
+run_race_tests() {
+  run "Race tests" go test -race -vet=off ./...
+}
+
+database_lane_cleanup() {
+  if [[ -n "${lane_child_pid}" ]]; then
+    kill -TERM "${lane_child_pid}" >/dev/null 2>&1 || true
+    wait "${lane_child_pid}" >/dev/null 2>&1 || true
+    lane_child_pid=""
+  fi
+}
+
+if ((internal_database_lane)); then
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap database_lane_cleanup EXIT
+  database_tests_and_lifecycle
+  if [[ "${CHALK_API_RACE:-0}" == "1" ]]; then
+    run_race_tests
+  fi
+  exit 0
+fi
+
+lane_status_dir="$(mktemp -d "${TMPDIR:-/tmp}/chalk-api-gate.XXXXXX")"
+lane_pids=()
+lane_labels=()
+lane_status_files=()
+lane_seen=()
+lane_count=0
+lane_cleanup_done=0
+
+lane_signal() {
+  if [[ -n "${lane_child_pid}" ]]; then
+    kill -TERM "${lane_child_pid}" >/dev/null 2>&1 || true
+  fi
+  printf '143\n' > "${lane_status_file}.tmp"
+  mv "${lane_status_file}.tmp" "${lane_status_file}"
+  exit 143
 }
 
 start_lane() {
@@ -172,7 +190,39 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap cleanup_lanes EXIT
 
-start_lane "Database tests + lifecycle" database_tests_and_lifecycle
+run_postgres_gate() {
+  run_lane_command "Postgres preparation + database lane" \
+    "${repository_root}/scripts/gates/with-postgres.sh" \
+    --api-gate-db-lane -- "${script_directory}/gate.sh" --database-lane
+}
+
+if ((direct_database_lane)); then
+  start_lane "Database tests + lifecycle" run_postgres_gate
+else
+  start_lane "Database tests + lifecycle" database_tests_and_lifecycle
+fi
+
+run "Go version" go version
+
+printf '\n==> Format check\n'
+go_files=()
+while IFS= read -r go_file; do
+  go_files[${#go_files[@]}]="${go_file}"
+done < <(find . -name '*.go' -not -path './vendor/*' | sort)
+if ((${#go_files[@]} > 0)); then
+  unformatted="$(gofmt -l "${go_files[@]}")"
+  if [[ -n "$unformatted" ]]; then
+    echo "These Go files need gofmt:"
+    echo "$unformatted"
+    echo
+    echo "Run: apps/api/scripts/format.sh"
+    exit 1
+  fi
+fi
+
+run "Module tidy check" go mod tidy -diff
+run "sqlc vet" go tool sqlc vet
+
 start_lane "go vet" run_lane_command "go vet" go vet ./...
 start_lane "Staticcheck" run_lane_command "Staticcheck" go tool staticcheck ./...
 start_lane "Vulnerability check" run_lane_command "Vulnerability check" go tool govulncheck ./...
@@ -203,8 +253,8 @@ done
 
 cleanup_lanes
 
-if [[ "${CHALK_API_RACE:-0}" == "1" ]]; then
-  run "Race tests" go test -race -vet=off ./...
+if [[ "${CHALK_API_RACE:-0}" == "1" && "${direct_database_lane}" == "0" ]]; then
+  run_race_tests
 fi
 
 printf '\nGo API gate passed.\n'

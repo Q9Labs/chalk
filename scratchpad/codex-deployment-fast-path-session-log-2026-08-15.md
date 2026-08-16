@@ -27,3 +27,19 @@
 - The bounded reviews found three final hardening gaps. Web deploys now serialize
   across release SHAs, local stale-lock recovery refuses a live owner, and the
   manifest schema accepts only the component orders the runtime accepts.
+- 2026-08-16: Kept real PostgreSQL for migration, constraint, transaction, and
+  lifecycle coverage. Warm isolated database startup costs about 4 seconds and
+  migrations add about 2 seconds, so replacing it with a mock would save little
+  while removing the checks most likely to catch database release failures.
+- 2026-08-16: Moved PostgreSQL preparation into a background gate lane. Static
+  checks start at once; database tests and lifecycle smoke wait for the migrated
+  database. The real API gate passed on the remote M4 verifier.
+- 2026-08-16: Shared the main checkout's Turbo cache with the detached local web
+  release worktree. Web-only release inputs and the exact SHA stay in the web
+  task's cache key; unrelated package builds can now remain warm across release
+  SHAs.
+- 2026-08-16: The canonical gate exposed an existing Bash 3 runtime failure in
+  OSV lockfile discovery. Replaced its nested null-delimited read with a simple
+  line-delimited tracked-lockfile scan; lockfile names in this repository are
+  fixed conventional paths, and the helper now runs under both system Bash 3
+  and Homebrew Bash.

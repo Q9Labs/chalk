@@ -100,3 +100,12 @@ The runner requires Node 22 or newer, pins pnpm and Wrangler, installs from the
 local pnpm store when possible, and uses Turbo's build cache. It passes the full
 SHA into the build metadata and service worker and always invokes the existing
 deployment verifier after each upload.
+
+Local releases run from a detached checkout but keep the persistent Turbo cache
+in the main checkout at `.turbo/cache`. Set `CHALK_WEB_TURBO_CACHE_DIR` to a
+different path inside the main checkout when needed; relative paths resolve from
+that checkout. The release runner passes this absolute path through Turbo's
+`--cache-dir` option, so no cache symlink is created. Dependency package builds
+can be reused across release SHAs, while the web build still includes its exact
+SHA and release configuration in its cache key. CI restores the same
+`.turbo/cache` path before the release build.

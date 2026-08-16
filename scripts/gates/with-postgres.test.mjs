@@ -32,3 +32,15 @@ test("isolated Postgres keeps migrations on the same database URL", () => {
   assert.match(script, /CHALK_DATABASE_URL="\$\{database_url\}" .*db-migrate\.sh/);
   assert.match(script, /export CHALK_DATABASE_URL="\$\{database_url\}"/);
 });
+
+test("API gate callback mode is explicit and runs only after preparation", () => {
+  assert.match(script, /--api-gate-db-lane/);
+  assert.match(script, /api_gate_db_lane=1/);
+  assert.match(script, /export CHALK_GATE_POSTGRES_CALLBACK=1/);
+
+  const preparation = script.indexOf('export_database_url "${port}"');
+  const callback = script.indexOf("export CHALK_GATE_POSTGRES_CALLBACK=1");
+  assert.notEqual(preparation, -1);
+  assert.notEqual(callback, -1);
+  assert.ok(preparation < callback, "callback starts after PostgreSQL preparation");
+});

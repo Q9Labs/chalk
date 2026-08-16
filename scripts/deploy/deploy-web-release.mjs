@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -19,6 +19,7 @@ export const DEFAULT_PRODUCTION_URL = "https://chalkmeet.com";
 export const STAGING_PROJECT = "chalk-staging";
 export const PRODUCTION_PROJECT = "chalk";
 export const DEFAULT_RELEASE_LOCK_PATH = join(tmpdir(), "chalk-web-release.lock");
+export const TURBO_CACHE_DIRECTORY_ENV = "CHALK_WEB_TURBO_CACHE_DIR";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
@@ -88,9 +89,26 @@ export function parseDeploymentURL(output, projectName = STAGING_PROJECT) {
   return new URL(match[0]).origin;
 }
 
-export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEFAULT_PRODUCTION_URL, rootDirectory = repositoryRoot, webPath = webDirectory, verifier = verifierPath }) {
+export function resolveTurboCacheDirectory({ environment = process.env, mainCheckoutRoot = repositoryRoot } = {}) {
+  const checkoutRoot = resolve(mainCheckoutRoot);
+  const configuredDirectory = environment[TURBO_CACHE_DIRECTORY_ENV]?.trim();
+  if (configuredDirectory?.startsWith("~") || configuredDirectory?.split(/[\\/]+/).includes("..")) {
+    throw new Error(`${TURBO_CACHE_DIRECTORY_ENV} must resolve to a directory inside the main checkout; received ${configuredDirectory}`);
+  }
+  const cacheDirectory = resolve(checkoutRoot, configuredDirectory || ".turbo/cache");
+  const relativeCacheDirectory = relative(checkoutRoot, cacheDirectory);
+
+  if (!relativeCacheDirectory || relativeCacheDirectory.startsWith("..") || isAbsolute(relativeCacheDirectory) || cacheDirectory.includes("\0")) {
+    throw new Error(`${TURBO_CACHE_DIRECTORY_ENV} must resolve to a directory inside the main checkout; received ${configuredDirectory || ".turbo/cache"}`);
+  }
+
+  return cacheDirectory;
+}
+
+export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEFAULT_PRODUCTION_URL, rootDirectory = repositoryRoot, webPath = webDirectory, verifier = verifierPath, turboCacheDirectory = join(resolve(rootDirectory), ".turbo", "cache") }) {
   const normalizedSHA = normalizeSHA(sha);
-  const commands = [commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory), commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web..."], rootDirectory)];
+  const cacheDirectory = resolve(turboCacheDirectory);
+  const commands = [commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory), commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", cacheDirectory], rootDirectory)];
 
   if (!skipStaging) {
     commands.push(
@@ -106,7 +124,16 @@ export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEF
   return commands;
 }
 
-export async function runWebRelease({ arguments_ = process.argv.slice(2), environment = process.env, commandRunner = runCommand, rootDirectory = repositoryRoot, webPath = webDirectory, productionURL = environment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL, build = true } = {}) {
+export async function runWebRelease({
+  arguments_ = process.argv.slice(2),
+  environment = process.env,
+  commandRunner = runCommand,
+  rootDirectory = repositoryRoot,
+  webPath = webDirectory,
+  productionURL = environment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL,
+  build = true,
+  turboCacheDirectory,
+} = {}) {
   const executionEnvironment = { ...process.env, ...environment };
   const isCI = executionEnvironment.CI === "true" || executionEnvironment.GITHUB_ACTIONS === "true";
   const options = parseArguments(arguments_, { isCI });
@@ -115,7 +142,8 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
   assertExactHEAD(currentSHA, expectedSHA);
   await assertCleanTree(commandRunner, rootDirectory, executionEnvironment);
 
-  const releasePlan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL, rootDirectory, webPath });
+  const resolvedTurboCacheDirectory = turboCacheDirectory ?? resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
+  const releasePlan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL, rootDirectory, webPath, turboCacheDirectory: resolvedTurboCacheDirectory });
   if (options.dryRun) {
     printDryRun(expectedSHA, releasePlan);
     return { sha: expectedSHA, dryRun: true, plan: releasePlan };
@@ -139,7 +167,7 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
       VITE_API_URL: "https://api.chalkmeet.com",
       VITE_CHALK_TELEMETRY_ENABLED: "false",
     };
-    await commandRunner(commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web..."], rootDirectory, { env: buildEnvironment }));
+    await commandRunner(commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", resolvedTurboCacheDirectory], rootDirectory, { env: buildEnvironment }));
   }
 
   let stagingURL;
@@ -161,9 +189,10 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
   const executionEnvironment = { ...process.env, ...environment };
   const options = parseArguments(arguments_);
   const expectedSHA = options.sha ?? (await readGitSHA(commandRunner, rootDirectory, executionEnvironment));
+  const turboCacheDirectory = resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
 
   if (options.dryRun) {
-    const plan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL: executionEnvironment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL, rootDirectory, webPath: join(rootDirectory, "apps/web") });
+    const plan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL: executionEnvironment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL, rootDirectory, webPath: join(rootDirectory, "apps/web"), turboCacheDirectory });
     console.log(`Local web release dry-run for ${expectedSHA}; no detached worktree, install, upload, or verification commands were executed.`);
     printDryRun(expectedSHA, plan);
     return { sha: expectedSHA, dryRun: true, plan };
@@ -187,6 +216,7 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
         commandRunner,
         rootDirectory: worktreePath,
         webPath: join(worktreePath, "apps/web"),
+        turboCacheDirectory,
       });
     } finally {
       try {
