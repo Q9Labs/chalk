@@ -41,3 +41,13 @@ Lesson for delegation.md: Luna root threads that use `fork_turns: "all"` cannot 
 - Syncpack then flagged the SDK bumps drifting from the rest of the workspace; aligned `@noble/hashes` 2.3.0, `esbuild` 0.28.2, `happy-dom` ^20.11.2, `playwright` ^1.62.1 in transcription-dispatcher, diagnostics-contracts, ui, whiteboard, episode-diagnostics, sdk-web-consumer-e2e. All six type-check and test green.
 - Committed from a clean worktree at `.worktrees/deps` (mix deps/\_build copied in so the Sync gate could run offline). Full pre-commit gate passed there for both commits: `20f3e1bf chore(deps)`, `a60d945e feat(client)` spaces get/list/archive/restore. Fast-forwarded master to them.
 - Lesson: when the pre-commit ratchet reads other agents' dirty files, a `.worktrees/<name>` checkout is the way to run the gate honestly instead of `--no-verify`.
+
+## Grant pass-through made seamless (2026-08-16 12:00)
+
+- Hasan: exporting the parser is acceptable but wanted something smoother. Finding: `core.ts` already treats the `getAccess` result as `unknown` and validates it, and `requireParsedAccessGrant` already handles a `Response`; the quickstart itself cast `as AccessGrant`. So the brand on the return type was ceremony.
+- Change (`c13a6d35`): `GetAccess` resolves with `AccessGrantSource = AccessGrant | Response | object`; core validates via `requireParsedAccessGrant`; join fails with `Access was rejected` on non-OK or malformed. Parser stays private; contract test unchanged. Docs (quickstart, client/react READMEs) drop the cast. Web `chalk-access.test.ts` stops narrowing the provider result.
+- `de169e4a`: tightened `apps/api/session` ratchet baseline (978→955) because master's committed Go changes had left a clean checkout unable to commit.
+- Both landed via the clean `.worktrees/deps` gate; master fast-forwarded to `c13a6d35`.
+- Heads-up for the agent holding staged `apps/web/src/lib/chalk-access.test.ts`: their staged version re-adds `const grant: AccessGrant = await provider(...)`, which no longer type-checks against `GetAccess`; drop the annotation (and the now-unused `AccessGrant` import) before committing.
+- Incident: `.git/config` of the main repo flipped to `core.bare = true` at 11:54 (not by my commands; codex worktrees `api-gate-overlap`, `web-release-cache` appeared in the same window). Restored `core.bare=false`.
+- Kaadr plan annotated: browser callback returns the raw join `Response` or the typed `grant` field; no cast, no suppression.
