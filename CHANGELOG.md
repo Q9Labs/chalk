@@ -62,11 +62,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Rebuilt the Dashboard and Episode Debugger into responsive, keyboard-friendly
   product surfaces with dependable navigation, readable tables and dialogs,
   complete-row affordances, and accessible mobile controls.
-- Fixed visitor Space access refresh so the browser forwards media proof to the
-  broker. Proof-less renewals made the broker replace the media connection,
-  which the client rejected at the first refresh window as an invalid grant.
-- Fixed Dashboard Space access refresh so scheduled renewal preserves current
-  media proof and rejected credentials recover with a replacement connection.
 - Fixed Dashboard Space and Episode navigation so active Spaces are directly
   openable, Episode history links back to its Space, duplicate Space names show
   their slug, and empty diagnostic references no longer claim healthy evidence.
@@ -82,6 +77,33 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Episode in the gated Episode Debugger on React and React Native.
 - Fixed the guarded npm publish workflow for pnpm 10 and made release dispatches
   target `Q9Labs/chalk` explicitly.
+
+## [4.1.0] - 2026-08-16
+
+### Added
+
+- Added `spaces.get`, `spaces.list`, `spaces.archive`, and `spaces.restore` to the
+  `@q9labsai/chalk-client` server SDK, with `archived` and `archived_at` on the
+  returned Space.
+- Added sidebar and menu primitives to `@q9labsai/chalk-ui`.
+
+### Changed
+
+- Let a `getAccess` callback return the server-minted grant unchanged as the
+  `Response` that carries it or as its decoded JSON (`AccessGrantSource`). The
+  client validates the grant and fails the join with `Access was rejected`, so
+  applications proxying their own join endpoint no longer need a cast.
+- Refreshed the TypeScript SDK and API dependencies to their current releases.
+
+### Fixed
+
+- Fixed visitor Space access refresh so the browser forwards media proof to the
+  broker. Proof-less renewals made the broker replace the media connection,
+  which the client rejected at the first refresh window as an invalid grant.
+- Fixed Dashboard Space access refresh so scheduled renewal preserves current
+  media proof and rejected credentials recover with a replacement connection.
+- Accepted PostgreSQL-formatted UUID values in the generated client schemas and
+  preserved Episode conflict and upstream statuses in the generated HTTP API.
 
 ## [4.0.1] - 2026-08-09
 
