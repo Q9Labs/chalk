@@ -129,3 +129,37 @@ test("runs one build, both uploads, and both verifiers through structured comman
   assert.equal(verifications[0].args.at(-1), fullSHA);
   assert.equal(verifications[1].args.at(-1), "--production");
 });
+
+test("reads the pinned Wrangler version only after the workspace install", async () => {
+  const order = [];
+  const commandRunner = async (command) => {
+    if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
+    if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
+    if (command.command === "node" && command.args[0] === "--version") return { stdout: "v22.14.0" };
+    if (command.command === "pnpm" && command.args[0] === "--version") return { stdout: "10.26.2" };
+    if (command.command === "pnpm" && command.args[0] === "install") {
+      order.push("install");
+      return { stdout: "", stderr: "" };
+    }
+    if (command.command === "pnpm" && command.args.includes("wrangler") && command.args.at(-1) === "--version") {
+      order.push("wrangler");
+      if (!order.includes("install")) throw new Error('Command "wrangler" not found');
+      return { stdout: "4.107.0" };
+    }
+    if (command.args.includes("--project-name") && command.args.includes("chalk-staging")) {
+      return { stdout: "Take a peek over at https://abc123.chalk-staging.pages.dev", stderr: "" };
+    }
+    return { stdout: "", stderr: "" };
+  };
+
+  await runWebRelease({
+    arguments_: ["--sha", fullSHA],
+    environment: { CLOUDFLARE_API_TOKEN: "injected-by-test" },
+    commandRunner,
+    rootDirectory: "/repo",
+    webPath: "/repo/apps/web",
+    productionURL: "https://chalkmeet.com",
+  });
+
+  assert.deepEqual(order, ["install", "wrangler"]);
+});

@@ -44,6 +44,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Serialized web releases across SHAs, added guarded stale-lock recovery, and
   made manifest component ordering match runtime validation.
+- Fixed the web release preflight, which read the pinned Wrangler version from
+  the workspace before installing it and so failed on every fresh checkout.
 - Fixed chat attachment reservation against the Space-scoped stream schema and
   corrected cleanup fixtures so historical Whiteboard scenes do not violate
   the one-current-scene constraint.
