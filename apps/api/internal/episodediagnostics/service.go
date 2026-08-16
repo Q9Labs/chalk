@@ -222,7 +222,7 @@ func (s Service) Resolve(ctx context.Context, operator OperatorPrincipal, refere
 	if err != nil {
 		return DiagnosticResolverResponseV1{}, err
 	}
-	snapshot, err := s.repository.ReadSnapshot(ctx, diagnostic, DiagnosticFilterV1{}, MaxSnapshotOperations)
+	snapshot, err := s.readSnapshot(ctx, diagnostic, DiagnosticFilterV1{})
 	if err != nil {
 		return DiagnosticResolverResponseV1{}, err
 	}
@@ -273,7 +273,7 @@ func (s Service) Snapshot(ctx context.Context, operator OperatorPrincipal, refer
 	if err != nil {
 		return DiagnosticSnapshotV1{}, err
 	}
-	return s.repository.ReadSnapshot(ctx, diagnostic, queryFilter, MaxSnapshotOperations)
+	return s.readSnapshot(ctx, diagnostic, queryFilter)
 }
 
 func (s Service) Events(ctx context.Context, operator OperatorPrincipal, reference string, filter DiagnosticFilterV1, after, before *int64, limit int) (DiagnosticEventPageV1, error) {
@@ -375,6 +375,17 @@ func (s Service) Brief(ctx context.Context, operator OperatorPrincipal, referenc
 		return AgentBriefResponseV1{}, errors.New("invalid Agent Brief format")
 	}
 	return response, nil
+}
+
+func (s Service) readSnapshot(ctx context.Context, diagnostic EpisodeDiagnostic, filter DiagnosticFilterV1) (DiagnosticSnapshotV1, error) {
+	snapshot, err := s.repository.ReadSnapshot(ctx, diagnostic, filter, MaxSnapshotOperations)
+	if err != nil {
+		return DiagnosticSnapshotV1{}, err
+	}
+	if err := ValidateSnapshot(snapshot); err != nil {
+		return DiagnosticSnapshotV1{}, fmt.Errorf("validate diagnostic snapshot: %w", err)
+	}
+	return snapshot, nil
 }
 
 func narrowBriefToBranch(snapshot *DiagnosticSnapshotV1, branchID string) bool {

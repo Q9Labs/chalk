@@ -280,6 +280,63 @@ func TestServiceRejectsOperatorCapabilityOrEnvironmentMismatch(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsInvalidRepositorySnapshot(t *testing.T) {
+	repository := &repositoryStub{
+		resolveFn: func(context.Context, DiagnosticReference) (EpisodeDiagnostic, error) {
+			return serviceDiagnosticFixture(), nil
+		},
+		readSnapshotFn: func(context.Context, EpisodeDiagnostic, DiagnosticFilterV1, int) (DiagnosticSnapshotV1, error) {
+			return DiagnosticSnapshotV1{
+				SchemaVersion:   "DiagnosticSnapshot/v1",
+				Reference:       serviceReference(),
+				Environment:     EnvironmentDevelopment,
+				Participants:    []ParticipantProjectionV1{{SchemaVersion: "ParticipantProjection/v1", ParticipantID: "participant01", AnonymousLabel: "participant-452a645d", IdentityKind: "anonymous", State: "active", Visibility: "opaque"}},
+				Operations:      []DiagnosticOperationDetail{},
+				Issues:          []DiagnosticIssueDetail{},
+				Branches:        []DiagnosticBranchDetail{},
+				CommittedCursor: 1,
+				ProjectedCursor: 1,
+			}, nil
+		},
+	}
+	service := NewService(repository, EnvironmentDevelopment, nil, &auditWriterStub{}, nil)
+
+	_, err := service.Snapshot(context.Background(), serviceOperator(), serviceReference(), DiagnosticFilterV1{})
+	if err == nil || !strings.Contains(err.Error(), "validate diagnostic snapshot") {
+		t.Fatalf("invalid repository snapshot error = %v", err)
+	}
+}
+
+func TestServiceResolveRejectsInvalidRepositorySnapshot(t *testing.T) {
+	repository := &repositoryStub{
+		resolveFn: func(context.Context, DiagnosticReference) (EpisodeDiagnostic, error) {
+			return serviceDiagnosticFixture(), nil
+		},
+		readSnapshotFn: func(context.Context, EpisodeDiagnostic, DiagnosticFilterV1, int) (DiagnosticSnapshotV1, error) {
+			return DiagnosticSnapshotV1{
+				SchemaVersion:   "DiagnosticSnapshot/v1",
+				Reference:       serviceReference(),
+				Environment:     EnvironmentDevelopment,
+				Participants:    []ParticipantProjectionV1{{SchemaVersion: "ParticipantProjection/v1", ParticipantID: "participant01", AnonymousLabel: "participant-452a645d", IdentityKind: "anonymous", State: "active", Visibility: "opaque"}},
+				Operations:      []DiagnosticOperationDetail{},
+				Issues:          []DiagnosticIssueDetail{},
+				Branches:        []DiagnosticBranchDetail{},
+				CommittedCursor: 1,
+				ProjectedCursor: 1,
+			}, nil
+		},
+	}
+	service := NewService(repository, EnvironmentDevelopment, nil, &auditWriterStub{}, nil)
+
+	_, err := service.Resolve(context.Background(), serviceOperator(), serviceReference())
+	if err == nil || !strings.Contains(err.Error(), "validate diagnostic snapshot") {
+		t.Fatalf("invalid repository snapshot error = %v", err)
+	}
+	if repository.readSnapshotCall != 1 {
+		t.Fatalf("repository snapshot reads = %d, want 1", repository.readSnapshotCall)
+	}
+}
+
 func TestServiceRejectsCrossTenantOperatorAfterReferenceResolution(t *testing.T) {
 	repository := &repositoryStub{
 		resolveFn: func(context.Context, DiagnosticReference) (EpisodeDiagnostic, error) {
@@ -338,7 +395,17 @@ func TestServiceResolveFocusedEventUsesCursorWindow(t *testing.T) {
 			if limit != MaxSnapshotOperations {
 				t.Fatalf("snapshot limit = %d, want %d", limit, MaxSnapshotOperations)
 			}
-			return DiagnosticSnapshotV1{}, nil
+			return DiagnosticSnapshotV1{
+				SchemaVersion:   "DiagnosticSnapshot/v1",
+				Reference:       serviceReference(),
+				Environment:     EnvironmentDevelopment,
+				State:           DiagnosticLive,
+				CommittedCursor: cursor,
+				ProjectedCursor: cursor,
+				Operations:      []DiagnosticOperationDetail{},
+				Issues:          []DiagnosticIssueDetail{},
+				Branches:        []DiagnosticBranchDetail{},
+			}, nil
 		},
 		pageEventsFn: func(_ context.Context, _ EpisodeDiagnostic, filter DiagnosticFilterV1, after, before *int64, limit int) (DiagnosticEventPageV1, error) {
 			if filter != (DiagnosticFilterV1{}) {
