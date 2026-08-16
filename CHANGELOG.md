@@ -34,6 +34,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Rebuilt the dashboard sidebar on a shadcn-style primitive: a chalkboard-dark
+  panel with a collapsible icon rail, tooltips, a keyboard toggle, persisted
+  state, and a drawer on small screens.
 - Made the local API gate own its isolated migrated PostgreSQL database, expose
   every integration-test database alias, run independent checks in parallel,
   and avoid duplicate vet work in `go test`.
