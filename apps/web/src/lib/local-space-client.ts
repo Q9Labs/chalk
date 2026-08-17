@@ -24,12 +24,17 @@ type LocalSpaceClientDependencies = {
 /** Creates the app-owned public client so its broker-selected API and sync endpoints stay paired. */
 export function createLocalSpaceClient({ credential, getAccess, connectionAccess, journey }: LocalSpaceClientOptions, dependencies: LocalSpaceClientDependencies = {}): SpaceClient {
   const dashboard = "space" in credential;
-  const syncURL = "syncURL" in credential ? credential.syncURL : undefined;
+  const syncURL = "syncURL" in credential ? credential.syncURL : dashboardSyncURL();
   const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)(
     { space: dashboard ? credential.space : localSpace, getAccess, baseUrl: credential.apiBaseURL },
     { ...(syncURL ? { syncUrl: syncURL } : {}), ...(connectionAccess ? { connectionAccess } : {}), telemetry: journey.context },
   );
   return instrumentSpaceClient(client, journey, dependencies.now ?? Date.now);
+}
+
+function dashboardSyncURL(): string | undefined {
+  const configured = import.meta.env.VITE_CHALK_DEV_SYNC_URL;
+  return typeof configured === "string" && configured.trim().length > 0 ? configured : undefined;
 }
 
 /** Releasing is safe from both the public client's leave callback and React unmount cleanup. */

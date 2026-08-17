@@ -80,12 +80,12 @@ function JoinSpacePage({ slug }: { readonly slug?: string }) {
     [spaceAccess],
   );
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    active.current = true;
+    return () => {
       active.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   if (spaceAccess) {
     return <LocalSpace credential={spaceAccess.credential} displayName={displayName.trim()} getAccess={spaceAccess.getAccess} connectionAccess={spaceAccess.connectionAccess} inviteLink={spaceInviteLink()} journey={journey} onFinish={finish} spaceName={slug ?? localSpaceName()} />;
@@ -117,6 +117,7 @@ function LocalSpace({
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const episodeID = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection.episode?.id;
   const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
+  const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const openDiagnostics = useCallback(() => {
     if (diagnostics.path) globalThis.open(diagnostics.path, "_blank", "noopener");
   }, [diagnostics.path]);
@@ -124,12 +125,18 @@ function LocalSpace({
     void release().catch(() => undefined);
   }, [release]);
 
-  useEffect(
-    () => () => {
-      void release().catch(() => undefined);
-    },
-    [release],
-  );
+  useEffect(() => {
+    if (pendingRelease.current !== undefined) {
+      globalThis.clearTimeout(pendingRelease.current);
+      pendingRelease.current = undefined;
+    }
+    return () => {
+      pendingRelease.current = globalThis.setTimeout(() => {
+        pendingRelease.current = undefined;
+        void release().catch(() => undefined);
+      }, 0);
+    };
+  }, [release]);
 
   useEffect(() => {
     const releaseOnPageHide = (event: PageTransitionEvent) => {
@@ -254,7 +261,7 @@ function SpaceArrival({ displayName, error, preparing, onDisplayNameChange, onEn
           </p>
         ) : null}
         <button type="button" onClick={onEnter} disabled={preparing || !displayName.trim()} aria-busy={preparing} className="mt-6 h-11 w-full rounded-md bg-[#315f72] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
-          Continue
+          {preparing ? "Joining…" : "Continue"}
         </button>
       </section>
     </main>

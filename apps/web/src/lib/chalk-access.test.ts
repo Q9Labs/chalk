@@ -1,4 +1,4 @@
-import type { GetAccess } from "@q9labsai/chalk-client";
+import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { cleanupParticipantCredential, createAccessGrantProvider, createBrokerConnectionAccess, createParticipantCredential, isUnauthenticatedDashboardSpaceError, joinDashboardSpace } from "./chalk-access";
@@ -78,7 +78,7 @@ describe("local Chalk access client", () => {
 
     const provider = createAccessGrantProvider();
     expect(requests).toEqual([]);
-    const grant = await provider({ space: "local-space", reason: "join" });
+    const grant: AccessGrant = await provider({ space: "local-space", reason: "join" });
     expect(grant).toEqual(access);
     expectRequest(requests, "/local-chalk/access-grants", {});
   });
@@ -175,6 +175,13 @@ describe("local Chalk access client", () => {
     const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
 
     expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
+  });
+
+  it("surfaces nested Dashboard API error messages", async () => {
+    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse({ error: { code: "media_plane.unavailable", message: "Media access is unavailable." } }, 503)];
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => responses.shift() ?? new Response(null, { status: 500 })));
+
+    await expect(joinDashboardSpace("tenant-1", "design-lab", "Ada")).rejects.toThrow("Media access is unavailable.");
   });
 
   it("uses stored media proof when the public Dashboard provider refreshes access", async () => {

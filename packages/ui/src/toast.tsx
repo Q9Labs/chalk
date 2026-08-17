@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Toast as ToastPrimitive } from "@base-ui/react/toast";
 
-import { resolvePortalThemeFromDocument } from "./lib/theme";
+import { usePortalTheme } from "./lib/use-portal-theme";
 import { cn } from "./lib/utils";
 
 export type ToastType = "neutral" | "info" | "success" | "warning" | "error" | "danger";
@@ -67,7 +67,7 @@ const ToastAction = React.forwardRef<HTMLButtonElement, React.ComponentPropsWith
 
 function ToastViewport({ className, children, ...props }: React.ComponentPropsWithoutRef<typeof ToastPrimitive.Viewport>) {
   const { toasts } = ToastPrimitive.useToastManager();
-  const portalTheme = resolvePortalThemeFromDocument();
+  const portalTheme = usePortalTheme();
 
   return (
     <ToastPrimitive.Viewport data-chalk data-chalk-theme={portalTheme} data-slot="toast-viewport" className={cn("chalk-ui-root chalk-ui-toast-viewport", className)} {...props}>

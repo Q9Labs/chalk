@@ -36,6 +36,14 @@ describe("EntityViews", () => {
     expect(onSelect).toHaveBeenCalledWith({ kind: "participant", value: participant });
   });
 
+  it("distinguishes a Participant who is still present from one whose departure was never recorded", () => {
+    const departed = { ...participant, participantId: "participant-8", state: "left" as const, display: { label: { value: "Guest" }, rawIdentity: {} } };
+    render(<ParticipantsView snapshot={snapshotFixture(8, { participants: [participant, departed] })} onSelect={vi.fn()} onOpenRelated={vi.fn()} />);
+
+    expect(screen.getByText("still in Episode")).toBeTruthy();
+    expect(screen.getByText("unknown: not available")).toBeTruthy();
+  });
+
   it("selects Epilogue branches and keeps late work visible", () => {
     const onSelect = vi.fn();
     const branch = { id: "branch-cleanup", kind: "cleanup" as const, state: "running" as const, leaseEndsAt: "2026-08-04T10:05:00.000Z", attempts: 1, lateObservations: 2 };

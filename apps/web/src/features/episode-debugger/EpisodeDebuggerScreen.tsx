@@ -1,3 +1,16 @@
+import Alert02Icon from "@hugeicons/core-free-icons/Alert02Icon";
+import ArrowLeft02Icon from "@hugeicons/core-free-icons/ArrowLeft02Icon";
+import ChartBarLineIcon from "@hugeicons/core-free-icons/ChartBarLineIcon";
+import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import Download04Icon from "@hugeicons/core-free-icons/Download04Icon";
+import Flag02Icon from "@hugeicons/core-free-icons/Flag02Icon";
+import FilterIcon from "@hugeicons/core-free-icons/FilterIcon";
+import ListViewIcon from "@hugeicons/core-free-icons/ListViewIcon";
+import Pulse01Icon from "@hugeicons/core-free-icons/Pulse01Icon";
+import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
+import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
+import WorkflowSquare06Icon from "@hugeicons/core-free-icons/WorkflowSquare06Icon";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { Button, Input, ToastProvider, ToastViewport, toast } from "@q9labsai/chalk-ui";
 import { formatDiagnosticReference, parseDiagnosticReference, parseDiagnosticFilter, renderAgentBriefMarkdown, type DiagnosticFilterV1 } from "@q9labsai/diagnostics-contracts";
 import { useParams } from "@tanstack/react-router";
@@ -187,7 +200,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
         <div className="episode-contextbar">
           <div className="episode-brand">
             <a className="episode-back-link" href="/home" aria-label="Back to dashboard">
-              <span aria-hidden="true">←</span>
+              <HugeiconsIcon icon={ArrowLeft02Icon} size={15} strokeWidth={2} />
               <span>Dashboard</span>
             </a>
             <span className="episode-brand-mark" aria-hidden="true">
@@ -216,37 +229,18 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
               <code title={normalizedReference}>{normalizedReference}</code>
             </div>
           </div>
-          <dl className="episode-runtime-facts" aria-label="Episode runtime facts">
-            <div>
-              <dt>Elapsed</dt>
-              <dd className="episode-mono">{formatDuration(snapshot?.run?.elapsedMilliseconds)}</dd>
-            </div>
-            <div>
-              <dt>Cursor</dt>
-              <dd className="episode-mono">
-                {snapshot?.committedCursor ?? "—"} / {snapshot?.projectedCursor ?? "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>Activity</dt>
-              <dd>{liveState.lastActivityAt ? new Date(liveState.lastActivityAt).toLocaleTimeString() : "waiting"}</dd>
-            </div>
-            <div>
-              <dt>Retention</dt>
-              <dd>7 days after completion</dd>
-            </div>
-          </dl>
           <div className="episode-top-actions" role="group" aria-label="Diagnostic export and copy actions">
-            <Button variant="outline" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
-              Copy reference
+            <Button variant="ghost" size="icon" title="Copy Diagnostic Reference" aria-label="Copy Diagnostic Reference" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
+              <HugeiconsIcon icon={Copy01Icon} strokeWidth={1.7} />
             </Button>
-            <Button variant="outline" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
-              Copy all
+            <Button variant="ghost" size="icon" title="Copy the complete AgentBrief Markdown" aria-label="Copy the complete AgentBrief Markdown" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
+              <HugeiconsIcon icon={ListViewIcon} strokeWidth={1.7} />
             </Button>
-            <Button variant="outline" data-episode-action="download-json" onClick={() => void exportController?.start(liveState.lastAppliedCursor)} disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}>
-              Download JSON
+            <Button variant="ghost" size="icon" title="Download the diagnostic bundle" aria-label="Download the diagnostic bundle" data-episode-action="download-json" onClick={() => void exportController?.start(liveState.lastAppliedCursor)} disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}>
+              <HugeiconsIcon icon={Download04Icon} strokeWidth={1.7} />
             </Button>
             <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact")}>
+              <HugeiconsIcon icon={SparklesIcon} strokeWidth={1.7} />
               Copy for Agent
             </Button>
           </div>
@@ -254,16 +248,35 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
       </header>
 
       <section className="episode-summary" aria-labelledby="episode-summary-title">
-        <div className="episode-summary-heading">
-          <p className="episode-eyebrow">At a glance</p>
-          <h2 id="episode-summary-title">Evidence summary</h2>
-        </div>
+        <h2 className="sr-only" id="episode-summary-title">
+          Evidence summary
+        </h2>
         <div className="episode-summary-grid">
           <SummaryMetric label="Events" value={evidenceInactive ? "—" : String(snapshot?.summary.eventCount ?? "—")} detail="Projected event evidence" />
           <SummaryMetric label="Operations" value={evidenceInactive ? "—" : String(snapshot?.summary.operationCount ?? "—")} detail="Bounded operation evidence" />
           <SummaryMetric label="Participants" value={evidenceInactive ? "—" : String(snapshot?.summary.participantCount ?? "—")} detail="Observable participants" />
           <SummaryMetric label="Open issues" value={evidenceInactive ? "—" : String(snapshot?.summary.openIssueCount ?? "—")} detail="Requires attention" tone={snapshot && !evidenceInactive ? (snapshot.summary.openIssueCount ? "danger" : "success") : "neutral"} />
         </div>
+        <dl className="episode-runtime-facts" aria-label="Episode runtime facts">
+          <div>
+            <dt>Elapsed</dt>
+            <dd className="episode-mono">{formatDuration(snapshot?.run?.elapsedMilliseconds)}</dd>
+          </div>
+          <div>
+            <dt>Cursor</dt>
+            <dd className="episode-mono">
+              {snapshot?.committedCursor ?? "—"} / {snapshot?.projectedCursor ?? "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>Activity</dt>
+            <dd>{liveState.lastActivityAt ? new Date(liveState.lastActivityAt).toLocaleTimeString() : "waiting"}</dd>
+          </div>
+          <div>
+            <dt>Retention</dt>
+            <dd>7 days after completion</dd>
+          </div>
+        </dl>
       </section>
 
       <div className="episode-shell">
@@ -271,9 +284,8 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
           <p className="episode-nav-heading">Views</p>
           {DEBUGGER_VIEWS.map((item) => (
             <Button key={item} data-episode-view={item} variant={view === item ? "secondary" : "ghost"} aria-current={view === item ? "page" : undefined} onClick={() => setView(item)}>
-              <span className="episode-nav-icon" aria-hidden="true">
-                {viewIcon(item)}
-              </span>
+              <HugeiconsIcon className="episode-nav-icon" icon={viewIcon(item)} strokeWidth={1.7} />
+
               <span>{viewLabel(item)}</span>
               {item === "issues" && snapshot?.summary.openIssueCount ? <b>{snapshot.summary.openIssueCount}</b> : null}
             </Button>
@@ -288,8 +300,10 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
             </div>
             <div className="episode-time-controls">
               <span className="episode-mono">projected {snapshot?.projectedCursor ?? "—"}</span>
-              <Button variant="outline" size="sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>
-                Filters{Object.keys(filter).length > 1 ? ` · ${Object.keys(filter).length - 1}` : ""}
+              <Button variant="outline" size="sm" aria-expanded={filtersOpen} data-episode-action="toggle-filters" onClick={() => setFiltersOpen((value) => !value)}>
+                <HugeiconsIcon icon={FilterIcon} size={14} strokeWidth={1.8} />
+                Filters
+                {Object.keys(filter).length > 1 && <span className="episode-filter-count">{Object.keys(filter).length - 1}</span>}
               </Button>
             </div>
           </div>
@@ -314,9 +328,11 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
               }}
             />
           )}
-          {(filterStatus === "loading" || filterStatus === "ready") && (
+          {/* Only speak up while evidence is in flight, or once filters are
+              actually narrowing it. A permanent "ready" line is noise. */}
+          {(filterStatus === "loading" || (filterStatus === "ready" && Object.keys(filter).length > 1)) && (
             <p className="episode-filter-status" role="status" data-state={filterStatus}>
-              {filterStatus === "loading" ? "Loading filtered evidence…" : `Filters ready at projected cursor ${snapshot?.projectedCursor ?? "—"}.`}
+              {filterStatus === "loading" ? "Loading filtered evidence…" : `Filtered evidence ready at projected cursor ${snapshot?.projectedCursor ?? "—"}.`}
             </p>
           )}
           {liveState.fillingGap && (
@@ -580,8 +596,8 @@ function viewLabel(view: DebuggerView): string {
   return "Epilogue";
 }
 
-function viewIcon(view: DebuggerView): string {
-  return ({ run: "▶", graph: "⌘", trace: "≡", flame: "▰", issues: "!", participants: "◉", epilogue: "◇" } as const)[view];
+function viewIcon(view: DebuggerView): IconSvgElement {
+  return { run: Pulse01Icon, graph: WorkflowSquare06Icon, trace: ListViewIcon, flame: ChartBarLineIcon, issues: Alert02Icon, participants: UserGroupIcon, epilogue: Flag02Icon }[view];
 }
 
 function viewDescription(view: DebuggerView): string {

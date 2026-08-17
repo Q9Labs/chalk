@@ -4,7 +4,7 @@ import * as React from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
 import { cn } from "./lib/utils";
-import { resolvePortalThemeFromDocument } from "./lib/theme";
+import { usePortalTheme } from "./lib/use-portal-theme";
 
 function TooltipProvider({ delay = 0, ...props }: TooltipPrimitive.Provider.Props) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />;
@@ -50,7 +50,7 @@ function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
 }
 
 function TooltipContent({ className, side = "top", sideOffset = 4, align = "center", alignOffset = 0, children, ...props }: TooltipPrimitive.Popup.Props & Pick<TooltipPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset">) {
-  const portalTheme = resolvePortalThemeFromDocument();
+  const portalTheme = usePortalTheme();
 
   return (
     <TooltipPrimitive.Portal>

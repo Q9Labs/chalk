@@ -1,4 +1,8 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+/* Only used until the element has been measured once, and by environments without
+   a ResizeObserver; CSS owns the real height. */
+const FALLBACK_VIEWPORT_PIXELS = 520;
 
 export type VirtualWindow = Readonly<{
   start: number;
@@ -26,15 +30,32 @@ type VirtualRowsProps<T> = Readonly<{
   viewportHeight?: number;
 }>;
 
-export function VirtualRows<T>({ items, getKey, label, renderRow, selectedKey, onSelect, rowHeight = 52, viewportHeight = 520 }: VirtualRowsProps<T>) {
+export function VirtualRows<T>({ items, getKey, label, renderRow, selectedKey, onSelect, rowHeight = 52, viewportHeight }: VirtualRowsProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [measuredHeight, setMeasuredHeight] = useState(FALLBACK_VIEWPORT_PIXELS);
   const selectedIndex = Math.max(
     0,
     items.findIndex((item) => getKey(item) === selectedKey),
   );
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
-  const window = useMemo(() => calculateVirtualWindow(items.length, rowHeight, viewportHeight, scrollTop), [items.length, rowHeight, viewportHeight, scrollTop]);
+  /* A window sized to a constant showed the same ten rows on a laptop and on a
+     tall display, and left the list scrolling inside an already scrolling page on
+     narrow layouts. The height is a layout question, so CSS answers it and the
+     virtualiser reads the answer back; an explicit prop still wins for tests. */
+  const height = viewportHeight ?? measuredHeight;
+  const window = useMemo(() => calculateVirtualWindow(items.length, rowHeight, height, scrollTop), [items.length, rowHeight, height, scrollTop]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (viewportHeight !== undefined || !container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.height;
+      if (next && next > 0) setMeasuredHeight(next);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [viewportHeight]);
 
   useLayoutEffect(() => {
     if (selectedKey === undefined) return;
@@ -52,8 +73,8 @@ export function VirtualRows<T>({ items, getKey, label, renderRow, selectedKey, o
     if (!container) return;
     const top = bounded * rowHeight;
     if (top < container.scrollTop) container.scrollTop = top;
-    if (top + rowHeight > container.scrollTop + viewportHeight) {
-      container.scrollTop = top + rowHeight - viewportHeight;
+    if (top + rowHeight > container.scrollTop + height) {
+      container.scrollTop = top + rowHeight - height;
     }
   };
 
@@ -66,7 +87,7 @@ export function VirtualRows<T>({ items, getKey, label, renderRow, selectedKey, o
       aria-rowcount={items.length}
       aria-activedescendant={items[activeIndex] ? `virtual-row-${getKey(items[activeIndex])}` : undefined}
       tabIndex={0}
-      style={{ height: viewportHeight }}
+      style={viewportHeight === undefined ? undefined : { height: viewportHeight }}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={(event) => {
         if (event.key === "ArrowDown") move(activeIndex + 1);

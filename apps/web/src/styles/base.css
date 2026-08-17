@@ -26,8 +26,8 @@ body {
 }
 
 ::selection {
-  background: var(--chalk-blue-light);
-  color: var(--ink);
+  background: var(--select-bg);
+  color: var(--select-ink);
 }
 
 img,
@@ -60,49 +60,30 @@ p {
   outline-offset: 3px;
 }
 
+/* 1136px of content at desktop, which is the measure the whole marketing page
+   is composed on: a full-width card, a two-up, and a three-up all end on the
+   same two rails. */
 .container {
-  width: min(100%, 1320px);
+  width: min(100%, 1184px);
   margin-inline: auto;
-  padding-inline: clamp(22px, 4vw, 56px);
-}
-
-.section {
-  padding-block: clamp(88px, 11vw, 148px);
-  scroll-margin-top: 76px;
-}
-
-.section-head {
-  max-width: 660px;
-}
-
-.section-head-wide {
-  max-width: 880px;
-}
-
-.section-head h2 {
-  font-size: clamp(38px, 5vw, 68px);
-}
-
-.section-head p {
-  max-width: 62ch;
-  margin-top: 22px;
-  color: var(--ink-2);
-  font-size: clamp(17px, 1.5vw, 20px);
-  line-height: 1.55;
+  padding-inline: clamp(20px, 4vw, 24px);
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 50px;
-  padding: 0 22px;
+  gap: 7px;
+  min-height: 48px;
+  padding: 0 24px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-body);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-site);
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   text-decoration: none;
+  white-space: nowrap;
   transition:
     transform 160ms var(--ease-out),
     box-shadow 160ms ease,
@@ -118,23 +99,52 @@ p {
   transform: translateY(0);
 }
 
+.btn-lg {
+  min-height: 56px;
+  padding: 0 30px;
+  font-size: 16px;
+}
+
 .btn-primary {
-  background: var(--ink);
-  color: #fff;
+  background: var(--brand);
+  box-shadow: 0 1px 2px rgba(15, 76, 61, 0.24);
+  color: #ffffff;
 }
 
 .btn-primary:hover {
-  box-shadow: var(--shadow-md);
+  background: var(--brand-hover);
+  box-shadow: 0 10px 26px rgba(15, 76, 61, 0.22);
 }
 
 .btn-secondary {
-  border-color: var(--line-strong);
-  background: var(--surface);
-  color: var(--ink);
+  border-color: var(--site-line-strong);
+  background: var(--site-paper);
+  box-shadow: 0 1px 2px rgba(10, 13, 12, 0.04);
+  color: var(--site-ink);
 }
 
 .btn-secondary:hover {
-  border-color: var(--ink);
+  border-color: var(--site-ink-3);
+}
+
+/* The chevron every action on the page carries. It nudges rather than slides,
+   because a whole arrow travelling on hover is a different, louder gesture. */
+.btn svg {
+  flex: none;
+  transition: transform 160ms var(--ease-out);
+}
+
+.btn:hover svg {
+  transform: translateX(2px);
+}
+
+.visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {

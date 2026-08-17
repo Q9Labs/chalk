@@ -33,6 +33,28 @@ export type DashboardAPIKey = DashboardValue<APIKeyList["api_keys"][number]>;
 export type DashboardAPIKeyPage = { api_keys: DashboardAPIKey[]; pagination: DashboardPagination };
 export type APIKeySecretResult = Omit<DashboardValue<APIKeyWithSecret>, "replayed"> & { replayed?: boolean };
 
+export function defaultSpaceMediaPlane(): "cf_rtk" | "cf_sfu" {
+  const configured = (import.meta as ImportMeta & { readonly env?: Record<string, unknown> }).env?.VITE_CHALK_DEV_MEDIA_PLANE;
+  return configured === "cf_sfu" ? "cf_sfu" : "cf_rtk";
+}
+
+type LocalTenantMediaPlaneConfig = {
+  readonly default_media_plane: "cf_sfu";
+  readonly media_plane_provider_config: {
+    readonly enabled: true;
+    readonly provider: "cf_sfu";
+    readonly mode: "chalk_managed";
+  };
+};
+
+export function localTenantMediaPlaneConfig(): LocalTenantMediaPlaneConfig | undefined {
+  if (defaultSpaceMediaPlane() !== "cf_sfu") return undefined;
+  return {
+    default_media_plane: "cf_sfu",
+    media_plane_provider_config: { enabled: true, provider: "cf_sfu", mode: "chalk_managed" },
+  };
+}
+
 let csrfToken: string | undefined;
 let csrfExpiresAt = 0;
 const CSRF_REFRESH_MS = 55 * 60 * 1000;
@@ -94,8 +116,9 @@ export async function onboardTenant(input: { name: string; default_region: strin
   const fingerprint = JSON.stringify({ name: input.name.trim(), default_region: input.default_region });
   const requestKey = tenantOnboardingRequestKey(fingerprint);
   const response = await generatedRequest((client) => client.tenants.onboardTenant({ headers: { "Idempotency-Key": requestKey }, payload: input }));
+  const tenant = (await configureLocalTenantMediaPlane(response.tenant.id)) ?? response.tenant;
   window.localStorage.removeItem("chalk.tenant-onboarding-request");
-  return { tenant: response.tenant as Tenant, access: response.access as TenantAccess };
+  return { tenant: tenant as Tenant, access: response.access as TenantAccess };
 }
 
 export function listSpaces(input: { tenantID: string; cursor?: string; pageSize?: number; archived?: boolean }): Promise<DashboardSpacePage> {
@@ -119,8 +142,9 @@ export async function createSpace(input: {
   linger_window_seconds?: number;
 }): Promise<DashboardSpace> {
   const { tenantID, ...values } = input;
+  await configureLocalTenantMediaPlane(tenantID);
   const body = {
-    media_plane: "cf_rtk",
+    media_plane: defaultSpaceMediaPlane(),
     default_episode_duration_seconds: 86_400,
     maximum_episode_duration_seconds: 86_400,
     linger_window_seconds: 0,
@@ -130,6 +154,12 @@ export async function createSpace(input: {
   const space = await generatedRequest((client) => client.spaces.createSpace({ params: { tenant_id: tenantID as GeneratedTenant["id"] }, headers: { "Idempotency-Key": request.key }, payload: body }));
   clearMutationRequestKey(request.storageKey);
   return space;
+}
+
+async function configureLocalTenantMediaPlane(tenantID: string): Promise<Tenant | undefined> {
+  const localMediaPlane = localTenantMediaPlaneConfig();
+  if (!localMediaPlane) return undefined;
+  return (await generatedRequest((client) => client.tenants.updateTenant({ params: { tenant_id: tenantID as GeneratedTenant["id"] }, payload: localMediaPlane }))) as Tenant;
 }
 
 export function updateSpace(input: {

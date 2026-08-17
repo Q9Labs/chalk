@@ -5,54 +5,72 @@ import { participantIdentityDisplay, safeIdentifierDisplay } from "./display-uti
 import { EvidenceEmpty } from "./RunGraphViews";
 import { StatusPill } from "./StatusPill";
 
+/* A card states the facts this issue actually carries. A projection that declares
+   nothing for a field used to print "unknown: not available" anyway, so four cards
+   read as a wall of absences with the real finding buried in it; the details panel
+   still enumerates every field, present or not, for whichever issue is selected.
+   A declared unknownReason is itself evidence and stays. */
+function issueFacts(issue: DiagnosticSnapshotV1["issues"][number]): readonly (readonly [string, string])[] {
+  const facts: (readonly [string, string])[] = [["First observed", formatTime(issue.firstObservedAt)]];
+  if (issue.lastConfirmedCheckpoint) facts.push(["Last confirmed", issue.lastConfirmedCheckpoint]);
+  if (issue.missingCheckpoint) facts.push(["First missing", issue.missingCheckpoint]);
+  else if (issue.unknownReason) facts.push(["First missing", `unknown: ${issue.unknownReason}`]);
+  if (issue.retryState) facts.push(["Retry", issue.retryState]);
+  if (issue.affected) facts.push(["Affected", `${issue.affected.kind}: ${safeIdentifierDisplay(issue.affected.identifier)}`]);
+  return facts;
+}
+
 export function IssuesView({ snapshot, onSelect }: { snapshot: DiagnosticSnapshotV1; onSelect: (selection: DebuggerSelection) => void }) {
   if (snapshot.issues.length === 0) return <EvidenceEmpty title="No diagnostic issues" detail="No explicit failure, missed confirmation, deadline overrun, recovery exhaustion, unexpected transition, or telemetry gap is visible at this cursor." />;
   return (
     <div className="episode-card-list">
-      {snapshot.issues.map((issue) => (
-        <Card key={issue.id} size="sm" className="episode-issue-card" data-severity={issue.severity}>
-          <CardHeader>
-            <div className="episode-card-title-row">
-              <StatusPill state={issue.severity} />
-              <StatusPill state={issue.state} />
-            </div>
-            <CardTitle>{issue.summary}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="episode-inline-facts">
-              <div>
-                <dt>First observed</dt>
-                <dd>{formatTime(issue.firstObservedAt)}</dd>
+      {snapshot.issues.map((issue) => {
+        const reference = issue.reference ?? issue.diagnosticReference;
+        return (
+          <Card key={issue.id} size="sm" className="episode-issue-card" data-severity={issue.severity}>
+            <CardHeader>
+              <p className="episode-eyebrow">{issue.kind.replaceAll("_", " ")}</p>
+              <div className="episode-card-title-row">
+                <StatusPill state={issue.severity} />
+                <CardTitle>{issue.summary}</CardTitle>
+                <StatusPill state={issue.state} />
               </div>
-              <div>
-                <dt>Last confirmed</dt>
-                <dd>{issue.lastConfirmedCheckpoint ?? "unknown: not available"}</dd>
+            </CardHeader>
+            <CardContent>
+              <dl className="episode-inline-facts">
+                {issueFacts(issue).map(([term, value]) => (
+                  <div key={term}>
+                    <dt>{term}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="episode-issue-footer">
+                {reference ? (
+                  <p>
+                    <span>Diagnostic reference</span>
+                    <code className="episode-mono">{reference}</code>
+                  </p>
+                ) : null}
+                <Button size="sm" variant="outline" onClick={() => onSelect({ kind: "issue", value: issue })}>
+                  Inspect issue
+                </Button>
               </div>
-              <div>
-                <dt>First missing</dt>
-                <dd>{issue.missingCheckpoint ?? `unknown: ${issue.unknownReason ?? "not available"}`}</dd>
-              </div>
-              <div>
-                <dt>Retry</dt>
-                <dd>{issue.retryState ?? "unknown: not available"}</dd>
-              </div>
-              <div>
-                <dt>Affected</dt>
-                <dd>{issue.affected ? `${issue.affected.kind}: ${safeIdentifierDisplay(issue.affected.identifier)}` : "unknown: not retained"}</dd>
-              </div>
-              <div className="episode-fact-wide">
-                <dt>Diagnostic reference</dt>
-                <dd className="episode-mono">{issue.reference ?? issue.diagnosticReference ?? "unknown: not available"}</dd>
-              </div>
-            </dl>
-            <Button size="sm" variant="outline" onClick={() => onSelect({ kind: "issue", value: issue })}>
-              Inspect issue
-            </Button>
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
+}
+
+/* A Participant who has not left has no departure time to be missing; printing
+   "unknown" there reads as lost evidence rather than as presence. Presence is only
+   claimed for a state that asserts it — a lane whose state is itself unknown says so. */
+function departureDisplay(participant: NonNullable<DiagnosticSnapshotV1["participants"]>[number]): string {
+  if (participant.leftAt) return formatTime(participant.leftAt);
+  if (participant.state === "joined" || participant.state === "reconnecting") return "still in Episode";
+  return "unknown: not available";
 }
 
 export function ParticipantsView({ snapshot, onSelect, onOpenRelated }: { snapshot: DiagnosticSnapshotV1; onSelect: (selection: DebuggerSelection) => void; onOpenRelated: (filter: DiagnosticFilterV1) => void }) {
@@ -82,7 +100,7 @@ export function ParticipantsView({ snapshot, onSelect, onOpenRelated }: { snapsh
               </div>
               <div>
                 <dt>Left</dt>
-                <dd>{formatTime(participant.leftAt)}</dd>
+                <dd>{departureDisplay(participant)}</dd>
               </div>
               <div>
                 <dt>Operations</dt>

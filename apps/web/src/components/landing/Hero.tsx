@@ -1,71 +1,25 @@
+import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import Link01Icon from "@hugeicons/core-free-icons/Link01Icon";
+import PackageIcon from "@hugeicons/core-free-icons/PackageIcon";
+import ServerStack01Icon from "@hugeicons/core-free-icons/ServerStack01Icon";
 import { useState, type FormEvent } from "react";
 
-const TECHNOLOGY_MARKS = {
-  typescript: { src: "/brand/technology/typescript.svg", label: "TypeScript" },
-  react: { src: "/brand/technology/react_light.svg", label: "React" },
-  "react-native": { src: "/brand/technology/react_light.svg", label: "React Native" },
-  cloudflare: { src: "/brand/technology/cloudflare.svg", label: "Cloudflare" },
-} as const;
+import { Icon } from "./Icon";
+import { resolveSpaceInviteLink } from "./invite-link";
 
-type Technology = keyof typeof TECHNOLOGY_MARKS;
+const PROOF = [
+  { id: "link", icon: Link01Icon, label: "One link that never expires" },
+  { id: "self-host", icon: ServerStack01Icon, label: "Self-host the whole thing" },
+  { id: "sdk", icon: PackageIcon, label: "React and React Native SDK" },
+] as const;
 
-/** Returns a safe Space URL without moving invite credentials into a query string. */
-export function resolveSpaceInviteLink(value: string, origin: string): string | undefined {
-  const input = value.trim();
-  if (!input || input.startsWith("//") || (!input.startsWith("/") && !/^https?:\/\//i.test(input))) return undefined;
-
-  let url: URL;
-  try {
-    url = new URL(input, origin);
-  } catch {
-    return undefined;
-  }
-
-  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-  if (url.search || url.username || url.password) return undefined;
-  if (!/^\/space\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(url.pathname)) return undefined;
-
-  return url.toString();
-}
-
-export function SiteNav() {
-  return (
-    <header className="nav">
-      <div className="container nav-inner">
-        <a href="/" className="nav-logo" aria-label="Chalk home">
-          <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
-        </a>
-        <nav className="nav-links" aria-label="Product navigation">
-          <a href="#product">Product</a>
-          <a href="#performance">Performance</a>
-          <a href="#self-host">Self-host</a>
-          <a href="#features">Features</a>
-        </nav>
-        <nav className="nav-actions" aria-label="Account navigation">
-          <a className="nav-dashboard" href="/home">
-            Dashboard
-          </a>
-          <a className="nav-sign-in" href="/sign-in">
-            Sign in
-          </a>
-          <a href="/sign-up" className="btn btn-primary nav-cta">
-            Get started
-          </a>
-        </nav>
-      </div>
-    </header>
-  );
-}
-
-function TechnologyMark({ technology }: { technology: Technology }) {
-  const mark = TECHNOLOGY_MARKS[technology];
-
-  return (
-    <span className={`hero-tech-mark hero-tech-${technology}`} role="img" aria-label={mark.label}>
-      <img src={mark.src} alt="" aria-hidden="true" />
-    </span>
-  );
-}
+// React and React Native share one mark, and one mark is what they get: the
+// same logo drawn twice reads as a mistake, not as two platforms.
+const TECHNOLOGY_MARKS = [
+  { id: "typescript", src: "/brand/technology/typescript.svg", label: "TypeScript" },
+  { id: "react", src: "/brand/technology/react_light.svg", label: "React and React Native" },
+  { id: "cloudflare", src: "/brand/technology/cloudflare.svg", label: "Cloudflare" },
+] as const;
 
 function InviteLinkForm() {
   const [inviteLink, setInviteLink] = useState("");
@@ -83,8 +37,8 @@ function InviteLinkForm() {
   }
 
   return (
-    <form className="hero-invite" id="join-space" onSubmit={submitInvite} noValidate aria-describedby={inviteError ? "invite-link-error" : "invite-link-help"}>
-      <label htmlFor="invite-link">Have an invite link?</label>
+    <form className="hero-invite" id="join-space" onSubmit={submitInvite} noValidate>
+      <label htmlFor="invite-link">Already been sent a link?</label>
       <div className="hero-invite-row">
         <input
           id="invite-link"
@@ -95,19 +49,16 @@ function InviteLinkForm() {
             setInviteLink(event.target.value);
             if (inviteError) setInviteError(undefined);
           }}
-          placeholder="Paste a Space invite link"
+          placeholder="Paste it here"
           autoComplete="url"
           spellCheck={false}
           aria-invalid={inviteError ? "true" : "false"}
-          aria-describedby={inviteError ? "invite-link-help invite-link-error" : "invite-link-help"}
+          aria-describedby={inviteError ? "invite-link-error" : undefined}
         />
-        <button type="submit" className="btn btn-secondary">
-          Join a Space
+        <button type="submit" className="hero-invite-submit">
+          Join
         </button>
       </div>
-      <p className="hero-invite-help" id="invite-link-help">
-        Use a link with a <code>/space/&lt;slug&gt;</code> path. The invite token stays in the link hash.
-      </p>
       {inviteError ? (
         <p className="hero-invite-error" id="invite-link-error" role="alert">
           {inviteError}
@@ -119,42 +70,68 @@ function InviteLinkForm() {
 
 export function Hero() {
   return (
-    <section className="hero">
-      <div className="container hero-inner">
-        <header className="hero-heading">
-          <h1>
-            <span>Bring people together.</span>
-            <span className="hero-highlight">Keep them in flow.</span>
-          </h1>
-        </header>
+    <>
+      <section className="hero">
+        <div className="container">
+          <a className="hero-badge" href="/sdk-preview">
+            <b>New</b>
+            Put a Space inside your own product
+            <span>
+              <Icon glyph={ArrowRight02Icon} size={14} weight={2.2} />
+            </span>
+          </a>
 
-        <div className="hero-grid">
-          <div className="hero-copy">
-            <p className="hero-sub">Chalk gives your product a dependable Space for every conversation, shared artifact, and live moment.</p>
-            <div className="hero-ctas">
-              <a href="/sign-up" className="btn btn-primary">
-                Create an Account
-              </a>
-              <a href="/home" className="btn btn-secondary">
-                Open Dashboard
-              </a>
-            </div>
-            <InviteLinkForm />
+          <h1>
+            Every call ends. <span className="muted">The Space doesn&rsquo;t.</span>
+          </h1>
+
+          <p className="hero-sub">Chalk gives a team, or a product you are building, a space that outlasts the call. Video, chat, whiteboard, and files stay put between calls — on our infrastructure or on yours.</p>
+
+          <div className="hero-ctas">
+            <a href="/sign-up" className="btn btn-primary btn-lg">
+              Create an account
+              <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
+            </a>
+            <a href="#product" className="btn btn-secondary btn-lg">
+              See how it works
+            </a>
           </div>
 
-          <figure className="hero-product">
-            <div className="hero-product-wash" aria-hidden="true" />
-            <img src="/images/marketing/chalk-speaker-view-20260801.webp" width={1586} height={992} alt="Chalk Space interface with an active speaker, Participant filmstrip, and media controls." />
-          </figure>
-        </div>
-      </div>
+          <ul className="hero-proof">
+            {PROOF.map((proof) => (
+              <li key={proof.id}>
+                <Icon glyph={proof.icon} size={17} weight={2} />
+                {proof.label}
+              </li>
+            ))}
+          </ul>
 
-      <div className="container hero-proof" aria-label="Technologies used by Chalk">
-        <TechnologyMark technology="typescript" />
-        <TechnologyMark technology="react" />
-        <TechnologyMark technology="react-native" />
-        <TechnologyMark technology="cloudflare" />
-      </div>
-    </section>
+          <div className="hero-stage">
+            <figure className="hero-frame">
+              <img src="/images/marketing/chalk-speaker-view-20260801.webp" width={1586} height={992} alt="Chalk Space interface with an active speaker, Participant filmstrip, and media controls." />
+            </figure>
+          </div>
+
+          {/* The invite form belongs down here rather than under the buttons:
+              three stacked ways to act is a menu, not a hero. Everything above
+              is for people arriving cold; this is for the one holding a link. */}
+          <InviteLinkForm />
+        </div>
+      </section>
+
+      <section className="trust">
+        <div className="container">
+          <p>Built on tools your team already runs</p>
+          <div className="trust-marks">
+            {TECHNOLOGY_MARKS.map((mark) => (
+              <span className="trust-mark" key={mark.id}>
+                <img src={mark.src} alt="" aria-hidden="true" />
+                {mark.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
   );
 }

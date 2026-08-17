@@ -1,29 +1,15 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@q9labsai/chalk-ui";
 import { useDashboardAccount } from "./DashboardAccount";
+import { DashboardSidebar } from "./DashboardSidebar";
 import { NewSpaceDialog } from "./NewSpaceDialog";
-
-const primaryNavigation = [
-  { to: "/home", label: "Overview", icon: "home" },
-  { to: "/spaces", label: "Spaces", icon: "spaces" },
-  { to: "/episodes", label: "Episodes", icon: "episodes" },
-] as const;
-
-const utilityNavigation = [{ to: "/developer", label: "Developer", icon: "developer" }] as const;
 
 export function DashboardShell() {
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [tenantMenuOpen, setTenantMenuOpen] = useState(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { account, current, tenants, selectTenant } = useDashboardAccount();
-  const initials = account.name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+  const { current } = useDashboardAccount();
 
   useEffect(() => {
     const openCreateDialog = (event: KeyboardEvent) => {
@@ -36,114 +22,18 @@ export function DashboardShell() {
     return () => window.removeEventListener("keydown", openCreateDialog);
   }, []);
 
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
-
   return (
-    <div className="dashboard-shell">
+    <SidebarProvider className="dashboard-shell">
       <a className="dashboard-skip-link" href="#dashboard-content">
         Skip to dashboard content
       </a>
-      <aside className={`dashboard-sidebar${mobileNavOpen ? " is-open" : ""}`} aria-label="Dashboard navigation">
-        <div className="dashboard-brand-row">
-          <Link to="/home" className="dashboard-brand" aria-label="Chalk home">
-            <img src="/brand/chalk/chalk-logo.svg" alt="" />
-            <span>Chalk</span>
-          </Link>
-          <button className="dashboard-sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}>
-            ×
-          </button>
-        </div>
 
-        <div className="tenant-switcher-wrap">
-          <button className="tenant-switcher" type="button" aria-label="Switch Tenant" aria-expanded={tenantMenuOpen} onClick={() => setTenantMenuOpen((open) => !open)}>
-            <span className="tenant-mark">{current.tenant.name.slice(0, 1).toUpperCase()}</span>
-            <span>
-              <strong>{current.tenant.name}</strong>
-              <small>Tenant</small>
-            </span>
-            <Icon name="chevrons" />
-          </button>
-          {tenantMenuOpen ? (
-            <div className="tenant-menu">
-              <p>Your Tenants</p>
-              {tenants.map((item) => (
-                <button
-                  type="button"
-                  className={item.tenant.id === current.tenant.id ? "is-selected" : ""}
-                  key={item.tenant.id}
-                  onClick={() => {
-                    selectTenant(item.tenant.id);
-                    setTenantMenuOpen(false);
-                  }}
-                >
-                  <span>{item.tenant.name.slice(0, 1).toUpperCase()}</span>
-                  <span>
-                    <strong>{item.tenant.name}</strong>
-                    <small>{item.access.role}</small>
-                  </span>
-                </button>
-              ))}
-              <Link to="/tenant" onClick={() => setTenantMenuOpen(false)}>
-                Manage current Tenant
-              </Link>
-            </div>
-          ) : null}
-        </div>
+      <DashboardSidebar pathname={pathname} onCreateSpace={() => setCreateOpen(true)} />
 
-        <button className="dashboard-create-button" type="button" onClick={() => setCreateOpen(true)}>
-          <Icon name="plus" />
-          New Space
-          <kbd>N</kbd>
-        </button>
-
-        <nav className="dashboard-nav" aria-label="Workspace">
-          <p>Workspace</p>
-          {primaryNavigation.map((item) => (
-            <DashboardLink key={item.to} {...item} pathname={pathname} />
-          ))}
-        </nav>
-
-        <nav className="dashboard-nav dashboard-nav-utility" aria-label="Tools">
-          <p>Tools</p>
-          {utilityNavigation.map((item) => (
-            <DashboardLink key={item.to} {...item} pathname={pathname} />
-          ))}
-        </nav>
-
-        <div className="dashboard-sidebar-footer">
-          <Link to="/tenant" className={pathname === "/tenant" ? "is-active" : ""}>
-            <Icon name="settings" />
-            Tenant settings
-          </Link>
-          <Link to="/account" className="account-switcher">
-            <span className="avatar">{initials}</span>
-            <span>
-              <strong>{account.name}</strong>
-              <small>{account.email}</small>
-            </span>
-            <Icon name="dots" />
-          </Link>
-        </div>
-      </aside>
-
-      {mobileNavOpen ? <button className="dashboard-sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} /> : null}
-
-      <main className="dashboard-main" id="dashboard-content">
-        <header className="dashboard-mobile-header">
-          <button className="dashboard-mobile-menu" type="button" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}>
-            <Icon name="menu" />
-          </button>
-          <Link to="/home" className="dashboard-brand">
-            <span>Chalk</span>
-          </Link>
-          <button className="dashboard-mobile-create" type="button" onClick={() => setCreateOpen(true)}>
-            New Space
-          </button>
-        </header>
+      <SidebarInset id="dashboard-content">
+        <DashboardMobileHeader onCreateSpace={() => setCreateOpen(true)} />
         <Outlet />
-      </main>
+      </SidebarInset>
 
       <NewSpaceDialog
         open={createOpen}
@@ -155,17 +45,26 @@ export function DashboardShell() {
           void navigate({ to: "/spaces" });
         }}
       />
-    </div>
+    </SidebarProvider>
   );
 }
 
-function DashboardLink({ to, label, icon, pathname }: { to: string; label: string; icon: string; pathname: string }) {
-  const active = pathname === to || pathname.startsWith(`${to}/`);
+/** Only mounts below the sidebar's drawer breakpoint, where the rail is unavailable. */
+function DashboardMobileHeader({ onCreateSpace }: { onCreateSpace: () => void }) {
+  const { isMobile } = useSidebar();
+  if (!isMobile) return null;
+
   return (
-    <Link to={to} className={active ? "is-active" : ""} aria-current={active ? "page" : undefined}>
-      <Icon name={icon} />
-      {label}
-    </Link>
+    <header className="dashboard-mobile-header">
+      <SidebarTrigger className="dashboard-mobile-menu" />
+      <Link to="/home" className="dashboard-brand">
+        <img src="/brand/chalk/chalk-icon.svg" alt="" />
+        <span>Chalk</span>
+      </Link>
+      <button className="dashboard-mobile-create" type="button" onClick={onCreateSpace}>
+        New Space
+      </button>
+    </header>
   );
 }
 

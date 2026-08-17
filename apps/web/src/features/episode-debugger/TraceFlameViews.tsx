@@ -9,7 +9,12 @@ import { VirtualRows } from "./VirtualRows";
 import { EvidenceEmpty } from "./RunGraphViews";
 import type { DiagnosticPageState } from "./live-controller";
 
-type TraceRow = Readonly<{ key: string; kind: "operation"; value: DiagnosticOperationDetail; depth: number }> | Readonly<{ key: string; kind: "event"; value: AcceptedDiagnosticEvent; depth: number }>;
+type TraceRow =
+  | Readonly<{ key: string; kind: "operation"; value: DiagnosticOperationDetail; depth: number }>
+  /* An Event reaches its producer either by declared ref or by a checkpoint's evidence
+     cursor. The row builder already resolves both, so it carries the answer rather
+     than leaving the row to re-derive it and call an attributed Event unattributed. */
+  | Readonly<{ key: string; kind: "event"; value: AcceptedDiagnosticEvent; depth: number; attributed: boolean }>;
 
 export function TraceView({
   snapshot,
@@ -76,8 +81,8 @@ export function TraceView({
           selectedKey={selectedKey}
           onSelect={(row) => onSelect({ kind: row.kind, value: row.value } as DebuggerSelection)}
           renderRow={(row) => (
-            <div className="episode-trace-tree-row" style={{ paddingInlineStart: `${row.depth * 16}px` }}>
-              {row.kind === "operation" ? <OperationRow operation={row.value} /> : <EventRow event={row.value} />}
+            <div className="episode-trace-tree-row" data-depth={Math.min(row.depth, 4)}>
+              {row.kind === "operation" ? <OperationRow operation={row.value} /> : <EventRow event={row.value} attributed={row.attributed} />}
             </div>
           )}
         />
@@ -112,7 +117,7 @@ function buildTraceRows(operations: readonly DiagnosticOperationDetail[], events
   const operationRows: TraceRow[] = operations.map((value) => ({ key: `op-${value.id}`, kind: "operation", value, depth: depthFor(value) }));
   const eventRows: TraceRow[] = events.map((value) => {
     const producer = (value.producerOperationRef ? byId.get(value.producerOperationRef) : undefined) ?? byEvidenceCursor.get(value.cursor);
-    return { key: `event-${value.cursor}`, kind: "event", value, depth: producer ? depthFor(producer) + 1 : 0 };
+    return { key: `event-${value.cursor}`, kind: "event", value, depth: producer ? depthFor(producer) + 1 : 0, attributed: producer !== undefined };
   });
   return [...operationRows, ...eventRows].sort((left, right) => rowTime(left) - rowTime(right));
 }
@@ -188,8 +193,11 @@ export function FlameView({ snapshot, selection, onSelect }: { snapshot: Diagnos
                 <div className="episode-flame-track">
                   {lane.bars.map((bar) => {
                     const operation = bar.operationId ? snapshot.operations.find((candidate) => candidate.id === bar.operationId) : undefined;
-                    const left = ((Date.parse(bar.startAt) - start) / range) * 100;
-                    const width = Math.max(0.5, (((bar.endAt ? Date.parse(bar.endAt) : end) - Date.parse(bar.startAt)) / range) * 100);
+                    const left = Math.max(0, Math.min(100 - FLAME_MIN_BAR_PERCENT, ((Date.parse(bar.startAt) - start) / range) * 100));
+                    const duration = (bar.endAt ? Date.parse(bar.endAt) : end) - Date.parse(bar.startAt);
+                    const width = Math.min(100 - left, Math.max(FLAME_MIN_BAR_PERCENT, (duration / range) * 100));
+                    const label = operation?.kind ?? `attempt ${bar.attempt ?? 1}`;
+                    const description = `${label}, ${bar.state.replaceAll("_", " ")}, ${formatDuration(duration)}`;
                     return (
                       <button
                         type="button"
@@ -199,19 +207,26 @@ export function FlameView({ snapshot, selection, onSelect }: { snapshot: Diagnos
                         data-selected={operation?.id === selectedId(selection)}
                         style={{ insetInlineStart: `${left}%`, inlineSize: `${width}%` }}
                         onClick={() => operation && onSelect({ kind: "operation", value: operation })}
-                        aria-label={`${operation?.kind ?? bar.id}, ${bar.state}, ${formatDuration((bar.endAt ? Date.parse(bar.endAt) : end) - Date.parse(bar.startAt))}`}
+                        title={description}
+                        aria-label={description}
                       >
-                        <span>{operation?.kind ?? `attempt ${bar.attempt ?? 1}`}</span>
+                        {/* A bar too narrow for its label renders a clipped fragment that
+                            reads as noise; the tooltip still carries the full name. */}
+                        {fitsLabel(width, zoom, label) && <span>{label}</span>}
                       </button>
                     );
                   })}
                 </div>
               </div>
             ))}
-            <div className="episode-heat-strip" aria-label={`${flame.buckets.length} aggregated sample buckets`}>
-              {flame.buckets.map((bucket, index) => (
-                <span key={`${bucket.startAt}-${index}`} style={{ opacity: Math.max(0.12, bucket.heat) }} data-failed={bucket.failedCount > 0} title={`${bucket.count} samples, ${bucket.failedCount} failed`} />
-              ))}
+            <div className="episode-heat-legend">
+              <span>Sample density</span>
+              <div className="episode-heat-strip" aria-label={`${flame.buckets.length} aggregated sample buckets`}>
+                {flame.buckets.map((bucket, index) => (
+                  <span key={`${bucket.startAt}-${index}`} style={{ opacity: Math.max(0.12, bucket.heat) }} data-failed={bucket.failedCount > 0} title={`${bucket.count} samples, ${bucket.failedCount} failed`} />
+                ))}
+              </div>
+              <span>Tinted buckets carry failures</span>
             </div>
           </div>
         </div>
@@ -220,21 +235,49 @@ export function FlameView({ snapshot, selection, onSelect }: { snapshot: Diagnos
   );
 }
 
+/* The track has no measured width at render time, so estimate from the lane's
+   declared minimum times the current zoom. Erring narrow drops a label; erring
+   wide would clip one. */
+/* An instant-length bar at the very end of the range still has to read as a bar,
+   so it keeps this much of the track rather than collapsing against the edge. */
+const FLAME_MIN_BAR_PERCENT = 1.2;
+
+const FLAME_TRACK_BASELINE_PIXELS = 660;
+const FLAME_LABEL_PIXELS_PER_CHARACTER = 5.8;
+
+function fitsLabel(widthPercent: number, zoom: number, label: string): boolean {
+  return (widthPercent / 100) * FLAME_TRACK_BASELINE_PIXELS * zoom >= label.length * FLAME_LABEL_PIXELS_PER_CHARACTER + 18;
+}
+
+/* The subtitle carries what separates this row from its neighbours, not the fields
+   every row shares. Defaults (first attempt, expectation v1, no parent) are silent;
+   the details panel still states them for whichever row is selected. */
+function operationSubtitle(operation: DiagnosticOperationDetail): string {
+  const observed = operation.checkpoints.filter((checkpoint) => checkpoint.state === "observed" || checkpoint.state === "late_observed").length;
+  const parts = [operation.checkpoints.length === 0 ? "no checkpoints declared" : `${observed}/${operation.checkpoints.length} checkpoints observed`];
+  if (operation.attempt > 1) parts.push(`attempt ${operation.attempt}`);
+  if (operation.expectationVersion > 1) parts.push(`expectation v${operation.expectationVersion}`);
+  if (operation.retryGroup) parts.push(`retry ${safeReferenceLabel(operation.retryGroup)}`);
+  if (operation.errorClass) parts.push(operation.errorClass);
+  return parts.join(" · ");
+}
+
 function OperationRow({ operation }: { operation: DiagnosticOperationDetail }) {
   return (
     <>
       <div className="episode-trace-primary" role="gridcell">
         <span className="episode-mono">{formatTime(operation.startedAt)}</span>
         <strong>{operation.kind}</strong>
-        <small>
-          attempt {operation.attempt} · expectation v{operation.expectationVersion}
-          {operation.retryGroup ? ` · retry ${safeReferenceLabel(operation.retryGroup)}` : ""}
-        </small>
-        <small>{operation.parentId ? `parent ${operation.parentId}` : "root operation"}</small>
+        <small>{operationSubtitle(operation)}</small>
       </div>
-      <span role="gridcell">{operation.source}</span>
-      <span role="gridcell" className="episode-mono">
-        {formatDuration(operation.durationMilliseconds)} · clock {operation.clockUncertainty ?? "unknown"}
+      <span role="gridcell" className="episode-trace-source">
+        {operation.source}
+      </span>
+      <span role="gridcell" className="episode-trace-duration">
+        <span className="episode-mono">{formatDuration(operation.durationMilliseconds)}</span>
+        {/* Only the rows that carry a measured uncertainty say so; the details
+            panel states the unknown case once instead of on every row. */}
+        {operation.clockUncertainty ? <small>clock {operation.clockUncertainty}</small> : null}
       </span>
       <span role="gridcell">
         <StatusPill state={operation.state} />
@@ -243,20 +286,30 @@ function OperationRow({ operation }: { operation: DiagnosticOperationDetail }) {
   );
 }
 
-function EventRow({ event }: { event: AcceptedDiagnosticEvent }) {
+/* Rows are nested under their producer, so naming it again on every line says
+   nothing; the anomaly — an Event no operation claims — is what gets called out.
+   Receipt time only appears when it trails the Event, which is the lag worth seeing. */
+function eventSubtitle(event: AcceptedDiagnosticEvent, attributed: boolean): string {
+  const parts = [`cursor ${event.cursor}`, event.phase];
+  if (!attributed) parts.push("no producing operation");
+  const lag = Date.parse(event.receivedAt) - Date.parse(event.occurredAt);
+  if (Number.isFinite(lag) && lag > 0) parts.push(`received +${formatDuration(lag)}`);
+  return parts.join(" · ");
+}
+
+function EventRow({ event, attributed }: { event: AcceptedDiagnosticEvent; attributed: boolean }) {
   return (
     <>
       <div className="episode-trace-primary" role="gridcell">
-        <span className="episode-mono">occurred {formatTime(event.occurredAt)}</span>
+        <span className="episode-mono">{formatTime(event.occurredAt)}</span>
         <strong>{event.name}</strong>
-        <small>
-          received {formatTime(event.receivedAt)} · cursor {event.cursor} · {event.phase}
-        </small>
-        <small>{event.producerOperationRef ? `producer ${event.producerOperationRef}` : "producer unknown"}</small>
+        <small>{eventSubtitle(event, attributed)}</small>
       </div>
-      <span role="gridcell">{event.source}</span>
-      <span role="gridcell" className="episode-mono">
-        seq {event.producerSequence}
+      <span role="gridcell" className="episode-trace-source">
+        {event.source}
+      </span>
+      <span role="gridcell" className="episode-trace-duration">
+        <span className="episode-mono">seq {event.producerSequence}</span>
       </span>
       <span role="gridcell">
         <StatusPill state={event.state} />

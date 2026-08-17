@@ -1,417 +1,405 @@
-.product-story {
-  border-bottom: 1px solid var(--line);
-}
+/* ===========================================================================
+   The five content bands, in page order: the two front doors, the Space model,
+   the latency budgets, the portable stack, and the shipped inventory.
 
-.entry-list {
-  margin-top: clamp(52px, 7vw, 84px);
-  border-top: 1px solid var(--line-strong);
-}
+   Every band opens with the same centred head and then differs only in what it
+   lays under it — a two-up, a full-width figure, a three-up, a split, a set of
+   chip rows. The head is the constant; the arrangement is the variable.
+   =========================================================================== */
 
-.entry-row {
+/* ===== front doors ======================================================== */
+
+/* Deliberately no `align-items: start`: the cards share subgrid rows, so a
+   shorter artifact would otherwise let one card stop a few pixels above the
+   other, which reads as a bug rather than as a difference. */
+.bento {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) minmax(250px, 0.68fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(18px, 2vw, 26px);
+  margin-top: clamp(40px, 4.5vw, 60px);
+}
+
+/* Subgrid, so the label rows line up, the sentences line up, and the artifacts
+   start on one line however unevenly the text above them wraps. Staggered, two
+   cards side by side just look like a mistake. */
+.bento-card {
+  display: grid;
+  overflow: hidden;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  padding: clamp(22px, 2.4vw, 30px) clamp(22px, 2.4vw, 30px) 0;
+}
+
+.bento-label {
+  display: flex;
   align-items: center;
-  gap: 30px;
-  min-height: 204px;
-  padding: 32px;
-  border-bottom: 1px solid var(--line-strong);
-}
-
-.entry-row-blue {
-  background: linear-gradient(90deg, var(--wash-blue), var(--surface-muted));
-}
-
-.entry-row-green {
-  background: linear-gradient(90deg, var(--wash-green), var(--surface-muted));
-}
-
-.entry-row-yellow {
-  background: linear-gradient(90deg, var(--wash-yellow), var(--surface-muted));
-}
-
-.entry-index {
-  align-self: start;
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.entry-row h3 {
-  font-size: clamp(27px, 3vw, 40px);
-}
-
-.entry-row p {
-  max-width: 58ch;
-  margin-top: 12px;
-  color: var(--ink-2);
-}
-
-.entry-row a {
-  justify-self: stretch;
-  padding: 18px 20px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.entry-row a {
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.entry-row a:hover {
-  border-color: var(--ink);
-}
-
-.entry-row-actions {
-  display: grid;
   gap: 9px;
+  color: var(--brand-ink);
+  font-size: 14.5px;
+  font-weight: 700;
 }
 
-.entry-row-actions a {
+.bento-label svg {
+  flex: none;
+}
+
+.bento-copy {
+  margin-top: 16px;
+}
+
+/* The body continues the heading's line rather than starting under it: one
+   sentence in black followed by two in grey is the page's whole way of making
+   a point, and a paragraph break would turn it into two points. */
+.bento-copy h3,
+.bento-copy p {
+  display: inline;
+  font-size: clamp(18px, 1.6vw, 20.5px);
+  letter-spacing: -0.024em;
+  line-height: 1.45;
+}
+
+.bento-copy p {
+  color: var(--site-ink-2);
+  font-weight: 400;
+}
+
+.bento-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* The artifact is set into the foot of the card and runs off its bottom edge,
+   so it reads as something the card is showing you rather than a picture the
+   card has made space for. */
+.bento-art {
+  display: grid;
+  /* The two feet are the same height but hold artifacts of very different
+     depths, so the shorter one centres instead of pooling its slack at the
+     bottom. The taller one fills and is unaffected. */
+  align-content: center;
+  margin: clamp(24px, 2.6vw, 32px) calc(clamp(22px, 2.4vw, 30px) * -1) 0;
+  padding: clamp(18px, 2vw, 24px) clamp(18px, 2vw, 24px) 0;
+  border-top: 1px solid var(--site-line);
+  background: var(--site-paper-2);
+}
+
+/* ===== the SDK sample ===================================================== */
+
+.door-code {
+  overflow-x: auto;
+  margin: 0;
+  padding: 18px 18px 22px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: #0f1613;
+  color: #d7e4de;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+
+.door-code code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  font-family: inherit;
+}
+
+.door-code-line {
+  display: block;
+  min-height: 1.75em;
+}
+
+.tok-keyword {
+  color: #8ad2b4;
+}
+
+.tok-string {
+  color: #e6c88a;
+}
+
+.tok-type {
+  color: #8ec7e6;
+}
+
+.tok-call {
+  color: #c9b3e8;
+}
+
+.tok-comment {
+  color: #7e918a;
+}
+
+/* ===== the Space model ==================================================== */
+
+.points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(24px, 3vw, 40px);
+  margin: clamp(40px, 4.5vw, 60px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.point {
   text-align: center;
 }
 
-.entry-row-actions .entry-action-primary {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
+.point-icon {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--site-line);
+  border-radius: var(--radius-md);
+  background: var(--site-paper);
+  box-shadow: 0 1px 2px rgba(10, 13, 12, 0.04);
+  color: var(--brand-ink);
 }
 
-.entry-row-actions .entry-action-primary:hover {
-  box-shadow: var(--shadow-sm);
+.point h3 {
+  margin-top: 16px;
+  font-size: 17px;
+  letter-spacing: -0.02em;
 }
 
-.performance {
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(0deg, color-mix(in srgb, var(--chalk-yellow-light) 42%, transparent), color-mix(in srgb, var(--chalk-yellow-light) 42%, transparent)), var(--paper);
+.point p {
+  max-width: 34ch;
+  margin: 8px auto 0;
+  color: var(--site-ink-2);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-.performance-head {
-  max-width: none;
-}
+/* ===== latency ============================================================ */
 
-.performance-grid {
+.speed-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin: 64px 0 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(16px, 1.8vw, 24px);
+  margin: clamp(40px, 4.5vw, 60px) 0 0;
   padding: 0;
-  border-block: 1px solid var(--line-strong);
   list-style: none;
 }
 
-.performance-grid li {
-  min-height: 220px;
-  padding: 34px;
-  border-left: 1px solid var(--line-strong);
+.speed-stat {
+  padding: clamp(24px, 2.6vw, 32px);
 }
 
-.performance-grid li:last-child {
-  border-right: 1px solid var(--line-strong);
+.speed-stat-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: var(--radius-md);
 }
 
-.performance-grid strong {
+/* The tint is the only thing separating the three cards, so it carries a real
+   difference: three budgets on three different planes, not one number printed
+   three times. */
+.speed-stat-blue .speed-stat-icon {
+  background: #e2eefb;
+  color: #2f5f8c;
+}
+
+.speed-stat-green .speed-stat-icon {
+  background: var(--brand-wash-strong);
+  color: var(--brand);
+}
+
+.speed-stat-yellow .speed-stat-icon {
+  background: #fbf0d5;
+  color: #7d6218;
+}
+
+.speed-stat strong {
   display: block;
-  font-family: var(--font-display);
-  font-size: clamp(48px, 6vw, 82px);
-  font-weight: 670;
-  letter-spacing: -0.055em;
+  margin-top: 22px;
+  font-size: clamp(38px, 4vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
   line-height: 1;
 }
 
-.performance-grid div {
-  margin-top: 28px;
-}
-
-.performance-grid b,
-.performance-grid span {
+.speed-stat b {
   display: block;
-}
-
-.performance-grid b {
+  margin-top: 12px;
   font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
-.performance-grid span {
-  margin-top: 5px;
-  color: var(--ink-2);
-  font-size: 14px;
+.speed-stat-how {
+  display: block;
+  margin-top: 4px;
+  color: var(--site-ink-2);
+  font-size: 14.5px;
 }
 
-.stack {
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-muted);
+.speed-note {
+  margin-top: 26px;
+  text-align: center;
 }
+
+/* ===== the portable stack ================================================= */
 
 .stack-layout {
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(500px, 1fr);
-  gap: clamp(64px, 9vw, 132px);
   align-items: center;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: clamp(28px, 3.5vw, 56px);
+  margin-top: clamp(40px, 4.5vw, 60px);
 }
 
-.stack-note {
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-  font-size: 14px !important;
-}
-
-.stack-map {
+.stack-claims {
+  display: grid;
+  gap: 18px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--line-strong);
   list-style: none;
 }
 
-.stack-layer {
+.stack-claims li {
   display: grid;
-  grid-template-columns: 58px 1fr;
-  gap: 24px;
-  min-height: 154px;
-  padding: 30px;
-  border-bottom: 1px solid var(--line-strong);
-}
-
-.stack-layer:last-child {
-  border-bottom: 0;
-}
-
-.stack-layer-blue {
-  background: var(--wash-blue);
-}
-
-.stack-layer-green {
-  background: var(--wash-green);
-}
-
-.stack-layer-yellow {
-  background: var(--wash-yellow);
-}
-
-.stack-layer > span {
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.stack-layer h3 {
-  font-size: 25px;
-}
-
-.stack-layer p {
-  max-width: 52ch;
-  margin-top: 9px;
-  color: var(--ink-2);
-  font-size: 15px;
-}
-
-.features {
-  border-bottom: 1px solid var(--line);
-}
-
-.features-layout {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.68fr) minmax(0, 1fr);
-  gap: clamp(64px, 9vw, 132px);
   align-items: start;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 13px;
 }
 
-.features-layout .section-head {
-  position: sticky;
-  top: 112px;
+.stack-claims svg {
+  margin-top: 3px;
+  color: var(--brand-ink);
 }
 
-.feature-list {
-  border-top: 1px solid var(--line-strong);
+.stack-claims span {
+  color: var(--site-ink-2);
+  font-size: 15.5px;
+  line-height: 1.6;
 }
 
-.feature {
-  position: relative;
-  min-height: 126px;
-  padding: 24px 18px 24px 34px;
-  border-bottom: 1px solid var(--line-strong);
+.stack-copy .fine-print {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--site-line);
 }
 
-.feature::before {
-  position: absolute;
-  inset: 24px auto 24px 0;
-  width: 5px;
-  border-radius: 3px;
-  content: "";
+/* ===== the shipped inventory ============================================== */
+
+.chip-groups {
+  display: grid;
+  gap: clamp(30px, 3.2vw, 42px);
+  margin-top: clamp(40px, 4.5vw, 60px);
 }
 
-.feature-green::before {
-  background: var(--chalk-green);
+.chip-group {
+  text-align: center;
 }
 
-.feature-yellow::before {
-  background: var(--chalk-yellow);
-}
-
-.feature-blue::before {
-  background: var(--chalk-blue);
-}
-
-.feature-pink::before {
-  background: var(--chalk-pink);
-}
-
-.feature h3 {
-  font-size: 21px;
-}
-
-.feature p {
-  max-width: 54ch;
-  margin-top: 7px;
-  color: var(--ink-2);
-  font-size: 14px;
-}
-
-.closing {
-  padding-block: clamp(84px, 10vw, 130px);
-  background: radial-gradient(64% 110% at 14% 100%, color-mix(in srgb, var(--chalk-blue-light) 72%, transparent), transparent 70%), radial-gradient(58% 110% at 90% 0%, color-mix(in srgb, var(--chalk-pink-light) 62%, transparent), transparent 74%), var(--wash-yellow);
-}
-
-.closing-inner {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 60px;
-}
-
-.closing h2 {
-  max-width: 720px;
-  font-size: clamp(44px, 6vw, 78px);
-}
-
-.closing p {
-  margin-top: 18px;
-  color: var(--ink-2);
-  font-size: 18px;
-}
-
-.closing-actions {
-  display: flex;
-  flex: none;
-  gap: 12px;
-}
-
-.footer {
-  padding-block: 28px;
-  border-top: 1px solid var(--line);
-  background: var(--paper);
-}
-
-.footer-inner {
-  display: flex;
+.chip-group h3 {
+  display: inline-flex;
   align-items: center;
-  gap: 28px;
-  color: var(--ink-3);
-  font-size: 12px;
+  gap: 8px;
+  color: var(--site-ink-3);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.footer-inner img {
-  width: auto;
-  height: 22px;
+.chip-group h3 svg {
+  color: var(--brand-ink);
 }
 
-.footer-links {
+.chips {
   display: flex;
-  gap: 22px;
-  margin-left: auto;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.footer-links a {
-  color: var(--ink-2);
-  text-decoration: none;
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px 9px 13px;
+  border: 1px solid var(--site-line);
+  border-radius: var(--radius-md);
+  background: var(--site-paper);
+  box-shadow: 0 1px 2px rgba(10, 13, 12, 0.04);
+  color: var(--site-ink-2);
+  font-size: 14.5px;
+  font-weight: 600;
 }
 
-.footer-links a:hover {
-  color: var(--ink);
+.chip svg {
+  flex: none;
+  color: var(--brand-ink);
 }
 
-@media (max-width: 980px) {
-  .entry-row {
-    grid-template-columns: 54px 1fr;
-  }
-
-  .entry-row > a,
-  .entry-row-actions {
-    grid-column: 2;
-  }
-
-  .stack-layout,
-  .features-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .features-layout .section-head {
-    position: static;
-  }
-
-  .closing-inner {
-    align-items: start;
-    flex-direction: column;
-  }
+.platform-note {
+  max-width: 62ch;
+  margin: clamp(36px, 4vw, 50px) auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--site-line);
+  text-align: center;
 }
 
-@media (max-width: 760px) {
-  .closing-inner {
-    align-items: start;
-    flex-direction: column;
-  }
+/* ===== responsive ========================================================= */
 
-  .performance-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .performance-grid li,
-  .performance-grid li:last-child {
-    min-height: 0;
-    border-right: 1px solid var(--line-strong);
-  }
-
-  .performance-grid li + li {
-    border-top: 1px solid var(--line-strong);
-  }
-
+@media (max-width: 900px) {
+  /* `minmax(0, 1fr)`, not `1fr`: a bare track keeps a min-content minimum, and
+     the widest unbreakable thing in either column — the Space URL, the import
+     line — would push the whole grid past the edge of a phone. */
+  .bento,
   .stack-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .closing-actions {
-    width: 100%;
-    flex-direction: column;
+  /* Subgrid only aligns things that sit side by side. Once the cards stack it
+     is holding rows open for a neighbour that is no longer there. */
+  .bento-card {
+    grid-row: auto;
+    grid-template-rows: none;
   }
 
-  .footer-inner {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .footer-links {
-    display: grid;
-    width: 100%;
+  .points,
+  .speed-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 24px;
-    margin-left: 0;
+  }
+
+  .points li:last-child,
+  .speed-stat:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .point p {
+    max-width: 44ch;
   }
 }
 
-@media (max-width: 560px) {
-  .entry-row {
-    grid-template-columns: 1fr;
-    padding: 26px 22px;
+@media (max-width: 620px) {
+  .points,
+  .speed-stats {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .entry-row > a,
-  .entry-row-actions {
-    grid-column: 1;
-    overflow-x: auto;
+  .points li:last-child,
+  .speed-stat:last-child {
+    grid-column: auto;
+  }
+
+  .bento-actions .btn {
+    width: 100%;
+  }
+
+  /* One step down is what it takes for the import line to fit a 375px phone.
+     Narrower than that the block scrolls sideways, which is the ordinary way
+     code behaves on a phone and better than shrinking it out of legibility. */
+  .door-code {
+    font-size: 11.5px;
   }
 }

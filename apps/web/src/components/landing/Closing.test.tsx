@@ -1,34 +1,31 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Closing, FeatureGrid } from "./Closing";
-
-describe("FeatureGrid", () => {
-  it("renders capabilities without progress badges", () => {
-    const markup = renderToStaticMarkup(<FeatureGrid />);
-
-    expect(markup).toContain("Space core");
-    expect(markup).toContain("Recording");
-    expect(markup).toContain("Whiteboard");
-    expect(markup).toContain("Webhooks");
-    expect(markup).not.toContain(">Implemented<");
-    expect(markup).not.toContain(">In progress<");
-  });
-});
+import { Closing } from "./Closing";
 
 describe("Closing", () => {
-  it("links to dashboard and account actions", () => {
+  it("closes on the two front doors and nothing else", () => {
     const markup = renderToStaticMarkup(<Closing />);
 
-    expect(markup).toContain("Create an Account");
-    expect(markup).toContain("Open Dashboard");
-    expect(markup).toContain("Sign in");
-    expect(markup).toContain('href="/home"');
+    // The chalked half of the line sits in its own element, so the headline
+    // never appears in the markup as one contiguous string.
+    expect(markup).toContain("Give every conversation ");
+    expect(markup).toContain("a place to live.");
+    expect(markup).toContain("Create an account");
+    expect(markup).toContain("Explore the SDK");
     expect(markup).toContain('href="/sign-up"');
-    expect(markup).toContain('href="/sign-in"');
+    expect(markup).toContain('href="/sdk-preview"');
+    expect(markup).not.toContain("Under active development");
+  });
+
+  it("keeps the section anchors and legal pages reachable from the footer", () => {
+    const markup = renderToStaticMarkup(<Closing />);
+
     expect(markup).toContain('href="#product"');
-    expect(markup).toContain("Under active development");
-    expect(markup).not.toContain('href="/sdk-preview"');
-    expect(markup).not.toContain("section-kicker");
+    expect(markup).toContain('href="#spaces"');
+    expect(markup).toContain('href="/home"');
+    expect(markup).toContain('href="/sign-in"');
+    expect(markup).toContain('href="/privacy"');
+    expect(markup).toContain('href="/terms"');
   });
 });

@@ -1,5 +1,6 @@
 /* @vitest-environment jsdom */
 
+import { StrictMode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,8 +15,9 @@ beforeEach(() => {
   resetSpacePageTestMocks();
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -81,7 +83,11 @@ describe("SpacePage", () => {
 
 describe("DashboardSpacePage", () => {
   it("keeps the signed-in by-slug join and names the Space from its slug", async () => {
-    render(<DashboardSpacePage slug="design-lab" />);
+    render(
+      <StrictMode>
+        <DashboardSpacePage slug="design-lab" />
+      </StrictMode>,
+    );
     enterName(" Ada ");
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
 
@@ -89,6 +95,7 @@ describe("DashboardSpacePage", () => {
     expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
     expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: dashboardSpaceTestAccess.credential, getAccess: mocks.dashboardGetAccess, connectionAccess: mocks.dashboardConnectionAccess, journey: mocks.journey });
     expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "design-lab" });
+    expect(mocks.dashboardLeave).not.toHaveBeenCalled();
     expect(mocks.holder.chalkProps?.inviteLink).toBeUndefined();
   });
 
@@ -151,6 +158,20 @@ describe("DashboardSpacePage", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Tenant access required");
     expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
     expect(mocks.createLocalSpaceClient).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a failed Dashboard join and re-enables Continue", async () => {
+    mocks.joinDashboardSpace.mockRejectedValueOnce(new Error("Media access is unavailable."));
+
+    render(
+      <StrictMode>
+        <DashboardSpacePage slug="design-lab" />
+      </StrictMode>,
+    );
+    enterName("Ada");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Media access is unavailable.");
+    expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("clears a visitor invite only after credential cleanup succeeds", async () => {

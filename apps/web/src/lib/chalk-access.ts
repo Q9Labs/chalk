@@ -30,6 +30,8 @@ export type ParticipantCredentialCleanupOptions = {
   readonly keepalive?: boolean;
 };
 
+const DASHBOARD_REQUEST_TIMEOUT_MS = 15_000;
+
 export async function createParticipantCredential(displayName: string, spaceInviteToken?: string, journey?: JourneyBrokerTelemetry): Promise<ParticipantCredential> {
   try {
     return await request(
@@ -189,22 +191,32 @@ let csrfToken: string | undefined;
 async function dashboardRequest(path: string, method: "POST" | "DELETE", body: unknown, journey?: JourneyBrokerTelemetry, options: ParticipantCredentialCleanupOptions = {}): Promise<unknown> {
   const startedAt = Date.now();
   const key = requestKey();
-  const tokenResponse = await fetch("/api/auth/csrf", { credentials: "same-origin" });
-  if (!tokenResponse.ok) throw new DashboardSpaceRequestError("Could not establish secure Dashboard access.", tokenResponse.status);
-  const tokenBody = (await tokenResponse.json()) as { readonly csrf_token?: unknown };
-  csrfToken = typeof tokenBody.csrf_token === "string" ? tokenBody.csrf_token : csrfToken;
-  if (!csrfToken) throw new Error("Could not establish secure Dashboard access.");
-  const response = await fetch(path, {
-    method,
-    credentials: "same-origin",
-    headers: { "content-type": "application/json", "x-chalk-csrf": csrfToken, "idempotency-key": key, ...journey?.headers },
-    body: JSON.stringify(body ?? {}),
-    keepalive: options.keepalive,
-  });
-  journey?.recordHttpRequest({ method, route: path, statusCode: response.status, durationMs: Date.now() - startedAt, state: response.ok ? "succeeded" : "failed" });
-  if (!response.ok) throw new DashboardSpaceRequestError(await errorMessage(response), response.status);
-  if (response.status === 204) return undefined;
-  return response.json();
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), DASHBOARD_REQUEST_TIMEOUT_MS);
+  try {
+    const tokenResponse = await fetch("/api/auth/csrf", { credentials: "same-origin", signal: controller.signal });
+    if (!tokenResponse.ok) throw new DashboardSpaceRequestError("Could not establish secure Dashboard access.", tokenResponse.status);
+    const tokenBody = (await tokenResponse.json()) as { readonly csrf_token?: unknown };
+    csrfToken = typeof tokenBody.csrf_token === "string" ? tokenBody.csrf_token : csrfToken;
+    if (!csrfToken) throw new Error("Could not establish secure Dashboard access.");
+    const response = await fetch(path, {
+      method,
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-chalk-csrf": csrfToken, "idempotency-key": key, ...journey?.headers },
+      body: JSON.stringify(body ?? {}),
+      keepalive: options.keepalive,
+      signal: controller.signal,
+    });
+    journey?.recordHttpRequest({ method, route: path, statusCode: response.status, durationMs: Date.now() - startedAt, state: response.ok ? "succeeded" : "failed" });
+    if (!response.ok) throw new DashboardSpaceRequestError(await errorMessage(response), response.status);
+    if (response.status === 204) return undefined;
+    return response.json();
+  } catch (cause) {
+    if (controller.signal.aborted) throw new DashboardSpaceRequestError("Dashboard access timed out. Please try again.", 504);
+    throw cause;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
 }
 
 function parseDashboardGrant(value: unknown): { readonly access: AccessGrant; readonly mediaToken: string; readonly participantGeneration: number } {
@@ -291,6 +303,7 @@ async function errorMessage(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as { readonly error?: unknown };
     if (typeof body.error === "string" && body.error.length > 0) return body.error;
+    if (isRecord(body.error) && typeof body.error.message === "string" && body.error.message.length > 0) return body.error.message;
   } catch {
     // The HTTP status remains useful when a proxy returns a non-JSON error page.
   }

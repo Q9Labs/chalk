@@ -1,92 +1,142 @@
-// Isometric-tilted floating UI mocks — the "coded visuals" layer.
+import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import type { CSSProperties } from "react";
 
-const FUNNEL = [
-  { stage: "Token", ms: 90, stick: "var(--chalk-blue)" },
-  { stage: "Episode", ms: 140, stick: "var(--chalk-green)" },
-  { stage: "ICE", ms: 260, stick: "var(--chalk-yellow)" },
-  { stage: "First frame", ms: 420, stick: "var(--chalk-pink)" },
-];
+import { Icon } from "./Icon";
 
-const FUNNEL_SCALE = 1000;
+// Coded visuals. Everything here is decoration for a claim made in prose next to
+// it, so the whole layer is hidden from assistive technology.
 
-export function LatencyVisual() {
-  let elapsed = 0;
-  const rows = FUNNEL.map((f) => {
-    const start = elapsed;
-    elapsed += f.ms;
-    return { ...f, start };
-  });
+const LAYERS = [
+  { tier: "Front doors", nodes: ["Chalk app", "your app"], seam: false },
+  { tier: "Portable core", nodes: ["api", "sync", "identity"], seam: false },
+  { tier: "Contracts", nodes: ["MediaPlane", "TokenSigner"], seam: true },
+  { tier: "Your infra", nodes: ["postgres", "an SFU"], seam: false },
+] as const;
 
+export function StackVisual() {
   return (
-    <div className="cv-scene">
-      <span className="cv-glow" aria-hidden="true" />
-      <div className="cv-card cv-tilt cv-card-latency" aria-hidden="true">
-        <div className="cv-head">
-          <span className="cv-eyebrow">
-            <span className="cv-dot" /> Join funnel · p50
-          </span>
-          <span className="cv-badge">under budget</span>
-        </div>
-        <div className="cv-metric">
-          <span className="cv-metric-num">
-            0.8<span className="cv-unit">s</span>
-          </span>
-          <span className="cv-metric-sub">click → first frame</span>
-        </div>
-        <div className="cv-funnel">
-          {rows.map((r, i) => (
-            <div className="cv-funnel-row" key={r.stage} style={{ "--d": `${i * 90}ms` } as React.CSSProperties}>
-              <span className="cv-funnel-label">{r.stage}</span>
-              <span className="cv-funnel-lane">
-                <span
-                  className="cv-funnel-bar"
-                  style={
-                    {
-                      left: `${(r.start / FUNNEL_SCALE) * 100}%`,
-                      width: `${(r.ms / FUNNEL_SCALE) * 100}%`,
-                      background: r.stick,
-                    } as React.CSSProperties
-                  }
-                />
+    <div className="sd" aria-hidden="true">
+      {LAYERS.map((layer) => (
+        <div className={layer.seam ? "sd-layer sd-layer-seam" : "sd-layer"} key={layer.tier}>
+          {/* The note belongs to the seam, so it hangs off the seam's own row
+              rather than floating somewhere in the drawing. */}
+          {layer.seam ? (
+            <span className="sd-annotation">
+              swap either one
+              <Icon glyph={ArrowRight02Icon} size={13} weight={2.4} />
+            </span>
+          ) : null}
+          <span className="sd-tier">{layer.tier}</span>
+          <span className="sd-nodes">
+            {layer.nodes.map((node) => (
+              <span className="sd-node" key={node}>
+                {node}
               </span>
-              <span className="cv-funnel-ms">{r.ms}</span>
-            </div>
-          ))}
+            ))}
+          </span>
         </div>
-      </div>
-      <span className="cv-chip cv-chip-hi" aria-hidden="true">
-        <span className="cv-dot" /> sync&nbsp;<b>&lt;100ms</b>
-      </span>
-      <span className="cv-chip cv-chip-lo" aria-hidden="true">
-        glass-to-glass&nbsp;<b>&lt;200ms</b>
-      </span>
+      ))}
     </div>
   );
 }
 
-const LAYERS = [
-  { tier: "Front doors", nodes: ["Chalk app", "SDK"], tone: "plain" },
-  { tier: "Portable core", nodes: ["sync", "api", "identity"], tone: "core" },
-  { tier: "Contracts", nodes: ["MediaPlane", "TokenSigner"], tone: "seam" },
-  { tier: "Your infra", nodes: ["any SFU", "postgres", "redis"], tone: "plain" },
+// Episodes are laid out on a 100-column track so the rail reads as elapsed time
+// rather than as an evenly spaced list.
+type TimelineEpisode = {
+  readonly name: string;
+  readonly meta: string;
+  readonly start: number;
+  readonly span: number;
+  readonly artifacts: readonly string[];
+  readonly live: boolean;
+};
+
+const EPISODES: readonly TimelineEpisode[] = [
+  { name: "Kickoff", meta: "42 min", start: 1, span: 15, artifacts: ["Recording"], live: false },
+  { name: "Design review", meta: "1h 06", start: 24, span: 21, artifacts: ["Recording", "Transcript"], live: false },
+  { name: "Standup", meta: "11 min", start: 55, span: 9, artifacts: [], live: false },
+  { name: "Live now", meta: "4 joined", start: 72, span: 29, artifacts: [], live: true },
 ];
 
-export function StackVisual() {
+const PERSISTENT = ["Chat", "Whiteboard", "Files", "Members"] as const;
+
+export function SpaceTimeline() {
   return (
-    <div className="cv-scene cv-scene-stack">
-      <span className="cv-glow" aria-hidden="true" />
-      <div className="cv-iso" aria-hidden="true">
-        {LAYERS.map((l, i) => (
-          <div className={`cv-plane cv-plane-${l.tone}`} key={l.tier} style={{ "--i": i, "--d": `${i * 110}ms` } as React.CSSProperties}>
-            <span className="cv-plane-tier">{l.tier}</span>
-            <span className="cv-plane-nodes">
-              {l.nodes.map((n) => (
-                <span className="cv-plane-node" key={n}>
-                  {n}
-                </span>
-              ))}
+    <figure className="tl" aria-hidden="true">
+      <figcaption className="tl-head">
+        <span className="tl-title">Space · design-lab</span>
+        <span className="tl-age">open for 14 months</span>
+      </figcaption>
+
+      <ol className="tl-rail">
+        {EPISODES.map((episode) => (
+          <li className={episode.live ? "tl-episode tl-episode-live" : "tl-episode"} key={episode.name} style={{ "--start": episode.start, "--span": episode.span } as CSSProperties}>
+            <span className="tl-episode-bar" />
+            <span className="tl-episode-name">{episode.name}</span>
+            <span className="tl-episode-meta">{episode.meta}</span>
+            {episode.artifacts.length > 0 ? (
+              <span className="tl-artifacts">
+                {episode.artifacts.map((artifact) => (
+                  <span className="tl-artifact" key={artifact}>
+                    {artifact}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+
+      <div className="tl-persist">
+        <span className="tl-persist-label">Stays in the Space, between all of them</span>
+        <div className="tl-persist-bands">
+          {PERSISTENT.map((band) => (
+            <span className="tl-band" key={band}>
+              {band}
             </span>
-          </div>
+          ))}
+        </div>
+      </div>
+    </figure>
+  );
+}
+
+const MEMBERS = [
+  { initial: "A", tone: "green" },
+  { initial: "M", tone: "yellow" },
+  { initial: "R", tone: "blue" },
+  { initial: "K", tone: "pink" },
+] as const;
+
+export function SpaceLinkCard() {
+  return (
+    <div className="cv-link" aria-hidden="true">
+      <div className="cv-link-bar">
+        <span className="cv-link-url">
+          chalk.q9labs.ai/space/<b>design-lab</b>
+        </span>
+        <span className="cv-link-copy">Copy link</span>
+      </div>
+
+      <div className="cv-link-row">
+        <span className="cv-link-members">
+          {MEMBERS.map((member) => (
+            <span className={`cv-avatar cv-avatar-${member.tone}`} key={member.initial}>
+              {member.initial}
+            </span>
+          ))}
+          <span className="cv-avatar cv-avatar-more">+7</span>
+        </span>
+        <span className="cv-link-live">
+          <span className="cv-dot" /> Live now
+        </span>
+      </div>
+
+      <div className="cv-link-surfaces">
+        {PERSISTENT.map((surface) => (
+          <span className="cv-link-surface" key={surface}>
+            {surface}
+          </span>
         ))}
       </div>
     </div>

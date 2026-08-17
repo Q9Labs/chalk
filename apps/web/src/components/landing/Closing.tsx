@@ -1,74 +1,90 @@
-const FEATURES = [
-  { title: "Space core", body: "Space, Episode, admission, roles, and lifecycle boundaries.", tone: "green" },
-  { title: "Realtime sync", body: "Durable control state, bounded recovery, and reconnect semantics.", tone: "yellow" },
-  { title: "Media adapters", body: "Cloudflare web and React Native RealtimeKit adapters.", tone: "blue" },
-  { title: "Whiteboard", body: "A shared React collaboration package with app rendering still in progress.", tone: "pink" },
-  { title: "Recording", body: "Control-plane contracts with capture qualification still open.", tone: "blue" },
-  { title: "Transcription", body: "Dispatcher and artifact flows with managed-path proof still open.", tone: "pink" },
-  { title: "Webhooks", body: "Versioned events, signatures, retries, fixtures, and consumer helpers.", tone: "green" },
-  { title: "Operations", body: "Local telemetry and health contracts with managed operations still open.", tone: "yellow" },
-];
+import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 
-export function FeatureGrid() {
-  return (
-    <section className="section features" id="features">
-      <div className="container features-layout">
-        <header className="section-head">
-          <h2>The parts that make a real-time product.</h2>
-          <p>Chalk has substantial SDK and infrastructure coverage. Hosted-product completeness is tracked separately from the existence of a component or API.</p>
-        </header>
-        <div className="feature-list">
-          {FEATURES.map((feature) => (
-            <article className={`feature feature-${feature.tone}`} key={feature.title}>
-              <div>
-                <h3>{feature.title}</h3>
-                <p>{feature.body}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
+import { Icon } from "./Icon";
+
+const FOOTER_COLUMNS = [
+  {
+    id: "product",
+    title: "Product",
+    links: [
+      { href: "#product", label: "Two ways in" },
+      { href: "#spaces", label: "Spaces and Episodes" },
+      { href: "#speed", label: "Speed" },
+      { href: "#platform", label: "What ships today" },
+    ],
+  },
+  {
+    id: "developers",
+    title: "Developers",
+    links: [
+      { href: "/sdk-preview", label: "SDK preview" },
+      { href: "#self-host", label: "Self-host" },
+      { href: "/status", label: "Status" },
+    ],
+  },
+  {
+    id: "account",
+    title: "Account",
+    links: [
+      { href: "/sign-up", label: "Create an account" },
+      { href: "/sign-in", label: "Sign in" },
+      { href: "/home", label: "Dashboard" },
+    ],
+  },
+] as const;
 
 export function Closing() {
   return (
     <>
       <section className="closing">
-        <div className="container closing-inner">
-          <div>
-            <h2>Give every Participant a dependable Space.</h2>
-            <p>Start with an Account, open the Dashboard, or sign in to keep moving.</p>
-          </div>
+        <div className="container">
+          <h2>
+            Give every conversation <span className="muted">a place to live.</span>
+          </h2>
+          <p>Create a Space in about a minute. Bring your own infrastructure whenever you are ready.</p>
           <div className="closing-actions">
-            <a href="/sign-up" className="btn btn-primary">
-              Create an Account
+            <a href="/sign-up" className="btn btn-primary btn-lg">
+              Create an account
+              <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
             </a>
-            <a href="/home" className="btn btn-secondary">
-              Open Dashboard
-            </a>
-            <a href="/sign-in" className="btn btn-tertiary">
-              Sign in
+            <a href="/sdk-preview" className="btn btn-secondary btn-lg">
+              Explore the SDK
             </a>
           </div>
         </div>
       </section>
+
       <footer className="footer">
-        <div className="container footer-inner">
-          <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
-          <nav className="footer-links" aria-label="Footer navigation">
-            <a href="#product">Product</a>
-            <a href="#performance">Performance</a>
-            <a href="#self-host">Self-host</a>
-            <a href="#features">Features</a>
-            <a href="/home">Dashboard</a>
-            <a href="/sign-in">Sign in</a>
-            <a href="/sign-up">Get started</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/terms">Terms</a>
-          </nav>
-          <span>© 2026 Q9 Labs · Under active development</span>
+        <div className="container">
+          <div className="footer-top">
+            <div className="footer-brand">
+              <a href="/" className="footer-logo" aria-label="Chalk home">
+                <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
+              </a>
+              <p className="footer-tagline">A Space that outlasts the call, for your team or for the product you are building.</p>
+            </div>
+
+            {FOOTER_COLUMNS.map((column) => (
+              <nav className="footer-col" key={column.id} aria-labelledby={`footer-${column.id}`}>
+                <h3 id={`footer-${column.id}`}>{column.title}</h3>
+                <ul>
+                  {column.links.map((link) => (
+                    <li key={link.href}>
+                      <a href={link.href}>{link.label}</a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
+          </div>
+
+          <div className="footer-legal">
+            <span>© 2026 Q9 Labs</span>
+            <nav aria-label="Legal">
+              <a href="/privacy">Privacy</a>
+              <a href="/terms">Terms</a>
+            </nav>
+          </div>
         </div>
       </footer>
     </>

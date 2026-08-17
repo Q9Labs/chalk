@@ -1,8 +1,8 @@
 .episode-debugger,
 .episode-refusal {
-  --episode-topbar-height: 158px;
-  --episode-summary-height: 112px;
-  --episode-nav-width: 164px;
+  --episode-topbar-height: 134px;
+  --episode-summary-height: 58px;
+  --episode-nav-width: 178px;
   --episode-details-width: 322px;
   --episode-gap-1: 4px;
   --episode-gap-2: 8px;
@@ -22,6 +22,21 @@
   --chalk-ink-tertiary: var(--chalk-ink-3, #687480);
   --chalk-line: var(--chalk-app-line, #303744);
   --chalk-line-strong: var(--chalk-app-line-strong, #46505f);
+  /* The palette ships hues but no tinted surfaces, and names its families
+     --font-display/--font-body. Bridge both into the vocabulary this sheet uses
+     so tones stay legible against the panel rather than resolving to nothing. */
+  --chalk-font-display: var(--font-display, var(--chalk-font-family, system-ui, sans-serif));
+  --chalk-font-body: var(--font-body, var(--chalk-font-family, system-ui, sans-serif));
+  --chalk-blue-wash: color-mix(in srgb, var(--chalk-blue) 16%, var(--chalk-white));
+  --chalk-green-wash: color-mix(in srgb, var(--chalk-green) 16%, var(--chalk-white));
+  --chalk-yellow-wash: color-mix(in srgb, var(--chalk-yellow) 16%, var(--chalk-white));
+  --chalk-pink-wash: color-mix(in srgb, var(--chalk-pink) 16%, var(--chalk-white));
+  /* The palette's -deep hues are tuned for light paper; on this forced-dark
+     surface a tone reads as its hue lifted toward white instead. */
+  --episode-tone-live: color-mix(in srgb, var(--chalk-blue) 82%, #ffffff);
+  --episode-tone-success: color-mix(in srgb, var(--chalk-green) 82%, #ffffff);
+  --episode-tone-warning: color-mix(in srgb, var(--chalk-yellow) 88%, #ffffff);
+  --episode-tone-danger: color-mix(in srgb, var(--chalk-pink) 82%, #ffffff);
   --chalk-radius-6: 6px;
   --chalk-radius-8: 8px;
   --chalk-radius-12: 12px;
@@ -30,8 +45,6 @@
   --chalk-shadow-1: var(--chalk-shadow-sm, 0 1px 2px rgb(0 0 0 / 30%));
   --chalk-shadow-2: var(--chalk-shadow-md, 0 6px 16px rgb(0 0 0 / 35%));
   --chalk-shadow-3: var(--chalk-shadow-lg, 0 16px 30px rgb(0 0 0 / 45%));
-  --danger-foreground: #ffd8d3;
-  --error-foreground: #ffd8d3;
   background: var(--chalk-paper);
   color: var(--chalk-ink);
   font-family: var(--chalk-font-body);
@@ -163,10 +176,6 @@
   padding-inline-start: var(--episode-gap-4);
 }
 .episode-top-status > .episode-mono,
-.episode-retention {
-  color: var(--chalk-ink-secondary);
-  font-size: 0.7rem;
-}
 .episode-environment {
   background: var(--chalk-paper);
   border-radius: var(--chalk-radius-pill);
@@ -200,11 +209,16 @@
   box-shadow: inset 3px 0 0 var(--chalk-blue);
 }
 .episode-nav-icon {
-  align-items: center;
-  display: inline-flex;
-  font-family: var(--chalk-font-mono);
-  inline-size: 18px;
-  justify-content: center;
+  block-size: 17px;
+  color: var(--chalk-ink-tertiary);
+  flex-shrink: 0;
+  inline-size: 17px;
+}
+.episode-nav [data-slot="button"]:hover .episode-nav-icon {
+  color: var(--chalk-ink-secondary);
+}
+.episode-nav [aria-current="page"] .episode-nav-icon {
+  color: var(--chalk-blue, #7fc0d8);
 }
 .episode-nav b {
   background: var(--chalk-pink);
@@ -263,13 +277,21 @@
   border: 1px solid var(--chalk-line);
   border-radius: var(--chalk-radius-12);
   display: flex;
+  /* The actions drop to their own line rather than shrinking the caption into a
+     one-word-per-line column or pushing the whole view into a scroller. */
+  flex-wrap: wrap;
+  gap: var(--episode-gap-3);
   justify-content: space-between;
   min-block-size: 50px;
   padding: var(--episode-gap-2) var(--episode-gap-3);
 }
 .episode-view-toolbar > p {
   color: var(--chalk-ink-secondary);
+  flex: 1 1 220px;
   font-size: 0.8rem;
+}
+.episode-toolbar-actions {
+  flex-wrap: wrap;
 }
 
 .episode-details-panel {
@@ -323,22 +345,34 @@
   margin-block-start: var(--episode-gap-3);
 }
 .episode-mini-issues > button {
-  background: var(--chalk-pink-wash);
-  border: 0;
+  background: var(--chalk-white);
+  border: 1px solid var(--chalk-line);
   border-inline-start: 3px solid var(--chalk-pink);
   border-radius: var(--chalk-radius-8);
+  cursor: pointer;
   display: grid;
-  gap: var(--episode-gap-1);
-  padding: var(--episode-gap-2);
+  gap: var(--episode-gap-2);
+  padding: var(--episode-gap-3);
   text-align: start;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
+.episode-mini-issues > button:hover {
+  background: color-mix(in srgb, var(--chalk-pink) 8%, var(--chalk-white));
+  border-color: color-mix(in srgb, var(--chalk-pink) 45%, var(--chalk-line));
+  border-inline-start-color: var(--chalk-pink);
+}
+/* The headline carries the finding; regular weight keeps three or four of them
+   readable stacked, which bold does not. */
 .episode-mini-issues strong {
-  font-size: 0.76rem;
-  line-height: 1.25;
+  color: var(--chalk-ink);
+  font-size: 0.78rem;
+  font-weight: 450;
+  line-height: 1.4;
 }
 .episode-mini-issues span:last-child {
-  color: var(--chalk-ink-secondary);
-  font-size: 0.68rem;
+  color: var(--chalk-ink-tertiary);
+  font-family: var(--chalk-font-mono);
+  font-size: 0.65rem;
 }
 .episode-field-list {
   display: grid;
@@ -365,33 +399,55 @@
 }
 
 .episode-status-pill {
+  --episode-pill-tone: var(--chalk-ink-secondary);
+  align-items: center;
+  background: color-mix(in srgb, var(--episode-pill-tone) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--episode-pill-tone) 38%, transparent);
+  border-radius: var(--chalk-radius-pill);
+  color: var(--episode-pill-tone);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  gap: var(--episode-gap-2);
+  /* Grid parents would otherwise stretch the pill across its whole cell. */
+  justify-self: start;
+  line-height: 1;
+  padding: 5px var(--episode-gap-3) 5px var(--episode-gap-2);
   text-transform: capitalize;
+  white-space: nowrap;
 }
 .episode-status-pill[data-tone="live"] {
-  background: var(--chalk-blue-wash);
-  border-color: var(--chalk-blue);
-  color: var(--chalk-blue-deep);
+  --episode-pill-tone: var(--episode-tone-live);
 }
 .episode-status-pill[data-tone="success"] {
-  background: var(--chalk-green-wash);
-  border-color: var(--chalk-green);
-  color: var(--chalk-green-deep);
+  --episode-pill-tone: var(--episode-tone-success);
 }
 .episode-status-pill[data-tone="warning"] {
-  background: var(--chalk-yellow-wash);
-  border-color: var(--chalk-yellow);
-  color: var(--chalk-ink);
+  --episode-pill-tone: var(--episode-tone-warning);
 }
 .episode-status-pill[data-tone="danger"] {
-  background: var(--chalk-pink-wash);
-  border-color: var(--chalk-pink);
-  color: var(--danger-foreground);
+  --episode-pill-tone: var(--episode-tone-danger);
 }
 .episode-status-dot {
   background: currentColor;
-  block-size: 5px;
+  block-size: 6px;
   border-radius: var(--chalk-radius-pill);
-  inline-size: 5px;
+  flex-shrink: 0;
+  inline-size: 6px;
+}
+.episode-status-pill[data-tone="live"] .episode-status-dot {
+  animation: episode-pulse 2s ease-in-out infinite;
+}
+@keyframes episode-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .episode-status-pill[data-tone="live"] .episode-status-dot {
+    animation: none;
+  }
 }
 
 .episode-metric-grid {
@@ -420,7 +476,9 @@
 .episode-boundary-grid {
   display: grid;
   gap: var(--episode-gap-3);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Auto-fit, not a fixed pair: below 1024 the canvas runs full width, so the
+     column count has to follow the container rather than the viewport. */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 .episode-release-mix {
   align-items: center;
@@ -483,15 +541,19 @@
 .episode-lane:last-child {
   border-block-end: 0;
 }
+/* Wrapping, not shrinking: a long state pill next to a participant id used to
+   crush the id to "pt_…", which identifies nobody. The pill drops to a second
+   line instead and the id stays readable. */
 .episode-lane-label {
   align-items: center;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--episode-gap-2);
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
   padding-inline: var(--episode-gap-3);
 }
 .episode-lane-label > .episode-mono {
   font-size: 0.66rem;
+  min-inline-size: 0;
 }
 .episode-participant-mark,
 .episode-participant-avatar {
@@ -506,61 +568,103 @@
   inline-size: 28px;
   justify-content: center;
 }
+/* Receive order, not elapsed time: the track carries no time axis, so it draws
+   no ruled grid that would imply one. */
 .episode-lane-track {
   align-items: center;
-  background-image: linear-gradient(to right, var(--chalk-line) 1px, transparent 1px);
-  background-size: 10% 100%;
   border-inline-start: 1px solid var(--chalk-line);
   display: flex;
-  gap: var(--episode-gap-1);
+  /* Wrapping keeps every chip visible; a horizontal scroller hid the tail of a
+     busy lane behind an edge with no affordance. */
+  flex-wrap: wrap;
+  gap: var(--episode-gap-2);
   min-block-size: 63px;
-  overflow-x: auto;
-  padding: var(--episode-gap-2);
+  padding: var(--episode-gap-2) var(--episode-gap-3);
+}
+.episode-lane-empty {
+  color: var(--chalk-ink-tertiary);
+  font-size: 0.7rem;
 }
 .episode-run-block,
 .episode-flame-bar {
-  background: var(--chalk-blue-wash);
-  border: 1px solid var(--chalk-blue);
+  --episode-block-tone: var(--chalk-blue);
+  align-items: center;
+  background: color-mix(in srgb, var(--episode-block-tone) 13%, var(--chalk-white));
+  border: 1px solid color-mix(in srgb, var(--episode-block-tone) 45%, transparent);
   border-radius: var(--chalk-radius-6);
   color: var(--chalk-ink);
   cursor: pointer;
-  font-size: 0.64rem;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  gap: var(--episode-gap-2);
+  max-inline-size: 190px;
   overflow: hidden;
-  padding: var(--episode-gap-1) var(--episode-gap-2);
+  padding: 5px var(--episode-gap-2) 5px 5px;
   text-overflow: ellipsis;
+  transition: background-color 120ms ease, border-color 120ms ease;
   white-space: nowrap;
+}
+.episode-run-block:hover,
+.episode-flame-bar:hover {
+  background: color-mix(in srgb, var(--episode-block-tone) 24%, var(--chalk-white));
+  border-color: var(--episode-block-tone);
+}
+.episode-run-block-order {
+  background: color-mix(in srgb, var(--episode-block-tone) 26%, var(--chalk-white));
+  border-radius: 4px;
+  color: var(--chalk-ink-secondary);
+  flex-shrink: 0;
+  font-family: var(--chalk-font-mono);
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 5px;
+}
+.episode-run-block-kind {
+  font-family: var(--chalk-font-mono);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .episode-run-block[data-tone="failed"],
 .episode-run-block[data-tone="timed_out"],
 .episode-flame-bar[data-tone="failed"],
 .episode-flame-bar[data-tone="timed_out"] {
-  background: var(--chalk-pink-wash);
-  border-color: var(--chalk-pink);
+  --episode-block-tone: var(--chalk-pink);
 }
 .episode-run-block[data-tone="stalled"],
-.episode-flame-bar[data-tone="stalled"] {
-  background: var(--chalk-yellow-wash);
-  border-color: var(--chalk-yellow);
+.episode-run-block[data-tone="retrying"],
+.episode-flame-bar[data-tone="stalled"],
+.episode-flame-bar[data-tone="retrying"] {
+  --episode-block-tone: var(--chalk-yellow);
 }
 .episode-run-block[data-tone="succeeded"],
 .episode-flame-bar[data-tone="succeeded"] {
-  background: var(--chalk-green-wash);
-  border-color: var(--chalk-green);
+  --episode-block-tone: var(--chalk-green);
 }
+.episode-run-block[data-tone="neutral"],
+.episode-flame-bar[data-tone="neutral"] {
+  --episode-block-tone: var(--chalk-line-strong);
+}
+/* A scope footnote, not an alarm: it states what v1 deliberately does not
+   claim, so it stays quieter than anything carrying evidence. */
 .episode-unsupported {
   align-items: center;
-  background: var(--chalk-yellow-wash);
-  border: 1px dashed var(--chalk-yellow);
+  background: var(--chalk-white);
+  border: 1px solid var(--chalk-line);
   border-radius: var(--chalk-radius-12);
   display: flex;
   gap: var(--episode-gap-3);
   padding: var(--episode-gap-3);
 }
-.episode-unsupported > span {
-  font-size: 1.4rem;
+.episode-unsupported > svg {
+  color: var(--chalk-ink-tertiary);
+  flex-shrink: 0;
 }
 .episode-unsupported strong {
-  font-size: 0.8rem;
+  color: var(--chalk-ink-secondary);
+  font-size: 0.76rem;
+  font-weight: 550;
 }
 .episode-unsupported p {
   color: var(--chalk-ink-secondary);
@@ -572,7 +676,6 @@
   background: var(--chalk-white);
   border: 1px solid var(--chalk-line);
   border-radius: var(--chalk-radius-16);
-  block-size: 500px;
   overflow: hidden;
   position: relative;
 }
@@ -607,8 +710,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--episode-gap-1);
-  inline-size: min(155px, 22%);
-  min-block-size: 96px;
+  /* Size and position come from RunGraphViews so the connectors, which are drawn
+     from the same numbers, land on node centres at any container width. */
+  overflow: hidden;
   padding: var(--episode-gap-3);
   position: absolute;
   text-align: start;
@@ -632,6 +736,10 @@
 }
 .episode-graph-node strong {
   font-size: 0.76rem;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .episode-graph-node > span:not(.episode-status-pill) {
   color: var(--chalk-ink-secondary);
@@ -667,28 +775,52 @@
   text-transform: uppercase;
 }
 
+/* The list grows with the display instead of holding a constant ten rows, and the
+   floor keeps enough context on a short window to read a sequence. */
 .episode-virtual-rows {
   background: var(--chalk-white);
+  block-size: clamp(360px, 58dvh, 820px);
   border: 1px solid var(--chalk-line);
   border-radius: var(--chalk-radius-12);
   overflow: auto;
+}
+/* One column ruler for the header and every row, declared once so the two can
+   never drift. The row itself is a single-cell grid; the tree row inside it
+   carries the real columns. */
+.episode-trace-header,
+.episode-trace-tree-row {
+  align-items: center;
+  column-gap: var(--episode-gap-3);
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 86px 92px 96px;
 }
 .episode-virtual-row {
   align-items: center;
   border-block-end: 1px solid var(--chalk-line);
   cursor: pointer;
   display: grid;
-  gap: var(--episode-gap-3);
-  grid-template-columns: minmax(240px, 1fr) 72px 94px 96px;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
   padding-inline: var(--episode-gap-3);
 }
 .episode-trace-tree-row {
-  align-items: center;
-  display: grid;
-  gap: var(--episode-gap-3);
   grid-column: 1 / -1;
-  grid-template-columns: minmax(240px, 1fr) 72px 94px 96px;
   inline-size: 100%;
+  min-inline-size: 0;
+}
+/* Depth indents the primary cell only; indenting the whole row would slide the
+   trailing columns out from under their headers. */
+.episode-trace-tree-row[data-depth="1"] .episode-trace-primary {
+  padding-inline-start: 16px;
+}
+.episode-trace-tree-row[data-depth="2"] .episode-trace-primary {
+  padding-inline-start: 32px;
+}
+.episode-trace-tree-row[data-depth="3"] .episode-trace-primary {
+  padding-inline-start: 48px;
+}
+.episode-trace-tree-row[data-depth="4"] .episode-trace-primary {
+  padding-inline-start: 64px;
 }
 .episode-virtual-row[aria-selected="true"] {
   background: var(--chalk-blue-wash);
@@ -696,33 +828,70 @@
 }
 .episode-trace-header {
   color: var(--chalk-ink-tertiary);
-  display: grid;
-  font-size: 0.65rem;
-  gap: var(--episode-gap-3);
-  grid-template-columns: minmax(240px, 1fr) 72px 94px 96px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   padding-inline: var(--episode-gap-3);
   text-transform: uppercase;
 }
+/* Exactly two text lines so the content can never outgrow the virtualizer's
+   fixed row height. */
 .episode-trace-primary {
+  column-gap: var(--episode-gap-3);
   display: grid;
-  gap: var(--episode-gap-1);
-  grid-template-columns: 78px minmax(0, 1fr);
+  grid-template-columns: 62px minmax(0, 1fr);
   min-inline-size: 0;
+  row-gap: 2px;
 }
 .episode-trace-primary > span {
   color: var(--chalk-ink-tertiary);
   font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
   grid-row: span 2;
+  white-space: nowrap;
 }
 .episode-trace-primary strong {
-  font-size: 0.76rem;
+  font-size: 0.78rem;
+  font-weight: 550;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .episode-trace-primary small {
+  color: var(--chalk-ink-tertiary);
+  font-size: 0.64rem;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.episode-trace-source {
   color: var(--chalk-ink-secondary);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.episode-trace-duration {
+  display: grid;
+  min-inline-size: 0;
+  row-gap: 2px;
+}
+.episode-trace-duration > span {
+  color: var(--chalk-ink);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+.episode-trace-duration small {
+  color: var(--chalk-ink-tertiary);
+  font-size: 0.6rem;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .episode-bounded-note {
   color: var(--chalk-ink-tertiary);
@@ -730,7 +899,16 @@
 }
 .episode-page-error,
 .episode-filter-status[data-state="error"] {
-  color: var(--error-foreground);
+  color: var(--episode-tone-danger);
+}
+.episode-filter-count {
+  background: color-mix(in srgb, var(--chalk-blue) 24%, transparent);
+  border-radius: var(--chalk-radius-pill);
+  color: var(--episode-tone-live);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 3px 6px;
 }
 .episode-filter-status {
   color: var(--chalk-ink-secondary);
@@ -746,14 +924,19 @@
   border: 1px solid var(--chalk-line);
   border-radius: var(--chalk-radius-12);
   min-inline-size: 100%;
+  /* The end padding keeps a bar that runs to the end of the range off the card's
+     rounded border, where it would read as clipped rather than as finished. */
   padding-block: 38px var(--episode-gap-3);
+  padding-inline-end: var(--episode-gap-3);
   position: relative;
   transition: inline-size var(--chalk-duration-normal) var(--chalk-ease-out-expo);
 }
+/* Aligned to the lane grid's 155px label column so a tick at n% sits over the
+   same instant as a bar at n%; the end matches the card's own end padding. */
 .episode-flame-ruler {
   border-block-end: 1px solid var(--chalk-line);
   inset-block-start: var(--episode-gap-3);
-  inset-inline: 165px var(--episode-gap-3);
+  inset-inline: 155px var(--episode-gap-3);
   position: absolute;
 }
 .episode-flame-ruler span {
@@ -762,6 +945,13 @@
   font-size: 0.6rem;
   position: absolute;
   transform: translateX(-50%);
+  white-space: nowrap;
+}
+.episode-flame-ruler span:first-child {
+  transform: none;
+}
+.episode-flame-ruler span:last-child {
+  transform: translateX(-100%);
 }
 .episode-flame-lane {
   border-block-end: 1px solid var(--chalk-line);
@@ -782,15 +972,19 @@
   font-size: 0.64rem;
 }
 .episode-flame-track {
+  /* Gridlines land on the ruler's 20% ticks so the two read as one axis. */
   background-image: linear-gradient(to right, var(--chalk-line) 1px, transparent 1px);
-  background-size: 10% 100%;
+  background-size: 20% 100%;
   border-inline-start: 1px solid var(--chalk-line);
+  overflow: hidden;
   position: relative;
 }
 .episode-flame-bar {
   block-size: 28px;
   inset-block-start: 10px;
-  min-inline-size: 8px;
+  max-inline-size: none;
+  min-inline-size: 6px;
+  padding-inline: 6px;
   position: absolute;
   text-align: start;
 }
@@ -798,15 +992,30 @@
   outline: var(--episode-focus-width) solid var(--chalk-ink);
   z-index: 2;
 }
+.episode-heat-legend {
+  align-items: center;
+  display: flex;
+  gap: var(--episode-gap-3);
+  margin: var(--episode-gap-3);
+  margin-inline-start: 155px;
+}
+.episode-heat-legend > span {
+  color: var(--chalk-ink-tertiary);
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .episode-heat-strip {
   display: flex;
+  flex: 1;
   gap: 1px;
-  margin: var(--episode-gap-3);
-  margin-inline-start: 165px;
+  min-inline-size: 0;
 }
 .episode-heat-strip span {
   background: var(--chalk-blue);
   block-size: 8px;
+  border-radius: 1px;
   flex: 1;
 }
 .episode-heat-strip span[data-failed="true"] {
@@ -817,9 +1026,7 @@
 .episode-participant-grid {
   display: grid;
   gap: var(--episode-gap-3);
-}
-.episode-participant-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 .episode-issue-card[data-severity="critical"],
 .episode-issue-card[data-severity="error"] {
@@ -828,26 +1035,78 @@
 .episode-issue-card[data-severity="warning"] {
   border-inline-start: 3px solid var(--chalk-yellow);
 }
+/* The severity leads, the finding reads as a sentence, the lifecycle state
+   parks at the far edge. */
+/* Both pills sit against the first line of the finding: centred, they drift to the
+   middle of a wrapped summary and stop lining up card to card. */
+.episode-issue-card .episode-card-title-row {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.episode-issue-card .episode-card-title-row > .episode-status-pill:last-child {
+  margin-inline-start: auto;
+}
+/* Cards in a row stretch to the tallest, so the action has to claim the slack
+   instead of leaving it below itself as an unexplained void. */
 .episode-issue-card [data-slot="card-content"] {
-  align-items: end;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--episode-gap-3);
+}
+.episode-issue-card .episode-issue-footer {
+  margin-block-start: auto;
+}
+.episode-issue-footer {
+  align-items: center;
+  border-block-start: 1px solid var(--chalk-line);
   display: flex;
   gap: var(--episode-gap-4);
   justify-content: space-between;
+  padding-block-start: var(--episode-gap-3);
+}
+.episode-issue-footer p {
+  align-items: baseline;
+  display: flex;
+  gap: var(--episode-gap-2);
+  min-inline-size: 0;
+}
+/* Issues without a reference drop the paragraph, so the action anchors itself to
+   the end rather than relying on a sibling to push it there. */
+.episode-issue-footer > [data-slot="button"] {
+  margin-inline-start: auto;
+}
+.episode-issue-footer span {
+  color: var(--chalk-ink-tertiary);
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.episode-issue-footer code {
+  color: var(--chalk-ink-secondary);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .episode-inline-facts {
+  column-gap: var(--episode-gap-4);
   display: grid;
-  flex: 1;
-  gap: var(--episode-gap-3);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   margin: 0;
+  row-gap: var(--episode-gap-3);
 }
 .episode-inline-facts dt {
   color: var(--chalk-ink-tertiary);
-  font-size: 0.65rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 .episode-inline-facts dd {
   font-size: 0.74rem;
-  margin: var(--episode-gap-1) 0 0;
+  margin: 3px 0 0;
   overflow-wrap: anywhere;
 }
 .episode-participant-heading {
@@ -869,13 +1128,38 @@
   grid-column: 1 / -1;
 }
 .episode-gap-list {
-  background: var(--chalk-yellow-wash);
-  border-radius: var(--chalk-radius-8);
+  background: color-mix(in srgb, var(--chalk-yellow) 9%, transparent);
+  border-inline-start: 2px solid color-mix(in srgb, var(--chalk-yellow) 55%, transparent);
+  border-radius: 0 var(--chalk-radius-8) var(--chalk-radius-8) 0;
+  color: var(--chalk-ink-secondary);
   display: grid;
   font-size: 0.68rem;
-  gap: var(--episode-gap-1);
+  gap: 2px;
   margin-block-start: var(--episode-gap-3);
-  padding: var(--episode-gap-2);
+  padding: var(--episode-gap-2) var(--episode-gap-3);
+}
+.episode-gap-list strong {
+  color: var(--episode-tone-warning);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* Cards in a grid stretch to the tallest sibling; pin the actions to the floor
+   so a short card does not leave its buttons stranded mid-air. */
+.episode-participant-grid > [data-slot="card"] {
+  display: flex;
+  flex-direction: column;
+}
+.episode-participant-grid [data-slot="card-content"] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.episode-participant-grid .episode-details-actions {
+  margin-block-start: auto;
+  padding-block-start: var(--episode-gap-3);
 }
 
 .episode-epilogue-summary {
@@ -908,13 +1192,23 @@
   padding: var(--episode-gap-3);
   text-align: start;
 }
+/* Every branch carries a stripe so the column reads as one ruler; only its
+   colour changes with the state. */
+.episode-branch {
+  border-inline-start: 3px solid var(--chalk-line);
+}
 .episode-branch[data-tone="failed"],
 .episode-branch[data-tone="timed_out"] {
-  border-inline-start: 3px solid var(--chalk-pink);
+  border-inline-start-color: var(--chalk-pink);
 }
-.episode-branch[data-tone="running"],
+.episode-branch[data-tone="running"] {
+  border-inline-start-color: var(--chalk-blue);
+}
 .episode-branch[data-tone="pending"] {
-  border-inline-start: 3px solid var(--chalk-blue);
+  border-inline-start-color: var(--chalk-yellow);
+}
+.episode-branch[data-tone="succeeded"] {
+  border-inline-start-color: var(--chalk-green);
 }
 .episode-branch-index {
   color: var(--chalk-ink-tertiary);
@@ -934,10 +1228,14 @@
   font-size: 0.68rem;
 }
 .episode-late {
-  background: var(--chalk-yellow-wash);
+  background: color-mix(in srgb, var(--chalk-yellow) 12%, transparent);
   border-radius: var(--chalk-radius-pill);
-  font-size: 0.65rem;
-  padding: var(--episode-gap-1) var(--episode-gap-2);
+  color: var(--episode-tone-warning);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  padding: 5px var(--episode-gap-2);
 }
 
 .episode-checkpoints {
@@ -1088,16 +1386,14 @@
   text-align: center;
 }
 .episode-empty-mark {
-  align-items: center;
-  background: var(--chalk-blue-wash);
+  background: color-mix(in srgb, var(--chalk-blue) 14%, transparent);
+  block-size: 46px;
   border-radius: var(--chalk-radius-pill);
-  color: var(--chalk-blue-deep);
-  display: flex;
-  font-size: 1.4rem;
-  block-size: 48px;
-  inline-size: 48px;
-  justify-content: center;
+  box-sizing: border-box;
+  color: var(--episode-tone-live);
+  inline-size: 46px;
   margin-block-end: var(--episode-gap-3);
+  padding: 10px;
 }
 .episode-empty h2 {
   font-size: 1rem;
@@ -1222,9 +1518,6 @@
   .episode-filter-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .episode-graph-node {
-    inline-size: min(142px, 22%);
-  }
 }
 
 @media (max-width: 1100px) {
@@ -1240,9 +1533,7 @@
   .episode-top-status {
     display: none;
   }
-  .episode-product-name,
-  .episode-retention,
-  .episode-heartbeat {
+  .episode-product-name {
     display: none;
   }
   .episode-nav [data-slot="button"] {
@@ -1254,33 +1545,25 @@
   .episode-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .episode-boundary-grid,
-  .episode-participant-grid {
-    grid-template-columns: 1fr;
-  }
   .episode-lane {
     grid-template-columns: 165px minmax(0, 1fr);
   }
   .episode-lane-label > .episode-mono {
     display: none;
   }
-  .episode-lane-label {
-    grid-template-columns: max-content max-content;
-  }
   .episode-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .episode-virtual-row,
   .episode-trace-header,
   .episode-trace-tree-row {
-    grid-template-columns: minmax(190px, 1fr) 58px 78px;
+    grid-template-columns: minmax(170px, 1fr) 88px 92px;
   }
-  .episode-virtual-row > :last-child,
-  .episode-trace-header > :last-child {
+  /* Source is the column you can lose here; state is the one you came for. */
+  .episode-trace-source,
+  .episode-trace-header > :nth-child(2) {
     display: none;
   }
   .episode-graph-node {
-    inline-size: 22%;
     padding: var(--episode-gap-2);
   }
 }
@@ -1350,9 +1633,9 @@
   padding-block: var(--episode-gap-2);
 }
 .episode-titlebar {
-  align-items: flex-end;
-  min-block-size: 108px;
-  padding-block: var(--episode-gap-4) var(--episode-gap-5);
+  align-items: center;
+  min-block-size: 86px;
+  padding-block: var(--episode-gap-3) var(--episode-gap-4);
 }
 .episode-brand {
   min-inline-size: 0;
@@ -1428,24 +1711,17 @@
   font-size: 0.7rem;
 }
 .episode-runtime-facts {
-  align-items: stretch;
-  border-inline-start: 1px solid var(--chalk-line);
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: repeat(4, minmax(80px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--episode-gap-5);
   margin: 0;
-  max-inline-size: 500px;
-  min-inline-size: 260px;
-  padding-inline-start: var(--episode-gap-5);
+  min-inline-size: 0;
 }
 .episode-runtime-facts > div {
-  display: grid;
-  gap: var(--episode-gap-1);
+  align-items: baseline;
+  display: flex;
+  gap: var(--episode-gap-2);
   min-inline-size: 0;
-  padding-inline: var(--episode-gap-3);
-}
-.episode-runtime-facts > div + div {
-  border-inline-start: 1px solid var(--chalk-line);
 }
 .episode-runtime-facts dt {
   color: var(--chalk-ink-tertiary);
@@ -1453,83 +1729,82 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .episode-runtime-facts dd {
   color: var(--chalk-ink-secondary);
-  font-size: 0.69rem;
+  font-size: 0.72rem;
   margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-inline-size: 0;
   white-space: nowrap;
 }
 .episode-top-actions {
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-  max-inline-size: 470px;
 }
 .episode-top-actions [data-slot="button"] {
-  min-block-size: 40px;
+  min-block-size: 34px;
 }
 .episode-top-actions [data-episode-action="copy-agent"] {
-  background: var(--chalk-blue-deep, #2f7da0);
-  border-color: var(--chalk-blue-deep, #2f7da0);
-  color: #fff;
+  gap: var(--episode-gap-2);
+  padding-inline: var(--episode-gap-4);
 }
-.episode-top-actions [data-episode-action="copy-agent"]:hover {
-  background: color-mix(in srgb, var(--chalk-blue-deep, #2f7da0) 86%, #fff);
-}
+/* One context band. The counts you scan sit left at display weight; the runtime
+   facts sit right as quiet label/value pairs, so the two never compete. */
 .episode-summary {
+  align-items: center;
   background: var(--chalk-paper);
   border-block-end: 1px solid var(--chalk-line);
-  display: grid;
-  gap: var(--episode-gap-4);
-  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 3fr);
-  padding: var(--episode-gap-4) var(--episode-pad-page);
-}
-.episode-summary-heading {
-  align-self: center;
-  min-inline-size: 0;
-}
-.episode-summary-heading h2 {
-  font-size: 0.98rem;
-  margin-block-start: var(--episode-gap-1);
+  column-gap: var(--episode-gap-6);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: var(--episode-gap-3) var(--episode-pad-page);
+  row-gap: var(--episode-gap-3);
 }
 .episode-summary-grid {
-  display: grid;
-  gap: var(--episode-gap-3);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Wide columns, tight rows: when the strip wraps the metrics should read as a
+     block, not as two sentences separated by a gutter. */
+  column-gap: var(--episode-gap-6);
+  display: flex;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  row-gap: var(--episode-gap-3);
 }
 .episode-summary-card {
-  background: var(--chalk-white);
-  border: 1px solid var(--chalk-line);
-  border-radius: var(--chalk-radius-8);
-  display: grid;
-  gap: var(--episode-gap-1);
-  min-block-size: 72px;
+  align-items: baseline;
+  display: flex;
+  gap: var(--episode-gap-2);
   min-inline-size: 0;
-  padding: var(--episode-gap-3);
-}
-.episode-summary-card[data-tone="success"] {
-  border-inline-start: 3px solid var(--chalk-green, #5f9e7d);
-}
-.episode-summary-card[data-tone="danger"] {
-  border-inline-start: 3px solid var(--chalk-pink, #d3675f);
-}
-.episode-summary-card > span {
-  color: var(--chalk-ink-secondary);
-  font-size: 0.67rem;
-  font-weight: 650;
+  position: relative;
 }
 .episode-summary-card > strong {
   color: var(--chalk-ink);
-  font-size: 1.2rem;
-  line-height: 1.05;
+  font-family: var(--chalk-font-display);
+  font-size: 1.32rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  order: -1;
 }
+.episode-summary-card > span {
+  color: var(--chalk-ink-secondary);
+  font-size: 0.78rem;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.episode-summary-card[data-tone="danger"] > strong {
+  color: var(--episode-tone-danger);
+}
+.episode-summary-card[data-tone="success"] > strong {
+  color: var(--episode-tone-success);
+}
+/* The detail line duplicates the label at this density; keep it for assistive
+   technology only. */
 .episode-summary-card > small {
-  color: var(--chalk-ink-tertiary);
-  font-size: 0.6rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  clip-path: inset(50%);
+  position: absolute;
   white-space: nowrap;
 }
 .episode-shell {
@@ -1630,6 +1905,15 @@
   background: var(--chalk-white);
   border-color: var(--chalk-line);
 }
+/* Restated after the shared boundary-card border above, which outranks the warning
+   class and had been flattening the pair into two identical neutral cards. Where
+   the run stopped is the headline of this screen and reads as one at a glance. */
+.episode-boundary-grid > [data-episode-boundary="confirmed"] {
+  border-inline-start: 3px solid var(--chalk-green);
+}
+.episode-boundary-grid > [data-episode-boundary="broken"] {
+  border-inline-start: 3px solid var(--chalk-yellow);
+}
 .episode-run-block,
 .episode-flame-bar,
 .episode-graph-node,
@@ -1676,6 +1960,68 @@
   }
 }
 
+/* Below this neither side rail can hold its column: the evidence feed squeezes
+   the canvas into a horizontal scroller and the view rail leaves a tall empty
+   stripe. Both unstack — the rail becomes a tab strip, the feed moves underneath
+   — and the shell stops being a fixed-height viewport. */
+@media (max-width: 1024px) {
+  .episode-shell {
+    block-size: auto;
+    display: block;
+    min-block-size: 0;
+  }
+  .episode-nav {
+    border-block-end: 1px solid var(--chalk-line);
+    border-inline-end: 0;
+    display: flex;
+    flex-direction: row;
+    gap: var(--episode-gap-2);
+    overflow-x: auto;
+    padding: var(--episode-gap-3) var(--episode-pad-page);
+    scrollbar-width: thin;
+  }
+  .episode-nav-heading {
+    align-self: center;
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0 var(--episode-gap-2) 0 0;
+  }
+  .episode-nav [data-slot="button"] {
+    flex: 0 0 auto;
+    inline-size: auto;
+    justify-content: flex-start;
+    min-inline-size: max-content;
+  }
+  .episode-nav [aria-current="page"]::after {
+    margin-inline-start: var(--episode-gap-2);
+  }
+  .episode-canvas {
+    overflow: visible;
+  }
+  /* The page itself scrolls here, so the list inside it takes more of the window
+     to keep the nested scroll from feeling like a keyhole. */
+  .episode-virtual-rows {
+    block-size: clamp(420px, 76dvh, 1000px);
+  }
+  .episode-details-panel {
+    border-block-start: 1px solid var(--chalk-line);
+    border-inline-start: 0;
+    max-block-size: none;
+    overflow: visible;
+  }
+  /* Narrow the lane so the flame fits the canvas instead of hiding its tail
+     behind a scroll edge. The ruler and heat strip follow the label column. */
+  .episode-flame-lane {
+    grid-template-columns: 130px minmax(440px, 1fr);
+  }
+  .episode-flame-ruler {
+    inset-inline: 130px var(--episode-gap-3);
+  }
+  .episode-heat-legend {
+    margin-inline-start: 130px;
+  }
+}
+
 @media (max-width: 980px) {
   .episode-debugger {
     --episode-nav-width: 132px;
@@ -1696,21 +2042,7 @@
     max-inline-size: none;
   }
   .episode-summary {
-    grid-template-columns: 1fr;
-    gap: var(--episode-gap-3);
-  }
-  .episode-summary-heading {
-    display: flex;
-    gap: var(--episode-gap-2);
-  }
-  .episode-summary-heading h2 {
-    margin-block-start: 0;
-  }
-  .episode-shell {
-    min-block-size: 0;
-  }
-  .episode-nav {
-    position: static;
+    column-gap: var(--episode-gap-4);
   }
 }
 
@@ -1753,34 +2085,42 @@
     flex: 1 1 calc(50% - var(--episode-gap-2));
   }
   .episode-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--episode-gap-4);
   }
-  .episode-shell {
-    display: block;
+  /* Severity and lifecycle keep a row of their own; the finding then gets the
+     card's full width instead of a five-line column between two pills. */
+  .episode-issue-card .episode-card-title-row {
+    flex-wrap: wrap;
   }
-  .episode-nav {
-    border-block-end: 1px solid var(--chalk-line);
-    border-inline-end: 0;
-    display: flex;
-    flex-direction: row;
-    gap: var(--episode-gap-2);
-    overflow-x: auto;
-    padding: var(--episode-gap-3) var(--episode-pad-page);
-    scrollbar-width: thin;
+  /* The order shift is what puts both pills on that row: in source order the
+     finding sits between them, so lifecycle would wrap alone under the summary. */
+  .episode-issue-card .episode-card-title-row > [data-slot="card-title"] {
+    flex: 1 0 100%;
+    order: 1;
   }
-  .episode-nav-heading {
-    align-self: center;
-    flex: 0 0 auto;
-    margin: 0;
-    padding: 0 var(--episode-gap-2) 0 0;
+  .episode-issue-footer {
+    flex-wrap: wrap;
+    gap: var(--episode-gap-3);
   }
-  .episode-nav [data-slot="button"] {
-    flex: 0 0 auto;
-    inline-size: auto;
-    min-inline-size: max-content;
+  .episode-issue-footer p {
+    flex: 1 0 100%;
   }
-  .episode-nav [aria-current="page"]::after {
-    margin-inline-start: var(--episode-gap-2);
+  /* The narrowest usable trace: the primary cell keeps whatever the two fixed
+     columns leave, and the clock-uncertainty footnote goes. */
+  .episode-trace-header,
+  .episode-trace-tree-row {
+    column-gap: var(--episode-gap-2);
+    grid-template-columns: minmax(0, 1fr) 74px 84px;
+  }
+  .episode-trace-primary {
+    column-gap: var(--episode-gap-2);
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+  .episode-trace-duration small {
+    display: none;
+  }
+  .episode-virtual-row {
+    padding-inline: var(--episode-gap-2);
   }
   .episode-canvas {
     min-block-size: 480px;
@@ -1816,6 +2156,28 @@
   .episode-lane-track {
     border-inline-start: 0;
   }
+  /* No column is wide enough to sit beside the track here, so the lane label
+     becomes a header row and the track takes the whole width. */
+  .episode-flame-lane {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .episode-flame-label {
+    align-items: baseline;
+    border-block-end: 1px solid var(--chalk-line);
+    display: flex;
+    gap: var(--episode-gap-2);
+  }
+  .episode-flame-ruler {
+    inset-inline: 0 var(--episode-gap-3);
+  }
+  .episode-flame-track {
+    border-inline-start: 0;
+    min-block-size: 48px;
+  }
+  .episode-heat-legend {
+    flex-wrap: wrap;
+    margin-inline-start: var(--episode-gap-3);
+  }
   .episode-participant-grid,
   .episode-boundary-grid {
     grid-template-columns: 1fr;
@@ -1832,10 +2194,6 @@
   }
   .episode-context-status .episode-status-pill {
     font-size: 0.62rem;
-  }
-  .episode-summary-card {
-    min-block-size: 66px;
-    padding: var(--episode-gap-2);
   }
   .episode-summary-card > strong {
     font-size: 1rem;

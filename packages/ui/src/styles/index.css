@@ -33,6 +33,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -69,6 +77,19 @@
   --input: #d5d9de;
   --ring: #0f1115;
   --radius: 0.5rem;
+
+  /* Sidebar: a chalkboard slate that anchors the paper canvas beside it. */
+  --sidebar: #171a18;
+  --sidebar-foreground: #b9c0ba;
+  --sidebar-primary: #f7f6f2;
+  --sidebar-primary-foreground: #121512;
+  --sidebar-accent: #2b302c;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #2c312d;
+  --sidebar-ring: #8fbf87;
+  --sidebar-width: 16rem;
+  --sidebar-width-icon: 3.25rem;
+  --sidebar-width-mobile: 18rem;
 
   --chalk-paper: #ffffff;
   --chalk-ink: #0f1115;
@@ -394,6 +415,14 @@
   --border: #313a3f;
   --input: #3d484e;
   --ring: #ffffff;
+  --sidebar: #121719;
+  --sidebar-foreground: #a4b0b5;
+  --sidebar-primary: #dde3e6;
+  --sidebar-primary-foreground: #0f1115;
+  --sidebar-accent: #232a2e;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #232a2e;
+  --sidebar-ring: #8fbf87;
   --chalk-paper: #1b2023;
   --chalk-ink: #dde3e6;
   --chalk-ink-2: #8b979d;
@@ -762,65 +791,72 @@ main[data-chalk][data-chalk-palette="cosmic-chalk"] > * {
 
 /* =============================================================================
    Base Styles & Scoped Reset
+
+   Lives in the `base` layer so that utilities keep beating it. Unlayered, a
+   zero-specificity `:where([data-chalk])` reset still outranks every utility,
+   which silently strips `bg-*` and `text-*` from any element that opens a
+   chalk scope.
    ============================================================================= */
 
-:where([data-chalk], .chalk-root) {
-  font-family: var(--chalk-font-family);
-  color: var(--foreground);
-  background: var(--background);
-  line-height: 1.5;
-  font-size: 16px;
-  text-align: left;
-  text-transform: none;
-  letter-spacing: normal;
-  text-size-adjust: 100%;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  isolation: isolate;
-}
+@layer base {
+  :where([data-chalk], .chalk-root) {
+    font-family: var(--chalk-font-family);
+    color: var(--foreground);
+    background: var(--background);
+    line-height: 1.5;
+    font-size: 16px;
+    text-align: left;
+    text-transform: none;
+    letter-spacing: normal;
+    text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    isolation: isolate;
+  }
 
-:where([data-chalk], .chalk-root),
-:where([data-chalk], .chalk-root) *,
-:where([data-chalk], .chalk-root) *::before,
-:where([data-chalk], .chalk-root) *::after {
-  box-sizing: border-box;
-}
+  :where([data-chalk], .chalk-root),
+  :where([data-chalk], .chalk-root) *,
+  :where([data-chalk], .chalk-root) *::before,
+  :where([data-chalk], .chalk-root) *::after {
+    box-sizing: border-box;
+  }
 
-:where([data-chalk], .chalk-root) :where(h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
-  margin: 0;
-}
+  :where([data-chalk], .chalk-root) :where(h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
+    margin: 0;
+  }
 
-:where([data-chalk], .chalk-root) :where(ul, ol) {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
+  :where([data-chalk], .chalk-root) :where(ul, ol) {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
 
-:where([data-chalk], .chalk-root) :where(button, input, optgroup, select, textarea) {
-  font: inherit;
-  color: inherit;
-  letter-spacing: inherit;
-  text-transform: none;
-  margin: 0;
-}
+  :where([data-chalk], .chalk-root) :where(button, input, optgroup, select, textarea) {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+    text-transform: none;
+    margin: 0;
+  }
 
-:where([data-chalk], .chalk-root) :where(button, [type="button"], [type="reset"], [type="submit"]) {
-  appearance: none;
-  -webkit-appearance: none;
-}
+  :where([data-chalk], .chalk-root) :where(button, [type="button"], [type="reset"], [type="submit"]) {
+    appearance: none;
+    -webkit-appearance: none;
+  }
 
-:where([data-chalk], .chalk-root) :where(img, svg, video, canvas, audio, iframe, embed, object) {
-  display: block;
-  vertical-align: middle;
-}
+  :where([data-chalk], .chalk-root) :where(img, svg, video, canvas, audio, iframe, embed, object) {
+    display: block;
+    vertical-align: middle;
+  }
 
-:where([data-chalk], .chalk-root) :where(img) {
-  max-width: 100%;
-  height: auto;
-}
+  :where([data-chalk], .chalk-root) :where(img) {
+    max-width: 100%;
+    height: auto;
+  }
 
-:where([data-chalk], .chalk-root) :where(video) {
-  max-width: 100%;
+  :where([data-chalk], .chalk-root) :where(video) {
+    max-width: 100%;
+  }
 }
 
 /* =============================================================================

@@ -26,7 +26,9 @@ export const formatTime = (value: string | undefined): string => {
   if (!value) return "unknown: not available";
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "unknown: invalid time";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  // A 24-hour clock: diagnostics correlate against server logs, and the AM/PM
+  // suffix only costs column width here.
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 };
 
 export const stateTone = (state: string): "live" | "success" | "warning" | "danger" | "neutral" => {

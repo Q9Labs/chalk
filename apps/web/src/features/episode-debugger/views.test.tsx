@@ -50,8 +50,9 @@ describe("accessible diagnostic alternatives", () => {
 
     expect(screen.getByText(/Showing 1 of 20 Events/)).toBeTruthy();
     expect(screen.getByText(/clock 50ms/)).toBeTruthy();
-    expect(screen.getByText(/received .* cursor 8/)).toBeTruthy();
-    expect(container.querySelectorAll(".episode-trace-tree-row")[1]?.getAttribute("style")).toContain("16px");
+    expect(screen.getByText(/^cursor 8 · /)).toBeTruthy();
+    expect(screen.getByText(/1\/1 checkpoints observed/)).toBeTruthy();
+    expect(container.querySelectorAll(".episode-trace-tree-row")[1]?.getAttribute("data-depth")).toBe("1");
     fireEvent.click(screen.getByRole("button", { name: "Load more Events" }));
     expect(onLoadMoreEvents).toHaveBeenCalledOnce();
   });
@@ -116,6 +117,26 @@ describe("typed details", () => {
     expect(screen.getByText("service: unknown: opaque identifier omitted")).toBeTruthy();
     expect(screen.queryByText("raw-provider-identifier")).toBeNull();
     expect(screen.getByText(affectedIssue.diagnosticReference)).toBeTruthy();
+  });
+
+  it("states an issue's declared facts on the card and leaves the absences to the panel", () => {
+    const sparseIssue = {
+      id: "issue-sparse",
+      kind: "clock_uncertainty",
+      severity: "info" as const,
+      state: "resolved" as const,
+      summary: "The client clock drifted ahead of the gateway.",
+      firstObservedAt: "2026-08-04T10:00:00.000Z",
+    };
+    const { container } = render(<IssuesView snapshot={snapshotFixture(8, { issues: [sparseIssue] })} onSelect={vi.fn()} />);
+
+    expect(screen.getByText("clock uncertainty")).toBeTruthy();
+    expect(container.querySelectorAll(".episode-inline-facts > div")).toHaveLength(1);
+    expect(screen.queryByText("unknown: not available")).toBeNull();
+    expect(screen.queryByText("Diagnostic reference")).toBeNull();
+
+    render(<DetailsPanel snapshot={snapshotFixture(8, { issues: [sparseIssue] })} selection={{ kind: "issue", value: sparseIssue }} onCopy={vi.fn()} onSelect={vi.fn()} onOpenRelated={vi.fn()} />);
+    expect(screen.getAllByText("unknown: not available").length).toBeGreaterThan(0);
   });
 
   it("renders every promised operation field and protects non-copyable IDs", () => {

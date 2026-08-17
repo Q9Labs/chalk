@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { createSpace, type Space } from "../../lib/dashboard-api";
+import { createSpace, defaultSpaceMediaPlane, type Space } from "../../lib/dashboard-api";
 import { runSpaceMutation, slugifySpaceName, SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, SpaceDialogHeading, useModalDialog } from "./SpaceDialogPrimitives";
 
 type NewSpaceDialogProps = {
@@ -35,7 +35,7 @@ export function NewSpaceDialog({ open, onClose, tenantID, onCreated }: NewSpaceD
           tenantID,
           name: name.trim(),
           slug: slug.trim(),
-          media_plane: "cf_rtk",
+          media_plane: defaultSpaceMediaPlane(),
           metadata: trimmedDescription ? { description: trimmedDescription } : undefined,
           admission_policy: { mode: admission },
         }),

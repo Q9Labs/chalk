@@ -156,9 +156,10 @@ function resolveRoute(method: string, pathname: string): BoundaryRoute | undefin
 
 function resolveTenantResourceRoute(method: string, pathname: string): BoundaryRoute | undefined {
   const segments = pathname.split("/").filter(Boolean);
-  if (segments.length < 4 || segments[0] !== "api" || segments[1] !== "tenants" || !UUID_PATTERN.test(segments[2] ?? "")) return undefined;
+  if (segments.length < 3 || segments[0] !== "api" || segments[1] !== "tenants" || !UUID_PATTERN.test(segments[2] ?? "")) return undefined;
 
   const tenantID = segments[2]!;
+  if (segments.length === 3) return method === "PATCH" ? { upstreamPath: `/v1/tenants/${tenantID}`, authenticated: true, mutation: true } : undefined;
   const resource = segments[3];
   if (resource === "spaces") return resolveSpaceRoute(method, segments, tenantID);
   if (resource === "api-keys") return resolveAPIKeyRoute(method, segments, tenantID);

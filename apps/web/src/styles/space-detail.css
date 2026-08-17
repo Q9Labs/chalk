@@ -238,7 +238,7 @@
 
 .space-detail-episode-status.status-ending {
   background: var(--wash-yellow);
-  color: #866718;
+  color: var(--app-caution-ink);
 }
 
 .space-detail-empty {
