@@ -116,6 +116,8 @@ func setProductionHostedDiagnosticsEnvironment(t *testing.T, optIn string) {
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.IntegrationsEnabled, "false")
 	t.Setenv(config.TranscriptionEnabled, "false")
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8443")
 	t.Setenv(config.ProviderBridgeServerCertFile, "/tmp/chalk-server.crt")
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/tmp/chalk-server.key")
