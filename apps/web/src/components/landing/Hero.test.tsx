@@ -12,7 +12,8 @@ describe("Hero", () => {
 
     expect(markup).toContain("Every call ends.");
     expect(markup).toContain("The Space doesn’t.");
-    expect(markup).toContain("Create an account");
+    expect(markup).toContain("Open a Space");
+    expect(markup).toContain('href="/space"');
     expect(markup).toContain('href="#product"');
     expect(markup).toContain('id="join-space"');
     expect(markup).toContain("TypeScript");

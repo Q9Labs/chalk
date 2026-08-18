@@ -89,8 +89,8 @@ export function Hero() {
           <p className="hero-sub">Chalk gives a team, or a product you are building, a space that outlasts the call. Video, chat, whiteboard, and files stay put between calls — on our infrastructure or on yours.</p>
 
           <div className="hero-ctas">
-            <a href="/sign-up" className="btn btn-primary btn-lg">
-              Create an account
+            <a href="/space" className="btn btn-primary btn-lg">
+              Open a Space
               <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
             </a>
             <a href="#product" className="btn btn-secondary btn-lg">
