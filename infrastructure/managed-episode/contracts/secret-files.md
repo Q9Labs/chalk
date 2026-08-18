@@ -5,6 +5,10 @@ registers each one in the rootless `chalk` user's Podman secret store, and then
 removes the transient registration input. The source files and environment
 files must be regular files, owned by the runtime user or root, and mode `0600`.
 Neither the release manifest nor journal output may contain their contents.
+[`runtime-inputs.json`](runtime-inputs.json) is the canonical map from each
+CI exclusion ID and SSM parameter suffix to these files. The deployment
+controller fetches exact allowlisted names, streams each Podman secret over
+standard input, verifies registration, and removes its private `/run` stage.
 
 | Source file                          | Podman secret                     | Container target                           |
 | ------------------------------------ | --------------------------------- | ------------------------------------------ |
@@ -19,5 +23,6 @@ Neither the release manifest nor journal output may contain their contents.
 The API server certificate must contain `chalk-api` in its DNS SAN. The Sync
 client certificate identity must satisfy the API's SPIFFE trust-domain and
 production-environment verifier. Certificate issuance and Podman secret
-registration are deployment responsibilities; these artifacts do not create,
-rotate, or inspect production credentials.
+rotation remain external responsibilities. The controller registers and
+reconciles the supplied values; it does not issue, rotate, or print production
+credentials.

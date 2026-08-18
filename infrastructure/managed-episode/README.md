@@ -3,8 +3,9 @@
 These artifacts package Chalk's API and SyncEngine for the ratified production
 application tier: one AWS Singapore node, rootless Podman supervised by systemd
 Quadlet, an outbound-only remotely managed Cloudflare Tunnel, PlanetScale
-PostgreSQL, and ephemeral Redis acceleration. They do not provision, mutate, or
-deploy any cloud resource.
+PostgreSQL, and ephemeral Redis acceleration. They do not declare cloud
+resources. Host deployment stays off unless a release dispatch sets
+`deploy_managed`.
 
 The runtime is fail-closed. Application services publish only on host loopback
 and the private `chalk-runtime` network. `chalk-cloudflared` starts after API and
@@ -91,31 +92,89 @@ infrastructure/managed-episode/scripts/render-runtime \
   /tmp/chalk-release/runtime
 ```
 
-The rendered Quadlets retain digest references and `Pull=never`; the boot
-workflow must pull and verify signatures, provenance, architecture, and release
-identity before starting the target. Automatic registry updates are
-intentionally disabled. Install the rendered files as rootless user Quadlets,
-install the companion user systemd units, and render runtime environment files
-from SSM according to [`env/api.env.example`](env/api.env.example),
-[`env/sync.env.example`](env/sync.env.example), and
-[`contracts/secret-files.md`](contracts/secret-files.md). Those host steps are
-outside this package because they require the pinned machine image, SSM paths,
-and deployment controller.
+The rendered Quadlets retain digest references and `Pull=never`. Automatic
+registry updates are disabled. CI waits for ECR signing to finish before it
+publishes the manifest. The host controller then checks the request, release
+identity, runtime artifact hashes, digest-only image references, and image
+architecture before cutover.
 
 Component selection is intentionally a public, pure contract. Use
 `scripts/plan-release-components` with changed paths (or `--component api`,
 `sync`, `both`, or `shared`) to obtain JSON build and restart sets. An API
-change rebuilds and restarts only API. A Sync change rebuilds and restarts only
-Sync. The units keep boot ordering through `Wants=` and `After=` without making
-one component restart stop the others. Both/shared changes restart the two
-application components. Redis is included only when a runtime dependency
-changes. Aggregate runtime health still gates promotion. Unknown paths fail
-closed.
+change rebuilds only API. A Sync change rebuilds only Sync, and each manifest
+carries the unchanged component digest forward. Runtime dependencies fail
+closed: API requires Redis, Sync requires API, and the Tunnel requires both.
+The host cuts over that dependency closure as one bounded transaction so health
+and rollback cannot leave a mixed runtime. Unknown paths fail closed.
 
-The private release controller owns staging, approvals, host installation,
-registry attestation checks, and its durable release ledger. Those control-plane
-records are deliberately outside this public package; this contract only
-describes immutable runtime inputs and the deterministic component plan.
+## SSM deployment controller
+
+The release workflow can carry a manifest from CI to one managed host without
+SSH. The deploy job is protected by the selected GitHub Environment and uses
+[`ssm/chalk-managed-episode-deploy.json`](ssm/chalk-managed-episode-deploy.json).
+The CI runner publishes that command document under a content-addressed version
+name, resolves it to a numeric SSM document version, sends one command, and
+accepts only the controller's healthy `RESULT` record.
+
+Each GitHub Environment must define these variables:
+
+- `CHALK_MANAGED_DEPLOY_ROLE_ARN`
+- `CHALK_MANAGED_AWS_REGION`
+- `CHALK_MANAGED_INSTANCE_ID`
+- `CHALK_MANAGED_LOG_GROUP_NAME`
+- `CHALK_MANAGED_PARAMETER_PREFIX`
+- `CHALK_MANAGED_SSM_DOCUMENT_NAME`
+
+The parameter prefix must be scoped as `/chalk/<environment>/...`. The exact
+suffixes and canonical IDs live in
+[`contracts/runtime-inputs.json`](contracts/runtime-inputs.json). Environment
+payloads and secret-file payloads must be SSM `SecureString` values. The
+PlanetScale proof may be `String` or `SecureString`.
+
+Missing or empty inputs fail before the stable runtime stops. A dispatch may
+name an allowed missing environment or secret-file input through the
+`managed_secret_exclusions` input. The PlanetScale durability proof is always
+mandatory and cannot be excluded.
+CI converts each comma-separated ID to one exact `--exclude-secret` argument.
+Unknown IDs, duplicates, wildcards, and exclusions that were not supplied by
+the runner fail. An exclusion only permits the file to be absent; the release
+must still pass full runtime health.
+
+On the host, `chalk-deployment-controller` performs this transaction:
+
+1. Validate the versioned request, manifest, source artifacts, SSM response,
+   image digests, and host architecture.
+2. Fetch all allowlisted SSM inputs with decryption and record their exact
+   versions without recording values.
+3. Render and validate the candidate while the stable runtime is still live,
+   then pull its immutable images.
+4. Stop the runtime, atomically publish `/run/chalk/env` and the checksummed
+   release identity, stream Podman secrets over standard input, start the hard
+   dependency target, and run aggregate health with bounded retries.
+5. Promote only after health. Any activation, health, or promotion failure
+   fences the candidate and restores the prior rendered runtime and exact SSM
+   parameter versions. A failed rollback leaves the runtime fenced.
+
+A healthy release writes its non-secret manifest, rendered runtime, active
+pointer, and append-only ledger under `/var/lib/chalk`. The root
+`chalk-runtime-restore.service` retries transient boot failures. After a reboot
+clears `/run`, it reads the active pointer, fetches the recorded SSM versions,
+rebuilds the env and release identity, reconciles the rootless Podman secrets,
+and starts the same health-checked release. Plaintext inputs stay under `/run`
+only. Promoted env files remain there for the services; transient secret source
+files are removed with the controller's private staging directory.
+
+The CI role needs narrowly scoped SSM document version and Run Command access.
+The host role needs `ssm:GetParameters` for its environment prefix, KMS decrypt
+for the matching key and context, and read access to the immutable image
+repositories. The SSM document exposes named fields only; it has no arbitrary
+command parameter.
+
+The pinned host image must provide the `chalk` runtime user with a lingering
+user manager, rootless Podman with instance-role ECR authentication, the SSM
+agent, AWS CLI, `curl`, `jq`, OpenSSL, and standard Linux archive and systemd
+tools. The controller checks these paths through its preparation work and fails
+before promotion when a prerequisite is missing.
 
 For a single-architecture Graviton release, build both application images for
 `linux/arm64` and pass `--architectures linux/arm64`. The manifest must describe
@@ -136,14 +195,20 @@ Quadlet invariants. It never prints environment or secret values.
 
 ```bash
 infrastructure/managed-episode/scripts/validate-runtime \
-  --env-root /run/chalk/env \
-  --secret-root /run/chalk/secret-inputs \
-  --manifest /run/chalk/release/release-manifest.json \
-  --sync-proof /run/chalk/evidence/planetscale-sync-proof.json \
-  --rendered-root /run/chalk/release/runtime
+  --env-root /tmp/chalk-inputs/env \
+  --secret-root /tmp/chalk-inputs/secret-inputs \
+  --manifest /tmp/chalk-release/release-manifest.json \
+  --sync-proof /tmp/chalk-inputs/evidence/planetscale-sync-proof.json \
+  --rendered-root /tmp/chalk-release/runtime
 
 infrastructure/managed-episode/scripts/test-config
+infrastructure/managed-episode/scripts/test-deployment-controller
+node --test scripts/deploy/deploy-managed-release.test.mjs
 ```
+
+The controller runs this validator against its private `/run` stage. It removes
+the transient secret inputs after Podman registration, so they are not kept in
+the promoted release directory.
 
 The host-side `chalk-runtime-watchdog` checks user-unit activity, local API and
 Sync readiness, cloudflared's `/ready` endpoint, release-manifest integrity,

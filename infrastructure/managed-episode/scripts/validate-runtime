@@ -8,9 +8,10 @@ manifest=""
 sync_proof=""
 rendered_root=""
 allow_dirty=false
+excluded_secrets=""
 
 usage() {
-  echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--rendered-root <dir>] [--allow-dirty]" >&2
+  echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--rendered-root <dir>] [--excluded-secrets <sorted-comma-separated-ids>] [--allow-dirty]" >&2
 }
 
 while (($# > 0)); do
@@ -21,6 +22,7 @@ while (($# > 0)); do
     --sync-proof) sync_proof="${2:-}"; shift 2 ;;
     --rendered-root) rendered_root="${2:-}"; shift 2 ;;
     --allow-dirty) allow_dirty=true; shift ;;
+    --excluded-secrets) excluded_secrets="${2:-}"; shift 2 ;;
     *) usage; exit 2 ;;
   esac
 done
@@ -31,6 +33,19 @@ if [[ -z "${env_root}" || -z "${secret_root}" || -z "${manifest}" || -z "${sync_
   usage
   exit 2
 fi
+
+if [[ -n "${excluded_secrets}" ]]; then
+  excluded_secrets="$(jq -Rcer --argjson allowed '["api-env","sync-env","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]' '
+    split(",") |
+    if length > 0 and all(.[]; length > 0) and (map(. as $id | $allowed | index($id) != null) | all) and (.[0:] == (sort | unique)) then . else error end
+  ' <<<"${excluded_secrets}")" || { echo "excluded runtime input IDs are invalid" >&2; exit 2; }
+else
+  excluded_secrets='[]'
+fi
+
+is_excluded() {
+  jq -e --arg id "$1" '.[] | select(. == $id)' <<<"${excluded_secrets}" >/dev/null 2>&1
+}
 
 fail() {
   echo "FAIL $1" >&2
@@ -52,6 +67,17 @@ secure_regular_file() {
   fi
 }
 
+certificate_matches_private_key() {
+  local certificate="$1"
+  local private_key="$2"
+  [[ "$(openssl x509 -in "$certificate" -pubkey -noout 2>/dev/null)" == "$(openssl pkey -in "$private_key" -pubout 2>/dev/null)" ]] || fail "certificate and private key do not match: ${certificate}"
+}
+
+input_is_absent() {
+  local file="$1"
+  [[ ! -e "${file}" && ! -L "${file}" ]]
+}
+
 env_value() {
   local file="$1"
   local name="$2"
@@ -69,11 +95,6 @@ require_env() {
 
 api_env="${env_root}/api.env"
 sync_env="${env_root}/sync.env"
-secure_regular_file "${api_env}"
-secure_regular_file "${sync_env}"
-if grep -Eq '__[A-Z0-9_]+__' "${api_env}" "${sync_env}"; then
-  fail "runtime environment files contain unresolved placeholders"
-fi
 
 api_required=(
   CHALK_API_ADDR CHALK_API_CORS_ALLOWED_ORIGINS CHALK_API_ENV
@@ -117,8 +138,25 @@ sync_required=(
   CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE
   CHALK_SYNC_PROVIDER_BRIDGE_CAFILE
 )
-for name in "${api_required[@]}"; do require_env "${api_env}" "${name}"; done
-for name in "${sync_required[@]}"; do require_env "${sync_env}" "${name}"; done
+
+api_available=true
+sync_available=true
+if is_excluded api-env && input_is_absent "${api_env}"; then
+  api_available=false
+else
+  secure_regular_file "${api_env}"
+  grep -Eq '__[A-Z0-9_]+__' "${api_env}" && fail "runtime API environment contains unresolved placeholders"
+  for name in "${api_required[@]}"; do require_env "${api_env}" "${name}"; done
+fi
+if is_excluded sync-env && input_is_absent "${sync_env}"; then
+  sync_available=false
+else
+  secure_regular_file "${sync_env}"
+  grep -Eq '__[A-Z0-9_]+__' "${sync_env}" && fail "runtime Sync environment contains unresolved placeholders"
+  for name in "${sync_required[@]}"; do require_env "${sync_env}" "${name}"; done
+fi
+
+if [[ "$api_available" == true && "$sync_available" == true ]]; then
 
 ops_ingest_token="$(env_value "${api_env}" CHALK_OPS_INGEST_TOKEN)"
 ops_ingest_token_bytes="$(LC_ALL=C printf '%s' "${ops_ingest_token}" | LC_ALL=C wc -c | tr -d '[:space:]')"
@@ -204,6 +242,7 @@ for file in "${api_env}" "${sync_env}"; do
   [[ "${database_url}" =~ ^postgres(ql)?:// ]] || fail "CHALK_DATABASE_URL must be a PostgreSQL URL"
   [[ "${database_url}" == *'sslmode=verify-full'* ]] || fail "CHALK_DATABASE_URL must use sslmode=verify-full"
 done
+fi
 
 certificates=(
   provider-bridge/api-server.crt
@@ -214,15 +253,39 @@ certificates=(
 keys=(provider-bridge/api-server.key provider-bridge/sync-client.key)
 for relative in "${certificates[@]}"; do
   file="${secret_root}/${relative}"
+  case "${relative}" in
+    provider-bridge/api-server.crt) input_id=provider-bridge-api-server-cert ;;
+    provider-bridge/sync-client-ca.crt) input_id=provider-bridge-sync-client-ca ;;
+    provider-bridge/sync-client.crt) input_id=provider-bridge-sync-client-cert ;;
+    provider-bridge/api-server-ca.crt) input_id=provider-bridge-api-server-ca ;;
+  esac
+  if is_excluded "${input_id}" && input_is_absent "${file}"; then
+    continue
+  fi
   secure_regular_file "${file}"
   openssl x509 -in "${file}" -noout >/dev/null 2>&1 || fail "invalid X.509 input: ${file}"
 done
 for relative in "${keys[@]}"; do
   file="${secret_root}/${relative}"
+  case "${relative}" in
+    provider-bridge/api-server.key) input_id=provider-bridge-api-server-key ;;
+    provider-bridge/sync-client.key) input_id=provider-bridge-sync-client-key ;;
+  esac
+  if is_excluded "${input_id}" && input_is_absent "${file}"; then
+    continue
+  fi
   secure_regular_file "${file}"
   openssl pkey -in "${file}" -noout >/dev/null 2>&1 || fail "invalid private-key input: ${file}"
 done
-secure_regular_file "${secret_root}/cloudflare/tunnel-token"
+if ! input_is_absent "${secret_root}/provider-bridge/api-server.crt" && ! input_is_absent "${secret_root}/provider-bridge/api-server.key"; then
+  certificate_matches_private_key "${secret_root}/provider-bridge/api-server.crt" "${secret_root}/provider-bridge/api-server.key"
+fi
+if ! input_is_absent "${secret_root}/provider-bridge/sync-client.crt" && ! input_is_absent "${secret_root}/provider-bridge/sync-client.key"; then
+  certificate_matches_private_key "${secret_root}/provider-bridge/sync-client.crt" "${secret_root}/provider-bridge/sync-client.key"
+fi
+if ! is_excluded cloudflare-tunnel-token || ! input_is_absent "${secret_root}/cloudflare/tunnel-token"; then
+  secure_regular_file "${secret_root}/cloudflare/tunnel-token"
+fi
 
 secure_regular_file "${sync_proof}"
 jq -e '

@@ -12,6 +12,23 @@ on:
         required: true
         default: true
         type: boolean
+      deploy_managed:
+        description: Deploy the managed release through the pinned SSM controller
+        required: true
+        default: false
+        type: boolean
+      managed_environment:
+        description: GitHub Environment and host environment to deploy
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      managed_secret_exclusions:
+        description: Comma-separated canonical runtime input IDs allowed to be missing
+        required: false
+        type: string
       stable_manifest_run_id:
         description: Run ID whose release manifest is the current stable baseline; omit only for the first release
         required: false
@@ -43,7 +60,7 @@ concurrency:
 jobs:
   plan-managed:
     name: Plan managed components
-    if: inputs.release_managed
+    if: inputs.release_managed || inputs.deploy_managed
     runs-on: ubuntu-24.04
     outputs:
       build_set: ${{ steps.plan.outputs.build_set }}
@@ -57,6 +74,9 @@ jobs:
           fetch-depth: 0
 
       - name: Verify exact release SHA
+        env:
+          DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
+          RELEASE_MANAGED: ${{ inputs.release_managed }}
         run: |
           if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "target_sha must be a full lowercase commit SHA" >&2
@@ -66,6 +86,16 @@ jobs:
             echo "checkout does not match target_sha" >&2
             exit 1
           fi
+          if [[ "$DEPLOY_MANAGED" == "true" && "$RELEASE_MANAGED" != "true" ]]; then
+            echo "deploy_managed requires release_managed" >&2
+            exit 1
+          fi
+
+      - name: Validate managed runtime contracts
+        run: |
+          infrastructure/managed-episode/scripts/test-config
+          infrastructure/managed-episode/scripts/test-deployment-controller
+          node --test scripts/deploy/deploy-managed-release.test.mjs
 
       - name: Download stable release manifest
         if: inputs.stable_manifest_run_id != ''
@@ -80,6 +110,7 @@ jobs:
       - name: Plan changed components
         id: plan
         env:
+          DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
           PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
         run: |
           set -euo pipefail
@@ -113,6 +144,10 @@ jobs:
           jq -e '.build_set == [] or .build_set == ["api"] or .build_set == ["sync"] or .build_set == ["api", "sync"]' "$PLAN_ROOT/plan.json" >/dev/null
           build_set="$(jq -c '.build_set' "$PLAN_ROOT/plan.json")"
           should_publish="$(jq -r 'if (.build_set | length) > 0 then "true" else "false" end' "$PLAN_ROOT/plan.json")"
+          if [[ "$DEPLOY_MANAGED" == "true" && "$should_publish" != "true" ]]; then
+            echo "deploy_managed requires at least one changed managed component" >&2
+            exit 1
+          fi
           release_id="managed-episode-$(date -u +%Y%m%dT%H%M%SZ)-${TARGET_SHA:0:8}-$(openssl rand -hex 4)"
           {
             printf 'build_set=%s\n' "$build_set"
@@ -308,6 +343,101 @@ jobs:
           path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}.json
           retention-days: 90
           if-no-files-found: error
+
+  deploy-managed:
+    name: Deploy managed release to ${{ inputs.managed_environment }}
+    needs: [plan-managed, publish-managed-manifest]
+    if: inputs.deploy_managed && needs.publish-managed-manifest.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ${{ inputs.managed_environment }}
+    concurrency:
+      group: deploy-managed-${{ inputs.managed_environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Download exact release manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/managed-release
+
+      - name: Validate managed deployment configuration
+        env:
+          CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+          CHALK_MANAGED_DEPLOY_ROLE_ARN: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          CHALK_MANAGED_INSTANCE_ID: ${{ vars.CHALK_MANAGED_INSTANCE_ID }}
+          CHALK_MANAGED_LOG_GROUP_NAME: ${{ vars.CHALK_MANAGED_LOG_GROUP_NAME }}
+          CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
+          CHALK_MANAGED_SSM_DOCUMENT_NAME: ${{ vars.CHALK_MANAGED_SSM_DOCUMENT_NAME }}
+        run: |
+          set -euo pipefail
+          required_variables=(
+            CHALK_MANAGED_AWS_REGION
+            CHALK_MANAGED_DEPLOY_ROLE_ARN
+            CHALK_MANAGED_INSTANCE_ID
+            CHALK_MANAGED_LOG_GROUP_NAME
+            CHALK_MANAGED_PARAMETER_PREFIX
+            CHALK_MANAGED_SSM_DOCUMENT_NAME
+          )
+          for variable_name in "${required_variables[@]}"; do
+            if [[ -z "${!variable_name:-}" ]]; then
+              echo "GitHub Environment variable ${variable_name} is required" >&2
+              exit 1
+            fi
+          done
+
+      - name: Configure managed deployment credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+
+      - name: Deploy, health-check, and prove release
+        env:
+          CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+          CHALK_MANAGED_INSTANCE_ID: ${{ vars.CHALK_MANAGED_INSTANCE_ID }}
+          CHALK_MANAGED_LOG_GROUP_NAME: ${{ vars.CHALK_MANAGED_LOG_GROUP_NAME }}
+          CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
+          CHALK_MANAGED_SSM_DOCUMENT_NAME: ${{ vars.CHALK_MANAGED_SSM_DOCUMENT_NAME }}
+          MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
+          MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions }}
+          RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          manifest="${{ runner.temp }}/managed-release/${RELEASE_ID}.json"
+          args=(
+            --manifest "$manifest"
+            --environment "$MANAGED_ENVIRONMENT"
+            --region "$CHALK_MANAGED_AWS_REGION"
+            --instance-id "$CHALK_MANAGED_INSTANCE_ID"
+            --document-name "$CHALK_MANAGED_SSM_DOCUMENT_NAME"
+            --document infrastructure/managed-episode/ssm/chalk-managed-episode-deploy.json
+            --parameter-prefix "$CHALK_MANAGED_PARAMETER_PREFIX"
+            --request-id "${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+            --log-group-name "$CHALK_MANAGED_LOG_GROUP_NAME"
+          )
+          while IFS= read -r secret_id; do
+            secret_id="${secret_id#"${secret_id%%[![:space:]]*}"}"
+            secret_id="${secret_id%"${secret_id##*[![:space:]]}"}"
+            if [[ -n "$secret_id" ]]; then
+              args+=(--exclude-secret "$secret_id")
+            fi
+          done < <(printf '%s\n' "$MANAGED_SECRET_EXCLUSIONS" | tr ',' '\n')
+
+          node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
 
   deploy-web:
     name: Deploy web fallback

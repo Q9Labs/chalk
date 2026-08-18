@@ -29,6 +29,13 @@ elif command -v sha256sum >/dev/null; then
   if ! (cd "$(dirname "${release_manifest}")" && sha256sum --check --status "$(basename "${release_checksum}")"); then
     failures+=(release-identity)
   fi
+elif command -v shasum >/dev/null; then
+  expected_release_checksum="$(awk '{print $1}' "${release_checksum}")"
+  if [[ ! "${expected_release_checksum}" =~ ^[0-9a-f]{64}$ ]] || [[ "$(shasum -a 256 "${release_manifest}" | awk '{print $1}')" != "${expected_release_checksum}" ]]; then
+    failures+=(release-identity)
+  fi
+else
+  failures+=(release-identity)
 fi
 
 disk_used="$(df -P / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"
