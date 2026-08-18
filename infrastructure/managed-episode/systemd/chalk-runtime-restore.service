@@ -1,0 +1,19 @@
+[Unit]
+Description=Restore the active Chalk managed Episode release
+After=network-online.target
+Wants=network-online.target
+Before=chalk-runtime.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/chalk-deployment-controller restore
+RemainAfterExit=yes
+User=root
+Group=root
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "2.2",
+  "description": "Deploy an immutable Chalk managed Episode release with the versioned host controller.",
+  "parameters": {
+    "SourceRevision": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[0-9a-f]{40}$",
+      "minChars": 40,
+      "maxChars": 40
+    },
+    "ManifestBase64": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[A-Za-z0-9+/]+={0,2}$",
+      "minChars": 1,
+      "maxChars": 16777216
+    },
+    "ReleaseId": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$",
+      "minChars": 1,
+      "maxChars": 128
+    },
+    "Environment": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minChars": 1,
+      "maxChars": 63
+    },
+    "AwsRegion": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minChars": 1,
+      "maxChars": 32
+    },
+    "ParameterPrefix": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
+      "minChars": 2,
+      "maxChars": 2048
+    },
+    "ExcludedSecrets": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^\\[[A-Za-z0-9_.,\"-]*\\]$",
+      "minChars": 2,
+      "maxChars": 4096
+    },
+    "RequestId": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$",
+      "minChars": 1,
+      "maxChars": 128
+    },
+    "RequestedAt": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$",
+      "minChars": 20,
+      "maxChars": 30
+    },
+    "ControllerVersion": {
+      "type": "String",
+      "default": "1",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^1$",
+      "minChars": 1,
+      "maxChars": 1
+    }
+  },
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "deployRelease",
+      "precondition": {
+        "StringEquals": ["platformType", "Linux"]
+      },
+      "inputs": {
+        "runCommand": [
+          "set -euo pipefail",
+          "umask 077",
+          "work_root=\"$(mktemp -d /run/chalk-ssm.XXXXXX)\"",
+          "cleanup() { rm -rf -- \"$work_root\"; }",
+          "trap cleanup EXIT",
+          "archive=\"$work_root/source.tar.gz\"",
+          "source_root=\"$work_root/source\"",
+          "mkdir -m 0700 \"$source_root\"",
+          "curl --fail --location --silent --show-error --output \"$archive\" \"https://github.com/Q9Labs/chalk/archive/$SSM_SourceRevision.tar.gz\"",
+          "tar --extract --gzip --file \"$archive\" --directory \"$source_root\" --strip-components=1",
+          "manifest=\"$work_root/release-manifest.json\"",
+          "printf '%s' \"$SSM_ManifestBase64\" | base64 --decode >\"$manifest\"",
+          "chmod 0600 \"$manifest\"",
+          "request=\"$work_root/deployment-request.json\"",
+          "jq -n --arg release_id \"$SSM_ReleaseId\" --arg source_revision \"$SSM_SourceRevision\" --arg environment \"$SSM_Environment\" --arg aws_region \"$SSM_AwsRegion\" --arg parameter_prefix \"$SSM_ParameterPrefix\" --arg request_id \"$SSM_RequestId\" --arg requested_at \"$SSM_RequestedAt\" --argjson controller_version \"$SSM_ControllerVersion\" --argjson excluded_secrets \"$SSM_ExcludedSecrets\" '{schema_version:1,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,excluded_secrets:$excluded_secrets,request_id:$request_id,requested_at:$requested_at}' >\"$request\"",
+          "chmod 0600 \"$request\"",
+          "controller=\"$source_root/infrastructure/managed-episode/controller/chalk-deployment-controller\"",
+          "test -f \"$controller\"",
+          "chmod 0755 \"$controller\"",
+          "exec \"$controller\" deploy --request \"$request\" --manifest \"$manifest\" --source-root \"$source_root\""
+        ]
+      }
+    }
+  ]
+}

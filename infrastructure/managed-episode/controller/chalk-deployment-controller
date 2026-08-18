@@ -1,0 +1,745 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly CONTROLLER_VERSION=1
+readonly CONTROLLER_NAME=chalk-deployment-controller
+CONTROLLER_DIR="$(cd "$(dirname "$0")" && pwd)"
+readonly CONTROLLER_DIR
+DEFAULT_MANAGED_ROOT="$(cd "${CONTROLLER_DIR}/.." && pwd)"
+readonly DEFAULT_MANAGED_ROOT
+readonly REQUEST_SCHEMA_KEYS='["aws_region","controller_version","environment","excluded_secrets","parameter_prefix","release_id","request_id","requested_at","schema_version","source_revision"]'
+readonly INPUT_IDS='["api-env","sync-env","planetscale-sync-proof","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]'
+
+state_root="${CHALK_CONTROLLER_STATE_ROOT:-/var/lib/chalk}"
+run_root="${CHALK_CONTROLLER_RUN_ROOT:-/run/chalk}"
+runtime_user="${CHALK_RUNTIME_USER:-chalk}"
+systemd_root="${CHALK_CONTROLLER_SYSTEMD_ROOT:-/etc/systemd/system}"
+systemctl_bin="${CHALK_SYSTEMCTL_BIN:-systemctl}"
+podman_bin="${CHALK_PODMAN_BIN:-podman}"
+aws_bin="${CHALK_AWS_BIN:-aws}"
+health_script="${CHALK_HEALTH_SCRIPT:-}"
+lock_file="${CHALK_CONTROLLER_LOCK_FILE:-${state_root}/deployment.lock}"
+active_pointer="${CHALK_ACTIVE_RELEASE_POINTER:-${state_root}/active-release.json}"
+ledger_file="${CHALK_DEPLOYMENT_LEDGER:-${state_root}/deployment-ledger.jsonl}"
+runtime_home="${CHALK_RUNTIME_HOME:-/home/${runtime_user}}"
+runtime_quadlet_dir="${CHALK_RUNTIME_QUADLET_DIR:-${runtime_home}/.config/containers/systemd}"
+runtime_systemd_dir="${CHALK_RUNTIME_SYSTEMD_DIR:-${runtime_home}/.config/systemd/user}"
+direct_user_commands="${CHALK_CONTROLLER_DIRECT_USER_COMMANDS:-false}"
+controller_install_dir="${CHALK_CONTROLLER_INSTALL_DIR:-/usr/local/libexec}"
+allow_non_root_tests="${CHALK_CONTROLLER_ALLOW_NON_ROOT_TESTS:-false}"
+
+request_path=""
+manifest_path=""
+source_root=""
+request_release_id=""
+request_source_revision=""
+request_environment=""
+request_region=""
+request_prefix=""
+request_id=""
+requested_at=""
+excluded_json='[]'
+excluded_csv=""
+stage_root=""
+versions_json='[]'
+missing_json='[]'
+input_records_json='[]'
+fallback_lock_directory=""
+
+usage() {
+  cat >&2 <<'USAGE'
+usage:
+  chalk-deployment-controller --version
+  chalk-deployment-controller deploy --request PATH --manifest PATH --source-root PATH
+  chalk-deployment-controller restore
+USAGE
+}
+
+fail() {
+  if [[ -n "${fallback_lock_directory}" ]]; then
+    rmdir "${fallback_lock_directory}" 2>/dev/null || true
+    fallback_lock_directory=""
+  fi
+  printf 'FAIL %s\n' "$1" >&2
+  exit 1
+}
+
+emit_result() {
+  local status="$1"
+  local health="$2"
+  local rolled_back="$3"
+  local error_message="${4:-}"
+  if [[ -n "${fallback_lock_directory}" ]]; then
+    rmdir "${fallback_lock_directory}" 2>/dev/null || true
+    fallback_lock_directory=""
+  fi
+  jq -cn \
+    --arg status "$status" --arg release_id "$request_release_id" --arg health "$health" \
+    --arg request_id "$request_id" --arg error "$error_message" --argjson rolled_back "$rolled_back" \
+    '{schema_version:1,status:$status,release_id:$release_id,health:$health,rolled_back:$rolled_back,request_id:$request_id} + (if $error == "" then {} else {error:$error} end)' \
+    | sed 's/^/RESULT /'
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "required command is unavailable: $1"
+}
+
+is_absolute_path() {
+  [[ "$1" == /* && "$1" != *$'\n'* && "$1" != *$'\r'* && "$1" != *$'\t'* ]]
+}
+
+reject_symlink_components() {
+  local path="$1"
+  is_absolute_path "$path" || fail "path must be absolute"
+  local current="/"
+  local component
+  local -a components=()
+  IFS='/' read -r -a components <<<"${path#/}"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != "." && "$component" != ".." ]] || fail "path contains an unsafe component"
+    current="${current%/}/${component}"
+    if [[ -L "$current" ]]; then
+      case "$current" in
+        /tmp|/var) ;;
+        *) fail "path contains a symlink" ;;
+      esac
+    fi
+  done
+}
+
+require_regular_file() {
+  local path="$1"
+  reject_symlink_components "$path"
+  [[ -f "$path" && ! -L "$path" ]] || fail "path is not a regular file: ${path}"
+}
+
+require_directory() {
+  local path="$1"
+  reject_symlink_components "$path"
+  [[ -d "$path" && ! -L "$path" ]] || fail "path is not a directory: ${path}"
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+    return
+  fi
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+
+atomic_write() {
+  local destination="$1"
+  local contents_file="$2"
+  local parent
+  parent="$(dirname "$destination")"
+  mkdir -p "$parent"
+  chmod 700 "$parent"
+  local temporary
+  temporary="$(mktemp "${parent}/.atomic.XXXXXX")"
+  chmod 600 "$temporary"
+  cp "$contents_file" "$temporary"
+  mv -f "$temporary" "$destination"
+  chmod 600 "$destination"
+}
+
+json_is_excluded() {
+  local id="$1"
+  jq -e --arg id "$id" '.[] | select(. == $id)' <<<"${excluded_json}" >/dev/null 2>&1
+}
+
+load_exclusions() {
+  local request_file="$1"
+  excluded_json="$(jq -cer '.excluded_secrets' "$request_file")" || fail "excluded_secrets is malformed"
+  jq -e --argjson allowed "$INPUT_IDS" '
+    type == "array" and
+    (map(type == "string") | all) and
+    (map(. as $id | $allowed | index($id) != null) | all) and
+    (.[0:] == (sort | unique))
+  ' <<<"${excluded_json}" >/dev/null || fail "excluded_secrets must be sorted, unique canonical IDs"
+  excluded_csv="$(jq -r 'join(",")' <<<"${excluded_json}")"
+}
+
+validate_request() {
+  require_regular_file "$request_path"
+  jq -e --argjson expected_keys "$REQUEST_SCHEMA_KEYS" '
+    type == "object" and (keys | sort) == $expected_keys and
+    .schema_version == 1 and .controller_version == 1 and
+    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
+    (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+    (.environment | type == "string" and test("^[a-z0-9]+(?:-[a-z0-9]+)*$")) and
+    (.aws_region | type == "string" and test("^[a-z0-9]+(?:-[a-z0-9]+)*$")) and
+    (.parameter_prefix | type == "string" and test("^/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
+    (.request_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
+    (.requested_at | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"))
+  ' "$request_path" >/dev/null || fail "deployment request is invalid"
+  load_exclusions "$request_path"
+  request_release_id="$(jq -er '.release_id' "$request_path")"
+  request_source_revision="$(jq -er '.source_revision' "$request_path")"
+  request_environment="$(jq -er '.environment' "$request_path")"
+  request_region="$(jq -er '.aws_region' "$request_path")"
+  request_prefix="$(jq -er '.parameter_prefix' "$request_path")"
+  [[ "$request_prefix" != *'//' && "$request_prefix" != *'..'* ]] || fail "parameter_prefix contains an unsafe path component"
+  request_id="$(jq -er '.request_id' "$request_path")"
+  requested_at="$(jq -er '.requested_at' "$request_path")"
+}
+
+validate_inventory() {
+  local inventory="$1"
+  require_regular_file "$inventory"
+  jq -e --argjson expected "$INPUT_IDS" '
+    type == "object" and (keys | sort) == ["$id","$schema","inputs","schema_version"] and .schema_version == 1 and
+    (.inputs | type == "array" and length == 10 and
+      (map(.id) == $expected) and
+      all(.[];
+        type == "object" and
+        (keys | sort) == ["destination", "id", "kind", "suffix"] and
+        (.id | type == "string") and (.suffix | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
+        (.destination | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
+        (.kind | type == "string" and length > 0)
+      )
+    )
+  ' "$inventory" >/dev/null || fail "runtime input inventory is invalid"
+}
+
+validate_manifest() {
+  require_regular_file "$manifest_path"
+  jq -e --argjson allowed "$INPUT_IDS" '
+    type == "object" and
+    (.schema_version == 1 or .schema_version == 2) and
+    (if .schema_version == 1 then
+      (keys | sort) == ["architectures","database_compatibility","generated_at","images","protocol_compatibility","release_id","runtime_artifacts","schema_version","source_revision","source_tree_state"]
+    else
+      (keys | sort) == ["affected_components","architectures","component_releases","database_compatibility","generated_at","images","protocol_compatibility","release_id","runtime_artifacts","schema_version","source_revision","source_tree_state"]
+    end) and
+    (.release_id | type == "string" and length > 0) and
+    (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+    (.source_tree_state == "clean") and
+    (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64","linux/arm64"]) and
+    (.database_compatibility == {engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null}) and
+    (.protocol_compatibility == {sync:1}) and
+    (if .schema_version == 2 then
+      ((.affected_components == ["api"] or .affected_components == ["sync"] or .affected_components == ["api","sync"]) and
+       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$")))))
+    else true end) and
+    (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
+    (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$")))
+  ' "$manifest_path" >/dev/null || fail "release manifest is invalid"
+  [[ "$(jq -er '.release_id' "$manifest_path")" == "$request_release_id" ]] || fail "request release_id does not match manifest"
+  [[ "$(jq -er '.source_revision' "$manifest_path")" == "$request_source_revision" ]] || fail "request source_revision does not match manifest"
+
+  while IFS=$'\t' read -r relative expected_digest; do
+    [[ "$relative" != /* && "$relative" != *$'\n'* && "$relative" != *$'\r'* && "$relative" != *$'\t'* ]] || fail "manifest contains an unsafe runtime artifact path"
+    [[ "$relative" != *".."* ]] || fail "manifest contains an unsafe runtime artifact path"
+    local artifact="${source_root}/${relative}"
+    require_regular_file "$artifact"
+    [[ "$(sha256_file "$artifact")" == "$expected_digest" ]] || fail "runtime artifact digest mismatch"
+  done < <(jq -r '.runtime_artifacts | to_entries[] | [.key, .value] | @tsv' "$manifest_path")
+}
+
+prepare_stage() {
+  reject_symlink_components "$run_root"
+  mkdir -p "$run_root"
+  chmod 700 "$run_root"
+  stage_root="$(mktemp -d "${run_root}/.deployment.XXXXXX")"
+  chmod 700 "$stage_root"
+  trap 'if [[ -n "${stage_root}" && -d "${stage_root}" ]]; then rm -rf -- "${stage_root}"; fi' EXIT
+}
+
+inventory_value() {
+  local field="$1"
+  local id="$2"
+  jq -er --arg id "$id" ".inputs[] | select(.id == \$id) | .${field}" "$source_root/infrastructure/managed-episode/contracts/runtime-inputs.json"
+}
+
+record_input() {
+  local id="$1"
+  local suffix="$2"
+  local destination="$3"
+  local kind="$4"
+  local name="$5"
+  local version="$6"
+  local missing="$7"
+  input_records_json="$(jq -c \
+    --arg id "$id" --arg suffix "$suffix" --arg destination "$destination" --arg kind "$kind" \
+    --arg name "$name" --arg version "$version" --argjson missing "$missing" \
+    '. + [{id:$id,suffix:$suffix,destination:$destination,kind:$kind,name:$name,version:(if $version == "" then null else ($version | tonumber) end),missing:$missing}]' \
+    <<<"${input_records_json}")"
+}
+
+write_input_file() {
+  local destination="$1"
+  local value="$2"
+  local target="${stage_root}/${destination}"
+  reject_symlink_components "$(dirname "$target")"
+  mkdir -p "$(dirname "$target")"
+  chmod 700 "$(dirname "$target")"
+  [[ ! -e "$target" || ! -L "$target" ]] || fail "runtime input destination is a symlink"
+  umask 077
+  printf '%s' "$value" >"$target"
+  chmod 600 "$target"
+}
+
+fetch_deployment_inputs() {
+  local inventory="$source_root/infrastructure/managed-episode/contracts/runtime-inputs.json"
+  validate_inventory "$inventory"
+  local -a ids suffixes destinations kinds names
+  mapfile -t ids < <(jq -r '.inputs[].id' "$inventory")
+  mapfile -t suffixes < <(jq -r '.inputs[].suffix' "$inventory")
+  mapfile -t destinations < <(jq -r '.inputs[].destination' "$inventory")
+  mapfile -t kinds < <(jq -r '.inputs[].kind' "$inventory")
+  local index
+  for index in "${!ids[@]}"; do
+    names[index]="${request_prefix}/${suffixes[index]}"
+    [[ "${names[index]}" != *'//' && "${names[index]}" != *'..'* ]] || fail "runtime input parameter name is unsafe"
+  done
+
+  local response_file="${stage_root}/ssm-response.json"
+  local aws_error="${stage_root}/ssm-error.log"
+  if ! "$aws_bin" ssm get-parameters --names "${names[@]}" --with-decryption --region "$request_region" --output json >"$response_file" 2>"$aws_error"; then
+    fail "SSM runtime input fetch failed"
+  fi
+  local expected_names_json
+  expected_names_json="$(printf '%s\n' "${names[@]}" | jq -R . | jq -s .)"
+  jq -e --argjson expected "$expected_names_json" '
+    (.Parameters | type == "array" and all(.[]; type == "object" and (.Name | type == "string") and (.Value? | type == "string" or . == null) and (.Version? | type == "number"))) and
+    (.InvalidParameters? | if . == null then true else type == "array" and all(.[]; type == "string") end) and
+    (([.Parameters[].Name] - $expected) | length) == 0 and
+    (((.InvalidParameters // []) - $expected) | length) == 0 and
+    ([.Parameters[].Name] | sort | unique | length) == ([.Parameters[].Name] | length)
+  ' "$response_file" >/dev/null 2>&1 || fail "SSM response is malformed or contains an unallowlisted input"
+  versions_json='[]'
+  missing_json='[]'
+  input_records_json='[]'
+  local id suffix destination kind name count value version type
+  for index in "${!ids[@]}"; do
+    id="${ids[index]}"
+    suffix="${suffixes[index]}"
+    destination="${destinations[index]}"
+    kind="${kinds[index]}"
+    name="${names[index]}"
+    count="$(jq --arg name "$name" '[.Parameters[] | select(.Name == $name)] | length' "$response_file")"
+    if [[ "$count" == 0 ]]; then
+      if json_is_excluded "$id"; then
+        missing_json="$(jq -c --arg id "$id" '. + [$id]' <<<"${missing_json}")"
+        record_input "$id" "$suffix" "$destination" "$kind" "$name" "" true
+        continue
+      fi
+      fail "required SSM runtime input is missing"
+    fi
+    [[ "$count" == 1 ]] || fail "SSM response contains duplicate runtime input"
+    type="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Type' "$response_file")" || fail "SSM runtime input type is malformed"
+    [[ "$type" == String ]] || fail "SSM runtime input type is unsupported"
+    value="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Value | strings' "$response_file" 2>/dev/null || true)"
+    if [[ -z "$value" ]]; then
+      json_is_excluded "$id" || fail "required SSM runtime input is empty"
+    fi
+    version="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Version | numbers' "$response_file" 2>/dev/null || true)"
+    [[ "$version" =~ ^[1-9][0-9]*$ ]] || fail "SSM runtime input version is malformed"
+    write_input_file "$destination" "$value"
+    versions_json="$(jq -c --arg id "$id" --arg name "$name" --argjson version "$version" '. + [{id:$id,name:$name,version:$version}]' <<<"${versions_json}")"
+    record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
+  done
+}
+
+run_user_command() {
+  if [[ "$direct_user_commands" == true ]]; then
+    "$@"
+    return
+  fi
+  local runtime_uid
+  runtime_uid="$(id -u "$runtime_user" 2>/dev/null || true)"
+  [[ "$runtime_uid" =~ ^[0-9]+$ ]] || fail "runtime user does not exist"
+  XDG_RUNTIME_DIR="/run/user/${runtime_uid}" runuser -u "$runtime_user" -- "$@"
+}
+
+run_user_systemctl() {
+  run_user_command "$systemctl_bin" --user "$@"
+}
+
+run_user_podman() {
+  run_user_command "$podman_bin" "$@"
+}
+
+install_runtime_files() {
+  local runtime_source="$1"
+  require_directory "$runtime_source"
+  mkdir -p "$runtime_quadlet_dir" "$runtime_systemd_dir"
+  chmod 700 "$runtime_quadlet_dir" "$runtime_systemd_dir"
+  local file
+  for file in "$runtime_source"/quadlet/*; do
+    [[ -f "$file" && ! -L "$file" ]] || fail "rendered runtime contains an unsafe Quadlet"
+    install -m 0644 "$file" "${runtime_quadlet_dir}/$(basename "$file")"
+  done
+  for file in "$runtime_source"/systemd/*; do
+    [[ -f "$file" && ! -L "$file" ]] || fail "rendered runtime contains an unsafe systemd unit"
+    case "$(basename "$file")" in
+      chalk-runtime-restore.service) continue ;;
+    esac
+    install -m 0644 "$file" "${runtime_systemd_dir}/$(basename "$file")"
+  done
+  if [[ "$direct_user_commands" != true ]]; then
+    chown -R "${runtime_user}:$(id -gn "$runtime_user")" "$runtime_quadlet_dir" "$runtime_systemd_dir"
+  fi
+  run_user_systemctl daemon-reload
+}
+
+install_restore_unit() {
+  local source_unit="$1"
+  require_regular_file "$source_unit"
+  mkdir -p "$systemd_root"
+  install -m 0644 "$source_unit" "${systemd_root}/chalk-runtime-restore.service"
+  "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/systemd-error.log" || fail "root systemd daemon reload failed"
+  "$systemctl_bin" enable chalk-runtime-restore.service >/dev/null 2>"${stage_root}/systemd-enable-error.log" || fail "root restore unit enable failed"
+}
+
+install_controller_runtime() {
+  local managed_root="$1"
+  require_regular_file "${managed_root}/controller/chalk-deployment-controller"
+  require_regular_file "${managed_root}/scripts/chalk-runtime-health"
+  mkdir -p "$controller_install_dir"
+  chmod 755 "$controller_install_dir"
+  install -m 0755 "${managed_root}/controller/chalk-deployment-controller" "${controller_install_dir}/chalk-deployment-controller"
+  install -m 0755 "${managed_root}/scripts/chalk-runtime-health" "${controller_install_dir}/chalk-runtime-health"
+}
+
+reconcile_secrets() {
+  local id destination secret_name source
+  while IFS=$'\t' read -r id destination; do
+    case "$id" in
+      provider-bridge-api-server-cert) secret_name=chalk-api-provider-server-cert ;;
+      provider-bridge-api-server-key) secret_name=chalk-api-provider-server-key ;;
+      provider-bridge-sync-client-ca) secret_name=chalk-api-provider-client-ca ;;
+      provider-bridge-sync-client-cert) secret_name=chalk-sync-provider-client-cert ;;
+      provider-bridge-sync-client-key) secret_name=chalk-sync-provider-client-key ;;
+      provider-bridge-api-server-ca) secret_name=chalk-sync-provider-server-ca ;;
+      cloudflare-tunnel-token) secret_name=chalk-cloudflare-tunnel-token ;;
+      *) continue ;;
+    esac
+    source="${stage_root}/${destination}"
+    [[ -f "$source" ]] || continue
+    if run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-inspect-error.log"; then
+      run_user_podman secret rm "$secret_name" >/dev/null 2>"${stage_root}/secret-rm-error.log" || fail "Podman secret replacement failed"
+    fi
+    run_user_podman secret create "$secret_name" "$source" >/dev/null 2>"${stage_root}/secret-create-error.log" || fail "Podman secret registration failed"
+  done < <(jq -r '.[] | [.id, .destination] | @tsv' <<<"${input_records_json}")
+}
+
+pull_images() {
+  local image
+  while IFS= read -r image; do
+    [[ "$image" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]] || fail "manifest image is not digest-addressed"
+    run_user_podman pull "$image" >/dev/null 2>"${stage_root}/podman-pull-error.log" || fail "digest-addressed image pull failed"
+  done < <(jq -r '.images | .api, .sync, .redis, .cloudflared' "$manifest_path")
+}
+
+stop_runtime() {
+  local unit
+  for unit in chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
+    run_user_systemctl stop "$unit" >/dev/null 2>"${stage_root}/stop-${unit}.log" || true
+  done
+}
+
+start_runtime() {
+  run_user_systemctl start chalk-runtime.target >/dev/null 2>"${stage_root}/start-runtime.log"
+}
+
+health_runtime() {
+  local script="${health_script}"
+  if [[ -z "$script" ]]; then
+    script="${source_root:+${source_root}/scripts/chalk-runtime-health}"
+    [[ -n "$script" && -f "$script" ]] || script="${controller_install_dir}/chalk-runtime-health"
+    [[ -f "$script" ]] || script="${DEFAULT_MANAGED_ROOT}/scripts/chalk-runtime-health"
+  fi
+  require_regular_file "$script"
+  run_user_command "$script" >"${stage_root}/health.log" 2>&1
+}
+
+fence_runtime() {
+  stop_runtime || true
+  run_user_systemctl stop chalk-runtime.target >/dev/null 2>"${stage_root}/fence-target.log" || true
+}
+
+persist_release() {
+  local release_root="$1"
+  local rendered_root="$2"
+  local pointer_file="$3"
+  local manifest_sha
+  manifest_sha="$(sha256_file "$manifest_path")"
+  mkdir -p "$release_root"
+  chmod 700 "$release_root"
+  cp "$manifest_path" "${release_root}/release-manifest.json"
+  chmod 600 "${release_root}/release-manifest.json"
+  cp -R "$rendered_root" "${release_root}/runtime"
+  chmod -R go-rwx "${release_root}/runtime"
+  local pointer_tmp="${stage_root}/active-pointer.json"
+  jq -n \
+    --arg release_id "$request_release_id" \
+    --arg source_revision "$request_source_revision" \
+    --arg environment "$request_environment" \
+    --arg aws_region "$request_region" \
+    --arg parameter_prefix "$request_prefix" \
+    --arg request_id "$request_id" \
+    --arg requested_at "$requested_at" \
+    --arg manifest_sha256 "$manifest_sha" \
+    --arg release_root "$release_root" \
+    --argjson excluded_secrets "$excluded_json" \
+    --argjson inputs "$input_records_json" \
+    '{schema_version:1,controller_version:1,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,request_id:$request_id,requested_at:$requested_at,excluded_secrets:$excluded_secrets,manifest_sha256:$manifest_sha256,release_root:$release_root,inputs:$inputs}' >"$pointer_tmp"
+  atomic_write "$pointer_file" "$pointer_tmp"
+  jq -c \
+    --arg outcome "healthy" --arg release_id "$request_release_id" --arg source_revision "$request_source_revision" \
+    --arg request_id "$request_id" --arg requested_at "$requested_at" --arg manifest_sha256 "$manifest_sha" \
+    --argjson excluded_secrets "$excluded_json" --argjson inputs "$input_records_json" \
+    '{schema_version:1,controller_version:1,outcome:$outcome,release_id:$release_id,source_revision:$source_revision,request_id:$request_id,requested_at:$requested_at,manifest_sha256:$manifest_sha256,excluded_secrets:$excluded_secrets,inputs:$inputs}' >>"$ledger_file"
+  chmod 600 "$ledger_file"
+}
+
+load_active_pointer() {
+  require_regular_file "$active_pointer"
+  jq -e --argjson allowed "$INPUT_IDS" '
+    type == "object" and
+    (keys | sort) == ["aws_region","controller_version","environment","excluded_secrets","inputs","manifest_sha256","parameter_prefix","release_id","release_root","request_id","requested_at","schema_version","source_revision"] and
+    .schema_version == 1 and .controller_version == 1 and
+    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
+    (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+    (.release_root | type == "string" and startswith("/")) and
+    (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+    (.excluded_secrets | type == "array" and (map(. as $id | $allowed | index($id) != null) | all) and (.[0:] == (sort | unique))) and
+    (.inputs | type == "array" and length == 10 and all(.[]; type == "object" and (keys | sort) == ["destination","id","kind","missing","name","suffix","version"] and (.id | type == "string") and (.name | type == "string") and (.destination | type == "string") and (.suffix | type == "string") and (.kind | type == "string") and ((.version == null) or (.version | type == "number" and floor == .)) and (.missing | type == "boolean")))
+  ' "$active_pointer" >/dev/null || fail "active release pointer is invalid"
+  local pointer_release_root
+  pointer_release_root="$(jq -er '.release_root' "$active_pointer")"
+  [[ "$pointer_release_root" == "${state_root}/releases/"* && "$pointer_release_root" != *'..'* ]] || fail "active release pointer escapes state root"
+  [[ "$pointer_release_root" == "${state_root}/releases/$(jq -er '.release_id' "$active_pointer")" ]] || fail "active release pointer release root is inconsistent"
+  local durable_manifest
+  durable_manifest="${pointer_release_root}/release-manifest.json"
+  require_regular_file "$durable_manifest"
+  [[ "$(sha256_file "$durable_manifest")" == "$(jq -er '.manifest_sha256' "$active_pointer")" ]] || fail "active release manifest hash does not match pointer"
+  jq -e --arg release_id "$(jq -er '.release_id' "$active_pointer")" --arg source_revision "$(jq -er '.source_revision' "$active_pointer")" '.release_id == $release_id and .source_revision == $source_revision' "$durable_manifest" >/dev/null || fail "active release manifest identity does not match pointer"
+}
+
+restore_inputs_from_pointer() {
+  local pointer_file="$1"
+  local pointer_region
+  pointer_region="$(jq -er '.aws_region' "$pointer_file")"
+  excluded_json="$(jq -cer '.excluded_secrets' "$pointer_file")"
+  excluded_csv="$(jq -r 'join(",")' <<<"${excluded_json}")"
+  local id name version missing destination
+  local response_file="${stage_root}/restore-response.json"
+  while IFS=$'\t' read -r id name version missing destination; do
+    if [[ "$missing" == true ]]; then
+      record_input "$id" "" "$destination" "secret-file" "$name" "" true
+      continue
+    fi
+    [[ "$name" =~ ^/[^:]*$ ]] || fail "active input parameter name is unsafe"
+    [[ "$version" =~ ^[1-9][0-9]*$ ]] || fail "active input parameter version is invalid"
+    if ! "$aws_bin" ssm get-parameters --names "${name}:${version}" --with-decryption --region "$pointer_region" --output json >"$response_file" 2>"${stage_root}/restore-ssm-error.log"; then
+      fail "SSM exact-version restore failed"
+    fi
+    local returned_version returned_name returned_value returned_type
+    returned_name="$(jq -er '.Parameters | if length == 1 then .[0].Name else empty end' "$response_file" 2>/dev/null || true)"
+    returned_version="$(jq -er '.Parameters | if length == 1 then .[0].Version else empty end' "$response_file" 2>/dev/null || true)"
+    [[ "$returned_name" == "$name" && "$returned_version" == "$version" ]] || fail "SSM restore did not return the requested parameter version"
+    returned_type="$(jq -er '.[].Type' "$response_file" 2>/dev/null || jq -er '.Parameters[0].Type' "$response_file" 2>/dev/null || true)"
+    [[ "$returned_type" == String ]] || fail "SSM restore parameter type is unsupported"
+    returned_value="$(jq -er '.Parameters[0].Value | strings' "$response_file" 2>/dev/null || true)"
+    if [[ -z "$returned_value" ]] && ! json_is_excluded "$id"; then
+      fail "required exact-version runtime input is empty"
+    fi
+    destination="$(jq -er --arg id "$id" '.inputs[] | select(.id == $id) | .destination' "$pointer_file")"
+    write_input_file "$destination" "$returned_value"
+    record_input "$id" "" "$destination" "secret-file" "$name" "$version" false
+  done < <(jq -r '.inputs[] | [.id, .name, (.version // ""), .missing, .destination] | @tsv' "$pointer_file")
+}
+
+run_candidate() {
+  local runtime_source="$1"
+  install_runtime_files "$runtime_source"
+  reconcile_secrets
+  start_runtime
+  health_runtime
+}
+
+rollback_to_stable() {
+  local stable_pointer="$1"
+  local stable_release_root stable_runtime stable_manifest
+  stable_release_root="$(jq -er '.release_root' "$stable_pointer")"
+  stable_runtime="${stable_release_root}/runtime"
+  stable_manifest="${stable_release_root}/release-manifest.json"
+  require_directory "$stable_runtime"
+  require_regular_file "$stable_manifest"
+  stop_runtime
+  versions_json='[]'
+  missing_json='[]'
+  input_records_json='[]'
+  restore_inputs_from_pointer "$stable_pointer"
+  manifest_path="$stable_manifest"
+  install_runtime_files "$stable_runtime"
+  reconcile_secrets
+  start_runtime
+  health_runtime
+}
+
+deploy() {
+  if ((EUID != 0)) && [[ "$allow_non_root_tests" != true ]]; then
+    fail "deployment controller must run as root"
+  fi
+  [[ "$request_environment" == production ]] || fail "deployment environment must be production"
+  require_directory "$source_root"
+  local managed_root="${source_root}/infrastructure/managed-episode"
+  require_directory "$managed_root"
+  validate_inventory "${managed_root}/contracts/runtime-inputs.json"
+  validate_manifest
+  prepare_stage
+  fetch_deployment_inputs
+  local rendered_root="${stage_root}/runtime"
+  mkdir -p "$rendered_root"
+  local render_script="${managed_root}/scripts/render-runtime"
+  require_regular_file "$render_script"
+  "$render_script" "$manifest_path" "$rendered_root" >"${stage_root}/render.log" 2>&1 || fail "runtime rendering failed"
+  local validate_script="${managed_root}/scripts/validate-runtime"
+  require_regular_file "$validate_script"
+  "$validate_script" \
+    --env-root "${stage_root}/env" \
+    --secret-root "${stage_root}/secret-inputs" \
+    --manifest "$manifest_path" \
+    --sync-proof "${stage_root}/evidence/planetscale-sync-proof.json" \
+    --rendered-root "$rendered_root" \
+    --excluded-secrets "$excluded_csv" >"${stage_root}/validate.log" 2>&1 || fail "candidate runtime validation failed"
+  pull_images
+  local stable_exists=false
+  if [[ -f "$active_pointer" && ! -L "$active_pointer" ]]; then
+    load_active_pointer
+    stable_exists=true
+  elif [[ -e "$active_pointer" ]]; then
+    fail "active release pointer is unsafe"
+  fi
+  local release_root="${state_root}/releases/${request_release_id}"
+  [[ ! -e "$release_root" ]] || fail "release already exists in durable state"
+  install_controller_runtime "$managed_root"
+  install_restore_unit "${managed_root}/systemd/chalk-runtime-restore.service"
+  local stable_pointer_copy="${stage_root}/stable-pointer.json"
+  if [[ "$stable_exists" == true ]]; then
+    cp "$active_pointer" "$stable_pointer_copy"
+    chmod 600 "$stable_pointer_copy"
+  fi
+  stop_runtime
+  if run_candidate "$rendered_root"; then
+    persist_release "$release_root" "$rendered_root" "$active_pointer"
+    emit_result deployed passed false
+    return
+  fi
+  local candidate_failure="candidate health failed"
+  fence_runtime
+  if [[ "$stable_exists" != true ]]; then
+    emit_result failed failed false "${candidate_failure}; no previous release exists"
+    exit 1
+  fi
+  if rollback_to_stable "$stable_pointer_copy"; then
+    emit_result rolled_back failed true "$candidate_failure; previous release restored"
+    exit 1
+  fi
+  local rollback_failure="rollback health failed"
+  fence_runtime
+  emit_result failed failed false "${candidate_failure}; ${rollback_failure}; candidate fenced"
+  exit 1
+}
+
+restore() {
+  if ((EUID != 0)) && [[ "$allow_non_root_tests" != true ]]; then
+    fail "deployment controller must run as root"
+  fi
+  [[ -f "$active_pointer" && ! -L "$active_pointer" ]] || fail "durable active release pointer is missing"
+  prepare_stage
+  load_active_pointer
+  local release_root
+  release_root="$(jq -er '.release_root' "$active_pointer")"
+  local runtime_source="${release_root}/runtime"
+  local durable_manifest="${release_root}/release-manifest.json"
+  require_directory "$runtime_source"
+  require_regular_file "$durable_manifest"
+  local expected_manifest_hash
+  expected_manifest_hash="$(jq -er '.manifest_sha256' "$active_pointer")"
+  [[ "$(sha256_file "$durable_manifest")" == "$expected_manifest_hash" ]] || fail "durable release manifest hash mismatch"
+  versions_json='[]'
+  missing_json='[]'
+  input_records_json='[]'
+  restore_inputs_from_pointer "$active_pointer"
+  manifest_path="$durable_manifest"
+  stop_runtime
+  run_candidate "$runtime_source" || {
+    fence_runtime
+    fail "active release restore health failed; runtime fenced"
+  }
+  request_release_id="$(jq -er '.release_id' "$active_pointer")"
+  request_id="$(jq -er '.request_id' "$active_pointer")"
+  emit_result restored passed false
+}
+
+with_lock() {
+  reject_symlink_components "$lock_file"
+  mkdir -p "$(dirname "$lock_file")"
+  chmod 700 "$(dirname "$lock_file")"
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$lock_file"
+    flock -n 9 || fail "another deployment is in progress"
+    "$@"
+    return
+  fi
+  local lock_directory="${lock_file}.d"
+  [[ ! -e "$lock_directory" || ! -L "$lock_directory" ]] || fail "deployment lock path is unsafe"
+  mkdir "$lock_directory" 2>/dev/null || fail "another deployment is in progress"
+  fallback_lock_directory="$lock_directory"
+  local command_status=0
+  if "$@"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  rmdir "$lock_directory" 2>/dev/null || true
+  fallback_lock_directory=""
+  return "$command_status"
+}
+
+parse_deploy_args() {
+  while (($# > 0)); do
+    case "$1" in
+      --request) [[ $# -ge 2 ]] || fail "--request requires a path"; request_path="$2"; shift 2 ;;
+      --manifest) [[ $# -ge 2 ]] || fail "--manifest requires a path"; manifest_path="$2"; shift 2 ;;
+      --source-root) [[ $# -ge 2 ]] || fail "--source-root requires a path"; source_root="$2"; shift 2 ;;
+      *) fail "unknown deploy argument" ;;
+    esac
+  done
+  [[ -n "$request_path" && -n "$manifest_path" && -n "$source_root" ]] || { usage; exit 2; }
+  is_absolute_path "$request_path" || fail "request path must be absolute"
+  is_absolute_path "$manifest_path" || fail "manifest path must be absolute"
+  is_absolute_path "$source_root" || fail "source root path must be absolute"
+}
+
+main() {
+  require_command jq
+  case "${1:-}" in
+    --version)
+      [[ $# == 1 ]] || { usage; exit 2; }
+      printf '%s %s\n' "$CONTROLLER_NAME" "$CONTROLLER_VERSION"
+      ;;
+    deploy)
+      shift
+      parse_deploy_args "$@"
+      validate_request
+      reject_symlink_components "$state_root"
+      with_lock deploy
+      ;;
+    restore)
+      [[ $# == 1 ]] || { usage; exit 2; }
+      reject_symlink_components "$state_root"
+      with_lock restore
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

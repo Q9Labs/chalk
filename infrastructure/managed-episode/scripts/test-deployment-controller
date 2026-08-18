@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+controller="${managed_root}/controller/chalk-deployment-controller"
+fixture_root="$(mktemp -d)"
+if [[ "${KEEP_TEST_FIXTURE:-false}" == true ]]; then
+  printf 'fixture=%s\n' "${fixture_root}" >&2
+else
+  trap 'rm -rf -- "${fixture_root}"' EXIT
+fi
+export CHALK_CONTROLLER_ALLOW_NON_ROOT_TESTS=true
+
+fail() {
+  echo "FAIL test-deployment-controller: $1" >&2
+  exit 1
+}
+
+expect_failure() {
+  if "$@" >/dev/null 2>"${fixture_root}/expected-failure.log"; then
+    fail "expected command to fail: $*"
+  fi
+}
+
+mkdir -p "${fixture_root}/source/infrastructure/managed-episode" "${fixture_root}/bin"
+cp -R "${managed_root}/contracts" "${fixture_root}/source/infrastructure/managed-episode/"
+cp -R "${managed_root}/controller" "${fixture_root}/source/infrastructure/managed-episode/"
+cp -R "${managed_root}/systemd" "${fixture_root}/source/infrastructure/managed-episode/"
+mkdir -p "${fixture_root}/source/infrastructure/managed-episode/scripts"
+cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/render-runtime" <<'RENDER'
+#!/usr/bin/env bash
+set -euo pipefail
+output="$2"
+mkdir -p "$output/quadlet" "$output/systemd"
+printf 'Image=ghcr.io/q9labs/chalk-api@sha256:%064d\n' 0 >"$output/quadlet/chalk-api.container"
+printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
+RENDER
+cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
+#!/usr/bin/env bash
+set -euo pipefail
+VALIDATE
+chmod 0755 "${fixture_root}/source/infrastructure/managed-episode/scripts/"{render-runtime,validate-runtime}
+cp "${managed_root}/scripts/chalk-runtime-health" "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
+chmod 0755 "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
+
+cat >"${fixture_root}/bin/aws" <<'AWS'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${FAKE_AWS_LOG:?}"
+printf '%s\n' "$*" >>"$log"
+names=()
+while (($# > 0)); do
+  if [[ "$1" == --names ]]; then
+    shift
+    while (($# > 0)) && [[ "$1" != --* ]]; do names+=("$1"); shift; done
+    continue
+  fi
+  shift
+done
+parameters='[]'
+for name in "${names[@]}"; do
+  base="$name"
+  version=1
+  if [[ "$name" == *:* ]]; then
+    base="${name%:*}"
+    version="${name##*:}"
+  fi
+  if [[ -n "${FAKE_MISSING_SUFFIX:-}" && "$base" == *"/${FAKE_MISSING_SUFFIX}" ]]; then
+    continue
+  fi
+  parameters="$(jq -c --arg name "$base" --arg value "test-only-secret-bytes" --argjson version "$version" '. + [{Name:$name,Type:"String",Value:$value,Version:$version}]' <<<"$parameters")"
+done
+jq -n --argjson parameters "$parameters" '{Parameters:$parameters,InvalidParameters:[]}'
+AWS
+
+cat >"${fixture_root}/bin/podman" <<'PODMAN'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'podman %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
+if [[ "${1:-}" == secret && "${2:-}" == inspect ]]; then
+  exit 1
+fi
+PODMAN
+
+cat >"${fixture_root}/bin/systemctl" <<'SYSTEMCTL'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'systemctl %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
+SYSTEMCTL
+
+cat >"${fixture_root}/health" <<'HEALTH'
+#!/usr/bin/env bash
+set -euo pipefail
+index_file="${FAKE_HEALTH_INDEX:?}"
+index=0
+if [[ -f "$index_file" ]]; then index="$(<"$index_file")"; fi
+sequence="${FAKE_HEALTH_SEQUENCE:-ok}"
+IFS=',' read -r -a values <<<"$sequence"
+value="${values[index]:-${values[${#values[@]}-1]}}"
+printf '%s' "$((index + 1))" >"$index_file"
+[[ "$value" == ok ]]
+HEALTH
+chmod 0755 "${fixture_root}/bin/"{aws,podman,systemctl} "${fixture_root}/health"
+
+source_revision="$(git -C "${managed_root}/../.." rev-parse HEAD)"
+make_manifest() {
+  local release_id="$1"
+  jq -n \
+    --arg release_id "$release_id" \
+    --arg source_revision "$source_revision" \
+    --arg artifact_digest "$(sha256sum "${fixture_root}/source/infrastructure/managed-episode/controller/chalk-deployment-controller" | awk '{print $1}')" \
+    --arg api_digest "$(printf 'a%.0s' {1..64})" \
+    --arg sync_digest "$(printf 'b%.0s' {1..64})" \
+    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:["linux/arm64"],images:{api:("ghcr.io/q9labs/chalk-api@sha256:"+$api_digest),sync:("ghcr.io/q9labs/chalk-sync@sha256:"+$sync_digest),redis:("ghcr.io/q9labs/redis@sha256:"+$api_digest),cloudflared:("ghcr.io/cloudflare/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"infrastructure/managed-episode/controller/chalk-deployment-controller":$artifact_digest}}'
+}
+
+make_request() {
+  local release_id="$1"
+  local output="$2"
+  local excluded="${3:-[]}"
+  jq -n --arg release_id "$release_id" --arg source_revision "$source_revision" --argjson excluded "$excluded" \
+    '{schema_version:1,controller_version:1,release_id:$release_id,source_revision:$source_revision,environment:"production",aws_region:"ap-southeast-1",parameter_prefix:"/chalk/production",excluded_secrets:$excluded,request_id:("test-"+$release_id),requested_at:"2026-08-18T00:00:00Z"}' >"$output"
+  chmod 0600 "$output"
+}
+
+run_controller() {
+  local state="$1"
+  local request="$2"
+  local manifest="$3"
+  local mode="${4:-ok}"
+  FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
+  CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
+  CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
+  CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_SCRIPT="${fixture_root}/health" CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
+  "$controller" deploy --request "$request" --manifest "$manifest" --source-root "${fixture_root}/source"
+}
+
+invalid_request="${fixture_root}/invalid-request.json"
+manifest="${fixture_root}/manifest.json"
+make_manifest stable >"$manifest"
+make_request stable "${fixture_root}/request.json"
+jq '.unexpected = true' "${fixture_root}/request.json" >"$invalid_request"
+expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"
+jq '.schema_version = 2' "${fixture_root}/request.json" >"$invalid_request"
+expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"
+ln -s "${fixture_root}/request.json" "${fixture_root}/request-link.json"
+expect_failure "$controller" deploy --request "${fixture_root}/request-link.json" --manifest "$manifest" --source-root "${fixture_root}/source"
+
+for exclusions in '["api-env","api-env"]' '["api-env","nope"]' '["*"]' '["sync-env","api-env"]'; do
+  make_request invalid "${fixture_root}/request.json" "$exclusions"
+  expect_failure "$controller" deploy --request "${fixture_root}/request.json" --manifest "$manifest" --source-root "${fixture_root}/source"
+done
+
+missing_state="${fixture_root}/missing-state"
+mkdir -p "$missing_state"
+make_request missing "${fixture_root}/request.json"
+make_manifest missing >"${fixture_root}/missing-manifest.json"
+if FAKE_MISSING_SUFFIX=api.env run_controller "$missing_state" "${fixture_root}/request.json" "${fixture_root}/missing-manifest.json" >/dev/null 2>&1; then
+  fail "missing unexcluded input was accepted"
+fi
+
+excluded_state="${fixture_root}/excluded-state"
+mkdir -p "$excluded_state"
+make_request excluded "${fixture_root}/request.json" '["api-env"]'
+make_manifest excluded >"${fixture_root}/excluded-manifest.json"
+FAKE_MISSING_SUFFIX=api.env run_controller "$excluded_state" "${fixture_root}/request.json" "${fixture_root}/excluded-manifest.json" ok >/dev/null
+jq -e '.inputs[] | select(.id == "api-env" and .missing == true)' "${excluded_state}/active-release.json" >/dev/null || fail "excluded missing input was not recorded"
+
+stable_state="${fixture_root}/stable-state"
+mkdir -p "$stable_state"
+make_request stable "${fixture_root}/request.json"
+run_controller "$stable_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
+make_manifest candidate >"${fixture_root}/candidate-manifest.json"
+make_request candidate "${fixture_root}/candidate-request.json"
+printf '0' >"${fixture_root}/health-index"
+if run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" 'fail,ok' >"${fixture_root}/rollback.log" 2>&1; then
+  fail "candidate health failure was accepted"
+fi
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer changed before candidate health"
+[[ "$(<"${fixture_root}/health-index")" == 2 ]] || fail "stable release was not re-healthed after candidate failure"
+
+printf '0' >"${fixture_root}/health-index"
+if run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" 'fail,fail' >"${fixture_root}/rollback-failure.log" 2>&1; then
+  fail "rollback failure was accepted"
+fi
+grep -Fq 'rollback health failed' "${fixture_root}/rollback-failure.log" || fail "rollback failure was not reported"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer was lost after rollback failure"
+
+printf '0' >"${fixture_root}/health-index"
+: >"${fixture_root}/aws.log"
+FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE=ok \
+CHALK_CONTROLLER_STATE_ROOT="$stable_state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${stable_state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${stable_state}/active-release.json" CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_SCRIPT="${fixture_root}/health" CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
+  "$controller" restore >/dev/null
+grep -Eq -- '--names /chalk/production/[^ ]+:[1-9][0-9]* ' "${fixture_root}/aws.log" || fail "restore did not request exact SSM versions"
+if grep -Fq 'test-only-secret-bytes' "${stable_state}/ledger.jsonl"; then
+  fail "secret bytes were persisted in the deployment ledger"
+fi
+
+jq -e '.schemaVersion == "2.2" and .mainSteps[0].name == "deployRelease" and (.parameters | to_entries | all(.value.interpolationType == "ENV_VAR")) and (.mainSteps[0].inputs.runCommand | all(contains("{{") | not)) and (.parameters | has("Command") | not)' "${managed_root}/ssm/chalk-managed-episode-deploy.json" >/dev/null || fail "SSM document contract is unsafe"
+
+echo "PASS managed-episode deployment controller tests"

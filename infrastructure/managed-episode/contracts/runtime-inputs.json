@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chalkmeet.com/schemas/managed-episode-runtime-inputs-v1.json",
+  "schema_version": 1,
+  "inputs": [
+    {
+      "id": "api-env",
+      "suffix": "api.env",
+      "destination": "env/api.env",
+      "kind": "env"
+    },
+    {
+      "id": "sync-env",
+      "suffix": "sync.env",
+      "destination": "env/sync.env",
+      "kind": "env"
+    },
+    {
+      "id": "planetscale-sync-proof",
+      "suffix": "planetscale-sync-proof.json",
+      "destination": "evidence/planetscale-sync-proof.json",
+      "kind": "proof"
+    },
+    {
+      "id": "provider-bridge-api-server-cert",
+      "suffix": "provider-bridge/api-server.crt",
+      "destination": "secret-inputs/provider-bridge/api-server.crt",
+      "kind": "secret-file"
+    },
+    {
+      "id": "provider-bridge-api-server-key",
+      "suffix": "provider-bridge/api-server.key",
+      "destination": "secret-inputs/provider-bridge/api-server.key",
+      "kind": "secret-file"
+    },
+    {
+      "id": "provider-bridge-sync-client-ca",
+      "suffix": "provider-bridge/sync-client-ca.crt",
+      "destination": "secret-inputs/provider-bridge/sync-client-ca.crt",
+      "kind": "secret-file"
+    },
+    {
+      "id": "provider-bridge-sync-client-cert",
+      "suffix": "provider-bridge/sync-client.crt",
+      "destination": "secret-inputs/provider-bridge/sync-client.crt",
+      "kind": "secret-file"
+    },
+    {
+      "id": "provider-bridge-sync-client-key",
+      "suffix": "provider-bridge/sync-client.key",
+      "destination": "secret-inputs/provider-bridge/sync-client.key",
+      "kind": "secret-file"
+    },
+    {
+      "id": "provider-bridge-api-server-ca",
+      "suffix": "provider-bridge/api-server-ca.crt",
+      "destination": "secret-inputs/provider-bridge/api-server-ca.crt",
+      "kind": "secret-file"
+    },
+    {
+      "id": "cloudflare-tunnel-token",
+      "suffix": "cloudflare/tunnel-token",
+      "destination": "secret-inputs/cloudflare/tunnel-token",
+      "kind": "secret-file"
+    }
+  ]
+}

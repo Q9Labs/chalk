@@ -15,6 +15,11 @@ for argument in --entrypoint=/usr/local/bin/cloudflared --log-opt=tag=chalk-api 
 done
 grep -Fq "Exec=redis-server --save '\"\"' --appendonly no" "${managed_root}/quadlet/chalk-redis.container.in" || { echo "Redis persistence disablement is not generator-safe" >&2; exit 1; }
 grep -Fq 'HealthCmd=["/usr/local/bin/chalk-healthcheck","http://127.0.0.1:8080/readyz"]' "${managed_root}/quadlet/chalk-api.container.in" || { echo "scratch API image healthcheck must use exec form" >&2; exit 1; }
+grep -Fq 'Requires=network-online.target chalk-api.service' "${managed_root}/quadlet/chalk-sync.container.in" || { echo "Sync must hard-require the API unit" >&2; exit 1; }
+grep -Fq 'Requires=network-online.target chalk-api.service chalk-sync.service' "${managed_root}/quadlet/chalk-cloudflared.container.in" || { echo "cloudflared must hard-require application units" >&2; exit 1; }
+grep -Fq 'Requires=chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service' "${managed_root}/systemd/chalk-runtime.target" || { echo "runtime target must fail closed on partial start" >&2; exit 1; }
+grep -Fq 'After=network-online.target' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must wait for network-online" >&2; exit 1; }
+grep -Fq 'Before=chalk-runtime.target' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must precede the runtime target" >&2; exit 1; }
 if grep -Fqx 'ProtectKernelModules=true' "${managed_root}/systemd/chalk-runtime-watchdog.service"; then
   echo "watchdog uses a capability sandbox unsupported by the rootless production user manager" >&2
   exit 1

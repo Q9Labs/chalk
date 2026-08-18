@@ -1,7 +1,7 @@
 [Unit]
 Description=Chalk production SyncEngine
 After=network-online.target chalk-api.service
-Wants=network-online.target chalk-api.service
+Requires=network-online.target chalk-api.service
 
 [Container]
 Image=__SYNC_IMAGE_REFERENCE__
