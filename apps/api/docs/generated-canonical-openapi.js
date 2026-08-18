@@ -6217,7 +6217,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_media_plane", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -7037,7 +7037,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "space.invalid_id", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["request.invalid", "space.invalid_id", "space.invalid_media_plane", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -14325,7 +14325,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             type: "string",
           },
         },
-        required: ["default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "name", "slug"],
+        required: ["default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "name", "slug"],
         type: "object",
       },
       CreateTenantRequest: {

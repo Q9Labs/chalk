@@ -524,6 +524,9 @@ func Load() (Config, error) {
 	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime); err != nil {
 		return Config{}, err
 	}
+	if err := validateProviderBridgeMediaPlaneProcessConfig(providerBridge, cloudflareRealtime); err != nil {
+		return Config{}, err
+	}
 	r2Config := R2Config{
 		AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
 		AccountID:       envOrDefault(R2AccountID, ""),
@@ -670,6 +673,19 @@ func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, process
 		}
 	default:
 		return fmt.Errorf("%s must be one of: %s, %s", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU, spaces.MediaPlaneProviderCloudflareRTK)
+	}
+	return nil
+}
+
+func validateProviderBridgeMediaPlaneProcessConfig(providerBridge ProviderBridgeConfig, processConfig CloudflareRealtimeConfig) error {
+	if !providerBridge.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
+		return fmt.Errorf("%s must be set when the ProviderBridge is enabled", CloudflareRealtimeAppID)
+	}
+	if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
+		return fmt.Errorf("%s must be set when the ProviderBridge is enabled", CloudflareRealtimeAppSecret)
 	}
 	return nil
 }

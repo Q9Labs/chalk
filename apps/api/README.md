@@ -58,6 +58,10 @@ The checked-in local launcher sets `cf_sfu`. A `cf_sfu` deployment requires the
 Realtime app ID and secret. A `cf_rtk` deployment requires the Cloudflare
 account ID, API token, and RealtimeKit app ID.
 
+The ProviderBridge currently uses the Cloudflare SFU executor independently of
+the deployment default. When the bridge is enabled, its Realtime app ID and
+secret remain required even if `CHALK_DEFAULT_MEDIA_PLANE=cf_rtk`.
+
 ### Google OAuth
 
 Google sign-in activates only with a complete

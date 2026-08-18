@@ -81,4 +81,9 @@ case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE)" in
     ;;
 esac
 
+if env_value "${api_env}" CHALK_PROVIDER_BRIDGE_ADDRESS >/dev/null 2>&1; then
+  require_env CHALK_CLOUDFLARE_REALTIME_APP_ID
+  require_env CHALK_CLOUDFLARE_REALTIME_APP_SECRET
+fi
+
 echo "PASS API runtime contract"

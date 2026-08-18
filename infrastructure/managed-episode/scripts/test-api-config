@@ -38,13 +38,22 @@ rtk_env="${fixture_root}/cf-rtk.env"
 cp "${api_env}" "${rtk_env}"
 sed -i.bak \
   -e 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=cf_rtk/' \
-  -e '/^CHALK_CLOUDFLARE_REALTIME_APP_ID=/d' \
-  -e '/^CHALK_CLOUDFLARE_REALTIME_APP_SECRET=/d' \
   -e '/^CHALK_CLOUDFLARE_RTK_APP_ID=/d' \
   "${rtk_env}"
 rm "${rtk_env}.bak"
 printf '%s\n' 'CHALK_CLOUDFLARE_RTK_APP_ID=test-rtk-app' >>"${rtk_env}"
 "${managed_root}/scripts/validate-api-runtime" --env-file "${rtk_env}" >/dev/null
+
+for bridge_credential in CHALK_CLOUDFLARE_REALTIME_APP_ID CHALK_CLOUDFLARE_REALTIME_APP_SECRET; do
+  missing_bridge_env="${fixture_root}/cf-rtk-missing-${bridge_credential}.env"
+  cp "${rtk_env}" "${missing_bridge_env}"
+  sed -i.bak "/^${bridge_credential}=/d" "${missing_bridge_env}"
+  rm "${missing_bridge_env}.bak"
+  if "${managed_root}/scripts/validate-api-runtime" --env-file "${missing_bridge_env}" >/dev/null 2>&1; then
+    echo "cf_rtk API environment without ${bridge_credential} was accepted while the ProviderBridge is enabled" >&2
+    exit 1
+  fi
+done
 
 "${managed_root}/scripts/plan-release-components" \
   infrastructure/managed-episode/env/api.env.example |

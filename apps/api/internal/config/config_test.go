@@ -656,6 +656,8 @@ func setHostedEnvironment(t *testing.T) {
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.IntegrationsEnabled, "false")
 	t.Setenv(config.TranscriptionEnabled, "false")
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8443")
 	t.Setenv(config.ProviderBridgeServerCertFile, "/tmp/chalk-server.crt")
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/tmp/chalk-server.key")
@@ -894,6 +896,31 @@ func TestLoadProviderBridgeConfig(t *testing.T) {
 	}
 	if !cfg.ProviderBridge.Enabled || cfg.ProviderBridge.Address != "127.0.0.1:8444" || cfg.ProviderBridge.SPIFFETrustDomain != "chalk.test" {
 		t.Fatalf("provider bridge config = %#v", cfg.ProviderBridge)
+	}
+}
+
+func TestLoadProviderBridgeRequiresSFUExecutorConfigWithRTKDefault(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		missing string
+	}{
+		{name: "app id", missing: config.CloudflareRealtimeAppID},
+		{name: "app secret", missing: config.CloudflareRealtimeAppSecret},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setProviderBridgeConfig(t)
+			t.Setenv(config.DefaultMediaPlane, string(spaces.MediaPlaneProviderCloudflareRTK))
+			t.Setenv(config.CloudflareAccountID, "account")
+			t.Setenv(config.CloudflareAPIToken, "token")
+			t.Setenv(config.CloudflareRTKAppID, "rtk-app")
+			t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+			t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
+			t.Setenv(test.missing, "")
+
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), test.missing) {
+				t.Fatalf("load error = %v, want missing ProviderBridge %s validation", err, test.missing)
+			}
+		})
 	}
 }
 
@@ -1367,6 +1394,8 @@ func TestLoadOperationLogsDefaultToAllRequestLogs(t *testing.T) {
 
 func setProviderBridgeConfig(t *testing.T) {
 	t.Helper()
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8444")
 	t.Setenv(config.ProviderBridgeServerCertFile, "/run/secrets/provider-bridge-server.crt")
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/run/secrets/provider-bridge-server.key")
