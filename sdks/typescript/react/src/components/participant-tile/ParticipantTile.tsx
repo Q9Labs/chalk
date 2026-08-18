@@ -3,6 +3,8 @@ import { cn } from "../../utils/cn";
 import { MicrophoneOff01Icon, Monitor01Icon, HandIcon, WifiOffIcon } from "../../utils/icons";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkBadge, ChalkChrome, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicParticipantTile } from "./ClassicParticipantTile";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
@@ -46,7 +48,7 @@ const aspectRatioClasses = {
   fill: "",
 };
 
-export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference }: ParticipantTileProps) => {
+const ChalkParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference }: ParticipantTileProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [trackError, setTrackError] = useState<string | null>(null);
@@ -247,6 +249,13 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
       />
     </div>
   );
+});
+
+ChalkParticipantTile.displayName = "ChalkParticipantTile";
+
+export const ParticipantTile = React.memo((props: ParticipantTileProps) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicParticipantTile {...props} /> : <ChalkParticipantTile {...props} />;
 });
 
 ParticipantTile.displayName = "ParticipantTile";

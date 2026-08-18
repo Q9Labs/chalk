@@ -2,6 +2,8 @@ import React from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkPanel, ChalkSelect, ChalkToggle } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicNoiseSuppressionToggle } from "./ClassicNoiseSuppressionToggle";
 
 export interface NoiseSuppressionToggleProps {
   enabled: boolean;
@@ -12,7 +14,7 @@ export interface NoiseSuppressionToggleProps {
   className?: string;
 }
 
-export const NoiseSuppressionToggle = React.memo(({ enabled, onChange, level = "medium", onLevelChange, disabled = false, className }: NoiseSuppressionToggleProps) => {
+const ChalkNoiseSuppressionToggle = React.memo(({ enabled, onChange, level = "medium", onLevelChange, disabled = false, className }: NoiseSuppressionToggleProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const handleLevelChange = (e: { target: { value: string } }) => {
     onLevelChange?.(e.target.value as "low" | "medium" | "high");
@@ -39,6 +41,13 @@ export const NoiseSuppressionToggle = React.memo(({ enabled, onChange, level = "
       )}
     </ChalkPanel>
   );
+});
+
+ChalkNoiseSuppressionToggle.displayName = "ChalkNoiseSuppressionToggle";
+
+export const NoiseSuppressionToggle = React.memo((props: NoiseSuppressionToggleProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicNoiseSuppressionToggle {...props} /> : <ChalkNoiseSuppressionToggle {...props} />;
 });
 
 NoiseSuppressionToggle.displayName = "NoiseSuppressionToggle";

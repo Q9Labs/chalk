@@ -1,6 +1,8 @@
 import React from "react";
 import { cn } from "../../utils/cn";
 import { ChalkBadge } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicReleaseBadge } from "./ClassicReleaseBadge";
 
 export interface ReleaseBadgeProps {
   type: "major" | "minor" | "patch";
@@ -22,7 +24,13 @@ const typeConfig = {
   },
 } as const;
 
-export const ReleaseBadge = React.memo<ReleaseBadgeProps>(({ type, className }) => {
+export const ReleaseBadge = React.memo<ReleaseBadgeProps>((props) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicReleaseBadge {...props} /> : <ChalkReleaseBadge {...props} />;
+});
+
+function ChalkReleaseBadge({ type, className }: ReleaseBadgeProps) {
   const config = typeConfig[type];
 
   return (
@@ -30,6 +38,6 @@ export const ReleaseBadge = React.memo<ReleaseBadgeProps>(({ type, className }) 
       {config.label}
     </ChalkBadge>
   );
-});
+}
 
 ReleaseBadge.displayName = "ReleaseBadge";

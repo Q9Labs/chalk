@@ -2,6 +2,8 @@ import React from "react";
 import { ChalkBackdrop, ChalkBadge, ChalkButton, ChalkDialogPanel, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { WifiOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
+import { useSkin } from "../skin-context";
+import { ClassicReconnectingOverlay } from "./ClassicReconnectingOverlay";
 
 export interface ReconnectingOverlayProps {
   isVisible: boolean;
@@ -13,7 +15,8 @@ export interface ReconnectingOverlayProps {
   className?: string;
 }
 
-export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeft, message, supportCode, className }) => {
+const ChalkReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeft, message, supportCode, className }) => {
+  const skin = useSkin();
   if (!isVisible) return null;
 
   const defaultMessages = {
@@ -23,7 +26,7 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
   };
 
   return (
-    <div className={cn("absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
+    <div data-chalk-skin={skin} className={cn("absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
       <ChalkBackdrop className="absolute inset-0 bg-[var(--chalk-app-canvas)] opacity-90 backdrop-blur-[2px]" style={{ position: "absolute" }} />
       <ChalkDialogPanel role="presentation" className="relative flex w-full max-w-sm flex-col items-center justify-center p-8 text-[var(--chalk-app-text)]" tone="neutral">
         {status === "failed" ? (
@@ -68,6 +71,13 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
       </ChalkDialogPanel>
     </div>
   );
+});
+
+ChalkReconnectingOverlay.displayName = "ChalkReconnectingOverlay";
+
+export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>((props: ReconnectingOverlayProps) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicReconnectingOverlay {...props} /> : <ChalkReconnectingOverlay {...props} />;
 });
 
 ReconnectingOverlay.displayName = "ReconnectingOverlay";

@@ -4,6 +4,8 @@ import { Tick01Icon, Cancel01Icon, UserGroupIcon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
 import { ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicAdmissionPanel } from "./ClassicAdmissionPanel";
 
 export interface AdmissionParticipant {
   id: string;
@@ -112,7 +114,7 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
   );
 });
 
-export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
+function ChalkAdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
   const client = useSpaceClient();
   const participantsSlice = useParticipants();
   const canManageAdmission = useCan("manageAdmission");
@@ -132,6 +134,11 @@ export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
       }}
     />
   );
+}
+
+export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicAdmissionPanel {...props} /> : <ChalkAdmissionPanel {...props} />;
 }
 
 AdmissionPanel.displayName = "AdmissionPanel";

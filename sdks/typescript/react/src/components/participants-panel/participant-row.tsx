@@ -5,6 +5,8 @@ import { cn } from "../../utils/cn";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import { ParticipantOptionsMenu } from "./participant-options-menu";
+import { useSkin } from "../skin-context";
+import { ClassicParticipantRow } from "./ClassicParticipantRow";
 import { ChalkIconButton, ChalkInput, ChalkMenu, ChalkPanel } from "../chalk-ui";
 
 export interface ParticipantRowProps {
@@ -25,7 +27,7 @@ export interface ParticipantRowProps {
   onMenuClose: () => void;
 }
 
-export function ParticipantRow({
+function ChalkParticipantRow({
   participant,
   variant,
   canManageParticipants,
@@ -167,4 +169,9 @@ export function ParticipantRow({
       </div>
     </ChalkPanel>
   );
+}
+
+export function ParticipantRow(props: ParticipantRowProps) {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicParticipantRow {...props} /> : <ChalkParticipantRow {...props} />;
 }

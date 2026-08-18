@@ -1,5 +1,5 @@
 import type React from "react";
-import { getThemeMode, type ThemePalette, type ThemeTexture } from "./components/theme";
+import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "./components/theme";
 
 /** The default light palette used when no color scheme is requested. */
 export const LIGHT_CHALK_THEME_TOKENS = {
@@ -50,6 +50,7 @@ export type ChalkTheme = {
   readonly colorScheme?: ChalkColorScheme;
   readonly palette?: ThemePalette;
   readonly texture?: ThemeTexture;
+  readonly skin?: ThemeSkin;
   readonly accent?: string;
   readonly tokens?: Partial<ChalkThemeTokens>;
 };
@@ -59,6 +60,7 @@ export const COSMIC_CHALK_THEME = {
   colorScheme: "dark",
   palette: "cosmic-chalk",
   texture: "slate",
+  skin: "chalk",
   tokens: {
     canvas: "#080f20",
     chrome: "#10182b",

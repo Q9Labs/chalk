@@ -4,6 +4,8 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor } from "../../utils/colorGenerator";
 import { ChalkBadge, ChalkChrome } from "../chalk-ui";
 import { CELEBRATION_EMOJIS } from "@q9labsai/chalk-ui/reactions";
+import { useSkin } from "../skin-context";
+import { ClassicReactionBubble } from "./ClassicReactionBubble";
 
 interface ReactionBubbleProps {
   emoji: string;
@@ -44,7 +46,13 @@ const generateParticles = (primaryColor: string) => {
   });
 };
 
-export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, duration: baseDuration = 3000, className }: ReactionBubbleProps) => {
+export const ReactionBubble = React.memo((props: ReactionBubbleProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicReactionBubble {...props} /> : <ChalkReactionBubble {...props} />;
+});
+
+function ChalkReactionBubble({ emoji, participantName, onComplete, duration: baseDuration = 3000, className }: ReactionBubbleProps) {
   const [isVisible, setIsVisible] = useState(true);
   const prefersReducedMotion = usePrefersReducedMotion();
 
@@ -121,6 +129,6 @@ export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, 
       )}
     </div>
   );
-});
+}
 
 ReactionBubble.displayName = "ReactionBubble";

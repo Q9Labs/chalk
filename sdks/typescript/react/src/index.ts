@@ -5,7 +5,7 @@ export { Chalk } from "./components/chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
 export { Entrance } from "./components/entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./components/entrance/Entrance";
-export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./components/theme";
+export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeSkin, ThemeTexture } from "./components/theme";
 export { COSMIC_CHALK_THEME } from "./theme";
 export type { ChalkTheme, ChalkThemeTokens } from "./theme";
 export {

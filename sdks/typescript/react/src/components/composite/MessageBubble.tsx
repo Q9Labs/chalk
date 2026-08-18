@@ -5,6 +5,8 @@ import { Avatar } from "../atomic/Avatar";
 import { Tick01Icon, TickDouble01Icon, FileTextIcon, Download01Icon } from "../../utils/icons";
 import { getParticipantColor } from "../../utils/colorGenerator";
 import { ChalkBadge, ChalkButton, ChalkChrome, ChalkPanel, ChalkSpinner } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicMessageBubble } from "./ClassicMessageBubble";
 
 export interface MessageBubbleProps {
   content: string;
@@ -36,7 +38,7 @@ const formatFileSize = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 };
 
-export const MessageBubble = React.memo<MessageBubbleProps>(
+const ChalkMessageBubble = React.memo<MessageBubbleProps>(
   ({
     content,
     senderName,
@@ -235,5 +237,10 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     );
   },
 );
+
+export const MessageBubble = React.memo<MessageBubbleProps>((props) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicMessageBubble {...props} /> : <ChalkMessageBubble {...props} />;
+});
 
 MessageBubble.displayName = "MessageBubble";

@@ -3,6 +3,8 @@ import { Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Vi
 import { VolumeHighIcon, VolumeMute01Icon } from "../../utils/icons";
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import { ChalkButton, ChalkDivider, ChalkIconButton, ChalkMenuItem, ChalkSlider } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicParticipantOptionsMenu } from "./ClassicParticipantOptionsMenu";
 
 export interface ParticipantOptionsMenuProps {
   participant: ParticipantListParticipant;
@@ -19,7 +21,7 @@ export interface ParticipantOptionsMenuProps {
   onParticipantVolumeChange?: (id: string, volume: number) => void;
 }
 
-export function ParticipantOptionsMenu({ participant, variant, canManageParticipants, onClose, onMuteParticipant, onRequestUnmute, onStopParticipantCamera, onRequestStartCamera, onRemoveParticipant, onEditName, participantVolumes, onParticipantVolumeChange }: ParticipantOptionsMenuProps) {
+function ChalkParticipantOptionsMenu({ participant, variant, canManageParticipants, onClose, onMuteParticipant, onRequestUnmute, onStopParticipantCamera, onRequestStartCamera, onRemoveParticipant, onEditName, participantVolumes, onParticipantVolumeChange }: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
   const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant);
@@ -124,6 +126,11 @@ export function ParticipantOptionsMenu({ participant, variant, canManageParticip
       ) : null}
     </>
   );
+}
+
+export function ParticipantOptionsMenu(props: ParticipantOptionsMenuProps) {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicParticipantOptionsMenu {...props} /> : <ChalkParticipantOptionsMenu {...props} />;
 }
 
 interface MenuActionProps {

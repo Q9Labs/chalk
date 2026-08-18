@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from "react";
 import { VolumeHighIcon } from "../../utils/icons";
 import { AudioIndicator } from "../atomic";
 import { ChalkIconButton, ChalkPanel, ChalkSelect } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicDeviceSelector } from "./ClassicDeviceSelector";
 import { Thumbnail } from "../../internal/thumbnail";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -26,7 +28,7 @@ export interface DeviceSelectorProps {
   className?: string;
 }
 
-export const DeviceSelector = React.memo(({ type, devices, selectedDeviceId, onChange, label, previewTrack, audioLevel, disabled = false, participantColorSeed, participantGradientPreference, className }: DeviceSelectorProps) => {
+const ChalkDeviceSelector = React.memo(({ type, devices, selectedDeviceId, onChange, label, previewTrack, audioLevel, disabled = false, participantColorSeed, participantGradientPreference, className }: DeviceSelectorProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -127,6 +129,13 @@ export const DeviceSelector = React.memo(({ type, devices, selectedDeviceId, onC
       )}
     </div>
   );
+});
+
+ChalkDeviceSelector.displayName = "ChalkDeviceSelector";
+
+export const DeviceSelector = React.memo((props: DeviceSelectorProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicDeviceSelector {...props} /> : <ChalkDeviceSelector {...props} />;
 });
 
 DeviceSelector.displayName = "DeviceSelector";

@@ -27,6 +27,8 @@ import { getParticipantThemeVariables, type ParticipantGradientPreference } from
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkIconButton, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicControlBar } from "./ClassicControlBar";
 
 interface MediaDevice {
   deviceId: string;
@@ -539,6 +541,13 @@ const ControlBarSurface = React.memo(
 );
 
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicControlBar {...props} /> : <ChalkControlBar {...props} />;
+}
+
+ControlBar.displayName = "ControlBar";
+
+function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
   const media = useMedia();
@@ -637,4 +646,4 @@ export function ControlBar(props: ControlBarProps): React.JSX.Element {
   );
 }
 
-ControlBar.displayName = "ControlBar";
+ChalkControlBar.displayName = "ChalkControlBar";

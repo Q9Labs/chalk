@@ -35,6 +35,9 @@ describe("PreviewGalleryToolbar", () => {
     const onChange = vi.fn();
     render(<PreviewGalleryToolbar search={DEFAULT_PREVIEW_SEARCH} onChange={onChange} />);
 
+    expect(screen.getByLabelText("Skin").querySelector('option[value="classic"]')?.textContent).toBe("Classic");
+    expect(screen.getByLabelText("Skin").querySelector('option[value="chalk"]')?.getAttribute("title")).toContain("Hand-drawn");
+
     fireEvent.change(screen.getByLabelText("View"), { target: { value: "space" } });
     fireEvent.change(screen.getByLabelText("Participants"), { target: { value: "5" } });
     fireEvent.change(screen.getByLabelText("Chat data"), { target: { value: "failure" } });
@@ -42,6 +45,7 @@ describe("PreviewGalleryToolbar", () => {
     fireEvent.change(screen.getByLabelText("Panel"), { target: { value: "chat" } });
     fireEvent.change(screen.getByLabelText("Dialog"), { target: { value: "settings" } });
     fireEvent.change(screen.getByLabelText("Layout"), { target: { value: "grid" } });
+    fireEvent.change(screen.getByLabelText("Skin"), { target: { value: "chalk" } });
     fireEvent.change(screen.getByLabelText("Palette"), { target: { value: "midnight" } });
     fireEvent.change(screen.getByLabelText("Texture"), { target: { value: "soft-dots" } });
     fireEvent.change(screen.getByLabelText("Toast"), { target: { value: "warning" } });
@@ -56,6 +60,7 @@ describe("PreviewGalleryToolbar", () => {
     expect(onChange).toHaveBeenCalledWith({ panel: "chat" });
     expect(onChange).toHaveBeenCalledWith({ dialog: "settings" });
     expect(onChange).toHaveBeenCalledWith({ layout: "grid" });
+    expect(onChange).toHaveBeenCalledWith({ skin: "chalk" });
     expect(onChange).toHaveBeenCalledWith({ palette: "midnight" });
     expect(onChange).toHaveBeenCalledWith({ texture: "soft-dots" });
     expect(onChange).toHaveBeenCalledWith({ toast: "warning" });

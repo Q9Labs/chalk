@@ -37,7 +37,10 @@ describe("EntranceSurface", () => {
     expect(screen.getByRole("button", { name: /Microphone/u })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: /Camera/u })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Enter Space" })).toBeDisabled();
-    expect(view.container.querySelectorAll("svg[data-chalk-chrome='true']").length).toBeGreaterThan(0);
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-skin", "classic");
+    expect(screen.getByRole("main").querySelector(":scope > section")).toHaveClass("grid", "max-w-5xl", "overflow-hidden", "rounded-lg", "border", "shadow-[var(--chalk-shadow)]");
+    expect(screen.getByText("You")).toHaveClass("bg-[var(--chalk-app-text,var(--chalk-text))]", "text-[var(--chalk-app-canvas,var(--chalk-accent-text))]");
+    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
 
     const nameInput = screen.getByRole("textbox", { name: "Your name" });
     fireEvent.change(nameInput, { target: { value: "Ada" } });
@@ -54,6 +57,25 @@ describe("EntranceSurface", () => {
     expect(screen.getByRole("button", { name: "Enter Space" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Enter Space" }));
     expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the hand-drawn controls behind the chalk skin", () => {
+    const view = render(<EntranceSurface {...surfaceProps({ theme: { skin: "chalk" } })} />);
+
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-skin", "chalk");
+    expect(view.container.querySelector('[data-chalk-entrance-layout="split"] > div:last-child')).toHaveClass("grid", "lg:grid-cols-[minmax(0,1fr)_24rem]");
+    expect(view.container.querySelectorAll("svg[data-chalk-chrome='true']").length).toBeGreaterThan(0);
+  });
+
+  it("switches renderer trees without changing hook order", () => {
+    const props = surfaceProps({ displayName: "Ada" });
+    const view = render(<EntranceSurface {...props} />);
+
+    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
+
+    view.rerender(<EntranceSurface {...props} theme={{ skin: "chalk" }} />);
+
+    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
   });
 
   it("announces pending access and surfaces errors with an optional cancel action", () => {

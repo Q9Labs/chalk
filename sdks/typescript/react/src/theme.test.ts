@@ -25,7 +25,7 @@ describe("chalkThemeStyle", () => {
   });
 
   it("ships the Cosmic Chalk convenience preset with its midnight tokens", () => {
-    expect(COSMIC_CHALK_THEME).toMatchObject({ palette: "cosmic-chalk", texture: "slate", colorScheme: "dark" });
+    expect(COSMIC_CHALK_THEME).toMatchObject({ palette: "cosmic-chalk", texture: "slate", colorScheme: "dark", skin: "chalk" });
     expect(chalkThemeStyle(COSMIC_CHALK_THEME)).toMatchObject({
       "--chalk-canvas": "#080f20",
       "--chalk-surface": "#10182b",

@@ -1,8 +1,9 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 import { cn } from "../../utils/cn";
+import { useSkin } from "../skin-context";
 import { ChalkChrome } from "./ChalkChrome";
-import { mergeStyle, TONE_FILLS, TONE_STROKES, type ChalkSeed, type ChalkTone } from "./common";
+import { CLASSIC_FOCUS_CLASSES, classicButtonClasses, mergeStyle, TONE_FILLS, TONE_STROKES, type ChalkSeed, type ChalkTone } from "./common";
 
 export interface ChalkIconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "color"> {
   readonly tone?: ChalkTone;
@@ -14,6 +15,7 @@ export interface ChalkIconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButt
 const SIZE_CLASSES = { sm: "size-8", md: "size-10", lg: "size-12" } as const;
 
 export const ChalkIconButton = forwardRef<HTMLButtonElement, ChalkIconButtonProps>(function ChalkIconButton({ className, children, disabled, tone = "neutral", size = "md", seed, roughness, style, type = "button", ...props }, ref) {
+  const skin = useSkin();
   const stroke = TONE_STROKES[tone];
   return (
     <button
@@ -23,7 +25,13 @@ export const ChalkIconButton = forwardRef<HTMLButtonElement, ChalkIconButtonProp
       data-chalk-tone={tone}
       data-chalk-size={size}
       aria-label={props["aria-label"]}
-      className={cn("group relative inline-grid shrink-0 place-items-center rounded-md text-[var(--chalk-app-text)] outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-55", SIZE_CLASSES[size], className)}
+      className={cn(
+        skin === "classic"
+          ? cn(CLASSIC_FOCUS_CLASSES, classicButtonClasses("outline", tone), "inline-grid shrink-0 place-items-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-55")
+          : "group relative inline-grid shrink-0 place-items-center rounded-md text-[var(--chalk-app-text)] outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-55",
+        SIZE_CLASSES[size],
+        className,
+      )}
       style={mergeStyle(style)}
       {...props}
     >

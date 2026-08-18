@@ -3,6 +3,8 @@ import { ArrowRight01Icon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkButton, ChalkChrome, ChalkIconButton, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicTourTooltip } from "./ClassicTourTooltip";
 
 export interface TourTooltipProps {
   title: string;
@@ -18,7 +20,13 @@ export interface TourTooltipProps {
   className?: string;
 }
 
-export const TourTooltip = React.memo<TourTooltipProps>(({ title, description, step, totalSteps, placement = "bottom", onNext, onPrev, onSkip, showSkip = true, showProgress = true, className }) => {
+export const TourTooltip = React.memo<TourTooltipProps>((props) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicTourTooltip {...props} /> : <ChalkTourTooltip {...props} />;
+});
+
+function ChalkTourTooltip({ title, description, step, totalSteps, placement = "bottom", onNext, onPrev, onSkip, showSkip = true, showProgress = true, className }: TourTooltipProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +104,6 @@ export const TourTooltip = React.memo<TourTooltipProps>(({ title, description, s
       </div>
     </ChalkPanel>
   );
-});
+}
 
 TourTooltip.displayName = "TourTooltip";

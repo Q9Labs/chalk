@@ -25,4 +25,10 @@ describe("chalk stylesheet layering", () => {
     expect(reset).toBeGreaterThan(-1);
     expect(baseLayerDepthAt(reset)).toBeGreaterThan(0);
   });
+
+  it("keeps the Cosmic palette independent from its chalk skin decoration", () => {
+    expect(stylesheet).toContain('[data-chalk][data-chalk-palette="cosmic-chalk"] {');
+    expect(stylesheet).toContain('main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"]::before');
+    expect(stylesheet).not.toContain('main[data-chalk][data-chalk-palette="cosmic-chalk"]::before');
+  });
 });

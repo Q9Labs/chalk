@@ -2,6 +2,8 @@ import React from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkChrome } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicWaveform } from "./ClassicWaveform";
 
 export interface WaveformProps {
   levels: number[];
@@ -11,7 +13,13 @@ export interface WaveformProps {
   className?: string;
 }
 
-export const Waveform = React.memo(({ levels, color = "var(--chalk-focus)", animated = true, barCount = 5, className }: WaveformProps) => {
+export const Waveform = React.memo((props: WaveformProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicWaveform {...props} /> : <ChalkWaveform {...props} />;
+});
+
+function ChalkWaveform({ levels, color = "var(--chalk-focus)", animated = true, barCount = 5, className }: WaveformProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const displayLevels = React.useMemo(() => {
     if (levels.length === barCount) return levels;
@@ -41,6 +49,6 @@ export const Waveform = React.memo(({ levels, color = "var(--chalk-focus)", anim
       ))}
     </div>
   );
-});
+}
 
 Waveform.displayName = "Waveform";

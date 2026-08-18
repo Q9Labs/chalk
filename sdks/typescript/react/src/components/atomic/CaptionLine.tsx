@@ -1,6 +1,8 @@
 import React from "react";
 import { cn } from "../../utils/cn";
 import { ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicCaptionLine } from "./ClassicCaptionLine";
 
 export interface CaptionLineProps {
   text: string;
@@ -10,7 +12,7 @@ export interface CaptionLineProps {
   className?: string;
 }
 
-export const CaptionLine = React.memo<CaptionLineProps>(({ text, speaker, position = "bottom", maxLines = 2, className }) => {
+const ChalkCaptionLine = React.memo<CaptionLineProps>(({ text, speaker, position = "bottom", maxLines = 2, className }) => {
   if (!text) return null;
 
   return (
@@ -31,6 +33,11 @@ export const CaptionLine = React.memo<CaptionLineProps>(({ text, speaker, positi
       </ChalkPanel>
     </div>
   );
+});
+
+export const CaptionLine = React.memo<CaptionLineProps>((props) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicCaptionLine {...props} /> : <ChalkCaptionLine {...props} />;
 });
 
 CaptionLine.displayName = "CaptionLine";

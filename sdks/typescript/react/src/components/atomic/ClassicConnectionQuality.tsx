@@ -1,0 +1,51 @@
+import React from "react";
+import { cn } from "../../utils/cn";
+import type { ConnectionQualityProps } from "./ConnectionQuality";
+
+const labels = {
+  1: "Poor",
+  2: "Fair",
+  3: "Good",
+  4: "Excellent",
+};
+
+const colors = {
+  1: "var(--chalk-danger)",
+  2: "var(--chalk-accent)",
+  3: "var(--chalk-positive)",
+  4: "var(--chalk-positive)",
+};
+
+function clampQuality(quality: ConnectionQualityProps["quality"]): 1 | 2 | 3 | 4 {
+  if (quality <= 1) return 1;
+  if (quality >= 4) return 4;
+  if (quality === 2) return 2;
+  return 3;
+}
+
+export const ClassicConnectionQuality = React.memo(({ quality, showLabel = false, size = "md", className }: ConnectionQualityProps) => {
+  const barHeight = size === "sm" ? 10 : 14;
+  const barWidth = size === "sm" ? 3 : 4;
+
+  const clampedQuality = clampQuality(quality);
+  const color = colors[clampedQuality];
+
+  return (
+    <div className={cn("inline-flex items-end gap-0.5", className)} title={`Connection Quality: ${labels[clampedQuality]}`} role="status" aria-label={`Connection quality: ${labels[clampedQuality]}`}>
+      {[1, 2, 3, 4].map((level) => (
+        <div
+          key={level}
+          style={{
+            width: barWidth,
+            height: (barHeight / 4) * level,
+            backgroundColor: level <= clampedQuality ? color : "var(--chalk-stage)",
+            borderRadius: "1px",
+          }}
+        />
+      ))}
+      {showLabel && <span className="ml-1 text-xs text-[var(--chalk-muted-text)]">{labels[clampedQuality]}</span>}
+    </div>
+  );
+});
+
+ClassicConnectionQuality.displayName = "ClassicConnectionQuality";

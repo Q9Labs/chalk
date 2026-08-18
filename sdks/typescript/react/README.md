@@ -40,9 +40,11 @@ application. Chalk will use it without disposing it.
 <Chalk client={spaceClient} entrance={false} />
 ```
 
-`theme` is the only styling door. It accepts a closed token-key set, which
-Chalk emits as CSS custom properties scoped to its root. Size and place Chalk
-with its parent element.
+`theme` is the only styling door. `skin` defaults to `"classic"`; choose
+`"chalk"` when you want the hand-drawn Chalk skin. Palette and texture are
+independent from the skin, so the same palette and texture can compose with
+either choice. Chalk emits the closed token-key set as CSS custom properties
+scoped to its root. Size and place Chalk with its parent element.
 
 `colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows
 the browser preference while keeping explicit token overrides in place.
@@ -51,6 +53,9 @@ the browser preference while keeping explicit token overrides in place.
 <Chalk
   client={spaceClient}
   theme={{
+    skin: "chalk",
+    palette: "warm-charcoal",
+    texture: "paper",
     colorScheme: "dark",
     accent: "#4b9bb8",
     tokens: { canvas: "#152127", surface: "#1d2b31" },
@@ -58,9 +63,9 @@ the browser preference while keeping explicit token overrides in place.
 />
 ```
 
-Cosmic Chalk is a ready-made dark theme with a midnight board, moon-white text,
-comet-blue focus states, and a slate grain. The same preset works on the full
-Space and the standalone Entrance.
+`COSMIC_CHALK_THEME` is a ready-made Chalk-skin theme with a midnight board,
+moon-white text, comet-blue focus states, and a slate grain. The preset selects
+`skin: "chalk"`; it works on the full Space and the standalone Entrance.
 
 ```tsx
 import { Chalk, COSMIC_CHALK_THEME, Entrance } from "@q9labsai/chalk-react";
@@ -72,12 +77,16 @@ import { Chalk, COSMIC_CHALK_THEME, Entrance } from "@q9labsai/chalk-react";
 
 ## Hand-drawn UI
 
-Entrance and Space use the SDK's chalk-drawn controls throughout. Their rough
-SVG edges, powder passes, and focus marks are deterministic, while buttons,
-inputs, toggles, dialogs, menus, and sliders remain native accessible controls.
+The `chalk` skin uses the SDK's chalk-drawn controls throughout. Its rough SVG
+edges, powder passes, and focus marks are deterministic, while buttons, inputs,
+toggles, dialogs, menus, and sliders remain native accessible controls. The
+default `classic` skin keeps the same typed palette and texture choices without
+the hand-drawn treatment.
 
 The same pieces are public for custom panels. Each accepts a stable `seed` when
 you want a specific stroke to stay identical across renders.
+Directly imported `Chalk*` primitives keep their hand-drawn identity; the skin
+switch belongs to the turnkey `<Chalk />` and standalone `Entrance` surfaces.
 
 ```tsx
 import { ChalkButton, ChalkInput, ChalkPanel, ChalkToggle } from "@q9labsai/chalk-react";

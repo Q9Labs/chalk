@@ -4,6 +4,8 @@ import { cn } from "../../utils/cn";
 import { UserGroupIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
 import { ChalkBadge, ChalkControlGroup, ChalkEmptyState, ChalkIconButton, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicParticipantGrid } from "./ClassicParticipantGrid";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 
@@ -42,6 +44,11 @@ interface ParticipantGridSurfaceProps extends ParticipantGridProps {
 }
 
 export function ParticipantGrid(props: ParticipantGridProps): React.JSX.Element {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicParticipantGrid {...props} /> : <ChalkParticipantGrid {...props} />;
+}
+
+function ChalkParticipantGrid(props: ParticipantGridProps): React.JSX.Element {
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
@@ -409,5 +416,7 @@ const ParticipantGridSurface = React.memo(
 );
 
 ParticipantGridSurface.displayName = "ParticipantGridSurface";
+
+ChalkParticipantGrid.displayName = "ChalkParticipantGrid";
 
 ParticipantGrid.displayName = "ParticipantGrid";

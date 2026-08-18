@@ -1,6 +1,8 @@
 import React from "react";
 import { cn } from "../../utils/cn";
 import { ChalkBadge, ChalkChrome } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicConnectionQuality } from "./ClassicConnectionQuality";
 
 export interface ConnectionQualityProps {
   quality: 1 | 2 | 3 | 4;
@@ -30,7 +32,13 @@ const tones = {
   4: "success",
 } as const;
 
-export const ConnectionQuality = React.memo(({ quality, showLabel = false, size = "md", className }: ConnectionQualityProps) => {
+export const ConnectionQuality = React.memo((props: ConnectionQualityProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicConnectionQuality {...props} /> : <ChalkConnectionQuality {...props} />;
+});
+
+function ChalkConnectionQuality({ quality, showLabel = false, size = "md", className }: ConnectionQualityProps) {
   const barHeight = size === "sm" ? 10 : 14;
   const barWidth = size === "sm" ? 3 : 4;
 
@@ -58,6 +66,6 @@ export const ConnectionQuality = React.memo(({ quality, showLabel = false, size 
       )}
     </div>
   );
-});
+}
 
 ConnectionQuality.displayName = "ConnectionQuality";

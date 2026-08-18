@@ -4,6 +4,8 @@ import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
 import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicScreenShareView } from "./ClassicScreenShareView";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -352,6 +354,11 @@ const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, par
 });
 
 export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicScreenShareView {...props} /> : <ChalkScreenShareView {...props} />;
+}
+
+function ChalkScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
@@ -374,5 +381,7 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
     />
   );
 }
+
+ChalkScreenShareView.displayName = "ChalkScreenShareView";
 
 ScreenShareView.displayName = "ScreenShareView";

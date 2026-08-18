@@ -1,0 +1,90 @@
+import React, { useEffect, useRef } from "react";
+import { ArrowRight01Icon, Cancel01Icon } from "../../utils/icons";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import type { TourTooltipProps } from "./TourTooltip";
+
+export const ClassicTourTooltip = React.memo<TourTooltipProps>(({ title, description, step, totalSteps, placement = "bottom", onNext, onPrev, onSkip, showSkip = true, showProgress = true, className }) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight" || e.key === "n" || e.key === "N") {
+        onNext?.();
+      } else if (e.key === "ArrowLeft" || e.key === "b" || e.key === "B") {
+        if (step > 1) onPrev?.();
+      } else if (e.key === "Escape") {
+        onSkip?.();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onNext, onPrev, onSkip, step]);
+
+  const arrowClasses = cn("absolute w-4 h-4 bg-[var(--chalk-surface)] rotate-45 border-[var(--chalk-line)]", {
+    "top-[-8px] left-1/2 -translate-x-1/2 border-t border-l": placement === "bottom",
+    "bottom-[-8px] left-1/2 -translate-x-1/2 border-b border-r": placement === "top",
+    "left-[-8px] top-1/2 -translate-y-1/2 border-b border-l": placement === "right",
+    "right-[-8px] top-1/2 -translate-y-1/2 border-t border-r": placement === "left",
+  });
+
+  return (
+    <div ref={tooltipRef} role="dialog" aria-label={title} className={cn("relative z-50 min-w-[320px] max-w-sm rounded-2xl", "bg-[var(--chalk-surface)] border border-[var(--chalk-line)]", "shadow-2xl p-6", "text-[var(--chalk-text)]", !prefersReducedMotion && "chalk-animate-scale-in", className)}>
+      <div className={arrowClasses} />
+
+      <div className="flex justify-between items-start mb-4">
+        <h3 className="font-semibold text-lg leading-tight">{title}</h3>
+        {showSkip && (
+          <button type="button" onClick={onSkip} className="text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)] transition-colors p-1 -mt-1 -mr-1" aria-label="Skip tour">
+            <Cancel01Icon size={18} />
+          </button>
+        )}
+      </div>
+
+      <div className="mb-6 text-[var(--chalk-muted-text)] text-[15px] leading-relaxed">{description}</div>
+
+      <div className="flex items-center justify-between gap-4">
+        {showProgress ? (
+          <div className="flex gap-1.5" aria-label={`Step ${step} of ${totalSteps}`}>
+            {Array.from({ length: totalSteps }).map((_, i) => (
+              <div key={i} className={cn("w-1.5 h-1.5 rounded-full transition-all duration-300", i + 1 === step ? "bg-[var(--chalk-accent)] w-4" : "bg-[var(--chalk-stage)]")} />
+            ))}
+          </div>
+        ) : (
+          <div />
+        )}
+
+        <div className="flex gap-2 shrink-0">
+          {step > 1 && (
+            <button type="button" onClick={onPrev} className={cn("flex items-center justify-center py-2 px-3 rounded-xl", "text-[var(--chalk-muted-text)] hover:bg-[var(--chalk-stage)] hover:text-[var(--chalk-text)]", "transition-colors text-sm font-medium")} aria-label="Previous step">
+              Back
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onNext}
+            className={cn("flex items-center justify-center py-2 px-4 rounded-xl", "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:opacity-90 transition-all shadow-md shadow-[var(--chalk-shadow)]", "text-sm font-bold")}
+            aria-label={step === totalSteps ? "Finish tour" : "Next step"}
+          >
+            {step === totalSteps ? (
+              "Got it"
+            ) : (
+              <>
+                Next <ArrowRight01Icon size={16} className="ml-1.5" />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      <div className="sr-only">
+        Step {step} of {totalSteps}
+      </div>
+    </div>
+  );
+});
+
+ClassicTourTooltip.displayName = "ClassicTourTooltip";

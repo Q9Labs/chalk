@@ -1,5 +1,6 @@
 import { useId, useMemo, type CSSProperties } from "react";
 
+import { useSkin } from "../skin-context";
 import { generateChalkFill, generateChalkLayers, type ChalkShape } from "./shapes";
 import { resolveSeed } from "./prng";
 import { DEFAULT_CHALK_DIMENSIONS, usePrefersReducedMotion, useResizeObserver } from "./useResizeObserver";
@@ -46,6 +47,7 @@ export function ChalkChrome({
   className,
   style,
 }: ChalkChromeProps) {
+  const skin = useSkin();
   const id = useId();
   const explicitDimensions = { width: width ?? DEFAULT_CHALK_DIMENSIONS.width, height: height ?? DEFAULT_CHALK_DIMENSIONS.height };
   const { ref, dimensions } = useResizeObserver<SVGSVGElement>(explicitDimensions);
@@ -56,6 +58,8 @@ export function ChalkChrome({
   const shapeOptions = useMemo(() => ({ shape, width: dimensions.width, height: dimensions.height, radius, roughness, seed: resolvedSeed, frameCount, scribble }) as const, [dimensions.height, dimensions.width, frameCount, radius, roughness, resolvedSeed, shape, scribble]);
   const layers = useMemo(() => generateChalkLayers(shapeOptions), [shapeOptions]);
   const filledPath = useMemo(() => (filled && shape !== "line" && shape !== "check" ? generateChalkFill(shapeOptions) : undefined), [filled, shapeOptions]);
+
+  if (skin === "classic") return null;
 
   return (
     <svg

@@ -74,9 +74,10 @@ describe("SpaceView", () => {
     expect(controlBarSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ buttons: expect.arrayContaining(["diagnostics"]), onOpenDiagnostics }));
   });
 
-  it("keeps the theme-only palette and texture attributes on the layout", () => {
-    renderView(createTestClient(), { palette: "warm-charcoal", texture: "paper" });
+  it("keeps the typed skin, palette, and texture attributes on the layout", () => {
+    renderView(createTestClient(), { skin: "chalk", palette: "warm-charcoal", texture: "paper" });
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-theme", "dark");
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-skin", "chalk");
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-palette", "warm-charcoal");
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-texture", "paper");
   });
@@ -92,9 +93,21 @@ describe("SpaceView", () => {
     expect(stageLayout?.className).not.toContain("max-w-");
   });
 
-  it("uses chalk chrome for the stage and an open side panel", () => {
+  it("uses the pre-redesign stage and panel layout by default", () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     const { container } = renderView(client, { features: { chat: true }, initialPanel: "chat" });
+    const stage = screen.getByRole("region", { name: "Space stage" });
+    const panel = screen.getByRole("complementary", { name: "Chat panel" }).parentElement;
+
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-skin", "classic");
+    expect(stage).toHaveClass("chalk-textured-surface", "rounded-[10px]", "bg-[var(--chalk-app-stage)]");
+    expect(panel).toHaveClass("chalk-textured-surface", "rounded-[10px]", "border", "shadow-[var(--chalk-app-shadow-sm)]");
+    expect(container.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
+  });
+
+  it("uses chalk chrome for the stage and an open side panel", () => {
+    const client = createTestClient(createSnapshot(["sendChat"]));
+    const { container } = renderView(client, { skin: "chalk", features: { chat: true }, initialPanel: "chat" });
 
     expect(screen.getByRole("region", { name: "Space stage" }).querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Chat panel" }).querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();

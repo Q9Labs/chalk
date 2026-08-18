@@ -38,6 +38,8 @@ describe("preview fixtures", () => {
   it("passes the production theme through the permission-free Entrance adapter", () => {
     render(<PreviewEntrance spaceName="Design review" theme={COSMIC_CHALK_THEME} onJoin={() => undefined} />);
 
+    expect(COSMIC_CHALK_THEME.skin).toBe("chalk");
+    expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-skin", "chalk");
     expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-palette", "cosmic-chalk");
     expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-texture", "slate");
   });
@@ -46,6 +48,14 @@ describe("preview fixtures", () => {
     render(<PreviewSpaceView client={createTestClient()} spaceName="Design review" palette="warm-charcoal" texture="paper" />);
 
     expect(document.querySelector('[data-chalk-palette="warm-charcoal"]')).toHaveAttribute("data-chalk-texture", "paper");
+  });
+
+  it("forwards the skin independently of palette and texture to SpaceView", () => {
+    render(<PreviewSpaceView client={createTestClient()} spaceName="Design review" skin="chalk" palette="paper-and-ink" texture="none" />);
+
+    expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-skin", "chalk");
+    expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-palette", "paper-and-ink");
+    expect(document.querySelector("main[data-chalk]")).toHaveAttribute("data-chalk-texture", "none");
   });
 
   it("creates a preview client when no client is supplied", () => {

@@ -8,6 +8,8 @@ import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 import { ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkPanel, ChalkToggle } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicSettingsPanel } from "./ClassicSettingsPanel";
 
 export interface SettingsPanelProps {
   enablePictureInPicture?: boolean;
@@ -200,7 +202,7 @@ const SettingsPanelSurface = React.memo(
   },
 );
 
-export function SettingsPanel(props: SettingsPanelProps): React.JSX.Element {
+function ChalkSettingsPanel(props: SettingsPanelProps): React.JSX.Element {
   const client = useSpaceClient();
   const media = useMedia();
   const self = useSelf();
@@ -226,4 +228,9 @@ export function SettingsPanel(props: SettingsPanelProps): React.JSX.Element {
   );
 }
 
-SettingsPanel.displayName = "SettingsPanel";
+ChalkSettingsPanel.displayName = "ChalkSettingsPanel";
+
+export function SettingsPanel(props: SettingsPanelProps): React.JSX.Element {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicSettingsPanel {...props} /> : <ChalkSettingsPanel {...props} />;
+}

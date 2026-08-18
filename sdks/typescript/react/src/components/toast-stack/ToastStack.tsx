@@ -5,6 +5,8 @@ import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircle
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import { ChalkAlert, ChalkBadge, ChalkButton, ChalkIconButton } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicToastStack } from "./ClassicToastStack";
 
 export interface Toast {
   id: string;
@@ -65,7 +67,13 @@ function ToastContent({ currentToast, toastId }: { currentToast: Toast; toastId:
   );
 }
 
-export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }) => {
+export const ToastStack = React.memo<ToastStackProps>((props) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicToastStack {...props} /> : <ChalkToastStack {...props} />;
+});
+
+function ChalkToastStack({ toasts, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }: ToastStackProps) {
   const activeIds = useRef(new Set<string>());
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
@@ -137,7 +145,7 @@ export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, posi
       style={themeVariables as React.CSSProperties}
     />
   );
-});
+}
 
 ToastStack.displayName = "ToastStack";
 

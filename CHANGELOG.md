@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added typed `classic` and `chalk` skins to the web React SDK theme. Classic is
+  the default, the existing hand-drawn treatment remains available as Chalk,
+  and either skin composes independently with every typed palette and texture.
 - Added deterministic hand-drawn chalk controls across the React SDK Entrance
   and Space, plus public chalk buttons, fields, toggles, panels, menus, dialogs,
   alerts, sliders, badges, and loading primitives for custom SDK surfaces.
@@ -40,6 +43,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Restored the React SDK’s pre-redesign Entrance and Space layouts as the
+  Classic skin, and rebuilt the Chalk Entrance as a balanced responsive split
+  between the camera preview and entry form.
 - Made the local API gate own its isolated migrated PostgreSQL database, expose
   every integration-test database alias, run independent checks in parallel,
   avoid duplicate vet work in `go test`, and overlap PostgreSQL preparation

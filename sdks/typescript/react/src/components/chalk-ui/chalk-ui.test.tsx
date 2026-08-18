@@ -5,6 +5,7 @@ import { fireEvent } from "@testing-library/dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { SkinProvider } from "../skin-context";
 import { ChalkBadge } from "./ChalkBadge";
 import { ChalkAlert } from "./ChalkAlert";
 import { ChalkBackdrop } from "./ChalkBackdrop";
@@ -46,6 +47,74 @@ describe("chalk-ui primitives", () => {
     expect(markup).toContain('data-chalk-layer="core"');
     expect(markup).toContain('data-chalk-layer="powder"');
     expect(markup).toContain('data-chalk-layer="edge"');
+  });
+
+  it("keeps direct primitives on the chalk skin by default", () => {
+    const markup = renderToStaticMarkup(<ChalkButton seed={7}>Save</ChalkButton>);
+    expect(markup).toContain('data-chalk-chrome="true"');
+  });
+
+  it("renders classic controls without chalk SVG chrome", () => {
+    document.documentElement.style.setProperty("--chalk-app-control", "rgb(255 255 255)");
+    document.documentElement.style.setProperty("--chalk-app-control-primary", "rgb(26 92 180)");
+    document.documentElement.style.setProperty("--chalk-app-danger", "rgb(190 46 56)");
+    document.documentElement.style.setProperty("--chalk-app-success", "rgb(28 128 76)");
+    document.documentElement.style.setProperty("--chalk-app-line", "rgb(200 200 200)");
+    document.documentElement.style.setProperty("--chalk-app-text", "rgb(12 14 18)");
+    render(
+      <SkinProvider skin="classic">
+        <ChalkButton>Save</ChalkButton>
+        <ChalkButton tone="danger" variant="solid">
+          Delete
+        </ChalkButton>
+        <ChalkButton tone="success" variant="solid">
+          Done
+        </ChalkButton>
+        <ChalkButton tone="danger" variant="ghost">
+          Cancel
+        </ChalkButton>
+        <ChalkBadge tone="danger">Danger</ChalkBadge>
+        <ChalkBadge tone="success">Success</ChalkBadge>
+        <ChalkToggle aria-label="Danger toggle" defaultPressed tone="danger" />
+        <ChalkToggle aria-label="Success toggle" defaultPressed tone="success" />
+        <ChalkAlert tone="success">Success alert</ChalkAlert>
+        <ChalkIconButton aria-label="Danger icon" tone="danger">
+          !
+        </ChalkIconButton>
+        <ChalkPanel>Panel</ChalkPanel>
+        <ChalkInput aria-label="Name" />
+        <ChalkCheckbox aria-label="Agree" />
+        <ChalkSelect aria-label="Theme">
+          <option value="light">Light</option>
+        </ChalkSelect>
+      </SkinProvider>,
+    );
+
+    expect(document.querySelectorAll("svg[data-chalk-chrome='true']")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Save" })).toHaveClass("border-[var(--chalk-app-line-strong,var(--chalk-line))]", "bg-[var(--chalk-app-control,var(--chalk-surface))]", "text-[var(--chalk-app-text,var(--chalk-text))]");
+    const deleteButton = screen.getByRole("button", { name: "Delete" });
+    expect(deleteButton).toHaveClass("bg-[var(--chalk-app-danger,var(--chalk-danger))]", "text-[var(--chalk-app-control-active-text,var(--chalk-accent-text))]");
+    expect(deleteButton).not.toHaveClass("bg-[var(--chalk-app-control-primary,var(--chalk-accent))]");
+    expect(screen.getByRole("button", { name: "Done" })).toHaveClass("bg-[var(--chalk-app-success,var(--chalk-positive))]");
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    expect(cancelButton).toHaveClass("border-transparent", "bg-transparent", "text-[var(--chalk-app-danger,var(--chalk-danger))]");
+    expect(cancelButton).not.toHaveClass("border-[var(--chalk-app-line,var(--chalk-line))]");
+    expect(cancelButton).not.toHaveClass("bg-[var(--chalk-app-control,var(--chalk-surface))]");
+    const dangerBadge = screen.getByText("Danger").parentElement;
+    const successBadge = screen.getByText("Success").parentElement;
+    expect(dangerBadge).toHaveClass("border-[var(--chalk-app-danger,var(--chalk-danger))]");
+    expect(successBadge).toHaveClass("border-[var(--chalk-app-success,var(--chalk-positive))]");
+    expect(dangerBadge).not.toHaveClass("border-[var(--chalk-app-success,var(--chalk-positive))]");
+    const dangerToggle = screen.getByRole("button", { name: "Danger toggle" });
+    const successToggle = screen.getByRole("button", { name: "Success toggle" });
+    expect(dangerToggle).toHaveClass("bg-[var(--chalk-app-danger,var(--chalk-danger))]");
+    expect(successToggle).toHaveClass("bg-[var(--chalk-app-success,var(--chalk-positive))]");
+    expect(dangerToggle).not.toHaveClass("bg-[var(--chalk-app-success,var(--chalk-positive))]");
+    expect(screen.getByRole("alert")).toHaveClass("border-[var(--chalk-app-success,var(--chalk-positive))]");
+    expect(screen.getByRole("button", { name: "Danger icon" })).toHaveClass("border-[var(--chalk-app-danger,var(--chalk-danger))]");
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Agree" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Theme" })).toBeInTheDocument();
   });
 
   it("keeps native semantics across the primitive set", () => {

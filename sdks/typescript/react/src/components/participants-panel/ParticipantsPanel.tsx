@@ -5,6 +5,8 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { ChalkBadge, ChalkButton, ChalkChrome, ChalkEmptyState, ChalkIconButton, ChalkInput, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicParticipantsPanel } from "./ClassicParticipantsPanel";
 import { ParticipantRow } from "./participant-row";
 import { useParticipantVolumeContext } from "./participant-volume-context";
 
@@ -230,7 +232,7 @@ const ParticipantsPanelSurface = React.memo(
   },
 );
 
-export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
+const ChalkParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
@@ -281,6 +283,11 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined}
     />
   );
+});
+
+export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicParticipantsPanel {...props} /> : <ChalkParticipantsPanel {...props} />;
 });
 
 ParticipantsPanel.displayName = "ParticipantsPanel";

@@ -3,6 +3,8 @@ import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { Alert02Icon } from "../../utils/icons";
 import { ChalkBadge, ChalkButton, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicTranscriptLine } from "./ClassicTranscriptLine";
 
 export interface TranscriptLineProps {
   speaker: string;
@@ -53,7 +55,7 @@ function highlightText(text: string, query: string): React.ReactNode {
   });
 }
 
-export const TranscriptLine = React.memo<TranscriptLineProps>(
+const ChalkTranscriptLine = React.memo<TranscriptLineProps>(
   ({ speaker, speakerId, text, timestamp, isInterim = false, confidence = 1.0, showTimestamp = true, showSpeaker = true, speakerColor, isLocalParticipant = false, showAvatar = true, showHeader = true, searchHighlight, isCurrentMatch = false, className }) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [copied, setCopied] = useState(false);
@@ -143,5 +145,10 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
     );
   },
 );
+
+export const TranscriptLine = React.memo<TranscriptLineProps>((props) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicTranscriptLine {...props} /> : <ChalkTranscriptLine {...props} />;
+});
 
 TranscriptLine.displayName = "TranscriptLine";

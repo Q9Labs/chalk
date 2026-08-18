@@ -13,7 +13,8 @@ import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsD
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
-import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
+import { SkinProvider, useSkin } from "../skin-context";
+import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { ChalkButton } from "../chalk-ui";
 
@@ -62,6 +63,7 @@ export type ChalkProps = SpaceIntegration &
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
   const colorScheme = useResolvedColorScheme(props.theme?.palette ? getThemeMode(props.theme.palette) : props.theme?.colorScheme);
+  const skin = props.theme?.skin ?? "classic";
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -88,11 +90,13 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   }, [ownedClient]);
 
   return (
-    <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
-      <ChalkProvider client={client}>
-        <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
-      </ChalkProvider>
-    </div>
+    <SkinProvider skin={skin}>
+      <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} data-chalk-skin={skin} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
+        <ChalkProvider client={client}>
+          <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
+        </ChalkProvider>
+      </div>
+    </SkinProvider>
   );
 }
 
@@ -172,10 +176,12 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
+  const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.skin ?? "classic", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
+  const resolvedSkin: ThemeSkin = props.theme?.skin ?? "classic";
   const resolvedPalette: ThemePalette = props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light");
   const resolvedTexture: ThemeTexture = props.theme?.texture ?? "none";
   const appearancePaletteExplicitRef = useRef(props.theme?.palette !== undefined);
@@ -192,9 +198,18 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
     }));
   }, [media.local.camera.state, media.local.microphone.state, media.selection.camera, media.selection.microphone, media.selection.speaker, self.displayName]);
   useEffect(() => {
-    if (!props.theme?.palette && !props.theme?.texture) return;
-    setSettings((current) => ({ ...current, appearance: { ...current.appearance, palette: props.theme?.palette ?? current.appearance.palette, texture: props.theme?.texture ?? current.appearance.texture, theme: (props.theme?.palette ?? current.appearance.palette) === "light" ? "light" : "dark" } }));
-  }, [props.theme?.palette, props.theme?.texture]);
+    if (!props.theme?.skin && !props.theme?.palette && !props.theme?.texture) return;
+    setSettings((current) => ({
+      ...current,
+      appearance: {
+        ...current.appearance,
+        skin: props.theme?.skin ?? current.appearance.skin,
+        palette: props.theme?.palette ?? current.appearance.palette,
+        texture: props.theme?.texture ?? current.appearance.texture,
+        theme: (props.theme?.palette ?? current.appearance.palette) === "light" ? "light" : "dark",
+      },
+    }));
+  }, [props.theme?.palette, props.theme?.skin, props.theme?.texture]);
   useEffect(() => {
     if (props.theme?.palette || appearancePaletteExplicitRef.current) return;
     const palette: ThemePalette = props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light";
@@ -237,6 +252,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       logoUrl={props.logoUrl}
       inviteLink={props.inviteLink}
       pickChatFiles={props.pickChatFiles}
+      skin={settings.appearance.skin ?? resolvedSkin}
       palette={settings.appearance.palette ?? resolvedPalette}
       texture={settings.appearance.texture ?? resolvedTexture}
       layout={settings.appearance.layout === "focus" || settings.appearance.layout === "grid" || settings.appearance.layout === "presentation" ? settings.appearance.layout : (props.layout ?? "focus")}
@@ -249,12 +265,23 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       whiteboard={whiteboard}
       onToggleWhiteboard={() => setWhiteboardOpen((open) => !open)}
       infoDialog={props.features?.info !== false && props.inviteLink ? { isOpen: infoOpen, onOpenChange: setInfoOpen, spaceName: props.spaceName, inviteLink: props.inviteLink, onCopyLink: () => void navigator.clipboard?.writeText(props.inviteLink!) } : undefined}
-      onOpenSettings={props.features?.settings !== false ? () => setSettingsOpen(true) : undefined}
+      onOpenSettings={
+        props.features?.settings !== false
+          ? () => {
+              setSettingsInitialSection(undefined);
+              setSettingsOpen(true);
+            }
+          : undefined
+      }
       settingsDialog={
         props.features?.settings !== false ? (
           <SettingsDialog
             isOpen={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
+            onClose={() => {
+              setSettingsOpen(false);
+              setSettingsInitialSection(undefined);
+            }}
+            initialSection={settingsInitialSection}
             settings={settings}
             onUpdateIdentity={(updates) => {
               setSettings((current) => ({ ...current, identity: { ...current.identity, ...updates } }));
@@ -278,6 +305,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
             onUpdateAppearance={(updates) => {
               if (updates.palette !== undefined) appearancePaletteExplicitRef.current = true;
               const current = settingsRef.current;
+              if (updates.skin !== undefined && updates.skin !== current.appearance.skin) setSettingsInitialSection("appearance");
               const next = { ...current, appearance: { ...current.appearance, ...updates } };
               settingsRef.current = next;
               setSettings(next);
@@ -308,8 +336,9 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
 }
 
 function StatusView({ message, onRetry }: { readonly message: string; readonly onRetry?: () => void }): React.JSX.Element {
+  const skin = useSkin();
   return (
-    <main className="grid h-full min-h-0 place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
+    <main data-chalk-skin={skin} className="grid h-full min-h-0 place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
       <div className="grid max-w-sm gap-4 justify-items-center">
         <p role="status" className="text-sm text-[var(--chalk-muted-text)]">
           {message}
@@ -356,13 +385,13 @@ function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): v
   useEffect(() => client.on("error", (event) => callbacks.onError?.(event)), [callbacks.onError, client]);
 }
 
-function createSettings(displayName: string, layout: SpaceLayout, palette: ThemePalette, texture: ThemeTexture): SettingsDialogValue {
+function createSettings(displayName: string, layout: SpaceLayout, skin: ThemeSkin, palette: ThemePalette, texture: ThemeTexture): SettingsDialogValue {
   return {
     identity: { displayName },
     join: { videoEnabled: true, audioEnabled: true },
     audio: { outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
     video: { quality: "auto" },
-    appearance: { layout, theme: palette === "light" ? "light" : "dark", palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
+    appearance: { layout, theme: palette === "light" ? "light" : "dark", skin, palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
     experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
   };
 }

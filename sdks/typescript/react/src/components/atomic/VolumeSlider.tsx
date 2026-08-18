@@ -2,6 +2,8 @@ import React from "react";
 import { VolumeHighIcon, VolumeMute01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { ChalkIconButton, ChalkSlider } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicVolumeSlider } from "./ClassicVolumeSlider";
 
 export interface VolumeSliderProps {
   value: number;
@@ -14,7 +16,13 @@ export interface VolumeSliderProps {
   className?: string;
 }
 
-export const VolumeSlider = React.memo<VolumeSliderProps>(({ value, onChange, muted = false, onMuteToggle, showValue = false, size = "md", orientation = "horizontal", className }) => {
+export const VolumeSlider = React.memo<VolumeSliderProps>((props) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicVolumeSlider {...props} /> : <ChalkVolumeSlider {...props} />;
+});
+
+function ChalkVolumeSlider({ value, onChange, muted = false, onMuteToggle, showValue = false, size = "md", orientation = "horizontal", className }: VolumeSliderProps) {
   const isVertical = orientation === "vertical";
   const sliderValue = muted ? 0 : value;
 
@@ -45,6 +53,6 @@ export const VolumeSlider = React.memo<VolumeSliderProps>(({ value, onChange, mu
       {showValue && <span className="text-xs text-[var(--chalk-muted-text)] min-w-[2rem] text-center">{Math.round(sliderValue)}%</span>}
     </div>
   );
-});
+}
 
 VolumeSlider.displayName = "VolumeSlider";

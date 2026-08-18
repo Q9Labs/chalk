@@ -7,11 +7,14 @@ import { getParticipantAvatarRecipe, getParticipantColor, getParticipantThemeVar
 import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { VolumeSlider } from "../atomic";
-import { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_TEXTURES, type ThemePalette, type ThemeTexture } from "../theme";
+import { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 import { ChalkBackdrop, ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkInput, ChalkPanel, ChalkToggle } from "../chalk-ui";
+import { SkinProvider } from "../skin-context";
+import { useSkin } from "../skin-context";
+import { ClassicSettingsDialog } from "./ClassicSettingsDialog";
 
 type SectionId = "audio" | "video" | "appearance" | "experience";
 type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;
@@ -39,6 +42,7 @@ export interface SettingsDialogValue {
   appearance: {
     layout: string;
     theme: "light" | "dark" | "system";
+    skin?: ThemeSkin;
     palette?: ThemePalette;
     texture?: ThemeTexture;
     gradient: "default" | "darker";
@@ -113,6 +117,7 @@ interface SettingsDialogProps {
   reducedMotion?: boolean;
   participantColorSeed?: string;
   isDarkMode?: boolean;
+  initialSection?: SectionId;
 }
 
 const SECTIONS = [
@@ -133,9 +138,9 @@ const SECTIONS = [
   {
     id: "appearance",
     label: "Appearance",
-    description: "Palette, texture, layout",
+    description: "Skin, palette, texture, layout",
     icon: Monitor01Icon,
-    keywords: ["theme", "palette", "texture", "paper", "slate", "layout", "filmstrip", "motion", "dark", "light", "color", "gradient", "profile", "avatar", "facehash", "generated", "initials", "fun"],
+    keywords: ["theme", "skin", "classic", "chalk", "palette", "texture", "paper", "slate", "layout", "filmstrip", "motion", "dark", "light", "color", "gradient", "profile", "avatar", "facehash", "generated", "initials", "fun"],
   },
   {
     id: "experience",
@@ -182,7 +187,7 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
   );
 }
 
-export const SettingsDialog = React.memo(
+const ChalkSettingsDialog = React.memo(
   ({
     isOpen,
     onClose,
@@ -212,17 +217,20 @@ export const SettingsDialog = React.memo(
     reducedMotion = false,
     participantColorSeed,
     isDarkMode = false,
+    initialSection = "audio",
   }: SettingsDialogProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const portalTheme = resolvePortalThemeFromDocument();
     const isDesktop = useMediaQuery("(min-width: 768px)");
     const disableMotion = prefersReducedMotion || reducedMotion;
     const fallbackPalette: ThemePalette = settings.appearance.theme === "dark" || (settings.appearance.theme === "system" && portalTheme === "dark") ? "warm-charcoal" : "light";
+    const inheritedSkin = useSkin();
+    const resolvedSkin = settings.appearance.skin ?? inheritedSkin;
     const resolvedPalette = settings.appearance.palette ?? fallbackPalette;
     const resolvedTexture = settings.appearance.texture ?? "none";
     const resolvedTheme = getThemeMode(resolvedPalette);
     const usesDarkPalette = isDarkMode || isDarkThemePalette(resolvedPalette);
-    const [activeSection, setActiveSection] = useState<SectionId>("audio");
+    const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
     const [isNavOpen, setIsNavOpen] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [detectedDevices, setDetectedDevices] = useState(EMPTY_DEVICE_GROUPS);
@@ -392,6 +400,34 @@ export const SettingsDialog = React.memo(
         case "appearance":
           return (
             <div className="space-y-5">
+              <SectionCard title="Skin" description="Choose the shape and finish of the interface. Every skin can use any palette or texture.">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {THEME_SKINS.map((skin) => {
+                    const isSelected = resolvedSkin === skin.value;
+                    return (
+                      <ChalkButton
+                        variant="outline"
+                        key={skin.value}
+                        type="button"
+                        onClick={() => onUpdateAppearance({ skin: skin.value })}
+                        aria-pressed={isSelected}
+                        className={cn(
+                          "!min-h-0 !w-full !justify-start !rounded-[10px] !border !p-3 !text-left transition-colors",
+                          isSelected
+                            ? "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]"
+                            : "border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] hover:border-[var(--chalk-app-control-active-line)] hover:bg-[var(--chalk-app-control-hover)]",
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">{skin.label}</span>
+                          <span className="mt-0.5 block text-[11px] leading-4 opacity-70">{skin.description}</span>
+                        </span>
+                      </ChalkButton>
+                    );
+                  })}
+                </div>
+              </SectionCard>
+
               <SectionCard title="Palette" description="Choose a complete color family. Every palette can use any material texture.">
                 {(["light", "dark"] as const).map((mode) => (
                   <div key={mode} className="space-y-2.5">
@@ -682,106 +718,137 @@ export const SettingsDialog = React.memo(
     const showContent = isDesktop || !isNavOpen;
 
     return (
-      <Dialog.Root
-        open={isOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            onClose();
-          }
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Backdrop render={<ChalkBackdrop className={cn("z-[100] !bg-[var(--chalk-stage)] !backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />} />
-          <Dialog.Popup
-            data-chalk
-            data-chalk-theme={resolvedTheme}
-            data-chalk-palette={resolvedPalette}
-            data-chalk-texture={resolvedTexture}
-            className={cn(
-              "chalk-root chalk-textured-surface",
-              "fixed inset-4 z-[101] m-auto flex max-h-[min(680px,calc(100dvh-32px))] w-auto max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-chrome)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] md:inset-0",
-              !disableMotion && "animate-in fade-in duration-300 ease-out",
-              !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
-            )}
-            style={settingsChromeVariables}
-          >
-            <ChalkDialogPanel className="!h-full !max-h-full !w-full !max-w-none !rounded-[14px] !border-0 !bg-transparent !p-0" role="presentation">
-              <Dialog.Title className="sr-only">Space settings</Dialog.Title>
-              <div className="flex h-full flex-col md:flex-row">
-                <aside className={cn("flex w-full shrink-0 flex-col border-[var(--chalk-app-line)] bg-[var(--chalk-app-control-group)] md:w-44 md:border-r", !showSidebar && "hidden")}>
-                  <div className="p-3 pb-2">
-                    <div className="mb-5 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Settings01Icon className="h-5 w-5 text-[var(--chalk-app-text-muted)]" />
+      <SkinProvider skin={resolvedSkin}>
+        <Dialog.Root
+          open={isOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              onClose();
+            }
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Backdrop
+              render={
+                <ChalkBackdrop
+                  data-chalk
+                  data-chalk-theme={resolvedTheme}
+                  data-chalk-skin={resolvedSkin}
+                  data-chalk-palette={resolvedPalette}
+                  data-chalk-texture={resolvedTexture}
+                  className={cn("chalk-root z-[100] !bg-[var(--chalk-app-canvas)] !backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")}
+                />
+              }
+            />
+            <Dialog.Popup
+              data-chalk
+              data-chalk-theme={resolvedTheme}
+              data-chalk-skin={resolvedSkin}
+              data-chalk-palette={resolvedPalette}
+              data-chalk-texture={resolvedTexture}
+              className={cn(
+                "chalk-root chalk-textured-surface",
+                "fixed inset-4 z-[101] m-auto flex max-h-[min(680px,calc(100dvh-32px))] w-auto max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-chrome)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] md:inset-0",
+                !disableMotion && "animate-in fade-in duration-300 ease-out",
+                !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
+              )}
+              style={settingsChromeVariables}
+            >
+              <ChalkDialogPanel className="!h-full !max-h-full !w-full !max-w-none !rounded-[14px] !border-0 !bg-transparent !p-0" role="presentation">
+                <Dialog.Title className="sr-only">Space settings</Dialog.Title>
+                <div className="flex h-full flex-col md:flex-row">
+                  <aside className={cn("flex w-full shrink-0 flex-col border-[var(--chalk-app-line)] bg-[var(--chalk-app-control-group)] md:w-44 md:border-r", !showSidebar && "hidden")}>
+                    <div className="p-3 pb-2">
+                      <div className="mb-5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Settings01Icon className="h-5 w-5 text-[var(--chalk-app-text-muted)]" />
+                          <div>
+                            <div className="text-base font-semibold">Settings</div>
+                            <div className="text-xs text-[var(--chalk-app-text-muted)]">Local to this browser</div>
+                          </div>
+                        </div>
+                        <ChalkIconButton onClick={onClose} aria-label="Close settings" className="md:hidden">
+                          <Cancel01Icon className="h-5 w-5" />
+                        </ChalkIconButton>
+                      </div>
+                      <div className="relative">
+                        <Search01Icon className="pointer-events-none absolute left-3 top-1/2 z-[2] h-4 w-4 -translate-y-1/2 text-[var(--chalk-app-text-muted)]" />
+                        <ChalkInput value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" className="rounded-[8px] border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-input)] pl-9" aria-label="Search settings" />
+                      </div>
+                    </div>
+                    <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
+                      {filteredSections.map((section) => {
+                        const Icon = section.icon;
+                        return (
+                          <ChalkButton
+                            variant="ghost"
+                            key={section.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveSection(section.id);
+                              setIsNavOpen(false);
+                            }}
+                            className={cn(
+                              "!min-h-0 !flex !w-full !items-start !justify-start !gap-2.5 !rounded-[8px] !px-3 !py-2.5 !text-left transition-colors",
+                              activeSection === section.id ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]",
+                            )}
+                          >
+                            <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium">{section.label}</span>
+                              <span className="block text-xs opacity-80">{section.description}</span>
+                            </span>
+                          </ChalkButton>
+                        );
+                      })}
+                      {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[var(--chalk-app-line)] px-4 py-8 text-center text-sm text-[var(--chalk-app-text-muted)]">No matching settings.</div>}
+                    </nav>
+                  </aside>
+
+                  <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
+                    <div className="flex items-start justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-5 py-4 md:px-6">
+                      <div className="flex items-center gap-3">
+                        <ChalkIconButton onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections">
+                          <ArrowLeft02Icon className="h-5 w-5" />
+                        </ChalkIconButton>
                         <div>
-                          <div className="text-base font-semibold">Settings</div>
-                          <div className="text-xs text-[var(--chalk-app-text-muted)]">Local to this browser</div>
+                          <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                          <p className="mt-0.5 text-xs text-[var(--chalk-app-text-muted)] md:mt-1 md:text-sm">Changes apply to this device.</p>
                         </div>
                       </div>
-                      <ChalkIconButton onClick={onClose} aria-label="Close settings" className="md:hidden">
+                      <ChalkIconButton onClick={onClose} aria-label="Close settings">
                         <Cancel01Icon className="h-5 w-5" />
                       </ChalkIconButton>
                     </div>
-                    <div className="relative">
-                      <Search01Icon className="pointer-events-none absolute left-3 top-1/2 z-[2] h-4 w-4 -translate-y-1/2 text-[var(--chalk-app-text-muted)]" />
-                      <ChalkInput value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" className="rounded-[8px] border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-input)] pl-9" aria-label="Search settings" />
+                    <div className="chalk-textured-surface min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
+                      <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                     </div>
-                  </div>
-                  <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
-                    {filteredSections.map((section) => {
-                      const Icon = section.icon;
-                      return (
-                        <ChalkButton
-                          variant="ghost"
-                          key={section.id}
-                          type="button"
-                          onClick={() => {
-                            setActiveSection(section.id);
-                            setIsNavOpen(false);
-                          }}
-                          className={cn(
-                            "!min-h-0 !flex !w-full !items-start !justify-start !gap-2.5 !rounded-[8px] !px-3 !py-2.5 !text-left transition-colors",
-                            activeSection === section.id ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]",
-                          )}
-                        >
-                          <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium">{section.label}</span>
-                            <span className="block text-xs opacity-80">{section.description}</span>
-                          </span>
-                        </ChalkButton>
-                      );
-                    })}
-                    {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[var(--chalk-app-line)] px-4 py-8 text-center text-sm text-[var(--chalk-app-text-muted)]">No matching settings.</div>}
-                  </nav>
-                </aside>
-
-                <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
-                  <div className="flex items-start justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-5 py-4 md:px-6">
-                    <div className="flex items-center gap-3">
-                      <ChalkIconButton onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections">
-                        <ArrowLeft02Icon className="h-5 w-5" />
-                      </ChalkIconButton>
-                      <div>
-                        <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
-                        <p className="mt-0.5 text-xs text-[var(--chalk-app-text-muted)] md:mt-1 md:text-sm">Changes apply to this device.</p>
-                      </div>
-                    </div>
-                    <ChalkIconButton onClick={onClose} aria-label="Close settings">
-                      <Cancel01Icon className="h-5 w-5" />
-                    </ChalkIconButton>
-                  </div>
-                  <div className="chalk-textured-surface min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
-                    <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                   </div>
                 </div>
-              </div>
-            </ChalkDialogPanel>
-          </Dialog.Popup>
-        </Dialog.Portal>
-      </Dialog.Root>
+              </ChalkDialogPanel>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
+      </SkinProvider>
     );
   },
 );
+
+ChalkSettingsDialog.displayName = "ChalkSettingsDialog";
+
+export const SettingsDialog = React.memo((props: SettingsDialogProps): React.JSX.Element => {
+  const inheritedSkin = useSkin();
+  const skin = props.settings.appearance.skin ?? inheritedSkin;
+  const previousSkin = React.useRef(skin);
+  const switchedSkinWhileOpen = props.isOpen && previousSkin.current !== skin;
+
+  useEffect(() => {
+    previousSkin.current = skin;
+  }, [skin]);
+
+  const rendererProps = switchedSkinWhileOpen ? { ...props, initialSection: "appearance" as const } : props;
+
+  return <SkinProvider skin={skin}>{skin === "classic" ? <ClassicSettingsDialog {...rendererProps} /> : <ChalkSettingsDialog {...rendererProps} />}</SkinProvider>;
+});
 
 SettingsDialog.displayName = "SettingsDialog";
