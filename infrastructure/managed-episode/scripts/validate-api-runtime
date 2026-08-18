@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+api_env=""
+usage() {
+  echo "usage: validate-api-runtime --env-file <api.env>" >&2
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --env-file) api_env="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage; exit 2 ;;
+  esac
+done
+
+[[ -n "${api_env}" ]] || { usage; exit 2; }
+
+fail() {
+  echo "FAIL $1" >&2
+  exit 1
+}
+
+secure_regular_file() {
+  local file="$1"
+  [[ -f "${file}" && ! -L "${file}" ]] || fail "required input is not a regular file: ${file}"
+  [[ -s "${file}" ]] || fail "required input is empty: ${file}"
+  local mode
+  if stat -f '%Lp' "${file}" >/dev/null 2>&1; then
+    mode="$(stat -f '%Lp' "${file}")"
+  else
+    mode="$(stat -c '%a' "${file}")"
+  fi
+  if ((8#${mode} & 077)); then
+    fail "required input must not grant group or other permissions: ${file}"
+  fi
+}
+
+env_value() {
+  local file="$1"
+  local name="$2"
+  awk -v name="${name}" '
+    index($0, name "=") == 1 { count++; value=substr($0, length(name) + 2) }
+    END { if (count == 1 && length(value) > 0) print value; else exit 1 }
+  ' "${file}"
+}
+
+require_env() {
+  local name="$1"
+  env_value "${api_env}" "${name}" >/dev/null || fail "${name} must occur exactly once with a non-empty value in ${api_env}"
+}
+
+secure_regular_file "${api_env}"
+if grep -Eq '__[A-Z0-9_]+__' "${api_env}"; then
+  fail "API environment contains unresolved placeholders"
+fi
+
+for name in CHALK_DEFAULT_MEDIA_PLANE CHALK_GOOGLE_OAUTH_CLIENT_ID CHALK_GOOGLE_OAUTH_CLIENT_SECRET CHALK_GOOGLE_OAUTH_REDIRECT_URL; do
+  require_env "${name}"
+done
+
+oauth_client_id="$(env_value "${api_env}" CHALK_GOOGLE_OAUTH_CLIENT_ID)"
+oauth_client_secret="$(env_value "${api_env}" CHALK_GOOGLE_OAUTH_CLIENT_SECRET)"
+if [[ -z "${oauth_client_id}" || -z "${oauth_client_secret}" ]]; then
+  fail "Google OAuth client ID and secret must be configured together"
+fi
+[[ "$(env_value "${api_env}" CHALK_GOOGLE_OAUTH_REDIRECT_URL)" == https://chalkmeet.com/api/auth/google/callback ]] || fail "CHALK_GOOGLE_OAUTH_REDIRECT_URL must use the production callback"
+
+case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE)" in
+  cf_sfu)
+    require_env CHALK_CLOUDFLARE_REALTIME_APP_ID
+    require_env CHALK_CLOUDFLARE_REALTIME_APP_SECRET
+    ;;
+  cf_rtk)
+    require_env CHALK_CLOUDFLARE_ACCOUNT_ID
+    require_env CHALK_CLOUDFLARE_API_TOKEN
+    require_env CHALK_CLOUDFLARE_RTK_APP_ID
+    ;;
+  *)
+    fail "CHALK_DEFAULT_MEDIA_PLANE must be cf_sfu or cf_rtk"
+    ;;
+esac
+
+echo "PASS API runtime contract"

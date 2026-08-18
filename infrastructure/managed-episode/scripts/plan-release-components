@@ -69,6 +69,12 @@ classify_path() {
       classifications+=(shared)
       runtime_paths+=("${path}")
       ;;
+    infrastructure/managed-episode/env/api.env.example|infrastructure/managed-episode/scripts/validate-api-runtime|infrastructure/managed-episode/scripts/test-api-config)
+      classifications+=(api)
+      ;;
+    infrastructure/managed-episode/env/sync.env.example|infrastructure/managed-episode/scripts/validate-sync-runtime)
+      classifications+=(sync)
+      ;;
     infrastructure/managed-episode/*)
       classifications+=(shared)
       ;;
