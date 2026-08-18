@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added `web` and `mobile` shipment targets to the affected-workspace gate, so
+  shared SDK changes can validate one consumer lane without hiding shared,
+  non-platform, global, or directly changed work.
+
 ### Changed
 
 ### Fixed
