@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -49,7 +48,7 @@ func TestCreateSpaceAppliesSafeDurationDefaults(t *testing.T) {
 
 func TestCreateSpaceUsesConfiguredDefaultMediaPlane(t *testing.T) {
 	repository := &spaceRepository{}
-	service := spaces.NewServiceWithDefaultProvider(repository, config.MediaPlaneProviderCloudflareSFU)
+	service := spaces.NewServiceWithDefaultProvider(repository, spaces.MediaPlaneProviderCloudflareSFU)
 	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
 
 	if _, err := service.CreateSpace(context.Background(), spaces.CreateSpaceInput{
@@ -59,8 +58,8 @@ func TestCreateSpaceUsesConfiguredDefaultMediaPlane(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create space: %v", err)
 	}
-	if repository.input.MediaPlane != string(config.MediaPlaneProviderCloudflareSFU) {
-		t.Fatalf("media plane = %q, want %q", repository.input.MediaPlane, config.MediaPlaneProviderCloudflareSFU)
+	if repository.input.MediaPlane != string(spaces.MediaPlaneProviderCloudflareSFU) {
+		t.Fatalf("media plane = %q, want %q", repository.input.MediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
 	}
 }
 
@@ -76,7 +75,7 @@ func TestCreateSpaceRejectsExplicitInvalidMediaPlaneValues(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service := spaces.NewServiceWithDefaultProvider(&spaceRepository{}, config.MediaPlaneProviderCloudflareSFU)
+			service := spaces.NewServiceWithDefaultProvider(&spaceRepository{}, spaces.MediaPlaneProviderCloudflareSFU)
 			tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
 
 			_, err := service.CreateSpace(context.Background(), spaces.CreateSpaceInput{
@@ -95,7 +94,7 @@ func TestCreateSpaceRejectsExplicitInvalidMediaPlaneValues(t *testing.T) {
 
 func TestCreateSpaceAppliesMediaPlaneDefaultBeforeFingerprint(t *testing.T) {
 	firstRepository := &idempotentSpaceRepository{}
-	firstService := spaces.NewServiceWithDefaultProvider(firstRepository, config.MediaPlaneProviderCloudflareRTK)
+	firstService := spaces.NewServiceWithDefaultProvider(firstRepository, spaces.MediaPlaneProviderCloudflareRTK)
 	secondRepository := &idempotentSpaceRepository{}
 	secondService := spaces.NewService(secondRepository)
 	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")

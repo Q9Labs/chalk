@@ -13,7 +13,7 @@ import (
 )
 
 func TestRegistryResolvesSpaceProvider(t *testing.T) {
-	registry := NewRegistry(testProcessConfig())
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig()})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"chalk_managed"}`)}
 
@@ -31,7 +31,7 @@ func TestRegistryResolvesSpaceProvider(t *testing.T) {
 
 func TestRegistryFallsBackToTenantProvider(t *testing.T) {
 	defaultProvider := SpaceProviderCloudflareSFU
-	registry := NewRegistry(testProcessConfig())
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig()})
 	space := spaces.Space{}
 	tenant := tenants.Tenant{
 		DefaultMediaPlane:        &defaultProvider,
@@ -51,7 +51,8 @@ func TestRegistryFallsBackToTenantProvider(t *testing.T) {
 }
 
 func TestRegistryUsesProcessConfigWhenTenantConfigIsAbsentForDefaultProvider(t *testing.T) {
-	registry := NewRegistry(testProcessConfig(), config.MediaPlaneProviderCloudflareRTK)
+	telemetry := &recordingTelemetry{}
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig(), DefaultProvider: spaces.MediaPlaneProviderCloudflareRTK, Telemetry: telemetry})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 
 	service, err := registry.Resolve(context.Background(), tenants.Tenant{}, space)
@@ -61,10 +62,17 @@ func TestRegistryUsesProcessConfigWhenTenantConfigIsAbsentForDefaultProvider(t *
 	if service == nil || service.Provider() != mediaplane.ProviderCloudflareRTK {
 		t.Fatalf("service = %#v, want cf_rtk service", service)
 	}
+	telemetry.assertLast(t, Resolution{
+		Provider:            spaces.MediaPlaneProviderCloudflareRTK,
+		ConfigurationSource: ConfigurationSourceDeploymentDefault,
+		Mode:                ModeChalkManaged,
+		Outcome:             ResolutionOutcomeResolved,
+		FailureClass:        "none",
+	})
 }
 
 func TestRegistryUsesProcessConfigWhenTenantConfigIsJSONNullForDefaultProvider(t *testing.T) {
-	registry := NewRegistry(testProcessConfig(), config.MediaPlaneProviderCloudflareSFU)
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig(), DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareSFU}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte("null")}
 
@@ -78,7 +86,7 @@ func TestRegistryUsesProcessConfigWhenTenantConfigIsJSONNullForDefaultProvider(t
 }
 
 func TestRegistryDoesNotFallbackForNonDefaultProvider(t *testing.T) {
-	registry := NewRegistry(testProcessConfig(), config.MediaPlaneProviderCloudflareSFU)
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig(), DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 
 	_, err := registry.Resolve(context.Background(), tenants.Tenant{}, space)
@@ -88,7 +96,8 @@ func TestRegistryDoesNotFallbackForNonDefaultProvider(t *testing.T) {
 }
 
 func TestRegistryDisabledProviderDoesNotFallback(t *testing.T) {
-	registry := NewRegistry(testProcessConfig(), config.MediaPlaneProviderCloudflareRTK)
+	telemetry := &recordingTelemetry{}
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig(), DefaultProvider: spaces.MediaPlaneProviderCloudflareRTK, Telemetry: telemetry})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":false}`)}
 
@@ -99,6 +108,13 @@ func TestRegistryDisabledProviderDoesNotFallback(t *testing.T) {
 	if service != nil {
 		t.Fatalf("service = %#v, want nil", service)
 	}
+	telemetry.assertLast(t, Resolution{
+		Provider:            spaces.MediaPlaneProviderCloudflareRTK,
+		ConfigurationSource: ConfigurationSourceDisabled,
+		Mode:                ModeDisabled,
+		Outcome:             ResolutionOutcomeDisabled,
+		FailureClass:        "none",
+	})
 }
 
 func TestRegistryRejectsMalformedAndMismatchedTenantConfig(t *testing.T) {
@@ -111,7 +127,7 @@ func TestRegistryRejectsMalformedAndMismatchedTenantConfig(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			registry := NewRegistry(testProcessConfig(), config.MediaPlaneProviderCloudflareRTK)
+			registry := NewRegistry(Config{ProcessConfig: testProcessConfig(), DefaultProvider: spaces.MediaPlaneProviderCloudflareRTK})
 			space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 			tenant := tenants.Tenant{MediaPlaneProviderConfig: test.raw}
 
@@ -124,7 +140,7 @@ func TestRegistryRejectsMalformedAndMismatchedTenantConfig(t *testing.T) {
 }
 
 func TestRegistryDisabledProviderReturnsNoService(t *testing.T) {
-	registry := NewRegistry(config.CloudflareRealtimeConfig{})
+	registry := NewRegistry(Config{ProcessConfig: config.CloudflareRealtimeConfig{}})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":false}`)}
 
@@ -138,7 +154,7 @@ func TestRegistryDisabledProviderReturnsNoService(t *testing.T) {
 }
 
 func TestRegistryResolvesTenantManagedConfig(t *testing.T) {
-	registry := NewRegistry(testProcessConfig())
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig()})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"tenant_managed","cloudflare":{"account_id":"tenant-account","api_token":"tenant-token","rtk":{"app_id":"tenant-app","host_preset":"host","participant_preset":"participant"}}}`)}
 
@@ -155,7 +171,7 @@ func TestRegistryResolvesTenantManagedConfig(t *testing.T) {
 }
 
 func TestRegistryRejectsUnknownProvider(t *testing.T) {
-	registry := NewRegistry(testProcessConfig())
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig()})
 	space := spaces.Space{MediaPlane: "mediasoup"}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"mode":"chalk_managed"}`)}
 
@@ -166,7 +182,7 @@ func TestRegistryRejectsUnknownProvider(t *testing.T) {
 }
 
 func TestRegistryRejectsMissingTenantManagedConfig(t *testing.T) {
-	registry := NewRegistry(testProcessConfig())
+	registry := NewRegistry(Config{ProcessConfig: testProcessConfig()})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"tenant_managed"}`)}
 
@@ -177,7 +193,7 @@ func TestRegistryRejectsMissingTenantManagedConfig(t *testing.T) {
 }
 
 func TestRegistryRejectsUnconstructableAdapter(t *testing.T) {
-	registry := NewRegistry(config.CloudflareRealtimeConfig{})
+	registry := NewRegistry(Config{ProcessConfig: config.CloudflareRealtimeConfig{}})
 	space := spaces.Space{MediaPlane: SpaceProviderCloudflareRTK}
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: []byte(`{"enabled":true,"provider":"cf_rtk","mode":"chalk_managed"}`)}
 
@@ -195,5 +211,29 @@ func testProcessConfig() config.CloudflareRealtimeConfig {
 		RealtimeAppSecret: "sfu-secret",
 		RTKAppID:          "rtk-app",
 		RequestTimeout:    time.Second,
+	}
+}
+
+type recordingTelemetry struct {
+	resolutions []Resolution
+}
+
+func (t *recordingTelemetry) RecordResolution(_ context.Context, resolution Resolution) {
+	t.resolutions = append(t.resolutions, resolution)
+}
+
+func (t *recordingTelemetry) assertLast(testingT *testing.T, want Resolution) {
+	testingT.Helper()
+	if len(t.resolutions) == 0 {
+		testingT.Fatal("no resolution telemetry recorded")
+	}
+	got := t.resolutions[len(t.resolutions)-1]
+	if got.Duration <= 0 {
+		testingT.Fatalf("duration = %s, want positive", got.Duration)
+	}
+	got.Duration = 0
+	want.Duration = 0
+	if got != want {
+		testingT.Fatalf("resolution = %#v, want %#v", got, want)
 	}
 }

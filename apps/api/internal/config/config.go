@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 const (
@@ -332,7 +334,7 @@ type Config struct {
 	Auth               AuthConfig
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
-	DefaultMediaPlane  MediaPlaneProvider
+	DefaultMediaPlane  spaces.MediaPlaneProvider
 	Composio           ComposioConfig
 	Database           DatabaseConfig
 	DeadlineScheduler  DeadlineSchedulerConfig
@@ -627,20 +629,20 @@ func validateOpsIngestToken(environment, token string) error {
 	return nil
 }
 
-func loadDefaultMediaPlane() (MediaPlaneProvider, error) {
+func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 	value, ok := os.LookupEnv(DefaultMediaPlane)
 	if !ok || strings.TrimSpace(value) == "" {
 		return "", nil
 	}
 
-	provider, err := ParseMediaPlaneProvider(value)
+	provider, err := spaces.ParseMediaPlaneProvider(value)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", DefaultMediaPlane, err)
 	}
 	return provider, nil
 }
 
-func validateMediaPlaneProcessConfig(provider MediaPlaneProvider, processConfig CloudflareRealtimeConfig) error {
+func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig) error {
 	if provider == "" {
 		return nil
 	}
@@ -649,14 +651,14 @@ func validateMediaPlaneProcessConfig(provider MediaPlaneProvider, processConfig 
 	}
 
 	switch provider {
-	case MediaPlaneProviderCloudflareSFU:
+	case spaces.MediaPlaneProviderCloudflareSFU:
 		if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
 			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)
 		}
 		if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
 			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppSecret, DefaultMediaPlane, provider)
 		}
-	case MediaPlaneProviderCloudflareRTK:
+	case spaces.MediaPlaneProviderCloudflareRTK:
 		if strings.TrimSpace(processConfig.AccountID) == "" {
 			return fmt.Errorf("%s must be set when %s=%s", CloudflareAccountID, DefaultMediaPlane, provider)
 		}
@@ -667,7 +669,7 @@ func validateMediaPlaneProcessConfig(provider MediaPlaneProvider, processConfig 
 			return fmt.Errorf("%s must be set when %s=%s", CloudflareRTKAppID, DefaultMediaPlane, provider)
 		}
 	default:
-		return fmt.Errorf("%s must be one of: %s, %s", DefaultMediaPlane, MediaPlaneProviderCloudflareSFU, MediaPlaneProviderCloudflareRTK)
+		return fmt.Errorf("%s must be one of: %s, %s", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU, spaces.MediaPlaneProviderCloudflareRTK)
 	}
 	return nil
 }

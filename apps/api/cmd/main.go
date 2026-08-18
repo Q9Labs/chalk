@@ -250,7 +250,11 @@ func run() error {
 		}
 		episodeCredentials = verifier
 	}
-	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(cfg.CloudflareRealtime, cfg.DefaultMediaPlane)
+	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+		ProcessConfig:   cfg.CloudflareRealtime,
+		DefaultProvider: cfg.DefaultMediaPlane,
+		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),
+	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
 	var providerBridgeServer *providerbridgeserver.Server

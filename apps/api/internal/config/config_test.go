@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 func TestLoadRequiresSyncTokenSigningConfigInProduction(t *testing.T) {
@@ -250,9 +251,9 @@ func TestLoadDefaultMediaPlaneIsOptional(t *testing.T) {
 }
 
 func TestLoadDefaultMediaPlaneAcceptsKnownProviders(t *testing.T) {
-	for _, provider := range []config.MediaPlaneProvider{
-		config.MediaPlaneProviderCloudflareSFU,
-		config.MediaPlaneProviderCloudflareRTK,
+	for _, provider := range []spaces.MediaPlaneProvider{
+		spaces.MediaPlaneProviderCloudflareSFU,
+		spaces.MediaPlaneProviderCloudflareRTK,
 	} {
 		t.Run(string(provider), func(t *testing.T) {
 			t.Setenv(config.DefaultMediaPlane, string(provider))

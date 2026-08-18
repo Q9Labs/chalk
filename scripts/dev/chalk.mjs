@@ -110,6 +110,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId,
         CHALK_CLOUDFLARE_REALTIME_APP_SECRET: provider.appSecret,
+        CHALK_DEFAULT_MEDIA_PLANE: "cf_sfu",
         CHALK_SYNC_TOKEN_ISSUER: config.auth.issuer,
         CHALK_SYNC_TOKEN_AUDIENCE: config.auth.audience,
         CHALK_SYNC_TOKEN_KEY_ID: identity.kid,

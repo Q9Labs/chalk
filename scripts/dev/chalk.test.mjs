@@ -62,6 +62,7 @@ test("Chalk adapter wires the core DAG and bootstrap boundaries without logging 
     const status = await supervisor.start();
     assert.equal(status.state, "ready");
     assert.equal(apiChildEnv.CHALK_API_REQUEST_LOGS, "all");
+    assert.equal(apiChildEnv.CHALK_DEFAULT_MEDIA_PLANE, "cf_sfu");
     assert.match(output[0], /Chalk dev ready/);
     assert.doesNotMatch(output.join("\n"), /broker-secret-value|app-secret|private-key-value/);
     await supervisor.stop();

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -133,7 +132,7 @@ type FilteredRepository interface {
 
 type Service struct {
 	repository        Repository
-	defaultMediaPlane config.MediaPlaneProvider
+	defaultMediaPlane MediaPlaneProvider
 }
 
 type CreateSpaceInput struct {
@@ -199,7 +198,7 @@ func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
 
-func NewServiceWithDefaultProvider(repository Repository, defaultProvider config.MediaPlaneProvider) Service {
+func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaPlaneProvider) Service {
 	return Service{repository: repository, defaultMediaPlane: defaultProvider}
 }
 
@@ -315,7 +314,7 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 	if err != nil {
 		return ErrInvalidMediaPlane
 	}
-	provider, err := config.ParseMediaPlaneProvider(mediaPlane)
+	provider, err := ParseMediaPlaneProvider(mediaPlane)
 	if err != nil {
 		return ErrInvalidMediaPlane
 	}
@@ -359,7 +358,7 @@ func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 		return err
 	}
 	if input.MediaPlane.Set {
-		provider, parseErr := config.ParseMediaPlaneProvider(*input.MediaPlane.Value)
+		provider, parseErr := ParseMediaPlaneProvider(*input.MediaPlane.Value)
 		if parseErr != nil {
 			return ErrInvalidMediaPlane
 		}
