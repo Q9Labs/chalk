@@ -29,24 +29,15 @@ expect_rejected() {
 
 expect_rejected missing-default 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=/'
 expect_rejected unknown-default 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=unknown/'
+expect_rejected unsupported-rtk-default 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=cf_rtk/'
 expect_rejected partial-oauth 's/^CHALK_GOOGLE_OAUTH_CLIENT_SECRET=.*$/CHALK_GOOGLE_OAUTH_CLIENT_SECRET=/'
 expect_rejected wrong-callback 's|^CHALK_GOOGLE_OAUTH_REDIRECT_URL=.*$|CHALK_GOOGLE_OAUTH_REDIRECT_URL=https://chalkmeet.com/oauth/callback|'
 expect_rejected missing-sfu-secret '/^CHALK_CLOUDFLARE_REALTIME_APP_SECRET=/d'
 expect_rejected missing-sfu-id '/^CHALK_CLOUDFLARE_REALTIME_APP_ID=/d'
 
-rtk_env="${fixture_root}/cf-rtk.env"
-cp "${api_env}" "${rtk_env}"
-sed -i.bak \
-  -e 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=cf_rtk/' \
-  -e '/^CHALK_CLOUDFLARE_RTK_APP_ID=/d' \
-  "${rtk_env}"
-rm "${rtk_env}.bak"
-printf '%s\n' 'CHALK_CLOUDFLARE_RTK_APP_ID=test-rtk-app' >>"${rtk_env}"
-"${managed_root}/scripts/validate-api-runtime" --env-file "${rtk_env}" >/dev/null
-
 for bridge_credential in CHALK_CLOUDFLARE_REALTIME_APP_ID CHALK_CLOUDFLARE_REALTIME_APP_SECRET; do
   missing_bridge_env="${fixture_root}/cf-rtk-missing-${bridge_credential}.env"
-  cp "${rtk_env}" "${missing_bridge_env}"
+  cp "${api_env}" "${missing_bridge_env}"
   sed -i.bak "/^${bridge_credential}=/d" "${missing_bridge_env}"
   rm "${missing_bridge_env}.bak"
   if "${managed_root}/scripts/validate-api-runtime" --env-file "${missing_bridge_env}" >/dev/null 2>&1; then

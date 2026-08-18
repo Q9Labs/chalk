@@ -14,8 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- Added an environment-owned default MediaPlane for new Spaces while keeping
-  concrete Tenant-managed provider configuration authoritative.
+- Added an environment-owned Cloudflare SFU default MediaPlane for new Spaces
+  while keeping concrete Tenant-managed provider configuration authoritative.
 - Enabled Google sign-in in the managed production API contract with a complete
   OAuth client triplet and the exact Chalk web callback.
 - Added a System, Light, and Dark theme choice to the dashboard account menu.

@@ -209,6 +209,9 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	}
 	input.ID = id
 	if !input.MediaPlaneSet && input.MediaPlane == "" && s.defaultMediaPlane != "" {
+		if s.defaultMediaPlane != MediaPlaneProviderCloudflareSFU {
+			return Space{}, ErrInvalidMediaPlane
+		}
 		input.MediaPlane = string(s.defaultMediaPlane)
 	}
 	if err := prepareCreateSpaceInput(&input); err != nil {

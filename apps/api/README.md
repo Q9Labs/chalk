@@ -45,22 +45,23 @@ Redis-backed rate limiting through `CHALK_REDIS_URL`.
 ### Default MediaPlane
 
 `CHALK_DEFAULT_MEDIA_PLANE` selects the deployment-owned MediaPlane used when
-a Create Space request omits `media_plane`. Supported values are `cf_sfu` and
-`cf_rtk`. Managed production requires this setting; generic local and test
-processes may omit it, but then Create Space requests must supply a provider.
+a Create Space request omits `media_plane`. The supported deployment default is
+`cf_sfu`, because the Dashboard access-grant path is SFU-only. Managed
+production requires this setting; generic local and test processes may omit it,
+but then Create Space requests must supply a provider. Explicit Space and
+Tenant-managed provider configuration can still select `cf_rtk`.
 
 An absent Tenant provider configuration may use deployment credentials only
 when the Space provider matches this default. A concrete Tenant configuration
 remains authoritative, an explicit disable never falls back, and deployment
 credentials are never borrowed across providers.
 
-The checked-in local launcher sets `cf_sfu`. A `cf_sfu` deployment requires the
-Realtime app ID and secret. A `cf_rtk` deployment requires the Cloudflare
-account ID, API token, and RealtimeKit app ID.
+The checked-in local launcher sets `cf_sfu`. The deployment default requires the
+Realtime app ID and secret.
 
 The ProviderBridge currently uses the Cloudflare SFU executor independently of
 the deployment default. When the bridge is enabled, its Realtime app ID and
-secret remain required even if `CHALK_DEFAULT_MEDIA_PLANE=cf_rtk`.
+secret remain required.
 
 ### Google OAuth
 

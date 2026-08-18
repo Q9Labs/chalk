@@ -250,28 +250,26 @@ func TestLoadDefaultMediaPlaneIsOptional(t *testing.T) {
 	}
 }
 
-func TestLoadDefaultMediaPlaneAcceptsKnownProviders(t *testing.T) {
-	for _, provider := range []spaces.MediaPlaneProvider{
-		spaces.MediaPlaneProviderCloudflareSFU,
-		spaces.MediaPlaneProviderCloudflareRTK,
-	} {
-		t.Run(string(provider), func(t *testing.T) {
-			t.Setenv(config.DefaultMediaPlane, string(provider))
-			t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "1000")
-			t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
-			t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
-			t.Setenv(config.CloudflareAccountID, "account")
-			t.Setenv(config.CloudflareAPIToken, "token")
-			t.Setenv(config.CloudflareRTKAppID, "rtk-app")
+func TestLoadDefaultMediaPlaneAcceptsCloudflareSFU(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, string(spaces.MediaPlaneProviderCloudflareSFU))
+	t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "1000")
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 
-			cfg, err := config.Load()
-			if err != nil {
-				t.Fatalf("load config: %v", err)
-			}
-			if cfg.DefaultMediaPlane != provider {
-				t.Fatalf("default media plane = %q, want %q", cfg.DefaultMediaPlane, provider)
-			}
-		})
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DefaultMediaPlane != spaces.MediaPlaneProviderCloudflareSFU {
+		t.Fatalf("default media plane = %q, want %q", cfg.DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
+}
+
+func TestLoadRejectsRTKAsDeploymentDefault(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, string(spaces.MediaPlaneProviderCloudflareRTK))
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "Dashboard access-grant") {
+		t.Fatalf("load error = %v, want Dashboard-compatible default validation", err)
 	}
 }
 
@@ -306,36 +304,6 @@ func TestLoadValidatesDefaultMediaPlaneProcessConfig(t *testing.T) {
 				t.Setenv(config.CloudflareRealtimeAppSecret, "")
 			},
 			want: config.CloudflareRealtimeAppSecret,
-		},
-		{
-			name: "rtk account",
-			set: func(t *testing.T) {
-				t.Setenv(config.DefaultMediaPlane, "cf_rtk")
-				t.Setenv(config.CloudflareAccountID, "")
-				t.Setenv(config.CloudflareAPIToken, "token")
-				t.Setenv(config.CloudflareRTKAppID, "app")
-			},
-			want: config.CloudflareAccountID,
-		},
-		{
-			name: "rtk api token",
-			set: func(t *testing.T) {
-				t.Setenv(config.DefaultMediaPlane, "cf_rtk")
-				t.Setenv(config.CloudflareAccountID, "account")
-				t.Setenv(config.CloudflareAPIToken, "")
-				t.Setenv(config.CloudflareRTKAppID, "app")
-			},
-			want: config.CloudflareAPIToken,
-		},
-		{
-			name: "rtk app id",
-			set: func(t *testing.T) {
-				t.Setenv(config.DefaultMediaPlane, "cf_rtk")
-				t.Setenv(config.CloudflareAccountID, "account")
-				t.Setenv(config.CloudflareAPIToken, "token")
-				t.Setenv(config.CloudflareRTKAppID, "")
-			},
-			want: config.CloudflareRTKAppID,
 		},
 	}
 
@@ -899,7 +867,7 @@ func TestLoadProviderBridgeConfig(t *testing.T) {
 	}
 }
 
-func TestLoadProviderBridgeRequiresSFUExecutorConfigWithRTKDefault(t *testing.T) {
+func TestLoadProviderBridgeRequiresSFUExecutorConfig(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		missing string
@@ -909,10 +877,6 @@ func TestLoadProviderBridgeRequiresSFUExecutorConfigWithRTKDefault(t *testing.T)
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setProviderBridgeConfig(t)
-			t.Setenv(config.DefaultMediaPlane, string(spaces.MediaPlaneProviderCloudflareRTK))
-			t.Setenv(config.CloudflareAccountID, "account")
-			t.Setenv(config.CloudflareAPIToken, "token")
-			t.Setenv(config.CloudflareRTKAppID, "rtk-app")
 			t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
 			t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 			t.Setenv(test.missing, "")

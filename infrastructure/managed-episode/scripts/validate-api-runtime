@@ -71,13 +71,8 @@ case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE)" in
     require_env CHALK_CLOUDFLARE_REALTIME_APP_ID
     require_env CHALK_CLOUDFLARE_REALTIME_APP_SECRET
     ;;
-  cf_rtk)
-    require_env CHALK_CLOUDFLARE_ACCOUNT_ID
-    require_env CHALK_CLOUDFLARE_API_TOKEN
-    require_env CHALK_CLOUDFLARE_RTK_APP_ID
-    ;;
   *)
-    fail "CHALK_DEFAULT_MEDIA_PLANE must be cf_sfu or cf_rtk"
+    fail "CHALK_DEFAULT_MEDIA_PLANE must be cf_sfu because the Dashboard access-grant path requires Cloudflare SFU"
     ;;
 esac
 

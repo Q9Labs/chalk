@@ -642,6 +642,9 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", DefaultMediaPlane, err)
 	}
+	if provider != spaces.MediaPlaneProviderCloudflareSFU {
+		return "", fmt.Errorf("%s must be %s because the Dashboard access-grant path requires Cloudflare SFU", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
 	return provider, nil
 }
 
@@ -661,18 +664,8 @@ func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, process
 		if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
 			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppSecret, DefaultMediaPlane, provider)
 		}
-	case spaces.MediaPlaneProviderCloudflareRTK:
-		if strings.TrimSpace(processConfig.AccountID) == "" {
-			return fmt.Errorf("%s must be set when %s=%s", CloudflareAccountID, DefaultMediaPlane, provider)
-		}
-		if strings.TrimSpace(processConfig.APIToken) == "" {
-			return fmt.Errorf("%s must be set when %s=%s", CloudflareAPIToken, DefaultMediaPlane, provider)
-		}
-		if strings.TrimSpace(processConfig.RTKAppID) == "" {
-			return fmt.Errorf("%s must be set when %s=%s", CloudflareRTKAppID, DefaultMediaPlane, provider)
-		}
 	default:
-		return fmt.Errorf("%s must be one of: %s, %s", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU, spaces.MediaPlaneProviderCloudflareRTK)
+		return fmt.Errorf("%s must be %s", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
 	}
 	return nil
 }
