@@ -4,6 +4,7 @@ import LockIcon from "@hugeicons/core-free-icons/LockIcon";
 import RepeatIcon from "@hugeicons/core-free-icons/RepeatIcon";
 
 import { Icon } from "./Icon";
+import { Illustration } from "./Illustration";
 import { SpaceTimeline } from "./visuals";
 
 const POINTS = [
@@ -42,7 +43,12 @@ export function SpaceModel() {
           <p>So Chalk splits the work into two parts. A Space is the durable place, with its members, settings, chat, and whiteboard. An Episode is one bounded run of activity inside it.</p>
         </header>
 
-        <SpaceTimeline />
+        <div className="model-visual">
+          <Illustration className="model-illustration" src="/images/landing/chalk-flow-episodes-20260818.webp" width={1536} height={1024} />
+          <div className="model-timeline">
+            <SpaceTimeline />
+          </div>
+        </div>
 
         <ul className="points">
           {POINTS.map((point) => (

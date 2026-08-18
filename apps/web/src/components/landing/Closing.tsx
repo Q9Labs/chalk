@@ -1,6 +1,7 @@
 import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 
 import { Icon } from "./Icon";
+import { Illustration } from "./Illustration";
 
 const FOOTER_COLUMNS = [
   {
@@ -37,24 +38,28 @@ export function Closing() {
   return (
     <>
       <section className="closing">
-        <div className="container">
-          <h2>
-            Give every conversation <span className="muted">a place to live.</span>
-          </h2>
-          <p>Create a Space in about a minute. Bring your own infrastructure whenever you are ready.</p>
-          <div className="closing-actions">
-            <a href="/sign-up" className="btn btn-primary btn-lg">
-              Create an account
-              <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
-            </a>
-            <a href="/sdk-preview" className="btn btn-secondary btn-lg">
-              Explore the SDK
-            </a>
+        <Illustration className="closing-illustration" src="/images/landing/chalk-flow-closing-20260818.webp" width={1774} height={887} priority />
+        <div className="container closing-content">
+          <div className="closing-copy">
+            <h2>
+              Give every conversation <span className="muted">a place to live.</span>
+            </h2>
+            <p>Create a Space in about a minute. Bring your own infrastructure whenever you are ready.</p>
+            <div className="closing-actions">
+              <a href="/sign-up" className="btn btn-primary btn-lg">
+                Create an account
+                <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
+              </a>
+              <a href="/sdk-preview" className="btn btn-secondary btn-lg">
+                Explore the SDK
+              </a>
+            </div>
           </div>
         </div>
       </section>
 
       <footer className="footer">
+        <Illustration className="footer-illustration" src="/images/landing/chalk-flow-closing-20260818.webp" width={1774} height={887} priority />
         <div className="container">
           <div className="footer-top">
             <div className="footer-brand">

@@ -1,34 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { SpaceLinkCard, SpaceTimeline, StackVisual } from "./visuals";
-
-describe("StackVisual", () => {
-  it("renders the architecture layer labels", () => {
-    const markup = renderToStaticMarkup(<StackVisual />);
-
-    expect(markup).toContain("Front doors");
-    expect(markup).toContain("Portable core");
-    expect(markup).toContain("Contracts");
-    expect(markup).toContain("Your infra");
-  });
-
-  it("names the contracts that make the seam a seam", () => {
-    const markup = renderToStaticMarkup(<StackVisual />);
-
-    expect(markup).toContain("MediaPlane");
-    expect(markup).toContain("TokenSigner");
-  });
-
-  it("hangs the one annotation off the seam it is about", () => {
-    const markup = renderToStaticMarkup(<StackVisual />);
-    const seam = markup.slice(markup.indexOf("sd-layer-seam"));
-
-    expect(seam).toContain("swap either one");
-    expect(seam.indexOf("swap either one")).toBeLessThan(seam.indexOf("Your infra"));
-    expect(markup.match(/sd-annotation/g)).toHaveLength(1);
-  });
-});
+import { SpaceLinkCard, SpaceTimeline } from "./visuals";
 
 describe("SpaceLinkCard", () => {
   it("shows one durable Space link with its members and surfaces", () => {

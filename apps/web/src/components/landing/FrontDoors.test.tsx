@@ -18,6 +18,8 @@ describe("FrontDoors", () => {
     expect(markup).toContain('href="/sign-up"');
     expect(markup).toContain('href="/home"');
     expect(markup).toContain('href="/sdk-preview"');
+    expect(markup).toContain("/images/landing/chalk-flow-hosted-20260818.webp");
+    expect(markup).toContain("/images/landing/chalk-flow-sdk-20260818.webp");
   });
 
   it("shows the real SDK entry point and never mints access in the browser", () => {

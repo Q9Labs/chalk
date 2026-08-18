@@ -15,6 +15,7 @@ describe("Closing", () => {
     expect(markup).toContain("Explore the SDK");
     expect(markup).toContain('href="/sign-up"');
     expect(markup).toContain('href="/sdk-preview"');
+    expect(markup).toContain("/images/landing/chalk-flow-closing-20260818.webp");
     expect(markup).not.toContain("Under active development");
   });
 

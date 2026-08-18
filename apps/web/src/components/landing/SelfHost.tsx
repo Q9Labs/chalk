@@ -2,7 +2,7 @@ import ServerStack01Icon from "@hugeicons/core-free-icons/ServerStack01Icon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 
 import { Icon } from "./Icon";
-import { StackVisual } from "./visuals";
+import { Illustration } from "./Illustration";
 
 const CLAIMS = [
   { id: "deploy", text: "The API, the sync runtime, and Postgres run on your machines, with a deployment we run ourselves and keep documented." },
@@ -26,7 +26,9 @@ export function SelfHost() {
         </header>
 
         <div className="stack-layout">
-          <StackVisual />
+          <div className="portability-illustration card">
+            <Illustration src="/images/landing/chalk-flow-portability-20260818.webp" width={1448} height={1086} />
+          </div>
 
           <div className="stack-copy">
             <ul className="stack-claims">

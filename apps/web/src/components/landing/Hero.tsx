@@ -5,6 +5,7 @@ import ServerStack01Icon from "@hugeicons/core-free-icons/ServerStack01Icon";
 import { useState, type FormEvent } from "react";
 
 import { Icon } from "./Icon";
+import { Illustration } from "./Illustration";
 import { resolveSpaceInviteLink } from "./invite-link";
 
 const PROOF = [
@@ -107,9 +108,9 @@ export function Hero() {
           </ul>
 
           <div className="hero-stage">
-            <figure className="hero-frame">
-              <img src="/images/marketing/chalk-speaker-view-20260801.webp" width={1586} height={992} alt="Chalk Space interface with an active speaker, Participant filmstrip, and media controls." />
-            </figure>
+            <div className="hero-frame">
+              <Illustration src="/images/landing/chalk-flow-hero-20260818.webp" width={1536} height={1024} priority />
+            </div>
           </div>
 
           {/* The invite form belongs down here rather than under the buttons:

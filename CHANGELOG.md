@@ -26,6 +26,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added a product-first landing journey for Account creation, dashboard entry,
   invite-link joining, and SDK discovery, backed by the official technology
   marks distributed through SVGL.
+- Added an original responsive editorial illustration system to the landing
+  page and distilled its shipped capabilities inventory into four readable
+  groups.
 - Added routed Space administration pages with readable configuration,
   Episode history, and separate details and Join Space actions.
 - Added authenticated Dashboard Space entry by slug. Opening a Space now reuses

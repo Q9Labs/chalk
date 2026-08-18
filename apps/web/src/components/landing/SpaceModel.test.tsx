@@ -20,8 +20,10 @@ describe("SpaceModel", () => {
   it("draws the Episode timeline above the points it illustrates", () => {
     const markup = renderToStaticMarkup(<SpaceModel />);
 
+    expect(markup).toContain("/images/landing/chalk-flow-episodes-20260818.webp");
     expect(markup).toContain("tl-rail");
     expect(markup).toContain("Stays in the Space, between all of them");
+    expect(markup.indexOf("chalk-flow-episodes")).toBeLessThan(markup.indexOf("tl-rail"));
     expect(markup.indexOf("tl-rail")).toBeLessThan(markup.indexOf("One link, for good"));
   });
 

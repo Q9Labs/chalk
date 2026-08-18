@@ -1,8 +1,7 @@
 /* ===========================================================================
-   Coded visuals: the Space link card, the Episode timeline, and the stack
-   diagram. All three are decoration for a claim made in prose beside them, so
-   the whole layer is hidden from assistive technology and none of it carries
-   information that is not also written out.
+   Coded proof: the Space link card and the Episode timeline. Both support a
+   claim made in prose beside them, so the whole layer is hidden from assistive
+   technology and carries no information that is unavailable in text.
    =========================================================================== */
 
 /* ===== the Space link card ================================================ */
@@ -286,90 +285,6 @@
   font-weight: 700;
 }
 
-/* ===== the stack diagram ================================================== */
-
-.sd {
-  display: grid;
-  gap: 10px;
-  padding: clamp(18px, 2vw, 26px);
-  border: 1px solid var(--site-line);
-  border-radius: var(--radius-lg);
-  background: var(--site-paper);
-  box-shadow: 0 1px 2px rgba(10, 13, 12, 0.04);
-}
-
-/* Card white, rungs off-white: the reverse loses the card entirely, since the
-   section it sits in is tinted the same off-white. */
-.sd-layer {
-  position: relative;
-  display: grid;
-  align-items: center;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-  gap: 8px 16px;
-  padding: 15px 18px;
-  border: 1px solid var(--site-line);
-  border-radius: var(--radius-md);
-  background: var(--site-paper-2);
-}
-
-/* The one tier the section is about. It is drawn as an interruption in the
-   stack rather than another rung of it, which is what a seam is. */
-.sd-layer-seam {
-  border-color: var(--brand);
-  border-style: dashed;
-  background: var(--brand-wash);
-}
-
-.sd-tier {
-  color: var(--site-ink-3);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.sd-layer-seam .sd-tier {
-  color: var(--brand);
-}
-
-.sd-nodes {
-  display: flex;
-  justify-content: end;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.sd-node {
-  padding: 5px 11px;
-  border: 1px solid var(--site-line);
-  border-radius: var(--radius-sm);
-  background: var(--site-paper-2);
-  color: var(--site-ink-2);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.sd-layer-seam .sd-node {
-  border-color: var(--brand-wash-strong);
-  background: var(--site-paper);
-  color: var(--brand);
-}
-
-.sd-annotation {
-  position: absolute;
-  top: -11px;
-  right: 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--brand);
-  color: #ffffff;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
 /* ===== responsive ========================================================= */
 
 @media (max-width: 760px) {
@@ -390,14 +305,6 @@
   .tl-episode-bar {
     width: clamp(90px, calc(var(--span) * 2.6%), 100%);
     height: 26px;
-  }
-
-  .sd-layer {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .sd-nodes {
-    justify-content: start;
   }
 }
 

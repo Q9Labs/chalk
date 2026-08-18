@@ -323,27 +323,25 @@ body:has(.site) {
   color: var(--brand-ink);
 }
 
-/* ===== the product shot =================================================== */
+/* ===== the hero illustration ============================================= */
 
-/* The screenshot sits in a green frame rather than on the page, which is what
-   keeps a bright interface from dissolving into a white band. */
 .hero-stage {
   margin-top: clamp(40px, 5vw, 64px);
 }
 
 .hero-frame {
+  overflow: hidden;
   margin: 0;
-  padding: clamp(10px, 1.4vw, 18px);
+  border: 1px solid var(--site-line);
   border-radius: clamp(16px, 1.8vw, 24px);
-  background: linear-gradient(150deg, #2f6f5c 0%, #17564599 42%, #eaf7f5 100%);
-  box-shadow: 0 30px 70px -30px rgba(12, 46, 37, 0.45);
+  background: var(--site-paper-2);
+  box-shadow: 0 30px 70px -38px rgba(12, 46, 37, 0.32);
 }
 
 .hero-frame img {
+  display: block;
   width: 100%;
   height: auto;
-  border-radius: clamp(8px, 1vw, 14px);
-  background: var(--site-paper);
 }
 
 /* ===== the invite strip =================================================== */
@@ -477,21 +475,50 @@ body:has(.site) {
 /* ===== closing ============================================================ */
 
 .closing {
+  position: relative;
+  overflow: hidden;
   padding-block: clamp(72px, 8vw, 112px);
   background: var(--brand-wash);
-  text-align: center;
+}
+
+.closing::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(234, 247, 245, 0.99) 0%, rgba(234, 247, 245, 0.94) 32%, rgba(234, 247, 245, 0.15) 62%, rgba(234, 247, 245, 0) 100%);
+  content: "";
+}
+
+.closing-illustration {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.closing-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-height: clamp(270px, 24vw, 350px);
+}
+
+.closing-copy {
+  width: min(48%, 540px);
 }
 
 .closing h2 {
   max-width: 17ch;
-  margin-inline: auto;
   font-size: clamp(34px, 4.2vw, 54px);
   letter-spacing: -0.04em;
 }
 
 .closing p {
   max-width: 48ch;
-  margin: 18px auto 0;
+  margin: 18px 0 0;
   color: var(--site-ink-2);
   font-size: 17px;
   line-height: 1.6;
@@ -499,7 +526,6 @@ body:has(.site) {
 
 .closing-actions {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 30px;
@@ -510,9 +536,27 @@ body:has(.site) {
 /* Same mint as the closing band above it, so the two would fuse into one very
    tall block of colour without a rule to say where the page ends. */
 .footer {
+  position: relative;
+  overflow: hidden;
   padding-block: clamp(48px, 5vw, 72px) 32px;
   border-top: 1px solid var(--brand-wash-strong);
   background: var(--brand-wash);
+}
+
+.footer-illustration {
+  position: absolute;
+  right: -140px;
+  bottom: -155px;
+  width: min(620px, 46vw);
+  height: 310px;
+  opacity: 0.075;
+  object-fit: cover;
+  object-position: right center;
+}
+
+.footer > .container {
+  position: relative;
+  z-index: 1;
 }
 
 .footer-top {
@@ -609,9 +653,49 @@ body:has(.site) {
   .footer-brand {
     grid-column: 1 / -1;
   }
+
+  .closing-copy {
+    width: min(58%, 520px);
+  }
 }
 
 @media (max-width: 560px) {
+  .closing {
+    padding-block: 64px 260px;
+  }
+
+  .closing::after {
+    background: linear-gradient(180deg, var(--brand-wash) 0%, var(--brand-wash) 46%, rgba(234, 247, 245, 0.84) 62%, rgba(234, 247, 245, 0.08) 100%);
+  }
+
+  .closing-illustration {
+    top: auto;
+    height: 280px;
+    object-position: 72% center;
+  }
+
+  .closing-content {
+    display: block;
+    min-height: 0;
+  }
+
+  .closing-copy {
+    width: 100%;
+    text-align: center;
+  }
+
+  .closing h2 {
+    margin-inline: auto;
+  }
+
+  .closing p {
+    margin-inline: auto;
+  }
+
+  .closing-actions {
+    justify-content: center;
+  }
+
   .hero-ctas .btn,
   .closing-actions .btn {
     width: 100%;
@@ -632,5 +716,11 @@ body:has(.site) {
 
   .footer-top {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .footer-illustration {
+    right: -190px;
+    width: 520px;
+    opacity: 0.055;
   }
 }

@@ -1,44 +1,4 @@
-import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import type { CSSProperties } from "react";
-
-import { Icon } from "./Icon";
-
-// Coded visuals. Everything here is decoration for a claim made in prose next to
-// it, so the whole layer is hidden from assistive technology.
-
-const LAYERS = [
-  { tier: "Front doors", nodes: ["Chalk app", "your app"], seam: false },
-  { tier: "Portable core", nodes: ["api", "sync", "identity"], seam: false },
-  { tier: "Contracts", nodes: ["MediaPlane", "TokenSigner"], seam: true },
-  { tier: "Your infra", nodes: ["postgres", "an SFU"], seam: false },
-] as const;
-
-export function StackVisual() {
-  return (
-    <div className="sd" aria-hidden="true">
-      {LAYERS.map((layer) => (
-        <div className={layer.seam ? "sd-layer sd-layer-seam" : "sd-layer"} key={layer.tier}>
-          {/* The note belongs to the seam, so it hangs off the seam's own row
-              rather than floating somewhere in the drawing. */}
-          {layer.seam ? (
-            <span className="sd-annotation">
-              swap either one
-              <Icon glyph={ArrowRight02Icon} size={13} weight={2.4} />
-            </span>
-          ) : null}
-          <span className="sd-tier">{layer.tier}</span>
-          <span className="sd-nodes">
-            {layer.nodes.map((node) => (
-              <span className="sd-node" key={node}>
-                {node}
-              </span>
-            ))}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // Episodes are laid out on a 100-column track so the rail reads as elapsed time
 // rather than as an evenly spaced list.

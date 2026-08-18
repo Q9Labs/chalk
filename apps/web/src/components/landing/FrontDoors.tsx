@@ -4,6 +4,7 @@ import DoorIcon from "@hugeicons/core-free-icons/DoorIcon";
 import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
 
 import { Icon } from "./Icon";
+import { Illustration } from "./Illustration";
 import { SpaceLinkCard } from "./visuals";
 
 type CodeTone = "keyword" | "string" | "type" | "call" | "comment";
@@ -131,8 +132,11 @@ export function FrontDoors() {
                 Open the dashboard
               </a>
             </div>
-            <div className="bento-art">
-              <SpaceLinkCard />
+            <div className="bento-art bento-art-illustrated">
+              <Illustration className="bento-illustration" src="/images/landing/chalk-flow-hosted-20260818.webp" width={1448} height={1086} />
+              <div className="bento-proof bento-proof-link">
+                <SpaceLinkCard />
+              </div>
             </div>
           </article>
 
@@ -150,8 +154,11 @@ export function FrontDoors() {
                 <Icon glyph={ArrowRight02Icon} size={16} weight={2.2} />
               </a>
             </div>
-            <div className="bento-art">
-              <CodeSample />
+            <div className="bento-art bento-art-illustrated">
+              <Illustration className="bento-illustration" src="/images/landing/chalk-flow-sdk-20260818.webp" width={1448} height={1086} />
+              <div className="bento-proof bento-proof-code">
+                <CodeSample />
+              </div>
             </div>
           </article>
         </div>

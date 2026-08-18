@@ -15,10 +15,11 @@ describe("SelfHost", () => {
     expect(markup).toContain("needs an adapter that is not finished");
   });
 
-  it("ticks every claim and singles out the swappable tier in the diagram", () => {
+  it("pairs every claim with the portability illustration", () => {
     const markup = renderToStaticMarkup(<SelfHost />);
 
     expect(markup.match(/stack-claims/g)).toHaveLength(1);
-    expect(markup.match(/sd-layer-seam/g)).toHaveLength(1);
+    expect(markup).toContain("/images/landing/chalk-flow-portability-20260818.webp");
+    expect(markup).not.toContain("sd-layer-seam");
   });
 });

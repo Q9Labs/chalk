@@ -19,6 +19,8 @@ describe("Hero", () => {
     expect(markup).toContain("React and React Native");
     expect(markup).toContain("/brand/technology/typescript.svg");
     expect(markup).toContain("/brand/technology/cloudflare.svg");
+    expect(markup).toContain("/images/landing/chalk-flow-hero-20260818.webp");
+    expect(markup).not.toContain("/images/marketing/chalk-speaker-view-20260801.webp");
   });
 
   it("draws each technology mark once, since React and React Native share a logo", () => {
