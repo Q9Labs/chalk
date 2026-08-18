@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const repoRoot = process.cwd();
-const errors = [];
 
 const sourceRoots = ["apps/web/src", "apps/mobile/src", "infrastructure/uptime-worker/src", "packages/assets/src", "packages/facehash/src", "packages/ui/src", "packages/whiteboard/src", "sdks/typescript/client/src", "sdks/typescript/react-native/src", "sdks/typescript/react/src"];
 
@@ -88,14 +88,17 @@ function isInSourceRoot(relativePath) {
   return sourceRoots.some((sourceRoot) => relativePath.startsWith(`${sourceRoot}/`));
 }
 
-function candidateTestsFor(relativePath) {
+export function candidateTestsFor(relativePath) {
   const parsed = path.parse(relativePath);
   const dir = parsed.dir;
   const base = parsed.name;
+  const directorySuite = path.basename(dir);
   const root = sourceRoots.find((sourceRoot) => relativePath.startsWith(`${sourceRoot}/`));
   return [
     path.join(dir, `${base}.test${parsed.ext}`),
     path.join(dir, `${base}.spec${parsed.ext}`),
+    path.join(dir, `${directorySuite}.test.ts`),
+    path.join(dir, `${directorySuite}.test.tsx`),
     path.join(dir, "__tests__", `${base}.test${parsed.ext}`),
     path.join(dir, "__tests__", `${base}.spec${parsed.ext}`),
     root ? path.join(root, "__tests__", `${base}.test${parsed.ext}`) : null,
@@ -105,18 +108,23 @@ function candidateTestsFor(relativePath) {
   ].filter(Boolean);
 }
 
-const meaningfulSourceFiles = getAddedFiles().filter(isInSourceRoot).filter(isMeaningfulSourceFile);
+function run() {
+  const errors = [];
+  const meaningfulSourceFiles = getAddedFiles().filter(isInSourceRoot).filter(isMeaningfulSourceFile);
 
-for (const relativePath of meaningfulSourceFiles) {
-  if (!candidateTestsFor(relativePath).some((candidate) => existsSync(path.join(repoRoot, candidate)))) {
-    errors.push(relativePath);
+  for (const relativePath of meaningfulSourceFiles) {
+    if (!candidateTestsFor(relativePath).some((candidate) => existsSync(path.join(repoRoot, candidate)))) {
+      errors.push(relativePath);
+    }
   }
+
+  if (errors.length > 0) {
+    console.error("Source files without nearby tests:");
+    for (const relativePath of errors) console.error(`- ${relativePath}`);
+    process.exit(1);
+  }
+
+  console.log(`Test presence passed for ${meaningfulSourceFiles.length} newly added meaningful source files.`);
 }
 
-if (errors.length > 0) {
-  console.error("Source files without nearby tests:");
-  for (const relativePath of errors) console.error(`- ${relativePath}`);
-  process.exit(1);
-}
-
-console.log(`Test presence passed for ${meaningfulSourceFiles.length} newly added meaningful source files.`);
+if (process.argv[1] === fileURLToPath(import.meta.url)) run();

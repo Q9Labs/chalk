@@ -123,7 +123,7 @@ export function createGatePlan(files, options = {}) {
   const testPresenceFiles = addedFiles.join("\n");
 
   const tasks = [
-    task("self-test", "Gate routing tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
+    task("self-test", "Gate routing tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs", "scripts/gates/test-presence.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
     task("language-ratchet", "Language vocabulary ratchet", true, "always required", ["pnpm", "run", "language:ratchet"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
