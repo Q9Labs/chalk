@@ -8,7 +8,7 @@ import { Hero } from "./Hero";
 
 function heroImageSources(): string[] {
   const markup = renderToStaticMarkup(<Hero />);
-  return Array.from(markup.matchAll(/<img src="([^"]+)"/g), (match) => match[1]);
+  return Array.from(markup.matchAll(/<img src="([^"]+)"/g), (match) => match[1]).filter((source) => source !== undefined);
 }
 
 describe("Hero", () => {
