@@ -1,23 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://chalkmeet.com/schemas/managed-episode-deployment-request-v1.json",
+  "$id": "https://chalkmeet.com/schemas/managed-episode-deployment-request-v2.json",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "controller_version",
-    "release_id",
-    "source_revision",
-    "environment",
-    "aws_region",
-    "parameter_prefix",
-    "excluded_secrets",
-    "request_id",
-    "requested_at"
-  ],
+  "required": ["schema_version", "controller_version", "adopt_existing_release", "release_id", "source_revision", "environment", "aws_region", "parameter_prefix", "excluded_secrets", "request_id", "requested_at"],
   "properties": {
-    "schema_version": { "const": 1 },
-    "controller_version": { "const": 1 },
+    "schema_version": { "const": 2 },
+    "controller_version": { "const": 2 },
+    "adopt_existing_release": { "type": "boolean" },
     "release_id": {
       "type": "string",
       "minLength": 1,
@@ -30,38 +20,25 @@
     },
     "environment": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 63,
-      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      "enum": ["staging", "production"]
     },
     "aws_region": {
       "type": "string",
       "minLength": 1,
       "maxLength": 32,
-      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      "pattern": "^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$"
     },
     "parameter_prefix": {
       "type": "string",
       "minLength": 2,
-      "maxLength": 2048,
+      "maxLength": 900,
       "pattern": "^/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
     },
     "excluded_secrets": {
       "type": "array",
       "uniqueItems": true,
       "items": {
-        "enum": [
-          "api-env",
-          "sync-env",
-          "planetscale-sync-proof",
-          "provider-bridge-api-server-cert",
-          "provider-bridge-api-server-key",
-          "provider-bridge-sync-client-ca",
-          "provider-bridge-sync-client-cert",
-          "provider-bridge-sync-client-key",
-          "provider-bridge-api-server-ca",
-          "cloudflare-tunnel-token"
-        ]
+        "enum": ["api-env", "sync-env", "planetscale-sync-proof", "provider-bridge-api-server-cert", "provider-bridge-api-server-key", "provider-bridge-sync-client-ca", "provider-bridge-sync-client-cert", "provider-bridge-sync-client-key", "provider-bridge-api-server-ca", "cloudflare-tunnel-token"]
       }
     },
     "request_id": {

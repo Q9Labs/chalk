@@ -1,7 +1,8 @@
 [Unit]
 Description=Chalk outbound-only Cloudflare Tunnel connector
 After=network-online.target chalk-api.service chalk-sync.service
-Requires=network-online.target chalk-api.service chalk-sync.service
+Requires=chalk-api.service chalk-sync.service
+Wants=network-online.target
 
 [Container]
 Image=__CLOUDFLARED_IMAGE_REFERENCE__

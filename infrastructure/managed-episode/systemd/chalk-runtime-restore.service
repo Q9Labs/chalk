@@ -2,12 +2,17 @@
 Description=Restore the active Chalk managed Episode release
 After=network-online.target
 Wants=network-online.target
-Before=chalk-runtime.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/libexec/chalk-deployment-controller restore
 RemainAfterExit=yes
+Restart=on-failure
+RestartSec=15s
+TimeoutStartSec=15min
+UMask=0077
 User=root
 Group=root
 NoNewPrivileges=false

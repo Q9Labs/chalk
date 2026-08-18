@@ -99,6 +99,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added exact-SHA, component-aware managed release manifests and a manual
   release workflow that builds only the changed API or Sync image while
   carrying the stable component digest and provenance forward.
+- Added a versioned SSM host deployment controller with fail-closed runtime
+  inputs, health-gated promotion, automatic rollback, and exact secret restore
+  after reboot.
 - Added a local-first web release runner that builds one cached artifact,
   verifies staging by default, supports an explicit staging bypass, and reuses
   the same path as the CI fallback.

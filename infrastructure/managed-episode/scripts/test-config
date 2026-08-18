@@ -15,11 +15,15 @@ for argument in --entrypoint=/usr/local/bin/cloudflared --log-opt=tag=chalk-api 
 done
 grep -Fq "Exec=redis-server --save '\"\"' --appendonly no" "${managed_root}/quadlet/chalk-redis.container.in" || { echo "Redis persistence disablement is not generator-safe" >&2; exit 1; }
 grep -Fq 'HealthCmd=["/usr/local/bin/chalk-healthcheck","http://127.0.0.1:8080/readyz"]' "${managed_root}/quadlet/chalk-api.container.in" || { echo "scratch API image healthcheck must use exec form" >&2; exit 1; }
-grep -Fq 'Requires=network-online.target chalk-api.service' "${managed_root}/quadlet/chalk-sync.container.in" || { echo "Sync must hard-require the API unit" >&2; exit 1; }
-grep -Fq 'Requires=network-online.target chalk-api.service chalk-sync.service' "${managed_root}/quadlet/chalk-cloudflared.container.in" || { echo "cloudflared must hard-require application units" >&2; exit 1; }
+grep -Fq 'Requires=chalk-api.service' "${managed_root}/quadlet/chalk-sync.container.in" || { echo "Sync must hard-require the API unit" >&2; exit 1; }
+grep -Fq 'Requires=chalk-api.service chalk-sync.service' "${managed_root}/quadlet/chalk-cloudflared.container.in" || { echo "cloudflared must hard-require application units" >&2; exit 1; }
+grep -Fq 'Wants=network-online.target' "${managed_root}/quadlet/chalk-sync.container.in" || { echo "Sync must wait softly for the user-manager network target" >&2; exit 1; }
+grep -Fq 'Wants=network-online.target' "${managed_root}/quadlet/chalk-cloudflared.container.in" || { echo "cloudflared must wait softly for the user-manager network target" >&2; exit 1; }
 grep -Fq 'Requires=chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service' "${managed_root}/systemd/chalk-runtime.target" || { echo "runtime target must fail closed on partial start" >&2; exit 1; }
 grep -Fq 'After=network-online.target' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must wait for network-online" >&2; exit 1; }
-grep -Fq 'Before=chalk-runtime.target' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must precede the runtime target" >&2; exit 1; }
+grep -Fq 'ExecStart=/usr/local/libexec/chalk-deployment-controller restore' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must invoke the versioned deployment controller" >&2; exit 1; }
+grep -Fq 'Restart=on-failure' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must retry transient boot failures" >&2; exit 1; }
+grep -Fq 'ConditionPathExists=/run/chalk/release/release-manifest.sha256' "${managed_root}/systemd/chalk-runtime.target" || { echo "runtime target must wait for restored release identity" >&2; exit 1; }
 if grep -Fqx 'ProtectKernelModules=true' "${managed_root}/systemd/chalk-runtime-watchdog.service"; then
   echo "watchdog uses a capability sandbox unsupported by the rootless production user manager" >&2
   exit 1
@@ -98,6 +102,88 @@ digest_b="$(printf 'b%.0s' {1..64})"
   --sync-proof "${fixture_root}/sync-proof.json" \
   --rendered-root "${fixture_root}/rendered" \
   --allow-dirty >/dev/null
+
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --excluded-secrets planetscale-sync-proof \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "the mandatory PlanetScale proof was excludable" >&2
+  exit 1
+fi
+
+cp -R "${fixture_root}/env" "${fixture_root}/excluded-api-env"
+rm "${fixture_root}/excluded-api-env/api.env"
+"${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/excluded-api-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --excluded-secrets api-env \
+  --allow-dirty >/dev/null
+
+cp -R "${fixture_root}/excluded-api-env" "${fixture_root}/excluded-api-invalid-sync-env"
+sed -i.bak '/^PORT=/d' "${fixture_root}/excluded-api-invalid-sync-env/sync.env"
+rm "${fixture_root}/excluded-api-invalid-sync-env/sync.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/excluded-api-invalid-sync-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --excluded-secrets api-env \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "an API env exclusion bypassed Sync env validation" >&2
+  exit 1
+fi
+
+cp -R "${fixture_root}/env" "${fixture_root}/excluded-present-api-env"
+sed -i.bak '/^CHALK_API_ADDR=/d' "${fixture_root}/excluded-present-api-env/api.env"
+rm "${fixture_root}/excluded-present-api-env/api.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/excluded-present-api-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --excluded-secrets api-env \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "an exclusion bypassed validation of a present API env" >&2
+  exit 1
+fi
+
+cp -R "${fixture_root}/secrets" "${fixture_root}/excluded-present-secrets"
+printf 'not a certificate\n' >"${fixture_root}/excluded-present-secrets/provider-bridge/api-server.crt"
+chmod 600 "${fixture_root}/excluded-present-secrets/provider-bridge/api-server.crt"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/env" \
+  --secret-root "${fixture_root}/excluded-present-secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --excluded-secrets provider-bridge-api-server-cert \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "an exclusion bypassed validation of a present certificate" >&2
+  exit 1
+fi
+
+cp -R "${fixture_root}/secrets" "${fixture_root}/mismatched-key-secrets"
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "${fixture_root}/mismatched-key-secrets/provider-bridge/sync-client.key" >/dev/null 2>&1
+chmod 600 "${fixture_root}/mismatched-key-secrets/provider-bridge/sync-client.key"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/env" \
+  --secret-root "${fixture_root}/mismatched-key-secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "a certificate/private-key mismatch was accepted" >&2
+  exit 1
+fi
 
 jq -e '
   .schema_version == 2 and

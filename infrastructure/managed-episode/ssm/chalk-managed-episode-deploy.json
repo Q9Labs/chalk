@@ -14,7 +14,7 @@
       "interpolationType": "ENV_VAR",
       "allowedPattern": "^[A-Za-z0-9+/]+={0,2}$",
       "minChars": 1,
-      "maxChars": 16777216
+      "maxChars": 48000
     },
     "ReleaseId": {
       "type": "String",
@@ -42,7 +42,7 @@
       "interpolationType": "ENV_VAR",
       "allowedPattern": "^/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
       "minChars": 2,
-      "maxChars": 2048
+      "maxChars": 900
     },
     "ExcludedSecrets": {
       "type": "String",
@@ -50,6 +50,12 @@
       "allowedPattern": "^\\[[A-Za-z0-9_.,\"-]*\\]$",
       "minChars": 2,
       "maxChars": 4096
+    },
+    "AdoptExistingRelease": {
+      "type": "String",
+      "default": "false",
+      "interpolationType": "ENV_VAR",
+      "allowedValues": ["true", "false"]
     },
     "RequestId": {
       "type": "String",
@@ -67,9 +73,9 @@
     },
     "ControllerVersion": {
       "type": "String",
-      "default": "1",
+      "default": "2",
       "interpolationType": "ENV_VAR",
-      "allowedPattern": "^1$",
+      "allowedPattern": "^2$",
       "minChars": 1,
       "maxChars": 1
     }
@@ -83,10 +89,12 @@
       },
       "inputs": {
         "runCommand": [
+          "#!/bin/bash",
           "set -euo pipefail",
           "umask 077",
+          "for required_command in awk base64 curl find jq mktemp tar; do command -v \"$required_command\" >/dev/null || { printf 'missing required host command: %s\\n' \"$required_command\" >&2; exit 1; }; done",
           "work_root=\"$(mktemp -d /run/chalk-ssm.XXXXXX)\"",
-          "cleanup() { rm -rf -- \"$work_root\"; }",
+          "cleanup() { case \"$work_root\" in /run/chalk-ssm.??????) find \"$work_root\" -depth -delete ;; *) printf 'refusing unsafe SSM work cleanup\\n' >&2 ;; esac; }",
           "trap cleanup EXIT",
           "archive=\"$work_root/source.tar.gz\"",
           "source_root=\"$work_root/source\"",
@@ -97,12 +105,16 @@
           "printf '%s' \"$SSM_ManifestBase64\" | base64 --decode >\"$manifest\"",
           "chmod 0600 \"$manifest\"",
           "request=\"$work_root/deployment-request.json\"",
-          "jq -n --arg release_id \"$SSM_ReleaseId\" --arg source_revision \"$SSM_SourceRevision\" --arg environment \"$SSM_Environment\" --arg aws_region \"$SSM_AwsRegion\" --arg parameter_prefix \"$SSM_ParameterPrefix\" --arg request_id \"$SSM_RequestId\" --arg requested_at \"$SSM_RequestedAt\" --argjson controller_version \"$SSM_ControllerVersion\" --argjson excluded_secrets \"$SSM_ExcludedSecrets\" '{schema_version:1,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,excluded_secrets:$excluded_secrets,request_id:$request_id,requested_at:$requested_at}' >\"$request\"",
+          "jq -n --arg release_id \"$SSM_ReleaseId\" --arg source_revision \"$SSM_SourceRevision\" --arg environment \"$SSM_Environment\" --arg aws_region \"$SSM_AwsRegion\" --arg parameter_prefix \"$SSM_ParameterPrefix\" --arg request_id \"$SSM_RequestId\" --arg requested_at \"$SSM_RequestedAt\" --argjson controller_version \"$SSM_ControllerVersion\" --argjson adopt_existing_release \"$SSM_AdoptExistingRelease\" --argjson excluded_secrets \"$SSM_ExcludedSecrets\" '{schema_version:2,controller_version:$controller_version,adopt_existing_release:$adopt_existing_release,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,excluded_secrets:$excluded_secrets,request_id:$request_id,requested_at:$requested_at}' >\"$request\"",
           "chmod 0600 \"$request\"",
           "controller=\"$source_root/infrastructure/managed-episode/controller/chalk-deployment-controller\"",
-          "test -f \"$controller\"",
+          "test -f \"$controller\" && test ! -L \"$controller\"",
+          "controller_relative=\"controller/chalk-deployment-controller\"",
+          "expected_controller_sha=\"$(jq -er --arg path \"$controller_relative\" '.runtime_artifacts[$path] | select(type == \"string\" and test(\"^[0-9a-f]{64}$\"))' \"$manifest\")\"",
+          "if command -v sha256sum >/dev/null 2>&1; then actual_controller_sha=\"$(sha256sum \"$controller\" | awk '{print $1}')\"; elif command -v shasum >/dev/null 2>&1; then actual_controller_sha=\"$(shasum -a 256 \"$controller\" | awk '{print $1}')\"; else printf 'missing required SHA-256 command\\n' >&2; exit 1; fi",
+          "test \"$actual_controller_sha\" = \"$expected_controller_sha\" || { printf 'controller digest does not match release manifest\\n' >&2; exit 1; }",
           "chmod 0755 \"$controller\"",
-          "exec \"$controller\" deploy --request \"$request\" --manifest \"$manifest\" --source-root \"$source_root\""
+          "\"$controller\" deploy --request \"$request\" --manifest \"$manifest\" --source-root \"$source_root\""
         ]
       }
     }
