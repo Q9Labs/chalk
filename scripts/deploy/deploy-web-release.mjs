@@ -91,15 +91,15 @@ export function parseDeploymentURL(output, projectName = STAGING_PROJECT) {
 
 export function resolveTurboCacheDirectory({ environment = process.env, mainCheckoutRoot = repositoryRoot } = {}) {
   const checkoutRoot = resolve(mainCheckoutRoot);
-  const configuredDirectory = environment[TURBO_CACHE_DIRECTORY_ENV]?.trim();
-  if (configuredDirectory?.startsWith("~") || configuredDirectory?.split(/[\\/]+/).includes("..")) {
+  const configuredDirectory = configuredTurboCacheDirectory(environment);
+  if (hasInvalidCacheConfiguration(configuredDirectory)) {
     throw new Error(`${TURBO_CACHE_DIRECTORY_ENV} must resolve to a directory inside the main checkout; received ${configuredDirectory}`);
   }
-  const cacheDirectory = resolve(checkoutRoot, configuredDirectory || ".turbo/cache");
+  const cacheDirectory = resolve(checkoutRoot, configuredDirectory);
   const relativeCacheDirectory = relative(checkoutRoot, cacheDirectory);
 
-  if (!relativeCacheDirectory || relativeCacheDirectory.startsWith("..") || isAbsolute(relativeCacheDirectory) || cacheDirectory.includes("\0")) {
-    throw new Error(`${TURBO_CACHE_DIRECTORY_ENV} must resolve to a directory inside the main checkout; received ${configuredDirectory || ".turbo/cache"}`);
+  if (isCacheOutsideCheckout(relativeCacheDirectory, cacheDirectory)) {
+    throw new Error(`${TURBO_CACHE_DIRECTORY_ENV} must resolve to a directory inside the main checkout; received ${configuredDirectory}`);
   }
 
   return cacheDirectory;
@@ -124,19 +124,9 @@ export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEF
   return commands;
 }
 
-export async function runWebRelease({
-  arguments_ = process.argv.slice(2),
-  environment = process.env,
-  commandRunner = runCommand,
-  rootDirectory = repositoryRoot,
-  webPath = webDirectory,
-  productionURL = environment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL,
-  build = true,
-  turboCacheDirectory,
-} = {}) {
+export async function runWebRelease({ arguments_ = process.argv.slice(2), environment = process.env, commandRunner = runCommand, rootDirectory = repositoryRoot, webPath = webDirectory, productionURL = resolveProductionURL(environment), build = true, turboCacheDirectory } = {}) {
   const executionEnvironment = { ...process.env, ...environment };
-  const isCI = executionEnvironment.CI === "true" || executionEnvironment.GITHUB_ACTIONS === "true";
-  const options = parseArguments(arguments_, { isCI });
+  const options = parseArguments(arguments_, { isCI: isCIEnvironment(executionEnvironment) });
   const currentSHA = await readGitSHA(commandRunner, rootDirectory, executionEnvironment);
   const expectedSHA = options.sha ?? currentSHA;
   assertExactHEAD(currentSHA, expectedSHA);
@@ -150,33 +140,13 @@ export async function runWebRelease({
   }
 
   await checkRuntimeTools(commandRunner, rootDirectory, executionEnvironment);
-  if (!executionEnvironment.CLOUDFLARE_API_TOKEN?.trim()) {
-    throw new Error("CLOUDFLARE_API_TOKEN is required for a web release; inject it with op run locally or the CI secret");
-  }
+  requireCloudflareToken(executionEnvironment);
 
   await commandRunner(commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory, { env: executionEnvironment }));
   await checkPinnedWrangler(commandRunner, webPath, executionEnvironment);
 
-  if (build) {
-    const buildEnvironment = {
-      ...executionEnvironment,
-      CHALK_COMMIT_SHA: expectedSHA,
-      CHALK_ENVIRONMENT: "production",
-      CHALK_EPISODE_DIAGNOSTICS: "hosted",
-      CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN: "true",
-      CHALK_EPISODE_DIAGNOSTICS_GATEWAY: "verified",
-      VITE_API_URL: "https://api.chalkmeet.com",
-      VITE_CHALK_TELEMETRY_ENABLED: "false",
-    };
-    await commandRunner(commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", resolvedTurboCacheDirectory], rootDirectory, { env: buildEnvironment }));
-  }
-
-  let stagingURL;
-  if (!options.skipStaging) {
-    const stagingDeployment = await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", STAGING_PROJECT, "--branch", "staging", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { capture: true, env: executionEnvironment }));
-    stagingURL = parseDeploymentURL(combinedOutput(stagingDeployment), STAGING_PROJECT);
-    await runVerifier(commandRunner, stagingURL, expectedSHA, executionEnvironment, rootDirectory);
-  }
+  await buildWebArtifact({ build, commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, turboCacheDirectory: resolvedTurboCacheDirectory });
+  const stagingURL = await deployStagingArtifact({ commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, skipStaging: options.skipStaging, webPath });
 
   await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", PRODUCTION_PROJECT, "--branch", "master", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { env: executionEnvironment }));
   await runVerifier(commandRunner, productionURL, expectedSHA, executionEnvironment, rootDirectory, true);
@@ -186,14 +156,67 @@ export async function runWebRelease({
 
 export const deployWebRelease = runWebRelease;
 
-export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), environment = process.env, commandRunner = runCommand, rootDirectory = repositoryRoot, lockPath = environment.CHALK_WEB_RELEASE_LOCK_PATH?.trim() || DEFAULT_RELEASE_LOCK_PATH } = {}) {
+function resolveProductionURL(environment) {
+  return environment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL;
+}
+
+function resolveReleaseLockPath(environment) {
+  return environment.CHALK_WEB_RELEASE_LOCK_PATH?.trim() || DEFAULT_RELEASE_LOCK_PATH;
+}
+
+function configuredTurboCacheDirectory(environment) {
+  return environment[TURBO_CACHE_DIRECTORY_ENV]?.trim() || ".turbo/cache";
+}
+
+function hasInvalidCacheConfiguration(configuredDirectory) {
+  return [configuredDirectory?.startsWith("~") === true, configuredDirectory?.split(/[\\/]+/).includes("..") === true].includes(true);
+}
+
+function isCacheOutsideCheckout(relativeCacheDirectory, cacheDirectory) {
+  return [relativeCacheDirectory.length === 0, relativeCacheDirectory.startsWith(".."), isAbsolute(relativeCacheDirectory), cacheDirectory.includes("\0")].includes(true);
+}
+
+function isCIEnvironment(environment) {
+  return environment.CI === "true" || environment.GITHUB_ACTIONS === "true";
+}
+
+function requireCloudflareToken(environment) {
+  if (!environment.CLOUDFLARE_API_TOKEN?.trim()) {
+    throw new Error("CLOUDFLARE_API_TOKEN is required for a web release; inject it with op run locally or the CI secret");
+  }
+}
+
+async function buildWebArtifact({ build, commandRunner, environment, expectedSHA, rootDirectory, turboCacheDirectory }) {
+  if (!build) return;
+  const buildEnvironment = {
+    ...environment,
+    CHALK_COMMIT_SHA: expectedSHA,
+    CHALK_ENVIRONMENT: "production",
+    CHALK_EPISODE_DIAGNOSTICS: "hosted",
+    CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN: "true",
+    CHALK_EPISODE_DIAGNOSTICS_GATEWAY: "verified",
+    VITE_API_URL: "https://api.chalkmeet.com",
+    VITE_CHALK_TELEMETRY_ENABLED: "false",
+  };
+  await commandRunner(commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", turboCacheDirectory], rootDirectory, { env: buildEnvironment }));
+}
+
+async function deployStagingArtifact({ commandRunner, environment, expectedSHA, rootDirectory, skipStaging, webPath }) {
+  if (skipStaging) return undefined;
+  const stagingDeployment = await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", STAGING_PROJECT, "--branch", "staging", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { capture: true, env: environment }));
+  const stagingURL = parseDeploymentURL(combinedOutput(stagingDeployment), STAGING_PROJECT);
+  await runVerifier(commandRunner, stagingURL, expectedSHA, environment, rootDirectory);
+  return stagingURL;
+}
+
+export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), environment = process.env, commandRunner = runCommand, rootDirectory = repositoryRoot, lockPath = resolveReleaseLockPath(environment) } = {}) {
   const executionEnvironment = { ...process.env, ...environment };
   const options = parseArguments(arguments_);
   const expectedSHA = options.sha ?? (await readGitSHA(commandRunner, rootDirectory, executionEnvironment));
   const turboCacheDirectory = resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
 
   if (options.dryRun) {
-    const plan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL: executionEnvironment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL, rootDirectory, webPath: join(rootDirectory, "apps/web"), turboCacheDirectory });
+    const plan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL: resolveProductionURL(executionEnvironment), rootDirectory, webPath: join(rootDirectory, "apps/web"), turboCacheDirectory });
     console.log(`Local web release dry-run for ${expectedSHA}; no detached worktree, install, upload, or verification commands were executed.`);
     printDryRun(expectedSHA, plan);
     return { sha: expectedSHA, dryRun: true, plan };
