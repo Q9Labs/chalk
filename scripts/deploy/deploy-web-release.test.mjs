@@ -7,6 +7,41 @@ import { buildReleasePlan, parseArguments, parseDeploymentURL, recoverStaleRelea
 
 const fullSHA = "040a7c52698f8cf9b87b0ef48f918b681de9bc35";
 const temporaryDirectories = [];
+const installCommand = "pnpm\0install\0--frozen-lockfile\0--prefer-offline";
+const wranglerVersionCommand = "pnpm\0exec\0wrangler\0--version";
+
+function serializeReleaseCommand({ command, args }) {
+  return [command, ...args].join("\0");
+}
+
+function createReleaseCommandRunner({ calls = [], stagingOutput = "Take a peek over at https://abc123.chalk-staging.pages.dev" } = {}) {
+  const responses = new Map([
+    ["git\0rev-parse\0HEAD", { stdout: fullSHA, stderr: "" }],
+    ["git\0status\0--porcelain=v1\0--untracked-files=all", { stdout: "", stderr: "" }],
+    ["node\0--version", { stdout: "v22.14.0", stderr: "" }],
+    ["pnpm\0--version", { stdout: "10.26.2", stderr: "" }],
+    [wranglerVersionCommand, { stdout: "4.107.0", stderr: "" }],
+    [`pnpm\0exec\0wrangler\0pages\0deploy\0dist/client\0--project-name\0chalk-staging\0--branch\0staging\0--commit-hash\0${fullSHA}\0--commit-dirty=false`, { stdout: stagingOutput, stderr: "" }],
+  ]);
+
+  return async (command) => {
+    calls.push(command);
+    return responses.get(serializeReleaseCommand(command)) ?? { stdout: "", stderr: "" };
+  };
+}
+
+async function runRecordedWebRelease() {
+  const calls = [];
+  await runWebRelease({
+    arguments_: ["--sha", fullSHA],
+    environment: { CLOUDFLARE_API_TOKEN: "injected-by-test" },
+    commandRunner: createReleaseCommandRunner({ calls }),
+    rootDirectory: "/repo",
+    webPath: "/repo/apps/web",
+    productionURL: "https://chalkmeet.com",
+  });
+  return calls;
+}
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
@@ -66,12 +101,7 @@ test("defaults to the exact local HEAD SHA when no CI SHA is supplied", async ()
   const result = await runWebRelease({
     arguments_: ["--dry-run"],
     environment: {},
-    commandRunner: async (command) => {
-      calls.push(command);
-      if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
-      if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
-      return { stdout: "", stderr: "" };
-    },
+    commandRunner: createReleaseCommandRunner({ calls }),
     rootDirectory: "/repo",
     webPath: "/repo/apps/web",
   });
@@ -86,12 +116,7 @@ test("keeps CI dry-run plans on the checked-out persistent cache", async () => {
   const result = await runWebRelease({
     arguments_: ["--sha", fullSHA, "--dry-run"],
     environment: { CI: "true", GITHUB_ACTIONS: "true" },
-    commandRunner: async (command) => {
-      calls.push(command);
-      if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
-      if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
-      return { stdout: "", stderr: "" };
-    },
+    commandRunner: createReleaseCommandRunner({ calls }),
     rootDirectory: "/ci/release",
     webPath: "/ci/release/apps/web",
   });
@@ -151,16 +176,7 @@ test("passes the main checkout cache to detached local release builds", async ()
   const lockDirectory = await mkdtemp(join(tmpdir(), "chalk-web-release-cache-lock-test-"));
   temporaryDirectories.push(lockDirectory);
   const cacheDirectory = join(lockDirectory, "turbo-cache");
-  const commandRunner = async (command) => {
-    calls.push(command);
-    if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
-    if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
-    if (command.command === "node" && command.args[0] === "--version") return { stdout: "v22.14.0" };
-    if (command.command === "pnpm" && command.args[0] === "--version") return { stdout: "10.26.2" };
-    if (command.command === "pnpm" && command.args.at(-1) === "--version") return { stdout: "4.107.0" };
-    if (command.args.includes("--project-name") && command.args.includes("chalk-staging")) return { stdout: "https://abc123.chalk-staging.pages.dev", stderr: "" };
-    return { stdout: "", stderr: "" };
-  };
+  const commandRunner = createReleaseCommandRunner({ calls, stagingOutput: "https://abc123.chalk-staging.pages.dev" });
 
   await runLocalWebRelease({
     arguments_: ["--sha", fullSHA],
@@ -180,28 +196,7 @@ test("passes the main checkout cache to detached local release builds", async ()
 });
 
 test("runs one build, both uploads, and both verifiers through structured commands", async () => {
-  const calls = [];
-  const commandRunner = async (command) => {
-    calls.push(command);
-    if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
-    if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
-    if (command.command === "node" && command.args[0] === "--version") return { stdout: "v22.14.0" };
-    if (command.command === "pnpm" && command.args[0] === "--version") return { stdout: "10.26.2" };
-    if (command.command === "pnpm" && command.args.at(-1) === "--version") return { stdout: "4.107.0" };
-    if (command.args.includes("--project-name") && command.args.includes("chalk-staging")) {
-      return { stdout: "Take a peek over at https://abc123.chalk-staging.pages.dev", stderr: "" };
-    }
-    return { stdout: "", stderr: "" };
-  };
-
-  await runWebRelease({
-    arguments_: ["--sha", fullSHA],
-    environment: { CLOUDFLARE_API_TOKEN: "injected-by-test" },
-    commandRunner,
-    rootDirectory: "/repo",
-    webPath: "/repo/apps/web",
-    productionURL: "https://chalkmeet.com",
-  });
+  const calls = await runRecordedWebRelease();
 
   const installs = calls.filter(({ command, args }) => command === "pnpm" && args[0] === "install");
   const builds = calls.filter(({ command, args }) => command === "pnpm" && args.includes("run") && args.includes("build"));
@@ -219,35 +214,8 @@ test("runs one build, both uploads, and both verifiers through structured comman
 });
 
 test("reads the pinned Wrangler version only after the workspace install", async () => {
-  const order = [];
-  const commandRunner = async (command) => {
-    if (command.command === "git" && command.args[0] === "rev-parse") return { stdout: fullSHA };
-    if (command.command === "git" && command.args[0] === "status") return { stdout: "" };
-    if (command.command === "node" && command.args[0] === "--version") return { stdout: "v22.14.0" };
-    if (command.command === "pnpm" && command.args[0] === "--version") return { stdout: "10.26.2" };
-    if (command.command === "pnpm" && command.args[0] === "install") {
-      order.push("install");
-      return { stdout: "", stderr: "" };
-    }
-    if (command.command === "pnpm" && command.args.includes("wrangler") && command.args.at(-1) === "--version") {
-      order.push("wrangler");
-      if (!order.includes("install")) throw new Error('Command "wrangler" not found');
-      return { stdout: "4.107.0" };
-    }
-    if (command.args.includes("--project-name") && command.args.includes("chalk-staging")) {
-      return { stdout: "Take a peek over at https://abc123.chalk-staging.pages.dev", stderr: "" };
-    }
-    return { stdout: "", stderr: "" };
-  };
+  const calls = await runRecordedWebRelease();
 
-  await runWebRelease({
-    arguments_: ["--sha", fullSHA],
-    environment: { CLOUDFLARE_API_TOKEN: "injected-by-test" },
-    commandRunner,
-    rootDirectory: "/repo",
-    webPath: "/repo/apps/web",
-    productionURL: "https://chalkmeet.com",
-  });
-
-  assert.deepEqual(order, ["install", "wrangler"]);
+  const order = calls.map(serializeReleaseCommand).filter((command) => command === installCommand || command === wranglerVersionCommand);
+  assert.deepEqual(order, [installCommand, wranglerVersionCommand]);
 });
