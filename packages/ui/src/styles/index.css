@@ -762,19 +762,13 @@ main[data-chalk][data-chalk-palette="cosmic-chalk"]::after {
 main[data-chalk][data-chalk-palette="cosmic-chalk"]::before {
   inset: 0;
   opacity: 0.28;
-  background:
-    radial-gradient(circle at 12% 18%, #8fdcff 0 1px, transparent 1.7px),
-    radial-gradient(circle at 76% 13%, #f5d88c 0 1px, transparent 1.7px),
-    radial-gradient(circle at 88% 72%, #8fdcff 0 1px, transparent 1.7px),
-    radial-gradient(circle at 22% 84%, #f4ecd7 0 1px, transparent 1.7px);
+  background: radial-gradient(circle at 12% 18%, #8fdcff 0 1px, transparent 1.7px), radial-gradient(circle at 76% 13%, #f5d88c 0 1px, transparent 1.7px), radial-gradient(circle at 88% 72%, #8fdcff 0 1px, transparent 1.7px), radial-gradient(circle at 22% 84%, #f4ecd7 0 1px, transparent 1.7px);
 }
 
 main[data-chalk][data-chalk-palette="cosmic-chalk"]::after {
   inset: 9% 7%;
   opacity: 0.14;
-  background:
-    linear-gradient(24deg, transparent 0 49.4%, #8fdcff 49.6% 49.9%, transparent 50.1%),
-    linear-gradient(156deg, transparent 0 49.6%, #f5d88c 49.8% 50%, transparent 50.2%);
+  background: linear-gradient(24deg, transparent 0 49.4%, #8fdcff 49.6% 49.9%, transparent 50.1%), linear-gradient(156deg, transparent 0 49.6%, #f5d88c 49.8% 50%, transparent 50.2%);
 }
 
 main[data-chalk][data-chalk-palette="cosmic-chalk"] > * {

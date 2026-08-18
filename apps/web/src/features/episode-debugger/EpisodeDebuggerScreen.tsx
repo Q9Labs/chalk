@@ -236,7 +236,15 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
             <Button variant="ghost" size="icon" title="Copy the complete AgentBrief Markdown" aria-label="Copy the complete AgentBrief Markdown" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
               <HugeiconsIcon icon={ListViewIcon} strokeWidth={1.7} />
             </Button>
-            <Button variant="ghost" size="icon" title="Download the diagnostic bundle" aria-label="Download the diagnostic bundle" data-episode-action="download-json" onClick={() => void exportController?.start(liveState.lastAppliedCursor)} disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Download the diagnostic bundle"
+              aria-label="Download the diagnostic bundle"
+              data-episode-action="download-json"
+              onClick={() => void exportController?.start(liveState.lastAppliedCursor)}
+              disabled={!snapshot || exportState.phase === "starting" || exportState.phase === "polling"}
+            >
               <HugeiconsIcon icon={Download04Icon} strokeWidth={1.7} />
             </Button>
             <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact")}>

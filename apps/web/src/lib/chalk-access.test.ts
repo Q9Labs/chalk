@@ -179,7 +179,10 @@ describe("local Chalk access client", () => {
 
   it("surfaces nested Dashboard API error messages", async () => {
     const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse({ error: { code: "media_plane.unavailable", message: "Media access is unavailable." } }, 503)];
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => responses.shift() ?? new Response(null, { status: 500 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => responses.shift() ?? new Response(null, { status: 500 })),
+    );
 
     await expect(joinDashboardSpace("tenant-1", "design-lab", "Ada")).rejects.toThrow("Media access is unavailable.");
   });
