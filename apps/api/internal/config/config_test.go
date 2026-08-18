@@ -237,6 +237,123 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultMediaPlaneIsOptional(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DefaultMediaPlane != "" {
+		t.Fatalf("default media plane = %q, want empty", cfg.DefaultMediaPlane)
+	}
+}
+
+func TestLoadDefaultMediaPlaneAcceptsKnownProviders(t *testing.T) {
+	for _, provider := range []config.MediaPlaneProvider{
+		config.MediaPlaneProviderCloudflareSFU,
+		config.MediaPlaneProviderCloudflareRTK,
+	} {
+		t.Run(string(provider), func(t *testing.T) {
+			t.Setenv(config.DefaultMediaPlane, string(provider))
+			t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "1000")
+			t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+			t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
+			t.Setenv(config.CloudflareAccountID, "account")
+			t.Setenv(config.CloudflareAPIToken, "token")
+			t.Setenv(config.CloudflareRTKAppID, "rtk-app")
+
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.DefaultMediaPlane != provider {
+				t.Fatalf("default media plane = %q, want %q", cfg.DefaultMediaPlane, provider)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsUnknownDefaultMediaPlane(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, "mediasoup")
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.DefaultMediaPlane) {
+		t.Fatalf("load error = %v, want %s validation", err, config.DefaultMediaPlane)
+	}
+}
+
+func TestLoadValidatesDefaultMediaPlaneProcessConfig(t *testing.T) {
+	tests := []struct {
+		name string
+		set  func(*testing.T)
+		want string
+	}{
+		{
+			name: "sfu app id",
+			set: func(t *testing.T) {
+				t.Setenv(config.DefaultMediaPlane, "cf_sfu")
+				t.Setenv(config.CloudflareRealtimeAppID, "")
+				t.Setenv(config.CloudflareRealtimeAppSecret, "secret")
+			},
+			want: config.CloudflareRealtimeAppID,
+		},
+		{
+			name: "sfu app secret",
+			set: func(t *testing.T) {
+				t.Setenv(config.DefaultMediaPlane, "cf_sfu")
+				t.Setenv(config.CloudflareRealtimeAppID, "app")
+				t.Setenv(config.CloudflareRealtimeAppSecret, "")
+			},
+			want: config.CloudflareRealtimeAppSecret,
+		},
+		{
+			name: "rtk account",
+			set: func(t *testing.T) {
+				t.Setenv(config.DefaultMediaPlane, "cf_rtk")
+				t.Setenv(config.CloudflareAccountID, "")
+				t.Setenv(config.CloudflareAPIToken, "token")
+				t.Setenv(config.CloudflareRTKAppID, "app")
+			},
+			want: config.CloudflareAccountID,
+		},
+		{
+			name: "rtk api token",
+			set: func(t *testing.T) {
+				t.Setenv(config.DefaultMediaPlane, "cf_rtk")
+				t.Setenv(config.CloudflareAccountID, "account")
+				t.Setenv(config.CloudflareAPIToken, "")
+				t.Setenv(config.CloudflareRTKAppID, "app")
+			},
+			want: config.CloudflareAPIToken,
+		},
+		{
+			name: "rtk app id",
+			set: func(t *testing.T) {
+				t.Setenv(config.DefaultMediaPlane, "cf_rtk")
+				t.Setenv(config.CloudflareAccountID, "account")
+				t.Setenv(config.CloudflareAPIToken, "token")
+				t.Setenv(config.CloudflareRTKAppID, "")
+			},
+			want: config.CloudflareRTKAppID,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "1000")
+			t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+			t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
+			t.Setenv(config.CloudflareAccountID, "account")
+			t.Setenv(config.CloudflareAPIToken, "token")
+			t.Setenv(config.CloudflareRTKAppID, "rtk-app")
+			test.set(t)
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("load error = %v, want %s validation", err, test.want)
+			}
+		})
+	}
+}
+
 func TestLoadRecentAuthSecret(t *testing.T) {
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	cfg, err := config.Load()

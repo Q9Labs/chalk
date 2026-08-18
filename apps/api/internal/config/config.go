@@ -96,6 +96,7 @@ const (
 	CloudflareRTKPresetFacilitator     = "CHALK_CLOUDFLARE_RTK_PRESET_FACILITATOR"
 	CloudflareRTKPresetContributor     = "CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR"
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
+	DefaultMediaPlane                  = "CHALK_DEFAULT_MEDIA_PLANE"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
 	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
@@ -331,6 +332,7 @@ type Config struct {
 	Auth               AuthConfig
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
+	DefaultMediaPlane  MediaPlaneProvider
 	Composio           ComposioConfig
 	Database           DatabaseConfig
 	DeadlineScheduler  DeadlineSchedulerConfig
@@ -501,6 +503,25 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("%s must be an absolute localhost URL without query or fragment", CloudflareRealtimeBaseURL)
 		}
 	}
+	defaultMediaPlane, err := loadDefaultMediaPlane()
+	if err != nil {
+		return Config{}, err
+	}
+	cloudflareRealtime := CloudflareRealtimeConfig{
+		AccountID:            envOrDefault(CloudflareAccountID, ""),
+		APIToken:             envOrDefault(CloudflareAPIToken, ""),
+		RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
+		RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
+		RealtimeBaseURL:      realtimeBaseURL,
+		RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
+		RTKTokenOrgID:        envOrDefault(CloudflareRTKTokenOrgID, ""),
+		RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
+		RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
+		RequestTimeout:       cloudflareRealtimeRequestTimeout,
+	}
+	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime); err != nil {
+		return Config{}, err
+	}
 	r2Config := R2Config{
 		AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
 		AccountID:       envOrDefault(R2AccountID, ""),
@@ -543,19 +564,9 @@ func Load() (Config, error) {
 			RecentAuthSecret:          recentAuthSecret,
 			SessionTTL:                sessionTTL,
 		},
-		Capabilities: capabilities,
-		CloudflareRealtime: CloudflareRealtimeConfig{
-			AccountID:            envOrDefault(CloudflareAccountID, ""),
-			APIToken:             envOrDefault(CloudflareAPIToken, ""),
-			RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
-			RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
-			RealtimeBaseURL:      realtimeBaseURL,
-			RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
-			RTKTokenOrgID:        envOrDefault(CloudflareRTKTokenOrgID, ""),
-			RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
-			RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
-			RequestTimeout:       cloudflareRealtimeRequestTimeout,
-		},
+		Capabilities:       capabilities,
+		CloudflareRealtime: cloudflareRealtime,
+		DefaultMediaPlane:  defaultMediaPlane,
 		Composio: ComposioConfig{
 			APIKey:         composioAPIKey,
 			BaseURL:        envOrDefault(ComposioBaseURL, DefaultComposioBaseURL),
@@ -612,6 +623,51 @@ func validateOpsIngestToken(environment, token string) error {
 	}
 	if len(token) < opsIngestTokenMinLength {
 		return fmt.Errorf("%s must be at least %d bytes", APIOpsIngestToken, opsIngestTokenMinLength)
+	}
+	return nil
+}
+
+func loadDefaultMediaPlane() (MediaPlaneProvider, error) {
+	value, ok := os.LookupEnv(DefaultMediaPlane)
+	if !ok || strings.TrimSpace(value) == "" {
+		return "", nil
+	}
+
+	provider, err := ParseMediaPlaneProvider(value)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", DefaultMediaPlane, err)
+	}
+	return provider, nil
+}
+
+func validateMediaPlaneProcessConfig(provider MediaPlaneProvider, processConfig CloudflareRealtimeConfig) error {
+	if provider == "" {
+		return nil
+	}
+	if processConfig.RequestTimeout <= 0 {
+		return fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
+	}
+
+	switch provider {
+	case MediaPlaneProviderCloudflareSFU:
+		if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
+			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)
+		}
+		if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
+			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppSecret, DefaultMediaPlane, provider)
+		}
+	case MediaPlaneProviderCloudflareRTK:
+		if strings.TrimSpace(processConfig.AccountID) == "" {
+			return fmt.Errorf("%s must be set when %s=%s", CloudflareAccountID, DefaultMediaPlane, provider)
+		}
+		if strings.TrimSpace(processConfig.APIToken) == "" {
+			return fmt.Errorf("%s must be set when %s=%s", CloudflareAPIToken, DefaultMediaPlane, provider)
+		}
+		if strings.TrimSpace(processConfig.RTKAppID) == "" {
+			return fmt.Errorf("%s must be set when %s=%s", CloudflareRTKAppID, DefaultMediaPlane, provider)
+		}
+	default:
+		return fmt.Errorf("%s must be one of: %s, %s", DefaultMediaPlane, MediaPlaneProviderCloudflareSFU, MediaPlaneProviderCloudflareRTK)
 	}
 	return nil
 }

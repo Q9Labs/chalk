@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -43,6 +44,75 @@ func TestCreateSpaceAppliesSafeDurationDefaults(t *testing.T) {
 		repository.input.MaximumEpisodeDurationSeconds != spaces.DefaultMaximumEpisodeDurationSeconds ||
 		repository.input.LingerWindowSeconds != spaces.DefaultLingerWindowSeconds {
 		t.Fatalf("defaults = %d/%d/%d, want %d/%d/%d", repository.input.DefaultEpisodeDurationSeconds, repository.input.MaximumEpisodeDurationSeconds, repository.input.LingerWindowSeconds, spaces.DefaultEpisodeDurationSeconds, spaces.DefaultMaximumEpisodeDurationSeconds, spaces.DefaultLingerWindowSeconds)
+	}
+}
+
+func TestCreateSpaceUsesConfiguredDefaultMediaPlane(t *testing.T) {
+	repository := &spaceRepository{}
+	service := spaces.NewServiceWithDefaultProvider(repository, config.MediaPlaneProviderCloudflareSFU)
+	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+
+	if _, err := service.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+		TenantID: tenantID,
+		Name:     "Daily",
+		Slug:     "daily",
+	}); err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	if repository.input.MediaPlane != string(config.MediaPlaneProviderCloudflareSFU) {
+		t.Fatalf("media plane = %q, want %q", repository.input.MediaPlane, config.MediaPlaneProviderCloudflareSFU)
+	}
+}
+
+func TestCreateSpaceRejectsExplicitInvalidMediaPlaneValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "null", value: ""},
+		{name: "empty", value: "   "},
+		{name: "unknown", value: "mediasoup"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := spaces.NewServiceWithDefaultProvider(&spaceRepository{}, config.MediaPlaneProviderCloudflareSFU)
+			tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+
+			_, err := service.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+				TenantID:      tenantID,
+				Name:          "Daily",
+				Slug:          "daily",
+				MediaPlane:    test.value,
+				MediaPlaneSet: true,
+			})
+			if !errors.Is(err, spaces.ErrInvalidMediaPlane) {
+				t.Fatalf("error = %v, want invalid media plane", err)
+			}
+		})
+	}
+}
+
+func TestCreateSpaceAppliesMediaPlaneDefaultBeforeFingerprint(t *testing.T) {
+	firstRepository := &idempotentSpaceRepository{}
+	firstService := spaces.NewServiceWithDefaultProvider(firstRepository, config.MediaPlaneProviderCloudflareRTK)
+	secondRepository := &idempotentSpaceRepository{}
+	secondService := spaces.NewService(secondRepository)
+	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+	requestKey := "space-create-request-0001"
+
+	if _, err := firstService.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+		TenantID: tenantID, Name: "Daily", Slug: "daily", RequestKey: requestKey,
+	}); err != nil {
+		t.Fatalf("defaulted create: %v", err)
+	}
+	if _, err := secondService.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+		TenantID: tenantID, Name: "Daily", Slug: "daily", MediaPlane: "cf_rtk", RequestKey: requestKey,
+	}); err != nil {
+		t.Fatalf("explicit create: %v", err)
+	}
+	if firstRepository.input.MediaPlane != secondRepository.input.MediaPlane || firstRepository.input.RequestFingerprint != secondRepository.input.RequestFingerprint {
+		t.Fatalf("defaulted fingerprint/input = %q/%x, explicit = %q/%x", firstRepository.input.MediaPlane, firstRepository.input.RequestFingerprint, secondRepository.input.MediaPlane, secondRepository.input.RequestFingerprint)
 	}
 }
 

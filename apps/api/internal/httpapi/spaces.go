@@ -75,15 +75,15 @@ type spaceListResponse struct {
 }
 
 type createSpaceRequest struct {
-	Name                          string                 `json:"name"`
-	Slug                          string                 `json:"slug"`
-	MediaPlane                    string                 `json:"media_plane"`
-	Metadata                      utilities.OptionalJSON `json:"metadata"`
-	RecurringPolicy               utilities.OptionalJSON `json:"recurring_policy"`
-	AdmissionPolicy               utilities.OptionalJSON `json:"admission_policy"`
-	DefaultEpisodeDurationSeconds int32                  `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds int32                  `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           int32                  `json:"linger_window_seconds"`
+	Name                          string                   `json:"name"`
+	Slug                          string                   `json:"slug"`
+	MediaPlane                    utilities.OptionalString `json:"media_plane"`
+	Metadata                      utilities.OptionalJSON   `json:"metadata"`
+	RecurringPolicy               utilities.OptionalJSON   `json:"recurring_policy"`
+	AdmissionPolicy               utilities.OptionalJSON   `json:"admission_policy"`
+	DefaultEpisodeDurationSeconds int32                    `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32                    `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32                    `json:"linger_window_seconds"`
 }
 
 type updateSpaceRequest struct {
@@ -158,7 +158,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -236,7 +236,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceID, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -454,11 +454,16 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 }
 
 func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID utilities.ID, requestKey string) spaces.CreateSpaceInput {
+	mediaPlane := ""
+	if request.MediaPlane.Value != nil {
+		mediaPlane = *request.MediaPlane.Value
+	}
 	return spaces.CreateSpaceInput{
 		Name:                          request.Name,
 		TenantID:                      tenantID,
 		Slug:                          request.Slug,
-		MediaPlane:                    request.MediaPlane,
+		MediaPlane:                    mediaPlane,
+		MediaPlaneSet:                 request.MediaPlane.Set,
 		Metadata:                      request.Metadata.Value,
 		RecurringPolicy:               request.RecurringPolicy.Value,
 		AdmissionPolicy:               request.AdmissionPolicy.Value,
