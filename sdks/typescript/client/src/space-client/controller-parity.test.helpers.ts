@@ -111,7 +111,7 @@ class FakeSync {
   }
 }
 
-export function snapshot(input: { readonly media?: V1EpisodeSnapshot["media"] } = {}): V1EpisodeSnapshot {
+export function snapshot(input: { readonly media?: V1EpisodeSnapshot["media"]; readonly presence?: V1EpisodeSnapshot["presence"] } = {}): V1EpisodeSnapshot {
   const participants = [participant("participant-1", "Ada", "owner", ["publishAudio"]), participant("participant-2", "Grace", "observer", ["subscribe"])];
   const control: V1ControlState = {
     revision: 1,
@@ -133,7 +133,7 @@ export function snapshot(input: { readonly media?: V1EpisodeSnapshot["media"] } 
     control,
     optimisticControl: null,
     media: input.media ?? null,
-    presence: null,
+    presence: input.presence ?? null,
     mediaPlane: { local: [], remote: [] },
     localMedia: { microphone: "unknown", camera: "unknown", screen: "unknown" },
     pendingCommandCount: 0,

@@ -203,7 +203,7 @@ const ChatPanelSurface = React.memo(
     };
 
     return (
-      <ChalkPanel className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent p-0 text-[var(--chalk-app-text)]", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
+      <ChalkPanel className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent p-0 text-[var(--chalk-app-text)]", className)} contentClassName="flex h-full min-h-0 flex-col" role="complementary" aria-label="Chat panel">
         <div className="flex h-full min-h-0 w-full flex-col">
           {variant === "sidebar" ? (
             <header className="group relative flex items-center justify-between bg-[var(--chalk-app-panel)] px-5 py-[18px]">

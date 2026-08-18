@@ -152,13 +152,7 @@ const ParticipantsPanelSurface = React.memo(
 
     if (variant === "sidebar") {
       return (
-        <ChalkPanel
-          className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] p-0 font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)}
-          style={themeVariables as React.CSSProperties}
-          data-tour="participants-panel"
-          role="complementary"
-          aria-label="Participants list"
-        >
+        <ChalkPanel className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] p-0 font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
           <header className="group relative flex items-center justify-between px-5 py-[18px]">
             <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-panel))" part="participants-header" />
             <div className="flex items-center gap-2">

@@ -48,8 +48,8 @@ function createParticipantsClient() {
     participants: {
       ...snapshot.participants,
       roster: [
-        { participantId: "local", displayName: "You", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "active", camera: "inactive", screenShare: "inactive" } },
-        { participantId: "remote", displayName: "Remote", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "active", camera: "inactive", screenShare: "inactive" } },
+        { participantId: "local", displayName: "You", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, presence: { state: "connected", speaking: false, activeSpeaker: false }, media: { microphone: "active", camera: "inactive", screenShare: "inactive" } },
+        { participantId: "remote", displayName: "Remote", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, presence: { state: "connected", speaking: false, activeSpeaker: false }, media: { microphone: "active", camera: "inactive", screenShare: "inactive" } },
       ],
     },
   });

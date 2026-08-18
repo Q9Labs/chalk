@@ -64,6 +64,8 @@ export interface SettingsDialogValue {
     defaultOpenParticipants: boolean;
     defaultOpenTranscription: boolean;
     autoOpenPictureInPicture: boolean;
+    /** Join, leave, message, hand-raise and reaction cues. */
+    sounds: boolean;
   };
 }
 
@@ -668,6 +670,7 @@ const ChalkSettingsDialog = React.memo(
                     })
                   }
                 />
+                <ToggleRow title="Sounds" description="Play a cue when someone joins, leaves, messages, raises a hand or reacts." checked={settings.experience.sounds} onChange={(checked) => onUpdateExperience({ sounds: checked })} />
                 {enablePictureInPicture ? (
                   <ToggleRow
                     title="Auto-open Picture-in-Picture"

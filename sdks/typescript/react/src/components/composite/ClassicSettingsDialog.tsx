@@ -602,6 +602,7 @@ export const ClassicSettingsDialog = React.memo(
                     })
                   }
                 />
+                <ToggleRow title="Sounds" description="Play a cue when someone joins, leaves, messages, raises a hand or reacts." checked={settings.experience.sounds} onChange={(checked) => onUpdateExperience({ sounds: checked })} />
                 {enablePictureInPicture ? (
                   <ToggleRow
                     title="Auto-open Picture-in-Picture"

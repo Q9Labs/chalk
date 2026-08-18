@@ -52,6 +52,13 @@ const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
     isVideoEnabled: true,
     connectionQuality: 4,
   },
+  { id: "priya", displayName: "Priya Shah", isMuted: false, isVideoEnabled: true, connectionQuality: 4 },
+  { id: "eli", displayName: "Eli Morgan", isMuted: true, isVideoEnabled: false, connectionQuality: 3 },
+  { id: "june", displayName: "June Okafor", isMuted: false, isVideoEnabled: true, connectionQuality: 4 },
+  { id: "tomas", displayName: "Tomás Rivera", isMuted: true, isVideoEnabled: true, connectionQuality: 1 },
+  { id: "lena", displayName: "Lena Fischer", isMuted: false, isVideoEnabled: false, connectionQuality: 4 },
+  { id: "kenji", displayName: "Kenji Sato", isMuted: true, isVideoEnabled: true, isHandRaised: true, connectionQuality: 4 },
+  { id: "amara", displayName: "Amara Diallo", isMuted: false, isVideoEnabled: true, connectionQuality: 3 },
 ];
 
 export const INITIAL_CHAT_MESSAGES: readonly ChalkChatMessage[] = [
@@ -98,7 +105,7 @@ export const INITIAL_SETTINGS: SettingsDialogValue = {
   audio: { selectedInput: "default-mic", selectedOutput: "default-speaker", outputVolume: 68, noiseSuppression: true, echoCancellation: true, autoGainControl: true },
   video: { selectedInput: "default-camera", quality: "auto" },
   appearance: { layout: "focus", theme: "dark", skin: "classic", palette: "warm-charcoal", texture: "paper", gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
-  experience: { captions: false, compactMode: false, showInviteToast: false, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
+  experience: { captions: false, compactMode: false, showInviteToast: false, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
 };
 
 export const TOAST_MESSAGES: Record<Exclude<PreviewSearch["toast"], "none">, string> = {

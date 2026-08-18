@@ -455,13 +455,7 @@ const TranscriptPanelSurface = React.memo(
     // Sidebar variant
     if (variant === "sidebar") {
       return (
-        <div
-          className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative", "bg-transparent", !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
-          data-tour="transcription-panel"
-          role="complementary"
-          aria-label="Live transcription"
-          style={themeVariables as React.CSSProperties}
-        >
+        <div className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative", "bg-transparent", className)} data-tour="transcription-panel" role="complementary" aria-label="Live transcription" style={themeVariables as React.CSSProperties}>
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-4">
             <div className="flex items-center gap-3">
@@ -488,8 +482,8 @@ const TranscriptPanelSurface = React.memo(
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col">
-            <div ref={containerRef} className={cn("rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px] flex-1", "bg-[var(--chalk-stage)] border border-[var(--chalk-line)]")} onScroll={handleScroll}>
+          <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+            <div ref={containerRef} className={cn("relative min-h-0 flex-1 space-y-1 overflow-y-auto rounded-2xl p-4", "bg-[var(--chalk-stage)] border border-[var(--chalk-line)]")} onScroll={handleScroll}>
               {renderTranscriptContent()}
               {renderNewContentIndicator()}
             </div>

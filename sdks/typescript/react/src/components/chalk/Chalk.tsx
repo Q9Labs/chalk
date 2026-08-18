@@ -30,6 +30,8 @@ export type ChalkFeatures = {
   readonly handRaise?: boolean;
   readonly info?: boolean;
   readonly settings?: boolean;
+  /** Join / leave / message / hand-raise / reaction cues. The user can still mute them from Settings. */
+  readonly sounds?: boolean;
 };
 
 type SpaceIntegration = { readonly client: SpaceClient; readonly space?: never; readonly getAccess?: never } | { readonly client?: never; readonly space: string; readonly getAccess: GetAccess };
@@ -260,7 +262,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
         setSettings((current) => ({ ...current, appearance: { ...current.appearance, layout: nextLayout } }));
         props.onLayoutChange?.(nextLayout);
       }}
-      features={props.features}
+      features={{ ...props.features, sounds: props.features?.sounds !== false && settings.experience.sounds }}
       onOpenDiagnostics={props.onOpenDiagnostics}
       whiteboard={whiteboard}
       onToggleWhiteboard={() => setWhiteboardOpen((open) => !open)}
@@ -392,6 +394,6 @@ function createSettings(displayName: string, layout: SpaceLayout, skin: ThemeSki
     audio: { outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
     video: { quality: "auto" },
     appearance: { layout, theme: palette === "light" ? "light" : "dark", skin, palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
-    experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
+    experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
   };
 }

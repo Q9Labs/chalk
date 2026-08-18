@@ -33,7 +33,7 @@ describe("ParticipantGrid", () => {
     );
 
     const emptyState = screen.getByRole("status");
-    expect(emptyState).toHaveClass("flex", "px-6", "py-10");
+    expect(emptyState).toHaveTextContent("The Space is quiet");
     expect(emptyState.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
   });
 
@@ -42,7 +42,10 @@ describe("ParticipantGrid", () => {
     client.setSnapshot({
       ...client.getSnapshot(),
       self: { ...client.getSnapshot().self, participantId: "hasan", displayName: "Hasan" },
-      participants: { roster: [{ participantId: "hasan", displayName: "Hasan", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "active", screenShare: "inactive" } }], admissionQueue: [] },
+      participants: {
+        roster: [{ participantId: "hasan", displayName: "Hasan", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "active", screenShare: "inactive" }, presence: { state: "connected", speaking: false, activeSpeaker: false } }],
+        admissionQueue: [],
+      },
     });
     render(
       <ChalkProvider client={client}>
@@ -58,7 +61,10 @@ describe("ParticipantGrid", () => {
     client.setSnapshot({
       ...client.getSnapshot(),
       self: { ...client.getSnapshot().self, participantId: "hasan", displayName: "Hasan" },
-      participants: { roster: [{ participantId: "hasan", displayName: "Hasan", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "active", screenShare: "inactive" } }], admissionQueue: [] },
+      participants: {
+        roster: [{ participantId: "hasan", displayName: "Hasan", role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "active", screenShare: "inactive" }, presence: { state: "connected", speaking: false, activeSpeaker: false } }],
+        admissionQueue: [],
+      },
     });
     render(
       <ChalkProvider client={client}>
@@ -69,7 +75,7 @@ describe("ParticipantGrid", () => {
     expect(screen.getByRole("button", { name: "Video tile for Hasan" })).not.toHaveClass("aspect-video");
   });
 
-  it("keeps mobile pages reachable for five Participants", () => {
+  it("pages Participants beyond the visible cap and keeps the rest mounted", () => {
     const client = createTestClient(createSnapshot());
     const roster: SpaceSnapshot["participants"]["roster"] = ["hasan", "ada", "grace", "linus", "margaret"].map((participantId) => ({
       participantId,
@@ -79,6 +85,7 @@ describe("ParticipantGrid", () => {
       capabilities: [],
       handRaised: false,
       media: { microphone: "inactive", camera: "active", screenShare: "inactive" },
+      presence: { state: "connected", speaking: false, activeSpeaker: false },
     }));
     client.setSnapshot({
       ...client.getSnapshot(),
@@ -88,13 +95,12 @@ describe("ParticipantGrid", () => {
 
     render(
       <ChalkProvider client={client}>
-        <ParticipantGrid variant="mobile" />
+        <ParticipantGrid variant="mobile" maxVisibleParticipants={4} />
       </ChalkProvider>,
     );
 
     expect(screen.getAllByRole("button", { name: /^Go to page \d+$/ })).toHaveLength(2);
-    expect(screen.getByTestId("participant-grid-carousel")).toHaveClass("min-w-0", "overscroll-x-contain");
-    expect(screen.getAllByTestId("participant-grid-page")).toHaveLength(2);
-    expect(screen.getAllByTestId("participant-grid-page")[0]).toHaveClass("shrink-0");
+    expect(screen.getAllByRole("button", { name: /^Video tile for/ })).toHaveLength(4);
+    expect(screen.getByLabelText("Video tile for margaret")).toHaveAttribute("aria-hidden", "true");
   });
 });

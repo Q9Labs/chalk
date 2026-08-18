@@ -8,6 +8,7 @@ import { DEFAULT_QUICK_REACTIONS, EMOJI_CATEGORIES, EMOJI_KEYWORDS, type Reactio
 import { ChalkBackdrop, ChalkDialogPanel, ChalkIconButton, ChalkInput } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicReactionPicker } from "./ClassicReactionPicker";
+import { ReactionTray } from "./ReactionTray";
 
 export interface ReactionPickerProps {
   isOpen: boolean;
@@ -80,6 +81,21 @@ const ChalkReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReact
   const currentEmojis = isSearching ? searchResults : EMOJI_CATEGORIES[activeCategory]?.emojis || [];
 
   if (!isOpen) return null;
+
+  if (allowedReactions) {
+    return (
+      <ReactionTray
+        reactions={allowedReactions}
+        position={position}
+        className={className}
+        onSelect={(emoji) => {
+          onSelect(emoji);
+          onClose();
+        }}
+        onClose={onClose}
+      />
+    );
+  }
 
   return (
     <>

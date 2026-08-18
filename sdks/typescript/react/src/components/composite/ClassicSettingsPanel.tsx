@@ -57,13 +57,7 @@ const SettingsPanelSurface = React.memo(
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
     return (
-      <div
-        className={cn("flex flex-col h-full w-80 shadow-xl", "bg-[var(--chalk-surface)]", "border-l border-[var(--chalk-line)]", !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
-        data-tour="settings-panel"
-        role="dialog"
-        aria-label="Settings"
-        style={themeVariables as React.CSSProperties}
-      >
+      <div className={cn("flex flex-col h-full w-80 shadow-xl", "bg-[var(--chalk-surface)]", "border-l border-[var(--chalk-line)]", className)} data-tour="settings-panel" role="dialog" aria-label="Settings" style={themeVariables as React.CSSProperties}>
         <div className="flex items-center justify-between p-4 border-b border-[var(--chalk-line)]">
           <div className="flex items-center gap-2">
             <Settings01Icon className="w-4 h-4 text-[var(--chalk-muted-text)]" />

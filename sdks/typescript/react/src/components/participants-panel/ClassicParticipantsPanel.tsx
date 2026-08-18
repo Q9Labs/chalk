@@ -125,13 +125,7 @@ const ParticipantsPanelSurface = React.memo(
 
     if (variant === "sidebar") {
       return (
-        <div
-          className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)}
-          style={themeVariables as React.CSSProperties}
-          data-tour="participants-panel"
-          role="complementary"
-          aria-label="Participants list"
-        >
+        <div className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
           <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-5 py-[18px]">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title === "Participants" ? "People" : title}</h2>

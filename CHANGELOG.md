@@ -28,6 +28,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added deterministic hand-drawn chalk controls across the React SDK Entrance
   and Space, plus public chalk buttons, fields, toggles, panels, menus, dialogs,
   alerts, sliders, badges, and loading primitives for custom SDK surfaces.
+- Wired the React SDK sound cues: join, leave, chat, hand raise, and reaction
+  cues from the shared assets play on Space changes, on by default behind the
+  new `sounds` feature and a Settings toggle.
 - Added an environment-owned Cloudflare SFU default MediaPlane for new Spaces
   while keeping concrete Tenant-managed provider configuration authoritative.
 - Enabled Google sign-in in the managed production API contract with a complete
@@ -65,6 +68,41 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Restored the React SDK’s pre-redesign Entrance and Space layouts as the
   Classic skin, and rebuilt the Chalk Entrance as a balanced responsive split
   between the camera preview and entry form.
+- Rebuilt the React SDK Space stage on one measured renderer for both skins.
+  Participants, each live screen share, and the open whiteboard are all stage
+  tiles: any tile can be pinned or become the primary, spotlight shows one
+  primary with a strip, and grid keeps tiles equal. Overflow pages instead of a
+  "+N more" tile, tiles keep their video element across layout and page
+  changes, and speaking and active-speaker come from sync presence. `Stage`,
+  `buildStageItems`, `StageItem`, and `StageLayout` are exported; the
+  `showScreenShareIndicator` and `screenShareContent` grid props are removed and
+  `isVideoEnabled` now means the camera alone.
+- Made the SDK preview gallery share a real captured canvas track and offer
+  9- and 12-Participant rosters, so the stage renders live rather than behind a
+  mock overlay.
+- Replaced the React SDK Space side panels with one right-hand drawer in both
+  skins. Chat, People, Transcript, and Admission dock as a full-height column
+  that pushes the stage on wide screens and slide in as a sheet over a scrim on
+  narrow ones; the drawer animates open and closed, honours reduced motion,
+  closes on Escape, and returns focus to the control that opened it.
+  `AdmissionPanel` gains an `onClose` prop and close button.
+- Made React SDK Space grid tiles fill the stage: tiles now stretch to their
+  whole cell instead of holding 16:9, so no band of empty stage is left around
+  2, 9, or 12 Participants, and only absurdly tall or wide cells clamp to a
+  3:4–21:9 range. `minTileHeight` joins the grid fit options and the aspect
+  list is gone. Redesigned the tile name chip as one dark glass pill with the
+  name, a red muted mark, and a yellow raised-hand mark, in both skins.
+- Redesigned the React SDK Space chrome around the stage. The header is now a
+  slim ghost bar with a Layout menu (Spotlight, Grid, Presentation) and Info
+  next to Settings, the participants button leaves the header, the stage
+  reaches further down under a floating control bar, and Share and Board
+  join the bar. Presence is shown in the tile chip and as a soft halo on the
+  avatar rather than a frame; the chip scales with the tile. Pager arrows sit
+  at the strip edge with quiet dots, and the drawer docks as an inset card
+  aligned with the stage. Reactions get a compact tray and a calmer float.
+  The SDK preview gallery now enables the same features as the Space (share,
+  whiteboard, sounds, info) and publishes a silent microphone track for
+  unmuted Participants so speaking renders as it does live.
 - Made the local API gate own its isolated migrated PostgreSQL database, expose
   every integration-test database alias, run independent checks in parallel,
   avoid duplicate vet work in `go test`, and overlap PostgreSQL preparation

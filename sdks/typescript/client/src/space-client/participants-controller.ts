@@ -5,7 +5,7 @@ import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
 import { V1_CAPABILITIES } from "../sync/v1-types";
-import type { Capability, MediaRequestKind, ParticipantsSlice, SelfSlice } from "./types";
+import type { Capability, MediaRequestKind, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
 
 export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
 const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]) });
@@ -188,7 +188,7 @@ function directed(result: { readonly request_id: string; readonly result: "deliv
 function participantsFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>): ParticipantsSlice {
   const control = controlFor(snapshot);
   if (!control) return EMPTY_PARTICIPANTS;
-  return Object.freeze({ roster: rosterFor(control.participants, collaborationCapabilities, mediaFor(snapshot)), admissionQueue: admissionQueueFor(control.admissionRequests) });
+  return Object.freeze({ roster: rosterFor(control.participants, collaborationCapabilities, mediaFor(snapshot), presenceFor(snapshot)), admissionQueue: admissionQueueFor(control.admissionRequests) });
 }
 function controlFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null): NonNullable<ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["control"]> | null {
   if (!snapshot) return null;
@@ -199,7 +199,15 @@ function mediaFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> |
   if (!snapshot) return null;
   return snapshot.media;
 }
-function rosterFor(participants: NonNullable<ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["control"]>["participants"], collaborationCapabilities: Readonly<Record<string, readonly string[]>>, media: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"]): ParticipantsSlice["roster"] {
+function presenceFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null): ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"] {
+  return snapshot?.presence ?? null;
+}
+function rosterFor(
+  participants: NonNullable<ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["control"]>["participants"],
+  collaborationCapabilities: Readonly<Record<string, readonly string[]>>,
+  media: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"],
+  presence: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"],
+): ParticipantsSlice["roster"] {
   return Object.freeze(
     participants.map((participant) =>
       Object.freeze({
@@ -210,6 +218,7 @@ function rosterFor(participants: NonNullable<ReturnType<ConnectionPorts["sync"][
         capabilities: capabilitiesFor(participant.capabilities, collaborationCapabilities[participant.participantId]),
         handRaised: participant.handRaised,
         media: participantMedia(participant.participantId, media),
+        presence: participantPresence(participant.participantId, presence),
       }),
     ),
   );
@@ -242,6 +251,11 @@ function participantMedia(participantId: string, media: ReturnType<ConnectionPor
   const active = new Set(media.items.filter((publication) => publication.participantId === participantId && publication.enabled).map((publication) => publication.source));
   return Object.freeze({ microphone: active.has("microphone") ? "active" : "inactive", camera: active.has("camera") ? "active" : "inactive", screenShare: active.has("screen") ? "active" : "inactive" });
 }
+function participantPresence(participantId: string, presence: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"]): ParticipantPresence {
+  const item = presence?.items.find((candidate) => candidate.participantId === participantId);
+  if (!item) return Object.freeze({ state: "unknown", speaking: false, activeSpeaker: false });
+  return Object.freeze({ state: item.state, speaking: item.speaking, activeSpeaker: item.activeSpeaker });
+}
 function sameParticipants(left: ParticipantsSlice, right: ParticipantsSlice): boolean {
   return (
     sameArray(
@@ -256,7 +270,10 @@ function sameParticipants(left: ParticipantsSlice, right: ParticipantsSlice): bo
         sameValues(current.capabilities, next.capabilities) &&
         current.media.microphone === next.media.microphone &&
         current.media.camera === next.media.camera &&
-        current.media.screenShare === next.media.screenShare,
+        current.media.screenShare === next.media.screenShare &&
+        current.presence.state === next.presence.state &&
+        current.presence.speaking === next.presence.speaking &&
+        current.presence.activeSpeaker === next.presence.activeSpeaker,
     ) &&
     sameArray(
       left.admissionQueue,

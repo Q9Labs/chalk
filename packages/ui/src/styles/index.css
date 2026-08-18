@@ -1386,21 +1386,27 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
   }
 }
 
-/* Harmonic Speaker Glow */
-@keyframes chalk-harmonic-pulse {
-  0% {
-    box-shadow: 0 0 0 0px rgba(34, 197, 94, 0);
-    border-color: rgba(34, 197, 94, 0);
+/* Voice halo behind the avatar of a speaking, camera-off participant: a soft ring that breathes. */
+@keyframes chalk-voice-halo-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--chalk-participant-color) 22%, transparent);
   }
 
   50% {
-    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2);
-    border-color: rgba(34, 197, 94, 0.4);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--chalk-participant-color) 12%, transparent);
+  }
+}
+
+/* Sound bars in the tile chip while someone speaks. */
+@keyframes chalk-sound-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
   }
 
-  100% {
-    box-shadow: 0 0 0 0px rgba(34, 197, 94, 0);
-    border-color: rgba(34, 197, 94, 0);
+  50% {
+    transform: scaleY(1);
   }
 }
 
@@ -1421,8 +1427,55 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
   animation: chalk-tile-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards !important;
 }
 
-.chalk-animate-harmonic-pulse {
-  animation: chalk-harmonic-pulse 3s infinite !important;
+.chalk-voice-halo {
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--chalk-participant-color) 18%, transparent);
+  animation: chalk-voice-halo-breathe 1.8s ease-in-out infinite;
+}
+
+.chalk-sound-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 12px;
+}
+
+@container (min-width: 240px) {
+  .chalk-sound-bars {
+    height: 14px;
+  }
+}
+
+.chalk-sound-bars > i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  transform-origin: center;
+  animation: chalk-sound-bar 0.9s ease-in-out infinite;
+}
+
+.chalk-sound-bars > i:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.chalk-sound-bars > i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.chalk-sound-bars > i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chalk-voice-halo {
+    animation: none;
+  }
+
+  .chalk-sound-bars > i {
+    animation: none;
+    transform: scaleY(0.7);
+  }
 }
 
 /* Animation utility classes */
@@ -1458,12 +1511,141 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
   animation: chalk-panel-slide-in var(--chalk-duration-slow) var(--chalk-ease-out-expo);
 }
 
+/* Space drawer: a right-hand sheet below 1024px, a docked column that pushes the stage above it. */
+@keyframes chalk-drawer-slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes chalk-drawer-grow {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: var(--chalk-drawer-width);
+  }
+}
+
+@keyframes chalk-drawer-shrink {
+  from {
+    width: var(--chalk-drawer-width);
+  }
+
+  to {
+    width: 0;
+  }
+}
+
+.chalk-drawer {
+  --chalk-drawer-width: 396px;
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 50;
+  width: min(100%, 420px);
+  overflow: hidden;
+}
+
+.chalk-drawer[data-state="open"] {
+  animation: chalk-panel-slide-in var(--chalk-duration-slow) var(--chalk-ease-out-expo);
+}
+
+.chalk-drawer[data-state="closing"] {
+  animation: chalk-drawer-slide-out var(--chalk-duration-normal) var(--chalk-ease-out-expo) forwards;
+  pointer-events: none;
+}
+
+.chalk-drawer-content {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 100%;
+}
+
+.chalk-drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+}
+
+@media (min-width: 1024px) {
+  .chalk-drawer {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    flex: none;
+    width: var(--chalk-drawer-width);
+  }
+
+  .chalk-drawer[data-state="open"] {
+    animation: chalk-drawer-grow var(--chalk-duration-slow) var(--chalk-ease-out-expo);
+  }
+
+  .chalk-drawer[data-state="closing"] {
+    animation: chalk-drawer-shrink var(--chalk-duration-normal) var(--chalk-ease-out-expo) forwards;
+  }
+
+  /* Docked: the panel is a card with the same insets as the stage, not a wall against the header. */
+  .chalk-drawer-content {
+    inset: 4px 20px 16px 0;
+    width: calc(var(--chalk-drawer-width) - 20px);
+    border-radius: 10px;
+  }
+
+  .chalk-drawer-scrim {
+    display: none;
+  }
+}
+
 .chalk-animate-float-up {
   animation: chalk-float-up 2s ease-out forwards;
 }
 
 .chalk-animate-reaction-float {
   animation: chalk-reaction-float var(--float-duration, 3000ms) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Classic reactions: rise from the stage floor, sway once, fade at the top of the travel. */
+@keyframes chalk-reaction-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.6);
+  }
+
+  12% {
+    opacity: 1;
+    transform: translate3d(var(--reaction-sway, 0px), -36px, 0) scale(1.12);
+  }
+
+  55% {
+    transform: translate3d(calc(var(--reaction-sway, 0px) * -0.6), calc(var(--reaction-travel, -280px) * 0.55), 0) scale(1);
+  }
+
+  82% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--reaction-sway, 0px) * 0.4), var(--reaction-travel, -280px), 0) scale(0.92);
+  }
+}
+
+.chalk-reaction-rise {
+  animation: chalk-reaction-rise var(--reaction-duration, 3200ms) cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chalk-reaction-rise {
+    animation: chalk-fade-out 400ms ease-out calc(var(--reaction-duration, 3200ms) - 400ms) forwards;
+  }
 }
 
 .chalk-animate-reaction-bounce-in {

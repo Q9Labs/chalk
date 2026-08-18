@@ -6,6 +6,7 @@ import { type PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Chalk, ChalkProvider, useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useSelf, useSpaceClient, useWhiteboard } from "../index";
+import { createFakeMediaStreamTrack } from "../test-support/fake-media-track";
 
 const createSpaceClientSpy = vi.hoisted(() => vi.fn());
 const screenShareSpy = vi.hoisted(() =>
@@ -20,7 +21,7 @@ vi.mock("@q9labsai/chalk-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@q9labsai/chalk-client")>()),
   createSpaceClient: createSpaceClientSpy,
 }));
-vi.mock("../components/composite/ScreenShareView", () => ({ ScreenShareView: screenShareSpy }));
+vi.mock("../components/composite/ScreenShareView", () => ({ ScreenShareViewSurface: screenShareSpy }));
 
 type TestClient = SpaceClient & {
   readonly setSnapshot: (snapshot: SpaceSnapshot) => void;
@@ -307,7 +308,7 @@ describe("React bindings", () => {
   it("renders a local screen-share track in presentation mode and stops it through the controller", () => {
     screenShareSpy.mockClear();
     const client = createTestClient(createSnapshot(["publishScreen"]));
-    const track = { readyState: "live" } as MediaStreamTrack;
+    const track = createFakeMediaStreamTrack();
     const stopScreenShare = vi.spyOn(client.media, "setScreenShareEnabled").mockResolvedValue();
     const snapshot = client.getSnapshot();
     client.setSnapshot({
@@ -322,7 +323,10 @@ describe("React bindings", () => {
 
     const view = render(<Chalk client={client} entrance={false} layout="grid" />);
 
-    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ className: "h-full" }));
+    expect(within(view.container).getByRole("button", { name: "Layout: Presentation" })).toBeInTheDocument();
+    expect(screenShareSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ screenShareTrack: track, sharedByName: "You", showThumbnails: false }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "Stop active share" }));
+    expect(stopScreenShare).toHaveBeenCalledWith(false);
 
     act(() =>
       client.setSnapshot({
@@ -334,13 +338,13 @@ describe("React bindings", () => {
         },
       }),
     );
-    expect(within(view.container).getByRole("button", { name: "Grid layout" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(view.container).getByRole("button", { name: "Layout: Grid" })).toBeInTheDocument();
   });
 
   it("promotes a remote screen-share track and stops it through the participant controller", () => {
     screenShareSpy.mockClear();
     const client = createTestClient();
-    const track = { readyState: "live" } as MediaStreamTrack;
+    const track = createFakeMediaStreamTrack();
     const stopScreenShare = vi.spyOn(client.participants, "stopScreenShare").mockResolvedValue();
     const snapshot = client.getSnapshot();
     client.setSnapshot({
@@ -348,7 +352,7 @@ describe("React bindings", () => {
       connection: { ...snapshot.connection, status: "live" },
       participants: {
         ...snapshot.participants,
-        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "inactive", screenShare: "active" } }],
+        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, presence: { state: "connected", speaking: false, activeSpeaker: false }, media: { microphone: "inactive", camera: "inactive", screenShare: "active" } }],
       },
       media: {
         ...snapshot.media,
@@ -358,11 +362,13 @@ describe("React bindings", () => {
 
     const view = render(<Chalk client={client} entrance={false} layout="grid" />);
 
-    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ className: "h-full" }));
-    expect(within(view.container).getByRole("button", { name: "Presentation layout" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(view.container).getByRole("button", { name: "Layout: Presentation" })).toBeInTheDocument();
+    expect(screenShareSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ screenShareTrack: track, sharedByName: "Grace", showThumbnails: false }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "Stop active share" }));
+    expect(stopScreenShare).toHaveBeenCalledWith("grace");
 
     act(() => client.setSnapshot({ ...client.getSnapshot(), media: { ...client.getSnapshot().media, remote: [] } }));
-    expect(within(view.container).getByRole("button", { name: "Grid layout" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(view.container).getByRole("button", { name: "Layout: Grid" })).toBeInTheDocument();
   });
 
   it("shows directed media actions when the caller has the canonical request capability", () => {
@@ -374,7 +380,7 @@ describe("React bindings", () => {
       connection: { ...snapshot.connection, status: "live" },
       participants: {
         ...snapshot.participants,
-        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" } }],
+        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, presence: { state: "connected", speaking: false, activeSpeaker: false }, media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" } }],
       },
     });
 
@@ -483,12 +489,12 @@ describe("React bindings", () => {
     const view = render(<Chalk client={client} features={{ settings: true }} />);
 
     fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
-    expect(view.container.querySelector("aside")).toBeInTheDocument();
+    expect(view.container.querySelector("[data-chalk-drawer]")).toBeInTheDocument();
     fireEvent.click(document.querySelector('[role="dialog"] button[aria-label="Close settings"]')!);
 
     await waitFor(() => {
       expect(document.querySelector('[role="dialog"]')).not.toBeInTheDocument();
-      expect(view.container.querySelector("aside")).not.toBeInTheDocument();
+      expect(view.container.querySelector("[data-chalk-drawer]")).not.toBeInTheDocument();
     });
   });
 
@@ -501,7 +507,7 @@ describe("React bindings", () => {
     fireEvent.click(within(document.body).getByRole("button", { name: /Appearance/ }));
     fireEvent.click(within(document.body).getByRole("button", { name: "Grid" }));
 
-    expect(view.container.querySelector('button[aria-label="Grid layout"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(view.container.querySelector('button[aria-label="Layout: Grid"]')).not.toBeNull();
   });
 
   it("keeps a texture-only theme following system palette changes", () => {

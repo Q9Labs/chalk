@@ -14,7 +14,7 @@ interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly onDenyAll?: () => void;
 }
 
-const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className }: AdmissionPanelSurfaceProps) => {
+const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -39,7 +39,10 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Admission</h2>
           <Badge variant="default" count={participants.length} />
         </div>
-        {loading && <Spinner size="sm" />}
+        <div className="flex items-center gap-2">
+          {loading && <Spinner size="sm" />}
+          {onClose ? <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close admission" /> : null}
+        </div>
       </div>
 
       {(onAdmitAll || onDenyAll) && (
@@ -77,7 +80,7 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
         </div>
       )}
 
-      <ul className="max-h-80 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
+      <ul className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
         {!hasPendingAdmission ? (
           <li className="flex flex-col items-center gap-2 p-8 text-center">
             <UserGroupIcon size={24} className="text-[var(--chalk-muted-text)]" />

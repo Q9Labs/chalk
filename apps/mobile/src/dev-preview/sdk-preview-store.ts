@@ -232,6 +232,7 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
         eligibleRoles: request.eligibleRoles,
         capabilities: ["publishAudio", "publishVideo", "subscribe", "raiseHand"],
         media: inactiveParticipantMedia(),
+        presence: { state: "connected", speaking: false, activeSpeaker: false },
       };
       return { ...current, participants: { roster: [...current.participants.roster, participant], admissionQueue: current.participants.admissionQueue.filter((candidate) => candidate.requestId !== requestId) } };
     });
@@ -298,6 +299,7 @@ function participantsFor(count: PreviewSearch["participants"], search: PreviewSe
     eligibleRoles: fixture.role === "owner" ? ["owner", "collaborator", "observer"] : ["collaborator", "observer"],
     capabilities: [...fixture.capabilities],
     media: participantMediaFor(fixture.id, search),
+    presence: { state: "connected", speaking: false, activeSpeaker: false },
   }));
 }
 
