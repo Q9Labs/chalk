@@ -33,7 +33,7 @@ export type DashboardAPIKey = DashboardValue<APIKeyList["api_keys"][number]>;
 export type DashboardAPIKeyPage = { api_keys: DashboardAPIKey[]; pagination: DashboardPagination };
 export type APIKeySecretResult = Omit<DashboardValue<APIKeyWithSecret>, "replayed"> & { replayed?: boolean };
 
-export function defaultSpaceMediaPlane(): "cf_rtk" | "cf_sfu" {
+function defaultSpaceMediaPlane(): "cf_rtk" | "cf_sfu" {
   const configured = (import.meta as ImportMeta & { readonly env?: Record<string, unknown> }).env?.VITE_CHALK_DEV_MEDIA_PLANE;
   return configured === "cf_sfu" ? "cf_sfu" : "cf_rtk";
 }
@@ -47,7 +47,7 @@ type LocalTenantMediaPlaneConfig = {
   };
 };
 
-export function localTenantMediaPlaneConfig(): LocalTenantMediaPlaneConfig | undefined {
+function localTenantMediaPlaneConfig(): LocalTenantMediaPlaneConfig | undefined {
   if (defaultSpaceMediaPlane() !== "cf_sfu") return undefined;
   return {
     default_media_plane: "cf_sfu",
