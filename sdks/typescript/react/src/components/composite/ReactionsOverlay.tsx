@@ -4,6 +4,8 @@ import { useReactions } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { ReactionBubble } from "../atomic";
 import { ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicReactionsOverlay } from "./ClassicReactionsOverlay";
 
 export interface ReactionsOverlayProps {
   readonly maxVisible?: number;
@@ -14,7 +16,7 @@ interface ReactionsOverlaySurfaceProps extends ReactionsOverlayProps {
   readonly reactions: readonly ActiveReaction[];
 }
 
-function ReactionsOverlaySurface({ reactions, maxVisible = 6, className }: ReactionsOverlaySurfaceProps): React.JSX.Element {
+function ChalkReactionsOverlaySurface({ reactions, maxVisible = 6, className }: ReactionsOverlaySurfaceProps): React.JSX.Element {
   return (
     <div className={`pointer-events-none absolute inset-0 z-30 overflow-hidden ${className ?? ""}`} aria-live="polite" aria-atomic="false">
       {reactions.slice(-maxVisible).map((reaction, index) => (
@@ -29,7 +31,12 @@ function ReactionsOverlaySurface({ reactions, maxVisible = 6, className }: React
   );
 }
 
-export function ReactionsOverlay(props: ReactionsOverlayProps): React.JSX.Element {
+function ChalkReactionsOverlay(props: ReactionsOverlayProps): React.JSX.Element {
   const reactions = useReactions();
-  return <ReactionsOverlaySurface {...props} reactions={reactions.active} />;
+  return <ChalkReactionsOverlaySurface {...props} reactions={reactions.active} />;
+}
+
+export function ReactionsOverlay(props: ReactionsOverlayProps): React.JSX.Element {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicReactionsOverlay {...props} /> : <ChalkReactionsOverlay {...props} />;
 }

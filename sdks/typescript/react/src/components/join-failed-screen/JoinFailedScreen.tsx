@@ -3,6 +3,8 @@ import { useId } from "react";
 import { ChalkAlert, ChalkBadge, ChalkButton, ChalkDivider, ChalkPanel } from "../chalk-ui";
 import { ArrowLeft01Icon, Alert02Icon, RefreshIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
+import { useSkin } from "../skin-context";
+import { ClassicJoinFailedScreen } from "./ClassicJoinFailedScreen";
 
 const DEFAULT_TITLE = "Couldn’t enter the Space";
 
@@ -20,13 +22,14 @@ export interface JoinFailedScreenProps {
  * the Entrance. The support code is intentionally plain text so people can
  * select and copy it without the component reaching for the clipboard.
  */
-export function JoinFailedScreen({ title = DEFAULT_TITLE, message, supportCode, onRetry, onBack, className }: JoinFailedScreenProps): React.JSX.Element {
+function ChalkJoinFailedScreen({ title = DEFAULT_TITLE, message, supportCode, onRetry, onBack, className }: JoinFailedScreenProps): React.JSX.Element {
   const titleId = useId();
   const messageId = useId();
   const supportCodeLabelId = useId();
+  const skin = useSkin();
 
   return (
-    <main data-chalk className={cn("chalk-root chalk-textured-surface flex min-h-dvh items-center justify-center bg-[var(--chalk-app-canvas)] px-4 py-10 font-sans text-[var(--chalk-app-text)] sm:px-6", className)}>
+    <main data-chalk data-chalk-skin={skin} className={cn("chalk-root chalk-textured-surface flex min-h-dvh items-center justify-center bg-[var(--chalk-app-canvas)] px-4 py-10 font-sans text-[var(--chalk-app-text)] sm:px-6", className)}>
       <section aria-labelledby={titleId} className="w-full max-w-lg">
         <ChalkPanel className="p-0" tone="neutral">
           <div className="flex flex-col items-center px-6 pb-7 pt-9 text-center sm:px-10 sm:pt-10">
@@ -70,4 +73,9 @@ export function JoinFailedScreen({ title = DEFAULT_TITLE, message, supportCode, 
       </section>
     </main>
   );
+}
+
+export function JoinFailedScreen(props: JoinFailedScreenProps): React.JSX.Element {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicJoinFailedScreen {...props} /> : <ChalkJoinFailedScreen {...props} />;
 }

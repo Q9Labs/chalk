@@ -4,6 +4,8 @@ import { InformationCircleIcon, LayoutGridIcon, Maximize01Icon, Monitor01Icon, S
 import { cn } from "../../utils/cn";
 import { StatusBadge } from "../atomic/StatusBadge";
 import { ChalkControlGroup, ChalkDivider, ChalkIconButton, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicSpaceHeader } from "./ClassicSpaceHeader";
 
 export interface SpaceHeaderProps {
   spaceName: string;
@@ -26,7 +28,7 @@ const formatDuration = (seconds: number): string => {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 };
 
-export const SpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, logoUrl, duration = 0, isRecording = false, isTranscribing = false, layout = "focus", onLayoutChange, onInvite, onInfo, onSettings, className }) => {
+const ChalkSpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, logoUrl, duration = 0, isRecording = false, isTranscribing = false, layout = "focus", onLayoutChange, onInvite, onInfo, onSettings, className }) => {
   return (
     <header className={cn("relative flex h-[76px] shrink-0 items-center text-[var(--chalk-app-text)]", className)} role="banner">
       <ChalkPanel className="h-full w-full rounded-none p-0" seed="space-header-shell">
@@ -102,6 +104,13 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, logoUrl, d
       </ChalkPanel>
     </header>
   );
+});
+
+ChalkSpaceHeader.displayName = "ChalkSpaceHeader";
+
+export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicSpaceHeader {...props} /> : <ChalkSpaceHeader {...props} />;
 });
 
 SpaceHeader.displayName = "SpaceHeader";

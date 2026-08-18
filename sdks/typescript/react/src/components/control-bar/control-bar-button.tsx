@@ -4,6 +4,8 @@ import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 import { cn } from "../../utils/cn";
 import { ChalkIconButton, type ChalkSeed } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicControlBarButton } from "./ClassicControlBarButton";
 
 interface ControlBarButtonProps {
   icon: React.ReactNode;
@@ -26,7 +28,7 @@ interface ControlBarButtonProps {
   ref?: React.Ref<HTMLButtonElement>;
 }
 
-export const ControlBarButton = React.memo(
+const ChalkControlBarButton = React.memo(
   ({ icon, label, active = false, danger = false, disabled = false, size = "md", showLabel = false, inlineLabel, hideTooltip = false, noBorder = false, onClick, className, haptic = "selection", activeClassName, seed, "data-tour": dataTour, ref }: ControlBarButtonProps) => {
     const { trigger } = useHaptics({
       enabled: !disabled && haptic !== false,
@@ -78,5 +80,12 @@ export const ControlBarButton = React.memo(
     );
   },
 );
+
+ChalkControlBarButton.displayName = "ChalkControlBarButton";
+
+export const ControlBarButton = React.memo((props: ControlBarButtonProps) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicControlBarButton {...props} /> : <ChalkControlBarButton {...props} />;
+});
 
 ControlBarButton.displayName = "ControlBarButton";

@@ -2,7 +2,7 @@ import type { Capability, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type React from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
-import { CommandErrorAlert, JoinFailedScreen, LeaveDialog, PreviewEpisodeEnded, PreviewEntrance, PreviewJoiningScreen, PreviewSpaceView, type SpaceLayout, type ThemePalette, type ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
+import { CommandErrorAlert, JoinFailedScreen, LeaveDialog, PreviewEpisodeEnded, PreviewEntrance, PreviewJoiningScreen, PreviewSpaceView, type SpaceLayout, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
 import { SettingsDialog, type SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
 import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
 import { ToastStack } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
@@ -38,12 +38,14 @@ export interface SdkPreviewGalleryProps {
 
 export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(DISPLAY_NAME);
+  const [keepAppearanceOpen, setKeepAppearanceOpen] = useState(false);
+  const skin: ThemeSkin = search.skin;
   const mappedPalette: ThemePalette = productionPalette(search.palette);
   const mappedTexture: ThemeTexture = productionTexture(search.texture);
-  const entranceTheme = mappedPalette === "cosmic-chalk" ? { ...COSMIC_CHALK_THEME, texture: mappedTexture } : { palette: mappedPalette, texture: mappedTexture };
+  const entranceTheme = mappedPalette === "cosmic-chalk" ? { ...COSMIC_CHALK_THEME, skin, palette: mappedPalette, texture: mappedTexture } : { skin, palette: mappedPalette, texture: mappedTexture };
   const [settings, setSettings] = useState<SettingsDialogValue>(() => ({
     ...INITIAL_SETTINGS,
-    appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, palette: mappedPalette, texture: mappedTexture },
+    appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, skin, palette: mappedPalette, texture: mappedTexture },
   }));
   const fixtureSearch = useMemo<PreviewSearch>(() => (search.state === "empty" ? { ...search, participants: 0 as const, chat: "empty" as const } : search), [search]);
   const participants = useMemo(() => participantsForCount(fixtureSearch.participants, fixtureSearch), [fixtureSearch]);
@@ -59,10 +61,14 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
 
   useEffect(() => {
     setSettings((current) => {
-      if (current.appearance.layout === search.layout && current.appearance.palette === mappedPalette && current.appearance.texture === mappedTexture) return current;
-      return { ...current, appearance: { ...current.appearance, layout: search.layout, palette: mappedPalette, texture: mappedTexture } };
+      if (current.appearance.layout === search.layout && current.appearance.skin === skin && current.appearance.palette === mappedPalette && current.appearance.texture === mappedTexture) return current;
+      return { ...current, appearance: { ...current.appearance, layout: search.layout, skin, palette: mappedPalette, texture: mappedTexture } };
     });
-  }, [mappedPalette, mappedTexture, search.layout]);
+  }, [mappedPalette, mappedTexture, search.layout, skin]);
+
+  useEffect(() => {
+    if (search.dialog !== "settings") setKeepAppearanceOpen(false);
+  }, [search.dialog]);
 
   const patch = (updates: PreviewSearchPatch) => onSearchChange(updates);
   const backToEntrance = () => patch({ view: "entrance", state: "ready", panel: "none", dialog: "none" });
@@ -71,8 +77,10 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
     setSettings((current) => ({ ...current, [section]: { ...current[section], ...updates } }));
     if (section !== "appearance") return;
     const appearance = updates as Partial<SettingsDialogValue["appearance"]>;
+    if (appearance.skin) setKeepAppearanceOpen(true);
     patch({
       ...(appearance.layout === "focus" || appearance.layout === "grid" || appearance.layout === "presentation" ? { layout: appearance.layout } : {}),
+      ...(appearance.skin === "classic" || appearance.skin === "chalk" ? { skin: appearance.skin } : {}),
       ...(appearance.palette ? { palette: previewPalette(appearance.palette) } : {}),
       ...(appearance.texture ? { texture: previewTexture(appearance.texture) } : {}),
     });
@@ -140,6 +148,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         client={previewClient}
         spaceName={SPACE_NAME}
         logoUrl="/brand/chalk/chalk-logo.svg"
+        skin={skin}
         palette={mappedPalette}
         texture={mappedTexture}
         inviteLink={SPACE_LINK}
@@ -161,8 +170,12 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         settingsDialog={
           <SettingsDialog
             isOpen={search.dialog === "settings"}
-            onClose={() => patch({ dialog: "none" })}
+            onClose={() => {
+              setKeepAppearanceOpen(false);
+              patch({ dialog: "none" });
+            }}
             settings={settings}
+            initialSection={keepAppearanceOpen ? "appearance" : undefined}
             onUpdateIdentity={(updates) => {
               updateSettings("identity", updates);
               if (updates.displayName) setDisplayName(updates.displayName);

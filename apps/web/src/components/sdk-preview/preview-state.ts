@@ -6,6 +6,8 @@
  * after a reload without depending on React state.
  */
 
+import { THEME_SKINS, type ThemeSkin } from "../../../../../sdks/typescript/react/src/components/theme";
+
 export const PREVIEW_VIEWS = ["entrance", "space"] as const;
 export type PreviewView = (typeof PREVIEW_VIEWS)[number];
 
@@ -35,6 +37,9 @@ export type PreviewPalette = (typeof PREVIEW_PALETTES)[number];
 export const PREVIEW_TEXTURES = ["soft-grid", "soft-dots", "none"] as const;
 export type PreviewTexture = (typeof PREVIEW_TEXTURES)[number];
 
+export const PREVIEW_SKINS = THEME_SKINS.map((skin) => skin.value);
+export type PreviewSkin = ThemeSkin;
+
 const PREVIEW_CHROME = ["visible", "hidden"] as const;
 export type PreviewChrome = (typeof PREVIEW_CHROME)[number];
 
@@ -54,6 +59,7 @@ export interface PreviewSearch {
   readonly panel: PreviewPanel;
   readonly stage: PreviewStage;
   readonly dialog: PreviewDialog;
+  readonly skin: PreviewSkin;
   readonly palette: PreviewPalette;
   readonly texture: PreviewTexture;
   readonly chrome: PreviewChrome;
@@ -74,6 +80,7 @@ export const DEFAULT_PREVIEW_SEARCH: PreviewSearch = {
   panel: "none",
   stage: "people",
   dialog: "none",
+  skin: "classic",
   palette: "warm-charcoal",
   texture: "soft-grid",
   chrome: "visible",
@@ -93,7 +100,7 @@ export interface PreviewSerializeOptions {
 type PreviewSearchSource = URLSearchParams | URL | string | Readonly<Record<string, unknown>>;
 type PreviewSearchLike = PreviewSearchSource | PreviewSearchPatch;
 
-const SEARCH_KEYS = ["view", "state", "layout", "panel", "stage", "dialog", "palette", "texture", "chrome", "participants", "chat", "mic", "camera", "hand", "toast"] as const;
+const SEARCH_KEYS = ["view", "state", "layout", "panel", "stage", "dialog", "skin", "palette", "texture", "chrome", "participants", "chat", "mic", "camera", "hand", "toast"] as const;
 
 function sourceValue(source: PreviewSearchSource | PreviewSearchPatch, key: string): unknown {
   if (source instanceof URLSearchParams) return source.get(key) ?? undefined;
@@ -163,6 +170,7 @@ export function normalizePreviewSearch(source: PreviewSearchLike = {}): PreviewS
     panel: enumValue(sourceValue(source, "panel"), PREVIEW_PANELS, DEFAULT_PREVIEW_SEARCH.panel),
     stage: enumValue(sourceValue(source, "stage"), PREVIEW_STAGES, DEFAULT_PREVIEW_SEARCH.stage),
     dialog: enumValue(sourceValue(source, "dialog"), PREVIEW_DIALOGS, DEFAULT_PREVIEW_SEARCH.dialog),
+    skin: enumValue(sourceValue(source, "skin"), PREVIEW_SKINS, DEFAULT_PREVIEW_SEARCH.skin),
     palette: enumValue(sourceValue(source, "palette"), PREVIEW_PALETTES, DEFAULT_PREVIEW_SEARCH.palette),
     texture: enumValue(sourceValue(source, "texture"), PREVIEW_TEXTURES, DEFAULT_PREVIEW_SEARCH.texture),
     chrome: enumValue(sourceValue(source, "chrome"), PREVIEW_CHROME, DEFAULT_PREVIEW_SEARCH.chrome),

@@ -1,6 +1,8 @@
 import React from "react";
 import { cn } from "../../utils/cn";
 import { ChalkBadge } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicNameTag } from "./ClassicNameTag";
 
 export interface NameTagProps {
   name: string;
@@ -15,13 +17,19 @@ const sizeClasses = {
   lg: "text-base px-3 py-1.5",
 };
 
-export const NameTag = React.memo(({ name, isLocal = false, size = "md", className }: NameTagProps) => {
+export const NameTag = React.memo((props: NameTagProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicNameTag {...props} /> : <ChalkNameTag {...props} />;
+});
+
+function ChalkNameTag({ name, isLocal = false, size = "md", className }: NameTagProps) {
   return (
     <ChalkBadge tone="neutral" className={cn("inline-flex max-w-full items-center gap-2 text-[var(--chalk-accent-text)]", sizeClasses[size], className)}>
       <span className="truncate font-semibold text-lg tracking-tight">{name}</span>
       {isLocal && <span className="text-xs text-[var(--chalk-accent-text)] whitespace-nowrap">(You)</span>}
     </ChalkBadge>
   );
-});
+}
 
 NameTag.displayName = "NameTag";

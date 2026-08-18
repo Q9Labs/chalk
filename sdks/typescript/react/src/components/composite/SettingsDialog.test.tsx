@@ -22,14 +22,30 @@ describe("SettingsDialog appearance", () => {
     render(<SettingsDialog isOpen onClose={vi.fn()} settings={createSettings()} onUpdateIdentity={vi.fn()} onUpdateJoin={vi.fn()} onUpdateAudio={vi.fn()} onUpdateVideo={vi.fn()} onUpdateAppearance={onUpdateAppearance} onUpdateExperience={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Chalk Hand-drawn outlines/ }));
     fireEvent.click(screen.getByRole("button", { name: /Warm Porcelain/ }));
     fireEvent.click(screen.getByRole("button", { name: "Use Slate texture" }));
 
+    expect(onUpdateAppearance).toHaveBeenCalledWith({ skin: "chalk" });
     expect(onUpdateAppearance).toHaveBeenCalledWith({ palette: "warm-porcelain", theme: "light" });
     expect(onUpdateAppearance).toHaveBeenCalledWith({ texture: "slate" });
-    expect(document.querySelector("[data-chalk-chrome]")).toBeInTheDocument();
+    expect(document.querySelector("[data-chalk-chrome]")).not.toBeInTheDocument();
     expect(document.querySelector('[data-chalk-palette="warm-charcoal"]')).toHaveAttribute("data-chalk-theme", "dark");
     expect(document.querySelector('[data-chalk-palette="warm-charcoal"]')).toHaveAttribute("data-chalk-texture", "paper");
+  });
+
+  it("keeps the classic layout while exposing the skin control", () => {
+    const onUpdateAppearance = vi.fn();
+    render(<SettingsDialog isOpen onClose={vi.fn()} settings={createSettings()} onUpdateIdentity={vi.fn()} onUpdateJoin={vi.fn()} onUpdateAudio={vi.fn()} onUpdateVideo={vi.fn()} onUpdateAppearance={onUpdateAppearance} onUpdateExperience={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
+    expect(screen.getByRole("button", { name: /^Classic/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Classic/ })).toHaveClass("border-[var(--chalk-app-control-active-line)]", "bg-[var(--chalk-app-control-active)]", "text-[var(--chalk-app-control-active-text)]");
+    fireEvent.click(screen.getAllByRole("button", { name: /^Chalk/ })[0]);
+
+    expect(onUpdateAppearance).toHaveBeenCalledWith({ skin: "chalk" });
+    expect(document.querySelector('[data-chalk-skin="classic"]')).toBeInTheDocument();
+    expect(document.querySelector(".rounded-\\[14px\\]")).toBeInTheDocument();
   });
 });
 
@@ -42,6 +58,7 @@ function createSettings(): SettingsDialogValue {
     appearance: {
       layout: "focus",
       theme: "dark",
+      skin: "classic",
       palette: "warm-charcoal",
       texture: "paper",
       gradient: "default",

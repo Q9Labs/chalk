@@ -3,6 +3,8 @@ import { Cancel01Icon, Upload01Icon, Image01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { ChalkButton } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicBackgroundEffectsPicker } from "./ClassicBackgroundEffectsPicker";
 
 export interface BackgroundEffect {
   id: string;
@@ -23,7 +25,7 @@ export interface BackgroundEffectsPickerProps {
   className?: string;
 }
 
-export const BackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, onSelect, onCustomUpload, disabled = false, participantColorSeed, participantGradientPreference, className }: BackgroundEffectsPickerProps) => {
+const ChalkBackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, onSelect, onCustomUpload, disabled = false, participantColorSeed, participantGradientPreference, className }: BackgroundEffectsPickerProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
@@ -117,6 +119,13 @@ export const BackgroundEffectsPicker = React.memo(({ effects, selectedEffectId, 
       </div>
     </div>
   );
+});
+
+ChalkBackgroundEffectsPicker.displayName = "ChalkBackgroundEffectsPicker";
+
+export const BackgroundEffectsPicker = React.memo((props: BackgroundEffectsPickerProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicBackgroundEffectsPicker {...props} /> : <ChalkBackgroundEffectsPicker {...props} />;
 });
 
 BackgroundEffectsPicker.displayName = "BackgroundEffectsPicker";

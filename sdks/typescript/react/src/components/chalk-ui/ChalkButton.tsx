@@ -1,8 +1,9 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 import { cn } from "../../utils/cn";
+import { useSkin } from "../skin-context";
 import { ChalkChrome } from "./ChalkChrome";
-import { mergeStyle, TONE_FILLS, TONE_STROKES, type ChalkButtonVariant, type ChalkSeed, type ChalkTone } from "./common";
+import { CLASSIC_FOCUS_CLASSES, classicButtonClasses, mergeStyle, TONE_FILLS, TONE_STROKES, type ChalkButtonVariant, type ChalkSeed, type ChalkTone } from "./common";
 
 export interface ChalkButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "color"> {
   readonly variant?: ChalkButtonVariant;
@@ -13,6 +14,7 @@ export interface ChalkButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEl
 }
 
 export const ChalkButton = forwardRef<HTMLButtonElement, ChalkButtonProps>(function ChalkButton({ className, children, disabled = false, loading = false, variant = "outline", tone = "neutral", seed, roughness, style, type = "button", ...props }, ref) {
+  const skin = useSkin();
   const isDisabled = disabled || loading;
   const stroke = TONE_STROKES[tone];
   const fill = TONE_FILLS[tone];
@@ -26,8 +28,10 @@ export const ChalkButton = forwardRef<HTMLButtonElement, ChalkButtonProps>(funct
       data-chalk-tone={tone}
       data-loading={loading ? "true" : undefined}
       className={cn(
-        "group relative inline-flex min-h-10 items-center justify-center gap-2 overflow-visible rounded-md px-4 py-2 text-sm font-medium text-[var(--chalk-app-text)] outline-none transition-[filter,transform] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-55",
-        variant === "ghost" ? "bg-transparent" : "bg-transparent",
+        skin === "classic"
+          ? cn(CLASSIC_FOCUS_CLASSES, classicButtonClasses(variant, tone), "inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-55")
+          : "group relative inline-flex min-h-10 items-center justify-center gap-2 overflow-visible rounded-md px-4 py-2 text-sm font-medium text-[var(--chalk-app-text)] outline-none transition-[filter,transform] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-55",
+        skin === "chalk" && (variant === "ghost" ? "bg-transparent" : "bg-transparent"),
         className,
       )}
       style={mergeStyle(style)}

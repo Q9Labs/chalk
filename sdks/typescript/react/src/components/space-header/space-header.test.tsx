@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SpaceHeader } from "./SpaceHeader";
+import { SkinProvider } from "../skin-context";
 
 afterEach(cleanup);
 
@@ -29,5 +30,17 @@ describe("SpaceHeader", () => {
     expect(onLayoutChange).toHaveBeenNthCalledWith(2, "presentation");
     expect(screen.getByRole("button", { name: "Spotlight layout" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Grid layout" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("restores the classic header structure without rough chrome", () => {
+    render(
+      <SkinProvider skin="classic">
+        <SpaceHeader spaceName="Design review" />
+      </SkinProvider>,
+    );
+
+    const header = screen.getByRole("banner");
+    expect(header).toHaveClass("chalk-textured-surface", "border-b", "bg-[var(--chalk-app-chrome)]");
+    expect(header.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
   });
 });

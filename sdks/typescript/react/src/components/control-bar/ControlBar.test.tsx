@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ControlBar } from "./ControlBar";
 import { ChalkProvider } from "../../bindings/context";
+import { SkinProvider } from "../skin-context";
 import { createSnapshot, createTestClient } from "../../test-support/test-client";
 
 afterEach(cleanup);
@@ -44,6 +45,20 @@ describe("ControlBar", () => {
     expect(container.querySelectorAll("svg[data-chalk-chrome='true']").length).toBeGreaterThanOrEqual(3);
     expect(screen.getByRole("button", { name: "Unmute" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Leave space" })).toBeInTheDocument();
+  });
+
+  it("uses the classic control layout without rough chrome", () => {
+    render(
+      <SkinProvider skin="classic">
+        <ChalkProvider client={createTestClient()}>
+          <ControlBar placement="floating" density="comfortable" buttons={["mic", "leave"]} />
+        </ChalkProvider>
+      </SkinProvider>,
+    );
+
+    const toolbar = screen.getByRole("toolbar", { name: "Space controls" });
+    expect(toolbar).toHaveClass("pointer-events-auto");
+    expect(toolbar.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
   });
 
   it("surfaces bare-provider command failures", async () => {

@@ -160,10 +160,12 @@ describe("React bindings", () => {
     });
     const view = render(<Chalk client={client} entrance={false} />);
 
+    expect(view.container.firstElementChild).toHaveAttribute("data-chalk-skin", "classic");
     await waitFor(() => expect(within(view.container).getByRole("status")).toHaveTextContent("Access expired"));
     expect(within(view.container).queryByRole("heading", { name: "Enter this Space" })).not.toBeInTheDocument();
     expect(within(view.container).getByRole("button", { name: "Try again" })).toBeInTheDocument();
-    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
+    expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-skin", "classic");
+    expect(view.container.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
   });
 
   it("uses the selected color scheme palette and preserves token overrides", () => {
@@ -379,28 +381,34 @@ describe("React bindings", () => {
     const view = render(<Chalk client={client} entrance={false} />);
     fireEvent.click(within(view.container).getAllByRole("button", { name: "People" })[0]!);
     fireEvent.click(within(view.container).getByRole("button", { name: "Options for Grace" }));
-    fireEvent.click(within(view.container).getByRole("menuitem", { name: "Ask to unmute" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "Ask to unmute" }));
 
     expect(requestMedia).toHaveBeenCalledWith("grace", "microphone");
 
     fireEvent.click(within(view.container).getByRole("button", { name: "Options for Grace" }));
-    fireEvent.click(within(view.container).getByRole("menuitem", { name: "Ask to start camera" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "Ask to start camera" }));
     expect(requestMedia).toHaveBeenCalledWith("grace", "camera");
   });
 
-  it("uses the single theme prop for initial palette and texture", () => {
+  it("uses the single theme prop for initial skin, palette, and texture", () => {
     const client = createTestClient();
     client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
-    const view = render(<Chalk client={client} entrance={false} features={{ settings: true }} theme={{ palette: "oled-signal", texture: "slate" }} />);
+    const view = render(<Chalk client={client} entrance={false} features={{ settings: true }} theme={{ skin: "chalk", palette: "oled-signal", texture: "slate" }} />);
 
+    expect(view.container.firstElementChild).toHaveAttribute("data-chalk-skin", "chalk");
+    expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-skin", "chalk");
+    expect(within(view.container).getByRole("main").querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-palette", "oled-signal");
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-texture", "slate");
 
     fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
     fireEvent.click(within(document.body).getByRole("button", { name: /Appearance/ }));
+    fireEvent.click(within(document.body).getByRole("button", { name: /Classic/ }));
     fireEvent.click(within(document.body).getByRole("button", { name: /Warm Porcelain/ }));
     fireEvent.click(within(document.body).getByRole("button", { name: "Use Paper Grain texture" }));
 
+    expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-skin", "classic");
+    expect(within(view.container).getByRole("main").querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-palette", "warm-porcelain");
     expect(within(view.container).getByRole("main")).toHaveAttribute("data-chalk-texture", "paper");
   });

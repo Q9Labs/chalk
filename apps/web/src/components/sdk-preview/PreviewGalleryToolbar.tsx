@@ -11,6 +11,7 @@ import {
   PREVIEW_PANELS,
   PREVIEW_PARTICIPANT_COUNTS,
   PREVIEW_PALETTES,
+  PREVIEW_SKINS,
   PREVIEW_STAGES,
   PREVIEW_TEXTURES,
   PREVIEW_TOASTS,
@@ -20,6 +21,7 @@ import {
   type PreviewSearchPatch,
   type PreviewState,
 } from "./preview-state";
+import { THEME_SKINS } from "../../../../../sdks/typescript/react/src/components/theme";
 
 interface PreviewGalleryToolbarProps {
   readonly search: PreviewSearch;
@@ -46,7 +48,29 @@ function stateLabel(state: PreviewState): string {
   return valueLabel(state);
 }
 
-function SelectField<T extends string | number>({ label, value, options, onChange, format = (option) => valueLabel(String(option)) }: { readonly label: string; readonly value: T; readonly options: readonly T[]; readonly onChange: (value: T) => void; readonly format?: (value: T) => string }) {
+function skinLabel(skin: PreviewSearch["skin"]): string {
+  return THEME_SKINS.find((option) => option.value === skin)?.label ?? valueLabel(skin);
+}
+
+function skinDescription(skin: PreviewSearch["skin"]): string | undefined {
+  return THEME_SKINS.find((option) => option.value === skin)?.description;
+}
+
+function SelectField<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  format = (option) => valueLabel(String(option)),
+  describe,
+}: {
+  readonly label: string;
+  readonly value: T;
+  readonly options: readonly T[];
+  readonly onChange: (value: T) => void;
+  readonly format?: (value: T) => string;
+  readonly describe?: (value: T) => string | undefined;
+}) {
   return (
     <label className="min-w-0 text-[11px] font-semibold text-[#555b65]">
       <span>{label}</span>
@@ -60,7 +84,7 @@ function SelectField<T extends string | number>({ label, value, options, onChang
         }}
       >
         {options.map((option) => (
-          <option key={String(option)} value={String(option)}>
+          <option key={String(option)} value={String(option)} title={describe?.(option)}>
             {format(option)}
           </option>
         ))}
@@ -169,6 +193,7 @@ export function PreviewGalleryToolbar({ search, onChange }: PreviewGalleryToolba
           <fieldset className="border-0 p-0">
             <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6d727b]">Appearance and signals</legend>
             <div className="mt-2 grid grid-cols-2 gap-2">
+              <SelectField label="Skin" value={search.skin} options={PREVIEW_SKINS} format={skinLabel} describe={skinDescription} onChange={(skin) => onChange({ skin })} />
               <SelectField label="Palette" value={search.palette} options={PREVIEW_PALETTES} onChange={(palette) => onChange({ palette })} />
               <SelectField label="Texture" value={search.texture} options={PREVIEW_TEXTURES} onChange={(texture) => onChange({ texture })} />
               <SelectField label="Toast" value={search.toast} options={PREVIEW_TOASTS} onChange={(toast) => onChange({ toast })} />

@@ -3,6 +3,8 @@ import { cn } from "../../utils/cn";
 import { CircleIcon, Radio01Icon, TextIcon, Alert02Icon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkBadge } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicStatusBadge } from "./ClassicStatusBadge";
 
 export interface StatusBadgeProps {
   status: "recording" | "live" | "transcribing" | "connecting" | "reconnecting";
@@ -44,7 +46,13 @@ const config = {
   },
 } as const;
 
-export const StatusBadge = React.memo(({ status, pulse = false, size = "md", className }: StatusBadgeProps) => {
+export const StatusBadge = React.memo((props: StatusBadgeProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicStatusBadge {...props} /> : <ChalkStatusBadge {...props} />;
+});
+
+function ChalkStatusBadge({ status, pulse = false, size = "md", className }: StatusBadgeProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { icon: Icon, text, colorClass, tone } = config[status];
 
@@ -60,6 +68,6 @@ export const StatusBadge = React.memo(({ status, pulse = false, size = "md", cla
       <span>{text}</span>
     </ChalkBadge>
   );
-});
+}
 
 StatusBadge.displayName = "StatusBadge";

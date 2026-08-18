@@ -2,6 +2,8 @@ import React from "react";
 import { Microphone01Icon, MicrophoneOff01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { ChalkBadge, ChalkChrome } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicAudioIndicator } from "./ClassicAudioIndicator";
 
 interface AudioIndicatorProps {
   level?: number;
@@ -17,7 +19,13 @@ const sizeMap = {
   lg: { width: 24, height: 24 },
 };
 
-export const AudioIndicator = React.memo(({ level = 0, muted = false, size = "md", variant = "icon", className }: AudioIndicatorProps) => {
+export const AudioIndicator = React.memo((props: AudioIndicatorProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicAudioIndicator {...props} /> : <ChalkAudioIndicator {...props} />;
+});
+
+function ChalkAudioIndicator({ level = 0, muted = false, size = "md", variant = "icon", className }: AudioIndicatorProps) {
   const { width, height } = sizeMap[size];
   const clampedLevel = Math.max(0, Math.min(100, level));
 
@@ -73,6 +81,6 @@ export const AudioIndicator = React.memo(({ level = 0, muted = false, size = "md
       )}
     </div>
   );
-});
+}
 
 AudioIndicator.displayName = "AudioIndicator";

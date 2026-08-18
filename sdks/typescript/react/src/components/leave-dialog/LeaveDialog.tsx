@@ -5,6 +5,8 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import { ChalkBackdrop, ChalkBadge, ChalkButton, ChalkDialogPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicLeaveDialog } from "./ClassicLeaveDialog";
 
 export interface LeaveDialogProps {
   isOpen: boolean;
@@ -16,7 +18,8 @@ export interface LeaveDialogProps {
   className?: string;
 }
 
-export const LeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClose, onConfirm, onEndEpisode, palette, texture = "none", className }: LeaveDialogProps) => {
+const ChalkLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClose, onConfirm, onEndEpisode, palette, texture = "none", className }: LeaveDialogProps) => {
+  const skin = useSkin();
   const prefersReducedMotion = usePrefersReducedMotion();
   const portalTheme = resolvePortalThemeFromDocument();
   const modalRef = useRef<HTMLDivElement>(null);
@@ -47,7 +50,7 @@ export const LeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClose, onCo
   const resolvedTheme = palette ? getThemeMode(palette) : portalTheme;
 
   return (
-    <div data-chalk data-chalk-theme={resolvedTheme} data-chalk-palette={palette} data-chalk-texture={texture} className={cn("chalk-root fixed inset-0 z-[100]", !prefersReducedMotion && "animate-in fade-in duration-200", className)} onClick={handleBackdropClick}>
+    <div data-chalk data-chalk-skin={skin} data-chalk-theme={resolvedTheme} data-chalk-palette={palette} data-chalk-texture={texture} className={cn("chalk-root fixed inset-0 z-[100]", !prefersReducedMotion && "animate-in fade-in duration-200", className)} onClick={handleBackdropClick}>
       <ChalkBackdrop className="z-0 !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_65%,transparent)] !backdrop-blur-[2px]" />
       <div className="relative z-10 flex h-full items-center justify-center p-4">
         <ChalkDialogPanel
@@ -113,6 +116,13 @@ export const LeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClose, onCo
       </div>
     </div>
   );
+});
+
+ChalkLeaveDialog.displayName = "ChalkLeaveDialog";
+
+export const LeaveDialog = React.memo<LeaveDialogProps>((props: LeaveDialogProps) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicLeaveDialog {...props} /> : <ChalkLeaveDialog {...props} />;
 });
 
 LeaveDialog.displayName = "LeaveDialog";

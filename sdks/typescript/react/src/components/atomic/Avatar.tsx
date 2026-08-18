@@ -3,6 +3,8 @@ import { Facehash } from "@q9labsai/facehash/react";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { ChalkBadge, ChalkChrome } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicAvatar } from "./ClassicAvatar";
 
 type FacehashComponentProps = {
   name: string;
@@ -43,7 +45,13 @@ const statusToneMap = {
   offline: "neutral",
 } as const;
 
-export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference, generated = true }: AvatarProps) => {
+export const Avatar = React.memo((props: AvatarProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicAvatar {...props} /> : <ChalkAvatar {...props} />;
+});
+
+function ChalkAvatar({ name, src, size = "md", status, className, style, gradientPreference, generated = true }: AvatarProps) {
   const [imageError, setImageError] = useState(false);
   const hasUploadedImage = Boolean(src) && !imageError;
   const shouldShowGeneratedAvatar = generated && Boolean(name) && !hasUploadedImage;
@@ -72,6 +80,6 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
       {status && <ChalkBadge dot tone={statusToneMap[status]} className="absolute bottom-0 right-0 z-[3] rounded-full ring-2 ring-[var(--chalk-surface)]" style={{ width: Math.max(8, pxSize / 4), height: Math.max(8, pxSize / 4) }} role="status" aria-label={`Status: ${status}`} />}
     </div>
   );
-});
+}
 
 Avatar.displayName = "Avatar";

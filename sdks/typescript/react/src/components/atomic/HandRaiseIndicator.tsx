@@ -3,6 +3,8 @@ import { HandIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkBadge } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicHandRaiseIndicator } from "./ClassicHandRaiseIndicator";
 
 interface HandRaiseIndicatorProps {
   raised: boolean;
@@ -31,7 +33,13 @@ const wrapperSizeMap = {
   lg: "p-1.5 ring-2",
 };
 
-export const HandRaiseIndicator = React.memo(({ raised, animated = true, position = "top-right", size = "md", className }: HandRaiseIndicatorProps) => {
+export const HandRaiseIndicator = React.memo((props: HandRaiseIndicatorProps) => {
+  const skin = useSkin();
+
+  return skin === "classic" ? <ClassicHandRaiseIndicator {...props} /> : <ChalkHandRaiseIndicator {...props} />;
+});
+
+function ChalkHandRaiseIndicator({ raised, animated = true, position = "top-right", size = "md", className }: HandRaiseIndicatorProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
 
   if (!raised) return null;
@@ -53,6 +61,6 @@ export const HandRaiseIndicator = React.memo(({ raised, animated = true, positio
       <HandIcon size={sizeMap[size]} fill="currentColor" />
     </ChalkBadge>
   );
-});
+}
 
 HandRaiseIndicator.displayName = "HandRaiseIndicator";

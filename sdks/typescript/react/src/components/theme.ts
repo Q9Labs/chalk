@@ -28,9 +28,17 @@ export const THEME_TEXTURES = [
 
 export type ThemeTexture = (typeof THEME_TEXTURES)[number]["value"];
 
+export const THEME_SKINS = [
+  { value: "classic", label: "Classic", description: "Clean, polished controls with rounded token-based surfaces." },
+  { value: "chalk", label: "Chalk", description: "Hand-drawn outlines and layered strokes for a tactile finish." },
+] as const;
+
+export type ThemeSkin = (typeof THEME_SKINS)[number]["value"];
+
 export interface ThemeAppearance {
   readonly palette: ThemePalette;
   readonly texture: ThemeTexture;
+  readonly skin?: ThemeSkin;
 }
 
 const DARK_THEME_PALETTES = new Set<ThemePalette>(THEME_PALETTES.filter((palette) => palette.mode === "dark").map((palette) => palette.value));

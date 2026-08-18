@@ -6,6 +6,8 @@ import { Search01Icon } from "../../utils/icons";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { DEFAULT_QUICK_REACTIONS, EMOJI_CATEGORIES, EMOJI_KEYWORDS, type ReactionCategoryKey } from "@q9labsai/chalk-ui/reactions";
 import { ChalkBackdrop, ChalkDialogPanel, ChalkIconButton, ChalkInput } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicReactionPicker } from "./ClassicReactionPicker";
 
 export interface ReactionPickerProps {
   isOpen: boolean;
@@ -20,7 +22,7 @@ export interface ReactionPickerProps {
   size?: "default" | "compact" | "mini";
 }
 
-export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
+const ChalkReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger } = useHaptics();
   const [activeCategory, setActiveCategory] = useState<ReactionCategoryKey>("smileys");
@@ -185,6 +187,13 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
       </ChalkDialogPanel>
     </>
   );
+});
+
+ChalkReactionPicker.displayName = "ChalkReactionPicker";
+
+export const ReactionPicker = React.memo((props: ReactionPickerProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicReactionPicker {...props} /> : <ChalkReactionPicker {...props} />;
 });
 
 ReactionPicker.displayName = "ReactionPicker";

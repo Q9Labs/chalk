@@ -13,7 +13,7 @@ import { LeaveDialog } from "../components/leave-dialog/LeaveDialog";
 import { SpaceView, type SpacePanel, type SpaceViewProps } from "../components/space-view/SpaceView";
 import { ChalkProvider } from "../bindings/context";
 import { createPreviewClient } from "./preview-client";
-import { getThemeMode, THEME_PALETTES, THEME_TEXTURES, type ThemeAppearance, type ThemeMode, type ThemePalette, type ThemeTexture } from "../components/theme";
+import { getThemeMode, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type ThemeAppearance, type ThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../components/theme";
 
 /**
  * DEV-only adapter for the URL-addressable SDK gallery. It deliberately lives
@@ -118,5 +118,5 @@ export function PreviewEpisodeEnded({ spaceName, duration, participantCount, onR
   );
 }
 
-export { CommandErrorAlert, JoinFailedScreen, LeaveDialog, getThemeMode, THEME_PALETTES, THEME_TEXTURES };
-export type { EntranceSettings, SpaceLayout, SpacePanel, SpaceViewProps, ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture };
+export { CommandErrorAlert, JoinFailedScreen, LeaveDialog, getThemeMode, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES };
+export type { EntranceSettings, SpaceLayout, SpacePanel, SpaceViewProps, ThemeAppearance, ThemeMode, ThemePalette, ThemeSkin, ThemeTexture };

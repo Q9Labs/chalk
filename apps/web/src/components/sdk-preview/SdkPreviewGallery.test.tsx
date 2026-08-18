@@ -15,8 +15,8 @@ vi.mock("./PreviewGalleryToolbar", () => ({
 
 vi.mock("../../../../../sdks/typescript/react/src/test-support/preview-fixtures", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../../../sdks/typescript/react/src/test-support/preview-fixtures")>();
-  const MockPreviewEntrance = ({ error, onJoin, theme }: { readonly error?: string; readonly onJoin: (settings: { displayName: string; microphone: boolean; camera: boolean }) => void; readonly theme?: { readonly palette?: string; readonly texture?: string } }) => (
-    <section data-testid="entrance-screen" data-theme-palette={theme?.palette} data-theme-texture={theme?.texture}>
+  const MockPreviewEntrance = ({ error, onJoin, theme }: { readonly error?: string; readonly onJoin: (settings: { displayName: string; microphone: boolean; camera: boolean }) => void; readonly theme?: { readonly skin?: string; readonly palette?: string; readonly texture?: string } }) => (
+    <section data-testid="entrance-screen" data-theme-skin={theme?.skin} data-theme-palette={theme?.palette} data-theme-texture={theme?.texture}>
       <h1>Entrance</h1>
       {error ? <p role="alert">{error}</p> : null}
       <button type="button" onClick={() => onJoin({ displayName: "Ada", microphone: true, camera: true })}>
@@ -95,10 +95,19 @@ describe("SdkPreviewGallery", () => {
   });
 
   it("passes the mapped Cosmic Chalk theme into Entrance", () => {
-    render(<SdkPreviewGallery search={search({ view: "entrance", state: "ready", palette: "cosmic" })} onSearchChange={vi.fn()} />);
+    render(<SdkPreviewGallery search={search({ view: "entrance", state: "ready", skin: "chalk", palette: "cosmic" })} onSearchChange={vi.fn()} />);
 
+    expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-skin")).toBe("chalk");
     expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-palette")).toBe("cosmic-chalk");
     expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-texture")).toBe("paper");
+  });
+
+  it("passes the selected skin independently of palette and texture", () => {
+    render(<SdkPreviewGallery search={search({ view: "entrance", state: "ready", skin: "chalk", palette: "paper", texture: "none" })} onSearchChange={vi.fn()} />);
+
+    expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-skin")).toBe("chalk");
+    expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-palette")).toBe("light");
+    expect(screen.getByTestId("entrance-screen").getAttribute("data-theme-texture")).toBe("none");
   });
 
   it.each([
@@ -128,10 +137,26 @@ describe("SdkPreviewGallery", () => {
   });
 
   it("hydrates Settings from direct palette and texture links", () => {
-    render(<SdkPreviewGallery search={search({ view: "space", state: "happy", dialog: "settings", palette: "midnight", texture: "soft-dots" })} onSearchChange={vi.fn()} />);
+    render(<SdkPreviewGallery search={search({ view: "space", state: "happy", dialog: "settings", skin: "chalk", palette: "midnight", texture: "soft-dots" })} onSearchChange={vi.fn()} />);
 
+    expect(screen.getByRole("dialog", { name: "Space settings" }).getAttribute("data-chalk-skin")).toBe("chalk");
     expect(screen.getByRole("dialog", { name: "Space settings" }).getAttribute("data-chalk-palette")).toBe("oled-signal");
     expect(screen.getByRole("dialog", { name: "Space settings" }).getAttribute("data-chalk-texture")).toBe("slate");
+  });
+
+  it("keeps Appearance open while switching Settings skins", () => {
+    const onSearchChange = vi.fn();
+    const chalkSearch = search({ view: "space", state: "happy", dialog: "settings", skin: "chalk" });
+    const view = render(<SdkPreviewGallery search={chalkSearch} onSearchChange={onSearchChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Classic/ }));
+    expect(onSearchChange).toHaveBeenCalledWith({ skin: "classic" });
+
+    view.rerender(<SdkPreviewGallery search={{ ...chalkSearch, skin: "classic" }} onSearchChange={onSearchChange} />);
+
+    expect(screen.getByRole("heading", { name: "Appearance" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Warm Porcelain/ })).toBeTruthy();
   });
 
   it("keeps the whiteboard fixture local and network-free", () => {

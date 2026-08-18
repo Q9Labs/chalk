@@ -1,12 +1,14 @@
 import type React from "react";
 
 import { ChalkAlert } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicCommandErrorAlert } from "./ClassicCommandErrorAlert";
 
 export interface CommandErrorAlertProps {
   readonly message?: string;
 }
 
-export function CommandErrorAlert({ message }: CommandErrorAlertProps): React.JSX.Element | null {
+function ChalkCommandErrorAlert({ message }: CommandErrorAlertProps): React.JSX.Element | null {
   if (!message) return null;
 
   return (
@@ -14,4 +16,9 @@ export function CommandErrorAlert({ message }: CommandErrorAlertProps): React.JS
       {message}
     </ChalkAlert>
   );
+}
+
+export function CommandErrorAlert(props: CommandErrorAlertProps): React.JSX.Element | null {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicCommandErrorAlert {...props} /> : <ChalkCommandErrorAlert {...props} />;
 }

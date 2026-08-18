@@ -6,6 +6,8 @@ import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkInput, ChalkMenu, ChalkMenuItem, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicTranscriptPanel } from "./ClassicTranscriptPanel";
 
 export interface TranscriptEntry {
   id: string;
@@ -579,11 +581,16 @@ const TranscriptPanelSurface = React.memo(
   },
 );
 
-export const TranscriptPanel = React.memo((props: TranscriptPanelProps): React.JSX.Element => {
+const ChalkTranscriptPanel = React.memo((props: TranscriptPanelProps): React.JSX.Element => {
   const connection = useConnection();
   const self = useSelf();
 
   return <TranscriptPanelSurface {...props} transcripts={[]} isLive={connection.status === "live" || connection.status === "reconnecting"} localParticipantId={self.participantId ?? undefined} participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined} />;
+});
+
+export const TranscriptPanel = React.memo((props: TranscriptPanelProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicTranscriptPanel {...props} /> : <ChalkTranscriptPanel {...props} />;
 });
 
 TranscriptPanel.displayName = "TranscriptPanel";

@@ -4,7 +4,7 @@ import { DEFAULT_PREVIEW_SEARCH, ENTRANCE_STATES, SPACE_STATES, createPreviewHre
 
 describe("preview URL state", () => {
   it("provides a coherent complete default", () => {
-    expect(DEFAULT_PREVIEW_SEARCH).toMatchObject({ view: "entrance", state: "ready", panel: "none", dialog: "none", mic: true, camera: true, hand: false });
+    expect(DEFAULT_PREVIEW_SEARCH).toMatchObject({ view: "entrance", state: "ready", panel: "none", dialog: "none", skin: "classic", mic: true, camera: true, hand: false });
     expect(ENTRANCE_STATES).toContain(DEFAULT_PREVIEW_SEARCH.state);
   });
 
@@ -16,6 +16,11 @@ describe("preview URL state", () => {
 
   it("keeps the Cosmic Chalk palette addressable from direct links", () => {
     expect(parsePreviewSearch("?view=space&palette=cosmic").palette).toBe("cosmic");
+  });
+
+  it("keeps skins independently addressable from palette and texture", () => {
+    expect(parsePreviewSearch("?view=space&skin=chalk&palette=paper&texture=none")).toMatchObject({ skin: "chalk", palette: "paper", texture: "none" });
+    expect(parsePreviewSearch("?skin=unexpected").skin).toBe("classic");
   });
 
   it("clamps invalid enums, participant counts, booleans, and numbers", () => {
@@ -30,10 +35,10 @@ describe("preview URL state", () => {
   });
 
   it("serializes keys in deterministic order and omits defaults", () => {
-    const first = serializePreviewSearch({ view: "space", state: "reconnecting", participants: 5, hand: true });
-    const second = serializePreviewSearch({ hand: true, participants: 5, state: "reconnecting", view: "space" });
+    const first = serializePreviewSearch({ view: "space", state: "reconnecting", skin: "chalk", palette: "paper", texture: "none", participants: 5, hand: true });
+    const second = serializePreviewSearch({ hand: true, participants: 5, texture: "none", palette: "paper", skin: "chalk", state: "reconnecting", view: "space" });
 
-    expect(first).toBe("view=space&state=reconnecting&participants=5&hand=true");
+    expect(first).toBe("view=space&state=reconnecting&skin=chalk&palette=paper&texture=none&participants=5&hand=true");
     expect(second).toBe(first);
     expect(serializePreviewSearch(DEFAULT_PREVIEW_SEARCH)).toBe("");
   });

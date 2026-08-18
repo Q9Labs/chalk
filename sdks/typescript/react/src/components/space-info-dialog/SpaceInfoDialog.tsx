@@ -3,6 +3,8 @@ import React, { useState } from "react";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, Copy01Icon, Monitor01Icon, Shield01Icon, Tick01Icon } from "../../utils/icons";
 import { ChalkBackdrop, ChalkBadge, ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicSpaceInfoDialog } from "./ClassicSpaceInfoDialog";
 
 export interface SpaceInfoDialogProps {
   isOpen: boolean;
@@ -32,7 +34,8 @@ const formatDuration = (seconds: number): string => {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
-export const SpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen, onClose, spaceName, spaceId, inviteLink, onCopyLink, isRecording = false, isTranscribing = false, duration = 0, stats = { latency: 28, packetLoss: 0.1, resolution: "1080p · 60fps", region: "Frankfurt, DE" }, className }) => {
+const ChalkSpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen, onClose, spaceName, spaceId, inviteLink, onCopyLink, isRecording = false, isTranscribing = false, duration = 0, stats = { latency: 28, packetLoss: 0.1, resolution: "1080p · 60fps", region: "Frankfurt, DE" }, className }) => {
+  const skin = useSkin();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -44,7 +47,7 @@ export const SpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen, onClo
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50" onMouseDown={onClose}>
+    <div data-chalk-skin={skin} className="fixed inset-0 z-50" onMouseDown={onClose}>
       <ChalkBackdrop className="z-0 !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_90%,transparent)] !backdrop-blur-[1px]" />
       <div className="relative z-10 grid h-full place-items-center p-4">
         <ChalkDialogPanel
@@ -116,6 +119,13 @@ export const SpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen, onClo
       </div>
     </div>
   );
+});
+
+ChalkSpaceInfoDialog.displayName = "ChalkSpaceInfoDialog";
+
+export const SpaceInfoDialog = React.memo<SpaceInfoDialogProps>((props: SpaceInfoDialogProps) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicSpaceInfoDialog {...props} /> : <ChalkSpaceInfoDialog {...props} />;
 });
 
 SpaceInfoDialog.displayName = "SpaceInfoDialog";

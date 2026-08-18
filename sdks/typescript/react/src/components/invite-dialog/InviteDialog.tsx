@@ -3,6 +3,8 @@ import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkBackdrop, ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkInput, ChalkPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicInviteDialog } from "./ClassicInviteDialog";
 
 export interface InviteDialogProps {
   isOpen: boolean;
@@ -15,7 +17,8 @@ export interface InviteDialogProps {
   className?: string;
 }
 
-export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, inviteLink, spaceId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
+const ChalkInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, inviteLink, spaceId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
+  const skin = useSkin();
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
@@ -56,7 +59,7 @@ export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, in
   if (!isOpen) return null;
 
   return (
-    <div className={cn("fixed inset-0 z-50", className)}>
+    <div data-chalk-skin={skin} className={cn("fixed inset-0 z-50", className)}>
       <ChalkBackdrop className="z-0 !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_65%,transparent)] !backdrop-blur-[2px]" onClick={onClose} />
       <div className="relative z-10 flex h-full items-center justify-center p-4">
         <ChalkDialogPanel
@@ -141,6 +144,13 @@ export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, in
       </div>
     </div>
   );
+});
+
+ChalkInviteDialog.displayName = "ChalkInviteDialog";
+
+export const InviteDialog = React.memo<InviteDialogProps>((props: InviteDialogProps) => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicInviteDialog {...props} /> : <ChalkInviteDialog {...props} />;
 });
 
 InviteDialog.displayName = "InviteDialog";

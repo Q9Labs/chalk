@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getThemeMode, THEME_PALETTES, THEME_TEXTURES } from "./theme";
+import { getThemeMode, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "./theme";
 
 describe("appearance metadata", () => {
   it("defines unique palette values and classifies every color family", () => {
@@ -14,5 +14,10 @@ describe("appearance metadata", () => {
     expect(THEME_PALETTES.filter((palette) => palette.mode === "light")).toHaveLength(8);
     expect(THEME_PALETTES.filter((palette) => palette.mode === "dark")).toHaveLength(8);
     expect(THEME_TEXTURES.map((texture) => texture.value)).toEqual(["none", "paper", "slate"]);
+    expect(THEME_SKINS.map((skin) => skin.value)).toEqual(["classic", "chalk"]);
+    expect(THEME_SKINS).toEqual([
+      { value: "classic", label: "Classic", description: "Clean, polished controls with rounded token-based surfaces." },
+      { value: "chalk", label: "Chalk", description: "Hand-drawn outlines and layered strokes for a tactile finish." },
+    ]);
   });
 });

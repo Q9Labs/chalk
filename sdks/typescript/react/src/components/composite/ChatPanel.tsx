@@ -6,6 +6,8 @@ import { useChat, useParticipants, useSelf, useSpaceClient } from "../../binding
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
 import { ChalkAlert, ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner, ChalkTextarea } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicChatPanel } from "./ClassicChatPanel";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
@@ -347,7 +349,7 @@ const ChatPanelSurface = React.memo(
   },
 );
 
-export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
+const ChalkChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
   const client = useSpaceClient();
   const chat = useChat();
   const participants = useParticipants();
@@ -379,6 +381,11 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
       error={chat.lastError?.message ?? null}
     />
   );
+});
+
+export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicChatPanel {...props} /> : <ChalkChatPanel {...props} />;
 });
 
 ChatPanel.displayName = "ChatPanel";

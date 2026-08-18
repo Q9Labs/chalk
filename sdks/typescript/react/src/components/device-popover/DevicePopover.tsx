@@ -12,6 +12,8 @@ import { ControlBarButton } from "../atomic";
 import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 import { ChalkIconButton, ChalkMenu, ChalkMenuItem, ChalkPanel, ChalkTooltipPanel } from "../chalk-ui";
+import { useSkin } from "../skin-context";
+import { ClassicDevicePopover } from "./ClassicDevicePopover";
 
 export interface DevicePopoverProps {
   type: "mic" | "video";
@@ -34,7 +36,8 @@ export interface DevicePopoverProps {
   appearance?: "default" | "floating";
 }
 
-export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDeviceId, onDeviceChange, secondaryDevices, selectedSecondaryDeviceId, onSecondaryDeviceChange, orientation = "up", className, disabled = false, haptic = "soft", size = "md", appearance = "default" }: DevicePopoverProps) => {
+const ChalkDevicePopover = ({ type, isActive, onToggle, devices, selectedDeviceId, onDeviceChange, secondaryDevices, selectedSecondaryDeviceId, onSecondaryDeviceChange, orientation = "up", className, disabled = false, haptic = "soft", size = "md", appearance = "default" }: DevicePopoverProps) => {
+  const skin = useSkin();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { trigger } = useHaptics({
@@ -90,7 +93,7 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
   const floating = appearance === "floating";
 
   return (
-    <div className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
+    <div data-chalk-skin={skin} className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
       <ControlBarButton
         icon={icon}
@@ -209,4 +212,9 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
       )}
     </div>
   );
+};
+
+export const DevicePopover = (props: DevicePopoverProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicDevicePopover {...props} /> : <ChalkDevicePopover {...props} />;
 };
