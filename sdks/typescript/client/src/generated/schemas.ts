@@ -432,7 +432,7 @@ export const CreateSpaceRequestSchema = Schema.Struct({
   default_episode_duration_seconds: Schema.Number,
   linger_window_seconds: Schema.Number,
   maximum_episode_duration_seconds: Schema.Number,
-  media_plane: Schema.String.check(Schema.isMinLength(1)),
+  media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.String.check(Schema.isMinLength(1)),
   recurring_policy: Schema.optional(Schema.Unknown),
@@ -4255,6 +4255,25 @@ export const SpaceInvalidIdErrorSchema = SpaceInvalidIdErrorWireSchema.pipe(
   }),
 );
 
+export class SpaceInvalidMediaPlaneError extends Schema.TaggedErrorClass<SpaceInvalidMediaPlaneError>()("SpaceInvalidMediaPlaneError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_media_plane"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceInvalidMediaPlaneErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_media_plane"),
+    message: Schema.String,
+  }),
+});
+export const SpaceInvalidMediaPlaneErrorSchema = SpaceInvalidMediaPlaneErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceInvalidMediaPlaneError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidMediaPlaneError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class SpaceInvalidSlugError extends Schema.TaggedErrorClass<SpaceInvalidSlugError>()("SpaceInvalidSlugError", {
   error: Schema.Struct({
     code: Schema.Literal("space.invalid_slug"),
@@ -5293,6 +5312,7 @@ export const CreateSpaceErrorSchema = Schema.Union([
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
+  SpaceInvalidMediaPlaneErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
@@ -6231,6 +6251,7 @@ export const UpdateSpaceErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpaceInvalidIdErrorSchema,
+  SpaceInvalidMediaPlaneErrorSchema,
   SpaceNotFoundErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,

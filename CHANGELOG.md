@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added an environment-owned default MediaPlane for new Spaces while keeping
+  concrete Tenant-managed provider configuration authoritative.
+- Enabled Google sign-in in the managed production API contract with a complete
+  OAuth client triplet and the exact Chalk web callback.
 - Added a System, Light, and Dark theme choice to the dashboard account menu.
   The preference is remembered across visits and applied before the first
   paint, and it covers the dashboard, Space administration, and every chalk
@@ -49,6 +53,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fixed first join for newly created Spaces whose Tenant has no custom
+  MediaPlane configuration, and added bounded resolver traces, metrics, and
+  structured logs for the selected configuration source.
 - Fixed the sidebar navigation labels, which the chalk reset drew over the
   utility classes that were meant to colour them, leaving them barely legible
   on the dark panel.

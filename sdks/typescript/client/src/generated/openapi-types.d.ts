@@ -1587,7 +1587,7 @@ export interface components {
       default_episode_duration_seconds: number;
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
-      media_plane: string;
+      media_plane?: string;
       metadata?:
         | {
             [key: string]: unknown;

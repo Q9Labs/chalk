@@ -81,7 +81,7 @@ classify_path() {
     infrastructure/managed-episode/*)
       classifications+=(shared)
       ;;
-    GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*|scripts/dev|scripts/dev/*)
+    CHANGELOG.md|GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|contract|contract/*|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*|scripts/dev|scripts/dev/*)
       classifications+=(none)
       ;;
     *)

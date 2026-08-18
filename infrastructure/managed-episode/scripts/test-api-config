@@ -68,6 +68,9 @@ printf '%s\n' 'CHALK_CLOUDFLARE_RTK_APP_ID=test-rtk-app' >>"${rtk_env}"
   scripts/dev/chalk.mjs |
   jq -e '.classification == "none" and .affected_components == []' >/dev/null
 "${managed_root}/scripts/plan-release-components" \
+  CHANGELOG.md contract/generated/openapi.json |
+  jq -e '.classification == "none" and .affected_components == []' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
   infrastructure/managed-episode/scripts/validate-sync-runtime |
   jq -e '.classification == "sync" and .affected_components == ["sync"]' >/dev/null
 
