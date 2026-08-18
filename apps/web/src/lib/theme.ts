@@ -63,7 +63,7 @@ export function applyThemeMode(root: HTMLElement, mode: ThemeMode): void {
 }
 
 /**
- * Runs in `<head>` before first paint so a dark session never flashes the light
+ * Runs in `<head>` before first paint so a dark visit never flashes the light
  * palette. It mirrors `resolveThemeMode` and `applyThemeMode`; the tests below
  * pin the two together.
  */
