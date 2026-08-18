@@ -92,6 +92,7 @@ func ScenarioNames() []string {
 		RouteAuthGoogleCallbackScenario,
 		RouteMeScenario,
 		RouteTenantOnboardScenario,
+		ServiceMediaPlaneDefaultResolutionScenario,
 		RouteTenantCreateScenario,
 		RouteTenantListSystemScenario,
 		RouteTenantGetAuthorizedScenario,
@@ -136,6 +137,7 @@ func ScenarioNames() []string {
 		EdgeForbiddenTenantRouteScenario,
 		EdgeInvalidRouteIDScenario,
 		EdgeTenantOnboardConflictScenario,
+		EdgeMediaPlaneDisabledScenario,
 		WebhookDeliveryAttemptScenario,
 	}
 }
