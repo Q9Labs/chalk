@@ -4,22 +4,18 @@ import { StrictMode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { dashboardSpaceTestAccess, getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestCredential } from "../../__tests__/space-page.test-support";
+import { cleanupSpacePageTestMocks, dashboardSpaceTestAccess, getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestCredential } from "../../__tests__/space-page.test-support";
 import { DashboardAPIError } from "../../lib/dashboard-api";
 
 import { DashboardSpacePage, SpacePage } from "./SpacePage";
 
 const mocks = getSpacePageTestMocks();
 
-beforeEach(() => {
-  resetSpacePageTestMocks();
-});
+beforeEach(resetSpacePageTestMocks);
 
 afterEach(async () => {
   cleanup();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  vi.clearAllMocks();
-  vi.unstubAllGlobals();
+  await cleanupSpacePageTestMocks();
 });
 
 describe("SpacePage", () => {

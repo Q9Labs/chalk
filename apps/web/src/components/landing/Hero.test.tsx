@@ -6,6 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { Hero } from "./Hero";
 
+function heroImageSources(): string[] {
+  const markup = renderToStaticMarkup(<Hero />);
+  return Array.from(markup.matchAll(/<img src="([^"]+)"/g), (match) => match[1]);
+}
+
 describe("Hero", () => {
   it("leads with the Space promise and uses local technology marks", () => {
     const markup = renderToStaticMarkup(<Hero />);
@@ -25,9 +30,7 @@ describe("Hero", () => {
   });
 
   it("draws each technology mark once, since React and React Native share a logo", () => {
-    const markup = renderToStaticMarkup(<Hero />);
-
-    const sources = Array.from(markup.matchAll(/<img src="([^"]+)"/g), (match) => match[1]);
+    const sources = heroImageSources();
 
     expect(sources.length).toBeGreaterThan(0);
     expect(sources).toHaveLength(new Set(sources).size);
@@ -44,8 +47,7 @@ describe("Hero", () => {
   });
 
   it("serves every image from this origin, so no vendor logo is hotlinked", () => {
-    const markup = renderToStaticMarkup(<Hero />);
-    const sources = Array.from(markup.matchAll(/<img src="([^"]+)"/g), (match) => match[1]);
+    const sources = heroImageSources();
 
     expect(sources.length).toBeGreaterThan(0);
     for (const source of sources) {

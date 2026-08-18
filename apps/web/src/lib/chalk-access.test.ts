@@ -164,17 +164,13 @@ describe("local Chalk access client", () => {
       vi.fn<typeof fetch>(async () => responses.shift() ?? new Response(null, { status: 500 })),
     );
 
-    const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
-
-    expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
+    await expectUnauthenticatedDashboardSpaceError();
   });
 
   it("identifies an unauthenticated CSRF response for invite fallback", async () => {
     stubFetch(jsonResponse({ error: "Authentication required" }, 401));
 
-    const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
-
-    expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
+    await expectUnauthenticatedDashboardSpaceError();
   });
 
   it("surfaces nested Dashboard API error messages", async () => {
@@ -231,6 +227,11 @@ describe("local Chalk access client", () => {
 function credential(audience: "chalk-sync" | "chalk-media"): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
   return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.signature`;
+}
+
+async function expectUnauthenticatedDashboardSpaceError(): Promise<void> {
+  const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
+  expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
 }
 
 function stubFetch(response: Response) {

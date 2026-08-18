@@ -127,6 +127,12 @@ export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.telemetry.configureApiBaseURL.mockReset();
 }
 
+export async function cleanupSpacePageTestMocks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+}
+
 function makeRelease(cleanup: () => Promise<void>): ReturnType<typeof vi.fn> {
   let releasePromise: Promise<void> | undefined;
   return vi.fn(() => {

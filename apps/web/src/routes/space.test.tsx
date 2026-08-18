@@ -3,20 +3,17 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestCredential } from "../__tests__/space-page.test-support";
+import { cleanupSpacePageTestMocks, getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestCredential } from "../__tests__/space-page.test-support";
 
 import { SpacePage } from "../components/space/SpacePage";
 
 const mocks = getSpacePageTestMocks();
 
-beforeEach(() => {
-  resetSpacePageTestMocks();
-});
+beforeEach(resetSpacePageTestMocks);
 
 afterEach(async () => {
   cleanup();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  vi.clearAllMocks();
+  await cleanupSpacePageTestMocks();
 });
 
 describe("public SDK Space route", () => {
