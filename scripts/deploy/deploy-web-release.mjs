@@ -149,12 +149,13 @@ export async function runWebRelease({
     return { sha: expectedSHA, dryRun: true, plan: releasePlan };
   }
 
-  await checkPinnedTools(commandRunner, rootDirectory, webPath, executionEnvironment);
+  await checkRuntimeTools(commandRunner, rootDirectory, executionEnvironment);
   if (!executionEnvironment.CLOUDFLARE_API_TOKEN?.trim()) {
     throw new Error("CLOUDFLARE_API_TOKEN is required for a web release; inject it with op run locally or the CI secret");
   }
 
   await commandRunner(commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory, { env: executionEnvironment }));
+  await checkPinnedWrangler(commandRunner, webPath, executionEnvironment);
 
   if (build) {
     const buildEnvironment = {
@@ -293,13 +294,16 @@ async function runVerifier(commandRunner, baseURL, expectedSHA, environment, roo
   await commandRunner(commandSpec(process.execPath, [verifier, baseURL, expectedSHA, ...(production ? ["--production"] : [])], rootDirectory, { env: environment }));
 }
 
-async function checkPinnedTools(commandRunner, rootDirectory, webPath, environment) {
+async function checkRuntimeTools(commandRunner, rootDirectory, environment) {
   const nodeVersion = commandOutput(await commandRunner(commandSpec("node", ["--version"], rootDirectory, { capture: true, env: environment })));
   assertMinimumNodeVersion(nodeVersion, RELEASE_TOOL_VERSIONS.minimumNodeMajor);
 
   const pnpmVersion = commandOutput(await commandRunner(commandSpec("pnpm", ["--version"], rootDirectory, { capture: true, env: environment })));
   assertToolVersion("pnpm", pnpmVersion, RELEASE_TOOL_VERSIONS.pnpm);
+}
 
+/** Wrangler ships as a workspace dependency, so a fresh CI checkout can only report it after the install. */
+async function checkPinnedWrangler(commandRunner, webPath, environment) {
   const wranglerVersion = commandOutput(await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "--version"], webPath, { capture: true, env: environment })));
   assertToolVersion("Wrangler", wranglerVersion, RELEASE_TOOL_VERSIONS.wrangler);
 }

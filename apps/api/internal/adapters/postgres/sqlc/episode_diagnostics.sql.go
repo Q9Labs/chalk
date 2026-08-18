@@ -1806,6 +1806,66 @@ func (q *Queries) GetDiagnosticParticipant(ctx context.Context, arg GetDiagnosti
 	return i, err
 }
 
+const getDiagnosticParticipantProjection = `-- name: GetDiagnosticParticipantProjection :one
+select p.participant_id,
+       p.joined_at,
+       p.left_at,
+       p.latest_lifecycle_name,
+       p.latest_lifecycle_state,
+       p.operation_count,
+       p.issue_count,
+       p.first_observed_at,
+       p.last_observed_at,
+       1 + (
+           select count(*)
+           from diagnostic_participant_projections before_participant
+           where before_participant.tenant_id = p.tenant_id
+             and before_participant.diagnostic_id = p.diagnostic_id
+             and before_participant.participant_id < p.participant_id
+       )::bigint as ordinal
+from diagnostic_participant_projections p
+where p.tenant_id = $1
+  and p.diagnostic_id = $2
+  and p.participant_id = $3
+`
+
+type GetDiagnosticParticipantProjectionParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	DiagnosticID  pgtype.UUID `json:"diagnostic_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+}
+
+type GetDiagnosticParticipantProjectionRow struct {
+	ParticipantID        pgtype.UUID        `json:"participant_id"`
+	JoinedAt             pgtype.Timestamptz `json:"joined_at"`
+	LeftAt               pgtype.Timestamptz `json:"left_at"`
+	LatestLifecycleName  string             `json:"latest_lifecycle_name"`
+	LatestLifecycleState string             `json:"latest_lifecycle_state"`
+	OperationCount       int64              `json:"operation_count"`
+	IssueCount           int64              `json:"issue_count"`
+	FirstObservedAt      pgtype.Timestamptz `json:"first_observed_at"`
+	LastObservedAt       pgtype.Timestamptz `json:"last_observed_at"`
+	Ordinal              int32              `json:"ordinal"`
+}
+
+func (q *Queries) GetDiagnosticParticipantProjection(ctx context.Context, arg GetDiagnosticParticipantProjectionParams) (GetDiagnosticParticipantProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getDiagnosticParticipantProjection, arg.TenantID, arg.DiagnosticID, arg.ParticipantID)
+	var i GetDiagnosticParticipantProjectionRow
+	err := row.Scan(
+		&i.ParticipantID,
+		&i.JoinedAt,
+		&i.LeftAt,
+		&i.LatestLifecycleName,
+		&i.LatestLifecycleState,
+		&i.OperationCount,
+		&i.IssueCount,
+		&i.FirstObservedAt,
+		&i.LastObservedAt,
+		&i.Ordinal,
+	)
+	return i, err
+}
+
 const getDiagnosticProjectorOffset = `-- name: GetDiagnosticProjectorOffset :one
 select tenant_id, diagnostic_id, projected_cursor, lease_token, lease_owner, lease_until, failure_count, last_error_class, last_error_at, updated_at
 from diagnostic_projector_offsets

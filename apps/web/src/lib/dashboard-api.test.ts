@@ -391,6 +391,17 @@ describe("dashboard API client", () => {
     expect(window.localStorage.getItem("chalk.dashboard-request.space-create")).toBeNull();
   });
 
+  it("creates Dashboard Spaces on the web client's supported media plane", async () => {
+    const created = space("22222222-2222-4222-8222-222222222222", "Product studio");
+    const fetcher = boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), Response.json(created, { status: 201 }));
+    vi.stubGlobal("fetch", fetcher);
+    const { createSpace } = await import("./dashboard-api");
+
+    await createSpace({ tenantID, name: "Product studio", slug: "product-studio" });
+
+    await expect(requestJSON(fetcher.mock.calls[1]?.[1] as RequestInit)).resolves.toMatchObject({ media_plane: "cf_sfu" });
+  });
+
   it("carries recent-auth proof to API-key mutations without putting it in the body", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const keyID = "22222222-2222-4222-8222-222222222222";

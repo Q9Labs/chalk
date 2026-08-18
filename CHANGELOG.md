@@ -17,6 +17,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added deterministic hand-drawn chalk controls across the React SDK Entrance
   and Space, plus public chalk buttons, fields, toggles, panels, menus, dialogs,
   alerts, sliders, badges, and loading primitives for custom SDK surfaces.
+- Added a System, Light, and Dark theme choice to the dashboard account menu.
+  The preference is remembered across visits and applied before the first
+  paint, and it covers the dashboard, Space administration, and every chalk
+  popup. Landing and legal pages stay on the paper palette.
 - Added exact-SHA, component-aware managed release manifests and a manual
   release workflow that builds only the changed API or Sync image while
   carrying the stable component digest and provenance forward.
@@ -40,6 +44,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Rebuilt the dashboard sidebar on a shadcn-style primitive: a chalkboard-dark
+  panel with a collapsible icon rail, tooltips, a keyboard toggle, persisted
+  state, and a drawer on small screens.
 - Made the local API gate own its isolated migrated PostgreSQL database, expose
   every integration-test database alias, run independent checks in parallel,
   avoid duplicate vet work in `go test`, and overlap PostgreSQL preparation
@@ -53,8 +60,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Fixed the dependency vulnerability gate under macOS's system Bash so its
   lockfile discovery no longer fails inside nested null-delimited reads.
+- Fixed the sidebar navigation labels, which the chalk reset drew over the
+  utility classes that were meant to colour them, leaving them barely legible
+  on the dark panel.
+- Fixed the tenant switcher, which threw when it labelled its group of Tenants
+  outside a menu group.
+- Fixed chalk popups reading the theme once when they opened, so a menu, a
+  tooltip, or a toast no longer keeps the old palette after the theme changes
+  underneath it.
+- Restored the landing hero's anonymous Space entry so its primary action opens
+  the `/space` Entrance without Account authentication.
 - Serialized web releases across SHAs, added guarded stale-lock recovery, and
   made manifest component ordering match runtime validation.
+- Fixed the web release preflight, which read the pinned Wrangler version from
+  the workspace before installing it and so failed on every fresh checkout.
 - Fixed chat attachment reservation against the Space-scoped stream schema and
   corrected cleanup fixtures so historical Whiteboard scenes do not violate
   the one-current-scene constraint.
@@ -68,11 +87,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Rebuilt the Dashboard and Episode Debugger into responsive, keyboard-friendly
   product surfaces with dependable navigation, readable tables and dialogs,
   complete-row affordances, and accessible mobile controls.
-- Fixed visitor Space access refresh so the browser forwards media proof to the
-  broker. Proof-less renewals made the broker replace the media connection,
-  which the client rejected at the first refresh window as an invalid grant.
-- Fixed Dashboard Space access refresh so scheduled renewal preserves current
-  media proof and rejected credentials recover with a replacement connection.
 - Fixed Dashboard Space and Episode navigation so active Spaces are directly
   openable, Episode history links back to its Space, duplicate Space names show
   their slug, and empty diagnostic references no longer claim healthy evidence.
@@ -88,6 +102,33 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Episode in the gated Episode Debugger on React and React Native.
 - Fixed the guarded npm publish workflow for pnpm 10 and made release dispatches
   target `Q9Labs/chalk` explicitly.
+
+## [4.1.0] - 2026-08-16
+
+### Added
+
+- Added `spaces.get`, `spaces.list`, `spaces.archive`, and `spaces.restore` to the
+  `@q9labsai/chalk-client` server SDK, with `archived` and `archived_at` on the
+  returned Space.
+- Added sidebar and menu primitives to `@q9labsai/chalk-ui`.
+
+### Changed
+
+- Let a `getAccess` callback return the server-minted grant unchanged as the
+  `Response` that carries it or as its decoded JSON (`AccessGrantSource`). The
+  client validates the grant and fails the join with `Access was rejected`, so
+  applications proxying their own join endpoint no longer need a cast.
+- Refreshed the TypeScript SDK and API dependencies to their current releases.
+
+### Fixed
+
+- Fixed visitor Space access refresh so the browser forwards media proof to the
+  broker. Proof-less renewals made the broker replace the media connection,
+  which the client rejected at the first refresh window as an invalid grant.
+- Fixed Dashboard Space access refresh so scheduled renewal preserves current
+  media proof and rejected credentials recover with a replacement connection.
+- Accepted PostgreSQL-formatted UUID values in the generated client schemas and
+  preserved Episode conflict and upstream statuses in the generated HTTP API.
 
 ## [4.0.1] - 2026-08-09
 

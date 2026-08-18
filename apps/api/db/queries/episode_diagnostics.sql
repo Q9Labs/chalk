@@ -303,6 +303,28 @@ where tenant_id = sqlc.arg(tenant_id)
 order by participant_id
 limit least(sqlc.arg(page_limit)::int, 100);
 
+-- name: GetDiagnosticParticipantProjection :one
+select p.participant_id,
+       p.joined_at,
+       p.left_at,
+       p.latest_lifecycle_name,
+       p.latest_lifecycle_state,
+       p.operation_count,
+       p.issue_count,
+       p.first_observed_at,
+       p.last_observed_at,
+       1 + (
+           select count(*)
+           from diagnostic_participant_projections before_participant
+           where before_participant.tenant_id = p.tenant_id
+             and before_participant.diagnostic_id = p.diagnostic_id
+             and before_participant.participant_id < p.participant_id
+       )::bigint as ordinal
+from diagnostic_participant_projections p
+where p.tenant_id = sqlc.arg(tenant_id)
+  and p.diagnostic_id = sqlc.arg(diagnostic_id)
+  and p.participant_id = sqlc.arg(participant_id);
+
 -- name: UpsertDiagnosticParticipantProjection :exec
 insert into diagnostic_participant_projections (
     tenant_id, diagnostic_id, participant_id, joined_at, left_at,

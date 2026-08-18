@@ -231,3 +231,17 @@ A valid npm token can still return `404` on `PUT` when the package scope
 belongs to another organization. Verify every release scope belongs to the
 publishing account or organization. Publish retries should query the registry
 and skip exact versions that succeeded before a later package failed.
+
+## Validate Diagnostic Projections At Both Sides Of The Wire
+
+A diagnostic snapshot can return HTTP 200 and still be unusable when a server
+projection emits values outside the public client contract. Validate the full
+snapshot before it leaves the server, and keep a client contract validator at
+the browser boundary so schema drift fails close on both sides.
+
+## A Pages 404 Shell Is Not An SPA Fallback
+
+A top-level `404.html` can return the correct app shell with HTTP 404 while the
+client router later renders the route. Do not emit that file for a Cloudflare
+Pages SPA that needs automatic deep-link fallback, and make deployment checks
+assert that a real dynamic document URL returns both HTML and HTTP 200.
