@@ -55,6 +55,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteTenantOnboard(ctx, false)
 	case EdgeTenantOnboardConflictScenario:
 		return runRouteTenantOnboard(ctx, true)
+	case EdgeMediaPlaneDisabledScenario:
+		return runEdgeMediaPlaneDisabled(ctx)
 	case RouteTenantCreateScenario:
 		return runCreateTenant(ctx, RouteTenantCreateScenario)
 	case RouteTenantListSystemScenario:
@@ -99,6 +101,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runServiceEpisodeDiagnostics(ctx)
 	case ServiceDashboardSpaceJoinScenario:
 		return runServiceDashboardSpaceJoin(ctx)
+	case ServiceMediaPlaneDefaultResolutionScenario:
+		return runServiceMediaPlaneDefaultResolution(ctx)
 	case RouteWhiteboardFileUploadScenario:
 		return runRouteWhiteboardFileUpload(ctx)
 	case RouteChatAttachmentUploadScenario:

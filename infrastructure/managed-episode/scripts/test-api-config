@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "${fixture_root}"' EXIT
+
+api_env="${fixture_root}/api.env"
+sed -E \
+  -e 's|__SECRET[A-Z0-9_]*__|test-only-secret|g' \
+  -e 's|__RELEASE_ID__|test-release|g' \
+  "${managed_root}/env/api.env.example" >"${api_env}"
+chmod 600 "${api_env}"
+
+"${managed_root}/scripts/validate-api-runtime" --env-file "${api_env}" >/dev/null
+
+expect_rejected() {
+  local name="$1"
+  local expression="$2"
+  local candidate="${fixture_root}/${name}.env"
+  cp "${api_env}" "${candidate}"
+  sed -i.bak "${expression}" "${candidate}"
+  rm "${candidate}.bak"
+  if "${managed_root}/scripts/validate-api-runtime" --env-file "${candidate}" >/dev/null 2>&1; then
+    echo "${name} API environment was accepted" >&2
+    exit 1
+  fi
+}
+
+expect_rejected missing-default 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=/'
+expect_rejected unknown-default 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=unknown/'
+expect_rejected unsupported-rtk-default 's/^CHALK_DEFAULT_MEDIA_PLANE=.*$/CHALK_DEFAULT_MEDIA_PLANE=cf_rtk/'
+expect_rejected partial-oauth 's/^CHALK_GOOGLE_OAUTH_CLIENT_SECRET=.*$/CHALK_GOOGLE_OAUTH_CLIENT_SECRET=/'
+expect_rejected wrong-callback 's|^CHALK_GOOGLE_OAUTH_REDIRECT_URL=.*$|CHALK_GOOGLE_OAUTH_REDIRECT_URL=https://chalkmeet.com/oauth/callback|'
+expect_rejected missing-sfu-secret '/^CHALK_CLOUDFLARE_REALTIME_APP_SECRET=/d'
+expect_rejected missing-sfu-id '/^CHALK_CLOUDFLARE_REALTIME_APP_ID=/d'
+
+for bridge_credential in CHALK_CLOUDFLARE_REALTIME_APP_ID CHALK_CLOUDFLARE_REALTIME_APP_SECRET; do
+  missing_bridge_env="${fixture_root}/cf-rtk-missing-${bridge_credential}.env"
+  cp "${api_env}" "${missing_bridge_env}"
+  sed -i.bak "/^${bridge_credential}=/d" "${missing_bridge_env}"
+  rm "${missing_bridge_env}.bak"
+  if "${managed_root}/scripts/validate-api-runtime" --env-file "${missing_bridge_env}" >/dev/null 2>&1; then
+    echo "cf_rtk API environment without ${bridge_credential} was accepted while the ProviderBridge is enabled" >&2
+    exit 1
+  fi
+done
+
+"${managed_root}/scripts/plan-release-components" \
+  infrastructure/managed-episode/env/api.env.example |
+  jq -e '.classification == "api" and .affected_components == ["api"] and .build_set == ["api"] and .restart_components == ["api"] and .restart_closure == ["chalk-api.service"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  infrastructure/managed-episode/scripts/validate-api-runtime |
+  jq -e '.classification == "api" and .affected_components == ["api"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  infrastructure/managed-episode/scripts/test-api-config |
+  jq -e '.classification == "api" and .affected_components == ["api"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  infrastructure/managed-episode/env/sync.env.example |
+  jq -e '.classification == "sync" and .affected_components == ["sync"] and .restart_components == ["sync"] and .restart_closure == ["chalk-sync.service"]' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  infrastructure/managed-episode/scripts/validate-runtime |
+  jq -e '.classification == "none" and .affected_components == []' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  infrastructure/managed-episode/scripts/plan-release-components |
+  jq -e '.classification == "none" and .affected_components == []' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  scripts/dev/chalk.mjs |
+  jq -e '.classification == "none" and .affected_components == []' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  CHANGELOG.md contract/generated/openapi.json |
+  jq -e '.classification == "none" and .affected_components == []' >/dev/null
+"${managed_root}/scripts/plan-release-components" \
+  infrastructure/managed-episode/scripts/validate-sync-runtime |
+  jq -e '.classification == "sync" and .affected_components == ["sync"]' >/dev/null
+
+echo "PASS API managed-episode config"

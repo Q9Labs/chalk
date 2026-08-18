@@ -42,6 +42,35 @@ load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
 Redis-backed rate limiting through `CHALK_REDIS_URL`.
 
+### Default MediaPlane
+
+`CHALK_DEFAULT_MEDIA_PLANE` selects the deployment-owned MediaPlane used when
+a Create Space request omits `media_plane`. The supported deployment default is
+`cf_sfu`, because the Dashboard access-grant path is SFU-only. Managed
+production requires this setting; generic local and test processes may omit it,
+but then Create Space requests must supply a provider. Explicit Space and
+Tenant-managed provider configuration can still select `cf_rtk`.
+
+An absent Tenant provider configuration may use deployment credentials only
+when the Space provider matches this default. A concrete Tenant configuration
+remains authoritative, an explicit disable never falls back, and deployment
+credentials are never borrowed across providers.
+
+The checked-in local launcher sets `cf_sfu`. The deployment default requires the
+Realtime app ID and secret.
+
+The ProviderBridge currently uses the Cloudflare SFU executor independently of
+the deployment default. When the bridge is enabled, its Realtime app ID and
+secret remain required.
+
+### Google OAuth
+
+Google sign-in activates only with a complete
+`CHALK_GOOGLE_OAUTH_CLIENT_ID`, `CHALK_GOOGLE_OAUTH_CLIENT_SECRET`, and
+`CHALK_GOOGLE_OAUTH_REDIRECT_URL` triplet. Generic local development may omit
+the triplet. Managed production requires it and requires the redirect URL to be
+`https://chalkmeet.com/api/auth/google/callback`.
+
 ### Production capabilities
 
 Integrations, recording, and transcription are explicit runtime capabilities:

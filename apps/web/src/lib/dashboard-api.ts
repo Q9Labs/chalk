@@ -144,7 +144,6 @@ export async function createSpace(input: {
   const { tenantID, ...values } = input;
   await configureLocalTenantMediaPlane(tenantID);
   const body = {
-    media_plane: "cf_sfu",
     default_episode_duration_seconds: 86_400,
     maximum_episode_duration_seconds: 86_400,
     linger_window_seconds: 0,

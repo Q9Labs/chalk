@@ -171,7 +171,7 @@ func run() error {
 	membershipRepository := postgres.NewMembershipRepository(operationQueries)
 	membershipService := memberships.NewService(membershipRepository)
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
-	spaceService := spaces.NewService(spaceRepository)
+	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
 	episodeRepository := postgres.NewEpisodeLifecycleRepository(pool)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
@@ -250,7 +250,11 @@ func run() error {
 		}
 		episodeCredentials = verifier
 	}
-	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(cfg.CloudflareRealtime)
+	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+		ProcessConfig:   cfg.CloudflareRealtime,
+		DefaultProvider: cfg.DefaultMediaPlane,
+		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),
+	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
 	var providerBridgeServer *providerbridgeserver.Server

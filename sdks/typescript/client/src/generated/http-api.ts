@@ -1416,6 +1416,7 @@ const spacesGroup = HttpApiGroup.make("spaces")
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidMediaPlaneErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
@@ -1558,6 +1559,7 @@ const spacesGroup = HttpApiGroup.make("spaces")
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidMediaPlaneErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
