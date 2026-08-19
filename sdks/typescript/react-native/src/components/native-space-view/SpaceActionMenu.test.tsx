@@ -75,6 +75,18 @@ describe("SpaceActionMenu", () => {
     expect(onOpenDiagnostics).toHaveBeenCalledTimes(1);
   });
 
+  it("opens Feedback from the utility actions and closes the action sheet", () => {
+    const setActionsOpen = vi.fn();
+    const onOpenFeedback = vi.fn();
+    const tree = SpaceActionMenu({ controller: actionController({ setActionsOpen }), onOpenFeedback });
+    const feedback = findElements(tree, "Pressable").find((element) => findText(element).length === 1 && findText(element).includes("Feedback"));
+    const onPress = feedback?.props?.onPress;
+    if (typeof onPress === "function") onPress();
+
+    expect(setActionsOpen).toHaveBeenCalledWith(false);
+    expect(onOpenFeedback).toHaveBeenCalledOnce();
+  });
+
   it("leaves chat and settings panel ownership to canonical mounted sheets", () => {
     expect(source).not.toContain("ChatPanel");
     expect(source).not.toContain("<SpacePanel");

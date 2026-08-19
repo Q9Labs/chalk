@@ -28,6 +28,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/feedback"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
@@ -280,12 +281,15 @@ func run() error {
 	var whiteboardFileService httpapi.WhiteboardFileService
 	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
 	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
+	feedbackRepository := postgres.NewFeedbackRepository(operationQueries)
+	var feedbackObjects feedback.ObjectStore
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
 			return fmt.Errorf("configure r2 object storage: %w", err)
 		}
 		recordingStorage := objectstorage.NewService(store)
+		feedbackObjects = feedback.NewObjectStorageAdapter(recordingStorage)
 		recordingDownloads = recordingStorage
 		recordingObjects = recordingStorage
 		transcriptionStorage = &recordingStorage
@@ -310,6 +314,7 @@ func run() error {
 			}
 		}
 	}
+	feedbackService := feedback.NewService(feedbackRepository, feedbackObjects).WithTelemetry(observability.NewFeedbackTelemetry(logger))
 	var integrationService httpapi.IntegrationService
 	if cfg.Capabilities.Integrations {
 		integrationCatalog, err := integrations.DefaultCatalog()
@@ -442,6 +447,7 @@ func run() error {
 		WhiteboardFiles:        whiteboardFileService,
 		WhiteboardParticipants: whiteboardParticipantVerifier,
 		EpisodeDiagnostics:     episodeDiagnosticsHTTPOptions,
+		Feedback:               httpapi.FeedbackHTTPOptions{Service: feedbackService, ParticipantVerifier: episodeDiagnosticsHTTPOptions.ParticipantVerifier, Operator: episodeDiagnosticsHTTPOptions, Audit: httpapi.NewFeedbackAuditWriter(auditLogService)},
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	diagnostics.ApplyHTTP(&routerOptions)

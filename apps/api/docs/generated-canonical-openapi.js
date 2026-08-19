@@ -1009,6 +1009,166 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         summary: "Get chat attachment download",
       },
     },
+    "/v1/feedback-reports": {
+      post: {
+        operationId: "createParticipantFeedbackReport",
+        parameters: [
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/FeedbackReportRequestV1",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          201: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/FeedbackReportReceiptV1",
+                },
+              },
+            },
+            description: "Created",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["feedback.invalid_evidence", "feedback.invalid_screenshot", "request.invalid_idempotency_key"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["request.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["request.forbidden"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["feedback.idempotency_conflict"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["feedback.storage_unavailable"],
+          },
+        },
+        security: [
+          {
+            participantDiagnosticsBearer: [],
+          },
+        ],
+        summary: "Create participant feedback report",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/me": {
       get: {
         operationId: "getMe",
@@ -3396,6 +3556,174 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         ],
         summary: "Get audit log",
+      },
+    },
+    "/v1/tenants/{tenant_id}/feedback-reports": {
+      post: {
+        operationId: "createAccountFeedbackReport",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/FeedbackReportRequestV1",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          201: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/FeedbackReportReceiptV1",
+                },
+              },
+            },
+            description: "Created",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["feedback.invalid_evidence", "feedback.invalid_screenshot", "request.invalid_idempotency_key"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["request.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["request.forbidden"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["feedback.idempotency_conflict"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["feedback.storage_unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Create account feedback report",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
       },
     },
     "/v1/tenants/{tenant_id}/integrations/connections": {
@@ -13303,6 +13631,12 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         name: "X-Ops-Ingest-Token",
         type: "apiKey",
       },
+      participantDiagnosticsBearer: {
+        bearerFormat: "JWT",
+        description: "Short-lived Episode Diagnostic participant credential bound to one Tenant, Space, Episode, participant generation, and environment.",
+        scheme: "bearer",
+        type: "http",
+      },
       participantMediaBearer: {
         bearerFormat: "JWT",
         description: "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
@@ -14642,6 +14976,334 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         },
         required: ["max_duration_minutes"],
+        type: "object",
+      },
+      FeedbackReportReceiptV1: {
+        additionalProperties: false,
+        properties: {
+          id: {
+            $ref: "#/components/schemas/UUID",
+          },
+          schema_version: {
+            type: "string",
+          },
+          submitted_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+        },
+        required: ["id", "schema_version", "submitted_at"],
+        type: "object",
+      },
+      FeedbackReportRequestV1: {
+        additionalProperties: false,
+        properties: {
+          category: {
+            minLength: 1,
+            type: "string",
+          },
+          evidence: {
+            additionalProperties: false,
+            properties: {
+              app: {
+                additionalProperties: false,
+                properties: {
+                  build: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  name: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  version: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                },
+                required: ["name"],
+                type: ["object", "null"],
+              },
+              collected_at: {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              connection: {
+                additionalProperties: false,
+                properties: {
+                  error_code: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  state: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                },
+                required: ["state"],
+                type: ["object", "null"],
+              },
+              cookies: {
+                additionalProperties: false,
+                properties: {
+                  entries: {
+                    items: {
+                      additionalProperties: false,
+                      properties: {
+                        name: {
+                          minLength: 1,
+                          type: "string",
+                        },
+                        present: {
+                          type: "boolean",
+                        },
+                        value: {
+                          minLength: 1,
+                          type: "string",
+                        },
+                      },
+                      required: ["name", "present"],
+                      type: "object",
+                    },
+                    type: "array",
+                  },
+                  registry_version: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                },
+                required: ["entries", "registry_version"],
+                type: "object",
+              },
+              correlations: {
+                additionalProperties: false,
+                properties: {
+                  command_id: {
+                    $ref: "#/components/schemas/UUID",
+                  },
+                  diagnostic_reference: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  journey_id: {
+                    $ref: "#/components/schemas/UUID",
+                  },
+                  request_id: {
+                    $ref: "#/components/schemas/UUID",
+                  },
+                  root_journey_id: {
+                    $ref: "#/components/schemas/UUID",
+                  },
+                  span_id: {
+                    maxLength: 16,
+                    minLength: 16,
+                    pattern: "^(?=.*[1-9a-fA-F])[0-9a-fA-F]{16}$",
+                    type: ["string", "null"],
+                  },
+                  trace_id: {
+                    maxLength: 32,
+                    minLength: 32,
+                    pattern: "^(?=.*[1-9a-fA-F])[0-9a-fA-F]{32}$",
+                    type: ["string", "null"],
+                  },
+                },
+                type: "object",
+              },
+              diagnostics: {
+                additionalProperties: false,
+                properties: {
+                  availability: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  diagnostic_events: {
+                    items: {
+                      additionalProperties: true,
+                      items: {},
+                      type: ["object", "array", "string", "number", "boolean", "null"],
+                    },
+                    type: "array",
+                  },
+                  dropped_count: {
+                    type: "integer",
+                  },
+                  telemetry_events: {
+                    items: {
+                      additionalProperties: true,
+                      items: {},
+                      type: ["object", "array", "string", "number", "boolean", "null"],
+                    },
+                    type: "array",
+                  },
+                },
+                required: ["availability", "diagnostic_events", "dropped_count", "telemetry_events"],
+                type: "object",
+              },
+              local_state: {
+                additionalProperties: false,
+                properties: {
+                  entries: {
+                    items: {
+                      additionalProperties: false,
+                      properties: {
+                        key: {
+                          minLength: 1,
+                          type: "string",
+                        },
+                        value: {
+                          additionalProperties: true,
+                          items: {},
+                          type: ["object", "array", "string", "number", "boolean", "null"],
+                        },
+                      },
+                      required: ["key", "value"],
+                      type: "object",
+                    },
+                    type: "array",
+                  },
+                  registry_version: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                },
+                required: ["entries", "registry_version"],
+                type: "object",
+              },
+              platform: {
+                additionalProperties: false,
+                properties: {
+                  browser_name: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  browser_version: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  device_class: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  device_model: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  kind: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  os_name: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  os_version: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                },
+                required: ["kind"],
+                type: "object",
+              },
+              schema_version: {
+                minLength: 1,
+                type: "string",
+              },
+              scope: {
+                additionalProperties: false,
+                properties: {
+                  episode_id: {
+                    $ref: "#/components/schemas/EpisodeId",
+                  },
+                  participant_id: {
+                    $ref: "#/components/schemas/ParticipantId",
+                  },
+                  space_id: {
+                    $ref: "#/components/schemas/SpaceId",
+                  },
+                },
+                type: ["object", "null"],
+              },
+              screenshot: {
+                additionalProperties: false,
+                properties: {
+                  captured_at: {
+                    $ref: "#/components/schemas/DateTimeString",
+                  },
+                  failure_code: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  state: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                },
+                required: ["state"],
+                type: "object",
+              },
+              sdk: {
+                additionalProperties: false,
+                properties: {
+                  client: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  react: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                  react_native: {
+                    minLength: 1,
+                    type: "string",
+                  },
+                },
+                required: ["client"],
+                type: "object",
+              },
+            },
+            required: ["collected_at", "cookies", "correlations", "diagnostics", "local_state", "platform", "schema_version", "screenshot", "sdk"],
+            type: "object",
+          },
+          message: {
+            minLength: 1,
+            type: "string",
+          },
+          schema_version: {
+            minLength: 1,
+            type: "string",
+          },
+          screenshot: {
+            additionalProperties: false,
+            properties: {
+              captured_at: {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              data_base64: {
+                minLength: 1,
+                type: "string",
+              },
+              height: {
+                type: "integer",
+              },
+              mime_type: {
+                minLength: 1,
+                type: "string",
+              },
+              schema_version: {
+                minLength: 1,
+                type: "string",
+              },
+              width: {
+                type: "integer",
+              },
+            },
+            required: ["captured_at", "data_base64", "height", "mime_type", "schema_version", "width"],
+            type: ["object", "null"],
+          },
+          source: {
+            minLength: 1,
+            type: "string",
+          },
+        },
+        required: ["category", "evidence", "message", "schema_version", "source"],
         type: "object",
       },
       InitiateChatAttachmentUploadRequest: {

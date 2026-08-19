@@ -482,6 +482,54 @@ describe("account boundary", () => {
     expect(expiredLogin.headers.get("set-cookie")).toContain("__Host-chalk_account=");
   });
 
+  it("relays bounded Feedback without forwarding browser cookies", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const fetcher = vi.fn<typeof globalThis.fetch>(async () => Response.json({ schema_version: "FeedbackReportReceipt/v1", id: "22222222-2222-4222-8222-222222222222", submitted_at: "2026-08-19T12:00:00Z" }, { status: 201 }));
+    const body = { schema_version: "FeedbackReportRequest/v1", category: "bug", message: "x".repeat(80 * 1024), source: "dashboard", evidence: {} };
+    const response = await handleAccountBoundary(
+      jsonRequest(`/api/tenants/${tenantID}/feedback-reports`, body, {
+        Origin: secureOrigin,
+        Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token; host_cookie=never-forward",
+        "X-Chalk-CSRF": "csrf-token",
+        "Idempotency-Key": "feedback-request-123456",
+        Traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(201);
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(String(url)).toBe(`${upstream.CHALK_API_ORIGIN}/v1/tenants/${tenantID}/feedback-reports`);
+    const headers = new Headers(init?.headers);
+    expect(headers.get("authorization")).toBe("Bearer server-held-account-token");
+    expect(headers.get("cookie")).toBeNull();
+    expect(headers.get("idempotency-key")).toBe("feedback-request-123456");
+    expect(headers.get("traceparent")).toBe("00-11111111111111111111111111111111-2222222222222222-01");
+  });
+
+  it("rejects Feedback above the dedicated one MiB boundary", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const fetcher = vi.fn();
+    const response = await handleAccountBoundary(
+      jsonRequest(
+        `/api/tenants/${tenantID}/feedback-reports`,
+        { message: "x".repeat((1 << 20) + 1) },
+        {
+          Origin: secureOrigin,
+          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+          "X-Chalk-CSRF": "csrf-token",
+          "Idempotency-Key": "feedback-request-123456",
+        },
+      ),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(413);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("clears both account and CSRF cookies on logout", async () => {
     const response = await handleAccountBoundary(
       jsonRequest(

@@ -30,6 +30,7 @@ type ExpectedChalkProps =
   | "layout"
   | "onLayoutChange"
   | "onOpenDiagnostics"
+  | "feedbackSource"
   | "onJoined"
   | "onLeft"
   | "onEpisodeEnded"

@@ -10,6 +10,7 @@ import type { ParticipantsControllerEffects } from "./participants-controller";
 import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
 import type { PromiseController } from "./promise-facade";
+import type { FeedbackController } from "../feedback/types";
 
 export type AccessReason = "join" | "refresh" | "retry";
 
@@ -222,6 +223,7 @@ export type ClientEventName = keyof ClientEventMap;
 export type ClientEventHandler<TEvent extends ClientEventName> = (event: ClientEventMap[TEvent]) => void;
 
 export type SpaceClient = {
+  readonly feedback: FeedbackController;
   readonly media: MediaController;
   readonly chat: ChatController;
   readonly participants: ParticipantsController;

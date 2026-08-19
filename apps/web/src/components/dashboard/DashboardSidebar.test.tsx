@@ -33,11 +33,11 @@ vi.mock("./DashboardAccount", () => ({
 const { ThemeProvider } = await import("../../lib/theme-context");
 const { DashboardSidebar } = await import("./DashboardSidebar");
 
-function renderSidebar(pathname: string, onCreateSpace = vi.fn()) {
+function renderSidebar(pathname: string, onCreateSpace = vi.fn(), onOpenFeedback = vi.fn()) {
   render(
     <ThemeProvider>
       <SidebarProvider>
-        <DashboardSidebar pathname={pathname} onCreateSpace={onCreateSpace} />
+        <DashboardSidebar pathname={pathname} onCreateSpace={onCreateSpace} onOpenFeedback={onOpenFeedback} />
       </SidebarProvider>
     </ThemeProvider>,
   );
@@ -81,6 +81,15 @@ describe("DashboardSidebar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /New Space/ }));
     expect(onCreateSpace).toHaveBeenCalledOnce();
+  });
+
+  it("offers Feedback in the Support utility group", () => {
+    const onOpenFeedback = vi.fn();
+    renderSidebar("/home", vi.fn(), onOpenFeedback);
+
+    fireEvent.click(screen.getByRole("button", { name: "Feedback" }));
+
+    expect(onOpenFeedback).toHaveBeenCalledOnce();
   });
 
   it("opens the tenant switcher and hands back the chosen Tenant", async () => {

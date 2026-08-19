@@ -45,6 +45,7 @@ export function ClassicSpaceView({
   inviteDialog,
   settingsDialog,
   onOpenDiagnostics,
+  onOpenFeedback,
   onOpenSettings,
   onToggleWhiteboard,
   whiteboard,
@@ -92,6 +93,7 @@ export function ClassicSpaceView({
     ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
     ...(feature("info") && infoDialog ? ["info" as const] : []),
     ...(feature("settings") ? ["settings" as const] : []),
+    ...(onOpenFeedback ? ["feedback" as const] : []),
     "leave",
   ];
 
@@ -182,6 +184,7 @@ export function ClassicSpaceView({
                 onOpenReactions={() => setReactionPickerOpen(true)}
                 onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                 onOpenDiagnostics={onOpenDiagnostics}
+                onOpenFeedback={onOpenFeedback}
                 onOpenSettings={() => {
                   setActivePanel("settings");
                   onOpenSettings?.();
@@ -202,6 +205,7 @@ export function ClassicSpaceView({
                 onOpenReactions={() => setReactionPickerOpen(true)}
                 onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                 onOpenDiagnostics={onOpenDiagnostics}
+                onOpenFeedback={onOpenFeedback}
                 onOpenSettings={() => {
                   setActivePanel("settings");
                   onOpenSettings?.();

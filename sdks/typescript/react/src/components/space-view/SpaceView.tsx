@@ -76,6 +76,7 @@ export interface SpaceViewProps {
   readonly inviteDialog?: SpaceViewInviteDialogProps;
   readonly settingsDialog?: React.ReactNode;
   readonly onOpenDiagnostics?: () => void;
+  readonly onOpenFeedback?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
@@ -112,6 +113,7 @@ function ChalkSpaceView({
   inviteDialog,
   settingsDialog,
   onOpenDiagnostics,
+  onOpenFeedback,
   onOpenSettings,
   onToggleWhiteboard,
   whiteboard,
@@ -159,6 +161,7 @@ function ChalkSpaceView({
     ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
     ...(feature("info") && infoDialog ? ["info" as const] : []),
     ...(feature("settings") ? ["settings" as const] : []),
+    ...(onOpenFeedback ? ["feedback" as const] : []),
     "leave",
   ];
 
@@ -258,6 +261,7 @@ function ChalkSpaceView({
                   onOpenReactions={() => setReactionPickerOpen(true)}
                   onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                   onOpenDiagnostics={onOpenDiagnostics}
+                  onOpenFeedback={onOpenFeedback}
                   onOpenSettings={() => {
                     setActivePanel("settings");
                     onOpenSettings?.();
@@ -278,6 +282,7 @@ function ChalkSpaceView({
                   onOpenReactions={() => setReactionPickerOpen(true)}
                   onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                   onOpenDiagnostics={onOpenDiagnostics}
+                  onOpenFeedback={onOpenFeedback}
                   onOpenSettings={() => {
                     setActivePanel("settings");
                     onOpenSettings?.();

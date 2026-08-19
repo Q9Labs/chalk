@@ -1,4 +1,5 @@
 import type { Capability, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { createPreviewFeedbackController } from "./preview-feedback";
 
 export type PreviewClient = SpaceClient & { readonly setSnapshot: (snapshot: SpaceSnapshot) => void };
 
@@ -11,6 +12,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot()): Preview
   const listeners = new Set<() => void>();
   const unavailable = () => async () => undefined;
   const client = {
+    feedback: createPreviewFeedbackController(),
     media: { setMicrophoneEnabled: unavailable(), setCameraEnabled: unavailable(), setScreenShareEnabled: unavailable(), selectMicrophone: unavailable(), selectCamera: unavailable(), selectSpeaker: unavailable(), acceptRequest: unavailable(), declineRequest: unavailable() },
     chat: { files: { upload: unavailable(), url: () => "" }, send: unavailable(), loadOlder: unavailable(), markRead: unavailable() },
     participants: {

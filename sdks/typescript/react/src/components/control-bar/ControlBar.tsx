@@ -59,7 +59,7 @@ function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined,
   return selectedDeviceId ? [{ deviceId: selectedDeviceId, label: fallbackLabel, kind }] : [];
 }
 
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "more" | "info" | "thumbsup" | "leave";
+export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "feedback" | "more" | "info" | "thumbsup" | "leave";
 
 interface ControlBarSurfaceProps {
   position?: "bottom" | "top";
@@ -103,6 +103,7 @@ interface ControlBarSurfaceProps {
   onOpenReactions?: () => void;
   onOpenSettings?: () => void;
   onOpenDiagnostics?: () => void;
+  onOpenFeedback?: () => void;
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
   onLeft?: () => void;
@@ -125,6 +126,7 @@ export interface ControlBarProps {
   readonly onOpenReactions?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onOpenDiagnostics?: () => void;
+  readonly onOpenFeedback?: () => void;
   readonly onOpenMore?: () => void;
   readonly onOpenInfo?: () => void;
   readonly onLeaveRequest?: () => void;
@@ -207,6 +209,7 @@ const ControlBarSurface = React.memo(
     onOpenReactions,
     onOpenSettings,
     onOpenDiagnostics,
+    onOpenFeedback,
     onOpenMore,
     onOpenInfo,
     onLeft,
@@ -250,7 +253,7 @@ const ControlBarSurface = React.memo(
 
     const showLeave = buttonsToRender.includes("leave");
     const mediaButtons = buttonsToRender.filter((b) => b === "mic" || b === "video" || b === "screenshare" || b === "record" || b === "whiteboard" || b === "handraise");
-    const interactionButtons = buttonsToRender.filter((b) => b === "participants" || b === "chat" || b === "transcription" || b === "thumbsup" || b === "pip" || b === "reactions" || b === "settings" || b === "diagnostics" || b === "more" || b === "info");
+    const interactionButtons = buttonsToRender.filter((b) => b === "participants" || b === "chat" || b === "transcription" || b === "thumbsup" || b === "pip" || b === "reactions" || b === "settings" || b === "diagnostics" || b === "feedback" || b === "more" || b === "info");
 
     const renderButton = (type: ControlBarButtonName) => {
       switch (type) {
@@ -339,6 +342,9 @@ const ControlBarSurface = React.memo(
             return null;
           }
           return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} seed="control-diagnostics" showLabel={showLabels} />;
+        case "feedback":
+          if (!onOpenFeedback) return null;
+          return <ControlBarButton key="feedback" icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} seed="control-feedback" showLabel={showLabels} />;
         case "more":
           if (!onOpenMore) return null;
           return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} seed="control-more" showLabel={showLabels} />;
@@ -423,6 +429,11 @@ const ControlBarSurface = React.memo(
 
             <ChalkPanel className="order-2 shrink-0 rounded-none p-1" seed="control-compact-more-leave">
               <ChalkControlGroup aria-label="More and leave controls" className="gap-1">
+                {buttonsToRender.includes("feedback") && onOpenFeedback ? (
+                  <ChalkIconButton aria-label="Feedback" onClick={onOpenFeedback} seed="control-compact-feedback" size="lg">
+                    <Message01Icon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
                 {buttonsToRender.includes("more") && onOpenMore ? (
                   <ChalkIconButton aria-label="More options" onClick={onOpenMore} seed="control-compact-more" size="lg">
                     <MoreHorizontalIcon className="h-5 w-5" />
@@ -476,6 +487,8 @@ const ControlBarSurface = React.memo(
             return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} seed="control-floating-settings" />;
           case "diagnostics":
             return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} seed="control-floating-diagnostics" /> : null;
+          case "feedback":
+            return onOpenFeedback ? <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} seed="control-floating-feedback" /> : null;
           case "more":
             if (!onOpenMore) return null;
             return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} seed="control-floating-more" />;
@@ -637,6 +650,7 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
         onOpenReactions={props.onOpenReactions}
         onOpenSettings={props.onOpenSettings}
         onOpenDiagnostics={props.onOpenDiagnostics}
+        onOpenFeedback={props.onOpenFeedback}
         onOpenMore={props.onOpenMore}
         onOpenInfo={props.onOpenInfo}
         onLeft={leave}

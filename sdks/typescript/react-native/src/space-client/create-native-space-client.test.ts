@@ -44,6 +44,7 @@ describe("native client creation", () => {
     createNativeSpaceClient(options());
 
     expect(createSpaceClientForPlatform.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ syncStartupTimeoutMs: 30_000 }));
+    expect(createSpaceClientForPlatform.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ feedbackSource: "embedded" }));
   });
 
   it("preserves an explicit consumer Sync startup budget", () => {

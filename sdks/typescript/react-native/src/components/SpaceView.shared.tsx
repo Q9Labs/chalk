@@ -1,5 +1,7 @@
+import { useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 
+import { useSpaceClient } from "../context/space-client-context";
 import { Theme } from "../ui/theme";
 import { useNativeTheme } from "../ui/native-theme";
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
@@ -8,6 +10,8 @@ import type { SpaceViewProps } from "./SpaceView";
 import { SpaceGridAndroid } from "./native-space-view/SpaceGrid.android";
 import { SpaceBottomDockAndroid } from "./native-space-view/SpaceBottomDock.android";
 import { SpaceActionMenu, selectSpaceReaction } from "./native-space-view/SpaceActionMenu";
+import { FeedbackSheet } from "./native-space-view/FeedbackSheet";
+import type { FeedbackCaptureSize } from "../feedback/native-capture";
 import { SpaceStageAndroid } from "./native-space-view/SpaceStage.android";
 import { SpaceTopBarAndroid } from "./native-space-view/SpaceTopBar.android";
 import { SpaceWhiteboardSurface } from "./native-space-view/SpaceWhiteboardSurface";
@@ -17,7 +21,11 @@ import { useSpaceViewController } from "./native-space-view/useSpaceViewControll
 
 export function SpaceViewShared(props: SpaceViewProps): React.JSX.Element {
   const controller = useSpaceViewController(props);
+  const client = useSpaceClient();
   const theme = useNativeTheme();
+  const captureTarget = useRef<View>(null);
+  const [captureSize, setCaptureSize] = useState<FeedbackCaptureSize>({ width: 0, height: 0 });
+  const [feedbackRequested, setFeedbackRequested] = useState(false);
   const toggleMedia = (action: () => void) => {
     if (controller.simulatorMediaDisabled) {
       Alert.alert("Media unavailable", getIosSimulatorMediaMessage());
@@ -27,55 +35,58 @@ export function SpaceViewShared(props: SpaceViewProps): React.JSX.Element {
   };
 
   return (
-    <View style={[styles.space, { backgroundColor: theme.colors.darkCanvas }]}>
-      <SpaceTopBarAndroid formattedDuration={controller.formattedDuration} logoUrl={props.logoUrl} participantCount={controller.participantCount} spaceName={controller.spaceName} />
-      {props.reconnecting ? (
-        <View accessibilityLiveRegion="polite" style={[styles.recovery, { backgroundColor: theme.colors.primary }]}>
-          <Text style={[styles.recoveryText, { color: theme.colors.primaryForeground }]}>Reconnecting… controls will resume shortly.</Text>
+    <>
+      <View collapsable={false} onLayout={(event) => setCaptureSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} ref={captureTarget} style={[styles.space, { backgroundColor: theme.colors.darkCanvas }]}>
+        <SpaceTopBarAndroid formattedDuration={controller.formattedDuration} logoUrl={props.logoUrl} participantCount={controller.participantCount} spaceName={controller.spaceName} />
+        {props.reconnecting ? (
+          <View accessibilityLiveRegion="polite" style={[styles.recovery, { backgroundColor: theme.colors.primary }]}>
+            <Text style={[styles.recoveryText, { color: theme.colors.primaryForeground }]}>Reconnecting… controls will resume shortly.</Text>
+          </View>
+        ) : null}
+        <View style={styles.stage}>
+          {controller.whiteboard.isOpen ? (
+            <SpaceWhiteboardSurface whiteboard={controller.whiteboard} />
+          ) : controller.derived.isStageMode || controller.layout.layout !== "grid" ? (
+            <SpaceStageAndroid
+              activeReactions={controller.activeReactions}
+              handRaised={controller.handRaised}
+              isCompactViewport={controller.derived.isCompactViewport}
+              isMuted={controller.isMuted}
+              layoutMode={controller.layout.layout}
+              primaryContent={controller.derived.primaryContent}
+              raisedHandCount={controller.raisedHandCount}
+              screenShareTrack={controller.derived.screenShareTrack}
+              screenSharer={controller.derived.screenSharer}
+              selfName={controller.selfName}
+              stripParticipants={controller.derived.allParticipants}
+              whiteboard={{
+                isOpen: controller.whiteboard.isOpen,
+                canDraw: controller.whiteboard.canDraw,
+                elementCount: controller.whiteboard.elements.length,
+                participantCount: controller.whiteboard.openParticipants.length,
+              }}
+            />
+          ) : (
+            <SpaceGridAndroid gridPages={controller.derived.gridPages} participants={controller.derived.allParticipants} />
+          )}
         </View>
-      ) : null}
-      <View style={styles.stage}>
-        {controller.whiteboard.isOpen ? (
-          <SpaceWhiteboardSurface whiteboard={controller.whiteboard} />
-        ) : controller.derived.isStageMode || controller.layout.layout !== "grid" ? (
-          <SpaceStageAndroid
-            activeReactions={controller.activeReactions}
-            handRaised={controller.handRaised}
-            isCompactViewport={controller.derived.isCompactViewport}
-            isMuted={controller.isMuted}
-            layoutMode={controller.layout.layout}
-            primaryContent={controller.derived.primaryContent}
-            raisedHandCount={controller.raisedHandCount}
-            screenShareTrack={controller.derived.screenShareTrack}
-            screenSharer={controller.derived.screenSharer}
-            selfName={controller.selfName}
-            stripParticipants={controller.derived.allParticipants}
-            whiteboard={{
-              isOpen: controller.whiteboard.isOpen,
-              canDraw: controller.whiteboard.canDraw,
-              elementCount: controller.whiteboard.elements.length,
-              participantCount: controller.whiteboard.openParticipants.length,
-            }}
-          />
-        ) : (
-          <SpaceGridAndroid gridPages={controller.derived.gridPages} participants={controller.derived.allParticipants} />
-        )}
+        <SpaceBottomDockAndroid
+          isCameraOff={controller.isCameraOff}
+          isMuted={controller.isMuted}
+          onLeave={controller.handleLeave}
+          onOpenChat={controller.canChat ? () => controller.openPanel("chat") : undefined}
+          onOpenMore={() => controller.setActionsOpen(true)}
+          onToggleAudio={() => toggleMedia(controller.toggleAudio)}
+          onToggleVideo={() => toggleMedia(controller.toggleVideo)}
+          simulatorMediaDisabled={controller.simulatorMediaDisabled}
+          unreadChatCount={controller.chat.unreadCount}
+        />
+        <SpaceActionMenu controller={controller} onOpenDiagnostics={props.onOpenDiagnostics} onOpenFeedback={() => setFeedbackRequested(true)} />
+        {controller.panel === "settings" ? <SettingsSheet controller={controller} isOpen onClose={controller.closePanel} /> : <SpacePanelSheet controller={controller} />}
+        <ReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={(reaction) => selectSpaceReaction(controller, reaction)} />
       </View>
-      <SpaceBottomDockAndroid
-        isCameraOff={controller.isCameraOff}
-        isMuted={controller.isMuted}
-        onLeave={controller.handleLeave}
-        onOpenChat={controller.canChat ? () => controller.openPanel("chat") : undefined}
-        onOpenMore={() => controller.setActionsOpen(true)}
-        onToggleAudio={() => toggleMedia(controller.toggleAudio)}
-        onToggleVideo={() => toggleMedia(controller.toggleVideo)}
-        simulatorMediaDisabled={controller.simulatorMediaDisabled}
-        unreadChatCount={controller.chat.unreadCount}
-      />
-      <SpaceActionMenu controller={controller} onOpenDiagnostics={props.onOpenDiagnostics} />
-      {controller.panel === "settings" ? <SettingsSheet controller={controller} isOpen onClose={controller.closePanel} /> : <SpacePanelSheet controller={controller} />}
-      <ReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={(reaction) => selectSpaceReaction(controller, reaction)} />
-    </View>
+      <FeedbackSheet client={client} captureSize={captureSize} captureTarget={captureTarget} feedbackEvidence={props.feedbackEvidence} onClose={() => setFeedbackRequested(false)} requested={feedbackRequested} />
+    </>
   );
 }
 

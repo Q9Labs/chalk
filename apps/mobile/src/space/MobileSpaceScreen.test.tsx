@@ -56,6 +56,7 @@ vi.mock("react", () => ({
 }));
 vi.mock("@q9labsai/chalk-react-native", () => ({ Chalk: mocks.Chalk, Entrance: mocks.Entrance }));
 vi.mock("@q9labsai/chalk-client", () => ({}));
+vi.mock("expo-constants", () => ({ default: { nativeAppVersion: "2.0.0", nativeBuildVersion: "28", expoConfig: { version: "2.0.0" } } }));
 vi.mock("../lib/chat-files", () => ({ pickMobileChatFiles: vi.fn() }));
 vi.mock("../lib/spaces", () => ({
   cleanupParticipantCredential: mocks.cleanupParticipantCredential,
@@ -134,6 +135,7 @@ describe("MobileSpaceScreen", () => {
       features: mocks.MOBILE_SPACE_FEATURES,
       inviteLink: `https://chalkmeet.com/space#spaceInviteToken=${mocks.credential.spaceInviteToken}`,
       spaceName: route.spaceName,
+      feedbackEvidence: { app: { name: "Chalk", version: "2.0.0", build: "28" } },
     });
     expect(rendered.props.pickChatFiles).toEqual(expect.any(Function));
     expect(mocks.createMobileSpaceClient).toHaveBeenCalledWith({ credential: mocks.credential, defaults: arrival.defaults, getAccess: mocks.getAccess, journey: mocks.journey, space: route.space });

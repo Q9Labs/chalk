@@ -12,6 +12,7 @@ test("the turnkey and entrance props use the ratified names", () => {
     readonly features?: object;
     readonly layout?: SpaceLayout;
     readonly onOpenDiagnostics?: () => void;
+    readonly feedbackEvidence?: object;
   }>();
   expectTypeOf<EntranceProps>().toMatchTypeOf<{
     readonly defaults?: { readonly microphone?: boolean; readonly camera?: boolean };

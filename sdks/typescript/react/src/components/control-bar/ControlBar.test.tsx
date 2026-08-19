@@ -11,6 +11,19 @@ import { createSnapshot, createTestClient } from "../../test-support/test-client
 afterEach(cleanup);
 
 describe("ControlBar", () => {
+  it("renders Feedback as its own action", () => {
+    const onOpenFeedback = vi.fn();
+    render(
+      <ChalkProvider client={createTestClient()}>
+        <ControlBar placement="floating" density="comfortable" buttons={["feedback"]} onOpenFeedback={onOpenFeedback} />
+      </ChalkProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Feedback" }));
+    expect(onOpenFeedback).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
+  });
+
   it("uses context commands for every rendered bare-provider control", () => {
     const client = createTestClient(createSnapshot(["publishScreen", "raiseHand"]));
 

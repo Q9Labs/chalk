@@ -28,6 +28,11 @@ const state = vi.hoisted(() => ({
   useSpaceViewController: vi.fn(),
 }));
 
+vi.mock("react", () => ({
+  useRef: <T,>(current: T) => ({ current }),
+  useState: <T,>(initial: T): readonly [T, ReturnType<typeof vi.fn>] => [initial, vi.fn()],
+}));
+
 vi.mock("react-native", () => ({
   Alert: { alert: vi.fn() },
   StyleSheet: { create: <T,>(styles: T) => styles },
@@ -38,6 +43,7 @@ vi.mock("../ui/theme", () => ({ Theme: { colors: { darkCanvas: "#0a0a0b", primar
 vi.mock("../ui/native-theme", () => ({
   useNativeTheme: () => ({ colors: { darkCanvas: "#0a0a0b", primary: "#1bb6a6", primaryForeground: "#ffffff" } }),
 }));
+vi.mock("../context/space-client-context", () => ({ useSpaceClient: () => ({ feedback: { prepare: vi.fn(), send: vi.fn() } }) }));
 vi.mock("../utils/ios-simulator", () => ({ getIosSimulatorMediaMessage: () => "Media is unavailable in the simulator." }));
 vi.mock("./ReactionPicker", () => ({ ReactionPicker: "ReactionPicker" }));
 vi.mock("./native-space-view/SpaceActionMenu", () => ({ SpaceActionMenu: "SpaceActionMenu", selectSpaceReaction: vi.fn() }));
@@ -48,6 +54,7 @@ vi.mock("./native-space-view/SpaceGrid.android", () => ({ SpaceGridAndroid: "Spa
 vi.mock("./native-space-view/SpaceStage.android", () => ({ SpaceStageAndroid: "SpaceStageAndroid" }));
 vi.mock("./native-space-view/SpaceTopBar.android", () => ({ SpaceTopBarAndroid: "SpaceTopBarAndroid" }));
 vi.mock("./native-space-view/SpaceWhiteboardSurface", () => ({ SpaceWhiteboardSurface: "SpaceWhiteboardSurface" }));
+vi.mock("./native-space-view/FeedbackSheet", () => ({ FeedbackSheet: "FeedbackSheet" }));
 vi.mock("./native-space-view/useSpaceViewController", () => ({ useSpaceViewController: state.useSpaceViewController }));
 
 import { SpaceViewShared } from "./SpaceView.shared";

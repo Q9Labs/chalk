@@ -146,6 +146,11 @@ type Querier interface {
 	GetEpisodeDiagnosticByEpisode(ctx context.Context, arg GetEpisodeDiagnosticByEpisodeParams) (EpisodeDiagnostic, error)
 	GetEpisodeDiagnosticByOpaqueID(ctx context.Context, arg GetEpisodeDiagnosticByOpaqueIDParams) (EpisodeDiagnostic, error)
 	GetEpisodeDiagnosticByOpaqueIDGlobal(ctx context.Context, id pgtype.UUID) (EpisodeDiagnostic, error)
+	GetFeedbackReport(ctx context.Context, arg GetFeedbackReportParams) (FeedbackReport, error)
+	// Feedback reports are tenant-bound for customer writes and operator-scoped
+	// for reads. Object bytes remain in object storage.
+	GetFeedbackReportByIdempotency(ctx context.Context, arg GetFeedbackReportByIdempotencyParams) (FeedbackReport, error)
+	GetFeedbackReportForOperator(ctx context.Context, id pgtype.UUID) (FeedbackReport, error)
 	GetFirstUnprojectedDiagnosticEvent(ctx context.Context, arg GetFirstUnprojectedDiagnosticEventParams) (DiagnosticEvent, error)
 	GetIntegrationConnection(ctx context.Context, arg GetIntegrationConnectionParams) (IntegrationConnection, error)
 	GetIntegrationConnectionByExternalRef(ctx context.Context, arg GetIntegrationConnectionByExternalRefParams) (IntegrationConnection, error)
@@ -187,6 +192,7 @@ type Querier interface {
 	HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecordingJobParams) (RecordingJob, error)
 	InsertDiagnosticEvent(ctx context.Context, arg InsertDiagnosticEventParams) (DiagnosticEvent, error)
 	InsertDiagnosticExportArtifactChunk(ctx context.Context, arg InsertDiagnosticExportArtifactChunkParams) error
+	InsertFeedbackReport(ctx context.Context, arg InsertFeedbackReportParams) (FeedbackReport, error)
 	InsertJourneyEvent(ctx context.Context, arg InsertJourneyEventParams) (pgtype.UUID, error)
 	// Projector dead letters.
 	InsertProjectorDeadLetter(ctx context.Context, arg InsertProjectorDeadLetterParams) (DiagnosticProjectorDeadLetter, error)
@@ -217,6 +223,7 @@ type Querier interface {
 	// same bounded, idempotent reference as newly observed Episodes.
 	ListEpisodeDiagnosticsMissingEpisodeReference(ctx context.Context, arg ListEpisodeDiagnosticsMissingEpisodeReferenceParams) ([]ListEpisodeDiagnosticsMissingEpisodeReferenceRow, error)
 	ListEventsAfterCursor(ctx context.Context, arg ListEventsAfterCursorParams) ([]DiagnosticEvent, error)
+	ListFeedbackReports(ctx context.Context, arg ListFeedbackReportsParams) ([]FeedbackReport, error)
 	ListIntegrationConnections(ctx context.Context, arg ListIntegrationConnectionsParams) ([]IntegrationConnection, error)
 	ListJourneyEvents(ctx context.Context, journeyID pgtype.UUID) ([]ObservabilityJourneyEvent, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)

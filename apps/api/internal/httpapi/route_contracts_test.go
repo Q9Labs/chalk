@@ -47,6 +47,8 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodGet, "/v1/status"},
 		{http.MethodPost, "/v1/ops/ingest/monitor-results"},
 		{http.MethodPost, "/v1/telemetry/journey-events"},
+		{http.MethodPost, "/v1/feedback-reports"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/feedback-reports"},
 		{http.MethodGet, "/v1/regions"},
 		{http.MethodPost, "/v1/chat/attachments/uploads"},
 		{http.MethodPost, "/v1/chat/attachments/uploads/{uploadId}/finalize"},
@@ -146,11 +148,14 @@ func TestPreviewRouteContracts(t *testing.T) {
 		if len(contract.Errors) == 0 {
 			t.Fatalf("%s %s has no error metadata", contract.Method, contract.Path)
 		}
-		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer && contract.Auth != httpapi.APIAuthParticipantMedia && contract.Auth != httpapi.APIAuthParticipantSync && contract.Auth != httpapi.APIAuthOpsToken {
+		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer && contract.Auth != httpapi.APIAuthParticipantMedia && contract.Auth != httpapi.APIAuthParticipantSync && contract.Auth != httpapi.APIAuthParticipantDiagnostics && contract.Auth != httpapi.APIAuthOpsToken {
 			t.Fatalf("%s %s should advertise a supported auth family", contract.Method, contract.Path)
 		}
 		if strings.Contains(contract.Path, "/media/sfu/") && contract.Auth != httpapi.APIAuthParticipantMedia {
 			t.Fatalf("%s %s should advertise participant media auth", contract.Method, contract.Path)
+		}
+		if contract.Path == "/v1/feedback-reports" && contract.Auth != httpapi.APIAuthParticipantDiagnostics {
+			t.Fatalf("participant Feedback should advertise the Diagnostic Participant credential")
 		}
 
 		if seenRoutes[contract.Path] == nil {

@@ -7,6 +7,7 @@ export type AccountBoundaryEnv = {
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const MAX_BODY_BYTES = 64 * 1024;
+const MAX_FEEDBACK_BODY_BYTES = 1 << 20;
 const IDEMPOTENCY_HEADER = "idempotency-key";
 const RECENT_AUTH_HEADER = "x-chalk-recent-auth";
 const CSRF_HEADER = "x-chalk-csrf";
@@ -23,6 +24,7 @@ type BoundaryRoute = {
   preserveAuthOnUnauthorized?: boolean;
   preserveTokens?: boolean;
   queryParameters?: readonly string[];
+  maxBodyBytes?: number;
 };
 
 export async function handleAccountBoundary(request: Request, env: AccountBoundaryEnv, fetcher: Fetcher = fetch): Promise<Response> {
@@ -78,7 +80,7 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
 
     const upstreamURL = resolveUpstreamURL(env.CHALK_API_ORIGIN, route.upstreamPath, allowedSearch(url, route.queryParameters));
     const headers = upstreamHeaders(request, journeyID, accountToken);
-    const body = request.method === "GET" || request.method === "HEAD" ? undefined : await boundedBody(request);
+    const body = request.method === "GET" || request.method === "HEAD" ? undefined : await boundedBody(request, route.maxBodyBytes ?? MAX_BODY_BYTES);
     const upstream = await fetcher(upstreamURL, { method: request.method, headers, body, redirect: "manual" });
     let response: Response;
     let preserveAuthOnUnauthorized = false;
@@ -163,6 +165,9 @@ function resolveTenantResourceRoute(method: string, pathname: string): BoundaryR
   const resource = segments[3];
   if (resource === "spaces") return resolveSpaceRoute(method, segments, tenantID);
   if (resource === "api-keys") return resolveAPIKeyRoute(method, segments, tenantID);
+  if (resource === "feedback-reports" && segments.length === 4 && method === "POST") {
+    return { upstreamPath: `/v1/tenants/${tenantID}/feedback-reports`, authenticated: true, mutation: true, maxBodyBytes: MAX_FEEDBACK_BODY_BYTES };
+  }
   return undefined;
 }
 
@@ -266,13 +271,13 @@ function upstreamHeaders(request: Request, journeyID: string, accountToken?: str
   return headers;
 }
 
-async function boundedBody(request: Request): Promise<ArrayBuffer | undefined> {
+async function boundedBody(request: Request, maxBodyBytes: number): Promise<ArrayBuffer | undefined> {
   const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") throw new BoundaryError(415, "unsupported_media_type", "Content-Type must be application/json");
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) throw new BoundaryError(413, "payload_too_large", "Request body is too large");
+  if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) throw new BoundaryError(413, "payload_too_large", "Request body is too large");
   const body = await request.arrayBuffer();
-  if (body.byteLength > MAX_BODY_BYTES) throw new BoundaryError(413, "payload_too_large", "Request body is too large");
+  if (body.byteLength > maxBodyBytes) throw new BoundaryError(413, "payload_too_large", "Request body is too large");
   return body;
 }
 

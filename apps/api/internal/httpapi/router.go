@@ -99,6 +99,7 @@ type Options struct {
 	ChatParticipants       ChatParticipantVerifier
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
+	Feedback               FeedbackHTTPOptions
 	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
 	// value is disabled and therefore does not mount any /_internal route.
 	EpisodeDiagnostics EpisodeDiagnosticsHTTPOptions
@@ -123,6 +124,7 @@ func NewRouter(options Options) http.Handler {
 
 	mountWorkerRoutes(r, options)
 	mountEpisodeDiagnosticsRoutes(r, options)
+	mountFeedbackOperatorRoutes(r, options.Feedback)
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))

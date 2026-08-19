@@ -13,20 +13,29 @@ func (err APIError) Error() string {
 }
 
 var (
-	apiErrorUnauthenticated     = APIError{Status: http.StatusUnauthorized, Code: "access.unauthenticated", Message: "Authentication required"}
-	apiErrorForbidden           = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
-	apiErrorServiceUnavailable  = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
-	apiErrorInvalidRequest      = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
-	apiErrorInvalidPageSize     = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
-	apiErrorInvalidCursor       = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
-	apiErrorInvalidTenantID     = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}
-	apiErrorInvalidTenantName   = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_name", Message: "Invalid tenant name"}
-	apiErrorInvalidTenantRegion = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_region", Message: "Invalid tenant region"}
-	apiErrorInvalidTenantField  = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_field", Message: "Invalid tenant field"}
-	apiErrorTenantNotFound      = APIError{Status: http.StatusNotFound, Code: "tenant.not_found", Message: "Tenant not found"}
-	apiErrorRateLimited         = APIError{Status: http.StatusTooManyRequests, Code: "request.rate_limited", Message: "Too many requests"}
-	apiErrorPayloadTooLarge     = APIError{Status: http.StatusRequestEntityTooLarge, Code: "request.payload_too_large", Message: "Request body is too large"}
-	apiErrorInternal            = APIError{Status: http.StatusInternalServerError, Code: "service.internal_error", Message: "Internal server error"}
+	apiErrorUnauthenticated             = APIError{Status: http.StatusUnauthorized, Code: "access.unauthenticated", Message: "Authentication required"}
+	apiErrorForbidden                   = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
+	apiErrorServiceUnavailable          = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
+	apiErrorInvalidRequest              = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
+	apiErrorInvalidPageSize             = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
+	apiErrorInvalidCursor               = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
+	apiErrorInvalidTenantID             = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}
+	apiErrorInvalidTenantName           = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_name", Message: "Invalid tenant name"}
+	apiErrorInvalidTenantRegion         = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_region", Message: "Invalid tenant region"}
+	apiErrorInvalidTenantField          = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_field", Message: "Invalid tenant field"}
+	apiErrorTenantNotFound              = APIError{Status: http.StatusNotFound, Code: "tenant.not_found", Message: "Tenant not found"}
+	apiErrorRateLimited                 = APIError{Status: http.StatusTooManyRequests, Code: "request.rate_limited", Message: "Too many requests"}
+	apiErrorPayloadTooLarge             = APIError{Status: http.StatusRequestEntityTooLarge, Code: "request.payload_too_large", Message: "Request body is too large"}
+	apiErrorInternal                    = APIError{Status: http.StatusInternalServerError, Code: "service.internal_error", Message: "Internal server error"}
+	apiErrorFeedbackUnauthenticated     = APIError{Status: http.StatusUnauthorized, Code: "request.unauthenticated", Message: "Authentication required"}
+	apiErrorFeedbackForbidden           = APIError{Status: http.StatusForbidden, Code: "request.forbidden", Message: "Access denied"}
+	apiErrorFeedbackInvalidEvidence     = APIError{Status: http.StatusBadRequest, Code: "feedback.invalid_evidence", Message: "Feedback evidence is invalid"}
+	apiErrorFeedbackInvalidScreenshot   = APIError{Status: http.StatusBadRequest, Code: "feedback.invalid_screenshot", Message: "Feedback screenshot is invalid"}
+	apiErrorFeedbackIdempotencyConflict = APIError{Status: http.StatusConflict, Code: "feedback.idempotency_conflict", Message: "Idempotency key was used for another request"}
+	apiErrorFeedbackStorageUnavailable  = APIError{Status: http.StatusServiceUnavailable, Code: "feedback.storage_unavailable", Message: "Feedback storage is unavailable"}
+	apiErrorFeedbackAuditUnavailable    = APIError{Status: http.StatusServiceUnavailable, Code: "feedback.audit_unavailable", Message: "Feedback access audit is unavailable"}
+	apiErrorFeedbackNotFound            = APIError{Status: http.StatusNotFound, Code: "feedback.not_found", Message: "Feedback report was not found"}
+	apiErrorFeedbackInvalidID           = APIError{Status: http.StatusBadRequest, Code: "feedback.invalid_id", Message: "Invalid feedback report id"}
 
 	apiErrorInvalidEmail              = APIError{Status: http.StatusBadRequest, Code: "identity.invalid_email", Message: "Invalid email"}
 	apiErrorInvalidPassword           = APIError{Status: http.StatusBadRequest, Code: "access.invalid_password", Message: "Invalid password"}

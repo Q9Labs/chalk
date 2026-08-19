@@ -102,6 +102,12 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"bearerFormat": "JWT",
 						"description":  "Short-lived Sync participant credential bound to one Space Episode and participant generation.",
 					},
+					"participantDiagnosticsBearer": map[string]any{
+						"type":         "http",
+						"scheme":       "bearer",
+						"bearerFormat": "JWT",
+						"description":  "Short-lived Episode Diagnostic participant credential bound to one Tenant, Space, Episode, participant generation, and environment.",
+					},
 					"opsIngestToken": map[string]any{
 						"type":        "apiKey",
 						"in":          "header",
@@ -163,6 +169,10 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 	case httpapi.APIAuthParticipantSync:
 		operation["security"] = []map[string][]string{
 			{"participantSyncBearer": {}},
+		}
+	case httpapi.APIAuthParticipantDiagnostics:
+		operation["security"] = []map[string][]string{
+			{"participantDiagnosticsBearer": {}},
 		}
 	case httpapi.APIAuthOpsToken:
 		operation["security"] = []map[string][]string{

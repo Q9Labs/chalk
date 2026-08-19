@@ -1,6 +1,6 @@
 "use client";
 
-import { createSpaceClient, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ChatUploadFile, type ClientEventMap, type FeedbackSource, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
@@ -17,6 +17,7 @@ import { SkinProvider, useSkin } from "../skin-context";
 import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { ChalkButton } from "../chalk-ui";
+import { FeedbackDialog } from "../feedback/FeedbackDialog";
 
 export type SpaceLayout = "focus" | "grid" | "presentation";
 
@@ -59,6 +60,7 @@ export type ChalkProps = SpaceIntegration &
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
     readonly onOpenDiagnostics?: () => void;
+    readonly feedbackSource?: FeedbackSource;
   };
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
@@ -78,6 +80,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     return createSpaceClient({ space: props.space, getAccess: getLatestAccess });
   }, [getLatestAccess, props.space, suppliedClient]);
   const client = suppliedClient ?? ownedClient!;
+  const feedbackRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!ownedClient) return;
@@ -91,16 +94,26 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
 
   return (
     <SkinProvider skin={skin}>
-      <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} data-chalk-skin={skin} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
+      <div
+        ref={feedbackRootRef}
+        data-chalk
+        data-chalk-feedback-root
+        data-chalk-theme={colorScheme}
+        data-chalk-palette={props.theme?.palette}
+        data-chalk-texture={props.theme?.texture}
+        data-chalk-skin={skin}
+        className="chalk-root h-full min-h-0 w-full"
+        style={chalkThemeStyle(props.theme, colorScheme)}
+      >
         <ChalkProvider client={client}>
-          <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
+          <SpaceExperience {...props} feedbackRootRef={feedbackRootRef} resolvedColorScheme={colorScheme} />
         </ChalkProvider>
       </div>
     </SkinProvider>
   );
 }
 
-function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
+function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const previousStatus = useRef(connection.status);
@@ -169,7 +182,7 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
   return <SpaceSurface {...props} spaceName={spaceName} reconnecting={connection.status === "reconnecting"} />;
 }
 
-function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string; readonly reconnecting: boolean }): React.JSX.Element {
+function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string; readonly reconnecting: boolean }): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
   const media = useMedia();
@@ -179,6 +192,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
   const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.skin ?? "classic", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
   const resolvedSkin: ThemeSkin = props.theme?.skin ?? "classic";
@@ -262,6 +276,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       }}
       features={props.features}
       onOpenDiagnostics={props.onOpenDiagnostics}
+      onOpenFeedback={() => setFeedbackOpen(true)}
       whiteboard={whiteboard}
       onToggleWhiteboard={() => setWhiteboardOpen((open) => !open)}
       infoDialog={props.features?.info !== false && props.inviteLink ? { isOpen: infoOpen, onOpenChange: setInfoOpen, spaceName: props.spaceName, inviteLink: props.inviteLink, onCopyLink: () => void navigator.clipboard?.writeText(props.inviteLink!) } : undefined}
@@ -328,6 +343,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
           {media.incomingRequests[0] ? (
             <MediaRequestDialog request={media.incomingRequests[0]} onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId))} onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId))} />
           ) : null}
+          <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} client={client} source={props.feedbackSource} captureRootRef={props.feedbackRootRef} />
           <CommandErrorAlert message={commandError ?? undefined} />
         </>
       }

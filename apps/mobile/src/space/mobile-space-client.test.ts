@@ -54,6 +54,7 @@ describe("mobile Space client", () => {
       storage: asyncStorage,
       syncUrl: credential.syncURL,
       telemetry: journey,
+      feedbackSource: "chalk_mobile",
     });
   });
 

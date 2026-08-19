@@ -24,6 +24,7 @@ export function createMobileSpaceClient({ credential, defaults, getAccess, journ
     storage: AsyncStorage,
     syncUrl: credential.syncURL,
     telemetry: journey,
+    feedbackSource: "chalk_mobile",
   });
 }
 

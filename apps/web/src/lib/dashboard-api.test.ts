@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { collectFeedbackEvidence, type FeedbackReportRequestV1 } from "@q9labsai/chalk-client";
 
 const localValues = new Map<string, string>();
 const testStorage: Storage = {
@@ -108,6 +109,27 @@ afterEach(() => {
 });
 
 describe("dashboard API client", () => {
+  it("submits Feedback through the CSRF-protected account boundary", async () => {
+    const fetcher = boundaryMutationResponseFetcher(Response.json({ csrf_token: "csrf-token" }), Response.json({ schema_version: "FeedbackReceipt/v1", id: "feedback-1", submitted_at: "2026-08-19T12:00:00Z" }, { status: 201 }));
+    vi.stubGlobal("fetch", fetcher);
+    const { submitFeedbackReport } = await import("./dashboard-api");
+    const input: FeedbackReportRequestV1 = {
+      schema_version: "FeedbackReportRequest/v1",
+      category: "bug",
+      message: "The feedback action is hard to find.",
+      source: "dashboard",
+      evidence: collectFeedbackEvidence({ sdk: { client: "@q9labsai/chalk-client" }, platform: { kind: "web" } }),
+    };
+
+    await expect(submitFeedbackReport(tenantID, input, "feedback-key")).resolves.toMatchObject({ id: "feedback-1" });
+    expect(fetcher).toHaveBeenNthCalledWith(2, `/api/tenants/${tenantID}/feedback-reports`, expect.objectContaining({ method: "POST", credentials: "same-origin" }));
+    const request = fetcher.mock.calls[1]?.[1] as RequestInit;
+    const headers = new Headers(request.headers);
+    expect(headers.get("x-chalk-csrf")).toBe("csrf-token");
+    expect(headers.get("idempotency-key")).toBe("feedback-key");
+    await expect(requestJSON(request)).resolves.toEqual(input);
+  });
+
   it("bootstraps CSRF and emits journey plus W3C trace context for sign-in", async () => {
     const fetcher = vi
       .fn()

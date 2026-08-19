@@ -10,7 +10,7 @@ import { SpaceView } from "./SpaceView";
 
 const audioOutputSpy = vi.hoisted(() => vi.fn(() => null));
 const controlBarSpy = vi.hoisted(() =>
-  vi.fn((props: { readonly buttons?: readonly string[]; readonly onOpenDiagnostics?: () => void; readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
+  vi.fn((props: { readonly buttons?: readonly string[]; readonly onOpenDiagnostics?: () => void; readonly onOpenFeedback?: () => void; readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
     <>
       <button type="button" onClick={props.onToggleParticipants}>
         People
@@ -72,6 +72,14 @@ describe("SpaceView", () => {
     renderView(createTestClient(), { onOpenDiagnostics });
 
     expect(controlBarSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ buttons: expect.arrayContaining(["diagnostics"]), onOpenDiagnostics }));
+  });
+
+  it("adds a named Feedback control instead of reusing More", () => {
+    const onOpenFeedback = vi.fn();
+    renderView(createTestClient(), { onOpenFeedback });
+
+    expect(controlBarSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ buttons: expect.arrayContaining(["feedback"]), onOpenFeedback }));
+    expect(controlBarSpy.mock.calls[0]?.[0].buttons).not.toContain("more");
   });
 
   it("keeps the typed skin, palette, and texture attributes on the layout", () => {

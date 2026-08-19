@@ -156,6 +156,7 @@ function LocalSpace({
         logoUrl="/brand/chalk/chalk-logo.svg"
         spaceName={spaceName}
         inviteLink={inviteLink}
+        feedbackSource="chalk_web"
         onEpisodeEnded={releaseFromLifecycle}
         onLeft={releaseFromLifecycle}
         onOpenDiagnostics={diagnostics.path ? openDiagnostics : undefined}

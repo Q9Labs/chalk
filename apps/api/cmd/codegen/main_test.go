@@ -283,6 +283,20 @@ func TestWhiteboardFileOperationsUseSyncParticipantCredentialScheme(t *testing.T
 	}
 }
 
+func TestFeedbackUsesDiagnosticParticipantCredentialScheme(t *testing.T) {
+	doc := generatedDocument()
+	scheme := mapValue(t, doc.Components.SecuritySchemes["participantDiagnosticsBearer"])
+	if scheme["type"] != "http" || scheme["scheme"] != "bearer" || scheme["bearerFormat"] != "JWT" {
+		t.Fatalf("participant diagnostics security scheme = %#v", scheme)
+	}
+
+	operation := mapValue(t, doc.Paths["/v1/feedback-reports"]["post"])
+	security, ok := operation["security"].([]map[string][]string)
+	if !ok || len(security) != 1 || security[0]["participantDiagnosticsBearer"] == nil {
+		t.Fatalf("Feedback security = %#v, want dedicated Diagnostic Participant bearer", operation["security"])
+	}
+}
+
 func generatedDocument() openAPIDoc {
 	routes := httpapi.PreviewRouteContracts()
 	gen := newGenerator(routes)
