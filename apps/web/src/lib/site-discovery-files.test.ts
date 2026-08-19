@@ -10,11 +10,15 @@ describe("public discovery files", () => {
     const headers = readPublicText("_headers");
 
     expect(robots).toContain("Sitemap: https://chalkmeet.com/sitemap.xml");
+    expect(robots).toContain("Disallow: /_shell/");
     expect(robots).toContain("Disallow: /space");
     expect(llms).toContain("The canonical product documentation is https://chalkmeet.com/docs");
     expect(sitemap).toContain("<loc>https://chalkmeet.com/docs</loc>");
     expect(sitemap).toContain("<loc>https://chalkmeet.com/status</loc>");
-    expect(redirects).toContain("/* /_shell.html 200");
+    expect(redirects).not.toContain("/ /index.html 200");
+    expect(redirects.split("\n")).not.toContain("/* /_shell/ 200");
+    expect(redirects).toContain("/space/* /_shell/ 200");
+    expect(redirects).toContain("/account* /_shell/ 200");
     expect(headers).toContain("Content-Type: application/xml; charset=utf-8");
     expect(headers).toContain("X-Robots-Tag: noindex, nofollow, noarchive");
   });

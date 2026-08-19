@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /_internal/
+Disallow: /_shell/
 Disallow: /_serverFn/
 Disallow: /api/
 Disallow: /account

@@ -25,6 +25,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Kept app-route fallbacks separate from public pages and static assets, so
+  deep links load the SPA shell without redirect loops or incorrect asset
+  content types.
 - Made managed host secret rotation use Podman's atomic replacement path and
   an actual input pipe, so Podman 4.9 can register new values without deleting
   the stable secret first.

@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -7,6 +7,9 @@ import { SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts";
 
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
+const shellDirectoryPath = resolve(clientDir, "_shell");
+const shellIndexPath = resolve(shellDirectoryPath, "index.html");
+const appShellUrl = "/_shell/";
 const indexPath = resolve(clientDir, "index.html");
 const fallback404Path = resolve(clientDir, "404.html");
 const spaceDirPath = resolve(clientDir, "space");
@@ -36,13 +39,17 @@ for (const publicPagePath of [indexPath, statusIndexPath, privacyIndexPath, term
   }
 }
 
+mkdirSync(shellDirectoryPath, { recursive: true });
+cpSync(shellPath, shellIndexPath);
+rmSync(shellPath);
+
 // Cloudflare Pages: ensure unknown paths and Space deep links load the SPA shell
 // even if a redirect rule is bypassed.
-cpSync(shellPath, fallback404Path);
+cpSync(shellIndexPath, fallback404Path);
 mkdirSync(spaceDirPath, { recursive: true });
-cpSync(shellPath, spaceIndexPath);
+cpSync(shellIndexPath, spaceIndexPath);
 
-const shellHtml = readFileSync(shellPath, "utf8");
+const shellHtml = readFileSync(shellIndexPath, "utf8");
 
 function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -106,12 +113,12 @@ function collectClientFiles(dir) {
   });
 }
 
-const precacheUrls = Array.from(new Set(["/", "/index.html", "/404.html", ...collectClientFiles(clientDir)])).sort();
+const precacheUrls = Array.from(new Set(["/", "/index.html", "/404.html", appShellUrl, ...collectClientFiles(clientDir)])).sort();
 
 const swSource = `
 const BUILD_META = ${JSON.stringify(buildMeta, null, 2)};
 const CACHE_NAME = "chalk-web-${buildMeta.version}-${buildMeta.commitHash}";
-const APP_SHELL_URL = "/_shell.html";
+const APP_SHELL_URL = ${JSON.stringify(appShellUrl)};
 const PRECACHE_URLS = ${JSON.stringify(precacheUrls, null, 2)};
 const ASSET_EXT_RE = /\\.[a-z0-9]+$/i;
 

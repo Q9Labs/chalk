@@ -8,7 +8,10 @@ describe("Cloudflare Pages SPA preparation", () => {
   it("preserves prerendered public pages and keeps a separate SPA shell", () => {
     expect(script).toContain("expected TanStack Start to prerender every public web page");
     expect(script).not.toContain("cpSync(shellPath, indexPath)");
-    expect(script).toContain('const APP_SHELL_URL = "/_shell.html"');
+    expect(script).toContain('const appShellUrl = "/_shell/"');
+    expect(script).toContain("cpSync(shellPath, shellIndexPath)");
+    expect(script).toContain("rmSync(shellPath)");
+    expect(script).toContain("const APP_SHELL_URL = ${JSON.stringify(appShellUrl)}");
     expect(script).toContain('import { SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts"');
     expect(script).not.toContain("chalk-flow-hero-20260818.webp");
   });
