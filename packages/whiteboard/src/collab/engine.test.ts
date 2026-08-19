@@ -103,6 +103,88 @@ describe("ExcalidrawCollabEngine", () => {
     engine.dispose();
   });
 
+  it("flushes a pending local change before disposal", async () => {
+    const remoteElements = [createElement("remote", 1, 100)];
+    const localElements = [createElement("local", 1, 50)];
+    let sceneElements: readonly OrderedExcalidrawElement[] = remoteElements;
+    const api = createAPI(() => sceneElements);
+    const submitUpdate = vi.fn().mockResolvedValue({
+      operationId: "operation-0000000001",
+      sceneId: "10000000-0000-4000-8000-000000000001",
+      revision: "2",
+    });
+    const engine = createEngine(api, { submitUpdate });
+
+    engine.handleRemoteSnapshot({
+      sceneId: "10000000-0000-4000-8000-000000000001",
+      elements: remoteElements.map(toWireElement),
+    });
+    sceneElements = localElements;
+    engine.handleChange(localElements, {} as never, {});
+
+    engine.dispose();
+
+    expect(submitUpdate).toHaveBeenCalledOnce();
+    expect(submitUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elements: localElements.map(toWireElement),
+        sceneId: "10000000-0000-4000-8000-000000000001",
+        syncAll: false,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(submitUpdate).toHaveBeenCalledOnce();
+  });
+
+  it("submits a dirty teardown scene while an earlier submission is in flight", async () => {
+    const remoteElements = [createElement("remote", 1, 100)];
+    const firstLocalElements = [createElement("first", 1, 50)];
+    const finalLocalElements = [createElement("final", 1, 75)];
+    let sceneElements: readonly OrderedExcalidrawElement[] = remoteElements;
+    const api = createAPI(() => sceneElements);
+    const commit = {
+      operationId: "operation-0000000001",
+      sceneId: "10000000-0000-4000-8000-000000000001",
+      revision: "2",
+    };
+    let resolveFirstSubmission: (value: typeof commit) => void = () => undefined;
+    const firstSubmission = new Promise<typeof commit>((resolve) => {
+      resolveFirstSubmission = resolve;
+    });
+    const submitUpdate = vi
+      .fn()
+      .mockImplementationOnce(() => firstSubmission)
+      .mockResolvedValue(commit);
+    const engine = createEngine(api, { submitUpdate });
+
+    engine.handleRemoteSnapshot({
+      sceneId: commit.sceneId,
+      elements: remoteElements.map(toWireElement),
+    });
+    sceneElements = firstLocalElements;
+    engine.handleChange(firstLocalElements, {} as never, {});
+    await vi.advanceTimersByTimeAsync(151);
+
+    sceneElements = finalLocalElements;
+    engine.handleChange(finalLocalElements, {} as never, {});
+    engine.dispose();
+
+    expect(submitUpdate).toHaveBeenCalledTimes(2);
+    expect(submitUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        elements: finalLocalElements.map(toWireElement),
+        sceneId: commit.sceneId,
+        syncAll: false,
+      }),
+    );
+
+    resolveFirstSubmission(commit);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(submitUpdate).toHaveBeenCalledTimes(2);
+  });
+
   it("does not infer an epoch clear when the canvas becomes empty", async () => {
     const original = [createElement("local", 1, 50)];
     const tombstone = [{ ...original[0], isDeleted: true, version: 2, hash: 60 }] as unknown as OrderedExcalidrawElement[];

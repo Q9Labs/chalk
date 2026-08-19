@@ -29,6 +29,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
 
+## [4.1.5] - 2026-08-19
+
+### Fixed
+
+- Made Board presentation shared across every Participant in an Episode, focus
+  it ahead of an active screen share, and keep the scene intact across
+  close/reopen by flushing the final pending drawing before the canvas unmounts.
+- Kept Board presentation safe during rolling upgrades and replay recovery:
+  older Sync servers get the legacy handshake, older clients keep their exact
+  wire shape, and a recovered connection refreshes shared presentation state.
+
 ## [4.1.4] - 2026-08-19
 
 ### Fixed

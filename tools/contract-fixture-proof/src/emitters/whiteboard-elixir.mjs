@@ -54,6 +54,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "snapshot_ack" -> decode_snapshot_ack(frame)
       "clear" -> decode_clear(frame)
       "set_draw_permission" -> decode_set_draw_permission(frame)
+      "set_presentation" -> decode_set_presentation(frame)
       "cursor" -> decode_cursor(frame)
       "ping" -> if(exact?(frame, ["type"]), do: {:ok, {:ping, %{}}}, else: {:error, :invalid_frame})
       _ -> {:error, :unknown_type}
@@ -71,6 +72,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "commit" -> valid_commit?(frame)
       "cursor" -> valid_server_cursor?(frame)
       "permission_updated" -> valid_permission_updated?(frame)
+      "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
       "operation_error" -> valid_operation_error?(frame)
       "pong" -> exact?(frame, ["type"])
@@ -81,14 +83,28 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   def valid_server_frame?(_frame), do: false
 
   defp decode_hello(frame) do
-    with true <- exact?(frame, ${render(contract.frames.hello.exactFields)}),
+    with {:ok, extensions} <- hello_extensions(frame),
          "whiteboard-v1" <- frame["protocol"],
          token when is_binary(token) <- frame["token"],
          true <- byte_size(token) > 0 and byte_size(token) <= @limits["tokenBytes"],
          {:ok, cursor} <- cursor(frame["cursor"]) do
-      {:ok, {:hello, %{token: token, cursor: cursor}}}
+      {:ok, {:hello, %{token: token, cursor: cursor, extensions: extensions}}}
     else
       _ -> {:error, :invalid_hello}
+    end
+  end
+
+  defp hello_extensions(frame) do
+    cond do
+      exact?(frame, ${render(contract.frames.hello.exactFields)}) ->
+        {:ok, []}
+
+      exact?(frame, ${render(contract.frames.hello.extendedExactFields)}) and
+          frame["extensions"] == [%{"name" => ${render(contract.extensions.presentation.name)}}] ->
+        {:ok, frame["extensions"]}
+
+      true ->
+        {:error, :invalid_hello}
     end
   end
 
@@ -150,6 +166,15 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     end
   end
 
+  defp decode_set_presentation(frame) do
+    if exact?(frame, ${render(contract.frames.setPresentation.exactFields)}) and
+         operation_id?(frame["operation_id"]) and is_boolean(frame["presenting"]) do
+      {:ok, {:set_presentation, %{operation_id: frame["operation_id"], presenting: frame["presenting"]}}}
+    else
+      {:error, :invalid_payload}
+    end
+  end
+
   defp decode_cursor(frame) do
     if exact?(frame, ${render(contract.frames.cursor.clientExactFields)}) and finite_number?(frame["x"]) and
          finite_number?(frame["y"]) and encoded_bytes(frame) <= @limits["cursorFrameBytes"] do
@@ -160,7 +185,9 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp valid_welcome?(frame) do
-    exact?(frame, ${render(contract.frames.welcome.exactFields)}) and
+    (exact?(frame, ${render(contract.frames.welcome.exactFields)}) or
+       (exact?(frame, ${render(contract.frames.welcome.extendedExactFields)}) and
+          is_boolean(frame["presenting"]))) and
       frame["protocol"] == "whiteboard-v1" and uuid?(frame["participant_id"]) and
       is_integer(frame["participant_generation"]) and frame["participant_generation"] > 0 and
       capabilities?(frame["capabilities"]) and capabilities?(frame["participant_capabilities"]) and
@@ -208,6 +235,12 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       uuid?(frame["participant_id"]) and is_boolean(frame["can_draw"])
   end
 
+  defp valid_presentation_updated?(frame) do
+    exact?(frame, ${render(contract.frames.presentationUpdated.exactFields)}) and
+      uuid?(frame["scene_id"]) and unsigned_decimal?(frame["revision"]) and
+      is_boolean(frame["presenting"])
+  end
+
   defp valid_reset_required?(frame) do
     exact?(frame, ${render(contract.frames.resetRequired.exactFields)}) and uuid?(frame["scene_id"]) and
       frame["reason"] in @reset_reasons
@@ -216,7 +249,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   defp valid_operation_error?(frame) do
     exact?(frame, ${render(contract.frames.operationError.exactFields)}) and
       request_id?(frame["correlation_id"]) and
-      frame["operation"] in ["submit_update", "request_snapshot", "clear", "set_draw_permission"] and
+      frame["operation"] in ["submit_update", "request_snapshot", "clear", "set_draw_permission", "set_presentation"] and
       frame["code"] in @error_codes and is_boolean(frame["recoverable"]) and
       bounded_string?(frame["message"], 0, @limits["errorMessageMaxBytes"])
   end

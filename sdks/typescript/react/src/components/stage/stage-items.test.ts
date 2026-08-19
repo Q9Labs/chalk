@@ -39,13 +39,14 @@ describe("choosePrimary", () => {
     expect(choosePrimary(items, context({ layout: "focus" }))?.id).toBe("ada");
   });
 
-  it("promotes the newest screen share and falls back to the whiteboard", () => {
+  it("focuses the whiteboard over a screen share while it is presented", () => {
     const items = buildStageItems([person("ada", { isScreenSharing: true, screenShareTrack: track() }), person("grace", { isScreenSharing: true, screenShareTrack: track() })], true);
     const seenAt = new Map([
       [screenShareItemId("ada"), 5],
       [screenShareItemId("grace"), 2],
     ]);
-    expect(choosePrimary(items, context({ layout: "presentation", seenAt }))?.id).toBe(screenShareItemId("ada"));
+    expect(choosePrimary(items, context({ layout: "presentation", seenAt }))?.id).toBe(WHITEBOARD_ITEM_ID);
+    expect(choosePrimary(buildStageItems([person("ada", { isScreenSharing: true, screenShareTrack: track() })], false), context({ layout: "presentation", seenAt }))?.id).toBe(screenShareItemId("ada"));
     expect(choosePrimary(buildStageItems([person("ada")], true), context({ layout: "presentation" }))?.id).toBe(WHITEBOARD_ITEM_ID);
   });
 

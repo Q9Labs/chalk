@@ -72,6 +72,7 @@ export class ExcalidrawCollabEngine {
   private broadcastedElementVersions = new Map<string, number>();
   private submissionInFlight = false;
   private dirtyDuringSubmission = false;
+  private disposed = false;
 
   private changeDebounce: ReturnType<typeof setTimeout> | null = null;
   private fullSyncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -125,10 +126,19 @@ export class ExcalidrawCollabEngine {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+
+    const hasPendingChange = this.changeDebounce !== null || this.dirtyDuringSubmission;
+    this.disposed = true;
+
     if (this.changeDebounce) clearTimeout(this.changeDebounce);
-    if (this.fullSyncTimer) clearTimeout(this.fullSyncTimer);
     this.changeDebounce = null;
+
+    if (hasPendingChange) this.flushOnDispose();
+
+    if (this.fullSyncTimer) clearTimeout(this.fullSyncTimer);
     this.fullSyncTimer = null;
+    this.dirtyDuringSubmission = false;
     this.filesSync.dispose();
     this.presence.dispose();
     this.unsubscribe();
@@ -136,6 +146,8 @@ export class ExcalidrawCollabEngine {
   }
 
   handleChange(_elements: readonly OrderedExcalidrawElement[], _appState: AppState, files: BinaryFiles): void {
+    if (this.disposed) return;
+
     const elementsAll = this.opts.excalidrawAPI.getSceneElementsIncludingDeleted();
     this.filesSync.handleLocalScene(elementsAll, files);
 
@@ -210,6 +222,8 @@ export class ExcalidrawCollabEngine {
   }
 
   private flushNow(): void {
+    if (this.disposed) return;
+
     const context = this.submissionContext();
     if (!context) return;
     const elementsHash = hashElementsVersion(context.elements);
@@ -226,28 +240,50 @@ export class ExcalidrawCollabEngine {
     this.submit(context.sceneId, context.sceneGeneration ?? null, false, delta, elementsHash);
   }
 
+  private flushOnDispose(): void {
+    const context = this.submissionContext({ allowDisposed: true, allowInFlight: true });
+    if (!context) return;
+
+    const elementsHash = hashElementsVersion(context.elements);
+    if (elementsHash === this.lastBroadcastedOrReceivedElementsHash) return;
+
+    const syncableAll = filterSyncableElements(context.elements);
+    const delta: OrderedExcalidrawElement[] = [];
+    for (const element of syncableAll) {
+      const previousVersion = this.broadcastedElementVersions.get(element.id) ?? 0;
+      if (!previousVersion || element.version > previousVersion) delta.push(element);
+    }
+    if (delta.length === 0) return;
+
+    this.submitFinalUpdate(context.sceneId, context.sceneGeneration ?? null, delta);
+  }
+
   private scheduleFullSync(): void {
-    if (this.fullSyncTimer) return;
+    if (this.disposed || this.fullSyncTimer) return;
     this.fullSyncTimer = setTimeout(() => {
       this.fullSyncTimer = null;
+      if (this.disposed) return;
       this.sendFullSync();
     }, FULL_SYNC_INTERVAL_MS);
   }
 
   private sendFullSync(): void {
+    if (this.disposed) return;
+
     const context = this.submissionContext();
     if (!context) return;
     const syncableAll = filterSyncableElements(context.elements);
     this.submit(context.sceneId, context.sceneGeneration ?? null, true, syncableAll, hashElementsVersion(context.elements));
   }
 
-  private submissionContext(): SubmissionContext | null {
+  private submissionContext(options: { readonly allowDisposed?: boolean; readonly allowInFlight?: boolean } = {}): SubmissionContext | null {
+    if (this.disposed && !options.allowDisposed) return null;
     if (!this.canDraw) return null;
     if (!this.sceneId) {
       this.requestSnapshot();
       return null;
     }
-    if (this.submissionInFlight) {
+    if (this.submissionInFlight && !options.allowInFlight) {
       this.dirtyDuringSubmission = true;
       return null;
     }
@@ -270,6 +306,7 @@ export class ExcalidrawCollabEngine {
         elements: elements.map(toWireElement),
       })
       .then((commit) => {
+        if (this.disposed) return;
         if (commit.sceneId !== sceneId || this.sceneId !== sceneId || this.sceneGeneration !== sceneGeneration) {
           this.requestSnapshot();
           return;
@@ -282,9 +319,30 @@ export class ExcalidrawCollabEngine {
       })
       .catch(this.opts.onSubmissionError)
       .finally(() => {
+        if (this.disposed) return;
+
         this.submissionInFlight = false;
-        if (this.dirtyDuringSubmission) this.flushNow();
+        const shouldFlush = this.dirtyDuringSubmission;
+        this.dirtyDuringSubmission = false;
+        if (!this.disposed && shouldFlush) this.flushNow();
       });
+  }
+
+  private submitFinalUpdate(sceneId: string, sceneGeneration: string | null, elements: readonly OrderedExcalidrawElement[]): void {
+    let submission: Promise<WhiteboardCommit>;
+    try {
+      submission = this.opts.submitUpdate({
+        sceneId,
+        ...(sceneGeneration ? { sceneGeneration } : {}),
+        syncAll: false,
+        elements: elements.map(toWireElement),
+      });
+    } catch (cause) {
+      this.opts.onSubmissionError?.(cause);
+      return;
+    }
+
+    void submission.catch((cause: unknown) => this.opts.onSubmissionError?.(cause));
   }
 
   private applyRemoteElements(args: { sceneId: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: AppState; isSnapshot: boolean }) {
@@ -335,8 +393,13 @@ export class ExcalidrawCollabEngine {
   }
 
   private requestSnapshot(): void {
+    if (this.disposed) return;
+
     void Promise.resolve()
-      .then(() => this.opts.requestSnapshot())
+      .then(() => {
+        if (this.disposed) return;
+        return this.opts.requestSnapshot();
+      })
       .catch((cause: unknown) => this.opts.onSubmissionError?.(cause));
   }
 }

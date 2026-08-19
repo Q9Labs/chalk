@@ -37,14 +37,17 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
                operation.operation_id,
                fingerprint,
                "submit_update",
-               scene.scene_id,
-               revision,
-               operation.elements
+               %{
+                 scene_id: scene.scene_id,
+                 revision: revision,
+                 elements: operation.elements,
+                 presenting: nil
+               }
              ),
            :ok <- notify_head(connection, identity, scene.scene_id, revision) do
         {:ok, commit(operation.operation_id, :committed, scene.scene_id, revision)}
       else
-        {:duplicate, scene_id, revision} ->
+        {:duplicate, scene_id, revision, _event_presenting} ->
           {:ok, commit(operation.operation_id, :duplicate, scene_id, revision)}
 
         other ->
@@ -65,7 +68,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
            :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
            new_scene_id = UUID.generate(),
            :ok <- retire_scene(connection, identity, scene.scene_id),
-           :ok <- insert_scene(connection, identity, new_scene_id),
+           :ok <- insert_scene(connection, identity, new_scene_id, scene.is_presenting),
            :ok <-
              insert_receipt(
                connection,
@@ -73,14 +76,12 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
                operation.operation_id,
                fingerprint,
                "clear",
-               new_scene_id,
-               0,
-               nil
+               %{scene_id: new_scene_id, revision: 0, elements: nil, presenting: nil}
              ),
            :ok <- notify_head(connection, identity, new_scene_id, 0) do
         {:ok, commit(operation.operation_id, :committed, new_scene_id, 0)}
       else
-        {:duplicate, scene_id, revision} ->
+        {:duplicate, scene_id, revision, _event_presenting} ->
           {:ok, commit(operation.operation_id, :duplicate, scene_id, revision)}
 
         other ->
@@ -106,14 +107,60 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
                operation.operation_id,
                fingerprint,
                "set_draw_permission",
-               scene.scene_id,
-               scene.revision,
-               nil
+               %{
+                 scene_id: scene.scene_id,
+                 revision: scene.revision,
+                 elements: nil,
+                 presenting: nil
+               }
              ) do
         {:ok, commit(operation.operation_id, :committed, scene.scene_id, scene.revision)}
       else
-        {:duplicate, scene_id, revision} ->
+        {:duplicate, scene_id, revision, _event_presenting} ->
           {:ok, commit(operation.operation_id, :duplicate, scene_id, revision)}
+
+        other ->
+          other
+      end
+    end)
+  end
+
+  @impl true
+  def set_presentation(%Identity{} = identity, operation) do
+    fingerprint = fingerprint(operation)
+
+    transaction(identity, fn connection ->
+      with {:ok, authority} <- authority(connection, identity),
+           :ok <- require_capability(authority, "drawWhiteboard"),
+           {:ok, scene} <- current_scene(connection, identity),
+           :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
+           {:ok, revision, presenting} <-
+             update_presentation(connection, identity, scene.scene_id, operation.presenting),
+           :ok <-
+             insert_receipt(
+               connection,
+               identity,
+               operation.operation_id,
+               fingerprint,
+               "set_presentation",
+               %{
+                 scene_id: scene.scene_id,
+                 revision: revision,
+                 elements: nil,
+                 presenting: presenting
+               }
+             ),
+           :ok <- notify_head(connection, identity, scene.scene_id, revision) do
+        {:ok,
+         operation.operation_id
+         |> commit(:committed, scene.scene_id, revision)
+         |> Map.put(:presenting, presenting)}
+      else
+        {:duplicate, scene_id, revision, presenting} when is_boolean(presenting) ->
+          {:ok,
+           operation.operation_id
+           |> commit(:duplicate, scene_id, revision)
+           |> Map.put(:presenting, presenting)}
 
         other ->
           other
@@ -185,12 +232,37 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
-  defp read_after_event([operation_id, encoded_scene_id, revision, elements]) do
+  defp read_after_event([
+         "submit_update",
+         operation_id,
+         encoded_scene_id,
+         revision,
+         elements,
+         nil
+       ]) do
     %{
+      type: :update,
       operation_id: operation_id,
       scene_id: UUID.load!(encoded_scene_id),
       revision: revision,
       elements: elements
+    }
+  end
+
+  defp read_after_event([
+         "set_presentation",
+         operation_id,
+         encoded_scene_id,
+         revision,
+         nil,
+         presenting
+       ]) do
+    %{
+      type: :presentation,
+      operation_id: operation_id,
+      scene_id: UUID.load!(encoded_scene_id),
+      revision: revision,
+      presenting: presenting
     }
   end
 
@@ -233,9 +305,15 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
              SQL.ensure_scene(),
              context(identity) ++ [uuid(generated_scene_id)]
            ),
-         {:ok, %Postgrex.Result{rows: [[scene_id, revision, app_state]]}} <-
+         {:ok, %Postgrex.Result{rows: [[scene_id, revision, app_state, is_presenting]]}} <-
            Postgrex.query(connection, SQL.lock_scene(), context(identity)) do
-      {:ok, %{scene_id: UUID.load!(scene_id), revision: revision, app_state: app_state}}
+      {:ok,
+       %{
+         scene_id: UUID.load!(scene_id),
+         revision: revision,
+         app_state: app_state,
+         is_presenting: is_presenting
+       }}
     else
       {:ok, %Postgrex.Result{rows: []}} ->
         {:retryable, :storage_unavailable}
@@ -257,8 +335,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       {:ok, %Postgrex.Result{rows: []}} ->
         :missing
 
-      {:ok, %Postgrex.Result{rows: [[^fingerprint, scene_id, revision]]}} ->
-        {:duplicate, UUID.load!(scene_id), revision}
+      {:ok, %Postgrex.Result{rows: [[^fingerprint, scene_id, revision, event_presenting]]}} ->
+        {:duplicate, UUID.load!(scene_id), revision, event_presenting}
 
       {:ok, %Postgrex.Result{rows: [_conflict]}} ->
         {:error, :operation_id_conflict}
@@ -309,11 +387,10 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
          operation_id,
          fingerprint,
          operation_name,
-         scene_id,
-         revision,
-         elements
+         event
        ) do
-    event_encoded_bytes = if elements, do: elements |> JSON.encode!() |> byte_size(), else: 0
+    event_encoded_bytes =
+      if event.elements, do: event.elements |> JSON.encode!() |> byte_size(), else: 0
 
     params =
       context(identity) ++
@@ -323,9 +400,10 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
           operation_id,
           fingerprint,
           operation_name,
-          uuid(scene_id),
-          revision,
-          elements,
+          uuid(event.scene_id),
+          event.revision,
+          event.elements,
+          event.presenting,
           event_encoded_bytes
         ]
 
@@ -343,10 +421,29 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
-  defp insert_scene(connection, identity, scene_id) do
-    case Postgrex.query(connection, SQL.insert_scene(), context(identity) ++ [uuid(scene_id)]) do
+  defp insert_scene(connection, identity, scene_id, is_presenting) do
+    case Postgrex.query(
+           connection,
+           SQL.insert_scene(),
+           context(identity) ++ [uuid(scene_id), is_presenting]
+         ) do
       {:ok, _result} -> :ok
       {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  end
+
+  defp update_presentation(connection, identity, scene_id, presenting) do
+    params = context(identity) ++ [uuid(scene_id), presenting]
+
+    case Postgrex.query(connection, SQL.update_presentation(), params) do
+      {:ok, %Postgrex.Result{rows: [[revision, is_presenting]]}} ->
+        {:ok, revision, is_presenting}
+
+      {:ok, _result} ->
+        {:error, :stale_scene}
+
+      {:error, _error} ->
+        {:retryable, :storage_unavailable}
     end
   end
 

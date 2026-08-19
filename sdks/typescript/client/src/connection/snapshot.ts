@@ -269,6 +269,7 @@ function emptyWhiteboard(): ChalkWhiteboardSummary {
     capabilities: [],
     canDraw: false,
     canClear: false,
+    presenting: false,
     error: null,
   };
 }

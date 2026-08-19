@@ -243,7 +243,10 @@ function stableFixtureMarker(root) {
 }
 
 export function discoverBrokerRuntime(root) {
-  const candidates = findFiles(join(root, "infrastructure")).filter(({ path, content }) => basename(path) === "wrangler.toml" && /\/local-chalk\/\*/.test(content));
+  const candidates = findFiles(join(root, "infrastructure")).filter(({ path, content }) => {
+    if (basename(path) !== "wrangler.toml" || !/\/local-chalk\/\*/.test(content)) return false;
+    return parseRequiredBindings(content).includes("CHALK_SPACE_ID");
+  });
   if (candidates.length !== 1) throw failure(FailureKind.CONFIG, `expected one local broker config, found ${candidates.length}`, { stage: "config" });
   const [{ path: configPath, content }] = candidates;
   const required = parseRequiredBindings(content);
@@ -254,7 +257,7 @@ export function discoverBrokerRuntime(root) {
 
 export function discoverWebJoinPath(root) {
   const routesDirectory = join(root, "apps", "web", "src", "routes");
-  const candidates = findFiles(routesDirectory).filter(({ path, content }) => path.endsWith(".tsx") && /from\s+["']@q9labsai\/chalk-react["']/.test(content));
+  const candidates = findFiles(routesDirectory).filter(({ path, content }) => path.endsWith(".tsx") && /createFileRoute\(\s*["']\/space["']\s*\)/.test(content));
   if (candidates.length !== 1) throw failure(FailureKind.CONFIG, `expected one web join route, found ${candidates.length}`, { stage: "config" });
   const routeMatch = candidates[0].content.match(/createFileRoute\(\s*["']([^"']+)["']\s*\)/);
   if (!routeMatch?.[1]) throw failure(FailureKind.CONFIG, "web join route does not declare a file route", { stage: "config" });

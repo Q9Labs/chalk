@@ -71,6 +71,6 @@ function snapshot(): SpaceSnapshot {
     },
     chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },
-    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, error: null } },
+    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } },
   };
 }

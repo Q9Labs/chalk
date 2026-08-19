@@ -191,6 +191,7 @@ export type WhiteboardSlice = {
     readonly status: "unsubscribed" | "loading" | "ready" | "recovering" | "failed";
     readonly sceneId: string | null;
     readonly revision: string | null;
+    readonly presenting: boolean;
     readonly error: ChalkWhiteboardV1Failure | null;
   };
 };

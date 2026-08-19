@@ -18,17 +18,17 @@ describe("WhiteboardController", () => {
     expect(controller.transport()).toBe(transport);
     expect(transport.startSceneSubscription).not.toHaveBeenCalled();
     await controller.transport()!.startSceneSubscription();
-    onSummary?.({ status: "ready", sceneId: "scene-1", revision: "3", capabilities: ["drawWhiteboard"], canDraw: true, canClear: false, error: null });
-    expect(harness.store.getSnapshot().whiteboard).toEqual({ open: true, engine: { status: "ready", sceneId: "scene-1", revision: "3", error: null } });
+    onSummary?.({ status: "ready", sceneId: "scene-1", revision: "3", capabilities: ["drawWhiteboard"], canDraw: true, canClear: false, presenting: true, error: null });
+    expect(harness.store.getSnapshot().whiteboard).toEqual({ open: true, engine: { status: "ready", sceneId: "scene-1", revision: "3", presenting: true, error: null } });
 
     const stable = harness.store.getSnapshot().whiteboard;
-    onSummary?.({ status: "ready", sceneId: "scene-1", revision: "3", capabilities: ["drawWhiteboard"], canDraw: true, canClear: false, error: null });
+    onSummary?.({ status: "ready", sceneId: "scene-1", revision: "3", capabilities: ["drawWhiteboard"], canDraw: true, canClear: false, presenting: true, error: null });
     expect(harness.store.getSnapshot().whiteboard).toBe(stable);
 
     harness.disconnect();
     expect(transport.stopSceneSubscription).toHaveBeenCalledOnce();
-    expect(harness.store.getSnapshot().whiteboard).toEqual({ open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, error: null } });
-    onSummary?.({ status: "ready", sceneId: "stale-scene", revision: "4", capabilities: ["drawWhiteboard"], canDraw: true, canClear: false, error: null });
+    expect(harness.store.getSnapshot().whiteboard).toEqual({ open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } });
+    onSummary?.({ status: "ready", sceneId: "stale-scene", revision: "4", capabilities: ["drawWhiteboard"], canDraw: true, canClear: false, presenting: true, error: null });
     expect(harness.store.getSnapshot().whiteboard.engine.sceneId).toBeNull();
   });
 });

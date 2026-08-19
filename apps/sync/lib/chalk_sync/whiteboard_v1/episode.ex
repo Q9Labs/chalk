@@ -24,7 +24,8 @@ defmodule ChalkSync.WhiteboardV1.Episode do
          "participant_capabilities" => context.participant_capabilities,
          "scene_id" => context.scene_id,
          "revision" => Integer.to_string(context.revision),
-         "can_draw" => context.can_draw
+         "can_draw" => context.can_draw,
+         "presenting" => context.is_presenting
        }}
     end
   end
@@ -73,6 +74,18 @@ defmodule ChalkSync.WhiteboardV1.Episode do
     end
   end
 
+  def set_presentation(%Identity{} = identity, operation) do
+    with {:ok, commit} <- Repository.set_presentation(identity, operation) do
+      {:ok, commit_frame(commit),
+       %{
+         "type" => "presentation_updated",
+         "scene_id" => commit.scene_id,
+         "revision" => Integer.to_string(commit.revision),
+         "presenting" => commit.presenting
+       }}
+    end
+  end
+
   def snapshot(%Identity{} = identity, request_id) do
     with {:ok, snapshot} <- Repository.snapshot(identity),
          {:ok, pages} <- pages(snapshot.elements),
@@ -98,11 +111,11 @@ defmodule ChalkSync.WhiteboardV1.Episode do
     end
   end
 
-  def read_after(%Identity{} = identity, scene_id, revision) do
-    with {:ok, updates} <- Repository.read_after(identity, scene_id, revision),
-         true <- length(updates) <= @snapshot_page_items,
-         true <- contiguous?(updates, revision),
-         {:ok, frames} <- update_frames(updates) do
+  def read_after(%Identity{} = identity, scene_id, revision, include_presentation \\ true) do
+    with {:ok, events} <- Repository.read_after(identity, scene_id, revision),
+         true <- length(events) <= @snapshot_page_items,
+         true <- contiguous?(events, revision),
+         {:ok, frames} <- replay_frames(events, include_presentation) do
       {:ok, frames}
     else
       false -> {:error, :cursor_reset_required}
@@ -154,26 +167,43 @@ defmodule ChalkSync.WhiteboardV1.Episode do
     }
   end
 
-  defp update_frames(updates) do
-    Enum.reduce_while(updates, {:ok, []}, fn update, {:ok, frames} ->
-      result =
-        Multipart.update_frames(%{
-          "type" => "update",
-          "operation_id" => update.operation_id,
-          "scene_id" => update.scene_id,
-          "revision" => Integer.to_string(update.revision),
-          "elements" => update.elements
-        })
+  defp replay_frames(events, include_presentation) do
+    Enum.reduce_while(events, {:ok, []}, fn event, {:ok, frames} ->
+      result = event_frames(event, include_presentation)
 
       case result do
-        {:ok, update_frames} -> {:cont, {:ok, frames ++ update_frames}}
+        {:ok, event_frames} -> {:cont, {:ok, frames ++ event_frames}}
         failure -> {:halt, failure}
       end
     end)
   end
 
-  defp contiguous?(updates, revision) do
-    updates
+  defp event_frames(%{type: :update} = update, _include_presentation) do
+    Multipart.update_frames(%{
+      "type" => "update",
+      "operation_id" => update.operation_id,
+      "scene_id" => update.scene_id,
+      "revision" => Integer.to_string(update.revision),
+      "elements" => update.elements
+    })
+  end
+
+  defp event_frames(%{type: :presentation} = presentation, true) do
+    {:ok,
+     [
+       %{
+         "type" => "presentation_updated",
+         "scene_id" => presentation.scene_id,
+         "revision" => Integer.to_string(presentation.revision),
+         "presenting" => presentation.presenting
+       }
+     ]}
+  end
+
+  defp event_frames(%{type: :presentation}, false), do: {:ok, []}
+
+  defp contiguous?(events, revision) do
+    events
     |> Enum.map(& &1.revision)
     |> Enum.with_index(revision + 1)
     |> Enum.all?(fn {actual, expected} -> actual == expected end)

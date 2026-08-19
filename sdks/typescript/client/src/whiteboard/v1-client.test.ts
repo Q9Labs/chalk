@@ -18,6 +18,7 @@ describe("ChalkWhiteboardV1Client", () => {
       protocol: "whiteboard-v1",
       token: "participant-token",
       cursor: null,
+      extensions: [{ name: "presentation_v1" }],
     });
 
     welcome(socket);
@@ -60,10 +61,130 @@ describe("ChalkWhiteboardV1Client", () => {
       capabilities: ["drawWhiteboard", "manageWhiteboard"],
       canDraw: true,
       canClear: true,
+      presenting: false,
       error: null,
     });
+
+    const presented = client.setPresentation(true);
+    await settle();
+    const presentation = socket.frames().at(-1)!;
+    expect(presentation).toMatchObject({ type: "set_presentation", presenting: true });
+    socket.receive({ type: "presentation_updated", scene_id: sceneId, revision: "5", presenting: true });
+    socket.receive({ type: "commit", operation_id: presentation.operation_id, outcome: "committed", scene_id: sceneId, revision: "5" });
+    await expect(presented).resolves.toBeUndefined();
+    expect(summaries.at(-1)).toMatchObject({ presenting: true });
+
     client.stopSceneSubscription();
-    expect(summaries.at(-1)).toMatchObject({ status: "unsubscribed", canDraw: false, canClear: false });
+    expect(summaries.at(-1)).toMatchObject({ status: "unsubscribed", canDraw: false, canClear: false, presenting: false });
+  });
+
+  it("accepts the legacy welcome without enabling presentation commands", async () => {
+    const { client, socket, started } = await connectingClient();
+    socket.receive({
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      scene_id: sceneId,
+      revision: "3",
+      can_draw: true,
+    });
+    await finishInitialSnapshot(socket, started);
+
+    await expect(client.setPresentation(true)).rejects.toMatchObject({ code: "unavailable", operation: "set_presentation" });
+    client.stopSceneSubscription();
+  });
+
+  it("falls back to the legacy hello when an older Sync server rejects extensions", async () => {
+    const { client, sockets, clock } = reconnectingClient();
+
+    const started = client.startSceneSubscription();
+    await settle();
+    sockets[0]!.open();
+    await settle();
+    expect(sockets[0]!.frames()[0]).toMatchObject({ extensions: [{ name: "presentation_v1" }] });
+
+    sockets[0]!.close(1009);
+    clock.advance(10);
+    await settle();
+    sockets[1]!.open();
+    await settle();
+    expect(sockets[1]!.frames()[0]).toEqual({
+      type: "hello",
+      protocol: "whiteboard-v1",
+      token: "participant-token",
+      cursor: null,
+    });
+
+    sockets[1]!.receive({
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      scene_id: sceneId,
+      revision: "3",
+      can_draw: true,
+    });
+    await finishInitialSnapshot(sockets[1]!, started);
+    await expect(client.setPresentation(true)).rejects.toMatchObject({ code: "unavailable", operation: "set_presentation" });
+    client.stopSceneSubscription();
+  });
+
+  it("reconnects after a negotiated gap so welcome repairs presentation state", async () => {
+    const summaries: unknown[] = [];
+    const events: unknown[] = [];
+    const { client, sockets, clock } = reconnectingClient({ onSummary: (summary) => summaries.push(summary) });
+
+    const started = client.startSceneSubscription();
+    await settle();
+    sockets[0]!.open();
+    await settle();
+    welcome(sockets[0]!);
+    await finishInitialSnapshot(sockets[0]!, started);
+    client.subscribe((event) => events.push(event));
+    events.length = 0;
+
+    sockets[0]!.receive({ type: "reset_required", scene_id: sceneId, reason: "gap" });
+    await settle();
+    clock.advance(10);
+    await settle();
+    sockets[1]!.open();
+    await settle();
+    expect(sockets[1]!.frames()[0]).toMatchObject({ extensions: [{ name: "presentation_v1" }] });
+
+    sockets[1]!.receive({
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      scene_id: sceneId,
+      revision: "6",
+      can_draw: true,
+      presenting: true,
+    });
+    await settle();
+    const request = sockets[1]!.frames().find((frame) => frame.type === "request_snapshot")!;
+    sockets[1]!.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "6",
+      page: 0,
+      page_count: 1,
+      elements: [],
+      app_state: null,
+    });
+    await settle();
+
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "reset_required" }));
+    expect(summaries.at(-1)).toMatchObject({ status: "ready", revision: "6", presenting: true });
+    client.stopSceneSubscription();
   });
 
   it("persists updates before send and clears the retry row after a commit", async () => {
@@ -238,6 +359,24 @@ async function connectingClient(overrides: Partial<ConstructorParameters<typeof 
   return { client, socket, started };
 }
 
+function reconnectingClient(overrides: Partial<ConstructorParameters<typeof ChalkWhiteboardV1Client>[0]> = {}) {
+  const sockets = [new TestSocket(), new TestSocket()];
+  const clock = new TestClock();
+  const availableIds = [...ids];
+  let socketIndex = 0;
+  const client = new ChalkWhiteboardV1Client({
+    url: "ws://sync.test/v1/whiteboard",
+    token: async () => "participant-token",
+    files: filesStub,
+    ids: { next: () => availableIds.shift()! },
+    webSocket: { connect: () => sockets[socketIndex++]! },
+    clock,
+    reconnectDelayMs: 10,
+    ...overrides,
+  });
+  return { client, sockets, clock };
+}
+
 async function subscribedClient(overrides: Partial<ConstructorParameters<typeof ChalkWhiteboardV1Client>[0]> = {}) {
   const { client, socket, started } = await connectingClient(overrides);
   welcome(socket);
@@ -259,6 +398,7 @@ function welcome(socket: TestSocket): void {
     scene_id: sceneId,
     revision: "3",
     can_draw: true,
+    presenting: false,
   });
 }
 

@@ -704,6 +704,7 @@ create table sync_whiteboard_scenes (
     space_id uuid not null,
     scene_id uuid not null,
     is_current boolean not null default true,
+    presenting_episode_id uuid,
     revision bigint not null default 0,
     app_state jsonb,
     element_count integer not null default 0,
@@ -792,6 +793,7 @@ create table sync_whiteboard_operation_receipts (
     scene_id uuid not null,
     revision bigint not null,
     event_elements jsonb,
+    event_presenting boolean,
     event_encoded_bytes integer not null default 0,
     completed_at timestamptz not null default now(),
     primary key (tenant_id, space_id, participant_id, operation_id),
@@ -806,18 +808,26 @@ create table sync_whiteboard_operation_receipts (
         on delete restrict,
     check (octet_length(operation_id) between 16 and 64),
     check (octet_length(request_fingerprint) = 32),
-    check (operation_name in ('submit_update', 'clear', 'set_draw_permission')),
+    check (operation_name in ('submit_update', 'clear', 'set_draw_permission', 'set_presentation')),
     check (outcome = 'committed'),
     check (revision >= 0),
     check (
         (
             operation_name = 'submit_update'
             and jsonb_typeof(event_elements) = 'array'
+            and event_presenting is null
             and event_encoded_bytes between 2 and 262144
         )
         or (
-            operation_name <> 'submit_update'
+            operation_name = 'set_presentation'
             and event_elements is null
+            and event_presenting is not null
+            and event_encoded_bytes = 0
+        )
+        or (
+            operation_name not in ('submit_update', 'set_presentation')
+            and event_elements is null
+            and event_presenting is null
             and event_encoded_bytes = 0
         )
     )

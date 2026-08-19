@@ -112,14 +112,17 @@ function response(status, body) {
 test("local adapter discovery finds the broker binding and web join route", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-discovery-test-"));
   try {
-    const brokerDirectory = join(root, "infrastructure", "broker");
+    const brokerDirectory = join(root, "infrastructure", "episode-broker");
+    const legacyBrokerDirectory = join(root, "infrastructure", "legacy-broker");
     const routesDirectory = join(root, "apps", "web", "src", "routes");
     await mkdir(brokerDirectory, { recursive: true });
+    await mkdir(legacyBrokerDirectory, { recursive: true });
     await mkdir(routesDirectory, { recursive: true });
     await writeFile(join(brokerDirectory, "wrangler.toml"), '[routes]\npattern = "chalk.local/local-chalk/*"\n[secrets]\nrequired = ["CHALK_API_KEY", "CHALK_SPACE_ID", "CHALK_TENANT_ID"]\n');
-    await writeFile(join(routesDirectory, "space.tsx"), 'import { SpaceView } from "@q9labsai/chalk-react";\nexport const Route = createFileRoute("/local")({ component: SpaceView });\n');
+    await writeFile(join(legacyBrokerDirectory, "wrangler.toml"), '[routes]\npattern = "chalk.local/local-chalk/*"\n[secrets]\nrequired = ["CHALK_API_KEY", "CHALK_LEGACY_SPACE_ID", "CHALK_TENANT_ID"]\n');
+    await writeFile(join(routesDirectory, "space.tsx"), 'import { Outlet, createFileRoute } from "@tanstack/react-router";\nexport const Route = createFileRoute("/space")({ component: Outlet });\n');
     assert.deepEqual(discoverBrokerRuntime(root), { configPath: join(brokerDirectory, "wrangler.toml"), configName: "wrangler.toml", directory: brokerDirectory, spaceBindingName: "CHALK_SPACE_ID" });
-    assert.equal(discoverWebJoinPath(root), "/local");
+    assert.equal(discoverWebJoinPath(root), "/space");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

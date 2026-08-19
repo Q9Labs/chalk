@@ -17,7 +17,7 @@ const EMPTY = empty({
   }),
   chat: empty({ status: "idle", messages: empty([]), pendingSends: empty([]), readReceipts: empty([]), unreadCount: 0, pagination: empty({ cursor: null, hasOlder: false, historyTruncated: false }), lastError: null }),
   reactions: empty({ active: empty([]) }),
-  whiteboard: empty({ open: false, engine: empty({ status: "unsubscribed", sceneId: null, revision: null, error: null }) }),
+  whiteboard: empty({ open: false, engine: empty({ status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }) }),
 }) satisfies SpaceSnapshot;
 
 export class SpaceStore {

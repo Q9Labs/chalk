@@ -162,6 +162,7 @@ export function whiteboardTransport(): ChalkWhiteboardV1Transport {
     requestSnapshot: vi.fn(),
     clear: vi.fn(),
     setDrawPermission: vi.fn(),
+    setPresentation: vi.fn(),
     files: { initiateUpload: vi.fn(), finalizeUpload: vi.fn(), getDownloadUrl: vi.fn() },
   };
 }

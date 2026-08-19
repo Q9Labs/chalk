@@ -53,7 +53,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   def lock_scene do
     """
-    select scene_id, revision, app_state
+    select scene_id, revision, app_state, coalesce(presenting_episode_id = $3, false) as is_presenting
     from sync_whiteboard_scenes
     where tenant_id = $1 and space_id = $2 and is_current and $3::uuid is not null
     for update
@@ -62,7 +62,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   def select_receipt do
     """
-    select request_fingerprint, scene_id, revision
+    select request_fingerprint, scene_id, revision, event_presenting
     from sync_whiteboard_operation_receipts
     where tenant_id = $1 and space_id = $2
       and participant_id = $3 and operation_id = $4
@@ -127,12 +127,12 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       tenant_id, space_id, episode_id,
       participant_id, submitted_generation,
       operation_id, request_fingerprint, operation_name,
-      outcome, scene_id, revision, event_elements, event_encoded_bytes
+      outcome, scene_id, revision, event_elements, event_presenting, event_encoded_bytes
     ) values (
       $1, $2, $3,
       $4, $5,
       $6, $7, $8,
-      'committed', $9, $10, $11, $12
+      'committed', $9, $10, $11, $12, $13
     )
     """
   end
@@ -148,8 +148,20 @@ defmodule ChalkSync.WhiteboardV1.SQL do
   def insert_scene do
     """
     insert into sync_whiteboard_scenes (
-      tenant_id, space_id, scene_id, is_current, revision
-    ) select $1, $2, $4, true, 0 where $3::uuid is not null
+      tenant_id, space_id, scene_id, is_current, presenting_episode_id, revision
+    ) select $1, $2, $4, true, case when $5 then $3::uuid else null end, 0 where $3::uuid is not null
+    """
+  end
+
+  def update_presentation do
+    """
+    update sync_whiteboard_scenes
+    set
+      presenting_episode_id = case when $5 then $3::uuid else null end,
+      revision = revision + 1,
+      updated_at = now()
+    where tenant_id = $1 and space_id = $2 and scene_id = $4 and is_current and $3::uuid is not null
+    returning revision, coalesce(presenting_episode_id = $3, false) as is_presenting
     """
   end
 
@@ -186,10 +198,10 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   def read_after do
     """
-    select operation_id, scene_id, revision, event_elements
+    select operation_name, operation_id, scene_id, revision, event_elements, event_presenting
     from sync_whiteboard_operation_receipts
     where tenant_id = $1 and episode_id = $2 and scene_id = $3 and revision > $4
-      and operation_name = 'submit_update'
+      and operation_name in ('submit_update', 'set_presentation')
     order by revision
     limit 129
     """

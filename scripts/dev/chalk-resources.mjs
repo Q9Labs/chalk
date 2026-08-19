@@ -190,7 +190,7 @@ function adoptable(name, container) {
   if (!container?.running) return false;
   const image = String(container.image || "");
   if (name === "postgres" && (!image.startsWith("postgres:18.3") || container.dataChecksums !== "on")) return false;
-  if (name === "redis" && !image.startsWith("redis:8.8")) return false;
+  if (name === "redis" && !image.startsWith("redis:8.10")) return false;
   if (name === "observabilityPostgres" && !image.startsWith("postgres:18.3")) return false;
   if (observabilityPortOwners.some(([portName]) => portName === name && portName !== "observabilityPostgres")) {
     if (!image.startsWith("grafana/otel-lgtm:0.28.0")) return false;

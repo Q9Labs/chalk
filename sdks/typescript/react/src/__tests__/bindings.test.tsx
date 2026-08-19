@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { Capability, ChatUploadFile, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { Capability, ChalkWhiteboardV1Transport, ChatUploadFile, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { act, cleanup, fireEvent, render, renderHook, waitFor, within } from "@testing-library/react";
 import { type PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,12 +16,14 @@ const screenShareSpy = vi.hoisted(() =>
     </button>
   )),
 );
+const whiteboardViewSpy = vi.hoisted(() => vi.fn(() => <div role="region" aria-label="Shared whiteboard" />));
 
 vi.mock("@q9labsai/chalk-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@q9labsai/chalk-client")>()),
   createSpaceClient: createSpaceClientSpy,
 }));
 vi.mock("../components/composite/ScreenShareView", () => ({ ScreenShareViewSurface: screenShareSpy }));
+vi.mock("../components/whiteboard-view/WhiteboardView", () => ({ WhiteboardView: whiteboardViewSpy }));
 
 type TestClient = SpaceClient & {
   readonly setSnapshot: (snapshot: SpaceSnapshot) => void;
@@ -540,6 +542,35 @@ describe("React bindings", () => {
     expect(within(view.container).queryByRole("button", { name: "Chat" })).not.toBeInTheDocument();
   });
 
+  it("presents and hides the shared whiteboard from the Space snapshot", async () => {
+    const transport = createWhiteboardTransport();
+    const initial = createSnapshot(["drawWhiteboard"]);
+    const client = createTestClient(
+      {
+        ...initial,
+        connection: { ...initial.connection, status: "live" },
+        whiteboard: { open: true, engine: { status: "ready", sceneId: "scene-1", revision: "4", presenting: false, error: null } },
+      },
+      transport,
+    );
+    const view = render(<Chalk client={client} entrance={false} layout="presentation" />);
+
+    await waitFor(() => expect(transport.startSceneSubscription).toHaveBeenCalledOnce());
+    fireEvent.click(within(view.container).getAllByRole("button", { name: /Whiteboard|Board/ })[0]!);
+    expect(transport.setPresentation).toHaveBeenCalledWith(true);
+
+    act(() => client.setSnapshot({ ...client.getSnapshot(), whiteboard: { ...client.getSnapshot().whiteboard, engine: { ...client.getSnapshot().whiteboard.engine, presenting: true } } }));
+    expect(within(view.container).getByRole("region", { name: "Shared whiteboard" })).toBeInTheDocument();
+
+    fireEvent.click(within(view.container).getAllByRole("button", { name: /Whiteboard|Board/ })[0]!);
+    expect(transport.setPresentation).toHaveBeenLastCalledWith(false);
+
+    act(() => client.setSnapshot({ ...client.getSnapshot(), whiteboard: { ...client.getSnapshot().whiteboard, engine: { ...client.getSnapshot().whiteboard.engine, presenting: false } } }));
+    expect(within(view.container).queryByRole("region", { name: "Shared whiteboard" })).not.toBeInTheDocument();
+    expect(transport.startSceneSubscription).toHaveBeenCalledOnce();
+    expect(transport.stopSceneSubscription).not.toHaveBeenCalled();
+  });
+
   it("gates the separately confirmed End Episode action on the endEpisode capability", () => {
     const authorized = createTestClient(createSnapshot(["sendChat", "endEpisode"]));
     authorized.setSnapshot({ ...authorized.getSnapshot(), connection: { ...authorized.getSnapshot().connection, status: "live" } });
@@ -559,7 +590,7 @@ describe("React bindings", () => {
   });
 });
 
-function createTestClient(initialSnapshot = createSnapshot()): TestClient {
+function createTestClient(initialSnapshot = createSnapshot(), whiteboardTransport: ChalkWhiteboardV1Transport | null = null): TestClient {
   let snapshot = initialSnapshot;
   const listeners = new Set<() => void>();
   const unavailable = vi.fn(async () => undefined);
@@ -594,7 +625,7 @@ function createTestClient(initialSnapshot = createSnapshot()): TestClient {
       renameSelf: unavailable,
     },
     reactions: { send: unavailable },
-    whiteboard: { transport: () => null },
+    whiteboard: { transport: () => whiteboardTransport },
     join: vi.fn(async () => undefined),
     leave: vi.fn(async () => undefined),
     dispose: vi.fn(),
@@ -616,6 +647,21 @@ function createTestClient(initialSnapshot = createSnapshot()): TestClient {
   });
 }
 
+function createWhiteboardTransport(): ChalkWhiteboardV1Transport {
+  return {
+    startSceneSubscription: vi.fn(async () => undefined),
+    stopSceneSubscription: vi.fn(),
+    subscribe: vi.fn(() => () => undefined),
+    submitUpdate: vi.fn(),
+    sendCursor: vi.fn(),
+    requestSnapshot: vi.fn(),
+    clear: vi.fn(),
+    setDrawPermission: vi.fn(),
+    setPresentation: vi.fn(async () => undefined),
+    files: { initiateUpload: vi.fn(), finalizeUpload: vi.fn(), getDownloadUrl: vi.fn() },
+  };
+}
+
 function createSnapshot(capabilities: readonly Capability[] = ["sendChat"]): SpaceSnapshot {
   return {
     connection: { status: "idle", episode: null, lastError: null },
@@ -635,7 +681,7 @@ function createSnapshot(capabilities: readonly Capability[] = ["sendChat"]): Spa
     },
     chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },
-    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, error: null } },
+    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } },
   };
 }
 

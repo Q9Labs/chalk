@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -176,12 +176,12 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
   const client = useSpaceClient();
   const self = useSelf();
   const media = useMedia();
+  const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
-  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.skin ?? "classic", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
   const resolvedSkin: ThemeSkin = props.theme?.skin ?? "classic";
@@ -228,14 +228,15 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
     }
   }, []);
   const whiteboardTransport = client.whiteboard.transport();
-  const whiteboardEnabled = props.features?.whiteboard !== false && whiteboardOpen && canDrawWhiteboard;
-  const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardEnabled);
+  const whiteboardAvailable = props.features?.whiteboard !== false;
+  const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardAvailable);
+  const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? whiteboardSubscription.transport.setPresentation : undefined;
   useEffect(() => {
     if (whiteboardSubscription.status === "failed") setCommandError(whiteboardSubscription.error.message);
     else if (whiteboardSubscription.status === "loading" || whiteboardSubscription.status === "ready") setCommandError(null);
   }, [whiteboardSubscription]);
   const whiteboard =
-    whiteboardEnabled && whiteboardSubscription.status === "ready"
+    whiteboardAvailable && whiteboardState.engine.presenting && whiteboardSubscription.status === "ready"
       ? {
           isOpen: true,
           props: {
@@ -274,7 +275,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       features={{ ...props.features, sounds: props.features?.sounds !== false && settings.experience.sounds }}
       onOpenDiagnostics={props.onOpenDiagnostics}
       whiteboard={whiteboard}
-      onToggleWhiteboard={() => setWhiteboardOpen((open) => !open)}
+      onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
       infoDialog={props.features?.info !== false && props.inviteLink ? { isOpen: infoOpen, onOpenChange: setInfoOpen, spaceName: props.spaceName, inviteLink: props.inviteLink, onCopyLink: () => void navigator.clipboard?.writeText(props.inviteLink!) } : undefined}
       onOpenSettings={
         props.features?.settings !== false
