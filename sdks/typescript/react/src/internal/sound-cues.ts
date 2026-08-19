@@ -52,6 +52,23 @@ export interface SoundPlayer {
   readonly dispose: () => void;
 }
 
+const AUTOPLAY_UNLOCK_EVENTS = ["pointerdown", "touchend", "click", "keydown"] as const;
+
+type SinkAwareAudioElement = HTMLAudioElement & {
+  setSinkId: (sinkId: string) => Promise<void>;
+  sinkId?: string;
+};
+
+type SoundUnlockTarget = Pick<EventTarget, "addEventListener" | "removeEventListener">;
+
+function isAutoplayBlocked(cause: unknown): boolean {
+  return typeof DOMException !== "undefined" && cause instanceof DOMException && cause.name === "NotAllowedError";
+}
+
+function supportsSinkSelection(element: HTMLAudioElement): element is SinkAwareAudioElement {
+  return "setSinkId" in element && typeof element.setSinkId === "function";
+}
+
 /** Picks the Opus file when the browser can decode it, otherwise the MP3. */
 export function soundSourceFor(cue: SoundCue, canPlay: (mimeType: string) => boolean): string {
   const asset = CHALK_SOUND_ASSETS[cue];
@@ -62,11 +79,58 @@ export function soundSourceFor(cue: SoundCue, canPlay: (mimeType: string) => boo
  * Lazily creates one `HTMLAudioElement` per cue and replays it from the start. Playback failures
  * (autoplay policy before the first gesture, network) are reported through `onError` and never thrown.
  */
-export function createSoundPlayer({ volume = 0.6, onError }: { volume?: number; onError?: (cue: SoundCue, cause: unknown) => void } = {}): SoundPlayer {
+export function createSoundPlayer({ volume = 0.6, outputDeviceId, onError, unlockTarget = typeof window === "undefined" ? null : window }: { volume?: number; outputDeviceId?: string; onError?: (cue: SoundCue, cause: unknown) => void; unlockTarget?: SoundUnlockTarget | null } = {}): SoundPlayer {
   const elements = new Map<SoundCue, HTMLAudioElement>();
   const lastPlayed = new Map<SoundCue, number>();
+  const blocked = new Set<SoundCue>();
+  const playbackInFlight = new Set<SoundCue>();
   const probe = typeof Audio === "undefined" ? null : new Audio();
   const canPlay = (mimeType: string) => probe !== null && probe.canPlayType(mimeType) !== "";
+  let listeningForUnlock = false;
+
+  const removeUnlockListeners = () => {
+    if (!unlockTarget || !listeningForUnlock) return;
+    for (const event of AUTOPLAY_UNLOCK_EVENTS) unlockTarget.removeEventListener(event, retryBlocked, true);
+    listeningForUnlock = false;
+  };
+
+  const addUnlockListeners = () => {
+    if (!unlockTarget || listeningForUnlock) return;
+    for (const event of AUTOPLAY_UNLOCK_EVENTS) unlockTarget.addEventListener(event, retryBlocked, { capture: true, passive: true });
+    listeningForUnlock = true;
+  };
+
+  const reportPlaybackFailure = (cue: SoundCue, cause: unknown) => {
+    if (isAutoplayBlocked(cause)) {
+      blocked.add(cue);
+      addUnlockListeners();
+    }
+    onError?.(cue, cause);
+  };
+
+  const playElement = (cue: SoundCue, element: HTMLAudioElement) => {
+    if (playbackInFlight.has(cue)) return;
+    playbackInFlight.add(cue);
+    element.currentTime = 0;
+    element.play().then(
+      () => {
+        playbackInFlight.delete(cue);
+        blocked.delete(cue);
+        if (blocked.size === 0) removeUnlockListeners();
+      },
+      (cause: unknown) => {
+        playbackInFlight.delete(cue);
+        reportPlaybackFailure(cue, cause);
+      },
+    );
+  };
+
+  function retryBlocked(): void {
+    for (const cue of blocked) {
+      const element = elements.get(cue);
+      if (element) playElement(cue, element);
+    }
+  }
 
   return {
     play: (cue) => {
@@ -79,12 +143,15 @@ export function createSoundPlayer({ volume = 0.6, onError }: { volume?: number; 
         element = new Audio(soundSourceFor(cue, canPlay));
         element.preload = "auto";
         element.volume = volume;
+        if (outputDeviceId && supportsSinkSelection(element) && element.sinkId !== outputDeviceId) void element.setSinkId(outputDeviceId).catch(() => undefined);
         elements.set(cue, element);
       }
-      element.currentTime = 0;
-      element.play().catch((cause: unknown) => onError?.(cue, cause));
+      playElement(cue, element);
     },
     dispose: () => {
+      removeUnlockListeners();
+      blocked.clear();
+      playbackInFlight.clear();
       for (const element of elements.values()) {
         element.pause();
         element.removeAttribute("src");

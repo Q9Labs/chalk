@@ -18,6 +18,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+## [4.1.3] - 2026-08-19
+
+### Fixed
+
+- Made React SDK Space sound cues recover when browser autoplay policy blocks
+  the first attempt: the pending cue now retries on the next pointer, touch,
+  click, or keyboard interaction. Cue audio also follows the selected speaker
+  when the browser supports output-device routing.
+
 ## [4.1.2] - 2026-08-18
 
 ### Added

@@ -1,20 +1,21 @@
 import { useEffect, useRef } from "react";
 
-import { useSpaceClient } from "../bindings/hooks";
+import { useMedia, useSpaceClient } from "../bindings/hooks";
 import { createSoundPlayer, diffSoundCues, type SoundPlayer } from "./sound-cues";
 
 /**
  * Plays the join / leave / message / hand-raise / reaction cues for snapshot changes on the
- * current client while `enabled`. Autoplay refusals before the first user gesture are ignored.
+ * current client while `enabled`. Autoplay refusals are retried after the next user gesture.
  */
-export function useSoundCues(enabled: boolean, createPlayer: () => SoundPlayer = () => createSoundPlayer()): void {
+export function useSoundCues(enabled: boolean, createPlayer: (options: { readonly outputDeviceId?: string }) => SoundPlayer = createSoundPlayer): void {
   const client = useSpaceClient();
+  const outputDeviceId = useMedia().selection.speaker ?? undefined;
   const createPlayerRef = useRef(createPlayer);
   createPlayerRef.current = createPlayer;
 
   useEffect(() => {
     if (!enabled) return;
-    const player = createPlayerRef.current();
+    const player = createPlayerRef.current({ outputDeviceId });
     let previous = client.getSnapshot();
     const unsubscribe = client.subscribe(() => {
       const next = client.getSnapshot();
@@ -25,5 +26,5 @@ export function useSoundCues(enabled: boolean, createPlayer: () => SoundPlayer =
       unsubscribe();
       player.dispose();
     };
-  }, [client, enabled]);
+  }, [client, enabled, outputDeviceId]);
 }

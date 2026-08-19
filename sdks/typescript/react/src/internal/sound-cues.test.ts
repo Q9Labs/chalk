@@ -64,7 +64,7 @@ describe("soundSourceFor", () => {
 });
 
 describe("createSoundPlayer", () => {
-  it("throttles repeated cues and reports playback failures instead of throwing", () => {
+  it("throttles repeated cues and reports playback failures instead of throwing", async () => {
     vi.useFakeTimers();
     const play = vi.fn(() => Promise.reject(new Error("NotAllowedError")));
     class FakeAudio {
@@ -83,12 +83,64 @@ describe("createSoundPlayer", () => {
     player.play("join");
     player.play("join");
     expect(play).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
     vi.advanceTimersByTime(CUE_THROTTLE_MS + 1);
     player.play("join");
     expect(play).toHaveBeenCalledTimes(2);
     player.dispose();
     vi.unstubAllGlobals();
     vi.useRealTimers();
-    return vi.waitFor(() => expect(onError).toHaveBeenCalledWith("join", expect.any(Error)));
+    expect(onError).toHaveBeenCalledWith("join", expect.any(Error));
+  });
+
+  it("retries an autoplay-blocked cue on the next user gesture", async () => {
+    const play = vi.fn().mockRejectedValueOnce(new DOMException("Playback requires interaction", "NotAllowedError")).mockResolvedValue(undefined);
+    class FakeAudio {
+      preload = "";
+      volume = 1;
+      currentTime = 0;
+      constructor(public src = "") {}
+      canPlayType = () => "probably";
+      play = play;
+      pause = vi.fn();
+      removeAttribute = vi.fn();
+    }
+    vi.stubGlobal("Audio", FakeAudio);
+    const unlockTarget = new EventTarget();
+    const player = createSoundPlayer({ unlockTarget });
+
+    player.play("message");
+    await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+    unlockTarget.dispatchEvent(new Event("click"));
+    await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(2));
+
+    player.dispose();
+    unlockTarget.dispatchEvent(new Event("click"));
+    expect(play).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
+  });
+
+  it("routes cue audio to the selected output device when supported", () => {
+    const setSinkId = vi.fn(() => Promise.resolve());
+    class FakeAudio {
+      preload = "";
+      volume = 1;
+      currentTime = 0;
+      sinkId = "";
+      constructor(public src = "") {}
+      canPlayType = () => "probably";
+      play = vi.fn(() => Promise.resolve());
+      pause = vi.fn();
+      removeAttribute = vi.fn();
+      setSinkId = setSinkId;
+    }
+    vi.stubGlobal("Audio", FakeAudio);
+    const player = createSoundPlayer({ outputDeviceId: "speaker-2" });
+
+    player.play("reaction");
+
+    expect(setSinkId).toHaveBeenCalledWith("speaker-2");
+    player.dispose();
+    vi.unstubAllGlobals();
   });
 });
