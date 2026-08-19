@@ -84,12 +84,12 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
       this.store.createLease(lease);
       await this.state.storage.setAlarm(lease.expiresAt);
       this.log("episode_lease_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
-      const spaceId = await provisionAnonymousSpace(this.chalk(input.trace), lease, this.environment.CHALK_TENANT_ID, configuredEpisodeDeadlineSeconds(this.environment));
+      const spaceId = await provisionAnonymousSpace(this.chalk(input.trace), lease, this.environment.CHALK_TENANT_ID);
       this.store.setSpace(spaceId);
       lease = { ...lease, spaceId };
       this.log("space_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
     } else if (input.action === "create" && lease.spaceOrigin === "isolated" && !lease.spaceId && lease.creatorCredentialId === input.participantCredentialId) {
-      const spaceId = await provisionAnonymousSpace(this.chalk(input.trace), lease, this.environment.CHALK_TENANT_ID, configuredEpisodeDeadlineSeconds(this.environment));
+      const spaceId = await provisionAnonymousSpace(this.chalk(input.trace), lease, this.environment.CHALK_TENANT_ID);
       this.store.setSpace(spaceId);
       lease = { ...lease, spaceId };
       this.log("space_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
@@ -204,7 +204,7 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
   private async endEpisode(lease: LeaseRecord, trace: TraceContext, reason: string): Promise<void> {
     let cleanupLease = lease;
     if (lease.spaceOrigin === "isolated" && !lease.spaceId) {
-      const spaceId = await provisionAnonymousSpace(this.chalk(trace), lease, this.environment.CHALK_TENANT_ID, configuredEpisodeDeadlineSeconds(this.environment));
+      const spaceId = await provisionAnonymousSpace(this.chalk(trace), lease, this.environment.CHALK_TENANT_ID);
       this.store.setSpace(spaceId);
       cleanupLease = { ...lease, spaceId };
       this.log("space_recovered_for_cleanup", { episodeLeaseLogId: lease.logId, journeyId: trace.journeyId, reason });

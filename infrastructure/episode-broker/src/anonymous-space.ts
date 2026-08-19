@@ -6,7 +6,8 @@ import type { LeaseRecord } from "./store";
 const anonymousSpaceMediaPlane = "cf_sfu";
 const canonicalID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
-export async function provisionAnonymousSpace(chalk: ChalkServerClient, lease: LeaseRecord, tenantId: string, durationSeconds: number): Promise<string> {
+export async function provisionAnonymousSpace(chalk: ChalkServerClient, lease: LeaseRecord, tenantId: string): Promise<string> {
+  const durationSeconds = isolatedSpaceDurationSeconds(lease);
   const space = await chalk.spaces.create(
     {
       admissionPolicy: { mode: "open" },
@@ -22,6 +23,12 @@ export async function provisionAnonymousSpace(chalk: ChalkServerClient, lease: L
   );
   requireExpectedSpace(space, tenantId, durationSeconds);
   return space.id;
+}
+
+export function isolatedSpaceDurationSeconds(lease: LeaseRecord): number {
+  const durationSeconds = (lease.expiresAt - lease.createdAt) / 1_000;
+  if (!Number.isSafeInteger(durationSeconds) || durationSeconds <= 0) throw new BrokerError(503, "The Space lease duration is invalid.");
+  return durationSeconds;
 }
 
 export function leaseSpaceId(lease: LeaseRecord, legacySpaceId: string): string {
