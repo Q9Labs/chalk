@@ -911,7 +911,7 @@ load_active_pointer() {
     (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
     (.runtime_sha256 | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
     (.environment == "staging" or .environment == "production") and
-    (.parameter_prefix == ("/chalk/" + .environment) or (.parameter_prefix | startswith("/chalk/" + .environment + "/"))) and
+    (.environment as $environment | (.parameter_prefix == ("/chalk/" + $environment) or (.parameter_prefix | startswith("/chalk/" + $environment + "/")))) and
     (.excluded_secrets | type == "array" and (map(. as $id | $allowed | index($id) != null) | all) and (.[0:] == (sort | unique))) and
     (
       .excluded_secrets as $excluded |

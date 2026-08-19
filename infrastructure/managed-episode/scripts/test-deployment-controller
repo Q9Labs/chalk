@@ -188,7 +188,7 @@ make_request() {
   local excluded="${3:-[]}"
   local environment="${4:-production}"
   local adopt_existing_release="${5:-false}"
-  jq -n --arg release_id "$release_id" --arg source_revision "$source_revision" --arg environment "$environment" --arg parameter_prefix "/chalk/${environment}" --argjson excluded "$excluded" --argjson adopt_existing_release "$adopt_existing_release" \
+  jq -n --arg release_id "$release_id" --arg source_revision "$source_revision" --arg environment "$environment" --arg parameter_prefix "/chalk/${environment}/managed-episode" --argjson excluded "$excluded" --argjson adopt_existing_release "$adopt_existing_release" \
     '{schema_version:2,controller_version:2,adopt_existing_release:$adopt_existing_release,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:"ap-southeast-1",parameter_prefix:$parameter_prefix,excluded_secrets:$excluded,request_id:("test-"+$release_id),requested_at:"2026-08-18T00:00:00Z"}' >"$output"
   chmod 0600 "$output"
 }
@@ -336,7 +336,7 @@ mkdir -p "$staging_state"
 make_request staging "${fixture_root}/staging-request.json" '[]' staging
 make_manifest staging >"${fixture_root}/staging-manifest.json"
 run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
-jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
 
 stable_state="${fixture_root}/stable-state"
 mkdir -p "$stable_state"
