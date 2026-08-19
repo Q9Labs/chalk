@@ -1,4 +1,9 @@
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import mdx from "@mdx-js/rollup";
+import rehypeShiki from "@shikijs/rehype";
+import rehypeAutolinkHeadings from "rehype-autolink-headings";
+import rehypeSlug from "rehype-slug";
+import remarkGfm from "remark-gfm";
 import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig, type ProxyOptions } from "vite";
@@ -116,6 +121,13 @@ const config = defineConfig({
         enabled: true,
       },
     }),
+    {
+      enforce: "pre",
+      ...mdx({
+        remarkPlugins: [remarkGfm],
+        rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "append" }], [rehypeShiki, { theme: "github-dark" }]],
+      }),
+    },
     viteReact(),
   ],
 });

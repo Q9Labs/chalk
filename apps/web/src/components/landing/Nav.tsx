@@ -3,12 +3,13 @@ import { useState } from "react";
 
 import { Icon } from "./Icon";
 
-const SECTIONS = [
+const NAV_LINKS = [
   { href: "#product", label: "Product" },
   { href: "#spaces", label: "Spaces" },
   { href: "#speed", label: "Speed" },
   { href: "#self-host", label: "Self-host" },
   { href: "#platform", label: "Platform" },
+  { href: "/docs", label: "Docs" },
 ] as const;
 
 function MenuIcon({ open }: { open: boolean }) {
@@ -41,9 +42,9 @@ export function SiteNav() {
         </a>
 
         <nav className="nav-links" aria-label="Product navigation">
-          {SECTIONS.map((section) => (
-            <a key={section.href} href={section.href}>
-              {section.label}
+          {NAV_LINKS.map((link) => (
+            <a key={link.href} href={link.href}>
+              {link.label}
             </a>
           ))}
         </nav>
@@ -68,9 +69,9 @@ export function SiteNav() {
           kind of thing that only stays true by accident. */}
       <nav className="nav-menu" id="nav-menu" aria-label="Site navigation" hidden={!menuOpen}>
         <div className="container nav-menu-inner">
-          {SECTIONS.map((section) => (
-            <a key={section.href} href={section.href} onClick={closeMenu}>
-              {section.label}
+          {NAV_LINKS.map((link) => (
+            <a key={link.href} href={link.href} onClick={closeMenu}>
+              {link.label}
             </a>
           ))}
           <a href="/home" onClick={closeMenu}>

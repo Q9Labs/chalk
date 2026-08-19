@@ -1,0 +1,18 @@
+## Keep identity and Chalk access at your backend boundary
+
+Your application remains the identity authority. It asks the Chalk server SDK or control plane for an `AccessGrant`, then returns that envelope to the client through `getAccess`. The client uses the grant for one Participant in one live Episode and refreshes it without exposing its contents to the UI.
+
+For control-plane requests, the checked-in OpenAPI contract accepts account authentication or bearer/API-key authentication on the routes that declare it. Participant media and Sync credentials are short-lived bearer credentials bound to a live Participant generation and Episode.
+
+```ts
+const client = createSpaceClient({
+  space: "design-review",
+  getAccess: ({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
+});
+```
+
+The example keeps your application route in front of Chalk. Do not place a tenant API key in browser code, and do not persist an `AccessGrant` beyond the client lifetime. If access expires, let `getAccess` issue a fresh envelope for `refresh` or `retry`.
+
+<Callout tone="caution" title="Server-only secrets">
+  Webhook secrets and control-plane tokens belong in server secret storage. Browser code should receive only the narrow access envelope needed for its current Participant.
+</Callout>

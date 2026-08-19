@@ -1,0 +1,18 @@
+## The public API is a versioned HTTP contract preview
+
+The checked-in contract is `contract/generated/openapi.json`, version `0.0.0-preview`. This page is an allowlisted public summary of customer operations, not every path in the contract. Use the file as the source of truth for path names, request shapes, response codes, and error codes before shipping an integration.
+
+```http
+GET /v1/tenants/{tenant_id}/spaces
+GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes
+POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end
+GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries
+```
+
+Customer operations cover Tenant, Space, and Episode records; Participant admission and access; media and file uploads; recordings and transcripts; webhook endpoints and delivery inspection; and the public status document. Most routes use a Tenant id in the path. List routes expose `page_size` and `cursor`; the webhook delivery list also filters by `state` and `event_type`. Mutating routes that create or change durable state require an `Idempotency-Key` where the contract declares it.
+
+The contract also exposes a public `GET /v1/status` response with `overall`, `generated_at`, `schema_version`, and component states. It returns `503` with a typed error when status is unavailable.
+
+### Use generated clients carefully
+
+The TypeScript client has generated HTTP and schema modules for server-side use. Keep Tenant credentials and webhook management on the server. For a live Space, use `SpaceClient` and its AccessGrant boundary instead of issuing Participant media or Sync requests directly.

@@ -2,6 +2,8 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import { relative, resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
 
+import { DOCS_PAGES } from "../src/docs/manifest.ts";
+
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
 const indexPath = resolve(clientDir, "index.html");
@@ -16,6 +18,8 @@ const STATUS_TITLE = "Chalk Status";
 const STATUS_DESCRIPTION = "Live system status, incidents, uptime, and maintenance updates for Chalk.";
 const STATUS_CANONICAL = "https://chalkmeet.com/status";
 const STATUS_IMAGE = "https://chalkmeet.com/brand/chalk/chalk-icon-512.png";
+const DOCS_ORIGIN = "https://chalkmeet.com";
+const DOCS_SOCIAL_IMAGE = `${DOCS_ORIGIN}/images/landing/chalk-flow-hero-20260818.webp`;
 
 function resolveCommitHash() {
   const commitHash = process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || execSync("git rev-parse HEAD").toString().trim();
@@ -38,6 +42,46 @@ mkdirSync(statusDirPath, { recursive: true });
 cpSync(shellPath, statusIndexPath);
 const statusHtml = readFileSync(statusIndexPath, "utf8");
 writeFileSync(statusIndexPath, injectStatusMeta(statusHtml));
+
+const shellHtml = readFileSync(shellPath, "utf8");
+
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function buildDocsHtml(page) {
+  const title = `${page.title} | Chalk Docs`;
+  const canonicalUrl = `${DOCS_ORIGIN}${page.href}`;
+  const titleTag = `<title>${escapeHtml(title)}</title>`;
+  const descriptionTag = `<meta name="description" content="${escapeHtml(page.description)}">`;
+  const socialTags = [
+    `<link rel="canonical" href="${canonicalUrl}">`,
+    '<meta property="og:type" content="website">',
+    '<meta property="og:site_name" content="Chalk">',
+    `<meta property="og:title" content="${escapeHtml(title)}">`,
+    `<meta property="og:description" content="${escapeHtml(page.description)}">`,
+    `<meta property="og:url" content="${canonicalUrl}">`,
+    `<meta property="og:image" content="${DOCS_SOCIAL_IMAGE}">`,
+    '<meta name="twitter:card" content="summary_large_image">',
+    `<meta name="twitter:title" content="${escapeHtml(title)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(page.description)}">`,
+    `<meta name="twitter:image" content="${DOCS_SOCIAL_IMAGE}">`,
+  ].join("\n    ");
+
+  const withTitle = shellHtml.replace(/<title>[^<]*<\/title>/i, titleTag);
+  const withDescription = withTitle.replace(/<meta\s+name=["']description["'][^>]*>/i, descriptionTag);
+  return withDescription.replace("</head>", `    ${socialTags}\n  </head>`);
+}
+
+for (const page of DOCS_PAGES) {
+  if (page.href !== "/docs" && !page.href.startsWith("/docs/")) {
+    throw new Error(`invalid docs path ${page.href}; expected /docs or a child path`);
+  }
+
+  const docsPageDir = resolve(clientDir, ...page.href.slice(1).split("/"));
+  mkdirSync(docsPageDir, { recursive: true });
+  writeFileSync(resolve(docsPageDir, "index.html"), buildDocsHtml(page));
+}
 
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 const buildMeta = {

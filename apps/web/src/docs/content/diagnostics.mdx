@@ -1,0 +1,25 @@
+## Diagnostics explain journeys without exporting content
+
+Client telemetry is opt-in. Start a `space.join` journey when a Participant joins, pass its W3C context to HTTP or Sync boundaries, mark it succeeded or failed, and flush the bounded queue when the surface is ready to export.
+
+```ts
+import { createTelemetryClient } from "@q9labsai/chalk-client/telemetry";
+
+const telemetry = createTelemetryClient({
+  enabled: true,
+  baseUrl: "https://api.example.com",
+});
+const journey = telemetry.startJourney({ kind: "space.join" });
+
+const response = await fetch("/api/chalk/spaces/design-review", {
+  headers: journey.headers,
+});
+journey.terminal(response.ok ? "succeeded" : "failed");
+await telemetry.flush();
+```
+
+Journey events carry `journey_id`, W3C `traceparent`, and optional `tracestate`. Attributes and the in-memory timeline are bounded. Built-in observations record aggregate RTC state only; they do not export AccessGrant contents, Participant identity, Space or Episode ids, media payloads, or request bodies.
+
+### Read failures safely
+
+`SpaceClientError` exposes a stable code, `recoverable` flag, and safe message. Log the code and bounded context, not credentials or raw payloads. For media first-frame work, the SDK's episode diagnostics distinguish connection, publication, and observation phases without requiring a media payload dump.

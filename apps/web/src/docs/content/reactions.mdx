@@ -1,0 +1,13 @@
+## Reactions are short-lived events
+
+`client.reactions.send` publishes one of six typed reactions. The `reactions.active` snapshot contains the visible events and their expiry; it is not a durable message stream.
+
+```ts
+await client.reactions.send("🎉");
+
+const active = client.getSnapshot().reactions.active;
+```
+
+The allowed values are `👍`, `❤️`, `😂`, `😮`, `😢`, and `🎉`. A Participant needs the `sendReaction` capability. A rejected command returns a stable client failure, so disable the affordance when `self.can("sendReaction")` is false and still handle a race with a capability change.
+
+Use the snapshot to render current reactions and let expired entries disappear. If your product needs durable feedback, send a chat message or persist the action in your own backend instead of treating a reaction event as history.

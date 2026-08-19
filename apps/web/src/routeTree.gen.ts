@@ -19,10 +19,13 @@ import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as NewRouteImport } from './routes/new'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpaceIndexRouteImport } from './routes/space.index'
+import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
+import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
 import { Route as AppTenantRouteImport } from './routes/_app.tenant'
 import { Route as AppSpacesRouteImport } from './routes/_app.spaces'
 import { Route as AppPeopleRouteImport } from './routes/_app.people'
@@ -84,6 +87,11 @@ const NewRoute = NewRouteImport.update({
   path: '/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
@@ -98,10 +106,20 @@ const SpaceIndexRoute = SpaceIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SpaceRoute,
 } as any)
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DocsRoute,
+} as any)
 const SpaceSlugRoute = SpaceSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => SpaceRoute,
+} as any)
+const DocsSlugRoute = DocsSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => DocsRoute,
 } as any)
 const AppTenantRoute = AppTenantRouteImport.update({
   id: '/tenant',
@@ -156,6 +174,7 @@ const AppSpacesSpaceIdRoute = AppSpacesSpaceIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRouteWithChildren
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
@@ -175,7 +194,9 @@ export interface FileRoutesByFullPath {
   '/people': typeof AppPeopleRoute
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
+  '/docs/$slug': typeof DocsSlugRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
   '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
@@ -199,7 +220,9 @@ export interface FileRoutesByTo {
   '/people': typeof AppPeopleRoute
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
+  '/docs/$slug': typeof DocsSlugRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/docs': typeof DocsIndexRoute
   '/space': typeof SpaceIndexRoute
   '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
@@ -207,6 +230,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/docs': typeof DocsRouteWithChildren
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
@@ -226,7 +250,9 @@ export interface FileRoutesById {
   '/_app/people': typeof AppPeopleRoute
   '/_app/spaces': typeof AppSpacesRoute
   '/_app/tenant': typeof AppTenantRoute
+  '/docs/$slug': typeof DocsSlugRoute
   '/space/$slug': typeof SpaceSlugRoute
+  '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
   '/_app/spaces_/$spaceId': typeof AppSpacesSpaceIdRoute
 }
@@ -234,6 +260,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/docs'
     | '/new'
     | '/onboarding'
     | '/privacy'
@@ -253,7 +280,9 @@ export interface FileRouteTypes {
     | '/people'
     | '/spaces'
     | '/tenant'
+    | '/docs/$slug'
     | '/space/$slug'
+    | '/docs/'
     | '/space/'
     | '/spaces/$spaceId'
   fileRoutesByTo: FileRoutesByTo
@@ -277,13 +306,16 @@ export interface FileRouteTypes {
     | '/people'
     | '/spaces'
     | '/tenant'
+    | '/docs/$slug'
     | '/space/$slug'
+    | '/docs'
     | '/space'
     | '/spaces/$spaceId'
   id:
     | '__root__'
     | '/'
     | '/_app'
+    | '/docs'
     | '/new'
     | '/onboarding'
     | '/privacy'
@@ -303,7 +335,9 @@ export interface FileRouteTypes {
     | '/_app/people'
     | '/_app/spaces'
     | '/_app/tenant'
+    | '/docs/$slug'
     | '/space/$slug'
+    | '/docs/'
     | '/space/'
     | '/_app/spaces_/$spaceId'
   fileRoutesById: FileRoutesById
@@ -311,6 +345,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  DocsRoute: typeof DocsRouteWithChildren
   NewRoute: typeof NewRoute
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -395,6 +430,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app': {
       id: '/_app'
       path: ''
@@ -416,12 +458,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpaceIndexRouteImport
       parentRoute: typeof SpaceRoute
     }
+    '/docs/': {
+      id: '/docs/'
+      path: '/'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
+      parentRoute: typeof DocsRoute
+    }
     '/space/$slug': {
       id: '/space/$slug'
       path: '/$slug'
       fullPath: '/space/$slug'
       preLoaderRoute: typeof SpaceSlugRouteImport
       parentRoute: typeof SpaceRoute
+    }
+    '/docs/$slug': {
+      id: '/docs/$slug'
+      path: '/$slug'
+      fullPath: '/docs/$slug'
+      preLoaderRoute: typeof DocsSlugRouteImport
+      parentRoute: typeof DocsRoute
     }
     '/_app/tenant': {
       id: '/_app/tenant'
@@ -524,6 +580,18 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface DocsRouteChildren {
+  DocsSlugRoute: typeof DocsSlugRoute
+  DocsIndexRoute: typeof DocsIndexRoute
+}
+
+const DocsRouteChildren: DocsRouteChildren = {
+  DocsSlugRoute: DocsSlugRoute,
+  DocsIndexRoute: DocsIndexRoute,
+}
+
+const DocsRouteWithChildren = DocsRoute._addFileChildren(DocsRouteChildren)
+
 interface SpaceRouteChildren {
   SpaceSlugRoute: typeof SpaceSlugRoute
   SpaceIndexRoute: typeof SpaceIndexRoute
@@ -539,6 +607,7 @@ const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  DocsRoute: DocsRouteWithChildren,
   NewRoute: NewRoute,
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,

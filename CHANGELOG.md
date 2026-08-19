@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added public docs at `/docs` with Why Chalk, a working Quickstart,
+  first-class TypeScript, React, and React Native guides, product concepts,
+  feature guides, webhooks, public API guidance, local search, and responsive
+  keyboard-friendly navigation.
 - Added typed `classic` and `chalk` skins to the web React SDK theme. Classic is
   the default, the existing hand-drawn treatment remains available as Chalk,
   and either skin composes independently with every typed palette and texture.

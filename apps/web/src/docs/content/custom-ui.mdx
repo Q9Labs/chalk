@@ -1,0 +1,35 @@
+## Custom UI reads snapshots and sends commands
+
+`ChalkProvider` shares an existing `SpaceClient` with React. It does not join, leave, refresh access, or own the client's lifetime. Your application keeps lifecycle ownership while hooks subscribe to stable snapshot slices.
+
+```tsx
+import type { SpaceClient } from "@q9labsai/chalk-client";
+import { ChalkButton, ChalkProvider, useCan, useParticipants, useSpaceClient } from "@q9labsai/chalk-react";
+
+function ParticipantPanel() {
+  const client = useSpaceClient();
+  const { roster } = useParticipants();
+  const canRaiseHand = useCan("raiseHand");
+
+  return (
+    <>
+      <p>{roster.length} participants</p>
+      {canRaiseHand ? <ChalkButton onClick={() => void client.participants.raiseHand()}>Raise hand</ChalkButton> : null}
+    </>
+  );
+}
+
+export function SpacePanel({ client }: { readonly client: SpaceClient }) {
+  return (
+    <ChalkProvider client={client}>
+      <ParticipantPanel />
+    </ChalkProvider>
+  );
+}
+```
+
+The hook set is closed: `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and `useCan`. Commands come from the client hook; snapshots come from the slice hooks.
+
+<Callout tone="caution" title="Keep ownership explicit">
+  If the application creates the client, it also decides when to join, leave, and dispose. The provider only supplies access to the tree.
+</Callout>

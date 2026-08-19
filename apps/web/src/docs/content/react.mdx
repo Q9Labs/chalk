@@ -1,0 +1,34 @@
+## React has a turnkey surface and a custom path
+
+Install the client and React binding, then render `<Chalk />` with a Space slug and `getAccess`. The component creates and owns its client when you do not pass one, shows the Entrance by default, and disposes its owned client on unmount.
+
+```sh
+pnpm add @q9labsai/chalk-client @q9labsai/chalk-react
+```
+
+```tsx
+import { Chalk } from "@q9labsai/chalk-react";
+
+export function SpacePage() {
+  return (
+    <Chalk
+      space="design-review"
+      getAccess={({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`)}
+      defaults={{ microphone: true, camera: true }}
+      features={{ chat: true, screenShare: true, reactions: true }}
+      spaceName="Design review"
+      onEpisodeEnded={({ episode }) => console.log(episode?.id)}
+    />
+  );
+}
+```
+
+Pass an existing `SpaceClient` when your application owns its lifetime:
+
+```tsx
+<Chalk client={spaceClient} entrance={false} />
+```
+
+The public hooks are `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and `useCan`. They read the same stable `SpaceSnapshot` slices as the TypeScript client.
+
+Continue with [Turnkey UI](/docs/turnkey-ui) for themes and feature flags, or [Custom UI](/docs/custom-ui) for your own layout.

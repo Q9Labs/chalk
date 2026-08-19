@@ -1,0 +1,32 @@
+## API errors have a stable envelope and a specific HTTP status
+
+The public API returns an `ErrorResponse` with an `error.code` and `error.message`. Use the HTTP status for broad control flow, then use the stable code for a user-facing action or a safe retry decision.
+
+```json
+{
+  "error": {
+    "code": "request.rate_limited",
+    "message": "Too many requests"
+  }
+}
+```
+
+Common statuses in the checked-in contract are:
+
+| Status        | Meaning                                    | Next step                                          |
+| ------------- | ------------------------------------------ | -------------------------------------------------- |
+| `400`         | Request or query is invalid                | Fix the input or cursor.                           |
+| `401`         | Authentication is missing or invalid       | Refresh the account credential.                    |
+| `403`         | The credential lacks access                | Check Tenant access and capability policy.         |
+| `404`         | The referenced resource is absent          | Re-read the parent or show a stale-link state.     |
+| `409`         | The operation conflicts with current state | Reconcile the resource or idempotency key.         |
+| `412`         | An `If-Match` revision is stale            | Read the current revision and retry deliberately.  |
+| `413`         | The body is too large                      | Reduce the payload.                                |
+| `429`         | The rate limit is exhausted                | Wait for `Retry-After`; do not spin.               |
+| `500` / `503` | Chalk or a dependency failed               | Retry only when the operation is safe and bounded. |
+
+Rate-limited responses include `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` where the route declares them. Mutating requests should carry a stable idempotency key so a timeout does not create an uncertain duplicate.
+
+<Callout tone="failure" title="Do not branch on message text">
+  Messages help a person, but `error.code` is the contract for program logic. Treat unknown codes as a safe, visible failure.
+</Callout>

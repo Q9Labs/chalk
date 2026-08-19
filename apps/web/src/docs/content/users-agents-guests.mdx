@@ -1,0 +1,20 @@
+## Users and Agents are durable identities; Guests are temporary
+
+Chalk keeps two durable identity kinds: **User** and **Agent**. Both can become Members, hold Roles, and participate with the same capability model. Your application remains the identity authority; Chalk stores the customer's `external_id` as the stable reference and mints its own ids.
+
+A **Guest** is an unregistered visitor admitted to the current Episode. A Guest gets an Episode-scoped Role, but no standing Space access, durable Role, dormant roster visibility, or durable identity in history. Promotion to Member requires your identity system and an explicit backend or approval flow; there is no automatic enrollment.
+
+### Choose the right boundary
+
+| Need                                          | Model         |
+| --------------------------------------------- | ------------- |
+| A person or service with durable identity     | User or Agent |
+| Standing access and a Role across Episodes    | Member        |
+| One-time participation in the current Episode | Guest         |
+| A live seat with media and Presence           | Participant   |
+
+This separation lets your product keep its own directory and decide when a visitor becomes a durable Member. The client only receives the Participant projection for the current Episode.
+
+<Callout tone="note" title="Agent is a first-class identity">
+  An Agent is not a special permission tier. It follows the same lifecycle and capability rules as a User; products decide what the Agent does.
+</Callout>

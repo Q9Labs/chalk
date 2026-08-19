@@ -1,0 +1,27 @@
+## React Native keeps the React surface shape
+
+Install the client and native binding. The root package exports `Chalk`, `Entrance`, `ChalkProvider`, `useSpaceClient`, the snapshot hooks, and the same feature and theme types as the web binding.
+
+```sh
+pnpm add @q9labsai/chalk-client @q9labsai/chalk-react-native
+```
+
+```tsx
+import { Chalk } from "@q9labsai/chalk-react-native";
+
+export function SpaceScreen() {
+  return <Chalk displayName="Taylor" getAccess={getAccess} logoUrl="https://example.com/logo.png" space="design-review" theme={{ colorScheme: "dark", accent: "#14b8a6" }} />;
+}
+```
+
+`Chalk` can receive an existing `SpaceClient` through `client`. Set `entrance={false}` to join immediately. The native surface supports `focus`, `grid`, and `presentation` layouts; `features.settings` is enabled unless you set it to `false`.
+
+For lifecycle ownership without the component, use the native adapter seam:
+
+```tsx
+import { createNativeSpaceClient } from "@q9labsai/chalk-react-native/client";
+
+const client = createNativeSpaceClient({ space: "design-review", getAccess });
+```
+
+Platform subpaths `android`, `ios`, `ios-phone`, `ios-pad`, and `macos` expose the same public binding shape. Differences stay at native permission and style mapping seams.

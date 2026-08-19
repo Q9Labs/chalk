@@ -1,0 +1,27 @@
+## Entrance prepares a Participant and admission controls entry
+
+`Entrance` is the place where a visitor chooses a display name and devices before joining a Space. `<Chalk />` renders it by default; set `entrance={false}` to join immediately with the supplied defaults.
+
+```tsx
+import { Entrance } from "@q9labsai/chalk-react";
+
+<Entrance spaceName="Design review" defaults={{ microphone: true, camera: false }} onJoin={(settings) => spaceClient.join(settings)} />;
+```
+
+The callback receives `displayName`, `microphone`, and `camera`. Your application can own the client and render this step separately, or let `<Chalk />` own both.
+
+### Admission policy
+
+The Space contract has three policies: `open`, `knock`, and `members_only`. A knock request appears in `participants.admissionQueue`; a Participant with `manageAdmission` can admit or deny it.
+
+```ts
+await client.participants.admit(requestId);
+// or
+await client.participants.deny(requestId);
+```
+
+Admission is distinct from identity. A Guest can be admitted to the current Episode without becoming a Member. A Member keeps standing Space access across Episodes.
+
+<Callout tone="note" title="One entry surface">
+  Entrance covers device preparation and waiting for admission in one place. Your product can style it or replace it with a custom panel while keeping the same `join` options.
+</Callout>

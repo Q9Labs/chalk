@@ -1,0 +1,57 @@
+## Join a Space in three pieces
+
+Install the client, provide a Space slug and an access callback, then join. Your backend creates the opaque `AccessGrant`; the browser passes it to Chalk without constructing or inspecting it.
+
+```sh
+pnpm add @q9labsai/chalk-client
+```
+
+```ts
+import { createSpaceClient } from "@q9labsai/chalk-client";
+
+const client = createSpaceClient({
+  space: "design-review",
+  getAccess: ({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
+});
+
+await client.join({
+  displayName: "Ari",
+  microphone: true,
+  camera: false,
+});
+```
+
+`getAccess` receives `reason: "join" | "refresh" | "retry"`. Keep the callback available for the client's full lifetime because `Connection` uses it for freshness, scheduled refresh, wake revalidation, and one refresh-and-retry after an access rejection.
+
+### Render a snapshot
+
+`subscribe` and `getSnapshot` form a framework-neutral external-store contract. Each slice is referentially stable, so a UI can select only the state it renders.
+
+```ts
+const unsubscribe = client.subscribe(() => {
+  const snapshot = client.getSnapshot();
+  renderConnection(snapshot.connection.status);
+});
+
+const snapshot = client.getSnapshot();
+if (snapshot.self.can("sendChat")) {
+  await client.chat.send({ text: "Ready when you are." });
+}
+
+unsubscribe();
+```
+
+### Leave cleanly
+
+Use `leave()` when the Participant leaves the live Episode. Use `dispose()` when the client will no longer be used so it releases the Connection and its resources.
+
+```ts
+await client.leave();
+client.dispose();
+```
+
+<Callout tone="caution" title="Keep the grant opaque">
+  The application backend owns access creation. Return its grant unchanged from `getAccess`; malformed JSON and non-OK responses fail the join.
+</Callout>
+
+Next, read [Spaces and Episodes](/docs/spaces-and-episodes) or choose a framework in [React](/docs/react).
