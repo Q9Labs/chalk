@@ -44,7 +44,7 @@ describe("createChalkServerClient", () => {
       telemetry: { journeyId: "journey", rootJourneyId: "journey", traceparent: "00-11111111111111111111111111111111-2222222222222222-01", tracestate: "chalk=test" },
     });
 
-    const createdSpace = await client.spaces.create(spaceInput());
+    const createdSpace = await client.spaces.create(spaceInput(), { idempotencyKey: "create-space" });
     const createdEpisode = await client.episodes.create(spaceId, episodeInput());
     const { admission, access } = await admitAndIssueAccess(client);
     const removed = await client.participants.remove(spaceId, episodeId, participantId, { participantGeneration: 2 }, { idempotencyKey: "remove-participant" });
@@ -69,6 +69,7 @@ describe("createChalkServerClient", () => {
     expect(JSON.parse(String(requests[4]?.init?.body))).toEqual({ participant_generation: 2 });
     expect(new Headers(requests[4]?.init?.headers).get("idempotency-key")).toBe("remove-participant");
     expect(new Headers(requests[5]?.init?.headers).get("idempotency-key")).toBe("end-episode");
+    expect(new Headers(requests[0]?.init?.headers).get("idempotency-key")).toBe("create-space");
     expect(createdSpace).toMatchObject({ id: spaceId, maximum_episode_duration_seconds: 7200 });
     expect(createdEpisode).toMatchObject({ id: episodeId, space_id: spaceId });
     expect(admission.access).toEqual(access);
@@ -137,6 +138,20 @@ describe("createChalkServerClient", () => {
     await episodeClient.episodes.create(spaceId, episodeInput(), { idempotencyKey: "stable-key" });
     expect(episodeCalls).toHaveLength(3);
     expect(episodeCalls.map((init) => new Headers(init.headers).get("idempotency-key"))).toEqual(["stable-key", "stable-key", "stable-key"]);
+  });
+
+  it("retries Space creation with a caller-supplied idempotency key", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const calls: RequestInit[] = [];
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(init ?? {});
+      return calls.length < 3 ? jsonResponse({ error: { code: "busy" } }, 503) : jsonResponse(space(), 201);
+    });
+    const client = createChalkServerClient({ apiKey: "chalk_sk_retry.secret", tenantId, apiBaseURL: "https://api.example.test", fetch });
+
+    await expect(client.spaces.create(spaceInput(), { idempotencyKey: "stable-space-key" })).resolves.toMatchObject({ id: spaceId });
+    expect(calls).toHaveLength(3);
+    expect(calls.map((init) => new Headers(init.headers).get("idempotency-key"))).toEqual(["stable-space-key", "stable-space-key", "stable-space-key"]);
   });
 
   it("never retries a one-time-secret response and exposes no cause or server message", async () => {

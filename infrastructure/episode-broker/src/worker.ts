@@ -30,6 +30,7 @@ async function route(request: Request, env: WorkerEnv, url: URL): Promise<Respon
     requireOrigin(request, env.CHALK_APP_ORIGIN);
     const input = browserParticipantCredentialInput(body);
     await enforceRateLimit(env.CREATE_RATE_LIMITER, await anonymousRateKey(request));
+    if (!input.spaceInviteToken) await enforceRateLimit(env.SPACE_CREATE_RATE_LIMITER, "anonymous-space-create");
     const existingCredential = cookieValue(request.headers.get("cookie"));
     const resume = Boolean(input.spaceInviteToken && existingCredential?.spaceInviteToken === input.spaceInviteToken);
     const spaceInviteToken = input.spaceInviteToken ?? randomCapability();
@@ -50,6 +51,7 @@ async function route(request: Request, env: WorkerEnv, url: URL): Promise<Respon
     requireTrustedCaller(request, env.CHALK_APP_ORIGIN);
     const input = participantCredentialInput(body);
     await enforceRateLimit(env.CREATE_RATE_LIMITER, await anonymousRateKey(request));
+    if (!input.spaceInviteToken) await enforceRateLimit(env.SPACE_CREATE_RATE_LIMITER, "anonymous-space-create");
     const spaceInviteToken = input.spaceInviteToken ?? randomCapability();
     const participantCredentialId = input.participantCredentialId ?? randomCapability();
     const stub = episodeLeaseStub(env, spaceInviteToken);

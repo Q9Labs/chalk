@@ -68,6 +68,7 @@ export type WorkerEnv = {
   readonly CREATE_RATE_LIMITER: RateLimitBinding;
   readonly EPISODE_RATE_LIMITER: RateLimitBinding;
   readonly EPISODE_LEASES: DurableObjectNamespaceLike;
+  readonly SPACE_CREATE_RATE_LIMITER: RateLimitBinding;
 };
 
 export class BrokerError extends Error {

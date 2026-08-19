@@ -7,7 +7,8 @@ tenant, owner membership, broker API key, and space together.
 
 The owner user must already exist. The command creates or promotes that user's
 membership to `owner`, configures the tenant for Chalk-managed `cf_sfu`, creates
-an API key with only `episodes:write`, and creates one `cf_sfu` space. It
+an API key with only `episodes:write` and `spaces:write`, and creates one
+`cf_sfu` Space for draining pre-isolation leases. It
 reuses resources only when their names, provider settings, state, and scopes are
 compatible; conflicting state fails without committing.
 
@@ -61,5 +62,7 @@ values in the private deployment runbook. Identity flag whitespace is removed
 before lookup and creation.
 
 After capturing the first result, bind its values to the episode broker as
-`CHALK_API_KEY`, `CHALK_TENANT_ID`, and `CHALK_SPACE_ID`. The bootstrap command
-does not deploy the API or Worker, apply migrations, or contact Cloudflare.
+`CHALK_API_KEY`, `CHALK_TENANT_ID`, and `CHALK_SPACE_ID`. New leases create and
+archive their own Spaces. `CHALK_SPACE_ID` remains only for leases created before
+Space isolation. The bootstrap command does not deploy the API or Worker, apply
+migrations, or contact Cloudflare.

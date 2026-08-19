@@ -51,17 +51,28 @@ try {
   assert.equal(creator.response.status, 201);
   assert.match(creator.cookie, /^__Secure-chalk_participant_credential=[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/u);
   assert.match(creator.body.spaceInviteToken, /^[A-Za-z0-9_-]{43}$/u);
-  assert.equal((await apiCalls()).length, 0, "Credential creation must not create Chalk resources");
+  assert.deepEqual(Object.keys(creator.body).sort(), ["apiBaseURL", "spaceInviteToken", "syncURL"]);
+  let calls = await apiCalls();
+  assert.equal(calls.length, 1, "Credential creation must create one isolated Space");
+  const creatorSpaceId = calls[0].spaceId;
+  assert.match(creatorSpaceId, /^[0-9a-f-]{36}$/u);
+  assert.equal(calls[0].body.default_episode_duration_seconds, 3);
+  assert.equal(calls[0].body.maximum_episode_duration_seconds, 3);
+  assert.match(calls[0].idempotencyKey, /^space-create-[0-9a-f-]{36}$/u);
 
   const creatorAccess = await post("/local-chalk/access-grants", {}, creator.cookie);
   assert.equal(creatorAccess.response.status, 201);
   assert.equal(creatorAccess.body.subject.participant_id.length > 0, true);
-  let calls = await apiCalls();
+  calls = await apiCalls();
   assert.deepEqual(
     calls.map((call) => call.path.split("/").at(-1)),
-    ["episodes", "participants"],
+    ["spaces", "episodes", "participants"],
   );
-  assert.equal(calls[1].body.role, "owner");
+  assert.equal(calls[2].body.role, "owner");
+  assert.equal(
+    calls.slice(1).every((call) => call.path.includes(`/spaces/${creatorSpaceId}/`)),
+    true,
+  );
   assert.equal(
     calls.every((call) => call.authorization === "Bearer local-api-key"),
     true,
@@ -115,15 +126,19 @@ try {
   assert.equal((await post("/local-chalk/access-grants", {}, collaborator.cookie)).response.status, 401);
   assert.equal((await post("/local-chalk/participant-credentials/cleanup", {}, creator.cookie)).response.status, 204);
   calls = await apiCalls();
-  assert.equal(calls.at(-1).path.endsWith("/end"), true);
+  assert.equal(calls.at(-2).path.endsWith("/end"), true);
+  assert.equal(calls.at(-1).path, `/v1/tenants/test-tenant/spaces/${creatorSpaceId}/archive`);
 
   const deadlineCreator = await post("/local-chalk/participant-credentials", { displayName: "Deadline Creator" });
+  calls = await apiCalls();
+  const deadlineSpaceId = calls.at(-1).spaceId;
+  assert.notEqual(deadlineSpaceId, creatorSpaceId, "independent invites must use different Spaces");
   assert.equal((await post("/local-chalk/access-grants", {}, deadlineCreator.cookie)).response.status, 201);
   await waitForAccessUnauthorized(deadlineCreator.cookie);
   assert.equal((await post("/local-chalk/access-grants", {}, deadlineCreator.cookie)).response.status, 401);
 
   calls = await apiCalls();
-  console.log(JSON.stringify({ calls: calls.length, creatorCleanup: "verified", creatorResume: "verified", durableObject: "verified", episodeDeadline: "verified", nativeParticipantCredential: "verified", spaceInviteJoin: "verified", status: "ok" }));
+  console.log(JSON.stringify({ calls: calls.length, creatorCleanup: "verified", creatorResume: "verified", durableObject: "verified", episodeDeadline: "verified", isolatedSpaces: "verified", nativeParticipantCredential: "verified", spaceInviteJoin: "verified", status: "ok" }));
 } catch (error) {
   process.stderr.write(`${fakeOutput()}\n${brokerOutput()}`);
   throw error;

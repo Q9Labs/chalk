@@ -107,7 +107,7 @@ func TestBootstrapSpaceCreatesLeastPrivilegeResources(t *testing.T) {
 	if string(transaction.createdTenantInput.MediaPlaneProviderConfig) != providerConfigValue {
 		t.Fatalf("provider config = %s", transaction.createdTenantInput.MediaPlaneProviderConfig)
 	}
-	if len(transaction.createdKeyInput.Scopes) != 1 || transaction.createdKeyInput.Scopes[0] != authentication.ScopeEpisodesWrite {
+	if len(transaction.createdKeyInput.Scopes) != 2 || transaction.createdKeyInput.Scopes[0] != authentication.ScopeEpisodesWrite || transaction.createdKeyInput.Scopes[1] != authentication.ScopeSpacesWrite {
 		t.Fatalf("broker scopes = %v", transaction.createdKeyInput.Scopes)
 	}
 	if transaction.createdKeyInput.CreatedByUserID != bootstrapTestOwnerID || !transaction.createdKeyInput.ExpiresAt.Equal(bootstrapTestNow.Add(defaultAPIKeyTTL)) {
@@ -131,7 +131,7 @@ func TestBootstrapSpaceReusesCompatibleResourcesWithoutReturningSecret(t *testin
 		tenantFound: true,
 		tenant:      tenants.Tenant{ID: bootstrapTestTenantID, Name: defaultTenantName, DefaultMediaPlane: &defaultMediaPlane, MediaPlaneProviderConfig: json.RawMessage(providerConfigValue)},
 		keyFound:    true,
-		key:         apikeys.Key{ID: bootstrapTestKeyID, TenantID: bootstrapTestTenantID, Scopes: []authentication.Scope{authentication.ScopeEpisodesWrite}},
+		key:         apikeys.Key{ID: bootstrapTestKeyID, TenantID: bootstrapTestTenantID, Scopes: []authentication.Scope{authentication.ScopeEpisodesWrite, authentication.ScopeSpacesWrite}},
 		spaceFound:  true,
 		space:       spaces.Space{ID: bootstrapTestSpaceID, TenantID: bootstrapTestTenantID, Name: defaultSpaceName, Slug: defaultSpaceSlug, MediaPlane: cloudflareSFU},
 	}
@@ -161,16 +161,27 @@ func TestBootstrapSpaceRejectsMissingOwnerAndIncompatibleKey(t *testing.T) {
 	}
 
 	defaultMediaPlane := cloudflareSFU
-	transaction := &fakeBootstrapTransaction{
-		ownerExists: true,
-		tenantFound: true,
-		tenant:      tenants.Tenant{ID: bootstrapTestTenantID, DefaultMediaPlane: &defaultMediaPlane, MediaPlaneProviderConfig: json.RawMessage(providerConfigValue)},
-		keyFound:    true,
-		key:         apikeys.Key{ID: bootstrapTestKeyID, Scopes: []authentication.Scope{authentication.ScopeEpisodesWrite, authentication.ScopeSpacesWrite}},
-	}
-	_, err = bootstrapSpace(context.Background(), transaction, bootstrapTestInput())
-	if err == nil || err.Error() != "active broker api key has broader or incompatible scopes" {
-		t.Fatalf("incompatible key error = %v", err)
+	for _, test := range []struct {
+		name   string
+		scopes []authentication.Scope
+	}{
+		{name: "episodes-only", scopes: []authentication.Scope{authentication.ScopeEpisodesWrite}},
+		{name: "broader", scopes: []authentication.Scope{authentication.ScopeEpisodesWrite, authentication.ScopeSpacesWrite, authentication.ScopeEpisodesRead}},
+		{name: "different", scopes: []authentication.Scope{authentication.ScopeSpacesWrite}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			transaction := &fakeBootstrapTransaction{
+				ownerExists: true,
+				tenantFound: true,
+				tenant:      tenants.Tenant{ID: bootstrapTestTenantID, DefaultMediaPlane: &defaultMediaPlane, MediaPlaneProviderConfig: json.RawMessage(providerConfigValue)},
+				keyFound:    true,
+				key:         apikeys.Key{ID: bootstrapTestKeyID, Scopes: test.scopes},
+			}
+			_, err := bootstrapSpace(context.Background(), transaction, bootstrapTestInput())
+			if err == nil || err.Error() != "active broker api key has broader or incompatible scopes" {
+				t.Fatalf("incompatible key error = %v", err)
+			}
+		})
 	}
 }
 

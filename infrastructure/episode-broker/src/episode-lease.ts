@@ -2,6 +2,7 @@ import { DurableObject, type DurableObjectState } from "cloudflare:workers";
 import { ChalkAPIError, createChalkServerClient, type AccessGrant, type ChalkServerClient } from "@q9labsai/chalk-client/server";
 
 import { BrokerError, episodeDeadlineSeconds, maximumDisplayNameLength, maximumEpisodeParticipants, type InternalAccessInput, type InternalCredentialInput, type InternalParticipantCredentialInput, type TraceContext, type WorkerEnv } from "./contracts";
+import { leaseSpaceId, provisionAnonymousSpace } from "./anonymous-space";
 import { brokerErrorResponse } from "./errors";
 import { empty, json } from "./http";
 import { LeaseStore, type LeaseRecord, type ParticipantCredentialRecord } from "./store";
@@ -41,16 +42,29 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
   private async handle(request: Request): Promise<Response> {
     if (request.method !== "POST") return json(405, { error: "Method not allowed." }, { allow: "POST" });
     const path = new URL(request.url).pathname;
+    let journeyId: string | undefined;
     try {
       const body = await request.json();
-      if (path === "/participant-credentials") return await this.createParticipantCredential(internalParticipantCredentialInput(body));
-      if (path === "/access-grants") return await this.accessGrant(internalAccessInput(body));
-      if (path === "/participant-credentials/cleanup") return await this.cleanup(internalCredentialInput(body));
+      if (path === "/participant-credentials") {
+        const input = internalParticipantCredentialInput(body);
+        journeyId = input.trace.journeyId;
+        return await this.createParticipantCredential(input);
+      }
+      if (path === "/access-grants") {
+        const input = internalAccessInput(body);
+        journeyId = input.trace.journeyId;
+        return await this.accessGrant(input);
+      }
+      if (path === "/participant-credentials/cleanup") {
+        const input = internalCredentialInput(body);
+        journeyId = input.trace.journeyId;
+        return await this.cleanup(input);
+      }
       return json(404, { error: "Not found." });
     } catch (error) {
       const response = brokerErrorResponse(error);
       const status = response.status;
-      this.log("operation_failed", { path, status, upstreamOrigin: configuredOrigin(this.environment.CHALK_API_URL), ...chalkErrorFields(error) });
+      this.log("operation_failed", { path, status, upstreamOrigin: configuredOrigin(this.environment.CHALK_API_URL), ...(journeyId ? { journeyId } : {}), ...chalkErrorFields(error) });
       return response;
     }
   }
@@ -65,24 +79,35 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
         createdAt: now,
         expiresAt: now + configuredEpisodeDeadlineSeconds(this.environment) * 1_000,
         creatorCredentialId: input.participantCredentialId,
+        spaceOrigin: "isolated",
       };
       this.store.createLease(lease);
       await this.state.storage.setAlarm(lease.expiresAt);
-      this.log("episode_lease_created", { episodeLeaseLogId: lease.logId });
+      this.log("episode_lease_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
+      const spaceId = await provisionAnonymousSpace(this.chalk(input.trace), lease, this.environment.CHALK_TENANT_ID, configuredEpisodeDeadlineSeconds(this.environment));
+      this.store.setSpace(spaceId);
+      lease = { ...lease, spaceId };
+      this.log("space_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
+    } else if (input.action === "create" && lease.spaceOrigin === "isolated" && !lease.spaceId && lease.creatorCredentialId === input.participantCredentialId) {
+      const spaceId = await provisionAnonymousSpace(this.chalk(input.trace), lease, this.environment.CHALK_TENANT_ID, configuredEpisodeDeadlineSeconds(this.environment));
+      this.store.setSpace(spaceId);
+      lease = { ...lease, spaceId };
+      this.log("space_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
     } else if (input.action === "create") {
       throw new BrokerError(409, "The Episode lease could not be created.");
     }
     requireActiveLease(lease, now);
+    leaseSpaceId(lease, this.environment.CHALK_SPACE_ID);
     if (input.action === "resume") {
       const credential = requireCredential(this.store.credential(input.participantCredentialId));
       this.store.touchCredential(credential.participantCredentialId, now);
-      this.log("participant_credential_resumed", { episodeLeaseLogId: lease.logId, role: credential.isCreator ? "owner" : "collaborator" });
+      this.log("participant_credential_resumed", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId, role: credential.isCreator ? "owner" : "collaborator" });
       return json(201, { apiBaseURL: this.environment.CHALK_API_URL, syncURL: this.environment.CHALK_SYNC_URL });
     }
     if (this.store.credentialCount() >= maximumEpisodeParticipants) throw new BrokerError(409, "The Episode is full.");
     const isCreator = lease.creatorCredentialId === input.participantCredentialId;
     this.store.addCredential({ participantCredentialId: input.participantCredentialId, displayName: input.displayName, isCreator }, now);
-    this.log("participant_credential_created", { episodeLeaseLogId: lease.logId, role: isCreator ? "owner" : "collaborator" });
+    this.log("participant_credential_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId, role: isCreator ? "owner" : "collaborator" });
     return json(201, { apiBaseURL: this.environment.CHALK_API_URL, syncURL: this.environment.CHALK_SYNC_URL });
   }
 
@@ -93,12 +118,13 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
     let credential = requireCredential(this.store.credential(input.participantCredentialId));
     this.store.touchCredential(credential.participantCredentialId, now);
     const chalk = this.chalk(input.trace);
+    const spaceId = leaseSpaceId(lease, this.environment.CHALK_SPACE_ID);
 
     if (!lease.episodeId) {
-      const episode = await chalk.episodes.create(this.environment.CHALK_SPACE_ID, {}, { idempotencyKey: `episode-lease-${lease.logId}` });
+      const episode = await chalk.episodes.create(spaceId, {}, { idempotencyKey: `episode-lease-${lease.logId}` });
       this.store.setEpisode(episode.id);
       lease = { ...lease, episodeId: episode.id };
-      this.log("episode_created", { episodeLeaseLogId: lease.logId });
+      this.log("episode_created", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
     }
     const episodeId = lease.episodeId;
     if (!episodeId) throw new BrokerError(502, "The Episode lease is incomplete.");
@@ -107,7 +133,7 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
       const participantId = credential.participantId ?? crypto.randomUUID();
       this.store.setParticipant(credential.participantCredentialId, participantId);
       const admission = await chalk.participants.admit(
-        this.environment.CHALK_SPACE_ID,
+        spaceId,
         episodeId,
         {
           name: credential.displayName,
@@ -118,11 +144,11 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
       );
       this.store.setParticipant(credential.participantCredentialId, participantId, admission.participant.generation);
       credential = { ...credential, participantId, participantGeneration: admission.participant.generation };
-      this.log("participant_admitted", { episodeLeaseLogId: lease.logId, role: credential.isCreator ? "owner" : "collaborator" });
+      this.log("participant_admitted", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId, role: credential.isCreator ? "owner" : "collaborator" });
       if (admission.access) return json(201, admission.access);
     }
 
-    return json(201, await issueAccessGrant(chalk, this.environment.CHALK_SPACE_ID, episodeId, credential, input));
+    return json(201, await issueAccessGrant(chalk, spaceId, episodeId, credential, input));
   }
 
   private async cleanup(input: InternalCredentialInput): Promise<Response> {
@@ -131,17 +157,23 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
     if (!credential.isCreator) {
       await this.removeParticipant(lease, credential, input.trace);
       this.store.deleteCredential(credential.participantCredentialId);
-      this.log("participant_credential_cleaned", { episodeLeaseLogId: lease.logId });
+      this.log("participant_credential_cleaned", { episodeLeaseLogId: lease.logId, journeyId: input.trace.journeyId });
       return empty(204);
     }
-    await this.endEpisode(lease, input.trace, "creator_cleanup");
+    try {
+      await this.endEpisode(lease, input.trace, "creator_cleanup");
+    } catch (error) {
+      await this.scheduleCleanupRetry(lease, input.trace, error);
+      throw error;
+    }
     return empty(204);
   }
 
   private async removeParticipant(lease: LeaseRecord, credential: ParticipantCredentialRecord, trace: TraceContext): Promise<void> {
     if (!lease.episodeId || !credential.participantId || credential.participantGeneration === undefined) return;
+    const spaceId = leaseSpaceId(lease, this.environment.CHALK_SPACE_ID);
     try {
-      await this.chalk(trace).participants.remove(this.environment.CHALK_SPACE_ID, lease.episodeId, credential.participantId, { participantGeneration: credential.participantGeneration }, { idempotencyKey: `episode-remove-${credential.participantId}-${credential.participantGeneration}` });
+      await this.chalk(trace).participants.remove(spaceId, lease.episodeId, credential.participantId, { participantGeneration: credential.participantGeneration }, { idempotencyKey: `episode-remove-${credential.participantId}-${credential.participantGeneration}` });
     } catch (error) {
       if (error instanceof ChalkAPIError && ["participant_not_active", "participant_not_found", "episode_not_active", "episode_not_found"].includes(error.code)) return;
       throw error;
@@ -158,24 +190,33 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
     const trace = generatedTrace();
     try {
       await this.endEpisode(lease, trace, "deadline_alarm");
-    } catch {
-      await this.state.storage.setAlarm(Date.now() + 60_000);
-      this.log("episode_end_retry_scheduled", { episodeLeaseLogId: lease.logId });
-      throw new Error("Episode end retry scheduled");
+    } catch (error) {
+      await this.scheduleCleanupRetry(lease, trace, error);
+      throw new Error("Space cleanup retry scheduled");
     }
   }
 
+  private async scheduleCleanupRetry(lease: LeaseRecord, trace: TraceContext, error: unknown): Promise<void> {
+    await this.state.storage.setAlarm(Date.now() + 60_000);
+    this.log("space_cleanup_retry_scheduled", { episodeLeaseLogId: lease.logId, journeyId: trace.journeyId, ...chalkErrorFields(error) });
+  }
+
   private async endEpisode(lease: LeaseRecord, trace: TraceContext, reason: string): Promise<void> {
+    const spaceId = leaseSpaceId(lease, this.environment.CHALK_SPACE_ID);
     if (lease.episodeId) {
       try {
-        await this.chalk(trace).episodes.end(this.environment.CHALK_SPACE_ID, lease.episodeId, { idempotencyKey: `episode-end-${lease.logId}` });
+        await this.chalk(trace).episodes.end(spaceId, lease.episodeId, { idempotencyKey: `episode-end-${lease.logId}` });
       } catch (error) {
         if (!(error instanceof ChalkAPIError) || !["episode_not_active", "episode_not_found"].includes(error.code)) throw error;
       }
     }
+    if (lease.spaceOrigin === "isolated") {
+      await this.chalk(trace).spaces.archive(spaceId);
+      this.log("space_archived", { episodeLeaseLogId: lease.logId, journeyId: trace.journeyId, reason });
+    }
     this.store.clearLease();
     await this.state.storage.deleteAlarm();
-    this.log("episode_ended", { episodeLeaseLogId: lease.logId, reason });
+    this.log("episode_ended", { episodeLeaseLogId: lease.logId, journeyId: trace.journeyId, reason });
   }
 
   private chalk(trace: TraceContext): ChalkServerClient {
@@ -192,6 +233,7 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
               this.log("api_fetch_failed", {
                 errorName: error instanceof Error ? error.name : "UnknownError",
                 errorMessage: error instanceof Error ? error.message.slice(0, 160) : "Unknown fetch failure",
+                journeyId: trace.journeyId,
               });
               throw error;
             }

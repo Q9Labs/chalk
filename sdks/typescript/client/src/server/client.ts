@@ -36,7 +36,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   return {
     spaces: {
       archive: (spaceId) => request<Space>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/archive`, expectedStatus: 200, retry: "always" }),
-      create: (input) => request<Space>({ method: "POST", path: `${tenantPath}/spaces`, body: createSpaceRequest(input), expectedStatus: 201, retry: "never" }),
+      create: (input, idempotency) => request<Space>({ method: "POST", path: `${tenantPath}/spaces`, body: createSpaceRequest(input), expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
       get: (spaceId) => request<Space>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}`, expectedStatus: 200, retry: "always" }),
       list: (input) => request<SpaceList>({ method: "GET", path: `${tenantPath}/spaces${spaceQuery(input)}`, expectedStatus: 200, retry: "always" }),
       restore: (spaceId) => request<Space>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/restore`, expectedStatus: 200, retry: "always" }),

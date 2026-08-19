@@ -1,11 +1,15 @@
 import type { SqlStorage } from "cloudflare:workers";
 
+export type SpaceOrigin = "isolated" | "legacy";
+
 export type LeaseRecord = {
   readonly createdAt: number;
   readonly expiresAt: number;
   readonly creatorCredentialId: string;
   readonly logId: string;
   readonly episodeId?: string;
+  readonly spaceId?: string;
+  readonly spaceOrigin: SpaceOrigin;
 };
 
 export type ParticipantCredentialRecord = {
@@ -22,6 +26,12 @@ type LeaseRow = {
   readonly creator_credential_id: string;
   readonly log_id: string;
   readonly episode_id: string | null;
+  readonly space_id: string | null;
+  readonly space_origin: string | null;
+};
+
+type TableInfoRow = {
+  readonly name: string;
 };
 
 type ParticipantCredentialRow = {
@@ -40,8 +50,11 @@ export class LeaseStore {
       created_at INTEGER NOT NULL,
       expires_at INTEGER NOT NULL,
       episode_id TEXT,
-      creator_credential_id TEXT NOT NULL
+      creator_credential_id TEXT NOT NULL,
+      space_id TEXT,
+      space_origin TEXT NOT NULL DEFAULT 'legacy' CHECK (space_origin IN ('isolated', 'legacy'))
     )`);
+    this.migrateEpisodeLeaseSchema();
     sql.exec(`CREATE TABLE IF NOT EXISTS participant_credentials (
       participant_credential_id TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
@@ -54,19 +67,21 @@ export class LeaseStore {
   }
 
   lease(): LeaseRecord | undefined {
-    const row = this.sql.exec<LeaseRow>("SELECT log_id, created_at, expires_at, episode_id, creator_credential_id FROM episode_lease WHERE singleton = 1").toArray()[0];
+    const row = this.sql.exec<LeaseRow>("SELECT log_id, created_at, expires_at, episode_id, creator_credential_id, space_id, space_origin FROM episode_lease WHERE singleton = 1").toArray()[0];
     if (!row) return undefined;
     return {
       logId: row.log_id,
       createdAt: row.created_at,
       expiresAt: row.expires_at,
       creatorCredentialId: row.creator_credential_id,
+      spaceOrigin: row.space_origin === "isolated" ? "isolated" : "legacy",
       ...(row.episode_id ? { episodeId: row.episode_id } : {}),
+      ...(row.space_id === null ? {} : { spaceId: row.space_id }),
     };
   }
 
   createLease(input: LeaseRecord): void {
-    this.sql.exec("INSERT INTO episode_lease (singleton, log_id, created_at, expires_at, creator_credential_id) VALUES (1, ?, ?, ?, ?)", input.logId, input.createdAt, input.expiresAt, input.creatorCredentialId);
+    this.sql.exec("INSERT INTO episode_lease (singleton, log_id, created_at, expires_at, creator_credential_id, space_id, space_origin) VALUES (1, ?, ?, ?, ?, ?, ?)", input.logId, input.createdAt, input.expiresAt, input.creatorCredentialId, input.spaceId ?? null, input.spaceOrigin);
   }
 
   credential(participantCredentialId: string): ParticipantCredentialRecord | undefined {
@@ -97,6 +112,10 @@ export class LeaseStore {
     this.sql.exec("UPDATE episode_lease SET episode_id = ? WHERE singleton = 1", episodeId);
   }
 
+  setSpace(spaceId: string): void {
+    this.sql.exec("UPDATE episode_lease SET space_id = ? WHERE singleton = 1", spaceId);
+  }
+
   setParticipant(participantCredentialId: string, participantId: string, participantGeneration?: number): void {
     this.sql.exec("UPDATE participant_credentials SET participant_id = ?, participant_generation = COALESCE(?, participant_generation) WHERE participant_credential_id = ?", participantId, participantGeneration ?? null, participantCredentialId);
   }
@@ -108,5 +127,16 @@ export class LeaseStore {
   clearLease(): void {
     this.sql.exec("DELETE FROM participant_credentials");
     this.sql.exec("DELETE FROM episode_lease");
+  }
+
+  private migrateEpisodeLeaseSchema(): void {
+    const columns = new Set(
+      this.sql
+        .exec<TableInfoRow>("PRAGMA table_info(episode_lease)")
+        .toArray()
+        .map(({ name }) => name),
+    );
+    if (!columns.has("space_id")) this.sql.exec("ALTER TABLE episode_lease ADD COLUMN space_id TEXT");
+    if (!columns.has("space_origin")) this.sql.exec("ALTER TABLE episode_lease ADD COLUMN space_origin TEXT NOT NULL DEFAULT 'legacy' CHECK (space_origin IN ('isolated', 'legacy'))");
   }
 }

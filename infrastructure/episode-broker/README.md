@@ -8,18 +8,20 @@ fallback.
 
 Each new Space invite receives a 256-bit capability token and maps to one
 SQLite-backed `EpisodeLease` Durable Object. The lease persists its deadline,
-creator and Participant credentials, Participant identities, and Participant
-generations. It creates an idempotent Episode in one pre-provisioned Cloudflare
-SFU space only when an SDK first requests an `AccessGrant`, admits that
-Participant, and returns the opaque grant. The API key, tenant, provider Space
-binding, and transport endpoints remain Worker bindings and never enter client
-bundles.
+creator and Participant credentials, Participant identities, Participant
+generations, and the lease's Space ID. A new invite creates one isolated,
+one-hour Cloudflare SFU Space. The first `AccessGrant` creates its Episode in
+that Space. Joining the invite reuses the same Space. Creator cleanup or the
+deadline ends the Episode and archives the Space. The API key, tenant, legacy
+Space fallback, and transport endpoints remain Worker bindings and never enter
+client bundles.
 
 The hard limits are an 8,192-byte JSON body, an 80-character display name, 32
 Participant credentials per Episode, a 60-minute Episode deadline, 20
-credential-creation attempts per minute for an anonymous source, and 120
-authenticated broker calls per Participant credential per minute. Creator
-cleanup ends the Episode and deletes the lease rows and alarm. Participant
+credential-creation attempts per minute for an anonymous source, 10 new Spaces
+per minute across the Worker, and 120 authenticated broker calls per Participant
+credential per minute. Creator cleanup ends the Episode, archives its Space,
+and deletes the lease rows and alarm. Participant
 cleanup deletes only that Participant's durable credential state. The Durable
 Object alarm repeats creator cleanup at the deadline, while the Episode's own
 remaining maximum duration is the independent upper bound.
@@ -117,9 +119,9 @@ and point `CHALK_API_URL` at a local fake or development API. Never place
 credentials in a tracked file.
 
 The checked-in end-to-end proof starts a service-bound fake Chalk API and two
-local Wrangler runtimes. It verifies credential creation has no upstream side
-effects, then exercises browser and native admission, `AccessGrant` refresh,
-capability-based Participant admission, cleanup, creator Episode end, and
+local Wrangler runtimes. It verifies one isolated Space per new invite, same
+Space reuse for invite joins, browser and native admission, `AccessGrant`
+refresh, Participant cleanup, creator Episode end, Space archive, and
 deadline-driven expiry:
 
 ```bash

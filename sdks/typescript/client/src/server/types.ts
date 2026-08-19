@@ -187,7 +187,7 @@ export type RotateAPIKeyInput = { readonly expiresAt?: string | null };
 export type ChalkServerClient = {
   readonly spaces: {
     archive(spaceId: string): Promise<Space>;
-    create(input: CreateSpaceInput): Promise<Space>;
+    create(input: CreateSpaceInput, options?: ChalkIdempotencyOptions): Promise<Space>;
     get(spaceId: string): Promise<Space>;
     list(input?: ListSpacesInput): Promise<SpaceList>;
     restore(spaceId: string): Promise<Space>;

@@ -142,6 +142,7 @@ function workerHarness(stubResponse: Response = jsonResponse({}, 201)) {
     CREATE_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
     EPISODE_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
     EPISODE_LEASES: namespace,
+    SPACE_CREATE_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
   } satisfies WorkerEnv;
   const log = vi.fn();
   return {

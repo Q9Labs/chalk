@@ -26,7 +26,10 @@ const (
 	providerConfigValue = `{"enabled":true,"provider":"cf_sfu","mode":"chalk_managed"}`
 )
 
-var brokerScopes = []authentication.Scope{authentication.ScopeEpisodesWrite}
+var brokerScopes = []authentication.Scope{
+	authentication.ScopeEpisodesWrite,
+	authentication.ScopeSpacesWrite,
+}
 
 type bootstrapInput struct {
 	TenantName  string

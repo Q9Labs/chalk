@@ -44,3 +44,11 @@ namespace_id = "2026072202"
 [ratelimits.simple]
 limit = 120
 period = 60
+
+[[ratelimits]]
+name = "SPACE_CREATE_RATE_LIMITER"
+namespace_id = "2026081901"
+
+[ratelimits.simple]
+limit = 10
+period = 60
