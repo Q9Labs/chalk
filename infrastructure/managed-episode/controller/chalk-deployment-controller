@@ -376,14 +376,16 @@ record_input() {
 
 write_input_file() {
   local destination="$1"
-  local value="$2"
+  local response_file="$2"
+  local parameter_name="$3"
   local target="${stage_root}/${destination}"
   reject_symlink_components "$(dirname "$target")"
   mkdir -p "$(dirname "$target")"
   chmod 700 "$(dirname "$target")"
   [[ ! -e "$target" || ! -L "$target" ]] || fail "runtime input destination is a symlink"
   umask 077
-  printf '%s' "$value" >"$target"
+  jq -j --arg name "$parameter_name" '.Parameters[] | select(.Name == $name) | .Value' "$response_file" >"$target" || fail "SSM runtime input value could not be written"
+  [[ -s "$target" ]] || fail "SSM runtime input value write was empty"
   chmod 600 "$target"
 }
 
@@ -419,7 +421,7 @@ fetch_deployment_inputs() {
   versions_json='[]'
   missing_json='[]'
   input_records_json='[]'
-  local id suffix destination kind name count value version type
+  local id suffix destination kind name count value_length version type
   for index in "${!ids[@]}"; do
     id="${ids[index]}"
     suffix="${suffixes[index]}"
@@ -438,17 +440,17 @@ fetch_deployment_inputs() {
     [[ "$count" == 1 ]] || fail "SSM response contains duplicate runtime input: ${id}"
     type="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Type' "$response_file")" || fail "SSM runtime input type is malformed: ${id}"
     input_type_is_supported "$kind" "$type" || fail "SSM runtime input type is unsupported for its contract kind: ${id}"
-    value="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Value | strings' "$response_file")" || fail "SSM runtime input value is malformed: ${id}"
+    value_length="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Value | strings | length' "$response_file")" || fail "SSM runtime input value is malformed: ${id}"
     version="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Version | numbers' "$response_file")" || fail "SSM runtime input version is malformed: ${id}"
     [[ "$version" =~ ^[1-9][0-9]*$ ]] || fail "SSM runtime input version is malformed: ${id}"
     versions_json="$(jq -c --arg id "$id" --arg name "$name" --argjson version "$version" '. + [{id:$id,name:$name,version:$version}]' <<<"${versions_json}")"
-    if [[ -z "$value" ]]; then
+    if [[ "$value_length" == 0 ]]; then
       json_is_excluded "$id" || fail "required SSM runtime input is empty: ${id}"
       missing_json="$(jq -c --arg id "$id" '. + [$id]' <<<"${missing_json}")"
       record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" true
       continue
     fi
-    write_input_file "$destination" "$value"
+    write_input_file "$destination" "$response_file" "$name"
     record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
   done
 }
@@ -962,15 +964,15 @@ restore_inputs_from_pointer() {
       fail "SSM exact-version restore failed: ${id}"
     fi
     jq -e '(.Parameters | type == "array" and length == 1) and ((.InvalidParameters // []) == [])' "$response_file" >/dev/null 2>&1 || fail "SSM exact-version restore response is malformed"
-    local returned_version returned_name returned_value returned_type
+    local returned_version returned_name returned_value_length returned_type
     returned_name="$(jq -er '.Parameters[0].Name | strings' "$response_file")" || fail "SSM restore parameter name is malformed"
     returned_version="$(jq -er '.Parameters[0].Version | numbers' "$response_file")" || fail "SSM restore parameter version is malformed"
     [[ "$returned_name" == "$name" && "$returned_version" == "$version" ]] || fail "SSM restore did not return the requested parameter version"
     returned_type="$(jq -er '.Parameters[0].Type | strings' "$response_file")" || fail "SSM restore parameter type is malformed"
     input_type_is_supported "$kind" "$returned_type" || fail "SSM restore parameter type is unsupported for its contract kind"
-    returned_value="$(jq -er '.Parameters[0].Value | strings' "$response_file")" || fail "SSM restore parameter value is malformed"
-    [[ -n "$returned_value" ]] || fail "required exact-version runtime input is empty: ${id}"
-    write_input_file "$destination" "$returned_value"
+    returned_value_length="$(jq -er '.Parameters[0].Value | strings | length' "$response_file")" || fail "SSM restore parameter value is malformed"
+    [[ "$returned_value_length" != 0 ]] || fail "required exact-version runtime input is empty: ${id}"
+    write_input_file "$destination" "$response_file" "$name"
     record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
   done < <(jq -r '.inputs[] | [.id, .name, (.version // 0), .missing, .destination, .kind, .suffix] | @tsv' "$pointer_file")
 }

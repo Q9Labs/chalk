@@ -144,8 +144,8 @@ On the host, `chalk-deployment-controller` performs this transaction:
 
 1. Validate the versioned request, manifest, source artifacts, SSM response,
    image digests, and host architecture.
-2. Fetch all allowlisted SSM inputs with decryption and record their exact
-   versions without recording values.
+2. Fetch all allowlisted SSM inputs with decryption, preserve their exact bytes
+   including trailing newlines, and record exact versions without values.
 3. On the first controller run, adopt a healthy legacy runtime only when its
    release identity, installed Quadlets, live env/proof, Podman secrets, and
    versioned SSM inputs agree. This creates the rollback point without stopping

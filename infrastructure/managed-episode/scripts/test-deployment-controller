@@ -75,6 +75,9 @@ for name in "${names[@]}"; do
     continue
   fi
   value=test-only-secret-bytes
+  if [[ "$base" == */api.env ]]; then
+    value=$'test-only-secret-bytes\n'
+  fi
   if [[ -n "${FAKE_EMPTY_SUFFIX:-}" && "$base" == *"/${FAKE_EMPTY_SUFFIX}" ]]; then
     value=""
   fi
@@ -243,7 +246,7 @@ printf '#!/usr/bin/env bash\nexit 1\n' >"${fixture_root}/install/chalk-runtime-h
 chmod 0755 "${fixture_root}/install/chalk-runtime-health"
 make_manifest legacy >"${fixture_root}/run/release/release-manifest.json"
 printf '%s  release-manifest.json\n' "$(sha256sum "${fixture_root}/run/release/release-manifest.json" | awk '{print $1}')" >"${fixture_root}/run/release/release-manifest.sha256"
-printf '%s' test-only-secret-bytes >"${fixture_root}/run/env/api.env"
+printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
 printf '%s' test-only-secret-bytes >"${fixture_root}/run/env/sync.env"
 printf '%s' test-only-secret-bytes >"${fixture_root}/run/evidence/planetscale-sync-proof.json"
 for component_file in api:chalk-api.container sync:chalk-sync.container redis:chalk-redis.container cloudflared:chalk-cloudflared.container; do
@@ -275,7 +278,7 @@ grep -Fq 'live runtime input does not match' "${fixture_root}/adoption-mismatch.
 stops_after_adoption="$(grep -Fc 'stop chalk-runtime.target' "${fixture_root}/commands.log" || true)"
 [[ "$stops_after_adoption" == "$stops_before_adoption" ]] || fail "legacy adoption stopped the runtime before its inputs agreed"
 [[ ! -e "${adoption_state}/active-release.json" ]] || fail "failed legacy adoption wrote an active pointer"
-printf '%s' test-only-secret-bytes >"${fixture_root}/run/env/api.env"
+printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
 printf '0' >"${fixture_root}/health-index"
 if run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" 'ok,fail,ok' >"${fixture_root}/adoption-result.log" 2>&1; then
   fail "failed first candidate was accepted after legacy adoption"
