@@ -137,8 +137,36 @@ try {
   await waitForAccessUnauthorized(deadlineCreator.cookie);
   assert.equal((await post("/local-chalk/access-grants", {}, deadlineCreator.cookie)).response.status, 401);
 
+  assert.equal((await fetch(`${fakeAPIOrigin}/fail-next-space-creation`, { method: "POST" })).status, 204);
+  const failedCreator = await post("/local-chalk/participant-credentials", { displayName: "Retry Creator" });
+  assert.equal(failedCreator.response.status, 503);
   calls = await apiCalls();
-  console.log(JSON.stringify({ calls: calls.length, creatorCleanup: "verified", creatorResume: "verified", durableObject: "verified", episodeDeadline: "verified", isolatedSpaces: "verified", nativeParticipantCredential: "verified", spaceInviteJoin: "verified", status: "ok" }));
+  const failedSpaceKey = calls.at(-1).idempotencyKey;
+  await waitForSpaceArchive(failedSpaceKey);
+  calls = await apiCalls();
+  const recoveredSpaceCalls = calls.filter((call) => call.idempotencyKey === failedSpaceKey);
+  assert.equal(recoveredSpaceCalls.length, 4, "cleanup must reuse the failed Space creation idempotency key");
+  const recoveredSpaceId = recoveredSpaceCalls.at(-1).spaceId;
+  assert.equal(
+    calls.some((call) => call.path === `/v1/tenants/test-tenant/spaces/${recoveredSpaceId}/archive`),
+    true,
+  );
+
+  calls = await apiCalls();
+  console.log(
+    JSON.stringify({
+      calls: calls.length,
+      creatorCleanup: "verified",
+      creatorResume: "verified",
+      durableObject: "verified",
+      episodeDeadline: "verified",
+      failedProvisionCleanup: "verified",
+      isolatedSpaces: "verified",
+      nativeParticipantCredential: "verified",
+      spaceInviteJoin: "verified",
+      status: "ok",
+    }),
+  );
 } catch (error) {
   process.stderr.write(`${fakeOutput()}\n${brokerOutput()}`);
   throw error;
@@ -202,6 +230,17 @@ async function waitForAccessUnauthorized(cookie) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("The Episode lease alarm did not clear the credential within 10 seconds");
+}
+
+async function waitForSpaceArchive(idempotencyKey) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const calls = await apiCalls();
+    const recoveredSpaceId = calls.findLast((call) => call.idempotencyKey === idempotencyKey && call.spaceId)?.spaceId;
+    if (recoveredSpaceId && calls.some((call) => call.path === `/v1/tenants/test-tenant/spaces/${recoveredSpaceId}/archive`)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("The Episode lease alarm did not archive the recovered Space within 10 seconds");
 }
 
 async function stop(process) {

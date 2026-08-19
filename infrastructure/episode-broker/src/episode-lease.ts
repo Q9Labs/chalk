@@ -202,15 +202,22 @@ export class EpisodeLease extends DurableObject<WorkerEnv> {
   }
 
   private async endEpisode(lease: LeaseRecord, trace: TraceContext, reason: string): Promise<void> {
-    const spaceId = leaseSpaceId(lease, this.environment.CHALK_SPACE_ID);
-    if (lease.episodeId) {
+    let cleanupLease = lease;
+    if (lease.spaceOrigin === "isolated" && !lease.spaceId) {
+      const spaceId = await provisionAnonymousSpace(this.chalk(trace), lease, this.environment.CHALK_TENANT_ID, configuredEpisodeDeadlineSeconds(this.environment));
+      this.store.setSpace(spaceId);
+      cleanupLease = { ...lease, spaceId };
+      this.log("space_recovered_for_cleanup", { episodeLeaseLogId: lease.logId, journeyId: trace.journeyId, reason });
+    }
+    const spaceId = leaseSpaceId(cleanupLease, this.environment.CHALK_SPACE_ID);
+    if (cleanupLease.episodeId) {
       try {
-        await this.chalk(trace).episodes.end(spaceId, lease.episodeId, { idempotencyKey: `episode-end-${lease.logId}` });
+        await this.chalk(trace).episodes.end(spaceId, cleanupLease.episodeId, { idempotencyKey: `episode-end-${lease.logId}` });
       } catch (error) {
         if (!(error instanceof ChalkAPIError) || !["episode_not_active", "episode_not_found"].includes(error.code)) throw error;
       }
     }
-    if (lease.spaceOrigin === "isolated") {
+    if (cleanupLease.spaceOrigin === "isolated") {
       await this.chalk(trace).spaces.archive(spaceId);
       this.log("space_archived", { episodeLeaseLogId: lease.logId, journeyId: trace.journeyId, reason });
     }

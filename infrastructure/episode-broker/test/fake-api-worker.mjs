@@ -1,15 +1,24 @@
 const calls = [];
 let episodeEndCalls = 0;
 let spaceSequence = 0;
+let spaceCreateFailures = 0;
 
 export default {
   async fetch(request) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/calls") return response(200, calls);
+    if (request.method === "POST" && url.pathname === "/fail-next-space-creation") {
+      spaceCreateFailures = 3;
+      return new Response(null, { status: 204 });
+    }
     const body = await request.json().catch(() => undefined);
     const call = { body, method: request.method, path: url.pathname, authorization: request.headers.get("authorization"), idempotencyKey: request.headers.get("idempotency-key") };
     calls.push(call);
     if (request.method === "POST" && url.pathname === "/v1/tenants/test-tenant/spaces") {
+      if (spaceCreateFailures > 0) {
+        spaceCreateFailures -= 1;
+        return response(503, { error: { code: "dependency_unavailable" } });
+      }
       spaceSequence += 1;
       const spaceId = `00000000-0000-4000-8000-${String(spaceSequence).padStart(12, "0")}`;
       call.spaceId = spaceId;
