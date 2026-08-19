@@ -110,9 +110,13 @@ case "${1:-} ${2:-}" in
     mv "$temporary" "$state"
     ;;
   "secret create")
-    [[ "${4:-}" == - ]]
+    [[ "${3:-}" == --replace && "${5:-}" == - ]]
+    [[ -p /dev/stdin ]]
     cat >/dev/null
-    printf '%s\n' "${3:?}" >>"$state"
+    temporary="${state}.tmp"
+    awk -v name="${4:?}" '$0 != name' "$state" >"$temporary"
+    printf '%s\n' "${4:?}" >>"$temporary"
+    mv "$temporary" "$state"
     ;;
   "image inspect")
     case "$(uname -m)" in
@@ -353,7 +357,7 @@ else
 fi
 [[ "$runtime_root_mode" == 755 && "$runtime_env_mode" == 700 ]] || fail "runtime paths do not allow safe runtime-user traversal"
 (cd "${fixture_root}/run/release" && if command -v sha256sum >/dev/null 2>&1; then sha256sum --check --status release-manifest.sha256; else expected="$(awk '{print $1}' release-manifest.sha256)"; [[ "$(shasum -a 256 release-manifest.json | awk '{print $1}')" == "$expected" ]]; fi) || fail "runtime release identity was not published to /run"
-grep -Fq 'podman secret create chalk-api-provider-server-cert -' "${fixture_root}/commands.log" || fail "Podman secrets were not streamed on standard input"
+grep -Fq 'podman secret create --replace chalk-api-provider-server-cert -' "${fixture_root}/commands.log" || fail "Podman secrets were not atomically streamed on standard input"
 grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com' "${fixture_root}/commands.log" || fail "rootless ECR authentication did not use standard input"
 if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"

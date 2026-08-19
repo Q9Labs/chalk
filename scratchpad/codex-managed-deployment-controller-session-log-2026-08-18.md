@@ -38,3 +38,8 @@
   that the closed-input harness had allowed through. Switched that JSON build
   to explicit input-free mode and made the harness require one healthy ledger
   record, so both interactive and SSM shells follow the same promotion path.
+- 2026-08-19: An authorized live rollout exposed a Podman 4.9 input contract
+  that the fake host did not model: `secret create ... -` rejects a regular
+  file redirected to standard input. The stable runtime was restored from its
+  pinned pointer. Secret rotation now sends bytes through a real pipe and uses
+  Podman's atomic `--replace` path; the fake Podman requires both properties.

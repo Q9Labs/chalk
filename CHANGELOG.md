@@ -18,6 +18,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made managed host secret rotation use Podman's atomic replacement path and
+  an actual input pipe, so Podman 4.9 can register new values without deleting
+  the stable secret first.
+
 ## [4.1.3] - 2026-08-19
 
 ### Fixed

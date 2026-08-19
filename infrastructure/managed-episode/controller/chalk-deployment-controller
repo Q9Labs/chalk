@@ -643,10 +643,9 @@ reconcile_secrets() {
       fi
       continue
     fi
-    if run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-inspect-error.log"; then
-      run_user_podman secret rm "$secret_name" >/dev/null 2>"${stage_root}/secret-rm-error.log" || fail "Podman secret replacement failed"
+    if ! cat "$source" | run_user_podman secret create --replace "$secret_name" - >/dev/null 2>"${stage_root}/secret-create-error.log"; then
+      fail "Podman secret registration failed"
     fi
-    run_user_podman secret create "$secret_name" - <"$source" >/dev/null 2>"${stage_root}/secret-create-error.log" || fail "Podman secret registration failed"
     run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-verify-error.log" || fail "Podman secret registration could not be verified"
   done < <(jq -r '.[] | [.id, .destination] | @tsv' <<<"${input_records_json}")
 }
