@@ -33,7 +33,8 @@ cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/render-runti
 set -euo pipefail
 output="$2"
 mkdir -p "$output/quadlet" "$output/systemd"
-printf 'Image=ghcr.io/q9labs/chalk-api@sha256:%064d\n' 0 >"$output/quadlet/chalk-api.container"
+image="$(jq -er '.images.api' "$1")"
+printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
 RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
@@ -49,6 +50,10 @@ cat >"${fixture_root}/bin/aws" <<'AWS'
 set -euo pipefail
 log="${FAKE_AWS_LOG:?}"
 printf '%s\n' "$*" >>"$log"
+if [[ "${1:-} ${2:-}" == "ecr get-login-password" ]]; then
+  printf '%s\n' test-only-registry-password
+  exit 0
+fi
 names=()
 while (($# > 0)); do
   if [[ "$1" == --names ]]; then
@@ -91,6 +96,10 @@ set -euo pipefail
 printf 'podman %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 state="${FAKE_SECRET_STATE:?}"
 case "${1:-} ${2:-}" in
+  "login --username")
+    [[ "${3:-}" == AWS && "${4:-}" == --password-stdin && "${5:-}" =~ ^[0-9]{12}\.dkr\.ecr\.ap-southeast-1\.amazonaws\.com$ ]]
+    [[ "$(cat)" == test-only-registry-password ]]
+    ;;
   "secret inspect") grep -Fxq -- "${3:?}" "$state" ;;
   "secret rm")
     temporary="${state}.tmp"
@@ -167,7 +176,7 @@ make_manifest() {
     --argjson architectures "$test_architectures" \
     --arg api_digest "$(printf 'a%.0s' {1..64})" \
     --arg sync_digest "$(printf 'b%.0s' {1..64})" \
-    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("ghcr.io/q9labs/chalk-api@sha256:"+$api_digest),sync:("ghcr.io/q9labs/chalk-sync@sha256:"+$sync_digest),redis:("ghcr.io/q9labs/redis@sha256:"+$api_digest),cloudflared:("ghcr.io/cloudflare/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
+    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
 }
 
 make_request() {
@@ -218,6 +227,15 @@ for exclusions in '["api-env","api-env"]' '["api-env","nope"]' '["*"]' '["sync-e
   make_request invalid "${fixture_root}/request.json" "$exclusions"
   expect_failure "$controller" deploy --request "${fixture_root}/request.json" --manifest "$manifest" --source-root "${fixture_root}/source"
 done
+
+wrong_region_state="${fixture_root}/wrong-region-state"
+mkdir -p "$wrong_region_state"
+make_request wrong-region "${fixture_root}/wrong-region-request.json"
+make_manifest wrong-region | jq '(.images[] |= sub("ap-southeast-1"; "us-east-1"))' >"${fixture_root}/wrong-region-manifest.json"
+if run_controller "$wrong_region_state" "${fixture_root}/wrong-region-request.json" "${fixture_root}/wrong-region-manifest.json" >"${fixture_root}/wrong-region.log" 2>&1; then
+  fail "cross-region ECR image was accepted"
+fi
+grep -Fq 'ECR image registry does not match the deployment region' "${fixture_root}/wrong-region.log" || fail "cross-region ECR rejection was not reported"
 
 adoption_state="${fixture_root}/adoption-state"
 mkdir -p "$adoption_state" "${fixture_root}/run/env" "${fixture_root}/run/evidence" "${fixture_root}/run/release" "${fixture_root}/user-quadlet" "${fixture_root}/user-systemd" "${fixture_root}/install"
@@ -333,7 +351,8 @@ fi
 [[ "$runtime_root_mode" == 755 && "$runtime_env_mode" == 700 ]] || fail "runtime paths do not allow safe runtime-user traversal"
 (cd "${fixture_root}/run/release" && if command -v sha256sum >/dev/null 2>&1; then sha256sum --check --status release-manifest.sha256; else expected="$(awk '{print $1}' release-manifest.sha256)"; [[ "$(shasum -a 256 release-manifest.json | awk '{print $1}')" == "$expected" ]]; fi) || fail "runtime release identity was not published to /run"
 grep -Fq 'podman secret create chalk-api-provider-server-cert -' "${fixture_root}/commands.log" || fail "Podman secrets were not streamed on standard input"
-if grep -Fq 'test-only-secret-bytes' "${fixture_root}/commands.log"; then
+grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com' "${fixture_root}/commands.log" || fail "rootless ECR authentication did not use standard input"
+if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"
 fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"

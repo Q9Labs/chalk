@@ -151,7 +151,8 @@ On the host, `chalk-deployment-controller` performs this transaction:
    versioned SSM inputs agree. This creates the rollback point without stopping
    the live services.
 4. Render and validate the candidate while the stable runtime is still live,
-   then pull its immutable images.
+   exchange the host role for a transient rootless ECR token over standard
+   input, then pull its immutable images.
 5. Stop the runtime, atomically publish `/run/chalk/env` and the checksummed
    release identity, stream Podman secrets over standard input, start the hard
    dependency target, and run aggregate health with bounded retries.

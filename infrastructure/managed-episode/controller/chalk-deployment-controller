@@ -657,6 +657,7 @@ pull_images() {
     *) fail "host architecture is unsupported" ;;
   esac
   jq -e --arg architecture "linux/${host_architecture}" '.architectures | index($architecture) != null' "$manifest_path" >/dev/null || fail "release manifest does not support the host architecture"
+  authenticate_ecr_registries
 
   local image image_architecture
   while IFS= read -r image; do
@@ -664,6 +665,26 @@ pull_images() {
     run_user_podman pull "$image" >/dev/null 2>"${stage_root}/podman-pull-error.log" || fail "digest-addressed image pull failed"
     image_architecture="$(run_user_podman image inspect --format '{{.Architecture}}' "$image" 2>"${stage_root}/podman-inspect-error.log")" || fail "pulled image architecture inspection failed"
     [[ "$image_architecture" == "$host_architecture" ]] || fail "pulled image architecture does not match the host"
+  done < <(jq -r '.images | .api, .sync, .redis, .cloudflared' "$manifest_path")
+}
+
+authenticate_ecr_registries() {
+  local authenticated_registries=$'\n'
+  local image registry
+  while IFS= read -r image; do
+    registry="${image%%/*}"
+    if [[ ! "$registry" =~ ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com(\.cn)?$ ]]; then
+      continue
+    fi
+    [[ "$registry" =~ ^[0-9]{12}\.dkr\.ecr\.${request_region}\.amazonaws\.com(\.cn)?$ ]] || fail "ECR image registry does not match the deployment region"
+    if [[ "$authenticated_registries" == *$'\n'"${registry}"$'\n'* ]]; then
+      continue
+    fi
+    if ! "$aws_bin" ecr get-login-password --region "$request_region" 2>"${stage_root}/ecr-login-error.log" \
+      | run_user_podman login --username AWS --password-stdin "$registry" >/dev/null 2>"${stage_root}/podman-login-error.log"; then
+      fail "rootless ECR authentication failed"
+    fi
+    authenticated_registries+="${registry}"$'\n'
   done < <(jq -r '.images | .api, .sync, .redis, .cloudflared' "$manifest_path")
 }
 
