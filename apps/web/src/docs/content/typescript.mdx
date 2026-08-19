@@ -1,0 +1,38 @@
+## TypeScript gives every UI the same SpaceClient
+
+`@q9labsai/chalk-client` is framework-agnostic. It owns the Connection, access refresh, lifecycle commands, and one `SpaceSnapshot` store. Use it directly when your UI is not React, or use it as the shared core under a framework binding.
+
+```sh
+pnpm add @q9labsai/chalk-client
+```
+
+```ts
+import { createSpaceClient } from "@q9labsai/chalk-client";
+
+const client = createSpaceClient({ space: "design-review", getAccess });
+
+const stop = client.subscribe(() => {
+  const { status, lastError } = client.getSnapshot().connection;
+  renderStatus(status, lastError);
+});
+
+await client.join({ displayName: "Ari", microphone: true, camera: false });
+```
+
+### Commands and snapshots
+
+Lifecycle stays flat on `SpaceClient`: `join`, `leave`, `dispose`, `endEpisode`, and `extendEpisode`. Feature commands are namespaced under `media`, `chat`, `participants`, `reactions`, and `whiteboard`. Snapshot slices cover connection, self, Participants, media, chat, reactions, and whiteboard.
+
+```ts
+await client.chat.send({ text: "Ready when you are." });
+await client.participants.raiseHand();
+await client.reactions.send("🎉");
+
+stop();
+await client.leave();
+client.dispose();
+```
+
+Use `client.on` for discrete `participantJoined`, `participantLeft`, `episodeEnded`, `screenShareStarted`, `screenShareStopped`, and `error` events. Use snapshots for current state, because an event listener alone cannot reconstruct a reconnect.
+
+See [recovery](/docs/recovery) for access and reconnect behavior, then choose [React](/docs/react) or [React Native](/docs/react-native) when you want framework bindings.

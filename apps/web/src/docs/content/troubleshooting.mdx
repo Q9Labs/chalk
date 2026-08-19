@@ -1,0 +1,23 @@
+## Start with the stable code, then choose the smallest recovery
+
+`SpaceClientError` includes `code`, `recoverable`, and a safe `message`. Render the message for the person, use the code for program logic, and avoid retrying a terminal state.
+
+| Code                                  | Meaning                                | Action                                                                   |
+| ------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------ |
+| `access.invalid`                      | The grant is malformed or rejected     | Ask `getAccess` for a fresh grant and retry once.                        |
+| `access.unavailable`                  | The access callback failed             | Check your backend route and auth, then offer retry.                     |
+| `media.permission_denied`             | The platform denied a device grant     | Explain the device setting and keep other sources usable.                |
+| `connection.sync_recovery_exhausted`  | Sync recovery gave up                  | Leave, dispose, and create a fresh client after checking service health. |
+| `connection.media_recovery_exhausted` | Media recovery gave up                 | Keep chat and Presence visible, then rejoin when ready.                  |
+| `chat.cursor_reset_required`          | Retained history moved past the cursor | Reset the local cursor and load the available history.                   |
+| `whiteboard.unavailable`              | The whiteboard transport is not ready  | Render the failure and keep the rest of the Space usable.                |
+| `episode.ended`                       | The live Episode is over               | Show history or let the Participant join the next Episode.               |
+
+```ts
+client.on("error", ({ error }) => {
+  reportSafeDiagnostic(error.code, error.recoverable);
+  if (error.recoverable) showRetry(error.message);
+});
+```
+
+If a command returns an unknown code, treat it as a visible failure and do not guess. Check the public [API error envelope](/docs/api-errors) for HTTP integrations and [Diagnostics](/docs/diagnostics) for bounded journey evidence.

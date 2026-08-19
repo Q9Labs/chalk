@@ -1,0 +1,25 @@
+## A Space persists; an Episode is bounded
+
+A **Space** is the durable place where collaboration happens. Its identity, configuration, Members, canonical chat stream, and whiteboard scene live between Episodes. A **live Episode** is one bounded run of activity inside that Space. It owns attendance, a snapshot of Space configuration, and its artifacts.
+
+Joining always targets the Space. If no Episode is live and the joining identity has the start capability, an Episode emerges. An explicit start operation exists for ceremony and warm-up, but it is not a prerequisite for an allowed Participant to join.
+
+### Lifecycle and policy
+
+- A Space can have at most one live Episode. Parallel tracks use separate Spaces.
+- Episode policy is a snapshot. Space edits take effect on the next Episode, not the running one.
+- An Episode can end explicitly, naturally after the last leave and its linger window, or at its deadline.
+- `endEpisode()` and `extendEpisode(minutes)` are capability-gated client operations.
+- After an Episode ends, it is frozen. Its attendance and artifacts do not change.
+
+```ts
+await client.join();
+await client.extendEpisode(15);
+await client.endEpisode();
+```
+
+The `connection.episode` snapshot gives the live Episode id, start time, and deadline. Use that summary for live UI. Use the public API to read durable Space and Episode records.
+
+<Callout tone="note" title="One join target">
+  Episode links describe history. A join link names the Space slug, so a visitor never has to choose between multiple live Episodes.
+</Callout>

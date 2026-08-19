@@ -1,0 +1,25 @@
+## Capabilities decide; Roles group
+
+A **Capability** is the mechanical check for an action now. A **Role** is a customer-defined named bundle of capabilities. The UI should ask `self.can(capability)` or `useCan(capability)` instead of inferring authority from a Role name.
+
+Chalk ships three use-case-neutral Role names: `owner`, `collaborator`, and `observer`. Customers can define other names. The wire accepts any non-empty Role name, while the capability set stays typed.
+
+Common capabilities include:
+
+| Area                     | Capabilities                                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Media and participation  | `publishAudio`, `publishVideo`, `publishScreen`, `subscribe`, `raiseHand`, `renameSelf`                                          |
+| Collaboration            | `sendChat`, `sendReaction`, `drawWhiteboard`, `manageWhiteboard`                                                                 |
+| Episode control          | `startEpisode`, `extendEpisode`, `endEpisode`                                                                                    |
+| Admission and moderation | `manageAdmission`, `assignRoles`, `muteOthers`, `stopVideoOthers`, `stopScreenOthers`, `requestMediaOthers`, `removeParticipant` |
+| Durable content          | `manageMembers`, `manageRecording`, `clearSpaceContent`                                                                          |
+
+```ts
+const snapshot = client.getSnapshot();
+
+if (snapshot.self.can("publishScreen")) {
+  await client.media.setScreenShareEnabled(true);
+}
+```
+
+Commands still return a typed failure when state, access, or capability checks reject them. Render affordances from the snapshot, and handle command failures at the boundary.

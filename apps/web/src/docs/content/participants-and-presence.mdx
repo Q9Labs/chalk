@@ -1,0 +1,30 @@
+## Participants are live seats; Presence is live state
+
+A **Participant** is anyone or anything present in a live Episode. The seat has its own id, display name, Role, capabilities, media state, and Presence. A reconnect keeps the seat; leaving and rejoining creates a new seat.
+
+**Presence** exists only in a live Episode. It reports whether a Participant is connected, speaking, or the active speaker. A dormant Space has Members and content, but no ambient Presence.
+
+```ts
+const { roster, admissionQueue } = client.getSnapshot().participants;
+
+for (const participant of roster) {
+  renderParticipant({
+    name: participant.displayName,
+    connected: participant.presence.state === "connected",
+    speaking: participant.presence.speaking,
+  });
+}
+```
+
+The client also emits `participantJoined` and `participantLeft` for discrete changes. Read `participants.roster` for the current view; do not rebuild a roster from events alone.
+
+### Admission requests
+
+When a Space uses knock admission, pending requests appear in `admissionQueue`. A Participant with the `manageAdmission` capability can admit or deny by request id:
+
+```ts
+await client.participants.admit(requestId);
+await client.participants.deny(requestId);
+```
+
+The queue is part of the snapshot, so a reconnect can render the current requests without replaying old events.

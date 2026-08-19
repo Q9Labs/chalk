@@ -24,6 +24,7 @@ describe("Closing", () => {
 
     expect(markup).toContain('href="#product"');
     expect(markup).toContain('href="#spaces"');
+    expect(markup).toContain('href="/docs"');
     expect(markup).toContain('href="/home"');
     expect(markup).toContain('href="/sign-in"');
     expect(markup).toContain('href="/privacy"');

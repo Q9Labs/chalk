@@ -1,0 +1,21 @@
+## Keep the hot path small: one client, stable slices, bounded work
+
+The client maintains one `SpaceSnapshot` store and publishes referentially stable slices. Subscribe once at the UI boundary, select the slice a component needs, and avoid copying the full roster or media list on every render.
+
+```ts
+const stop = client.subscribe(() => {
+  const { status } = client.getSnapshot().connection;
+  statusView.set(status);
+});
+```
+
+Feature controllers serialize their own source work. Media commands for microphone, camera, and screen are independent from chat and reactions, while chat pagination and file upload stay under `chat.files`. Dispose the client when its surface goes away so Connection, tracks, subscriptions, and timers can release resources.
+
+### Respect protocol bounds
+
+- Chat attachments allow at most five files per message and 25 MiB per file.
+- Whiteboard frames are limited to 256 KiB and 128 elements; multipart updates are bounded too.
+- Webhook receivers must enforce a 256 KiB request body and finish within ten seconds.
+- Telemetry keeps a bounded queue and bounded attributes.
+
+Keep code readable and let a code block or media list scroll inside its own boundary. Do not trade correctness for a smaller payload: use pagination, snapshot recovery, or an explicit upload path when a bound is reached.

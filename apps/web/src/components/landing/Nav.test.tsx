@@ -15,6 +15,7 @@ describe("SiteNav", () => {
     expect(markup).toContain('href="#speed"');
     expect(markup).toContain('href="#self-host"');
     expect(markup).toContain('href="#platform"');
+    expect(markup).toContain('href="/docs"');
     expect(markup).toContain('href="/sign-in"');
     expect(markup).toContain('href="/sign-up"');
     expect(markup).not.toContain("import.meta.env.DEV");

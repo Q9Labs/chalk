@@ -14,6 +14,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added public docs at `/docs` with Why Chalk, a working Quickstart,
+  first-class TypeScript, React, and React Native guides, product concepts,
+  feature guides, webhooks, public API guidance, local search, and responsive
+  keyboard-friendly navigation.
+- Added canonical metadata, structured data, a sitemap, crawler guidance,
+  `llms.txt`, and a product-led social preview to the public web app.
+
 ### Changed
 
 ### Fixed

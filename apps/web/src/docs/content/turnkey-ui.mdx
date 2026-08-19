@@ -1,0 +1,41 @@
+## Turnkey UI is the shortest path to a Space
+
+`<Chalk />` owns the Entrance, live surface, feature panels, and client wiring. Set feature flags for the pieces your product needs, then place the component inside a sized parent.
+
+```tsx
+<Chalk
+  client={spaceClient}
+  features={{
+    participants: true,
+    admission: true,
+    chat: true,
+    screenShare: true,
+    whiteboard: true,
+    reactions: true,
+    handRaise: true,
+    settings: true,
+  }}
+  layout="focus"
+/>
+```
+
+Web and React Native expose the same feature names: `chat`, `participants`, `admission`, `screenShare`, `whiteboard`, `reactions`, `handRaise`, `info`, and `settings`. Web also exposes `sounds` for join, leave, message, hand-raise, and reaction cues.
+
+### Theme the boundary
+
+The `theme` prop is the styling door. Web supports `skin: "classic" | "chalk"`, independent palette and texture choices, `colorScheme: "light" | "dark" | "system"`, an accent, and typed token overrides. Native maps the same token names to platform styles.
+
+```tsx
+<Chalk
+  client={spaceClient}
+  theme={{
+    skin: "chalk",
+    palette: "warm-charcoal",
+    texture: "paper",
+    colorScheme: "dark",
+    accent: "#4b9bb8",
+  }}
+/>
+```
+
+Use the standalone `Entrance` when your product needs a separate entry step. Use [Custom UI](/docs/custom-ui) when the turnkey layout does not fit.

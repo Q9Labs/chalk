@@ -1,0 +1,26 @@
+## AccessGrant is an opaque client envelope
+
+Your backend receives a server-minted `AccessGrant` and returns it unchanged from `getAccess`. The signed envelope carries the short-lived credentials and Participant identity needed for Sync and media. Application code must not construct, decode, or modify it.
+
+```ts
+const client = createSpaceClient({
+  space: "design-review",
+  getAccess: async ({ space, reason }) => {
+    const response = await fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`);
+    if (!response.ok) throw new Error(`Access request failed: ${response.status}`);
+    return response;
+  },
+});
+```
+
+The client validates a `Response` or decoded grant source before use. A non-OK response or malformed body fails the join. `reason` tells your backend why the client needs a fresh envelope:
+
+- `join` starts a Participant's access.
+- `refresh` renews access during a live Episode.
+- `retry` follows an access rejection once.
+
+Keep the callback available for the entire client lifetime. `Connection` owns refresh timing, wake revalidation, and recovery, so the UI does not need to manage token expiry.
+
+<Callout tone="failure" title="Do not log grants">
+  A grant contains credentials. Treat it as secret transport data and keep it out of logs, analytics, and client-side persistence.
+</Callout>

@@ -1,0 +1,31 @@
+## Chalk makes live work durable
+
+Chalk gives your product a durable **Space** and a bounded **Episode** instead of a one-off live surface. The Space keeps identity, membership, chat, and whiteboard content. Each Episode records who was present and what happened, then freezes its artifacts.
+
+That split keeps the product model simple: people join a Space, and Chalk creates an Episode when live activity starts. `join()` always targets the Space. A Space has at most one live Episode, so links and history stay unambiguous.
+
+<Callout tone="tip" title="Start with a working surface">
+  Put your first Space on screen with the [TypeScript quickstart](/docs/quickstart), then choose a UI path for your product.
+</Callout>
+
+### One client, several UI choices
+
+The framework-agnostic `SpaceClient` owns access, recovery, state, and feature commands. React and React Native bind to the same `SpaceSnapshot`, so a custom surface and the turnkey UI share one behavior contract.
+
+<CardGrid>
+  <FeatureCard title="Quickstart" href="/docs/quickstart">
+    Create a client, pass an AccessGrant through, and join a Space.
+  </FeatureCard>
+  <FeatureCard title="Core concepts" href="/docs/spaces-and-episodes">
+    Learn how Spaces, Episodes, Participants, and Presence fit together.
+  </FeatureCard>
+  <FeatureCard title="React" href="/docs/react">
+    Drop in the complete `<Chalk />` surface or build your own panels.
+  </FeatureCard>
+</CardGrid>
+
+### Built for product boundaries
+
+Chalk keeps server work and client work separate. Your backend mints the opaque `AccessGrant`; the client refreshes it when needed. Capabilities decide what an identity may do now, while customer-defined Roles group those capabilities. Webhooks and the public API make durable operations visible outside the live surface.
+
+The result is a collaboration layer that can sit inside an existing product without taking ownership of identity, navigation, or your application's data model.

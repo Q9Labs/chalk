@@ -18,6 +18,7 @@ const FOOTER_COLUMNS = [
     id: "developers",
     title: "Developers",
     links: [
+      { href: "/docs", label: "Documentation" },
       { href: "/sdk-preview", label: "SDK preview" },
       { href: "#self-host", label: "Self-host" },
       { href: "/status", label: "Status" },

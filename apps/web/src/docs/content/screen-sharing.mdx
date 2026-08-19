@@ -1,0 +1,23 @@
+## Screen sharing follows the media lifecycle
+
+Screen sharing uses the media controller and the `publishScreen` capability. Start or stop it with the same client that controls microphone and camera; the snapshot exposes the local screen state and remote screen tracks.
+
+```ts
+if (client.getSnapshot().self.can("publishScreen")) {
+  await client.media.setScreenShareEnabled(true);
+}
+
+await client.media.setScreenShareEnabled(false);
+```
+
+Use `screenShareStarted` and `screenShareStopped` for discrete UI cues. The event payload contains the affected `participantId`; read `snapshot.media.remote` for the current track list.
+
+```ts
+const stop = client.on("screenShareStarted", ({ participantId }) => {
+  announce(`${participantId} started sharing`);
+});
+```
+
+The browser or native platform may reject capture, and a server capability check may reject publication. Surface the returned `SpaceClientError` and leave the control available for a later attempt. Do not assume a local track means the remote publication is ready: render confirmed remote media from the snapshot.
+
+See [Diagnostics](/docs/diagnostics) for the bounded media observations that help explain a failed first frame.

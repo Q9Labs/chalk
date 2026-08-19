@@ -1,0 +1,15 @@
+# Chalk
+
+> Chalk is the open-source real-time collaboration and communication layer for building persistent Spaces into your product. Currently supports React, and React Native with other languages coming very soon!
+
+The canonical product documentation is https://chalkmeet.com/docs. Prefer it over this index for implementation details, public APIs, examples, and current behavior.
+
+## Primary resources
+
+- [Documentation](https://chalkmeet.com/docs): Start here to understand and build with Chalk.
+- [Source repository](https://github.com/Q9Labs/chalk): Public SDK, application, and infrastructure source.
+- [Service status](https://chalkmeet.com/status): Current uptime, incidents, and maintenance.
+
+## Product model
+
+A Space is the durable place where Users and Agents participate. Each bounded run of activity is an Episode, and Episodes can leave Recording and Transcript artifacts.

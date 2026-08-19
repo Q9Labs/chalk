@@ -1,0 +1,24 @@
+## Media is a namespaced client controller
+
+The `media` controller manages microphone, camera, screen, device selection, and incoming media requests. The `SpaceSnapshot.media` slice reports available devices, selected ids, local state, remote tracks, screen-share state, and pending requests.
+
+```ts
+await client.media.setMicrophoneEnabled(true);
+await client.media.setCameraEnabled(false);
+await client.media.selectMicrophone("microphone-id");
+await client.media.selectCamera("camera-id");
+await client.media.selectSpeaker("speaker-id");
+```
+
+The three media sources are `microphone`, `camera`, and `screen`. The browser or native platform still controls device grants. Chalk reports a denied device grant as `media.permission_denied`; keep the UI usable when a source is unavailable.
+
+### Directed requests
+
+A Participant with the right capability can ask another Participant to enable a microphone or camera. The target sees an incoming request in the media slice and can accept or decline it.
+
+```ts
+const result = await client.participants.requestMedia(participantId, "microphone");
+await client.media.acceptRequest(result.requestId);
+```
+
+Request results can be `delivered`, `expired`, `rate_limited`, `rejected`, or `target_unavailable`. Handle each status as a normal product state rather than retrying blindly.

@@ -1,0 +1,34 @@
+## Subscribe to the Event types your receiver can finish
+
+The public contract lists these webhook Event types:
+
+| Area        | Event types                                                          |
+| ----------- | -------------------------------------------------------------------- |
+| Endpoint    | `endpoint.test`                                                      |
+| Space       | `space.created`, `space.updated`, `space.archived`, `space.restored` |
+| Episode     | `episode.started`, `episode.ended`                                   |
+| Participant | `participant.joined`, `participant.left`                             |
+
+Create an endpoint with a version, URL, enabled flag, and event list. The management client uses an idempotency key for mutating requests:
+
+```ts
+const endpoint =
+  yield *
+  chalk.default.createWebhookEndpoint({
+    params: { tenant_id: tenantId },
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    payload: {
+      api_version: 1,
+      enabled: true,
+      event_types: ["episode.started", "participant.joined"],
+      name: "Operations",
+      url: "https://hooks.example.com/chalk",
+    },
+  });
+```
+
+List deliveries by `state`, `event_type`, `page_size`, and `cursor`. Delivery detail includes each attempt's outcome, HTTP status, timing, latency, and stable error code. A known Event without a typed handler is retryable; an authenticated unknown Event is acknowledged with `200` and `outcome: "ignored"`.
+
+<Callout tone="note" title="Artifact Event schemas are reserved">
+  `recording.*` and `transcript.*` Event names exist in the version 1 schemas, but they are reserved and unavailable for subscriptions until Chalk enables their production pipelines.
+</Callout>

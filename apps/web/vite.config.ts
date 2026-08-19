@@ -1,4 +1,9 @@
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import mdx from "@mdx-js/rollup";
+import rehypeShiki from "@shikijs/rehype";
+import rehypeAutolinkHeadings from "rehype-autolink-headings";
+import rehypeSlug from "rehype-slug";
+import remarkGfm from "remark-gfm";
 import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig, type ProxyOptions } from "vite";
@@ -113,10 +118,30 @@ const config = defineConfig({
       router: {
         routeFileIgnorePattern: "\\.test\\.",
       },
+      prerender: {
+        enabled: true,
+        autoStaticPathsDiscovery: false,
+        crawlLinks: false,
+        failOnError: true,
+      },
+      pages: [
+        { path: "/", prerender: { outputPath: "/index.html" } },
+        { path: "/status", prerender: { outputPath: "/status/index.html" } },
+        { path: "/privacy", prerender: { outputPath: "/privacy/index.html" } },
+        { path: "/terms", prerender: { outputPath: "/terms/index.html" } },
+      ],
       spa: {
         enabled: true,
+        maskPath: "/space",
       },
     }),
+    {
+      enforce: "pre",
+      ...mdx({
+        remarkPlugins: [remarkGfm],
+        rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "append" }], [rehypeShiki, { theme: "github-dark" }]],
+      }),
+    },
     viteReact(),
   ],
 });

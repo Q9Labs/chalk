@@ -1,0 +1,30 @@
+## Receive a signed Event, then make its effect idempotent
+
+Chalk delivers signed Events at least once and without ordering guarantees. Verify the exact request bytes, claim `event.id` in durable storage, make the side effect idempotent with that id, and return a `2xx` within ten seconds.
+
+```ts
+import { createWebhookProcessor, toWebhookResponse, type WebhookInbox } from "@q9labsai/chalk-client/webhooks";
+
+const processor = createWebhookProcessor({
+  secrets: () => loadCurrentAndPreviousSecrets(),
+  inbox: durableInbox satisfies WebhookInbox,
+  handlers: {
+    "participant.joined": async (event) => {
+      await crm.upsertParticipant(event.data.object, {
+        idempotencyKey: event.id,
+      });
+    },
+  },
+});
+
+export async function POST(request: Request): Promise<Response> {
+  const rawBody = new Uint8Array(await request.arrayBuffer());
+  return toWebhookResponse(await processor.process({ rawBody, headers: request.headers }));
+}
+```
+
+`verifyWebhook` and the Processor accept `Uint8Array`, never parsed JSON or a string. Read a web `Request` body once. In Node, Express, or Hono, collect raw bytes before a JSON parser touches them and enforce Chalk's 256 KiB body maximum.
+
+Keep every `whsec_` value in server secret storage. During rotation, return current and previous secrets for the 24-hour overlap, then remove the previous value after expiry. The `secret` appears only in create and rotate responses.
+
+The durable inbox must distinguish `leased`, `completed`, and an expired lease. Completion compares the lease token, so a late worker cannot overwrite a newer owner. Chalk can retry after a crash between the side effect and completion, so use `event.id` in your database transaction or downstream idempotency key.

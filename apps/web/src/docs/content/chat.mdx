@@ -1,0 +1,23 @@
+## Chat is durable Space content with a live snapshot
+
+`client.chat` sends text, loads older messages, marks messages read, and uploads attachments. The `chat` snapshot includes message order, pending sends, read receipts, unread count, pagination, and the latest failure.
+
+```ts
+await client.chat.send({ text: "The draft is ready." });
+await client.chat.loadOlder();
+await client.chat.markRead("message-id");
+```
+
+Chat files stay under `chat.files`:
+
+```ts
+const attachment = await client.chat.files.upload(file);
+const downloadUrl = client.chat.files.url(attachment);
+await client.chat.send({ text: "See the file.", attachments: [attachment] });
+```
+
+The checked-in contract permits up to five attachments per message and a maximum attachment size of 25 MiB. The allowed MIME list includes common images, PDF, text, and office document formats. Validate picker output before sending so users get a local explanation instead of a rejected command.
+
+### Pagination and recovery
+
+`chat.loadOlder()` can report `chat.cursor_reset_required` when the retained history floor moves. Reset the local cursor, render the retained history boundary, and load again. A pending send has `sending` or `failed` state; keep failed text visible so the user can choose whether to retry.

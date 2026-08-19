@@ -1,0 +1,23 @@
+## Recovery belongs to Connection, not the view
+
+`SpaceClient` keeps the access callback, Sync lifecycle, and media lifecycle together. When access expires or a transport wakes after interruption, `Connection` asks `getAccess` for a fresh envelope with `reason: "refresh"` or `"retry"`, then updates the same `SpaceSnapshot` store.
+
+The connection slice exposes `idle`, `joining`, `live`, `reconnecting`, `leaving`, `left`, and `failed`. Render from that state and keep commands at the client boundary:
+
+```ts
+client.subscribe(() => {
+  const { status, lastError } = client.getSnapshot().connection;
+  renderConnection(status, lastError);
+});
+```
+
+The client performs one refresh-and-retry after an access rejection. A malformed grant, a terminal Episode state, or exhausted Sync/media recovery becomes a typed `ClientFailure`. Do not start an independent retry loop in every component; it can race the single Connection owner.
+
+### Recovery actions
+
+- Keep `getAccess` available and return the server grant unchanged.
+- Show `reconnecting` as temporary state and decide whether to keep current data visible.
+- When `failed` is not recoverable, offer a fresh `join()` after explaining the failure.
+- Invoke `leave()` before replacing a client, then `dispose()` when its lifetime ends.
+
+An `episodeEnded` event marks the end of the live run. It does not delete the Space or its durable content.

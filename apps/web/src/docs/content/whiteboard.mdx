@@ -1,0 +1,25 @@
+## Whiteboard is an Excalidraw-backed Space surface
+
+`@q9labsai/chalk-whiteboard` provides framework-neutral contracts, an Excalidraw collaboration and file-sync engine, a React `WhiteboardCanvas`, and an embedded native bridge. `@q9labsai/chalk-react` supplies a thin styled `WhiteboardView` wrapper.
+
+```tsx
+import { WhiteboardCanvas } from "@q9labsai/chalk-whiteboard/react";
+
+<WhiteboardCanvas classNames={classNames} icons={icons} />;
+```
+
+`WhiteboardCanvas` owns Excalidraw loading, collaboration lifecycle, cursor and scene updates, file synchronization, and math elements. The `classNames` and `icons` props let a surface provide presentation without reimplementing the collaboration behavior.
+
+### React and web
+
+Use `@q9labsai/chalk-whiteboard/react` when the surface is a React web page. `WhiteboardCanvas` accepts `classNames` and `icons` for presentation, while the collaboration engine keeps scene, cursor, file, and math behavior in one place.
+
+### React Native and the embedded renderer
+
+Native hosts should build the self-contained embedded renderer with `pnpm run build:embedded` and use the versioned bridge from `@q9labsai/chalk-whiteboard/embedded`. The renderer is local and offline-only: React Native must not fetch a remote Excalidraw bundle. Authentication credentials, Sync tokens, storage signatures, and signed URLs stay in the native JavaScript host and are never posted into renderer JavaScript.
+
+### Transport and recovery
+
+The `whiteboard` client controller exposes the transport. The v1 transport can subscribe to a scene, submit an update, send a cursor, request a snapshot, clear, set draw permission, and transfer files. The snapshot reports `unsubscribed`, `loading`, `ready`, `recovering`, or `failed`, plus scene id, revision, and a bounded failure.
+
+The wire keeps 128-element and 256 KiB per-frame limits. Larger logical updates use atomic multipart operations with limits of 10,000 elements, 128 parts, and 16 MiB encoded frames. Incomplete inbound operations stay hidden and request a fresh snapshot after ten seconds.

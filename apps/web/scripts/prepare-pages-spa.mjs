@@ -1,6 +1,9 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
+
+import { DOCS_PAGES } from "../src/docs/manifest.ts";
+import { SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts";
 
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
@@ -10,12 +13,10 @@ const spaceDirPath = resolve(clientDir, "space");
 const spaceIndexPath = resolve(spaceDirPath, "index.html");
 const statusDirPath = resolve(clientDir, "status");
 const statusIndexPath = resolve(statusDirPath, "index.html");
+const privacyIndexPath = resolve(clientDir, "privacy", "index.html");
+const termsIndexPath = resolve(clientDir, "terms", "index.html");
 const serviceWorkerPath = resolve(clientDir, "sw.js");
 const packageJsonPath = resolve(process.cwd(), "package.json");
-const STATUS_TITLE = "Chalk Status";
-const STATUS_DESCRIPTION = "Live system status, incidents, uptime, and maintenance updates for Chalk.";
-const STATUS_CANONICAL = "https://chalkmeet.com/status";
-const STATUS_IMAGE = "https://chalkmeet.com/brand/chalk/chalk-icon-512.png";
 
 function resolveCommitHash() {
   const commitHash = process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || execSync("git rev-parse HEAD").toString().trim();
@@ -29,18 +30,57 @@ if (!existsSync(shellPath)) {
   throw new Error(`missing ${shellPath}; expected TanStack Start SPA build output to include _shell.html`);
 }
 
-// Cloudflare Pages: ensure deep-link loads SPA shell (even if rewrites are not applied).
-cpSync(shellPath, indexPath);
-// A top-level 404.html disables Cloudflare Pages' automatic SPA fallback and
-// makes valid client routes return HTTP 404. Remove stale output so every
-// Dashboard deep link is served from / with HTTP 200.
-rmSync(fallback404Path, { force: true });
+for (const publicPagePath of [indexPath, statusIndexPath, privacyIndexPath, termsIndexPath]) {
+  if (!existsSync(publicPagePath)) {
+    throw new Error(`missing ${publicPagePath}; expected TanStack Start to prerender every public web page`);
+  }
+}
+
+// Cloudflare Pages: ensure unknown paths and Space deep links load the SPA shell
+// even if a redirect rule is bypassed.
+cpSync(shellPath, fallback404Path);
 mkdirSync(spaceDirPath, { recursive: true });
 cpSync(shellPath, spaceIndexPath);
-mkdirSync(statusDirPath, { recursive: true });
-cpSync(shellPath, statusIndexPath);
-const statusHtml = readFileSync(statusIndexPath, "utf8");
-writeFileSync(statusIndexPath, injectStatusMeta(statusHtml));
+
+const shellHtml = readFileSync(shellPath, "utf8");
+
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function buildDocsHtml(page) {
+  const title = `${page.title} | Chalk Docs`;
+  const canonicalUrl = `${SITE_ORIGIN}${page.href}`;
+  const titleTag = `<title>${escapeHtml(title)}</title>`;
+  const descriptionTag = `<meta name="description" content="${escapeHtml(page.description)}">`;
+  const socialTags = [
+    `<link rel="canonical" href="${canonicalUrl}">`,
+    '<meta property="og:type" content="website">',
+    '<meta property="og:site_name" content="Chalk">',
+    `<meta property="og:title" content="${escapeHtml(title)}">`,
+    `<meta property="og:description" content="${escapeHtml(page.description)}">`,
+    `<meta property="og:url" content="${canonicalUrl}">`,
+    `<meta property="og:image" content="${SOCIAL_IMAGE_URL}">`,
+    '<meta name="twitter:card" content="summary_large_image">',
+    `<meta name="twitter:title" content="${escapeHtml(title)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(page.description)}">`,
+    `<meta name="twitter:image" content="${SOCIAL_IMAGE_URL}">`,
+  ].join("\n    ");
+
+  const withTitle = shellHtml.replace(/<title>[^<]*<\/title>/i, titleTag);
+  const withDescription = withTitle.replace(/<meta\s+name=["']description["'][^>]*>/i, descriptionTag);
+  return withDescription.replace("</head>", `    ${socialTags}\n  </head>`);
+}
+
+for (const page of DOCS_PAGES) {
+  if (page.href !== "/docs" && !page.href.startsWith("/docs/")) {
+    throw new Error(`invalid docs path ${page.href}; expected /docs or a child path`);
+  }
+
+  const docsPageDir = resolve(clientDir, ...page.href.slice(1).split("/"));
+  mkdirSync(docsPageDir, { recursive: true });
+  writeFileSync(resolve(docsPageDir, "index.html"), buildDocsHtml(page));
+}
 
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 const buildMeta = {
@@ -66,12 +106,12 @@ function collectClientFiles(dir) {
   });
 }
 
-const precacheUrls = Array.from(new Set(["/", "/index.html", ...collectClientFiles(clientDir)])).sort();
+const precacheUrls = Array.from(new Set(["/", "/index.html", "/404.html", ...collectClientFiles(clientDir)])).sort();
 
 const swSource = `
 const BUILD_META = ${JSON.stringify(buildMeta, null, 2)};
 const CACHE_NAME = "chalk-web-${buildMeta.version}-${buildMeta.commitHash}";
-const APP_SHELL_URL = "/index.html";
+const APP_SHELL_URL = "/_shell.html";
 const PRECACHE_URLS = ${JSON.stringify(precacheUrls, null, 2)};
 const ASSET_EXT_RE = /\\.[a-z0-9]+$/i;
 
@@ -123,14 +163,14 @@ async function handleNavigation(request) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      await writeToCache(APP_SHELL_URL, response.clone());
+      await writeToCache(request, response.clone());
       return response;
     }
   } catch {
     // Fall back to the cached shell below.
   }
 
-  return (await readFromCache(APP_SHELL_URL)) ?? Response.error();
+  return (await readFromCache(request)) ?? (await readFromCache(APP_SHELL_URL)) ?? Response.error();
 }
 
 async function handleAsset(request) {
@@ -176,26 +216,3 @@ self.addEventListener("fetch", (event) => {
 `.trimStart();
 
 writeFileSync(serviceWorkerPath, swSource);
-
-function injectStatusMeta(html) {
-  let next = html;
-
-  next = next.replace(/<title>.*?<\/title>/i, `<title>${STATUS_TITLE}</title>`);
-  next = next.replace(/<link rel="canonical" href="[^"]*"\s*\/?>/i, `<link rel="canonical" href="${STATUS_CANONICAL}" />`);
-
-  const statusMeta = [
-    `<meta name="description" content="${STATUS_DESCRIPTION}" />`,
-    `<meta property="og:title" content="${STATUS_TITLE}" />`,
-    `<meta property="og:description" content="${STATUS_DESCRIPTION}" />`,
-    `<meta property="og:type" content="website" />`,
-    `<meta property="og:url" content="${STATUS_CANONICAL}" />`,
-    `<meta property="og:image" content="${STATUS_IMAGE}" />`,
-    `<meta property="og:image:alt" content="Chalk status page preview" />`,
-    `<meta name="twitter:card" content="summary_large_image" />`,
-    `<meta name="twitter:title" content="${STATUS_TITLE}" />`,
-    `<meta name="twitter:description" content="${STATUS_DESCRIPTION}" />`,
-    `<meta name="twitter:image" content="${STATUS_IMAGE}" />`,
-  ].join("\n");
-
-  return next.replace("</head>", `${statusMeta}\n</head>`);
-}

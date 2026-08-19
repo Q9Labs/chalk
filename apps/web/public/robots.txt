@@ -1,3 +1,25 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /_internal/
+Disallow: /_serverFn/
+Disallow: /api/
+Disallow: /account
+Disallow: /activity
+Disallow: /artifacts
+Disallow: /developer
+Disallow: /episodes
+Disallow: /home
+Disallow: /j/
+Disallow: /new
+Disallow: /onboarding
+Disallow: /people
+Disallow: /sdk-preview
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /space
+Disallow: /spaces
+Disallow: /tenant
+Disallow: /whiteboard
+
+Sitemap: https://chalkmeet.com/sitemap.xml
