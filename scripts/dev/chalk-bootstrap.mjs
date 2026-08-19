@@ -1,7 +1,7 @@
 import { FailureKind, failure } from "./model.mjs";
 import { runChecked } from "./chalk-resources.mjs";
 
-const brokerScope = "episodes:write";
+const brokerScopes = ["episodes:write", "spaces:write"];
 
 export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, fetchImpl = fetch, now = () => new Date(), fresh = false } = {}) {
   if (!apiOrigin || !systemToken || !runtimeId) throw failure(FailureKind.CONFIG, "API bootstrap requires origin, system token, and runtime id", { stage: "bootstrap" });
@@ -34,13 +34,13 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
   const keys = await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys?page_size=100`, { systemToken });
   const keyName = `chalk-local-broker-${marker}`;
   const existing = keys.api_keys?.find((entry) => entry.name === keyName && !entry.revoked_at);
-  if (existing && (!Array.isArray(existing.scopes) || existing.scopes.length !== 1 || existing.scopes[0] !== brokerScope)) {
+  if (existing && (!Array.isArray(existing.scopes) || existing.scopes.length !== brokerScopes.length || !brokerScopes.every((scope) => existing.scopes.includes(scope)))) {
     throw failure(FailureKind.STARTUP, "runtime broker key has incompatible scopes", { stage: "bootstrap" });
   }
   const expiresAt = new Date(now().getTime() + 24 * 60 * 60 * 1000).toISOString();
   const key = existing
     ? await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys/${existing.id}/rotate`, { systemToken, method: "POST", body: { expires_at: expiresAt } })
-    : await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys`, { systemToken, method: "POST", body: { name: keyName, scopes: [brokerScope], expires_at: expiresAt } });
+    : await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys`, { systemToken, method: "POST", body: { name: keyName, scopes: brokerScopes, expires_at: expiresAt } });
   const secret = key.secret;
   if (typeof secret !== "string" || secret.length < 8) throw failure(FailureKind.STARTUP, "API bootstrap did not return a broker key secret", { stage: "bootstrap" });
   return {
