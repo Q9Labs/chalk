@@ -13,13 +13,18 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Chalk: Real-time Spaces" },
+      { name: "theme-color", content: "#f8f7f2" },
+      { title: "Chalk" },
       {
         name: "description",
-        content: "Chalk is an open-source real-time collaboration layer under active development, with a Go API, durable real-time sync, and TypeScript, React, and React Native SDKs.",
+        content: "Chalk is a real-time collaboration and communication layer built around durable Spaces and bounded Episodes.",
       },
     ],
     links: [
+      { rel: "manifest", href: "/manifest.json" },
+      { rel: "icon", href: "/brand/chalk/chalk-icon.svg", type: "image/svg+xml" },
+      { rel: "icon", href: "/favicon.ico", sizes: "64x64" },
+      { rel: "apple-touch-icon", href: "/brand/chalk/apple-touch-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {

@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Chalk",
   "short_name": "Chalk",
-  "description": "Ultra low-latency real-time collaboration for education.",
+  "description": "Real-time collaboration and communication built around durable Spaces and bounded Episodes.",
   "lang": "en-US",
   "scope": "/",
   "start_url": "/",
@@ -41,7 +41,7 @@
   "orientation": "any",
   "background_color": "#030303",
   "theme_color": "#030303",
-  "categories": ["education", "productivity", "communication"],
+  "categories": ["business", "productivity", "communication"],
   "shortcuts": [
     {
       "name": "New Space",
