@@ -24,7 +24,6 @@ describe("ChalkWhiteboardV1Client", () => {
     await settle();
     const request = socket.frames().find((frame) => frame.type === "request_snapshot")!;
     const events: unknown[] = [];
-    client.subscribe((event) => events.push(event));
     socket.receive({
       type: "snapshot_page",
       request_id: request.request_id,
@@ -37,6 +36,7 @@ describe("ChalkWhiteboardV1Client", () => {
     });
 
     await expect(started).resolves.toBeUndefined();
+    client.subscribe((event) => events.push(event));
     expect(socket.frames().at(-1)).toEqual({
       type: "snapshot_ack",
       request_id: request.request_id,
@@ -244,6 +244,7 @@ async function subscribedClient(overrides: Partial<ConstructorParameters<typeof 
   await finishInitialSnapshot(socket, started);
   const events: unknown[] = [];
   client.subscribe((event) => events.push(event));
+  events.length = 0;
   return { client, socket, events };
 }
 

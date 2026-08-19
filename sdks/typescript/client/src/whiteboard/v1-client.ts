@@ -71,6 +71,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #canDraw = false;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
+  #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
   #initialSnapshot: Deferred<void> | null = null;
   #startPromise: Promise<void> | null = null;
   #reconnectTimer: unknown;
@@ -130,6 +131,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   subscribe(listener: (event: ChalkWhiteboardV1Event) => void): () => void {
     this.#listeners.add(listener);
+    if (this.#phase === "live" && this.#latestSnapshot) listener(this.#latestSnapshot);
     return () => this.#listeners.delete(listener);
   }
 
@@ -589,6 +591,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #emit(event: ChalkWhiteboardV1Event): void {
+    if (event.type === "snapshot") this.#latestSnapshot = event;
     for (const listener of this.#listeners) listener(event);
   }
 

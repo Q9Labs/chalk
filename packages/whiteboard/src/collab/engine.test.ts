@@ -132,7 +132,24 @@ describe("ExcalidrawCollabEngine", () => {
     engine.dispose();
   });
 
-  it("routes subscribed transport snapshots, cursors, and resets into the engine", () => {
+  it("reports a synchronous snapshot failure instead of throwing from a canvas change", async () => {
+    const api = createAPI(() => [createElement("local", 1, 50)]);
+    const failure = new Error("Whiteboard is not connected.");
+    const onSubmissionError = vi.fn();
+    const engine = createEngine(api, {
+      requestSnapshot: vi.fn(() => {
+        throw failure;
+      }),
+      onSubmissionError,
+    });
+
+    expect(() => engine.handleChange(api.getSceneElementsIncludingDeleted(), {} as never, {})).not.toThrow();
+    await vi.advanceTimersByTimeAsync(151);
+    expect(onSubmissionError).toHaveBeenCalledWith(failure);
+    engine.dispose();
+  });
+
+  it("routes subscribed transport snapshots, cursors, and resets into the engine", async () => {
     const api = createAPI(() => []);
     const requestSnapshot = vi.fn().mockResolvedValue(undefined);
     const unsubscribe = vi.fn();
@@ -177,6 +194,7 @@ describe("ExcalidrawCollabEngine", () => {
       sceneId: "10000000-0000-4000-8000-000000000002",
       reason: "scene_changed",
     });
+    await Promise.resolve();
     expect(requestSnapshot).toHaveBeenCalledOnce();
 
     engine.dispose();

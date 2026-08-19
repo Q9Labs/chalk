@@ -133,6 +133,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runAdapterCloudflareR2SignedURL(ctx)
 	case AdapterCloudflareSFUBootstrapScenario:
 		return runAdapterCloudflareSFUBootstrap(ctx)
+	case AdapterCloudflareSFUFailureScenario:
+		return runAdapterCloudflareSFUFailure(ctx)
 	case AdapterProviderBridgeGrantScenario:
 		return runAdapterProviderBridgeGrant(ctx)
 	case AdapterCloudflareRTKJoinScenario:

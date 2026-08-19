@@ -55,10 +55,11 @@ type providerFailure struct {
 	statusCode   int
 	statusClass  string
 	providerCode string
+	details      providerFailureDetails
 }
 
 func (e providerFailure) Error() string {
-	return fmt.Sprintf(
+	message := fmt.Sprintf(
 		"cloudflare sfu %s failed: stage=%s status=%d status_class=%s provider_code=%s",
 		e.operation,
 		e.stage,
@@ -66,6 +67,13 @@ func (e providerFailure) Error() string {
 		e.statusClass,
 		e.providerCode,
 	)
+	if e.details.rawCode != "" {
+		message += " provider_raw_code=" + e.details.rawCode
+	}
+	if e.details.message != "" {
+		message += fmt.Sprintf(" provider_message=%q provider_message_fingerprint=%s", e.details.message, e.details.messageFingerprint)
+	}
+	return message
 }
 
 func (e providerFailure) Unwrap() error {
@@ -95,9 +103,11 @@ type responseValidator interface {
 }
 
 type providerErrorEnvelope struct {
-	ErrorCode string `json:"errorCode"`
-	Errors    []struct {
-		Code string `json:"code"`
+	ErrorCode        string `json:"errorCode"`
+	ErrorDescription string `json:"errorDescription"`
+	Errors           []struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
 	} `json:"errors"`
 }
 
@@ -259,11 +269,12 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 			localTracks = append(localTracks, providerTrack)
 		}
 	}
-	response := addTracksResponse{requestedLocalTracks: localTracks}
-	err := a.request(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), tracksRequest{
+	request := tracksRequest{
 		SessionDescription: input.SessionDescription,
 		Tracks:             tracks,
-	}, &response, "add_tracks")
+	}
+	response := addTracksResponse{requestedLocalTracks: localTracks}
+	err := a.request(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
@@ -280,12 +291,13 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 		providerTracks = append(providerTracks, closeTrack{Mid: track.Mid})
 	}
 
-	providerResponse := closeTracksResponse{requestedTracks: input.Tracks}
-	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(input.ConnectionID)), closeTracksRequest{
+	request := closeTracksRequest{
 		SessionDescription: input.SessionDescription,
 		Tracks:             providerTracks,
 		Force:              input.Force,
-	}, &providerResponse, "close_tracks")
+	}
+	providerResponse := closeTracksResponse{requestedTracks: input.Tracks}
+	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(input.ConnectionID)), request, &providerResponse, "close_tracks")
 	if err != nil {
 		return mediaplane.CloseTracksResponse{}, err
 	}
@@ -316,8 +328,10 @@ func (a Adapter) createConnection(ctx context.Context) (string, error) {
 
 func (a Adapter) request(ctx context.Context, method string, path string, body any, output any, operation string) (err error) {
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu."+operation, trace.WithSpanKind(trace.SpanKindClient))
+	responseBytes := 0
 	defer func() {
 		if err != nil {
+			err = enrichProviderFailure(err, body, responseBytes)
 			span.RecordError(sfuSpanError(err))
 			span.SetStatus(codes.Error, "Cloudflare SFU request failed")
 			recordProviderFailure(ctx, span, err)
@@ -359,6 +373,7 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 	if err != nil {
 		return newProviderFailure(operation, failureStageTransport, providerResponse.StatusCode, "transport_error")
 	}
+	responseBytes = len(payload)
 	if providerResponse.StatusCode < 200 || providerResponse.StatusCode >= 300 {
 		return sfuStatusError(operation, providerResponse.StatusCode, payload)
 	}
@@ -377,7 +392,7 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 
 func (r *closeTracksResponse) providerError(operation string) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return newProviderFailure(operation, failureStageTopLevel, http.StatusOK, providerRejectionCode(r.ErrorCode))
+		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedCloseTrackCount(r.Tracks))
 	}
 
 	requestedMids := make(map[string]struct{}, len(r.requestedTracks))
@@ -398,7 +413,7 @@ func (r *closeTracksResponse) providerError(operation string) error {
 			continue
 		}
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			return newProviderFailure(operation, failureStageTrack, http.StatusOK, providerRejectionCode(track.ErrorCode))
+			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedCloseTrackCount(r.Tracks))
 		}
 	}
 	if len(seenMids) != len(requestedMids) {
@@ -410,7 +425,7 @@ func (r *closeTracksResponse) providerError(operation string) error {
 
 func (r *addTracksResponse) providerError(operation string) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return newProviderFailure(operation, failureStageTopLevel, http.StatusOK, providerRejectionCode(r.ErrorCode))
+		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
 	}
 
 	type localTrackIdentity struct {
@@ -425,7 +440,7 @@ func (r *addTracksResponse) providerError(operation string) error {
 	seen := make(map[localTrackIdentity]struct{}, len(requested))
 	for _, track := range r.Tracks {
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			return newProviderFailure(operation, failureStageTrack, http.StatusOK, providerRejectionCode(track.ErrorCode))
+			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
 		}
 		if track.SessionID != "" || track.Location == "remote" {
 			continue
@@ -516,6 +531,26 @@ func providerRejectionCode(code string) string {
 	return code
 }
 
+func failedAddTrackCount(tracks []addTrackResult) int {
+	count := 0
+	for _, track := range tracks {
+		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func failedCloseTrackCount(tracks []closeTrackResult) int {
+	count := 0
+	for _, track := range tracks {
+		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
+			count++
+		}
+	}
+	return count
+}
+
 func normalizedProviderCode(code string) string {
 	switch strings.ToLower(strings.TrimSpace(code)) {
 	case "invalid_request", "bad_request":
@@ -566,6 +601,17 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		attribute.String("chalk.provider.error_code", failure.providerCode),
 	}
 	span.SetAttributes(attributes...)
+	span.AddEvent(
+		"cloudflare_sfu.provider_failure",
+		trace.WithAttributes(
+			attribute.String("chalk.provider.raw_error_code", failure.details.rawCode),
+			attribute.String("chalk.provider.message_fingerprint", failure.details.messageFingerprint),
+			attribute.Int("chalk.provider.response_bytes", failure.details.responseBytes),
+			attribute.Int("chalk.provider.request_track_count", failure.details.requestTrackCount),
+			attribute.Int("chalk.provider.response_track_count", failure.details.responseTrackCount),
+			attribute.Int("chalk.provider.failed_track_count", failure.details.failedTrackCount),
+		),
+	)
 	sfuFailureCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 
 	level := slog.LevelWarn
@@ -582,6 +628,17 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		"http_status", failure.statusCode,
 		"http_status_class", failure.statusClass,
 		"provider_code", failure.providerCode,
+		"provider_raw_code", failure.details.rawCode,
+		"provider_message", failure.details.message,
+		"provider_message_fingerprint", failure.details.messageFingerprint,
+		"provider_response_bytes", failure.details.responseBytes,
+		"request_track_count", failure.details.requestTrackCount,
+		"request_local_track_count", failure.details.localTrackCount,
+		"request_remote_track_count", failure.details.remoteTrackCount,
+		"response_track_count", failure.details.responseTrackCount,
+		"failed_track_count", failure.details.failedTrackCount,
+		"trace_id", span.SpanContext().TraceID().String(),
+		"span_id", span.SpanContext().SpanID().String(),
 	)
 }
 
@@ -660,7 +717,8 @@ func (a Adapter) VerifyConnectionMetadata(ctx context.Context, connectionRef str
 		return ConnectionMetadata{}, newProviderFailure("verify_connection", failureStageTransport, response.StatusCode, "transport_error")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return ConnectionMetadata{}, sfuStatusError("verify_connection", response.StatusCode, payload)
+		failure := sfuStatusError("verify_connection", response.StatusCode, payload)
+		return ConnectionMetadata{}, enrichProviderFailure(failure, nil, len(payload))
 	}
 
 	return ConnectionMetadata{
@@ -698,10 +756,16 @@ func sfuStatusError(operation string, statusCode int, payload []byte) error {
 	var envelope providerErrorEnvelope
 	_ = json.Unmarshal(payload, &envelope)
 	code := envelope.ErrorCode
+	message := envelope.ErrorDescription
 	if strings.TrimSpace(code) == "" {
 		for _, providerError := range envelope.Errors {
 			if strings.TrimSpace(providerError.Code) != "" {
 				code = providerError.Code
+			}
+			if strings.TrimSpace(message) == "" {
+				message = providerError.Message
+			}
+			if strings.TrimSpace(code) != "" && strings.TrimSpace(message) != "" {
 				break
 			}
 		}
@@ -723,5 +787,5 @@ func sfuStatusError(operation string, statusCode int, payload []byte) error {
 		}
 	}
 
-	return newProviderFailure(operation, failureStageHTTPStatus, statusCode, code)
+	return newProviderResponseFailure(operation, failureStageHTTPStatus, statusCode, code, message, 0, 0)
 }

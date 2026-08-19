@@ -184,7 +184,7 @@ export class ExcalidrawCollabEngine {
         });
         return;
       case "reset_required":
-        void this.opts.requestSnapshot().catch(this.opts.onSubmissionError);
+        this.requestSnapshot();
     }
   }
 
@@ -244,7 +244,7 @@ export class ExcalidrawCollabEngine {
   private submissionContext(): SubmissionContext | null {
     if (!this.canDraw) return null;
     if (!this.sceneId) {
-      void this.opts.requestSnapshot().catch(this.opts.onSubmissionError);
+      this.requestSnapshot();
       return null;
     }
     if (this.submissionInFlight) {
@@ -271,7 +271,7 @@ export class ExcalidrawCollabEngine {
       })
       .then((commit) => {
         if (commit.sceneId !== sceneId || this.sceneId !== sceneId || this.sceneGeneration !== sceneGeneration) {
-          void this.opts.requestSnapshot();
+          this.requestSnapshot();
           return;
         }
         for (const element of elements) {
@@ -305,7 +305,7 @@ export class ExcalidrawCollabEngine {
         this.broadcastedElementVersions.clear();
         this.lastBroadcastedOrReceivedElementsHash = 0;
       } else {
-        void this.opts.requestSnapshot().catch(this.opts.onSubmissionError);
+        this.requestSnapshot();
         return;
       }
     }
@@ -332,5 +332,11 @@ export class ExcalidrawCollabEngine {
     });
 
     this.filesSync.handleRemoteScene(reconciled);
+  }
+
+  private requestSnapshot(): void {
+    void Promise.resolve()
+      .then(() => this.opts.requestSnapshot())
+      .catch((cause: unknown) => this.opts.onSubmissionError?.(cause));
   }
 }

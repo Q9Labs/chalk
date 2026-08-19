@@ -238,7 +238,7 @@ describe("EpisodeDiagnosticRuntime", () => {
   });
 
   it("emits release, retry, and HMAC-safe provider correlation", () => {
-    const { runtime } = makeRuntime({ release: { id: "sdk-4.1.3", sourceCommit: "abc123" } });
+    const { runtime } = makeRuntime({ release: { id: "sdk-4.1.4", sourceCommit: "abc123" } });
     runtime.rotateCredential(credential(1));
     const operation = runtime.startOperation("chat.retry", undefined, undefined, undefined, {
       retryGroupRef: "chat-group-1",
@@ -248,7 +248,7 @@ describe("EpisodeDiagnosticRuntime", () => {
 
     expect(runtime.inspect().ring[0]).toMatchObject({
       producerOperationRef: operation?.ref,
-      release: { id: "sdk-4.1.3", sourceCommit: "abc123" },
+      release: { id: "sdk-4.1.4", sourceCommit: "abc123" },
       correlation: { retryGroupRef: "chat-group-1", attempt: 2, providerId: "hmac-v1-abcdef" },
     });
   });

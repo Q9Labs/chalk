@@ -141,6 +141,7 @@ Registered scenarios:
 - `adapter:redis-rate-limit`
 - `adapter:cloudflare-r2-signed-url`
 - `adapter:cloudflare-sfu-bootstrap`
+- `adapter:cloudflare-sfu-failure-observability`
 - `adapter:provider-bridge-publication-grant`
 - `adapter:cloudflare-rtk-join`
 - `adapter:resend-send-email`

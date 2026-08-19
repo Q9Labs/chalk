@@ -259,8 +259,8 @@ func TestAddTracksReturnsBoundedProviderFailureClassifications(t *testing.T) {
 				tt.wantClass,
 				tt.wantCode,
 			)
-			if err.Error() != wantText {
-				t.Fatalf("error = %q, want %q", err, wantText)
+			if !strings.HasPrefix(err.Error(), wantText) {
+				t.Fatalf("error = %q, want prefix %q", err, wantText)
 			}
 			for _, forbidden := range []string{"private-connection", "private-offer-sdp", "private-mid", "private-screen-track", "private transport detail"} {
 				if strings.Contains(err.Error(), forbidden) {
@@ -581,8 +581,8 @@ func TestAddTracksFailureTelemetryIsBounded(t *testing.T) {
 	})
 
 	adapter := testAdapter(t, &roundTripStub{
-		statusCode: http.StatusTooEarly,
-		body:       `{"errorCode":"SESSION_NOT_CONNECTED","errorDescription":"sfu-app-secret rejected private-offer-sdp for private-screen-track"}`,
+		statusCode: http.StatusOK,
+		body:       `{"tracks":[{"mid":"private-mid","trackName":"private-screen-track","errorCode":"RTC_SFU_TRACK_STATE_MISMATCH","errorDescription":"The connection is not ready for private-screen-track"}]}`,
 	})
 	_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
 		ConnectionID:       "private-connection",
@@ -605,10 +605,21 @@ func TestAddTracksFailureTelemetryIsBounded(t *testing.T) {
 	for _, required := range []string{
 		"cloudflare_sfu.request_failed",
 		"add_tracks",
-		"http_status",
-		"425",
-		"4xx",
-		"connection_not_connected",
+		"track",
+		"200",
+		"2xx",
+		"unknown",
+		"RTC_SFU_TRACK_STATE_MISMATCH",
+		"The connection is not ready for [redacted]",
+		"provider_message",
+		"provider_message_fingerprint",
+		"provider_response_bytes",
+		"request_track_count",
+		"response_track_count",
+		"failed_track_count",
+		"trace_id",
+		"span_id",
+		"cloudflare_sfu.provider_failure",
 		"chalk.api.cloudflare_sfu.failures",
 	} {
 		if !strings.Contains(telemetry, required) {
@@ -621,11 +632,17 @@ func TestAddTracksFailureTelemetryIsBounded(t *testing.T) {
 		"private-offer-sdp",
 		"private-mid",
 		"private-screen-track",
-		"rejected",
 	} {
 		if strings.Contains(telemetry, forbidden) {
 			t.Fatalf("telemetry contains %q: %s", forbidden, telemetry)
 		}
+	}
+}
+
+func TestObservableProviderMessageRejectsArbitraryIdentifiers(t *testing.T) {
+	message := observableProviderMessage("The connection at 10.0.0.1 for 张三 is not ready")
+	if message != "The connection at [redacted].[redacted].[redacted].[redacted] for [redacted] is not ready" {
+		t.Fatalf("message = %q", message)
 	}
 }
 

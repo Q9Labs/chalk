@@ -28,6 +28,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Kept app-route fallbacks separate from public pages and static assets, so
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
+
+## [4.1.4] - 2026-08-19
+
+### Fixed
+
+- Made the React SDK start and await the Whiteboard scene subscription before
+  mounting its collaboration canvas, and made snapshot failures stay on the
+  reported error path instead of escaping as uncaught synchronous errors.
+- Made Cloudflare SFU failures retain an unknown provider error code, scrubbed
+  provider message and fingerprint, request and response track counts, response
+  size, and trace IDs without recording SDP, credentials, or media identifiers.
 - Made managed host secret rotation use Podman's atomic replacement path and
   an actual input pipe, so Podman 4.9 can register new values without deleting
   the stable secret first.

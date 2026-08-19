@@ -7,6 +7,7 @@ import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
 import { useCan, useConnection, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
+import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsDialog";
@@ -227,22 +228,30 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
     }
   }, []);
   const whiteboardTransport = client.whiteboard.transport();
+  const whiteboardEnabled = props.features?.whiteboard !== false && whiteboardOpen && canDrawWhiteboard;
+  const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardEnabled);
+  useEffect(() => {
+    if (whiteboardSubscription.status === "failed") setCommandError(whiteboardSubscription.error.message);
+    else if (whiteboardSubscription.status === "loading" || whiteboardSubscription.status === "ready") setCommandError(null);
+  }, [whiteboardSubscription]);
   const whiteboard =
-    props.features?.whiteboard !== false && whiteboardOpen && canDrawWhiteboard && whiteboardTransport
+    whiteboardEnabled && whiteboardSubscription.status === "ready"
       ? {
           isOpen: true,
           props: {
             canDraw: canDrawWhiteboard,
             collab: {
               canDraw: canDrawWhiteboard,
-              subscribe: (listener: NonNullable<WhiteboardViewProps["collab"]>["subscribe"] extends (listener: infer T) => unknown ? T : never) => whiteboardTransport.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
-              submitUpdate: async (input: NonNullable<WhiteboardViewProps["collab"]>["submitUpdate"] extends (input: infer T) => unknown ? T : never) => whiteboardTransport.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
-              sendCursor: (input: NonNullable<WhiteboardViewProps["collab"]>["sendCursor"] extends (input: infer T) => unknown ? T : never) => whiteboardTransport.sendCursor(input),
-              requestSnapshot: () => whiteboardTransport.requestSnapshot(),
-              clear: () => whiteboardTransport.clear(),
-              initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => whiteboardTransport.files.initiateUpload(input),
-              finalizeUpload: (uploadId: string) => whiteboardTransport.files.finalizeUpload(uploadId),
-              presignDownload: (fileId: string) => whiteboardTransport.files.getDownloadUrl(fileId),
+              subscribe: (listener: NonNullable<WhiteboardViewProps["collab"]>["subscribe"] extends (listener: infer T) => unknown ? T : never) => whiteboardSubscription.transport.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
+              submitUpdate: async (input: NonNullable<WhiteboardViewProps["collab"]>["submitUpdate"] extends (input: infer T) => unknown ? T : never) =>
+                whiteboardSubscription.transport.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
+              sendCursor: (input: NonNullable<WhiteboardViewProps["collab"]>["sendCursor"] extends (input: infer T) => unknown ? T : never) => whiteboardSubscription.transport.sendCursor(input),
+              requestSnapshot: () => whiteboardSubscription.transport.requestSnapshot(),
+              onSubmissionError: (cause: unknown) => setCommandError(cause instanceof Error ? cause.message : "Whiteboard could not sync."),
+              clear: () => whiteboardSubscription.transport.clear(),
+              initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => whiteboardSubscription.transport.files.initiateUpload(input),
+              finalizeUpload: (uploadId: string) => whiteboardSubscription.transport.files.finalizeUpload(uploadId),
+              presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
             },
           },
         }
