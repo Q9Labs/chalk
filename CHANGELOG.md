@@ -51,6 +51,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Kept public invites compatible with browsers that send B3 tracing headers.
+
 - Made managed migration repair apply only explicitly allowed missing
   checked-in migrations before the exact release target, while rejecting any
   other out-of-order gap.
