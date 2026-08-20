@@ -65,6 +65,10 @@ while (($# > 0)); do
   fi
   shift
 done
+if ((${#names[@]} > 10)); then
+  printf 'GetParameters accepts at most 10 names\n' >&2
+  exit 2
+fi
 parameters='[]'
 for name in "${names[@]}"; do
   base="$name"
@@ -349,7 +353,14 @@ mkdir -p "$stable_state"
 make_request stable "${fixture_root}/request.json"
 : >"${fixture_root}/commands.log"
 : >"${fixture_root}/secret-state"
+: >"${fixture_root}/aws.log"
 run_controller "$stable_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
+jq -e -R -s '
+  split("\n")
+  | map(select(startswith("ssm get-parameters --names ")) | split(" ") | .[3:index("--with-decryption")])
+  | map(length)
+  | sort == [1, 10]
+' "${fixture_root}/aws.log" >/dev/null || fail "runtime inputs were not fetched in SSM batches of at most 10 names"
 jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 11)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
 grep -Fq 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" || fail "database migration unit was not started"
 migration_start_line="$(grep -nF 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"

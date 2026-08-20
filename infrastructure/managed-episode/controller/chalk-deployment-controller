@@ -409,9 +409,20 @@ fetch_deployment_inputs() {
 
   local response_file="${stage_root}/ssm-response.json"
   local aws_error="${stage_root}/ssm-error.log"
-  if ! "$aws_bin" ssm get-parameters --names "${names[@]}" --with-decryption --region "$request_region" --output json >"$response_file" 2>"$aws_error"; then
-    fail "SSM runtime input fetch failed"
-  fi
+  local batch_response="${stage_root}/ssm-batch-response.json"
+  local merged_response="${stage_root}/ssm-merged-response.json"
+  local batch_start
+  local -a batch_names
+  printf '{"Parameters":[],"InvalidParameters":[]}\n' >"$response_file"
+  : >"$aws_error"
+  for ((batch_start = 0; batch_start < ${#names[@]}; batch_start += 10)); do
+    batch_names=("${names[@]:batch_start:10}")
+    if ! "$aws_bin" ssm get-parameters --names "${batch_names[@]}" --with-decryption --region "$request_region" --output json >"$batch_response" 2>>"$aws_error"; then
+      fail "SSM runtime input fetch failed"
+    fi
+    jq -s '{Parameters:[.[].Parameters[]],InvalidParameters:[.[].InvalidParameters[]?]}' "$response_file" "$batch_response" >"$merged_response" 2>/dev/null || fail "SSM runtime input response could not be merged"
+    mv "$merged_response" "$response_file"
+  done
   local expected_names_json
   expected_names_json="$(printf '%s\n' "${names[@]}" | jq -R . | jq -s .)"
   jq -e --argjson expected "$expected_names_json" '
