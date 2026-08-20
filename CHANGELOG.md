@@ -25,6 +25,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Kept a newly created public Space admitted while its index URL becomes the
+  canonical invite route, so that route ownership cannot leave the creator and
+  archive the Space before another Participant arrives.
 - Kept app-route fallbacks separate from public pages and static assets, so
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.

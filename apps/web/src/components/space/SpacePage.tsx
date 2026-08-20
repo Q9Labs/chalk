@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { listAllAccountTenants } from "../../lib/dashboard-api";
-import { clearDashboardSpaceEntry, hasDashboardSpaceEntry, replaceWithSpaceInviteLink, replaceWithVerifiedSpaceInviteLink, spaceInviteToken } from "../../lib/named-space-route";
+import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";
 
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 
-export function SpacePage({ slug }: { readonly slug?: string } = {}) {
+export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistory }: { readonly slug?: string; readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void> } = {}) {
   const { journey, telemetry } = useWebTelemetry();
   const client = useMemo(() => createPublicInviteClient(journey), [journey]);
   const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
@@ -64,9 +64,19 @@ export function SpacePage({ slug }: { readonly slug?: string } = {}) {
     setPreparing(true);
     const preparation = accountEntry ? prepareDashboardSpace(slug!, normalizedDisplayName, journey) : arrive(client, normalizedDisplayName, slug, inviteToken);
     void preparation
-      .then((result) => {
+      .then(async (result) => {
         if (result.kind === "dashboard") {
           complete(result.access, result.inviteLink, result.spaceName);
+          return;
+        }
+        try {
+          await navigatePublicSpace(result.canonicalSlug, result.inviteLink);
+        } catch (cause) {
+          await releasePublicPreparation(client, result);
+          throw cause;
+        }
+        if (!active.current) {
+          await releasePublicPreparation(client, result);
           return;
         }
         const { arrival, inviteLink, spaceName } = result;
@@ -86,7 +96,7 @@ export function SpacePage({ slug }: { readonly slug?: string } = {}) {
       .finally(() => {
         if (active.current) setPreparing(false);
       });
-  }, [client, complete, displayName, pending, preparing, slug, spaceAccess]);
+  }, [client, complete, displayName, navigatePublicSpace, pending, preparing, slug, spaceAccess]);
 
   useEffect(() => {
     pendingRef.current = pending;
@@ -191,6 +201,7 @@ type PendingArrival = {
 type PublicPreparation = {
   readonly kind: "public";
   readonly arrival: PendingArrival["arrival"];
+  readonly canonicalSlug: string;
   readonly inviteLink: string;
   readonly spaceName: string;
   readonly prepared?: SpaceEntryAccess;
@@ -202,14 +213,27 @@ async function arrive(client: PublicInviteClient, displayName: string, slug: str
     const arrival = await client.arriveBySpacePublicInvite(inviteToken, displayName);
     const verifiedSlug = arrival.space?.slug ?? slug;
     if (!verifiedSlug) throw new Error(neutralSpaceError);
-    const inviteLink = replaceWithSpaceInviteLink(verifiedSlug, inviteToken);
-    return { kind: "public", arrival, inviteLink, spaceName: arrival.space?.name ?? verifiedSlug };
+    const inviteLink = canonicalSpaceInviteLink(verifiedSlug, inviteToken);
+    return { kind: "public", arrival, canonicalSlug: verifiedSlug, inviteLink, spaceName: arrival.space?.name ?? verifiedSlug };
   }
 
   const created = await client.createPublicSpace(displayName);
   const prepared = createPreparedPublicSpace(client, created.arrival);
-  const inviteLink = replaceWithVerifiedSpaceInviteLink(created.space.slug, created.invite_link);
-  return { kind: "public", arrival: created.arrival, inviteLink, spaceName: created.space.name, prepared };
+  const inviteLink = verifiedSpaceInviteLink(created.space.slug, created.invite_link);
+  return { kind: "public", arrival: created.arrival, canonicalSlug: created.space.slug, inviteLink, spaceName: created.space.name, prepared };
+}
+
+async function releasePublicPreparation(client: PublicInviteClient, preparation: PublicPreparation): Promise<void> {
+  if (preparation.prepared) {
+    await preparation.prepared.finish();
+    return;
+  }
+  const arrivalHandle = preparation.arrival.arrival_handle;
+  if (arrivalHandle) await client.leaveSpacePublicInviteArrival(arrivalHandle);
+}
+
+async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: string): Promise<void> {
+  globalThis.history?.replaceState(globalThis.history.state, "", inviteLink);
 }
 
 async function prepareDashboardSpace(slug: string, displayName: string, journey: ReturnType<typeof useWebTelemetry>["journey"]): Promise<DashboardPreparation> {

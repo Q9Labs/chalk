@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, replaceWithSpaceInviteLink, replaceWithVerifiedSpaceInviteLink, spaceInviteToken } from "./named-space-route";
+import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "./named-space-route";
 
 afterEach(() => {
   window.history.replaceState({}, "", "/");
@@ -40,22 +40,14 @@ describe("public Space invite route", () => {
     expect(() => canonicalSpaceInviteLink("design-lab", "https://evil.example/space/design-lab#spaceInviteToken=cspi1.test")).toThrow("unexpected origin");
   });
 
-  it("replaces the current URL after public creation", () => {
-    const link = replaceWithSpaceInviteLink("design-lab", "cspi1.test");
-
-    expect(link).toBe("http://localhost:3000/space/design-lab#spaceInviteToken=cspi1.test");
-    expect(window.location.href).toBe(link);
-  });
-
-  it("accepts and replaces with the server-issued canonical invite URL", () => {
+  it("accepts the server-issued canonical invite URL", () => {
     const link = "http://localhost:3000/space/design-lab#spaceInviteToken=cspi1.created";
 
-    expect(replaceWithVerifiedSpaceInviteLink("design-lab", link)).toBe(link);
-    expect(window.location.href).toBe(link);
+    expect(verifiedSpaceInviteLink("design-lab", link)).toBe(link);
   });
 
   it("rejects a canonical invite URL for another Space or token family", () => {
-    expect(() => replaceWithVerifiedSpaceInviteLink("design-lab", "http://localhost:3000/space/other#spaceInviteToken=cspi1.created")).toThrow("did not match the verified Space");
-    expect(() => replaceWithVerifiedSpaceInviteLink("design-lab", "http://localhost:3000/space/design-lab#spaceInviteToken=legacy.token")).toThrow("valid capability");
+    expect(() => verifiedSpaceInviteLink("design-lab", "http://localhost:3000/space/other#spaceInviteToken=cspi1.created")).toThrow("did not match the verified Space");
+    expect(() => verifiedSpaceInviteLink("design-lab", "http://localhost:3000/space/design-lab#spaceInviteToken=legacy.token")).toThrow("valid capability");
   });
 });

@@ -34,19 +34,7 @@ export function canonicalSpaceInviteLink(slug: string, inviteLink: string): stri
   return url.toString();
 }
 
-export function replaceWithSpaceInviteLink(slug: string, inviteLink: string): string {
-  const canonical = canonicalSpaceInviteLink(slug, inviteLink);
-  if (globalThis.history) globalThis.history.replaceState(globalThis.history.state, "", canonical);
-  return canonical;
-}
-
-export function replaceWithVerifiedSpaceInviteLink(slug: string, inviteLink: string): string {
-  const value = verifiedSpaceInviteLink(slug, inviteLink);
-  if (globalThis.history) globalThis.history.replaceState(globalThis.history.state, "", value);
-  return value;
-}
-
-function verifiedSpaceInviteLink(slug: string, inviteLink: string): string {
+export function verifiedSpaceInviteLink(slug: string, inviteLink: string): string {
   const value = inviteLink.trim();
   if (!value) throw new Error("The Space invite link was empty.");
 
