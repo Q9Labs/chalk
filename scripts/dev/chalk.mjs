@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 import { createSupervisor } from "./supervisor.mjs";
 import { createOpSecretResolver } from "./secrets.mjs";
 import { identityEnvironment } from "./identity.mjs";
@@ -14,7 +13,6 @@ import { writeJsonAtomic } from "./ownership.mjs";
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
   const config = {
     ...inputConfig,
-    brokerRuntime: inputConfig.brokerRuntime || discoverBrokerRuntime(inputConfig.root),
     webJoinPath: inputConfig.webJoinPath || discoverWebJoinPath(inputConfig.root),
   };
   const selectedServiceSpecs = serviceSpecs || defaultServiceSpecs(config);
@@ -50,7 +48,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     },
     startResources: async ({ lease }) => {
       systemToken = randomBytes(32).toString("base64url");
-      if (config.fresh) await rm(join(config.runtimeRoot, "wrangler"), { recursive: true, force: true });
       await resources.start({ lease });
       if (!resources.state.identity?.signing) throw failure(FailureKind.STARTUP, "runtime signing identity was not generated", { stage: "identity" });
     },
@@ -58,7 +55,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     beforeStartService: async (spec) => {
       if (spec.id !== "mobile") return;
       const bridgePath = `${config.root}/apps/mobile/scripts/prepare-local-bridge.mjs`;
-      const result = await runChecked("node", [bridgePath], { cwd: config.root, env: { CHALK_DEV_BROKER_PORT: String(config.ports.broker) } });
+      const result = await runChecked("node", [bridgePath], { cwd: config.root, env: { CHALK_DEV_WEB_PORT: String(config.ports.web) } });
       if (result.stdout?.trim()) output(result.stdout.trim());
       if (result.stderr?.trim()) output(result.stderr.trim());
     },
@@ -92,8 +89,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       CHALK_API_URL: config.urls.api,
       CHALK_SYNC_URL: `ws://127.0.0.1:${config.ports.sync}/v1/sync`,
       CHALK_DEV_WEB_PORT: String(config.ports.web),
-      CHALK_DEV_BROKER_PORT: String(config.ports.broker),
-      CHALK_DEV_BROKER_ORIGIN: `http://127.0.0.1:${config.ports.broker}`,
     };
     if (serviceId === "api") {
       if (!identity || !provider || !systemToken) throw failure(FailureKind.STARTUP, "API child identity is incomplete", { stage: "identity" });
@@ -147,56 +142,25 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_SYNC_OTLP_ENDPOINT: "http://127.0.0.1:4318",
       };
     }
-    if (serviceId === "broker")
+    if (serviceId === "web") {
       return {
         ...base,
-        CHALK_API_KEY: bindings?.apiKey || "",
-        CHALK_TENANT_ID: bindings?.tenantId || "",
-        CHALK_SPACE_ID: bindings?.spaceId || "",
-        [config.brokerRuntime.spaceBindingName]: bindings?.spaceId || "",
+        CHALK_DEV_API_ORIGIN: config.urls.api,
       };
-    if (serviceId === "web") return base;
-    if (serviceId === "mobile") return { ...base, EXPO_PUBLIC_CHALK_BROKER_URL: config.urls.broker };
+    }
+    if (serviceId === "mobile") return base;
     return {};
   }
 }
 
 export function defaultServiceSpecs(config) {
-  const brokerRuntime = config.brokerRuntime || discoverBrokerRuntime(config.root);
   const specs = [
     { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${config.root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` }, watchRoots: [`${config.root}/apps/api`] },
     { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${config.root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` }, watchRoots: [`${config.root}/apps/sync`] },
-    {
-      id: "broker",
-      command: "pnpm",
-      args: [
-        "exec",
-        "wrangler",
-        "dev",
-        "--local",
-        "--config",
-        brokerRuntime.configName,
-        "--persist-to",
-        `${config.runtimeRoot}/wrangler`,
-        "--ip",
-        "127.0.0.1",
-        "--port",
-        String(config.ports.broker),
-        "--var",
-        `CHALK_APP_ORIGIN:${config.urls.web}`,
-        "--var",
-        `CHALK_API_URL:${config.urls.api}`,
-        "--var",
-        `CHALK_SYNC_URL:ws://127.0.0.1:${config.ports.sync}/v1/sync`,
-      ],
-      cwd: brokerRuntime.directory,
-      dependsOn: ["sync"],
-      readiness: { url: `http://127.0.0.1:${config.ports.broker}/local-chalk/health` },
-    },
     { id: "sdk-client", command: "pnpm", args: ["--filter", "@q9labsai/chalk-client", "dev"], cwd: config.root },
     { id: "sdk-whiteboard", command: "pnpm", args: ["--filter", "@q9labsai/chalk-whiteboard", "dev"], cwd: config.root, readiness: { filePath: join(config.root, "packages/whiteboard/dist/react/index.js") } },
     { id: "sdk-react", command: "pnpm", args: ["--filter", "@q9labsai/chalk-react", "dev"], cwd: config.root, dependsOn: ["sdk-whiteboard"] },
-    { id: "web", command: "pnpm", args: ["--filter", "web", "exec", "vite", "dev", "--host", "127.0.0.1", "--port", String(config.ports.web)], cwd: config.root, dependsOn: ["broker", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
+    { id: "web", command: "pnpm", args: ["--filter", "web", "exec", "vite", "dev", "--host", "127.0.0.1", "--port", String(config.ports.web)], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
   ];
   if (config.profile === "mobile")
     specs.push({
@@ -215,7 +179,6 @@ function formatReadySummary(config, bindings) {
   return [
     "Chalk dev ready",
     `Web       ${config.urls.web}`,
-    `Broker    ${config.urls.broker || `http://127.0.0.1:${config.ports.broker}/local-chalk`}`,
     `API       ${config.urls.api}`,
     `Sync      ws://127.0.0.1:${config.ports.sync}/v1/sync`,
     "Grafana   http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability",
@@ -241,28 +204,14 @@ function stableFixtureMarker(root) {
   return createHash("sha256").update(root).digest("hex").slice(0, 12);
 }
 
-export function discoverBrokerRuntime(root) {
-  const candidates = findFiles(join(root, "infrastructure")).filter(({ path, content }) => basename(path) === "wrangler.toml" && /\/local-chalk\/\*/.test(content));
-  if (candidates.length !== 1) throw failure(FailureKind.CONFIG, `expected one local broker config, found ${candidates.length}`, { stage: "config" });
-  const [{ path: configPath, content }] = candidates;
-  const required = parseRequiredBindings(content);
-  const spaceBindingName = required.find((name) => name !== "CHALK_API_KEY" && name !== "CHALK_TENANT_ID");
-  if (!spaceBindingName) throw failure(FailureKind.CONFIG, "local broker config has no space binding", { stage: "config" });
-  return { configPath, configName: basename(configPath), directory: dirname(configPath), spaceBindingName };
-}
-
 export function discoverWebJoinPath(root) {
   const routesDirectory = join(root, "apps", "web", "src", "routes");
-  const candidates = findFiles(routesDirectory).filter(({ path, content }) => path.endsWith(".tsx") && /from\s+["']@q9labsai\/chalk-react["']/.test(content));
-  if (candidates.length !== 1) throw failure(FailureKind.CONFIG, `expected one web join route, found ${candidates.length}`, { stage: "config" });
-  const routeMatch = candidates[0].content.match(/createFileRoute\(\s*["']([^"']+)["']\s*\)/);
-  if (!routeMatch?.[1]) throw failure(FailureKind.CONFIG, "web join route does not declare a file route", { stage: "config" });
-  return routeMatch[1];
-}
-
-function parseRequiredBindings(content) {
-  const required = content.match(/required\s*=\s*\[([^\]]*)\]/s)?.[1] || "";
-  return [...required.matchAll(/["']([^"']+)["']/g)].map(([, name]) => name);
+  const candidates = findFiles(routesDirectory)
+    .filter(({ path, content }) => path.endsWith(".tsx") && (/from\s+["']@q9labsai\/chalk-react["']/.test(content) || /from\s+["'][^"']*\/components\/space\/SpacePage["']/.test(content)))
+    .map(({ content }) => content.match(/createFileRoute\(\s*["']([^"']+)["']\s*\)/)?.[1])
+    .filter((route) => route === "/space" || route === "/space/");
+  if (candidates.length !== 1) throw failure(FailureKind.CONFIG, `expected one public web join route, found ${candidates.length}`, { stage: "config" });
+  return candidates[0].replace(/\/$/, "");
 }
 
 function findFiles(directory) {

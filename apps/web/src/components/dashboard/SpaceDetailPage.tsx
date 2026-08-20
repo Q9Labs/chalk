@@ -1,16 +1,48 @@
-import { useEffect, useState } from "react";
-import { DashboardAPIError, getSpace, listEpisodes, type DashboardEpisode, type DashboardEpisodePage, type Space } from "../../lib/dashboard-api";
+import { useEffect, useRef, useState } from "react";
+import {
+  approveSpacePublicAdmissionRequest,
+  DashboardAPIError,
+  denySpacePublicAdmissionRequest,
+  getSpace,
+  getSpacePublicInvite,
+  listEpisodes,
+  listSpacePublicAdmissionRequests,
+  rotateSpacePublicInvite,
+  updateSpacePublicInvite,
+  type DashboardEpisode,
+  type DashboardEpisodePage,
+  type DashboardPublicAdmissionRequest,
+  type DashboardPublicAdmissionRequestPage,
+  type DashboardSpacePublicInvite,
+  type Space,
+} from "../../lib/dashboard-api";
 import { EditSpaceDialog } from "./EditSpaceDialog";
+import { SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, useModalDialog } from "./SpaceDialogPrimitives";
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
-import { episodeHistoryHref, defaultSpaceHrefBuilder } from "./space-links";
+import { defaultSpaceHrefBuilder, episodeHistoryHref, publicSpaceHrefBuilder } from "./space-links";
 import { formatDateTime, formatJSON, statusLabel } from "./episode-utils";
 
 export type SpaceDetailClient = {
   getSpace: (input: { tenantID: string; spaceID: string }) => Promise<Space>;
   listEpisodes: (input: { tenantID: string; spaceID?: string; pageSize?: number }) => Promise<DashboardEpisodePage>;
+  getSpacePublicInvite?: (input: { tenantID: string; spaceID: string }) => Promise<DashboardSpacePublicInvite>;
+  updateSpacePublicInvite?: (input: { tenantID: string; spaceID: string; enabled: boolean }) => Promise<DashboardSpacePublicInvite>;
+  rotateSpacePublicInvite?: (input: { tenantID: string; spaceID: string }) => Promise<DashboardSpacePublicInvite>;
+  listSpacePublicAdmissionRequests?: (input: { tenantID: string; spaceID: string }) => Promise<DashboardPublicAdmissionRequestPage>;
+  approveSpacePublicAdmissionRequest?: (input: { tenantID: string; spaceID: string; requestHandle: string }) => Promise<DashboardPublicAdmissionRequest>;
+  denySpacePublicAdmissionRequest?: (input: { tenantID: string; spaceID: string; requestHandle: string }) => Promise<DashboardPublicAdmissionRequest>;
 };
 
-const defaultSpaceDetailClient: SpaceDetailClient = { getSpace, listEpisodes };
+const defaultSpaceDetailClient: SpaceDetailClient = {
+  getSpace,
+  listEpisodes,
+  getSpacePublicInvite,
+  updateSpacePublicInvite,
+  rotateSpacePublicInvite,
+  listSpacePublicAdmissionRequests,
+  approveSpacePublicAdmissionRequest,
+  denySpacePublicAdmissionRequest,
+};
 
 type SpaceDetailPageProps = {
   tenantID: string;
@@ -19,6 +51,8 @@ type SpaceDetailPageProps = {
 };
 
 type LoadState = "loading" | "ready" | "error" | "not-found";
+type PublicInviteState = "loading" | "ready" | "error" | "archived" | "members-only" | "unavailable";
+type AdmissionRequestsState = "loading" | "ready" | "error" | "archived" | "members-only" | "not-applicable" | "unavailable";
 
 export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetailClient }: SpaceDetailPageProps) {
   const [space, setSpace] = useState<Space | null>(null);
@@ -26,6 +60,18 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [reloadGeneration, setReloadGeneration] = useState(0);
+  const [publicInvite, setPublicInvite] = useState<DashboardSpacePublicInvite | null>(null);
+  const [publicInviteState, setPublicInviteState] = useState<PublicInviteState>("loading");
+  const [publicInviteError, setPublicInviteError] = useState<string | null>(null);
+  const [publicInviteReloadGeneration, setPublicInviteReloadGeneration] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState<DashboardPublicAdmissionRequest[]>([]);
+  const [admissionRequestsState, setAdmissionRequestsState] = useState<AdmissionRequestsState>("loading");
+  const [admissionRequestsError, setAdmissionRequestsError] = useState<string | null>(null);
+  const [inviteMutation, setInviteMutation] = useState<"disable" | "enable" | "rotate" | null>(null);
+  const [inviteMutationError, setInviteMutationError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [rotateOpen, setRotateOpen] = useState(false);
+  const [requestAction, setRequestAction] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [lifecycle, setLifecycle] = useState<"archive" | "restore" | null>(null);
 
@@ -35,6 +81,14 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
     setError(null);
     setSpace(null);
     setEpisodes([]);
+    setPublicInvite(null);
+    setPublicInviteState("loading");
+    setPublicInviteError(null);
+    setPendingRequests([]);
+    setAdmissionRequestsState("loading");
+    setAdmissionRequestsError(null);
+    setCopyState("idle");
+    setInviteMutationError(null);
 
     void Promise.all([client.getSpace({ tenantID, spaceID }), client.listEpisodes({ tenantID, spaceID, pageSize: 10 })])
       .then(([nextSpace, episodePage]) => {
@@ -58,10 +112,140 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
     };
   }, [client, reloadGeneration, spaceID, tenantID]);
 
+  useEffect(() => {
+    if (state !== "ready" || !space) return;
+
+    let active = true;
+    const mode = readAdmissionMode(space.admission_policy);
+    setPublicInvite(null);
+    setPublicInviteError(null);
+    setAdmissionRequestsError(null);
+    setPendingRequests([]);
+
+    if (space.archived) {
+      setPublicInviteState("archived");
+      setAdmissionRequestsState("archived");
+      return () => {
+        active = false;
+      };
+    }
+
+    if (mode === "members_only") {
+      setPublicInviteState("members-only");
+      setAdmissionRequestsState("members-only");
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!client.getSpacePublicInvite) {
+      setPublicInviteState("unavailable");
+    } else {
+      setPublicInviteState("loading");
+      void client
+        .getSpacePublicInvite({ tenantID, spaceID: space.id })
+        .then((nextInvite) => {
+          if (!active) return;
+          setPublicInvite(nextInvite);
+          setPublicInviteState("ready");
+        })
+        .catch((cause: unknown) => {
+          if (!active) return;
+          setPublicInviteError(spaceDetailError(cause));
+          setPublicInviteState("error");
+        });
+    }
+
+    if (mode !== "knock") {
+      setAdmissionRequestsState("not-applicable");
+    } else if (!client.listSpacePublicAdmissionRequests) {
+      setAdmissionRequestsState("unavailable");
+    } else {
+      setAdmissionRequestsState("loading");
+      void client
+        .listSpacePublicAdmissionRequests({ tenantID, spaceID: space.id })
+        .then((page) => {
+          if (!active) return;
+          setPendingRequests(page.requests);
+          setAdmissionRequestsState("ready");
+        })
+        .catch((cause: unknown) => {
+          if (!active) return;
+          setAdmissionRequestsError(spaceDetailError(cause));
+          setAdmissionRequestsState("error");
+        });
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [client, publicInviteReloadGeneration, space, spaceID, state, tenantID]);
+
   function replaceSpace(nextSpace: Space) {
     setSpace(nextSpace);
     setEditOpen(false);
     setLifecycle(null);
+  }
+
+  async function setPublicInviteEnabled(enabled: boolean) {
+    if (!space || !client.updateSpacePublicInvite || inviteMutation) return;
+    setInviteMutation(enabled ? "enable" : "disable");
+    setInviteMutationError(null);
+    setCopyState("idle");
+    try {
+      const nextInvite = await client.updateSpacePublicInvite({ tenantID, spaceID: space.id, enabled });
+      setPublicInvite(nextInvite);
+    } catch (cause: unknown) {
+      setInviteMutationError(spaceDetailError(cause));
+    } finally {
+      setInviteMutation(null);
+    }
+  }
+
+  async function rotatePublicInvite() {
+    if (!space || !client.rotateSpacePublicInvite || inviteMutation) return;
+    setInviteMutation("rotate");
+    setInviteMutationError(null);
+    setCopyState("idle");
+    try {
+      const nextInvite = await client.rotateSpacePublicInvite({ tenantID, spaceID: space.id });
+      setPublicInvite(nextInvite);
+      setRotateOpen(false);
+    } catch (cause: unknown) {
+      setInviteMutationError(spaceDetailError(cause));
+    } finally {
+      setInviteMutation(null);
+    }
+  }
+
+  async function copyPublicInvite() {
+    const href = publicInvite ? publicSpaceHrefBuilder(publicInvite) : undefined;
+    if (!href || !globalThis.navigator?.clipboard?.writeText) {
+      setCopyState("error");
+      return;
+    }
+    try {
+      await globalThis.navigator.clipboard.writeText(href);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  async function decideAdmissionRequest(request: DashboardPublicAdmissionRequest, decision: "approve" | "deny") {
+    if (!space || requestAction) return;
+    const handler = decision === "approve" ? client.approveSpacePublicAdmissionRequest : client.denySpacePublicAdmissionRequest;
+    if (!handler) return;
+    setRequestAction(`${decision}:${request.request_handle}`);
+    setAdmissionRequestsError(null);
+    try {
+      await handler({ tenantID, spaceID: space.id, requestHandle: request.request_handle });
+      setPendingRequests((current) => current.filter((item) => item.request_handle !== request.request_handle));
+    } catch (cause: unknown) {
+      setAdmissionRequestsError(spaceDetailError(cause));
+    } finally {
+      setRequestAction(null);
+    }
   }
 
   if (state === "loading") return <SpaceDetailState kind="loading" />;
@@ -72,6 +256,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
   if (!space) return <SpaceDetailState kind="not-found" />;
 
   const archived = space.archived;
+  const admissionMode = readAdmissionMode(space.admission_policy);
   return (
     <div className="dashboard-page resource-page space-detail-page">
       <nav className="space-detail-breadcrumb" aria-label="Breadcrumb">
@@ -123,6 +308,32 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
         </dl>
       </section>
 
+      <PublicInvitePanel
+        state={publicInviteState}
+        invite={publicInvite}
+        error={publicInviteError}
+        mutation={inviteMutation}
+        mutationError={inviteMutationError}
+        copyState={copyState}
+        onCopy={() => void copyPublicInvite()}
+        onDisable={() => void setPublicInviteEnabled(false)}
+        onEnable={() => void setPublicInviteEnabled(true)}
+        onRotate={() => setRotateOpen(true)}
+        onRetry={() => setPublicInviteReloadGeneration((current) => current + 1)}
+      />
+
+      {admissionMode === "knock" ? (
+        <AdmissionRequestsPanel
+          state={admissionRequestsState}
+          requests={pendingRequests}
+          error={admissionRequestsError}
+          requestAction={requestAction}
+          onApprove={(request) => void decideAdmissionRequest(request, "approve")}
+          onDeny={(request) => void decideAdmissionRequest(request, "deny")}
+          onRetry={() => setPublicInviteReloadGeneration((current) => current + 1)}
+        />
+      ) : null}
+
       <section className="space-detail-episodes" aria-labelledby="space-episodes-heading">
         <div className="space-detail-section-heading">
           <div>
@@ -145,8 +356,260 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
 
       <EditSpaceDialog open={editOpen} tenantID={tenantID} space={space} onClose={() => setEditOpen(false)} onSaved={replaceSpace} />
       <SpaceLifecycleDialog open={lifecycle !== null} tenantID={tenantID} space={space} action={lifecycle ?? "archive"} onClose={() => setLifecycle(null)} onChanged={replaceSpace} />
+      <RotatePublicInviteDialog open={rotateOpen} spaceName={space.name} busy={inviteMutation === "rotate"} error={inviteMutationError} onClose={() => setRotateOpen(false)} onConfirm={() => void rotatePublicInvite()} />
     </div>
   );
+}
+
+type PanelState = PublicInviteState | AdmissionRequestsState;
+
+function PanelStateMessages({
+  headingID,
+  heading,
+  description,
+  state,
+  loadingMessage,
+  archivedMessage,
+  membersOnlyMessage,
+  unavailableMessage,
+  error,
+  errorFallback,
+  onRetry,
+}: {
+  headingID: string;
+  heading: string;
+  description: string;
+  state: PanelState;
+  loadingMessage: string;
+  archivedMessage: string;
+  membersOnlyMessage: string;
+  unavailableMessage: string;
+  error: string | null;
+  errorFallback: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <>
+      <div className="space-detail-section-heading">
+        <div>
+          <h2 id={headingID}>{heading}</h2>
+          <p>{description}</p>
+        </div>
+      </div>
+
+      {state === "loading" ? (
+        <p className="space-detail-inline-state" role="status" aria-busy="true" aria-live="polite">
+          {loadingMessage}
+        </p>
+      ) : null}
+      {state === "archived" ? <p className="space-detail-inline-state">{archivedMessage}</p> : null}
+      {state === "members-only" ? <p className="space-detail-inline-state">{membersOnlyMessage}</p> : null}
+      {state === "unavailable" ? <p className="space-detail-inline-state">{unavailableMessage}</p> : null}
+      {state === "error" ? (
+        <div className="space-detail-inline-error" role="alert">
+          <p>{error ?? errorFallback}</p>
+          {onRetry ? (
+            <button className="dashboard-button secondary" type="button" onClick={onRetry}>
+              Try again
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function PublicInvitePanel({
+  state,
+  invite,
+  error,
+  mutation,
+  mutationError,
+  copyState,
+  onCopy,
+  onDisable,
+  onEnable,
+  onRotate,
+  onRetry,
+}: {
+  state: PublicInviteState;
+  invite: DashboardSpacePublicInvite | null;
+  error: string | null;
+  mutation: "disable" | "enable" | "rotate" | null;
+  mutationError: string | null;
+  copyState: "idle" | "copied" | "error";
+  onCopy: () => void;
+  onDisable: () => void;
+  onEnable: () => void;
+  onRotate: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="space-detail-public-invite" aria-labelledby="space-public-link-heading">
+      <PanelStateMessages
+        headingID="space-public-link-heading"
+        heading="Public link"
+        description="Share this link with people outside your Tenant when you want them to enter this Space."
+        state={state}
+        loadingMessage="Loading public link…"
+        archivedMessage="Public links are unavailable while this Space is archived."
+        membersOnlyMessage="Public links are unavailable for members-only Spaces."
+        unavailableMessage="Public link management is not available for this Space yet."
+        error={error}
+        errorFallback="We could not load the public link."
+        onRetry={onRetry}
+      />
+
+      {state === "ready" ? (
+        <div className="space-detail-public-invite-body">
+          {publicInviteURL(invite) ? (
+            <div className="space-detail-public-link-field">
+              <label htmlFor="space-public-link">Public URL</label>
+              <div className="space-detail-public-link-controls">
+                <input id="space-public-link" readOnly value={publicInviteURL(invite)} />
+                <button className="dashboard-button secondary" type="button" onClick={onCopy} disabled={mutation !== null}>
+                  Copy link
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="space-detail-inline-state">The server has not materialized a public URL for this Space yet.</p>
+          )}
+
+          <div className="space-detail-public-invite-meta">
+            <span className={`space-detail-public-invite-status ${invite?.enabled ? "is-enabled" : "is-disabled"}`} role="status">
+              {invite?.enabled ? "Enabled" : "Disabled"}
+            </span>
+            {invite?.generation ? <span>Generation {invite.generation}</span> : null}
+          </div>
+
+          <div className="space-detail-public-invite-actions" aria-label="Public link actions">
+            {invite?.enabled ? (
+              <button className="dashboard-button secondary" type="button" onClick={onDisable} disabled={mutation !== null}>
+                {mutation === "disable" ? "Disabling…" : "Disable link"}
+              </button>
+            ) : (
+              <button className="dashboard-button secondary" type="button" onClick={onEnable} disabled={mutation !== null}>
+                {mutation === "enable" ? "Re-enabling…" : "Re-enable link"}
+              </button>
+            )}
+            <button className="dashboard-button secondary" type="button" onClick={onRotate} disabled={mutation !== null}>
+              Rotate link
+            </button>
+          </div>
+
+          {copyState === "copied" ? (
+            <p className="space-detail-inline-success" role="status">
+              Public link copied.
+            </p>
+          ) : null}
+          {copyState === "error" ? (
+            <p className="space-detail-inline-error" role="alert">
+              We could not copy the public link. Copy it from the field instead.
+            </p>
+          ) : null}
+          {mutationError ? (
+            <p className="space-detail-inline-error" role="alert">
+              {mutationError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function AdmissionRequestsPanel({
+  state,
+  requests,
+  error,
+  requestAction,
+  onApprove,
+  onDeny,
+  onRetry,
+}: {
+  state: AdmissionRequestsState;
+  requests: DashboardPublicAdmissionRequest[];
+  error: string | null;
+  requestAction: string | null;
+  onApprove: (request: DashboardPublicAdmissionRequest) => void;
+  onDeny: (request: DashboardPublicAdmissionRequest) => void;
+  onRetry?: () => void;
+}) {
+  return (
+    <section className="space-detail-admission-requests" aria-labelledby="space-admission-requests-heading">
+      <PanelStateMessages
+        headingID="space-admission-requests-heading"
+        heading="Pending join requests"
+        description="Approve or deny people waiting to enter this Space."
+        state={state}
+        loadingMessage="Loading pending requests…"
+        archivedMessage="Join requests are paused while this Space is archived."
+        membersOnlyMessage="Join requests are unavailable for members-only Spaces."
+        unavailableMessage="Pending request management is not available for this Space yet."
+        error={error}
+        errorFallback="We could not load pending requests."
+        onRetry={onRetry}
+      />
+      {state === "ready" && requests.length === 0 ? <p className="space-detail-inline-state">No pending join requests.</p> : null}
+      {state === "ready" && requests.length > 0 ? (
+        <ul className="space-detail-admission-request-list">
+          {requests.map((request) => {
+            const busy = requestAction === `approve:${request.request_handle}` || requestAction === `deny:${request.request_handle}`;
+            return (
+              <li key={request.request_handle} className="space-detail-admission-request">
+                <div>
+                  <strong>{request.display_name}</strong>
+                  <small>Requested {formatDateTime(request.requested_at)}</small>
+                </div>
+                <div className="space-detail-admission-request-actions">
+                  <button className="dashboard-button secondary" type="button" onClick={() => onApprove(request)} disabled={requestAction !== null}>
+                    {busy && requestAction?.startsWith("approve:") ? "Approving…" : `Approve ${request.display_name}`}
+                  </button>
+                  <button className="dashboard-button secondary" type="button" onClick={() => onDeny(request)} disabled={requestAction !== null}>
+                    {busy && requestAction?.startsWith("deny:") ? "Denying…" : `Deny ${request.display_name}`}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {error && state === "ready" ? (
+        <p className="space-detail-inline-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function RotatePublicInviteDialog({ open, spaceName, busy, error, onClose, onConfirm }: { open: boolean; spaceName: string; busy: boolean; error: string | null; onClose: () => void; onConfirm: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useModalDialog(dialogRef, open);
+
+  return (
+    <SpaceDialogFrame
+      dialogRef={dialogRef}
+      onClose={onClose}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onConfirm();
+      }}
+    >
+      <h2>Rotate public link?</h2>
+      <p className="dialog-intro">The current link will stop working as soon as you rotate it. Anyone using the old link must receive the new one.</p>
+      <p className="fixture-note">
+        <strong>{spaceName}</strong>
+      </p>
+      <SpaceDialogActions onClose={onClose} disabled={busy} busyLabel={busy ? "Rotating…" : undefined} submitLabel="Rotate link" />
+      <SpaceDialogError message={error} />
+    </SpaceDialogFrame>
+  );
+}
+
+function publicInviteURL(invite: DashboardSpacePublicInvite | null): string | undefined {
+  return invite ? publicSpaceHrefBuilder(invite) : undefined;
 }
 
 function RecentEpisodesTable({ episodes }: { episodes: DashboardEpisode[] }) {
@@ -248,6 +711,12 @@ function isNotFoundError(cause: unknown): boolean {
 function spaceDetailError(cause: unknown): string {
   if (cause instanceof DashboardAPIError) return cause.message;
   return cause instanceof Error ? cause.message : "The Space could not load.";
+}
+
+function readAdmissionMode(value: unknown): "open" | "knock" | "members_only" | undefined {
+  if (!value || typeof value !== "object" || !("mode" in value)) return undefined;
+  const mode = value.mode;
+  return mode === "open" || mode === "knock" || mode === "members_only" ? mode : undefined;
 }
 
 function admissionLabel(value: unknown): string {

@@ -47,6 +47,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added account-scoped Episode Debugger launch links to Episode details and the
   Developer page, with safe Episode references that resolve to canonical
   diagnostics only after tenant authorization.
+- Added one public Space invite contract for customer-managed and auto-created
+  Spaces, with collaborator Guest admission, open and knock policies, durable
+  rotation controls, browser and React Native clients, and SFU or RealtimeKit
+  media grants.
 
 ### Changed
 
@@ -59,6 +63,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   with database-free checks.
 - Made detached local web releases reuse the main checkout's Turbo cache while
   keeping web build inputs and the exact release SHA in the cache key.
+- Moved public Space creation, admission, credential refresh, leave, and timed
+  auto-Space archival into the API, so every canonical invite resolves an exact
+  Tenant and Space before account or Guest identity is selected.
 - Removed the unfinished standalone API performance harness. A replacement can
   return when it has stable workload, latency, and regression contracts.
 
@@ -101,6 +108,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Episode in the gated Episode Debugger on React and React Native.
 - Fixed the guarded npm publish workflow for pnpm 10 and made release dispatches
   target `Q9Labs/chalk` explicitly.
+
+### Removed
+
+- Removed both Episode broker workers, their public routes and cookies, the
+  legacy 43-character invite format, and their runtime, monitor, development,
+  mobile, and bootstrap configuration.
 
 ## [4.0.1] - 2026-08-09
 

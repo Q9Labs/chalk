@@ -2,15 +2,13 @@ import type { GetAccess, SpaceClient, SpaceClientOptions } from "@q9labsai/chalk
 import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 
-import type { DashboardSpaceCredential, ParticipantCredential } from "./chalk-access";
-
-const localSpace = "local-space";
+import type { AccountSpaceCredential, PublicSpaceCredential } from "./chalk-access";
 
 type SpaceOperationJourney = Pick<TelemetryJourney, "recordDiagnostic"> & { readonly context?: TelemetryJourney["context"] };
 type CreateSpaceClient = (options: SpaceClientOptions, platform: SpaceClientPlatform) => SpaceClient;
 
 export type LocalSpaceClientOptions = {
-  readonly credential: ParticipantCredential | DashboardSpaceCredential;
+  readonly credential: PublicSpaceCredential | AccountSpaceCredential;
   readonly getAccess: GetAccess;
   readonly connectionAccess?: SpaceClientPlatform["connectionAccess"];
   readonly journey: SpaceOperationJourney;
@@ -21,14 +19,10 @@ type LocalSpaceClientDependencies = {
   readonly now?: () => number;
 };
 
-/** Creates the app-owned public client so its broker-selected API and sync endpoints stay paired. */
+/** Creates the app-owned Space client with the verified Space identity and access provider. */
 export function createLocalSpaceClient({ credential, getAccess, connectionAccess, journey }: LocalSpaceClientOptions, dependencies: LocalSpaceClientDependencies = {}): SpaceClient {
-  const dashboard = "space" in credential;
   const syncURL = "syncURL" in credential ? credential.syncURL : dashboardSyncURL();
-  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)(
-    { space: dashboard ? credential.space : localSpace, getAccess, baseUrl: credential.apiBaseURL },
-    { ...(syncURL ? { syncUrl: syncURL } : {}), ...(connectionAccess ? { connectionAccess } : {}), telemetry: journey.context },
-  );
+  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)({ space: credential.space, getAccess, baseUrl: credential.apiBaseURL }, { ...(syncURL ? { syncUrl: syncURL } : {}), ...(connectionAccess ? { connectionAccess } : {}), telemetry: journey.context });
   return instrumentSpaceClient(client, journey, dependencies.now ?? Date.now);
 }
 
@@ -55,7 +49,7 @@ async function releaseOnce(client: Pick<SpaceClient, "leave" | "dispose">, clean
   try {
     await client.leave();
   } catch {
-    // The broker credential still has to be cleared when transport shutdown is already in progress.
+    // Arrival cleanup still has to run when transport shutdown is already in progress.
   }
   try {
     client.dispose();

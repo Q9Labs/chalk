@@ -1,6 +1,7 @@
 package tenants_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -49,6 +50,47 @@ func TestAccountServiceOnboardsNormalizedTenantWithStableFingerprint(t *testing.
 	}
 	if first.Tenant.Name != "Acme studio" || first.Tenant.ID.IsZero() || first.AccessID.IsZero() {
 		t.Fatalf("normalized record = %#v", first)
+	}
+}
+
+func TestAccountServiceOnboardingDefaultsManagedMediaPlaneAndPreservesReplay(t *testing.T) {
+	accountID := mustAccountID(t, "11111111-1111-4111-8111-111111111111")
+	var records []tenants.OnboardTenantRecordInput
+	repository := accountTenantRepository{onboard: func(_ context.Context, input tenants.OnboardTenantRecordInput) (tenants.OnboardTenantResult, error) {
+		records = append(records, input)
+		return tenants.OnboardTenantResult{Replayed: len(records) > 1}, nil
+	}}
+	service := tenants.NewAccountService(repository)
+	input := tenants.OnboardTenantInput{
+		AccountID:  accountID,
+		RequestKey: "tenant-onboard-media-plane-01",
+		Name:       "Managed studio",
+	}
+
+	first, err := service.OnboardTenant(context.Background(), input)
+	if err != nil {
+		t.Fatalf("first onboarding: %v", err)
+	}
+	second, err := service.OnboardTenant(context.Background(), input)
+	if err != nil {
+		t.Fatalf("replayed onboarding: %v", err)
+	}
+	if first.Replayed || !second.Replayed {
+		t.Fatalf("replay flags = first %v, second %v", first.Replayed, second.Replayed)
+	}
+	if len(records) != 2 {
+		t.Fatalf("repository calls = %d, want 2", len(records))
+	}
+	for index, record := range records {
+		if record.Tenant.DefaultMediaPlane == nil || *record.Tenant.DefaultMediaPlane != "cf_rtk" {
+			t.Fatalf("record %d default media plane = %v, want cf_rtk", index, record.Tenant.DefaultMediaPlane)
+		}
+		if !bytes.Equal(record.Tenant.MediaPlaneProviderConfig, []byte(`{"enabled":true,"provider":"cf_rtk","mode":"chalk_managed"}`)) {
+			t.Fatalf("record %d provider config = %s", index, record.Tenant.MediaPlaneProviderConfig)
+		}
+	}
+	if records[0].RequestFingerprint != records[1].RequestFingerprint {
+		t.Fatal("replay changed the normalized request fingerprint")
 	}
 }
 

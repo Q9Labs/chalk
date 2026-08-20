@@ -137,7 +137,6 @@ export interface Env {
   CHALK_OPS_API_BASE_URL?: string;
   ATLAS_BASE_URL?: string;
   API_MONITOR_BASE_URL?: string;
-  BROKER_BASE_URL?: string;
   SYNC_BASE_URL?: string;
   WEB_BASE_URL?: string;
   OPS_INGEST_TOKEN?: string;
@@ -165,7 +164,6 @@ export interface Env {
 }
 
 const DEFAULT_API_MONITOR_BASE_URL = "https://api.chalkmeet.com";
-const DEFAULT_BROKER_BASE_URL = "https://chalkmeet.com";
 const DEFAULT_SYNC_BASE_URL = "https://sync.chalkmeet.com";
 const DEFAULT_WEB_BASE_URL = "https://chalkmeet.com";
 
@@ -182,7 +180,6 @@ function monitorURL(rawBaseURL: string, pathname: string, variableName: string):
 
 function serviceMonitorDefinitions(env: Env): readonly MonitorDefinition[] {
   const apiBaseURL = env.API_MONITOR_BASE_URL || DEFAULT_API_MONITOR_BASE_URL;
-  const brokerBaseURL = env.BROKER_BASE_URL || env.WEB_BASE_URL || DEFAULT_BROKER_BASE_URL;
   const syncBaseURL = env.SYNC_BASE_URL || DEFAULT_SYNC_BASE_URL;
   const webBaseURL = env.WEB_BASE_URL || DEFAULT_WEB_BASE_URL;
 
@@ -227,13 +224,6 @@ function serviceMonitorDefinitions(env: Env): readonly MonitorDefinition[] {
       key: "sync.readiness",
       method: "GET",
       url: monitorURL(syncBaseURL, "/readyz", "SYNC_BASE_URL"),
-      severity: "critical",
-      expectedStatusCodes: [200],
-    },
-    {
-      key: "broker.health",
-      method: "GET",
-      url: monitorURL(brokerBaseURL, "/local-chalk/health", "BROKER_BASE_URL"),
       severity: "critical",
       expectedStatusCodes: [200],
     },

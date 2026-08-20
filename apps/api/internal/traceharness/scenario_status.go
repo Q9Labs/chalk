@@ -89,7 +89,7 @@ func (s *tracedStatusService) Snapshot(_ context.Context) (statusdomain.PublicSn
 		return statusdomain.PublicSnapshot{}, statusdomain.ErrStatusUnavailable
 	}
 	now := s.now()
-	span.End("public status snapshot returned", map[string]any{"overall": "operational", "component_count": 4, "private_fields": "redacted"}, nil)
+	span.End("public status snapshot returned", map[string]any{"overall": "operational", "component_count": 3, "private_fields": "redacted"}, nil)
 	return statusdomain.PublicSnapshot{
 		SchemaVersion: statusdomain.SchemaVersion,
 		GeneratedAt:   now,

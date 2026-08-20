@@ -1,7 +1,7 @@
 import { createTelemetryClient } from "@q9labsai/chalk-client/telemetry";
 import { describe, expect, it } from "vitest";
 
-import { recordMobileSpaceJoined, terminalizeMobileSpaceJourney } from "./mobile-space-telemetry-lifecycle";
+import { recordMobileSpaceJoined, recordMobileSpaceLifecycle, terminalizeMobileSpaceJourney } from "./mobile-space-telemetry-lifecycle";
 
 describe("mobile Space telemetry lifecycle", () => {
   it("keeps a joined Space journey open for sync, RTC, and diagnostic telemetry until the Episode ends", () => {
@@ -14,8 +14,7 @@ describe("mobile Space telemetry lifecycle", () => {
     journey.recordDiagnostic({ category: "connection", code: "space.live" });
     terminalizeMobileSpaceJourney(journey, "episode_ended");
 
-    expect(telemetry.getPendingEvents()).toMatchObject([
-      { name: "journey.started", state: "started" },
+    expect(telemetry.getPendingEvents().slice(1)).toMatchObject([
       { name: "journey.phase", phase: "media", state: "in_progress" },
       { name: "sync.frame", state: "observed" },
       { name: "rtc.summary", state: "observed" },
@@ -25,6 +24,23 @@ describe("mobile Space telemetry lifecycle", () => {
     const terminalEventCount = telemetry.getPendingEvents().length;
     expect(journey.recordSyncFrame({ direction: "client_to_server", frameType: "space.leave" })).toBeUndefined();
     expect(telemetry.getPendingEvents()).toHaveLength(terminalEventCount);
+  });
+
+  it("records public invite lifecycle events", () => {
+    const telemetry = createTelemetryClient({ enabled: true });
+    const journey = telemetry.startJourney({ kind: "space.join" });
+
+    recordMobileSpaceLifecycle(journey, "arrive", "succeeded");
+    recordMobileSpaceLifecycle(journey, "pending");
+    recordMobileSpaceLifecycle(journey, "refresh", "succeeded");
+    recordMobileSpaceLifecycle(journey, "leave");
+
+    expect(telemetry.getPendingEvents().slice(1)).toMatchObject([
+      { name: "diagnostic.timeline", attributes: { code: "public_invite.arrive" } },
+      { name: "diagnostic.timeline", attributes: { code: "public_invite.pending" } },
+      { name: "diagnostic.timeline", attributes: { code: "public_invite.refresh" } },
+      { name: "diagnostic.timeline", attributes: { code: "public_invite.leave" } },
+    ]);
   });
 
   it.each([

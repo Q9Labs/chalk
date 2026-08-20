@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Layer, Scope, Semaphore } from "effect";
-import type { CloudflareSFUSnapshot, MediaSource } from "../media";
+import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
@@ -554,7 +554,7 @@ function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: M
   if (camera) entries.push(["camera", camera]);
   return entries;
 }
-function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: CloudflareSFUSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]) {
+function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]) {
   const track = tracks.get(source) ?? null;
   const publication = snapshot?.localTracks.find((candidate) => candidate.source === source);
   if (publication?.enabled) return Object.freeze({ source, state: "enabled" as const, track });

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { approveSpacePublicAdmissionRequest, denySpacePublicAdmissionRequest, getSpacePublicInvite, listSpacePublicAdmissionRequests, rotateSpacePublicInvite, updateSpacePublicInvite } from "./dashboard-api";
 
 const localValues = new Map<string, string>();
 const testStorage: Storage = {
@@ -67,6 +68,32 @@ function episode(id: string, space_id: string, started_at: string, status: "acti
 
 function episodeEnd(episode_id: string, status: string) {
   return { episode_id, status, external_operation: { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", operation_name: "episode.end", request_key: "request-key", status, created_at: "2026-08-04T00:00:00Z" } };
+}
+
+function publicInvite(space_id = "22222222-2222-4222-8222-222222222222", overrides: Record<string, unknown> = {}) {
+  return {
+    schema_version: "cspi1",
+    tenant_id: tenantID,
+    space_id,
+    canonical_url: "https://app.chalk.test/space/product-studio#spaceInviteToken=cspi1.public-1.payload.signature",
+    enabled: true,
+    generation: 1,
+    public_role: "collaborator",
+    admission_mode: "open",
+    created_at: "2026-08-04T00:00:00Z",
+    updated_at: "2026-08-04T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function admissionRequest(_space_id = "22222222-2222-4222-8222-222222222222", request_handle = "request-handle-123456") {
+  return {
+    request_handle,
+    display_name: "Ada",
+    requested_at: "2026-08-04T00:00:00Z",
+    expires_at: "2026-08-04T00:05:00Z",
+    state: "pending",
+  };
 }
 
 function assertBoundaryMutation(init: RequestInit | undefined) {
@@ -354,6 +381,40 @@ describe("dashboard API client", () => {
     await endEpisode({ tenantID, spaceID, episodeID });
 
     expect(await Promise.all(fetcher.mock.calls.slice(1).map(([, init]) => requestJSON(init as RequestInit)))).toEqual([{}, {}, {}]);
+  });
+
+  it("manages a public link and pending admission requests through generated operations", async () => {
+    const spaceID = "22222222-2222-4222-8222-222222222222";
+    const requestHandle = "request-handle-123456";
+    const invite = publicInvite(spaceID);
+    const paths: string[] = [];
+    const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
+      paths.push(path);
+      assertBoundaryMutation(init);
+      if (path === "/api/auth/csrf") return Response.json({ csrf_token: "csrf-token" });
+      if (path.includes("public-admission-requests?state=pending")) return Response.json({ requests: [admissionRequest(spaceID, requestHandle)] });
+      if (path.endsWith("/public-admission-requests/" + requestHandle + "/approval")) return Response.json({ ...admissionRequest(spaceID, requestHandle), state: "approved" });
+      if (path.endsWith("/public-admission-requests/" + requestHandle + "/denial")) return Response.json({ ...admissionRequest(spaceID, requestHandle), state: "denied" });
+      if (path.endsWith("/public-invite/rotations")) return Response.json({ ...invite, generation: 2 }, { status: 201 });
+      if (path.endsWith("/public-invite") && init?.method === "PATCH") return Response.json({ ...invite, enabled: false });
+      return Response.json(invite);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await expect(getSpacePublicInvite({ tenantID, spaceID })).resolves.toMatchObject({ enabled: true, generation: 1 });
+    await expect(updateSpacePublicInvite({ tenantID, spaceID, enabled: false })).resolves.toMatchObject({ enabled: false });
+    await expect(rotateSpacePublicInvite({ tenantID, spaceID })).resolves.toMatchObject({ generation: 2 });
+    await expect(listSpacePublicAdmissionRequests({ tenantID, spaceID })).resolves.toMatchObject({ requests: [{ request_handle: requestHandle }] });
+    await expect(approveSpacePublicAdmissionRequest({ tenantID, spaceID, requestHandle })).resolves.toMatchObject({ state: "approved" });
+    await expect(denySpacePublicAdmissionRequest({ tenantID, spaceID, requestHandle })).resolves.toMatchObject({ state: "denied" });
+
+    expect(paths.filter((path) => path !== "/api/auth/csrf")).toEqual([
+      `/api/tenants/${tenantID}/spaces/${spaceID}/public-invite`,
+      `/api/tenants/${tenantID}/spaces/${spaceID}/public-invite`,
+      `/api/tenants/${tenantID}/spaces/${spaceID}/public-invite/rotations`,
+      `/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests?state=pending`,
+      `/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/approval`,
+      `/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/denial`,
+    ]);
   });
 
   it("retains an Episode-end key while the operation is ending and clears it after completion", async () => {

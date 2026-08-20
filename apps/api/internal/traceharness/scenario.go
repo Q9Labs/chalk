@@ -103,6 +103,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteWhiteboardFileUpload(ctx)
 	case RouteChatAttachmentUploadScenario:
 		return runRouteChatAttachmentUpload(ctx)
+	case RoutePublicInviteObservabilityScenario:
+		return runRoutePublicInviteObservability(ctx)
 	case RouteAPIKeyCustomerFlowScenario:
 		return runRouteAPIKeyCustomerFlow(ctx)
 	case EdgeAPIKeyRejectedScopeScenario:

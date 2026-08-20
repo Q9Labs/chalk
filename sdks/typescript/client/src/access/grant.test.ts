@@ -35,6 +35,24 @@ describe("access grant parsing", () => {
     expect(JSON.parse(JSON.stringify(grant))).toEqual(wire);
   });
 
+  it("parses and preserves the RealtimeKit participant binding and client token", () => {
+    const wire = { ...accessWire(), media: { ...accessWire().media, provider: "cloudflare_rtk", client_payload: { provider_subject: "participant-ref", token: "rtk-client-token" } } } as const;
+
+    expect(parseParsedAccessGrant(wire).media).toEqual({
+      token: wire.media.token,
+      expiresAt: wire.media.expires_at,
+      provider: "cloudflare_rtk",
+      clientPayload: { providerSubject: "participant-ref", token: "rtk-client-token" },
+    });
+    expect(JSON.parse(JSON.stringify(parseAccessGrant(wire)))).toEqual(wire);
+  });
+
+  it("rejects unsupported media providers and incomplete RealtimeKit payloads", () => {
+    const wire = accessWire();
+    expect(() => parseParsedAccessGrant({ ...wire, media: { ...wire.media, provider: "realtimekit" } })).toThrowError(expect.objectContaining({ code: "access.invalid" }));
+    expect(() => parseParsedAccessGrant({ ...wire, media: { ...wire.media, provider: "cloudflare_rtk", client_payload: { provider_subject: "participant-ref" } } })).toThrowError(expect.objectContaining({ code: "access.invalid" }));
+  });
+
   it("binds a diagnostic credential to the participant generation", () => {
     const wire = { ...accessWire(), diagnostics: { token: diagnosticJwt(), expires_at: "2026-07-21T12:05:00.000Z", generation: 3, intake_path: "/_internal/episode-diagnostic-events" } };
     const parsed = parseParsedAccessGrant(wire);

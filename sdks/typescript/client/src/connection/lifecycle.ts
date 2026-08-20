@@ -1,5 +1,5 @@
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
-import type { CloudflareSFUSnapshot } from "../media";
+import type { ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
@@ -63,7 +63,7 @@ type Model = {
   sync: ConnectionSyncClient | null;
   media: ConnectionMediaClient | null;
   syncSnapshot: V1EpisodeSnapshot | null;
-  mediaSnapshot: CloudflareSFUSnapshot | null;
+  mediaSnapshot: ConnectionMediaSnapshot | null;
   failure: ConnectionFailure | null;
   initialMedia: InitialMedia;
   intent: { microphone: boolean; camera: boolean };
@@ -505,7 +505,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const sync = model.sync;
           if (!media || !sync) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Media recovery requires active ports"));
           const grant = yield* access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure));
-          yield* foreign(() => media.restart(grant.media.clientPayload));
+          const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
+          yield* foreign(() => media.restart(restartInput));
           model.mediaSnapshot = media.getSnapshot();
           yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000));
         });
@@ -548,7 +549,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* stopPorts();
           yield* transition("failed");
         });
-      const handleMediaSnapshot = (media: ConnectionMediaClient, snapshot: CloudflareSFUSnapshot): Effect.Effect<void> =>
+      const handleMediaSnapshot = (media: ConnectionMediaClient, snapshot: ConnectionMediaSnapshot): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
@@ -728,7 +729,7 @@ function syncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefined):
   return "idle";
 }
 
-function mediaPhase(phase: CloudflareSFUSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
+function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
   if (phase === "live") return "healthy";
   if (phase === "recovering") return "recovering";
   if (phase === "failed") return "failed";

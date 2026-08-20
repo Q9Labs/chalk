@@ -6,5 +6,8 @@ export { ChalkProvider, useSpaceClient } from "./context/space-client-context";
 export type { ChalkProviderProps } from "./context/space-client-context";
 export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useSelf, useWhiteboard } from "./hooks/space-hooks";
 export { Theme, createNativeTheme } from "./ui/theme";
+export { extractSpaceInviteFromLink, getClipboardInviteSuggestion, parseSpaceInviteLink } from "./invites";
+export type { SpaceInviteLink } from "./invites";
+export { buildChalkInviteLink } from "./utils/build-chalk-invite-link";
 export { getThemeMode, isDarkThemePalette, resolveNativeAppearance, THEME_PALETTES, THEME_TEXTURES } from "./ui/appearance";
 export type { NativeAppearance, NativeAppearanceTokens, NativeShadowToken, NativeTextureBlendMode, NativeTextureDescriptor, NativeTextureKind, ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./ui/appearance";

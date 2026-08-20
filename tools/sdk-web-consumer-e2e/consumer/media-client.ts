@@ -13,12 +13,16 @@ type PeerState = {
 type FixtureMediaClientInput = {
   readonly access: {
     readonly subject: { readonly participantId: string };
-    readonly media: { readonly clientPayload: CloudflareSFUBootstrap };
+    readonly media: FixtureMediaAccess;
   };
   readonly credential: () => Promise<string>;
   readonly onFailure: (error: unknown) => void;
   readonly onScreenEnded: () => void;
 };
+
+type FixtureMediaAccess =
+  | { readonly token: string; readonly expiresAt: string; readonly provider: "cloudflare_sfu"; readonly clientPayload: CloudflareSFUBootstrap }
+  | { readonly token: string; readonly expiresAt: string; readonly provider: "cloudflare_rtk"; readonly clientPayload: { readonly providerSubject: string; readonly token: string } };
 
 export class FixtureMediaClient {
   readonly #credential: () => Promise<string>;
@@ -40,6 +44,7 @@ export class FixtureMediaClient {
   constructor(signalingURL: string, input: FixtureMediaClientInput) {
     this.#signalingURL = signalingURL;
     this.#participantId = input.access.subject.participantId;
+    if (input.access.media.provider !== "cloudflare_sfu") throw new TypeError("The fixture media client only supports Cloudflare SFU access");
     this.#bootstrap = input.access.media.clientPayload;
     this.#credential = input.credential;
     this.#onFailure = input.onFailure;
@@ -81,8 +86,8 @@ export class FixtureMediaClient {
     this.#publish("live");
   }
 
-  async restart(bootstrap: CloudflareSFUBootstrap): Promise<void> {
-    this.#bootstrap = bootstrap;
+  async restart(input: CloudflareSFUBootstrap | FixtureMediaAccess): Promise<void> {
+    this.#bootstrap = fixtureBootstrap(input);
     this.#publish("recovering");
     this.#closeNetwork();
     await this.#connect();
@@ -304,6 +309,12 @@ export class FixtureMediaClient {
   #emit(): void {
     for (const listener of this.#listeners) listener();
   }
+}
+
+function fixtureBootstrap(input: CloudflareSFUBootstrap | FixtureMediaAccess): CloudflareSFUBootstrap {
+  if (!("provider" in input)) return input;
+  if (input.provider !== "cloudflare_sfu") throw new TypeError("The fixture media client only supports Cloudflare SFU access");
+  return input.clientPayload;
 }
 
 export function reconcileFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: Map<string, CloudflareSFURemoteTrack>): void {

@@ -1,6 +1,6 @@
 export type ChalkAPIErrorCode = "network_error" | "invalid_response" | "request_failed" | (string & {});
 
-const safeCodePattern = /^[a-z][a-z0-9_]{0,63}$/u;
+const safeCodePattern = /^[a-z][a-z0-9_.-]{0,63}$/u;
 const safeRequestIdPattern = /^[A-Za-z0-9._:-]{1,128}$/u;
 
 export class ChalkAPIError extends Error {

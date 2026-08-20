@@ -6,7 +6,7 @@ const readyManifest = {
   status: "ready",
   runtime_id: "runtime-test",
   web: { url: "http://127.0.0.1:3070" },
-  web_join_path: "/local",
+  web_join_path: "/space",
   observability: { proofEndpoint: "http://127.0.0.1:8080/local-proof" },
 };
 
@@ -95,7 +95,7 @@ describe("media smoke runtime manifest gate", () => {
       runtimeID: "runtime-test",
       status: "ready",
       webOrigin: "http://127.0.0.1:3070",
-      webJoinPath: "/local",
+      webJoinPath: "/space",
       observabilityProofURL: "http://127.0.0.1:8080/local-proof",
     });
   });

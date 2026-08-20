@@ -1,5 +1,4 @@
 import type { GetAccess, SpaceClient } from "@q9labsai/chalk-client";
-import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 import { describe, expect, it, vi } from "vitest";
 
 const nativeClientFactory = vi.hoisted(() => vi.fn());
@@ -15,10 +14,10 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: asyncStor
 import { createMobileSpaceClient, createMobileSpaceRelease, ownMobileSpaceClient } from "./mobile-space-client";
 
 const credential = {
-  apiBaseURL: "https://api.chalkmeet.com",
-  participantCredentialId: "c".repeat(43),
-  spaceInviteToken: "i".repeat(43),
-  syncURL: "wss://sync.chalkmeet.com/v1/sync",
+  arrivalHandle: "arrival-handle",
+  guestCredential: "guest-credential",
+  slug: "team",
+  spaceInviteToken: "cspi1.header.payload.signature",
 };
 
 function spaceClient(status: "left" | "live" = "live"): SpaceClient {
@@ -30,30 +29,26 @@ function spaceClient(status: "left" | "live" = "live"): SpaceClient {
 }
 
 describe("mobile Space client", () => {
-  it("constructs the public native client with broker endpoints, arrival defaults, and journey telemetry", () => {
+  it("constructs the native client with arrival access and device defaults", () => {
     const client = spaceClient();
     const getAccess = vi.fn() as unknown as GetAccess;
-    const journey = {} as TelemetryJourney;
     nativeClientFactory.mockReturnValue(client);
 
     expect(
       createMobileSpaceClient({
-        credential,
+        apiBaseURL: "http://127.0.0.1:3072",
         defaults: { camera: false, microphone: true },
         getAccess,
-        journey,
-        space: "local-space",
+        space: "team",
       }),
     ).toBe(client);
     expect(nativeClientFactory).toHaveBeenCalledWith({
-      baseUrl: credential.apiBaseURL,
+      baseUrl: "http://127.0.0.1:3072",
       camera: false,
       getAccess,
       microphone: true,
-      space: "local-space",
+      space: "team",
       storage: asyncStorage,
-      syncUrl: credential.syncURL,
-      telemetry: journey,
     });
   });
 
@@ -76,15 +71,15 @@ describe("mobile Space client", () => {
     expect(client.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it("shares Episode-end and leave cleanup, then permits a retry after a transient failure", async () => {
-    const cleanupCredential = vi.fn().mockRejectedValueOnce(new Error("broker unavailable")).mockResolvedValueOnce(undefined);
+  it("shares cleanup and close, then permits a retry after a transient failure", async () => {
+    const cleanupCredential = vi.fn().mockRejectedValueOnce(new Error("arrival unavailable")).mockResolvedValueOnce(undefined);
     const onClose = vi.fn().mockResolvedValue(undefined);
     const onReleaseFailure = vi.fn();
     const release = createMobileSpaceRelease({ cleanupCredential, onClose, onReleaseFailure });
 
     const first = release(credential);
     expect(release(credential)).toBe(first);
-    await expect(first).rejects.toThrow("broker unavailable");
+    await expect(first).rejects.toThrow("arrival unavailable");
 
     await expect(release(credential)).resolves.toBeUndefined();
     expect(cleanupCredential).toHaveBeenCalledTimes(2);

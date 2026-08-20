@@ -178,12 +178,10 @@ describe("chalk ops monitor worker", () => {
       expect.objectContaining({ key: "api.readiness", url: "https://api.chalkmeet.com/readyz", method: "GET" }),
       expect.objectContaining({ key: "sync.health", url: "https://sync.chalkmeet.com/healthz", method: "GET" }),
       expect.objectContaining({ key: "sync.readiness", url: "https://sync.chalkmeet.com/readyz", method: "GET" }),
-      expect.objectContaining({ key: "broker.health", url: "https://chalkmeet.com/local-chalk/health", method: "GET" }),
     ]);
 
     const overridden = __internal.monitorDefinitions({
       API_MONITOR_BASE_URL: "https://api.staging.example/base?secret=redacted",
-      BROKER_BASE_URL: "https://broker.staging.example/private#fragment",
       SYNC_BASE_URL: "https://sync.staging.example/ignored",
       WEB_BASE_URL: "https://web.staging.example/ignored",
     });
@@ -194,7 +192,6 @@ describe("chalk ops monitor worker", () => {
       { key: "api.readiness", url: "https://api.staging.example/readyz" },
       { key: "sync.health", url: "https://sync.staging.example/healthz" },
       { key: "sync.readiness", url: "https://sync.staging.example/readyz" },
-      { key: "broker.health", url: "https://broker.staging.example/local-chalk/health" },
     ]);
   });
 
@@ -214,13 +211,13 @@ describe("chalk ops monitor worker", () => {
 
     const env = createEnv({ CHECK_RETRIES: "0" });
     const failed = await runMonitorCycle(env, new Date("2026-04-14T12:00:00Z"));
-    expect(failed).toMatchObject({ checked_count: 7, healthy_count: 6, failed_count: 1 });
+    expect(failed).toMatchObject({ checked_count: 6, healthy_count: 5, failed_count: 1 });
     expect(ingestedStatuses).toContainEqual(expect.objectContaining({ monitor_key: "sync.readiness", status: "failed", error_code: "unexpected_status" }));
 
     syncReady = true;
     ingestedStatuses.length = 0;
     const recovered = await runMonitorCycle(env, new Date("2026-04-14T12:05:00Z"));
-    expect(recovered).toMatchObject({ checked_count: 7, healthy_count: 7, failed_count: 0 });
+    expect(recovered).toMatchObject({ checked_count: 6, healthy_count: 6, failed_count: 0 });
     expect(ingestedStatuses).toContainEqual(expect.objectContaining({ monitor_key: "sync.readiness", status: "healthy" }));
 
     const publicResponse = await worker.fetch(new Request("https://chalk-uptime-worker.example/"), env);

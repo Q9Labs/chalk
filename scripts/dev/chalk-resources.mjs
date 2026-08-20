@@ -40,10 +40,14 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       for (const [name, containerName] of portOwners) {
         const port = config.ports[name];
         if (!port) continue;
+        if (!containers.has(containerName)) containers.set(containerName, await docker(containerName));
+        const container = containers.get(containerName);
+        if (container?.running && Array.isArray(container.hostPorts) && !container.hostPorts.includes(port)) {
+          throw failure(FailureKind.CONFIG, `${containerName} is already running without configured ${name} port ${port}; use its published host port or stop the container`, { stage: "preflight" });
+        }
         const result = await probePort(port);
         if (result.available) continue;
-        if (!containers.has(containerName)) containers.set(containerName, await docker(containerName));
-        if (adoptable(name, containers.get(containerName))) allowBusyPorts.add(name);
+        if (adoptable(name, container)) allowBusyPorts.add(name);
       }
       return preflight(config, { ...options, allowBusyPorts });
     },
@@ -264,7 +268,11 @@ async function dockerInspect(name) {
         dataChecksums = undefined;
       }
     }
-    return { running: container?.State?.Running === true, healthy: container?.State?.Health?.Status === "healthy", image: container?.Config?.Image, dataChecksums, name };
+    const hostPorts = Object.values(container?.NetworkSettings?.Ports || {})
+      .flatMap((bindings) => bindings || [])
+      .map((binding) => Number(binding.HostPort))
+      .filter(Number.isInteger);
+    return { running: container?.State?.Running === true, healthy: container?.State?.Health?.Status === "healthy", image: container?.Config?.Image, dataChecksums, hostPorts, name };
   } catch (error) {
     if (error.code === 1 || error.code === "ENOENT") return undefined;
     throw failure(FailureKind.IO, `docker inspect failed for ${name}`, { stage: "preflight", cause: error });

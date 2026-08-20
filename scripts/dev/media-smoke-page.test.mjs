@@ -7,13 +7,13 @@ import { createMediaSmokeInitScript } from "./media-smoke-page.mjs";
 const generatedJourneyID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 describe("media smoke page instrumentation", () => {
-  it("scopes the generated journey header to same-origin local broker paths", async () => {
+  it("scopes the generated journey header to same-origin public API paths", async () => {
     const page = createPage();
 
-    await page.window.fetch("/local-chalk/access", { method: "POST" });
+    await page.window.fetch("/v1/public/space-invite-arrivals", { method: "POST" });
     await page.window.fetch("/api/spaces");
-    await page.window.fetch("http://127.0.0.1:8787/local-chalk/access");
-    await page.window.fetch("/local-chalkish/access");
+    await page.window.fetch("http://127.0.0.1:8787/v1/public/space-invite-arrivals");
+    await page.window.fetch("/v1/publicish/access");
 
     expect(headerFor(page.calls[0])).toBe(generatedJourneyID);
     expect(headerFor(page.calls[1])).toBeNull();
@@ -23,7 +23,7 @@ describe("media smoke page instrumentation", () => {
 
   it("preserves a caller-provided journey header and Request identity", async () => {
     const page = createPage();
-    const request = new Request("http://127.0.0.1:3070/local-chalk/access", { method: "POST", body: "{}", headers: { "x-chalk-journey-id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" } });
+    const request = new Request("http://127.0.0.1:3070/v1/public/space-invite-arrivals", { method: "POST", body: "{}", headers: { "x-chalk-journey-id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" } });
 
     await page.window.fetch(request);
 

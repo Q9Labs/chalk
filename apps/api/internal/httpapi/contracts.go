@@ -80,6 +80,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
 	endpoints = append(endpoints, integrationEndpoints(nil, nil, integrationRouteOptions{})...)
 	endpoints = append(endpoints, webhookEndpoints(nil, nil)...)
+	endpoints = append(endpoints, publicInviteEndpoints(nil, nil)...)
 	return routeContracts(endpoints)
 }
 

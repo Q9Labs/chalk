@@ -12,11 +12,7 @@ import { createMobileTelemetry, flushAndDisposeTelemetry } from "./telemetry";
 describe("createMobileTelemetry", () => {
   it("does not collect or export journeys without the explicit deployment opt-in", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
-    const telemetry = createMobileTelemetry({
-      enabled: false,
-      fetch,
-      getApiBaseURL: () => "https://api.chalk.test",
-    });
+    const telemetry = createMobileTelemetry({ enabled: false, fetch, getApiBaseURL: () => "https://api.chalk.test" });
 
     telemetry.startJourney({ kind: "space.join" });
     await expect(telemetry.flush()).resolves.toBeUndefined();
@@ -28,11 +24,7 @@ describe("createMobileTelemetry", () => {
 
   it("keeps the journey queued until the SDK supplies an authenticated participant bearer", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
-    const telemetry = createMobileTelemetry({
-      enabled: true,
-      fetch,
-      getApiBaseURL: () => "https://api.chalk.test",
-    });
+    const telemetry = createMobileTelemetry({ enabled: true, fetch, getApiBaseURL: () => "https://api.chalk.test" });
     const journey = telemetry.startJourney({ kind: "space.join" });
 
     await expect(telemetry.flush()).resolves.toBeUndefined();
@@ -46,7 +38,7 @@ describe("createMobileTelemetry", () => {
     telemetry.dispose();
   });
 
-  it("exports the correlated journey once the broker supplies the participant bearer", async () => {
+  it("exports the correlated journey once the API supplies the participant bearer", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({ accepted_count: 1, duplicate_count: 0 }, { status: 202 }));
     const telemetry = createMobileTelemetry({
       enabled: true,

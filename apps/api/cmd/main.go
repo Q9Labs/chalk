@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -36,8 +40,11 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridgeserver"
+	"github.com/q9labs/chalk/apps/api/internal/publicinviteapp"
+	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/recentauth"
 	"github.com/q9labs/chalk/apps/api/internal/recorderhealth"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -372,6 +379,79 @@ func run() error {
 		transcriptWorker = transcriptService
 		workloadAuthorizer = authorizer
 	}
+	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), cfg, tenantService)
+	if err != nil {
+		return fmt.Errorf("configure public invite defaults: %w", err)
+	}
+	if publicInviteConfig.Enabled && (syncTokenRefresh == nil || participantMediaIssuer == nil) {
+		if cfg.Observability.Environment != config.DefaultEnvironment {
+			return errors.New("public invite credentials are required outside local environments")
+		}
+		publicInviteConfig.Enabled = false
+		logger.Info("public invite routes disabled because local media credentials are not configured", "event", "public_invite.disabled", "reason", "local_credentials_unavailable")
+	}
+	var publicInviteService httpapi.PublicInviteService
+	var publicInviteLifecycleScheduler *publicinvites.LifecycleScheduler
+	if publicInviteConfig.Enabled {
+		managedTenantID, err := utilities.ParseID(publicInviteConfig.ManagedTenantID)
+		if err != nil {
+			return fmt.Errorf("parse public invite managed Tenant ID: %w", err)
+		}
+		signer, err := publicinvites.NewSigner(publicinvites.Keyring{
+			CurrentKeyID: publicInviteConfig.KeyID,
+			Signer:       publicInviteConfig.PrivateKey,
+			Verifiers:    publicInviteConfig.VerificationKeys,
+		})
+		if err != nil {
+			return fmt.Errorf("configure cspi1 public invite keyring: %w", err)
+		}
+		publicInviteRepository := postgres.NewPublicInviteRepositoryWithPool(pool)
+		service, err := publicinvites.NewServiceWithLifecycle(publicInviteRepository, publicInviteRepository, signer)
+		if err != nil {
+			return fmt.Errorf("configure public invite service: %w", err)
+		}
+		spacePort, err := publicinviteapp.NewSpacePort(spaceService, tenantService, publicinviteapp.SpaceConfig{
+			ManagedTenantID:   managedTenantID,
+			DefaultMediaPlane: publicInviteConfig.DefaultMediaPlane,
+		})
+		if err != nil {
+			return fmt.Errorf("configure public invite Space port: %w", err)
+		}
+		accessPort, err := publicinviteapp.NewAccessPort(publicinviteapp.AccessConfig{
+			Episodes:      episodeService,
+			Spaces:        spaceService,
+			Tenants:       tenantService,
+			MediaResolver: mediaPlaneRegistry,
+			SyncTokens:    syncTokenRefresh,
+			MediaTokens:   participantMediaIssuer,
+			MediaProof:    participantMediaVerifier,
+		})
+		if err != nil {
+			return fmt.Errorf("configure public invite access port: %w", err)
+		}
+		accountsPort, err := publicinviteapp.NewAccountsPort(tenantAuthz)
+		if err != nil {
+			return fmt.Errorf("configure public invite Accounts port: %w", err)
+		}
+		linksPort, err := publicinviteapp.NewLinkPort(publicInviteConfig.WebOrigin)
+		if err != nil {
+			return fmt.Errorf("configure public invite link port: %w", err)
+		}
+		runtime, err := publicinvites.NewRuntime(service, spacePort, publicInviteRepository, accessPort, accountsPort, linksPort)
+		if err != nil {
+			return fmt.Errorf("configure public invite runtime: %w", err)
+		}
+		publicInviteService = runtime
+		lifecycleActions, err := publicinviteapp.NewLifecycleActions(episodeService, spaceService)
+		if err != nil {
+			return fmt.Errorf("configure public invite lifecycle actions: %w", err)
+		}
+		lifecycleWorker, err := publicinvites.NewLifecycleWorkerWithBatch(publicInviteRepository, lifecycleActions, publicInviteConfig.SchedulerBatch)
+		if err != nil {
+			return fmt.Errorf("configure public invite lifecycle worker: %w", err)
+		}
+		publicInviteLifecycleScheduler = publicinvites.NewLifecycleScheduler(lifecycleWorker, publicInviteConfig.SchedulerInterval, logger)
+	}
 	routerOptions := httpapi.Options{
 		Capabilities: httpapi.CapabilityStatus{
 			Integrations:  cfg.Capabilities.Integrations,
@@ -441,6 +521,8 @@ func run() error {
 		ChatParticipants:       chatParticipantVerifier,
 		WhiteboardFiles:        whiteboardFileService,
 		WhiteboardParticipants: whiteboardParticipantVerifier,
+		PublicInvites:          publicInviteService,
+		PublicInviteAudits:     auditLogService,
 		EpisodeDiagnostics:     episodeDiagnosticsHTTPOptions,
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
@@ -488,6 +570,12 @@ func run() error {
 		chatCleanupErr = cleanupErr
 		go func() { cleanupErr <- chatCleanupScheduler.Run(signalCtx) }()
 	}
+	var publicInviteLifecycleErr <-chan error
+	if publicInviteLifecycleScheduler != nil {
+		lifecycleErr := make(chan error, 1)
+		publicInviteLifecycleErr = lifecycleErr
+		go func() { lifecycleErr <- publicInviteLifecycleScheduler.Run(signalCtx) }()
+	}
 	var providerBridgeErr <-chan error
 	if providerBridgeServer != nil {
 		providerBridgeErr, err = providerBridgeServer.Start()
@@ -515,6 +603,7 @@ func run() error {
 	serverResultReceived := false
 	providerBridgeResultReceived := false
 	chatCleanupResultReceived := false
+	publicInviteLifecycleResultReceived := false
 	episodeDiagnosticsRuntimeResultReceived := false
 	whiteboardCleanupResultReceived := false
 	select {
@@ -546,6 +635,10 @@ func run() error {
 	case err := <-chatCleanupErr:
 		runErr = err
 		chatCleanupResultReceived = true
+		stop()
+	case err := <-publicInviteLifecycleErr:
+		runErr = err
+		publicInviteLifecycleResultReceived = true
 		stop()
 	case <-signalCtx.Done():
 		stop()
@@ -592,6 +685,11 @@ func run() error {
 			runErr = err
 		}
 	}
+	if publicInviteLifecycleErr != nil && !publicInviteLifecycleResultReceived {
+		if err := <-publicInviteLifecycleErr; runErr == nil {
+			runErr = err
+		}
+	}
 	if episodeDiagnosticsRuntimeErr != nil && !episodeDiagnosticsRuntimeResultReceived {
 		if err := <-episodeDiagnosticsRuntimeErr; runErr == nil {
 			runErr = err
@@ -602,6 +700,109 @@ func run() error {
 
 func r2Configured(cfg config.R2Config) bool {
 	return cfg.Bucket != "" || cfg.AccountID != "" || cfg.Endpoint != "" || cfg.AccessKeyID != "" || cfg.SecretAccessKey != ""
+}
+
+const (
+	localPublicInviteTenantName = "Chalk local public Spaces"
+	localPublicInviteKeyID      = "local-cspi1"
+	localPublicInviteSeedLabel  = "chalk.local.public_invites.cspi1.v1"
+	localPublicInviteWebDefault = "http://127.0.0.1:3070"
+)
+
+var errHostedPublicInviteConfigRequired = errors.New("public invite configuration is required outside local environments")
+
+type localPublicInviteTenantService interface {
+	CreateTenant(context.Context, tenants.CreateTenantInput) (tenants.Tenant, error)
+	ListTenants(context.Context, pagination.PageRequest) (tenants.TenantList, error)
+}
+
+func resolvePublicInviteConfig(ctx context.Context, cfg config.Config, tenantService localPublicInviteTenantService) (config.PublicInviteConfig, error) {
+	if cfg.Observability.Environment != config.DefaultEnvironment {
+		if !cfg.PublicInvite.Enabled {
+			return config.PublicInviteConfig{}, errHostedPublicInviteConfigRequired
+		}
+		return cfg.PublicInvite, nil
+	}
+	if cfg.PublicInvite.Enabled {
+		return cfg.PublicInvite, nil
+	}
+	if tenantService == nil {
+		return config.PublicInviteConfig{}, errors.New("local public invite Tenant service unavailable")
+	}
+	webOrigin := localPublicInviteWebOrigin(cfg.API.CORSAllowedOrigins)
+	managedTenant, err := ensureLocalPublicInviteTenant(ctx, tenantService)
+	if err != nil {
+		return config.PublicInviteConfig{}, err
+	}
+	privateKey := localPublicInvitePrivateKey(managedTenant.ID)
+	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
+	if !ok {
+		return config.PublicInviteConfig{}, errors.New("derive local public invite verification key")
+	}
+	return config.PublicInviteConfig{
+		Enabled:           true,
+		ManagedTenantID:   managedTenant.ID.String(),
+		DefaultMediaPlane: mediaplaneproviders.SpaceProviderCloudflareSFU,
+		WebOrigin:         webOrigin,
+		KeyID:             localPublicInviteKeyID,
+		PrivateKey:        privateKey,
+		VerificationKeys:  map[string]ed25519.PublicKey{localPublicInviteKeyID: append(ed25519.PublicKey(nil), publicKey...)},
+		SchedulerInterval: time.Duration(config.DefaultPublicInviteSchedulerIntervalMS) * time.Millisecond,
+		SchedulerBatch:    config.DefaultPublicInviteSchedulerBatch,
+	}, nil
+}
+
+func localPublicInviteWebOrigin(origins []string) string {
+	for _, origin := range origins {
+		origin = strings.TrimSpace(origin)
+		if origin != "" && origin != "*" {
+			return origin
+		}
+	}
+	return localPublicInviteWebDefault
+}
+
+func ensureLocalPublicInviteTenant(ctx context.Context, tenantService localPublicInviteTenantService) (tenants.Tenant, error) {
+	var cursor *pagination.Cursor
+	for {
+		page, err := pagination.NewPageRequest(pagination.MaxPageSize, cursor)
+		if err != nil {
+			return tenants.Tenant{}, fmt.Errorf("create local public invite Tenant page: %w", err)
+		}
+		list, err := tenantService.ListTenants(ctx, page)
+		if err != nil {
+			return tenants.Tenant{}, fmt.Errorf("list local public invite Tenants: %w", err)
+		}
+		for _, tenant := range list.Tenants {
+			if tenant.Name == localPublicInviteTenantName {
+				return tenant, nil
+			}
+		}
+		if !list.Page.HasMore || list.Page.NextCursor == nil {
+			break
+		}
+		cursor = list.Page.NextCursor
+	}
+
+	defaultMediaPlane := mediaplaneproviders.SpaceProviderCloudflareSFU
+	created, err := tenantService.CreateTenant(ctx, tenants.CreateTenantInput{
+		Name:                     localPublicInviteTenantName,
+		DefaultMediaPlane:        &defaultMediaPlane,
+		MediaPlaneProviderConfig: json.RawMessage(`{"enabled":true,"provider":"cf_sfu","mode":"chalk_managed"}`),
+	})
+	if err != nil {
+		return tenants.Tenant{}, fmt.Errorf("create local public invite Tenant: %w", err)
+	}
+	return created, nil
+}
+
+func localPublicInvitePrivateKey(tenantID utilities.ID) ed25519.PrivateKey {
+	bytes := tenantID.Bytes()
+	material := make([]byte, 0, len(localPublicInviteSeedLabel)+len(bytes))
+	material = append(material, localPublicInviteSeedLabel...)
+	material = append(material, bytes[:]...)
+	seed := sha256.Sum256(material)
+	return ed25519.NewKeyFromSeed(seed[:])
 }
 
 func applyCapabilityProfile(options *httpapi.Options, capabilities config.CapabilityConfig) {

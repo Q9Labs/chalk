@@ -30,8 +30,6 @@ PODS:
     - ExpoModulesCore
   - ExpoClipboard (55.0.9):
     - ExpoModulesCore
-  - ExpoCrypto (55.0.17):
-    - ExpoModulesCore
   - ExpoDocumentPicker (55.0.15):
     - ExpoModulesCore
   - ExpoDomWebView (55.0.3):
@@ -83,7 +81,7 @@ PODS:
   - hermes-engine (0.14.1):
     - hermes-engine/Pre-built (= 0.14.1)
   - hermes-engine/Pre-built (0.14.1)
-  - Q9ChalkReactNative (0.0.85):
+  - Q9ChalkReactNative (4.0.1):
     - React-Core
   - RCTDeprecation (0.83.2)
   - RCTRequired (0.83.2)
@@ -1956,6 +1954,8 @@ PODS:
     - React-utils (= 0.83.2)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.83.2)
+  - RealtimeKitCore (1.1.0):
+    - React-Core
   - RNCAsyncStorage (2.2.0):
     - hermes-engine
     - RCTRequired
@@ -2031,7 +2031,6 @@ DEPENDENCIES:
   - "Expo (from `../../../node_modules/.pnpm/expo@55.0.9_@babel+core@7.29.7_@expo+dom-webview@55.0.3_react-dom@19.2.7_react@19.2.7___03d9f9e6de4bc22eef07c632cdaaca8e/node_modules/expo`)"
   - "ExpoAsset (from `../../../node_modules/.pnpm/expo-asset@55.0.10_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2_f1677033f5b0b4f7ac415dfbd32c6979/node_modules/expo-asset/ios`)"
   - "ExpoClipboard (from `../../../node_modules/.pnpm/expo-clipboard@55.0.9_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7__react@19.2.7/node_modules/expo-clipboard/ios`)"
-  - "ExpoCrypto (from `../../../node_modules/.pnpm/expo-crypto@55.0.17_expo@55.0.9/node_modules/expo-crypto/ios`)"
   - "ExpoDocumentPicker (from `../../../node_modules/.pnpm/expo-document-picker@55.0.15_expo@55.0.9/node_modules/expo-document-picker/ios`)"
   - "ExpoDomWebView (from `../../../node_modules/.pnpm/@expo+dom-webview@55.0.3_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.7_@types+reac_0e0b0f14ffc54ffb416cac36aaf4e1b0/node_modules/@expo/dom-webview/ios`)"
   - "ExpoFileSystem (from `../../../node_modules/.pnpm/expo-file-system@55.0.24_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7_/node_modules/expo-file-system/ios`)"
@@ -2120,6 +2119,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - "ReactCommon/turbomodule/core (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/ReactCommon`)"
   - "ReactNativeDependencies (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)"
+  - "RealtimeKitCore (from `../../../node_modules/.pnpm/@cloudflare+realtimekit-react-native@1.1.0_@cloudflare+react-native-webrtc@125.0.3_expo_780d1279b07591dc5f2c2db67a47b554/node_modules/@cloudflare/realtimekit-react-native`)"
   - "RNCAsyncStorage (from `../../../node_modules/.pnpm/@react-native-async-storage+async-storage@2.2.0_react-native@0.83.2_@babel+core@7.29.7__889cd9bafd62e3b9ddcde1c69beb47f3/node_modules/@react-native-async-storage/async-storage`)"
   - "RNSVG (from `../../../node_modules/.pnpm/react-native-svg@15.15.4_react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7__react@19.2.7/node_modules/react-native-svg`)"
   - "Yoga (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/ReactCommon/yoga`)"
@@ -2137,8 +2137,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-asset@55.0.10_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2_f1677033f5b0b4f7ac415dfbd32c6979/node_modules/expo-asset/ios"
   ExpoClipboard:
     :path: "../../../node_modules/.pnpm/expo-clipboard@55.0.9_expo@55.0.9_react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7__react@19.2.7/node_modules/expo-clipboard/ios"
-  ExpoCrypto:
-    :path: "../../../node_modules/.pnpm/expo-crypto@55.0.17_expo@55.0.9/node_modules/expo-crypto/ios"
   ExpoDocumentPicker:
     :path: "../../../node_modules/.pnpm/expo-document-picker@55.0.15_expo@55.0.9/node_modules/expo-document-picker/ios"
   ExpoDomWebView:
@@ -2314,6 +2312,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  RealtimeKitCore:
+    :path: "../../../node_modules/.pnpm/@cloudflare+realtimekit-react-native@1.1.0_@cloudflare+react-native-webrtc@125.0.3_expo_780d1279b07591dc5f2c2db67a47b554/node_modules/@cloudflare/realtimekit-react-native"
   RNCAsyncStorage:
     :path: "../../../node_modules/.pnpm/@react-native-async-storage+async-storage@2.2.0_react-native@0.83.2_@babel+core@7.29.7__889cd9bafd62e3b9ddcde1c69beb47f3/node_modules/@react-native-async-storage/async-storage"
   RNSVG:
@@ -2326,7 +2326,6 @@ SPEC CHECKSUMS:
   Expo: 55d24f07827a295a2860cbba79709fc0536adc96
   ExpoAsset: 4efd0227e808dfa84d286aa3663ded641ef73479
   ExpoClipboard: fba6501fed478667b1cc888e999f82fb2838c685
-  ExpoCrypto: c824505d1529d941e7ea150263b3924e8b905d18
   ExpoDocumentPicker: 8f1356ab2ac5b67aeaafc4c14b3719ceb480c099
   ExpoDomWebView: f101fb3db4b6eec4163fca51f7507189b7e48661
   ExpoFileSystem: b16ad358dff1dd561f561d8ca0bf22cf00ddad40
@@ -2339,8 +2338,8 @@ SPEC CHECKSUMS:
   ExpoSecureStore: 83d31183fecaae7a084e88e29d14d5a02d90882a
   ExpoSplashScreen: ab4d4c72364d5f60ca91c5b44ce00ec65a8a5950
   FBLazyVector: 32e9ed0301d0fcbc1b2b341dd7fcbf291f51eb83
-  hermes-engine: ba53f223f143e6d7cf973529288ab691cb1041d8
-  Q9ChalkReactNative: 70612432a3092918e12d2977ed87a76aa341dea3
+  hermes-engine: a1b65c0ae6af9e77e4912fa76b7a8f3da93c7966
+  Q9ChalkReactNative: 715000ae5df0a25379cfdb6fee7a8e2ffeec2628
   RCTDeprecation: a522c536d2c7be8f518dd834883cf6dce1d4f545
   RCTRequired: 44337def23abb244c025e9e7ab58f9cd3d63ec7d
   RCTSwiftUI: b2f0c2f2761631b8cd605767536cbb1cbf8d020f
@@ -2349,7 +2348,7 @@ SPEC CHECKSUMS:
   React: f4edc7518ccb0b54a6f580d89dd91471844b4990
   React-callinvoker: 79ef4e3f1c021571f6d2dafbe45ca432b2f3a146
   React-Core: c19ad4660fd48bc8abc060d979f8ee37f1fc4a5a
-  React-Core-prebuilt: 3e35af57663d3f7053c42bc4e4cfc95f33bb93cb
+  React-Core-prebuilt: f866e003bb23e2e59b21d08e1d0e1e10e7ca9a9a
   React-CoreModules: f94ec3ee2bac588d033ad15a2377af746284f8c8
   React-cxxreact: de66364f2d5fb77d3da3cfa927b2fd960892c711
   React-debug: 4f6739c820d7da9c20f48caa985573b6a847e5f5
@@ -2413,7 +2412,8 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: d69159b417e8c9d82b8fe4d0a27def4c3e8f767f
   ReactCodegen: e190b0f500113930053f6bf9475c296b69ec125f
   ReactCommon: 8868269b67561136a7970be188b40738135af077
-  ReactNativeDependencies: c8151b54afc6f2bac2ec820b6aae732fc3ca6cbc
+  ReactNativeDependencies: 09173ec9e3d4fb1bcf5eb3d65fd7a83cb690bab8
+  RealtimeKitCore: 2530085db36dd62592288feb1f9efa6b1f3aa9ca
   RNCAsyncStorage: 3a4f5e2777dae1688b781a487923a08569e27fe4
   RNSVG: 7bf7808626c62cdf93911573b9358f1601d58003
   RTKWebRTC: 943dc8c747e5f22c263148c2a0cb493001510690

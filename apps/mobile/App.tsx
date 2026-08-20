@@ -1,7 +1,7 @@
-import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
-import { Theme } from "@q9labsai/chalk-react-native/theme";
 import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
+import { Theme } from "@q9labsai/chalk-react-native/theme";
 import { StatusBar } from "expo-status-bar";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
@@ -10,10 +10,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
 import { DevSdkPreviewScreen } from "./src/dev-preview";
-import { parsePreviewRoute } from "./src/dev-preview/preview-route";
 import { canOpenDevPreviewFromRoute, canShowGlobalDiagnostics } from "./src/dev-preview/policy";
 import { DEFAULT_PREVIEW_SEARCH, patchPreviewSearch, type PreviewSearch, type PreviewSearchPatch } from "./src/dev-preview/preview-state";
-import { clearSpaceContext, getBrokerUrl, getMobileDeviceContext, isMobileTelemetryEnabled, parseSpaceLink, type MobileRoute } from "./src/lib/spaces";
+import { parsePreviewRoute } from "./src/dev-preview/preview-route";
+import { getDeviceInfo } from "@q9labsai/chalk-react-native/runtime";
+import { clearSpaceContext, parseSpaceLink, type MobileRoute, type SpaceOperationObserver } from "./src/lib/spaces";
+import { getApiBaseURL, isMobileTelemetryEnabled } from "./src/lib/mobile-config";
 import { MobileSpaceScreen } from "./src/space/MobileSpaceScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
@@ -22,9 +24,9 @@ import { loadOnboardingState, resolveOnboardingLaunchSurface } from "./src/scree
 type AppRoute = MobileRoute | { readonly kind: "sdk-preview"; readonly preview: PreviewSearch };
 
 export default function App(): React.JSX.Element {
-  const brokerUrl = useMemo(() => getBrokerUrl(), []);
+  const apiBaseURL = useMemo(() => getApiBaseURL(), []);
   const telemetryEnabled = useMemo(() => isMobileTelemetryEnabled(), []);
-  const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, brokerUrl }), [brokerUrl]);
+  const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, apiBaseURL }), [apiBaseURL]);
   const diagnosticsEnabled = diagnosticsMode.enabled;
   const [route, setRoute] = useState<AppRoute>({ kind: "home" });
   const [isBooting, setIsBooting] = useState(true);
@@ -34,7 +36,7 @@ export default function App(): React.JSX.Element {
   const routeRef = useRef<AppRoute>({ kind: "home" });
 
   const syncStaticDiagnostics = useCallback(() => {
-    if (diagnosticsEnabled) setDevDiagnosticsDevice(getMobileDeviceContext().device);
+    if (diagnosticsEnabled) setDevDiagnosticsDevice(getDeviceInfo());
   }, [diagnosticsEnabled]);
 
   const openDiagnosticsForFailure = useCallback(
@@ -45,15 +47,33 @@ export default function App(): React.JSX.Element {
     },
     [diagnosticsEnabled],
   );
-
-  useEffect(() => {
-    if (!diagnosticsEnabled || route.kind === "sdk-preview") return;
-    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "space" ? `Space: ${route.space}` : undefined);
-  }, [diagnosticsEnabled, route]);
+  const recordSpaceOperation = useCallback<SpaceOperationObserver>(
+    (operation, state) => {
+      if (diagnosticsEnabled) recordDevDiagnosticsLifecycleEvent(`public-invite-${operation}`, `Public invite ${operation}`, state);
+    },
+    [diagnosticsEnabled],
+  );
 
   useEffect(() => {
     routeRef.current = route;
   }, [route]);
+
+  useEffect(() => {
+    if (!diagnosticsEnabled || route.kind === "sdk-preview") return;
+    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "space" ? `Space: ${route.space}` : undefined);
+    setDevDiagnosticsEnvironment({
+      apiBaseURL,
+      buildProfile: diagnosticsMode.buildProfile,
+      routeKind: route.kind,
+      routeSource: route.kind === "space" ? route.source : null,
+      routeSpaceId: route.kind === "space" ? route.space : null,
+    });
+    syncStaticDiagnostics();
+  }, [apiBaseURL, diagnosticsEnabled, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
+
+  useEffect(() => {
+    if (route.kind === "home") setDevDiagnosticsConnection(null);
+  }, [route.kind]);
 
   useEffect(() => {
     let mounted = true;
@@ -92,33 +112,14 @@ export default function App(): React.JSX.Element {
     };
   }, []);
 
-  useEffect(() => {
-    if (!diagnosticsEnabled || route.kind === "sdk-preview") return;
-    setDevDiagnosticsEnvironment({
-      buildProfile: diagnosticsMode.buildProfile,
-      brokerUrl,
-      routeKind: route.kind,
-      routeSource: route.kind === "space" ? route.source : null,
-      routeSpaceId: route.kind === "space" ? route.space : null,
-    });
-    syncStaticDiagnostics();
-  }, [brokerUrl, diagnosticsEnabled, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
-
-  useEffect(() => {
-    if (route.kind !== "home") return;
-    setDevDiagnosticsConnection(null);
-  }, [route.kind]);
-
   const goHome = useCallback(async () => {
-    await clearSpaceContext();
+    if (routeRef.current.kind === "space") await clearSpaceContext(routeRef.current);
     setRoute({ kind: "home" });
   }, []);
-
   const handleClearSpaceContext = useCallback(async () => {
-    await clearSpaceContext();
+    if (route.kind === "space") await clearSpaceContext(route);
     syncStaticDiagnostics();
-  }, [syncStaticDiagnostics]);
-
+  }, [route, syncStaticDiagnostics]);
   const handleResetDiagnostics = useCallback(async () => {
     resetDevDiagnosticsState();
     if (route.kind === "sdk-preview") {
@@ -126,40 +127,36 @@ export default function App(): React.JSX.Element {
       return;
     }
     setDevDiagnosticsEnvironment({
+      apiBaseURL,
       buildProfile: diagnosticsMode.buildProfile,
-      brokerUrl,
       routeKind: route.kind,
       routeSource: route.kind === "space" ? route.source : null,
       routeSpaceId: route.kind === "space" ? route.space : null,
     });
     setDevDiagnosticsConnection(null);
     syncStaticDiagnostics();
-  }, [brokerUrl, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
-
+  }, [apiBaseURL, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
   const handlePreviewSearchChange = useCallback((patch: PreviewSearchPatch) => {
     setRoute((current) => (current.kind === "sdk-preview" ? { ...current, preview: patchPreviewSearch(current.preview, patch) } : current));
   }, []);
-
   const openSdkPreview = useCallback(() => {
     setRoute({ kind: "sdk-preview", preview: DEFAULT_PREVIEW_SEARCH });
   }, []);
 
   const showDeveloperControls = __DEV__ && onboardingStatus === "complete";
-  const showSdkPreviewLauncher = showDeveloperControls && route.kind === "home";
-  const showDiagnosticsControls = showDeveloperControls && diagnosticsEnabled && canShowGlobalDiagnostics(route.kind);
 
   return (
     <SafeAreaProvider>
       <View style={styles.appShell}>
         <StatusBar backgroundColor={Theme.colors.background} style="dark" />
         {renderContent({
-          brokerUrl,
+          apiBaseURL,
           defaultDisplayName,
           isBooting,
-          onboardingStatus,
           onClose: goHome,
           onDiagnosticsConnection: diagnosticsEnabled ? setDevDiagnosticsConnection : undefined,
           onDiagnosticsFailure: openDiagnosticsForFailure,
+          onOperation: recordSpaceOperation,
           onNavigate: setRoute,
           onOnboardingComplete: (displayName) => {
             setDefaultDisplayName(displayName || null);
@@ -167,16 +164,17 @@ export default function App(): React.JSX.Element {
           },
           onPreviewSearchChange: handlePreviewSearchChange,
           route,
+          onboardingStatus,
           telemetryEnabled,
         })}
         {showDeveloperControls ? (
           <>
-            {showSdkPreviewLauncher ? (
+            {route.kind === "home" ? (
               <Pressable accessibilityLabel="Open SDK preview" accessibilityRole="button" hitSlop={16} onPress={openSdkPreview} style={styles.devPreviewButton}>
                 <Text style={styles.devPreviewButtonText}>SDK</Text>
               </Pressable>
             ) : null}
-            {showDiagnosticsControls ? (
+            {diagnosticsEnabled && canShowGlobalDiagnostics(route.kind) ? (
               <>
                 <Pressable accessibilityLabel="Open diagnostics" accessibilityRole="button" hitSlop={16} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
                   <HugeiconsIcon color={Theme.colors.primary} icon={Bug02Icon} size={18} />
@@ -192,29 +190,31 @@ export default function App(): React.JSX.Element {
 }
 
 function renderContent({
-  brokerUrl,
+  apiBaseURL,
   defaultDisplayName,
   isBooting,
-  onboardingStatus,
   onClose,
   onDiagnosticsConnection,
   onDiagnosticsFailure,
+  onOperation,
   onNavigate,
   onOnboardingComplete,
   onPreviewSearchChange,
+  onboardingStatus,
   route,
   telemetryEnabled,
 }: {
-  readonly brokerUrl: string;
+  readonly apiBaseURL: string;
   readonly defaultDisplayName: string | null;
   readonly isBooting: boolean;
-  readonly onboardingStatus: "loading" | "required" | "complete";
   readonly onClose: () => Promise<void>;
   readonly onDiagnosticsConnection?: (snapshot: Parameters<typeof setDevDiagnosticsConnection>[0]) => void;
   readonly onDiagnosticsFailure: (source: string, message: string) => void;
+  readonly onOperation: SpaceOperationObserver;
   readonly onNavigate: (route: AppRoute) => void;
   readonly onOnboardingComplete: (displayName: string) => void;
   readonly onPreviewSearchChange: (patch: PreviewSearchPatch) => void;
+  readonly onboardingStatus: "loading" | "required" | "complete";
   readonly route: AppRoute;
   readonly telemetryEnabled: boolean;
 }): ReactElement {
@@ -222,39 +222,24 @@ function renderContent({
   if (route.kind === "sdk-preview") return <DevSdkPreviewScreen onClose={onClose} onSearchChange={onPreviewSearchChange} search={route.preview} />;
   if (onboardingStatus === "loading") return <AppBootstrapScreen label="Starting Chalk…" />;
   if (onboardingStatus === "required") return <OnboardingScreen onComplete={onOnboardingComplete} />;
-  if (route.kind === "home") return <HomeScreen onDiagnosticsFailure={onDiagnosticsFailure} onNavigate={onNavigate} />;
-
-  return <MobileSpaceScreen brokerUrl={brokerUrl} defaultDisplayName={defaultDisplayName} onClose={onClose} onDiagnosticsConnection={onDiagnosticsConnection} onDiagnosticsFailure={(error) => onDiagnosticsFailure("space-error", error.message)} route={route} telemetryEnabled={telemetryEnabled} />;
+  if (route.kind === "home") return <HomeScreen apiBaseURL={apiBaseURL} onError={(message) => onDiagnosticsFailure("public-space-create", message)} onNavigate={onNavigate} onOperation={onOperation} />;
+  return (
+    <MobileSpaceScreen
+      apiBaseURL={apiBaseURL}
+      defaultDisplayName={defaultDisplayName}
+      onClose={onClose}
+      onDiagnosticsConnection={onDiagnosticsConnection}
+      onDiagnosticsFailure={(error) => onDiagnosticsFailure("space-error", error.message)}
+      onOperation={onOperation}
+      route={route}
+      telemetryEnabled={telemetryEnabled}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
   appShell: { flex: 1, backgroundColor: Theme.colors.background },
-  devPreviewButton: {
-    position: "absolute",
-    top: 64,
-    right: 64,
-    minWidth: 36,
-    height: 36,
-    paddingHorizontal: 8,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.colors.card,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-  },
+  devPreviewButton: { alignItems: "center", backgroundColor: Theme.colors.card, borderColor: Theme.colors.border, borderRadius: 18, borderWidth: 1, height: 36, justifyContent: "center", minWidth: 36, paddingHorizontal: 8, position: "absolute", right: 16, top: 64 },
   devPreviewButtonText: { color: Theme.colors.primary, fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
-  devButton: {
-    position: "absolute",
-    top: 64,
-    right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.colors.card,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-  },
+  devButton: { alignItems: "center", backgroundColor: Theme.colors.card, borderColor: Theme.colors.border, borderRadius: 18, borderWidth: 1, height: 36, justifyContent: "center", position: "absolute", right: 16, top: 64, width: 36 },
 });

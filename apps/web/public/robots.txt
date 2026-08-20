@@ -9,12 +9,10 @@ Disallow: /artifacts
 Disallow: /developer
 Disallow: /episodes
 Disallow: /home
-Disallow: /j/
 Disallow: /new
 Disallow: /onboarding
 Disallow: /people
 Disallow: /sdk-preview
-Disallow: /share/
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /space

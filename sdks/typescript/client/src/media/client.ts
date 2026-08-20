@@ -1,4 +1,6 @@
 import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "./plane";
+import { subscribeSnapshot } from "./observers";
+import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { CloudflareSFUError } from "./types";
 import type {
@@ -91,8 +93,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   subscribe(listener: () => void): () => void {
-    this.#snapshotListeners.add(listener);
-    return () => this.#snapshotListeners.delete(listener);
+    return subscribeSnapshot(this.#snapshotListeners, listener);
   }
 
   prepareLocalTrack(source: MediaSource, track: MediaStreamTrack): void {
@@ -165,10 +166,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
-    if (target.participantId !== this.#participantId) return { outcome: "terminal_failure", errorCode: "invalid_participant" };
-    if (this.#stopped) return { outcome: "terminal_failure", errorCode: "media_stopped" };
-    const state = this.#localTracks.get(target.source);
-    if (!state) return { outcome: "terminal_failure", errorCode: "source_unavailable" };
+    const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
+    if (resolved.kind === "result") return resolved.result;
+    const state = resolved.value;
     if (state.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
     try {
       await this.#setPreparedTrackEnabled(state, target.enabled, target.operationId);

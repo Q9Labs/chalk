@@ -145,6 +145,36 @@ Production requires `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`,
 the unpadded base64url encoding of a 64-byte Ed25519 private key and must be
 supplied through the runtime secret boundary.
 
+## Public Space invites
+
+Public Space links use a dedicated `cspi1` Ed25519 keyring. Hosted environments
+must configure all of these values:
+
+- `CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID` identifies the Tenant that owns Spaces
+  created from the public Open a Space flow.
+- `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` selects the media plane for those
+  auto-created Spaces.
+- `CHALK_PUBLIC_INVITE_WEB_ORIGIN` is the HTTPS origin used to build canonical
+  `/space/{slug}#spaceInviteToken=...` links.
+- `CHALK_PUBLIC_INVITE_KEY_ID` and `CHALK_PUBLIC_INVITE_PRIVATE_KEY` select the
+  current signing key. The private key is an unpadded base64url Ed25519 private
+  key and must stay inside the runtime secret boundary.
+- `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` is a non-empty JSON object that maps
+  key IDs to unpadded base64url Ed25519 public keys. It must include the public
+  key for the current signing key.
+
+`CHALK_PUBLIC_INVITE_SCHEDULER_INTERVAL_MS` and
+`CHALK_PUBLIC_INVITE_SCHEDULER_BATCH` are optional, but they must be set
+together. They control the worker that ends an auto-created Space's live
+Episode and archives the Space after its creator leaves or its deadline passes.
+
+Keep an outgoing public key in `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` while
+links signed by that key must remain valid. Removing the key invalidates those
+links; rotating a Space invite invalidates the prior link through its persisted
+generation instead. Local development derives a local-only keyring and creates
+or reuses a neutral managed Tenant when these variables are absent. It requires
+at least one non-wildcard API CORS origin so canonical links have a safe origin.
+
 Sensitive dashboard mutations use a five-minute, action- and resource-bound
 recent-auth proof. Local development uses a deterministic local-only default;
 every non-local environment must supply `CHALK_AUTH_RECENT_AUTH_SECRET` with at

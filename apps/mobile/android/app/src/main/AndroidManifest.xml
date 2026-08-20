@@ -29,6 +29,7 @@
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
     <service android:name="expo.modules.audio.service.AudioRecordingService" android:exported="false" android:foregroundServiceType="microphone"/>
+    <service android:enabled="true" android:foregroundServiceType="mediaProjection" android:name="com.cloudflare.realtimekit.ForegroundService"/>
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait" android:supportsPictureInPicture="true">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
@@ -44,8 +45,8 @@
       </intent-filter>
       <intent-filter android:autoVerify="true" data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
-        <data android:scheme="https" android:host="chalkmeet.com" android:path="/space"/>
-        <data android:scheme="https" android:host="chalk.q9labs.ai" android:path="/space"/>
+        <data android:scheme="https" android:host="chalkmeet.com" android:pathPrefix="/space"/>
+        <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPrefix="/space"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>

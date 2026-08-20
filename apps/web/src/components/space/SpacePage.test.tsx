@@ -1,196 +1,148 @@
 /* @vitest-environment jsdom */
 
-import { StrictMode } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { dashboardSpaceTestAccess, getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestCredential } from "../../__tests__/space-page.test-support";
-import { DashboardAPIError } from "../../lib/dashboard-api";
-
-import { DashboardSpacePage, SpacePage } from "./SpacePage";
+import { getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestArrival, spacePageTestToken } from "../../__tests__/space-page.test-support";
+import { SpacePage } from "./SpacePage";
 
 const mocks = getSpacePageTestMocks();
 
-beforeEach(() => {
-  resetSpacePageTestMocks();
-});
-
-afterEach(async () => {
+beforeEach(() => resetSpacePageTestMocks());
+afterEach(() => {
   cleanup();
-  await new Promise((resolve) => setTimeout(resolve, 0));
   vi.clearAllMocks();
-  vi.unstubAllGlobals();
 });
 
-describe("SpacePage", () => {
-  it("normalizes the query display name before building the app-owned SpaceClient", async () => {
-    window.history.replaceState({}, "", "/space?name=%20Ada%20");
-
-    render(<SpacePage />);
-
-    expect((screen.getByLabelText("Your name") as HTMLInputElement).value).toBe(" Ada ");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
-
-    expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", undefined, mocks.journey);
-    expect(mocks.telemetry.configureApiBaseURL).toHaveBeenCalledWith(spacePageTestCredential.apiBaseURL);
-    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: spacePageTestCredential, getAccess: mocks.getAccess, connectionAccess: mocks.brokerConnectionAccess, journey: mocks.journey });
-    expect(mocks.holder.chalkProps).toMatchObject({ client: mocks.client, displayName: "Ada", entrance: true, spaceName: "Local Space" });
-    expect(mocks.useEpisodeDiagnosticsAvailability).toHaveBeenCalledWith({ diagnosticReference: `chalk.episode:${mocks.episodeID}` });
-    (mocks.holder.chalkProps?.onOpenDiagnostics as (() => void) | undefined)?.();
-    expect(mocks.open).toHaveBeenCalledWith(mocks.diagnosticsPath, "_blank", "noopener");
-    expect(document.querySelector("main")?.className).toContain("h-dvh");
-  });
-
-  it("supplies the same live Episode debugger entry for the Dashboard path", async () => {
-    mocks.localStorage.getItem.mockReturnValue("tenant-1");
-    render(<DashboardSpacePage slug="design-space" />);
-
-    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
-
-    expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-space", "Ada", mocks.journey);
-    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: dashboardSpaceTestAccess.credential, getAccess: mocks.dashboardGetAccess, connectionAccess: mocks.dashboardConnectionAccess, journey: mocks.journey });
-    expect(mocks.holder.chalkProps).toMatchObject({ onOpenDiagnostics: expect.any(Function), spaceName: "design-space" });
-    (mocks.holder.chalkProps?.onOpenDiagnostics as (() => void) | undefined)?.();
-    expect(mocks.open).toHaveBeenCalledWith(mocks.diagnosticsPath, "_blank", "noopener");
-  });
-
-  it("keeps diagnostics absent when the current Episode is unavailable", async () => {
-    mocks.useEpisodeDiagnosticsAvailability.mockReturnValue({ path: undefined, status: "unavailable", supported: true, retry: vi.fn() });
-    render(<SpacePage />);
-
-    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
-
-    expect(mocks.holder.chalkProps?.onOpenDiagnostics).toBeUndefined();
-  });
-
-  it("surfaces a failed credential request while keeping the arrival form available", async () => {
-    mocks.createParticipantCredential.mockRejectedValueOnce(new Error("broker unavailable"));
-
-    render(<SpacePage />);
-    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    expect((await screen.findByRole("alert")).textContent).toContain("broker unavailable");
-    expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false);
-    expect(mocks.createLocalSpaceClient).not.toHaveBeenCalled();
-  });
-});
-
-describe("DashboardSpacePage", () => {
-  it("keeps the signed-in by-slug join and names the Space from its slug", async () => {
-    render(
-      <StrictMode>
-        <DashboardSpacePage slug="design-lab" />
-      </StrictMode>,
-    );
+describe("public Space entry", () => {
+  it("creates a public Space and replaces the index URL with its canonical invite", async () => {
+    const index = render(<SpacePage />);
     enterName(" Ada ");
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
 
-    expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-lab", "Ada", mocks.journey);
-    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
-    expect(mocks.createLocalSpaceClient).toHaveBeenCalledWith({ credential: dashboardSpaceTestAccess.credential, getAccess: mocks.dashboardGetAccess, connectionAccess: mocks.dashboardConnectionAccess, journey: mocks.journey });
-    expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "design-lab" });
-    expect(mocks.dashboardLeave).not.toHaveBeenCalled();
-    expect(mocks.holder.chalkProps?.inviteLink).toBeUndefined();
+    await waitFor(() => expect(mocks.publicClient.createPublicSpace).toHaveBeenCalledWith("Ada"));
+    expect(mocks.publicClient.createPublicSpace).toHaveBeenCalledTimes(1);
+    expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
+    expect(mocks.publicClient.leaveSpacePublicInviteArrival).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/space/created-space");
+    expect(window.location.hash).toBe(`#spaceInviteToken=${spacePageTestToken}`);
+    expect(mocks.createPreparedPublicSpace).toHaveBeenCalledWith(mocks.publicClient, spacePageTestArrival);
+    await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ inviteLink: window.location.href, spaceName: "Created Space" }));
+    index.unmount();
+    await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledOnce());
   });
 
-  it("keeps a token-bearing invite link while a signed-in Account joins by slug", async () => {
-    window.history.replaceState({}, "", `/space/design-lab?name=Private#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}&ignored=value`);
-    render(<DashboardSpacePage slug="design-lab" />);
+  it("leaves an admitted arrival when the Space page really unmounts", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    const view = render(<SpacePage slug="design-lab" />);
     enterName("Ada");
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
 
-    expect(mocks.joinDashboardSpace).toHaveBeenCalledOnce();
-    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
-    expect(mocks.holder.chalkProps?.inviteLink).toBe(`${window.location.origin}/space/design-lab#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}`);
+    view.unmount();
+    await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledOnce());
   });
 
-  it("uses the invite token when the visitor has no signed-in Account", async () => {
-    setNamedInviteLocation();
-    mocks.listAllAccountTenants.mockRejectedValueOnce(new DashboardAPIError(401, "access.unauthenticated", "Authentication required"));
-
-    render(<DashboardSpacePage slug="design-lab" />);
-    enterName("Ada");
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
-
-    expect(mocks.joinDashboardSpace).not.toHaveBeenCalled();
-    expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", spacePageTestCredential.spaceInviteToken, mocks.journey);
-    expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "design-lab", inviteLink: window.location.href });
-  });
-
-  it("uses the invite token when a stale Tenant hint reaches an unauthenticated join", async () => {
-    setNamedInviteLocation();
-    mocks.localStorage.getItem.mockReturnValue("tenant-old");
-    mocks.joinDashboardSpace.mockRejectedValueOnce(Object.assign(new Error("Authentication required"), { status: 401 }));
-
-    render(<DashboardSpacePage slug="design-lab" />);
-    enterName("Ada");
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
-
-    expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-old", "design-lab", "Ada", mocks.journey);
-    expect(mocks.createParticipantCredential).toHaveBeenCalledWith("Ada", spacePageTestCredential.spaceInviteToken, mocks.journey);
-  });
-
-  it("does not use broker access when an unauthenticated request has no invite token", async () => {
-    window.history.replaceState({}, "", "/space/design-lab");
-    mocks.listAllAccountTenants.mockRejectedValueOnce(new DashboardAPIError(401, "access.unauthenticated", "Authentication required"));
-
-    render(<DashboardSpacePage slug="design-lab" />);
+  it("arrives through a capability link without account-management fallback", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    render(<SpacePage slug="design-lab" />);
     enterName("Ada");
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Authentication required");
-    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
-    expect(mocks.createLocalSpaceClient).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith(spacePageTestToken, "Ada"));
+    expect(mocks.publicClient.createPublicSpace).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "Design Lab", inviteLink: window.location.href }));
   });
 
-  it("does not use the invite token when the Account lacks Tenant access", async () => {
-    setNamedInviteLocation();
-    mocks.joinDashboardSpace.mockRejectedValueOnce(Object.assign(new Error("Tenant access required"), { status: 403 }));
-
-    render(<DashboardSpacePage slug="design-lab" />);
+  it("keeps the explicit account marker on the authenticated join path when no capability is present", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    render(<SpacePage slug="design-lab" />);
     enterName("Ada");
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Tenant access required");
-    expect(mocks.createParticipantCredential).not.toHaveBeenCalled();
-    expect(mocks.createLocalSpaceClient).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-lab", "Ada", mocks.journey));
+    expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
+    expect(mocks.publicClient.createPublicSpace).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("");
   });
 
-  it("surfaces a failed Dashboard join and re-enables Continue", async () => {
-    mocks.joinDashboardSpace.mockRejectedValueOnce(new Error("Media access is unavailable."));
-
-    render(
-      <StrictMode>
-        <DashboardSpacePage slug="design-lab" />
-      </StrictMode>,
-    );
+  it("passes the server-issued account Space invite to Chalk", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    render(<SpacePage slug="design-lab" />);
     enterName("Ada");
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Media access is unavailable.");
-    expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ inviteLink: "/space/design-lab#spaceInviteToken=cspi1.account" }));
+    expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
   });
 
-  it("clears a visitor invite only after credential cleanup succeeds", async () => {
-    setNamedInviteLocation();
-    mocks.listAllAccountTenants.mockRejectedValueOnce(new DashboardAPIError(401, "access.unauthenticated", "Authentication required"));
-    let resolveCleanup!: () => void;
-    const cleanupPromise = new Promise<void>((resolve) => {
-      resolveCleanup = resolve;
+  it("gives a capability token precedence over the account marker and canonicalizes the verified slug", async () => {
+    window.history.replaceState({}, "", `/space/wrong-slug?entry=dashboard&name=old#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValueOnce({
+      ...spacePageTestArrival,
+      space: { ...spacePageTestArrival.space, slug: "verified-slug" },
     });
-    mocks.cleanupParticipantCredential.mockReturnValueOnce(cleanupPromise);
-
-    render(<DashboardSpacePage slug="design-lab" />);
+    render(<SpacePage slug="wrong-slug" />);
     enterName("Ada");
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
 
-    (mocks.holder.chalkProps?.onLeft as () => void)();
-    expect(window.location.hash).toBe(`#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}`);
-    resolveCleanup();
-    await waitFor(() => expect(window.location.hash).toBe(""));
+    await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith(spacePageTestToken, "Ada"));
+    expect(mocks.joinDashboardSpace).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/space/verified-slug");
+    expect(window.location.search).toBe("");
+    expect(window.location.hash).toBe(`#spaceInviteToken=${spacePageTestToken}`);
+  });
+
+  it("polls a pending arrival, resumes approved access, and renders Chalk", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite
+      .mockReset()
+      .mockResolvedValueOnce({ ...spacePageTestArrival, state: "pending", access: undefined, retry_after: 0 })
+      .mockResolvedValueOnce(spacePageTestArrival);
+    mocks.publicClient.getSpacePublicInviteArrival.mockResolvedValueOnce({ ...spacePageTestArrival, access: undefined });
+
+    render(<SpacePage slug="design-lab" />);
+    enterName("Ada");
+
+    expect(await screen.findByText("Waiting to enter")).toBeDefined();
+    await waitFor(() => expect(mocks.publicClient.getSpacePublicInviteArrival).toHaveBeenCalledWith("arrival-11111111"));
+    expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenNthCalledWith(2, spacePageTestToken, "Ada", { arrivalHandle: "arrival-11111111" });
+    expect(mocks.createPreparedPublicSpace).toHaveBeenLastCalledWith(mocks.publicClient, spacePageTestArrival);
+    expect(mocks.holder.chalkProps).toBeDefined();
+  });
+
+  it("cancels a pending arrival through the public leave operation", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValueOnce({ ...spacePageTestArrival, state: "pending", access: undefined, retry_after: 60 });
+
+    render(<SpacePage slug="design-lab" />);
+    enterName("Ada");
+    await screen.findByText("Waiting to enter");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(mocks.publicClient.leaveSpacePublicInviteArrival).toHaveBeenCalledWith("arrival-11111111"));
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDefined();
+  });
+
+  it("uses a neutral error for an unavailable invite", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite.mockRejectedValueOnce(new Error("secret backend detail"));
+
+    render(<SpacePage slug="design-lab" />);
+    enterName("Ada");
+
+    expect((await screen.findByRole("alert")).textContent).toBe("This Space is unavailable. Please check the invite link and try again.");
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDefined();
+  });
+
+  it("leaves the browser arrival when Chalk reports that the Participant left", async () => {
+    await renderAdmittedSpace();
+
+    const onLeft = mocks.holder.chalkProps?.onLeft;
+    if (typeof onLeft !== "function") throw new Error("Chalk did not provide the leave callback.");
+    act(() => onLeft());
+    await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledOnce());
+  });
+
+  it("keeps public arrival cleanup alive on pagehide", async () => {
+    await renderAdmittedSpace();
+
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledWith({ keepalive: true }));
   });
 });
 
@@ -199,6 +151,9 @@ function enterName(displayName: string): void {
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 }
 
-function setNamedInviteLocation(): void {
-  window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestCredential.spaceInviteToken}`);
+async function renderAdmittedSpace(): Promise<void> {
+  window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+  render(<SpacePage slug="design-lab" />);
+  enterName("Ada");
+  await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
 }

@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DashboardAPIError, archiveSpace, restoreSpace, updateSpace, type DashboardEpisode } from "../../lib/dashboard-api";
+import { DashboardAPIError, archiveSpace, restoreSpace, updateSpace, type DashboardEpisode, type DashboardPublicAdmissionRequest, type DashboardSpacePublicInvite } from "../../lib/dashboard-api";
 import { dashboardTestSpace as makeSpace, dashboardTestTenantID as tenantID, installDialogMethods } from "./__tests__/dialog-fixtures";
 import { SpaceDetailPage, type SpaceDetailClient } from "./SpaceDetailPage";
 
@@ -41,6 +41,33 @@ function clientFor(space = makeSpace(), episodes = [episode()]): SpaceDetailClie
   };
 }
 
+function publicInvite(overrides: Partial<DashboardSpacePublicInvite> = {}): DashboardSpacePublicInvite {
+  return {
+    schema_version: "cspi1",
+    tenant_id: tenantID,
+    space_id: "space-1",
+    enabled: true,
+    generation: 1,
+    public_role: "collaborator",
+    admission_mode: "open",
+    created_at: "2026-08-04T00:00:00Z",
+    updated_at: "2026-08-04T00:00:00Z",
+    canonical_url: "https://app.chalk.test/space/product-studio#spaceInviteToken=cspi1.public-1.payload.signature",
+    ...overrides,
+  };
+}
+
+function admissionRequest(overrides: Partial<DashboardPublicAdmissionRequest> = {}): DashboardPublicAdmissionRequest {
+  return {
+    request_handle: "request-handle-1",
+    display_name: "Ada",
+    requested_at: "2026-08-04T10:00:00Z",
+    expires_at: "2026-08-04T10:05:00Z",
+    state: "pending",
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   installDialogMethods();
   vi.clearAllMocks();
@@ -66,6 +93,85 @@ describe("SpaceDetailPage", () => {
     expect(await screen.findByText("Archived")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Join Space" })).toBeNull();
     expect(screen.getByRole("button", { name: "Restore" })).toBeTruthy();
+    expect(await screen.findByText("Public links are unavailable while this Space is archived.")).toBeTruthy();
+  });
+
+  it("renders the public invite and knock request panel headings", async () => {
+    render(
+      <SpaceDetailPage
+        tenantID={tenantID}
+        spaceID="space-1"
+        client={{
+          ...clientFor(makeSpace({ admission_policy: { mode: "knock" } })),
+          getSpacePublicInvite: vi.fn().mockResolvedValue(publicInvite({ admission_mode: "knock" })),
+          listSpacePublicAdmissionRequests: vi.fn().mockResolvedValue({ requests: [] }),
+        }}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Public link" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Pending join requests" })).toBeTruthy();
+  });
+
+  it("loads, copies, disables, re-enables, and rotates a public link", async () => {
+    const invite = publicInvite();
+    const getSpacePublicInvite = vi.fn().mockResolvedValue(invite);
+    const updateSpacePublicInvite = vi.fn().mockImplementation(({ enabled }: { enabled: boolean }) => Promise.resolve({ ...invite, enabled }));
+    const rotateSpacePublicInvite = vi.fn().mockResolvedValue({ ...invite, generation: 2, canonical_url: "https://app.chalk.test/space/product-studio#spaceInviteToken=cspi1.public-1.rotated.signature" });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(<SpaceDetailPage tenantID={tenantID} spaceID="space-1" client={{ ...clientFor(), getSpacePublicInvite, updateSpacePublicInvite, rotateSpacePublicInvite }} />);
+
+    expect(await screen.findByDisplayValue(invite.canonical_url)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(invite.canonical_url));
+    fireEvent.click(screen.getByRole("button", { name: "Disable link" }));
+    await waitFor(() => expect(updateSpacePublicInvite).toHaveBeenCalledWith({ tenantID, spaceID: "space-1", enabled: false }));
+    expect(await screen.findByRole("button", { name: "Re-enable link" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Re-enable link" }));
+    await waitFor(() => expect(updateSpacePublicInvite).toHaveBeenCalledWith({ tenantID, spaceID: "space-1", enabled: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Rotate link" }));
+    expect(await screen.findByRole("heading", { name: "Rotate public link?" })).toBeTruthy();
+    const rotateButtons = screen.getAllByRole("button", { name: "Rotate link" });
+    const rotateButton = rotateButtons.at(-1);
+    if (!rotateButton) throw new Error("Rotate confirmation button was not rendered.");
+    fireEvent.click(rotateButton);
+    await waitFor(() => expect(rotateSpacePublicInvite).toHaveBeenCalledWith({ tenantID, spaceID: "space-1" }));
+    expect(await screen.findByDisplayValue("https://app.chalk.test/space/product-studio#spaceInviteToken=cspi1.public-1.rotated.signature")).toBeTruthy();
+  });
+
+  it("shows a members-only public link state", async () => {
+    const getSpacePublicInvite = vi.fn();
+    render(<SpaceDetailPage tenantID={tenantID} spaceID="space-1" client={{ ...clientFor(makeSpace({ admission_policy: { mode: "members_only" } })), getSpacePublicInvite }} />);
+
+    expect(await screen.findByText("Public links are unavailable for members-only Spaces.")).toBeTruthy();
+    expect(getSpacePublicInvite).not.toHaveBeenCalled();
+  });
+
+  it("lists and decides pending knock requests", async () => {
+    const request = admissionRequest();
+    const listSpacePublicAdmissionRequests = vi.fn().mockResolvedValue({ requests: [request] });
+    const approveSpacePublicAdmissionRequest = vi.fn().mockResolvedValue({ ...request, state: "approved" });
+    const denySpacePublicAdmissionRequest = vi.fn().mockResolvedValue({ ...request, state: "denied" });
+    render(
+      <SpaceDetailPage
+        tenantID={tenantID}
+        spaceID="space-1"
+        client={{
+          ...clientFor(makeSpace({ admission_policy: { mode: "knock" } })),
+          getSpacePublicInvite: vi.fn().mockResolvedValue(publicInvite({ admission_mode: "knock" })),
+          listSpacePublicAdmissionRequests,
+          approveSpacePublicAdmissionRequest,
+          denySpacePublicAdmissionRequest,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText("Ada")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Approve Ada" }));
+    await waitFor(() => expect(approveSpacePublicAdmissionRequest).toHaveBeenCalledWith({ tenantID, spaceID: "space-1", requestHandle: request.request_handle }));
+    expect(screen.queryByText("Ada")).toBeNull();
+    expect(denySpacePublicAdmissionRequest).not.toHaveBeenCalled();
   });
 
   it("links each recent Episode to its filtered history", async () => {

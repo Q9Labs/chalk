@@ -1,14 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useLayoutEffect } from "react";
-import { DashboardSpacePage } from "../components/space/SpacePage";
-import { consumeDashboardSpaceEntry } from "../lib/named-space-route";
+import { SpacePage } from "../components/space/SpacePage";
 
 export const Route = createFileRoute("/space/$slug")({
-  component: DashboardSpaceRoute,
+  component: PublicSpaceRoute,
 });
 
-function DashboardSpaceRoute() {
+function PublicSpaceRoute() {
   const { slug } = Route.useParams();
-  useLayoutEffect(consumeDashboardSpaceEntry, []);
-  return <DashboardSpacePage slug={slug} />;
+  return <SpacePage slug={slug} />;
 }

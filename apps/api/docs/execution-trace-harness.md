@@ -126,6 +126,7 @@ Registered scenarios:
 - `route:chat-attachment-upload`
 - `route:whiteboard-file-upload`
 - `route:api-key-customer-flow`
+- `route:public-invite-observability`
 - `edge:api-key-rejected-scope`
 - `route:participant-media-sfu-auth`
 - `edge:participant-media-wrong-audience`

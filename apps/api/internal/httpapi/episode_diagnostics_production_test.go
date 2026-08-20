@@ -127,6 +127,17 @@ func setProductionHostedDiagnosticsEnvironment(t *testing.T, optIn string) {
 	t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
 	t.Setenv(config.EpisodeDiagnosticsProductionOptIn, optIn)
 
+	publicInvitePublicKey, publicInvitePrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.PublicInviteManagedTenantID, "11111111-1111-4111-8111-111111111111")
+	t.Setenv(config.PublicInviteDefaultMediaPlane, "cf_rtk")
+	t.Setenv(config.PublicInviteWebOrigin, "https://app.chalk.test")
+	t.Setenv(config.PublicInviteKeyID, "public-1")
+	t.Setenv(config.PublicInvitePrivateKey, base64.RawURLEncoding.EncodeToString(publicInvitePrivateKey))
+	t.Setenv(config.PublicInviteVerificationKeys, `{"public-1":"`+base64.RawURLEncoding.EncodeToString(publicInvitePublicKey)+`"}`)
+
 	operatorPublicKey, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
