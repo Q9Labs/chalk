@@ -47,3 +47,11 @@ Date: 2026-08-19
 - The client now retries one legacy hello after an extended hello is rejected. Negotiated replay gaps reconnect for a fresh welcome before rebuilding the snapshot, so presentation state is repaired with the scene. The React SDK only exposes the Board toggle when a transport implements the optional presentation command.
 - Focused client and React tests passed with 8 and 3 tests respectively, and both package type checks passed. No third review was run.
 - The first final-gate attempt stopped on duplicated reconnect-test setup and disconnect-function complexity. A shared test factory and smaller disconnect helpers removed both findings; the focused client suite, client type check, formatting, and changed-code analysis then passed.
+
+## Production repair
+
+- SDK 4.1.5, web, API, and Sync shipped from one exact release SHA with green packed-consumer, npm, and deployment workflows.
+- The first live pass exposed schema drift: managed deployment promoted API and Sync without applying the release migration, while readiness still accepted the older database. Applying the single pending migration with the dedicated owner credential restored Whiteboard connectivity and healthy SFU polling.
+- Managed releases now derive their migration target from the release migration set, run an embedded one-shot migrator before API and Sync activation, keep its credential out of both runtimes, and fail readiness when the database is behind. Controller rollback remains forward-only for schema changes.
+- The next live pass exposed a detached `setPresentation` class method. The React SDK now calls it through the transport receiver, and its regression test fails when that receiver is lost.
+- SDK 4.1.6 carries the transport binding repair. Focused React, release-contract, Go migrator, API readiness, Sync readiness, and managed controller/configuration tests pass before the final gate.

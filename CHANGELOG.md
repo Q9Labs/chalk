@@ -29,6 +29,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
 
+## [4.1.6] - 2026-08-20
+
+### Fixed
+
+- Kept the Board presentation command bound to its Whiteboard transport, so
+  opening Board updates the shared Stage instead of failing before Sync sees it.
+- Made managed releases apply their exact database migration target before API
+  and Sync start, and made API readiness fail when the database schema is behind.
+
 ## [4.1.5] - 2026-08-19
 
 ### Fixed

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/db/migrations"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	lambdawaker "github.com/q9labs/chalk/apps/api/internal/adapters/aws/lambdawaker"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
@@ -388,7 +389,7 @@ func run() error {
 		LocalSystemToken:       cfg.API.LocalSystemToken,
 		OpsIngestToken:         cfg.API.OpsIngestToken,
 		RateLimit:              rateLimitOptions,
-		Readiness:              postgres.Readiness{Pool: pool},
+		Readiness:              postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
 		Authentication:         authenticationService,
 		RecentAuth:             recentAuthService,
 		AccountTenants:         accountTenantService,

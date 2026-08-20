@@ -34,7 +34,9 @@ set -euo pipefail
 output="$2"
 mkdir -p "$output/quadlet" "$output/systemd"
 image="$(jq -er '.images.api' "$1")"
+target="$(jq -er '.database_compatibility.minimum_migration' "$1")"
 printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
+printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nExec=/usr/local/bin/chalk-migrate --database-url-file /run/chalk/migrate/database-url --target %s\n' "$image" "$target" >"$output/quadlet/chalk-api-migrate.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
 RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
@@ -183,7 +185,7 @@ make_manifest() {
     --argjson architectures "$test_architectures" \
     --arg api_digest "$(printf 'a%.0s' {1..64})" \
     --arg sync_digest "$(printf 'b%.0s' {1..64})" \
-    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
+    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260819130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
 }
 
 make_request() {
@@ -230,7 +232,7 @@ expect_failure "$controller" deploy --request "$invalid_request" --manifest "$ma
 ln -s "${fixture_root}/request.json" "${fixture_root}/request-link.json"
 expect_failure "$controller" deploy --request "${fixture_root}/request-link.json" --manifest "$manifest" --source-root "${fixture_root}/source"
 
-for exclusions in '["api-env","api-env"]' '["api-env","nope"]' '["*"]' '["sync-env","api-env"]' '["planetscale-sync-proof"]'; do
+for exclusions in '["api-env","api-env"]' '["api-env","nope"]' '["*"]' '["sync-env","api-env"]' '["planetscale-sync-proof"]' '["managed-migrator-database-url"]'; do
   make_request invalid "${fixture_root}/request.json" "$exclusions"
   expect_failure "$controller" deploy --request "${fixture_root}/request.json" --manifest "$manifest" --source-root "${fixture_root}/source"
 done
@@ -345,8 +347,15 @@ jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/manage
 stable_state="${fixture_root}/stable-state"
 mkdir -p "$stable_state"
 make_request stable "${fixture_root}/request.json"
+: >"${fixture_root}/commands.log"
+: >"${fixture_root}/secret-state"
 run_controller "$stable_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
-jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 10)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
+jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 11)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
+grep -Fq 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" || fail "database migration unit was not started"
+migration_start_line="$(grep -nF 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
+runtime_start_line="$(grep -nF 'systemctl --user start chalk-runtime.target' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
+[[ "${migration_start_line}" -lt "${runtime_start_line}" ]] || fail "runtime target started before database migrations"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "migration credential remained in the Podman secret store"
 [[ -s "${fixture_root}/run/env/api.env" && -s "${fixture_root}/run/env/sync.env" ]] || fail "runtime environment files were not published to /run"
 if stat -f '%Lp' "${fixture_root}/run" >/dev/null 2>&1; then
   runtime_root_mode="$(stat -f '%Lp' "${fixture_root}/run")"
@@ -364,6 +373,14 @@ if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root
 fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 make_request candidate "${fixture_root}/candidate-request.json"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_SYSTEMCTL_FAIL_ONCE='start chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/migration-failure.log" 2>&1; then
+  fail "database migration failure was accepted"
+fi
+grep -Fq 'database migration phase failed' "${fixture_root}/migration-failure.log" || fail "database migration failure was not reported"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer changed after migration failure"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "migration credential survived a failed migration"
 printf '0' >"${fixture_root}/health-index"
 if run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" 'fail,ok' >"${fixture_root}/rollback.log" 2>&1; then
   fail "candidate health failure was accepted"

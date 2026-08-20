@@ -14,6 +14,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
     go build -trimpath -ldflags='-s -w' -o /out/chalk-api ./cmd
 
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
+    go build -trimpath -ldflags='-s -w' -o /out/chalk-migrate ./cmd/migrate
+
 COPY images/healthcheck/main.go /healthcheck/main.go
 RUN CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
     go build -trimpath -ldflags='-s -w' -o /out/chalk-healthcheck /healthcheck/main.go
@@ -29,6 +34,7 @@ LABEL org.opencontainers.image.description="Chalk control-plane API" \
 
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/chalk-api /usr/local/bin/chalk-api
+COPY --from=build /out/chalk-migrate /usr/local/bin/chalk-migrate
 COPY --from=build /out/chalk-healthcheck /usr/local/bin/chalk-healthcheck
 
 USER 65532:65532

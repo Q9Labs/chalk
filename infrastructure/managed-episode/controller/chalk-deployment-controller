@@ -10,7 +10,9 @@ readonly CONTROLLER_DIR
 DEFAULT_MANAGED_ROOT="$(cd "${CONTROLLER_DIR}/.." && pwd)"
 readonly DEFAULT_MANAGED_ROOT
 readonly REQUEST_SCHEMA_KEYS='["adopt_existing_release","aws_region","controller_version","environment","excluded_secrets","parameter_prefix","release_id","request_id","requested_at","schema_version","source_revision"]'
-readonly INPUT_IDS='["api-env","sync-env","planetscale-sync-proof","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]'
+readonly INPUT_IDS='["managed-migrator-database-url","api-env","sync-env","planetscale-sync-proof","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]'
+readonly MIGRATOR_INPUT_ID='managed-migrator-database-url'
+readonly MIGRATOR_SECRET_NAME='chalk-managed-migrator-database-url'
 
 state_root="${CHALK_CONTROLLER_STATE_ROOT:-/var/lib/chalk/deployment-controller}"
 run_root="${CHALK_CONTROLLER_RUN_ROOT:-/run/chalk}"
@@ -240,6 +242,7 @@ load_exclusions() {
     (map(type == "string") | all) and
     (map(. as $id | $allowed | index($id) != null) | all) and
     (index("planetscale-sync-proof") == null) and
+    (index("managed-migrator-database-url") == null) and
     (.[0:] == (sort | unique))
   ' <<<"${excluded_json}" >/dev/null || fail "excluded_secrets must be sorted, unique canonical IDs"
 }
@@ -277,14 +280,14 @@ validate_inventory() {
   require_regular_file "$inventory"
   jq -e --argjson expected "$INPUT_IDS" '
     type == "object" and (keys | sort) == ["$id","$schema","inputs","schema_version"] and .schema_version == 1 and
-    (.inputs | type == "array" and length == 10 and
+    (.inputs | type == "array" and length == 11 and
       (map(.id) == $expected) and
       all(.[];
         type == "object" and
         (keys | sort) == ["destination", "id", "kind", "suffix"] and
         (.id | type == "string") and (.suffix | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
         (.destination | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
-        (.kind == "env" or .kind == "proof" or .kind == "secret-file")
+        (.kind == "env" or .kind == "proof" or .kind == "secret-file" or .kind == "migration")
       )
     )
   ' "$inventory" >/dev/null || fail "runtime input inventory is invalid"
@@ -305,7 +308,7 @@ validate_manifest() {
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.source_tree_state == "clean") and
     (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64","linux/arm64"]) and
-    (.database_compatibility == {engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null}) and
+    (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
     (.protocol_compatibility == {sync:1}) and
     (if .schema_version == 2 then
       ((.affected_components == ["api"] or .affected_components == ["sync"] or .affected_components == ["api","sync"]) and
@@ -340,7 +343,7 @@ input_type_is_supported() {
   local kind="$1"
   local parameter_type="$2"
   case "$kind" in
-    env | secret-file) [[ "$parameter_type" == SecureString ]] ;;
+    env | migration | secret-file) [[ "$parameter_type" == SecureString ]] ;;
     proof) [[ "$parameter_type" == String || "$parameter_type" == SecureString ]] ;;
     *) return 1 ;;
   esac
@@ -348,7 +351,7 @@ input_type_is_supported() {
 
 reset_staged_inputs() {
   local relative
-  for relative in env evidence secret-inputs; do
+  for relative in env evidence secret-inputs migration; do
     remove_staged_tree "${stage_root}/${relative}"
   done
 }
@@ -627,6 +630,7 @@ reconcile_secrets() {
   local id destination secret_name source
   while IFS=$'\t' read -r id destination; do
     case "$id" in
+      managed-migrator-database-url) secret_name="$MIGRATOR_SECRET_NAME" ;;
       provider-bridge-api-server-cert) secret_name=chalk-api-provider-server-cert ;;
       provider-bridge-api-server-key) secret_name=chalk-api-provider-server-key ;;
       provider-bridge-sync-client-ca) secret_name=chalk-api-provider-client-ca ;;
@@ -648,6 +652,19 @@ reconcile_secrets() {
     fi
     run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-verify-error.log" || fail "Podman secret registration could not be verified"
   done < <(jq -r '.[] | [.id, .destination] | @tsv' <<<"${input_records_json}")
+  if ! has_migrator_input; then
+    remove_migrator_secret
+  fi
+}
+
+has_migrator_input() {
+  jq -e --arg id "$MIGRATOR_INPUT_ID" 'any(.[]; .id == $id and .missing == false)' <<<"${input_records_json}" >/dev/null 2>&1
+}
+
+remove_migrator_secret() {
+  if run_user_podman secret inspect "$MIGRATOR_SECRET_NAME" >/dev/null 2>"${stage_root}/migration-secret-inspect-error.log"; then
+    run_user_podman secret rm "$MIGRATOR_SECRET_NAME" >/dev/null 2>"${stage_root}/migration-secret-rm-error.log" || fail "migration credential cleanup failed"
+  fi
 }
 
 pull_images() {
@@ -692,7 +709,7 @@ authenticate_ecr_registries() {
 stop_runtime() {
   local unit
   local failed=false
-  for unit in chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
+  for unit in chalk-api-migrate.service chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
     if ! run_user_systemctl stop "$unit" >/dev/null 2>"${stage_root}/stop-${unit}.log"; then
       failed=true
     fi
@@ -705,6 +722,33 @@ stop_runtime() {
 
 start_runtime() {
   run_user_systemctl start chalk-runtime.target >/dev/null 2>"${stage_root}/start-runtime.log"
+}
+
+run_migrations() {
+  local runtime_source="$1"
+  local migration_unit="${runtime_source}/quadlet/chalk-api-migrate.container"
+  if [[ ! -f "$migration_unit" || -L "$migration_unit" ]]; then
+    has_migrator_input && fail "release migration Quadlet is missing"
+    return 0
+  fi
+  has_migrator_input || fail "release migration credential is missing"
+
+  local migration_target
+  migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "$manifest_path")" || fail "release migration target is invalid"
+  [[ "$migration_target" =~ ^[0-9]{14}$ ]] || fail "release migration target is invalid"
+  grep -Fqx "Exec=/usr/local/bin/chalk-migrate --database-url-file /run/chalk/migrate/database-url --target ${migration_target}" "$migration_unit" || fail "release migration unit target does not match the manifest"
+  grep -Fq "Secret=${MIGRATOR_SECRET_NAME}," "$migration_unit" || fail "release migration unit does not mount the dedicated credential"
+
+  run_user_systemctl stop chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-stop.log" || true
+  run_user_systemctl reset-failed chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-reset-failed.log" || true
+  run_user_podman rm --force chalk-api-migrate >/dev/null 2>"${stage_root}/migration-container-rm.log" || true
+  if ! run_user_systemctl start chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-start.log"; then
+    remove_migrator_secret
+    remove_staged_tree "${stage_root}/migration"
+    fail "database migration phase failed"
+  fi
+  remove_migrator_secret
+  remove_staged_tree "${stage_root}/migration"
 }
 
 health_runtime() {
@@ -731,7 +775,17 @@ health_runtime() {
 }
 
 fence_runtime() {
-  stop_runtime
+  local status=0
+  if ! stop_runtime; then
+    status=1
+  fi
+  if ! remove_migrator_secret; then
+    status=1
+  fi
+  if [[ -n "$stage_root" && -d "${stage_root}/migration" ]]; then
+    remove_staged_tree "${stage_root}/migration"
+  fi
+  return "$status"
 }
 
 validate_live_release_manifest() {
@@ -757,7 +811,7 @@ validate_live_release_manifest() {
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     .source_tree_state == "clean" and
     (.architectures | type == "array" and index($architecture) != null) and
-    .database_compatibility == {engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null} and
+    (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
     .protocol_compatibility == {sync:1} and
     (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
     (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$")))
@@ -800,6 +854,11 @@ snapshot_live_runtime() {
     cp "${runtime_quadlet_dir}/${file}" "${destination}/quadlet/${file}"
     chmod 600 "${destination}/quadlet/${file}"
   done
+  if [[ -f "${runtime_quadlet_dir}/chalk-api-migrate.container" ]]; then
+    require_regular_file "${runtime_quadlet_dir}/chalk-api-migrate.container"
+    cp "${runtime_quadlet_dir}/chalk-api-migrate.container" "${destination}/quadlet/chalk-api-migrate.container"
+    chmod 600 "${destination}/quadlet/chalk-api-migrate.container"
+  fi
   for file in chalk-runtime.target chalk-runtime-watchdog.service chalk-runtime-watchdog.timer; do
     require_regular_file "${runtime_systemd_dir}/${file}"
     cp "${runtime_systemd_dir}/${file}" "${destination}/systemd/${file}"
@@ -826,6 +885,10 @@ adopt_live_release() {
 
   local adopted_runtime="${stage_root}/adopted-runtime"
   snapshot_live_runtime "$live_manifest" "$adopted_runtime"
+  local candidate_inputs_json="$input_records_json"
+  if [[ ! -f "${adopted_runtime}/quadlet/chalk-api-migrate.container" ]]; then
+    input_records_json="$(jq -c --arg id "$MIGRATOR_INPUT_ID" '[.[] | select(.id != $id)]' <<<"${input_records_json}")"
+  fi
   local candidate_manifest="$manifest_path"
   local candidate_release_id="$request_release_id"
   local candidate_source_revision="$request_source_revision"
@@ -838,6 +901,7 @@ adopt_live_release() {
   manifest_path="$candidate_manifest"
   request_release_id="$candidate_release_id"
   request_source_revision="$candidate_source_revision"
+  input_records_json="$candidate_inputs_json"
 }
 
 persist_release() {
@@ -915,13 +979,13 @@ load_active_pointer() {
     (
       .excluded_secrets as $excluded |
       .parameter_prefix as $prefix |
-      (.inputs | type == "array" and length == 10 and (map(.id) == $allowed) and all(.[];
+      (.inputs | type == "array" and ((length == 11 and (map(.id) == $allowed)) or (length == 10 and (map(.id) == ($allowed - ["managed-migrator-database-url"])))) and all(.[];
         type == "object" and
         (keys | sort) == ["destination","id","kind","missing","name","suffix","version"] and
         (.name == ($prefix + "/" + .suffix)) and
         (.destination | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
         (.suffix | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
-        (.kind == "env" or .kind == "proof" or .kind == "secret-file") and
+        (.kind == "env" or .kind == "proof" or .kind == "secret-file" or .kind == "migration") and
         (.missing | type == "boolean") and
         (if .missing then ((.version == null) or (.version | type == "number" and floor == . and . >= 1)) else (.version | type == "number" and floor == . and . >= 1) end) and
         (.id as $id | ((.missing | not) or ($excluded | index($id) != null)))
@@ -982,6 +1046,7 @@ run_candidate() {
   stop_runtime || fail "runtime services could not be stopped for cutover"
   activate_runtime_inputs
   reconcile_secrets
+  run_migrations "$runtime_source"
   start_runtime
   health_runtime
 }

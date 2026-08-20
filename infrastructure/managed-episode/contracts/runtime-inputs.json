@@ -4,6 +4,12 @@
   "schema_version": 1,
   "inputs": [
     {
+      "id": "managed-migrator-database-url",
+      "suffix": "managed-migrator-database-url",
+      "destination": "migration/database-url",
+      "kind": "migration"
+    },
+    {
       "id": "api-env",
       "suffix": "api.env",
       "destination": "env/api.env",

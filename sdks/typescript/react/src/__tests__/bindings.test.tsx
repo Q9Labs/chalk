@@ -648,7 +648,7 @@ function createTestClient(initialSnapshot = createSnapshot(), whiteboardTranspor
 }
 
 function createWhiteboardTransport(): ChalkWhiteboardV1Transport {
-  return {
+  const transport: ChalkWhiteboardV1Transport = {
     startSceneSubscription: vi.fn(async () => undefined),
     stopSceneSubscription: vi.fn(),
     subscribe: vi.fn(() => () => undefined),
@@ -657,9 +657,12 @@ function createWhiteboardTransport(): ChalkWhiteboardV1Transport {
     requestSnapshot: vi.fn(),
     clear: vi.fn(),
     setDrawPermission: vi.fn(),
-    setPresentation: vi.fn(async () => undefined),
+    setPresentation: vi.fn(async function (this: ChalkWhiteboardV1Transport) {
+      if (this !== transport) throw new Error("Whiteboard transport receiver was lost");
+    }),
     files: { initiateUpload: vi.fn(), finalizeUpload: vi.fn(), getDownloadUrl: vi.fn() },
   };
+  return transport;
 }
 
 function createSnapshot(capabilities: readonly Capability[] = ["sendChat"]): SpaceSnapshot {

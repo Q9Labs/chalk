@@ -10,15 +10,22 @@ CI exclusion ID and SSM parameter suffix to these files. The deployment
 controller fetches exact allowlisted names, streams each Podman secret over
 standard input, verifies registration, and removes its private `/run` stage.
 
-| Source file                          | Podman secret                     | Container target                           |
-| ------------------------------------ | --------------------------------- | ------------------------------------------ |
-| `provider-bridge/api-server.crt`     | `chalk-api-provider-server-cert`  | `/run/chalk/provider-bridge/server.crt`    |
-| `provider-bridge/api-server.key`     | `chalk-api-provider-server-key`   | `/run/chalk/provider-bridge/server.key`    |
-| `provider-bridge/sync-client-ca.crt` | `chalk-api-provider-client-ca`    | `/run/chalk/provider-bridge/client-ca.crt` |
-| `provider-bridge/sync-client.crt`    | `chalk-sync-provider-client-cert` | `/run/chalk/provider-bridge/client.crt`    |
-| `provider-bridge/sync-client.key`    | `chalk-sync-provider-client-key`  | `/run/chalk/provider-bridge/client.key`    |
-| `provider-bridge/api-server-ca.crt`  | `chalk-sync-provider-server-ca`   | `/run/chalk/provider-bridge/server-ca.crt` |
-| `cloudflare/tunnel-token`            | `chalk-cloudflare-tunnel-token`   | `/run/secrets/tunnel-token`                |
+The migration input is separate from these application secrets. The mandatory
+`managed-migrator-database-url` SSM `SecureString` is registered as
+`chalk-managed-migrator-database-url`, mounted only by the one-shot migration
+unit, and removed before API or Sync starts. It is never mounted in either
+runtime service and has no exclusion path.
+
+| Source file                          | Podman secret                         | Container target                                        |
+| ------------------------------------ | ------------------------------------- | ------------------------------------------------------- |
+| `provider-bridge/api-server.crt`     | `chalk-api-provider-server-cert`      | `/run/chalk/provider-bridge/server.crt`                 |
+| `provider-bridge/api-server.key`     | `chalk-api-provider-server-key`       | `/run/chalk/provider-bridge/server.key`                 |
+| `provider-bridge/sync-client-ca.crt` | `chalk-api-provider-client-ca`        | `/run/chalk/provider-bridge/client-ca.crt`              |
+| `provider-bridge/sync-client.crt`    | `chalk-sync-provider-client-cert`     | `/run/chalk/provider-bridge/client.crt`                 |
+| `provider-bridge/sync-client.key`    | `chalk-sync-provider-client-key`      | `/run/chalk/provider-bridge/client.key`                 |
+| `provider-bridge/api-server-ca.crt`  | `chalk-sync-provider-server-ca`       | `/run/chalk/provider-bridge/server-ca.crt`              |
+| `cloudflare/tunnel-token`            | `chalk-cloudflare-tunnel-token`       | `/run/secrets/tunnel-token`                             |
+| `migration/database-url`             | `chalk-managed-migrator-database-url` | `/run/chalk/migrate/database-url` (migration unit only) |
 
 The API server certificate must contain `chalk-api` in its DNS SAN. The Sync
 client certificate identity must satisfy the API's SPIFFE trust-domain and

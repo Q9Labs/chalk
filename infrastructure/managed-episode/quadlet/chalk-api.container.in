@@ -1,7 +1,7 @@
 [Unit]
 Description=Chalk production API
-After=network-online.target chalk-redis.service
-Requires=chalk-redis.service
+After=network-online.target chalk-redis.service chalk-api-migrate.service
+Requires=chalk-redis.service chalk-api-migrate.service
 Wants=network-online.target
 
 [Container]

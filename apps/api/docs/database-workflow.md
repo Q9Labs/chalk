@@ -97,6 +97,15 @@ For managed Postgres, set `CHALK_DATABASE_URL` to the direct Postgres connection
 before running migrations. Do not use the pooled runtime/PgBouncer URL for
 migrations.
 
+Managed production releases build the same migration set into the API image as
+`chalk-migrate`. The deployment controller passes the manifest's exact
+`minimum_migration` target (currently `20260819130000`) to a one-shot migration
+unit before API or Sync activation; the dedicated owner URL is never part of
+either runtime service.
+The API readiness check also rejects a database below its embedded latest
+migration. Runtime rollback is forward-only and does not undo applied database
+migrations.
+
 ## Adding A Migration
 
 Create a new timestamp-style file under `apps/api/db/migrations`:

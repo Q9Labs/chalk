@@ -1,6 +1,6 @@
 "use client";
 
-import { createSpaceClient, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
@@ -230,7 +230,7 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
   const whiteboardTransport = client.whiteboard.transport();
   const whiteboardAvailable = props.features?.whiteboard !== false;
   const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardAvailable);
-  const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? whiteboardSubscription.transport.setPresentation : undefined;
+  const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? bindWhiteboardPresentation(whiteboardSubscription.transport) : undefined;
   useEffect(() => {
     if (whiteboardSubscription.status === "failed") setCommandError(whiteboardSubscription.error.message);
     else if (whiteboardSubscription.status === "loading" || whiteboardSubscription.status === "ready") setCommandError(null);
@@ -345,6 +345,12 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       }
     />
   );
+}
+
+function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((presenting: boolean) => Promise<void>) | undefined {
+  const setPresentation = transport.setPresentation;
+  if (!setPresentation) return undefined;
+  return (presenting) => setPresentation.call(transport, presenting);
 }
 
 function StatusView({ message, onRetry }: { readonly message: string; readonly onRetry?: () => void }): React.JSX.Element {

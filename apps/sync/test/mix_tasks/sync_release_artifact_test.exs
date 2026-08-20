@@ -7,6 +7,8 @@ defmodule Mix.Tasks.Sync.ReleaseArtifactTest do
     minimum_migration =
       Application.fetch_env!(:chalk_sync, :minimum_compatible_sync_migration)
 
+    assert minimum_migration == 20_260_819_130_000
+
     assert ReleaseArtifact.migration_compatibility() == %{
              "minimum" => minimum_migration,
              "maximum" => nil

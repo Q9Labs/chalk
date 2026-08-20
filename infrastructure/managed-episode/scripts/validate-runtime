@@ -313,9 +313,7 @@ case "${manifest_schema_version}" in
     jq -e '
       .schema_version == 1 and
       (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
-      .database_compatibility == {
-        engine: "postgresql", major: 18, minimum_migration: 20260713130000, maximum_migration: null
-      } and
+      (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
       .protocol_compatibility.sync == 1
     ' "${manifest}" >/dev/null || fail "release manifest v1 compatibility contract is invalid"
     ;;
@@ -325,9 +323,7 @@ case "${manifest_schema_version}" in
       (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
       (.affected_components | type == "array" and length >= 1 and length <= 2 and unique == . and (length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
       (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | test("^[0-9a-f]{40}$")))) and
-      .database_compatibility == {
-        engine: "postgresql", major: 18, minimum_migration: 20260713130000, maximum_migration: null
-      } and
+      (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
       .protocol_compatibility.sync == 1
     ' "${manifest}" >/dev/null || fail "release manifest v2 component compatibility contract is invalid"
     ;;
@@ -366,6 +362,15 @@ if [[ -n "${rendered_root}" ]]; then
     grep -Eq '^Image=[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' "${rendered_root}/quadlet/${file}" || fail "rendered Quadlet image is not immutable: ${file}"
     ! grep -q '__' "${rendered_root}/quadlet/${file}" || fail "rendered Quadlet contains a placeholder: ${file}"
   done
+  migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "${manifest}")" || fail "manifest migration target is invalid"
+  [[ "${migration_target}" =~ ^[0-9]{14}$ ]] || fail "manifest migration target is invalid"
+  migration_unit="${rendered_root}/quadlet/chalk-api-migrate.container"
+  [[ -f "${migration_unit}" && ! -L "${migration_unit}" ]] || fail "rendered migration Quadlet is missing"
+  grep -Fqx "Image=$(jq -er '.images.api' "${manifest}")" "${migration_unit}" || fail "migration Quadlet image does not match the API image"
+  grep -Fqx "Exec=/usr/local/bin/chalk-migrate --database-url-file /run/chalk/migrate/database-url --target ${migration_target}" "${migration_unit}" || fail "migration Quadlet target is not bound to the manifest"
+  grep -Fq 'Secret=chalk-managed-migrator-database-url,' "${migration_unit}" || fail "migration Quadlet does not mount the dedicated migrator credential"
+  ! grep -Fq 'chalk-managed-migrator-database-url' "${rendered_root}/quadlet/chalk-api.container" || fail "API Quadlet exposes the dedicated migrator credential"
+  ! grep -Fq 'chalk-managed-migrator-database-url' "${rendered_root}/quadlet/chalk-sync.container" || fail "Sync Quadlet exposes the dedicated migrator credential"
   [[ -f "${rendered_root}/quadlet/chalk-runtime.network" ]] || fail "rendered network Quadlet is missing"
   [[ -f "${rendered_root}/systemd/chalk-runtime.target" ]] || fail "rendered runtime target is missing"
   expected_rendered_root="$(mktemp -d)"
