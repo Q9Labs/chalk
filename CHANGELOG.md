@@ -29,6 +29,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
 
+## [4.1.9] - 2026-08-20
+
+### Fixed
+
+- Made immediate Board reopen wait for replayed edits before loading its snapshot.
+
 ## [4.1.8] - 2026-08-20
 
 ### Fixed

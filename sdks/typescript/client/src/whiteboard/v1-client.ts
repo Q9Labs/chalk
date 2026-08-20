@@ -56,6 +56,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
   readonly #operations = new Map<string, OperationEntry>();
   readonly #reservedOperationIds = new Set<string>();
+  readonly #awaitingOperationIds = new Set<string>();
   readonly #pendingStoreWrites = new Set<Promise<void>>();
   readonly #operationRetryTimers = new Map<string, unknown>();
   readonly #snapshots = new Map<string, SnapshotAssembly>();
@@ -79,6 +80,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #initialSnapshot: Deferred<void> | null = null;
   #startPromise: Promise<void> | null = null;
   #stopPromise: Promise<void> | null = null;
+  #waitingForOperations = false;
   #reconnectTimer: unknown;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -136,6 +138,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearHeartbeat();
     this.#clearOperationRetryTimers();
     this.#clearUpdateAssemblies();
+    this.#awaitingOperationIds.clear();
+    this.#waitingForOperations = false;
     this.#socket?.close(1000, "whiteboard subscription stopped");
     this.#socket = null;
     this.#phase = "stopped";
@@ -421,11 +425,21 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#presenting = "presenting" in frame ? frame.presenting : false;
     this.#publishSummary("loading", null);
     this.#missedHeartbeats = 0;
-    for (const entry of [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending))) {
+    const pendingOperations = [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
+    this.#awaitingOperationIds.clear();
+    this.#waitingForOperations = true;
+    for (const entry of pendingOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
+    for (const entry of pendingOperations) {
       this.#sendOperation(entry.pending.frame);
     }
-    void this.#requestSnapshot().catch(() => undefined);
+    this.#requestSnapshotAfterOperations();
     this.#startHeartbeat();
+  }
+
+  #requestSnapshotAfterOperations(): void {
+    if (this.#phase !== "live" || !this.#waitingForOperations || this.#awaitingOperationIds.size > 0) return;
+    this.#waitingForOperations = false;
+    void this.#requestSnapshot().catch(() => undefined);
   }
 
   #requestSnapshot(): Promise<void> {
@@ -531,6 +545,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearOperationRetryTimer(frame.operation_id);
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
+    this.#awaitingOperationIds.delete(frame.operation_id);
     this.#publishSummary("ready", null);
     entry.deferred &&
       resolveDeferred(entry.deferred, {
@@ -539,6 +554,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         revision: frame.revision,
       });
     void this.#store.remove(frame.operation_id).catch(() => undefined);
+    this.#requestSnapshotAfterOperations();
   }
 
   #operationError(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>): void {
@@ -551,9 +567,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       }
       this.#operations.delete(frame.correlation_id);
       this.#clearOperationRetryTimer(frame.correlation_id);
+      this.#awaitingOperationIds.delete(frame.correlation_id);
       entry.deferred && rejectDeferred(entry.deferred, error(failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message)));
       this.#publishSummary("ready", failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message));
       void this.#store.remove(frame.correlation_id).catch(() => undefined);
+      this.#requestSnapshotAfterOperations();
       return;
     }
     const snapshot = this.#snapshots.get(frame.correlation_id);
@@ -607,6 +625,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearHeartbeat();
     this.#clearUpdateAssemblies();
     this.#phase = "connecting";
+    this.#waitingForOperations = false;
     this.#participantId = null;
     this.#capabilities = [];
     this.#canDraw = false;

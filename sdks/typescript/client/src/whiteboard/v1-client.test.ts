@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
+import { whiteboardV1PendingOperationBytes } from "./v1-multipart";
 import type { ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation, ChalkWhiteboardV1PendingOperationStore } from "./types";
 
 const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
@@ -262,6 +263,74 @@ describe("ChalkWhiteboardV1Client", () => {
     await expect(update).rejects.toMatchObject({ code: "unavailable", operation: "submit_update" });
   });
 
+  it("reconciles a restored update before requesting the startup snapshot", async () => {
+    const operation = restoredUpdate("restored-element");
+    const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    await store.put(operation);
+    const { client, socket, started } = await connectingClient({ pendingStore: store });
+    const events: unknown[] = [];
+    client.subscribe((event) => events.push(event));
+
+    welcome(socket);
+    await settle();
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toEqual([]);
+    const replay = socket.frames().find((frame) => frame.type === "submit_update")!;
+    socket.receive({ type: "commit", operation_id: replay.operation_id, outcome: "duplicate", scene_id: sceneId, revision: "5" });
+    await settle();
+
+    const request = socket.frames().find((frame) => frame.type === "request_snapshot")!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "5",
+      page: 0,
+      page_count: 1,
+      elements: [wireElement("restored-element")],
+      app_state: null,
+    });
+
+    await expect(started).resolves.toBeUndefined();
+    expect(events).toContainEqual(expect.objectContaining({ type: "snapshot", revision: "5", elements: [publicElement("restored-element")] }));
+    expect(await store.load()).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("unblocks startup after a terminal restored operation error and removes the retry row", async () => {
+    const operation = restoredUpdate("rejected-element");
+    const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    await store.put(operation);
+    const { client, socket, started } = await connectingClient({ pendingStore: store });
+
+    welcome(socket);
+    await settle();
+    const replay = socket.frames().find((frame) => frame.type === "submit_update")!;
+    socket.receive({
+      type: "operation_error",
+      correlation_id: replay.operation_id,
+      operation: "submit_update",
+      code: "stale_scene",
+      recoverable: false,
+      message: "The restored update targets an old scene.",
+    });
+    await settle();
+
+    const request = socket.frames().find((frame) => frame.type === "request_snapshot")!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "5",
+      page: 0,
+      page_count: 1,
+      elements: [],
+      app_state: null,
+    });
+    await expect(started).resolves.toBeUndefined();
+    expect(await store.load()).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
   it("sends and receives multipart updates as one logical operation", async () => {
     const { client, socket, events } = await subscribedClient();
     const elements = Array.from({ length: 129 }, (_, index) => publicElement(`element-${index}`));
@@ -477,6 +546,22 @@ function publicElement(id: string) {
     isDeleted: false,
     payload: { x: 1, y: 2 },
   } as const;
+}
+
+function restoredUpdate(id: string): ChalkWhiteboardV1PendingOperation {
+  const frame = {
+    type: "submit_update",
+    operation_id: ids[0]!,
+    scene_id: sceneId,
+    sync_all: false,
+    elements: [wireElement(id)],
+  } as const;
+  return {
+    operationId: frame.operation_id,
+    frame,
+    createdAt: 1,
+    bytes: whiteboardV1PendingOperationBytes(frame),
+  };
 }
 
 const filesStub: ChalkWhiteboardV1FileTransport = {
