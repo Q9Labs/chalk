@@ -98,6 +98,45 @@ describe("ChalkWhiteboardV1Client", () => {
     client.stopSceneSubscription();
   });
 
+  it("refreshes a stale snapshot for a new subscriber without replaying it", async () => {
+    const { client, socket, started } = await connectingClient();
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+
+    const initialEvents: unknown[] = [];
+    const unsubscribeInitial = client.subscribe((event) => initialEvents.push(event));
+    expect(initialEvents).toEqual([{ type: "snapshot", sceneId, revision: "3", elements: [] }]);
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toHaveLength(1);
+    unsubscribeInitial();
+
+    socket.receive({ type: "update", operation_id: ids[1], scene_id: sceneId, revision: "4", elements: [wireElement("live-element")] });
+    await settle();
+
+    const refreshedEvents: unknown[] = [];
+    client.subscribe((event) => refreshedEvents.push(event));
+    client.subscribe(() => undefined);
+    expect(refreshedEvents).toEqual([]);
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toHaveLength(2);
+    const request = socket
+      .frames()
+      .filter((frame) => frame.type === "request_snapshot")
+      .at(-1)!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "4",
+      page: 0,
+      page_count: 1,
+      elements: [wireElement("persisted-element")],
+      app_state: null,
+    });
+    await settle();
+
+    expect(refreshedEvents).toEqual([{ type: "snapshot", sceneId, revision: "4", elements: [publicElement("persisted-element")] }]);
+    client.stopSceneSubscription();
+  });
+
   it("falls back to the legacy hello when an older Sync server rejects extensions", async () => {
     const { client, sockets, clock } = reconnectingClient();
 

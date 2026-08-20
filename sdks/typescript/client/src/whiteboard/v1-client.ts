@@ -157,7 +157,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   subscribe(listener: (event: ChalkWhiteboardV1Event) => void): () => void {
     this.#listeners.add(listener);
-    if (this.#phase === "live" && this.#latestSnapshot) listener(this.#latestSnapshot);
+    if (this.#phase !== "live") return () => this.#listeners.delete(listener);
+    if (this.#latestSnapshot && this.#latestSnapshot.sceneId === this.#sceneId && this.#latestSnapshot.revision === this.#revision) {
+      listener(this.#latestSnapshot);
+      return () => this.#listeners.delete(listener);
+    }
+    if (this.#snapshots.size === 0 && !this.#waitingForOperations) void this.#requestSnapshot().catch(() => undefined);
     return () => this.#listeners.delete(listener);
   }
 

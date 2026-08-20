@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-react",
-  "version": "4.1.9",
+  "version": "4.1.10",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -72,10 +72,10 @@
     "@base-ui/react": "^1.7.0",
     "@hugeicons/core-free-icons": "^4.2.3",
     "@hugeicons/react": "^1.1.9",
-    "@q9labsai/chalk-client": "workspace:^4.1.9",
-    "@q9labsai/chalk-ui": "workspace:^4.1.9",
-    "@q9labsai/chalk-whiteboard": "workspace:^4.1.9",
-    "@q9labsai/facehash": "workspace:^4.1.9",
+    "@q9labsai/chalk-client": "workspace:^4.1.10",
+    "@q9labsai/chalk-ui": "workspace:^4.1.10",
+    "@q9labsai/chalk-whiteboard": "workspace:^4.1.10",
+    "@q9labsai/facehash": "workspace:^4.1.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "sonner": "^2.0.8",

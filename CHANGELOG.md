@@ -29,6 +29,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
 
+## [4.1.10] - 2026-08-20
+
+### Fixed
+
+- Reopening Board refreshes the current durable scene instead of replaying a stale cached snapshot.
+
 ## [4.1.9] - 2026-08-20
 
 ### Fixed
