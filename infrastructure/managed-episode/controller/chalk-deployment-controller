@@ -779,7 +779,7 @@ run_migrations() {
   migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "$manifest_path")" || fail "release migration target is invalid"
   [[ "$migration_target" =~ ^[0-9]{14}$ ]] || fail "release migration target is invalid"
   grep -Fqx 'PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate' "$migration_unit" || fail "release migration unit does not select the migration binary"
-  grep -Fqx "Exec=--database-url-file /run/chalk/migrate/database-url --target ${migration_target}" "$migration_unit" || fail "release migration unit target does not match the manifest"
+  grep -Eq "^Exec=--database-url-file /run/chalk/migrate/database-url --target ${migration_target}( --allow-missing-version [0-9]{14})*$" "$migration_unit" || fail "release migration unit target does not match the manifest"
   grep -Fq "Secret=${MIGRATOR_SECRET_NAME}," "$migration_unit" || fail "release migration unit does not mount the dedicated credential"
 
   run_user_systemctl stop chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-stop.log" || true

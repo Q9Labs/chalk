@@ -34,9 +34,13 @@ set -euo pipefail
 output="$2"
 mkdir -p "$output/quadlet" "$output/systemd"
 image="$(jq -er '.images.api' "$1")"
-target="$(jq -er '.database_compatibility.minimum_migration' "$1")"
+target="${FAKE_MIGRATION_TARGET:-}"
+if [[ -z "$target" ]]; then
+  target="$(jq -er '.database_compatibility.minimum_migration' "$1")"
+fi
+extra="${FAKE_MIGRATION_EXTRA:---allow-missing-version 20260819120000}"
 printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
-printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nPodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate\nExec=--database-url-file /run/chalk/migrate/database-url --target %s\n' "$image" "$target" >"$output/quadlet/chalk-api-migrate.container"
+printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nPodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate\nExec=--database-url-file /run/chalk/migrate/database-url --target %s%s\n' "$image" "$target" "${extra:+ ${extra}}" >"$output/quadlet/chalk-api-migrate.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
 RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
@@ -410,6 +414,16 @@ grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-s
 if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"
 fi
+make_manifest invalid-migration-unit >"${fixture_root}/invalid-migration-unit-manifest.json"
+make_request invalid-migration-unit "${fixture_root}/invalid-migration-unit-request.json"
+if FAKE_MIGRATION_EXTRA='--unexpected value' run_controller "$stable_state" "${fixture_root}/invalid-migration-unit-request.json" "${fixture_root}/invalid-migration-unit-manifest.json" ok >"${fixture_root}/invalid-migration-extra.log" 2>&1; then
+  fail "unknown migration arguments were accepted"
+fi
+grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-extra.log" || fail "unknown migration arguments did not fail closed"
+if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixture_root}/invalid-migration-unit-request.json" "${fixture_root}/invalid-migration-unit-manifest.json" ok >"${fixture_root}/invalid-migration-target.log" 2>&1; then
+  fail "a migration target below the manifest minimum was accepted"
+fi
+grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 make_request candidate "${fixture_root}/candidate-request.json"
 printf '0' >"${fixture_root}/health-index"

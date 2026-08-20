@@ -56,6 +56,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Made managed migration repair apply only explicitly allowed missing
   checked-in migrations before the exact release target, while rejecting any
   other out-of-order gap.
+- Kept managed release validation bound to the manifest migration target while
+  accepting only the bounded missing-version arguments rendered by the release.
 
 ### Removed
 
