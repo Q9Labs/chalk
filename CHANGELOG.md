@@ -49,6 +49,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added provider-neutral SDK media access and production RealtimeKit adapters
   for browsers and React Native while preserving the Cloudflare SFU path.
 
+### Fixed
+
+- Made managed migration repair apply missing checked-in migrations before the
+  exact target from the release manifest, even when a newer version is already
+  recorded.
+
 ### Removed
 
 - Removed both Episode broker workers, their public routes and cookies, the

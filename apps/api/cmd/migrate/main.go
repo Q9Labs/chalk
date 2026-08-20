@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -86,12 +87,7 @@ func migrate(ctx context.Context, options options) error {
 	if err := database.PingContext(ctx); err != nil {
 		return errors.New("ping migration database")
 	}
-	provider, err := goose.NewProvider(
-		goose.DialectPostgres,
-		database,
-		migrations.Files,
-		goose.WithLogger(goose.NopLogger()),
-	)
+	provider, err := newMigrationProvider(database, migrations.Files, goose.DialectPostgres)
 	if err != nil {
 		return errors.New("configure migration provider")
 	}
@@ -99,6 +95,16 @@ func migrate(ctx context.Context, options options) error {
 		return fmt.Errorf("apply migrations through %d: %w", options.target, redactDatabaseURL(err, databaseURL))
 	}
 	return nil
+}
+
+func newMigrationProvider(database *sql.DB, migrationFiles fs.FS, dialect goose.Dialect) (*goose.Provider, error) {
+	return goose.NewProvider(
+		dialect,
+		database,
+		migrationFiles,
+		goose.WithAllowOutofOrder(true),
+		goose.WithLogger(goose.NopLogger()),
+	)
 }
 
 func readDatabaseURL(path string) (string, error) {

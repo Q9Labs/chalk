@@ -98,10 +98,14 @@ before running migrations. Do not use the pooled runtime/PgBouncer URL for
 migrations.
 
 Managed production releases build the same migration set into the API image as
-`chalk-migrate`. The deployment controller passes the manifest's exact
-`minimum_migration` target (currently `20260819130000`) to a one-shot migration
-unit before API or Sync activation; the dedicated owner URL is never part of
-either runtime service.
+`chalk-migrate`. The deployment controller passes the release manifest's exact
+`minimum_migration` target to a one-shot migration unit before API or Sync
+activation; the dedicated owner URL is never part of either runtime service.
+The migrator enables Goose's checked-in out-of-order repair: if a database has
+already recorded a newer migration while an embedded migration below it is
+missing, it applies that checked-in migration first and then applies the
+remaining embedded migrations through the manifest target. It never invents a
+version or runs a migration that is not in the image.
 The API readiness check also rejects a database below its embedded latest
 migration. Runtime rollback is forward-only and does not undo applied database
 migrations.
