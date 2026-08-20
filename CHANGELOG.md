@@ -32,6 +32,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
 
+## [4.1.11] - 2026-08-20
+
+### Fixed
+
+- Remounting Board refreshes the authoritative Sync snapshot even when an in-memory snapshot has the same revision.
+
 ## [4.1.10] - 2026-08-20
 
 ### Fixed

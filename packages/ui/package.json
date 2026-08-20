@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-ui",
-  "version": "4.1.10",
+  "version": "4.1.11",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -190,7 +190,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
-    "@q9labsai/chalk-assets": "workspace:^4.1.10",
+    "@q9labsai/chalk-assets": "workspace:^4.1.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.6.0"

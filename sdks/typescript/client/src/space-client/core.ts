@@ -58,7 +58,7 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
     now: baseDependencies.clock.now,
     setTimeout: baseDependencies.clock.setTimeout,
     clearTimeout: baseDependencies.clock.clearTimeout,
-    release: { id: "chalk-client@4.1.10" },
+    release: { id: "chalk-client@4.1.11" },
   });
   const diagnosticSyncClients = new Set<ConnectionSyncClient>();
   const dependencies: ConnectionDependencies = {
