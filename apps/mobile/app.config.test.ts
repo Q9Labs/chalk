@@ -6,6 +6,7 @@ const iosInfoPlist = readFileSync(new URL("./ios/Chalk/Info.plist", import.meta.
 const iosProject = readFileSync(new URL("./ios/Chalk.xcodeproj/project.pbxproj", import.meta.url), "utf8");
 const androidManifest = readFileSync(new URL("./android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
 const androidStrings = readFileSync(new URL("./android/app/src/main/res/values/strings.xml", import.meta.url), "utf8");
+const easConfig = JSON.parse(readFileSync(new URL("./eas.json", import.meta.url), "utf8"));
 
 describe("createExpoConfig", () => {
   it("keeps the native module graph and public build metadata stable", () => {
@@ -46,6 +47,8 @@ describe("createExpoConfig", () => {
     expect(iosProject).not.toContain("CURRENT_PROJECT_VERSION = 19;");
     expect(iosProject.match(/MARKETING_VERSION = 2\.0\.1;/gu)).toHaveLength(4);
     expect(iosProject.match(/CURRENT_PROJECT_VERSION = 28;/gu)).toHaveLength(4);
+    expect(easConfig.cli.appVersionSource).toBe("remote");
+    expect(easConfig.build.production.autoIncrement).toBe(true);
   });
 });
 
