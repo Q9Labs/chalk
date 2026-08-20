@@ -14,6 +14,8 @@ for argument in --entrypoint=/usr/local/bin/cloudflared --log-opt=tag=chalk-api 
   grep -Fq "PodmanArgs=${argument}" "${managed_root}/quadlet/"* || { echo "missing production-compatible Quadlet argument: ${argument}" >&2; exit 1; }
 done
 grep -Fq "Exec=redis-server --save '\"\"' --appendonly no" "${managed_root}/quadlet/chalk-redis.container.in" || { echo "Redis persistence disablement is not generator-safe" >&2; exit 1; }
+grep -Fq 'PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate' "${managed_root}/quadlet/chalk-api-migrate.container.in" || { echo "migration Quadlet must override the API image entrypoint" >&2; exit 1; }
+grep -Fq 'Exec=--database-url-file /run/chalk/migrate/database-url --target __DATABASE_MIGRATION_TARGET__' "${managed_root}/quadlet/chalk-api-migrate.container.in" || { echo "migration Quadlet must pass only migration arguments to its entrypoint" >&2; exit 1; }
 grep -Fq 'HealthCmd=["/usr/local/bin/chalk-healthcheck","http://127.0.0.1:8080/readyz"]' "${managed_root}/quadlet/chalk-api.container.in" || { echo "scratch API image healthcheck must use exec form" >&2; exit 1; }
 grep -Fq 'Requires=chalk-redis.service chalk-api-migrate.service' "${managed_root}/quadlet/chalk-api.container.in" || { echo "API must hard-require the migration unit" >&2; exit 1; }
 grep -Fq 'Requires=chalk-api.service' "${managed_root}/quadlet/chalk-sync.container.in" || { echo "Sync must hard-require the API unit" >&2; exit 1; }

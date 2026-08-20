@@ -67,6 +67,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   can add required inputs without exceeding the service request limit.
 - Created new Podman secrets without replacement mode on Podman 4.9, and removed
   candidate-only units when a managed release rolls back.
+- Started the dedicated migration binary as the one-shot container entrypoint,
+  so managed releases use the mounted owner database URL instead of API defaults.
 
 ## [4.1.5] - 2026-08-19
 

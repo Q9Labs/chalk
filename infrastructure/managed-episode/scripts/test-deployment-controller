@@ -36,7 +36,7 @@ mkdir -p "$output/quadlet" "$output/systemd"
 image="$(jq -er '.images.api' "$1")"
 target="$(jq -er '.database_compatibility.minimum_migration' "$1")"
 printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
-printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nExec=/usr/local/bin/chalk-migrate --database-url-file /run/chalk/migrate/database-url --target %s\n' "$image" "$target" >"$output/quadlet/chalk-api-migrate.container"
+printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nPodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate\nExec=--database-url-file /run/chalk/migrate/database-url --target %s\n' "$image" "$target" >"$output/quadlet/chalk-api-migrate.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
 RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
