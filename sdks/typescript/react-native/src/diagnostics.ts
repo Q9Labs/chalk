@@ -17,8 +17,8 @@ export interface DevDiagnosticsTimelineEntry {
 export interface DevDiagnosticsState {
   readonly enabled: boolean;
   readonly environment: {
+    readonly apiBaseURL: string | null;
     readonly buildProfile: string | null;
-    readonly brokerUrl: string | null;
     readonly target: "custom" | "local" | "production" | "unknown";
     readonly routeKind: string | null;
     readonly routeSpaceId: string | null;
@@ -40,10 +40,10 @@ const maximumTimelineItems = 120;
 const listeners = new Set<() => void>();
 let state = initialState();
 
-export function classifyTarget(brokerUrl: string | null | undefined): DevDiagnosticsState["environment"]["target"] {
-  if (!brokerUrl) return "unknown";
+export function classifyTarget(apiBaseURL: string | null | undefined): DevDiagnosticsState["environment"]["target"] {
+  if (!apiBaseURL) return "unknown";
   try {
-    const hostname = new URL(brokerUrl).hostname;
+    const hostname = new URL(apiBaseURL).hostname;
     if (["localhost", "127.0.0.1", "0.0.0.0"].includes(hostname)) return "local";
     if (hostname === "chalkmeet.com" || hostname.endsWith(".chalkmeet.com")) return "production";
     return "custom";
@@ -52,13 +52,13 @@ export function classifyTarget(brokerUrl: string | null | undefined): DevDiagnos
   }
 }
 
-export function resolveDevDiagnosticsMode({ isDevRuntime, brokerUrl }: { readonly isDevRuntime: boolean; readonly brokerUrl: string | null | undefined }): {
+export function resolveDevDiagnosticsMode({ isDevRuntime, apiBaseURL }: { readonly isDevRuntime: boolean; readonly apiBaseURL: string | null | undefined }): {
   readonly enabled: boolean;
   readonly buildProfile: "development" | "production";
 } {
   return {
     enabled: isDevRuntime,
-    buildProfile: isDevRuntime || classifyTarget(brokerUrl) === "local" ? "development" : "production",
+    buildProfile: isDevRuntime || classifyTarget(apiBaseURL) === "local" ? "development" : "production",
   };
 }
 
@@ -77,7 +77,7 @@ export function setDevDiagnosticsEnvironment(next: Partial<DevDiagnosticsState["
     environment: {
       ...current.environment,
       ...next,
-      target: next.brokerUrl ? classifyTarget(next.brokerUrl) : current.environment.target,
+      target: next.apiBaseURL ? classifyTarget(next.apiBaseURL) : current.environment.target,
     },
   }));
 }
@@ -145,8 +145,8 @@ function initialState(): DevDiagnosticsState {
   return {
     enabled: isDevelopmentRuntime,
     environment: {
+      apiBaseURL: null,
       buildProfile: null,
-      brokerUrl: null,
       target: "unknown",
       routeKind: null,
       routeSpaceId: null,

@@ -84,6 +84,24 @@ returning *
     ) as role_defaults(name, capabilities)
     on conflict (tenant_id, space_id, name) do nothing
     returning id
+), invite_seeded as (
+    insert into space_public_invites (
+        tenant_id, space_id, handle, generation, state_epoch, enabled,
+        public_role, admission_mode, last_actor_id
+    )
+    select
+        inserted.tenant_id,
+        inserted.id,
+        sqlc.arg(public_invite_handle),
+        1,
+        1,
+        true,
+        'collaborator',
+        inserted.admission_policy ->> 'mode',
+        inserted.created_by_user_id
+    from inserted
+    on conflict (tenant_id, space_id) do nothing
+    returning tenant_id, space_id
 )
 select
     inserted.id,

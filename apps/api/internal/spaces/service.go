@@ -2,6 +2,7 @@ package spaces
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -137,6 +138,7 @@ type Service struct {
 
 type CreateSpaceInput struct {
 	ID                            utilities.ID
+	PublicInviteHandle            [32]byte
 	Name                          string
 	TenantID                      utilities.ID
 	Slug                          string
@@ -213,6 +215,9 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 			return Space{}, ErrInvalidMediaPlane
 		}
 		input.MediaPlane = string(s.defaultMediaPlane)
+	}
+	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
+		return Space{}, err
 	}
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err

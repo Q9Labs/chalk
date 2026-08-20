@@ -10,6 +10,7 @@ describe("CreateSpaceSheet", () => {
     expect(source).toContain("accessibilityViewIsModal");
     expect(source).toContain("onSubmitEditing={onCreate}");
     expect(source).toContain("disabled={isCreating}");
-    expect(source).toContain("does not create or save a new Space");
+    expect(source).toContain("Create a Space");
+    expect(source).not.toContain("local Space");
   });
 });

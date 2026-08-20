@@ -30,12 +30,6 @@
 /space*
   X-Robots-Tag: noindex, nofollow, noarchive
 
-/share/*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/j/*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
 /home*
   X-Robots-Tag: noindex, nofollow, noarchive
 

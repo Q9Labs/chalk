@@ -59,6 +59,54 @@ func TestRequireRouteSubjectRequiresExactBinding(t *testing.T) {
 	}
 }
 
+func TestRealtimeKitCredentialUsesProviderParticipantReference(t *testing.T) {
+	fixture := newCredentialFixture(t)
+	subject := testSubject(t)
+	subject.Provider = accessgrants.ProviderCloudflareRTK
+	subject.CloudflareConnectionID = ""
+	subject.ProviderSubject = "rtk-participant-123"
+
+	credential, err := fixture.issuer.Issue(context.Background(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := fixture.verifier.Verify(context.Background(), credential.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != subject {
+		t.Fatalf("subject = %#v, want %#v", got, subject)
+	}
+
+	if err := accessgrants.RequireRouteSubject(got, accessgrants.RouteSubject{
+		TenantID: got.TenantID, SpaceID: got.SpaceID, EpisodeID: got.EpisodeID,
+		ParticipantID: got.ParticipantID, ParticipantGeneration: got.ParticipantGeneration,
+		Provider: accessgrants.ProviderCloudflareRTK, ProviderSubject: "rtk-participant-123",
+	}); err != nil {
+		t.Fatalf("matching provider subject rejected: %v", err)
+	}
+	if err := accessgrants.RequireRouteSubject(got, accessgrants.RouteSubject{
+		TenantID: got.TenantID, SpaceID: got.SpaceID, EpisodeID: got.EpisodeID,
+		ParticipantID: got.ParticipantID, ParticipantGeneration: got.ParticipantGeneration,
+		Provider: accessgrants.ProviderCloudflareRTK, CloudflareConnectionID: "rtk-participant-123",
+	}); !errors.Is(err, accessgrants.ErrSubjectMismatch) {
+		t.Fatalf("connection alias accepted for RTK subject: %v", err)
+	}
+}
+
+func TestRequireRouteSubjectRejectsUnknownProvider(t *testing.T) {
+	subject := testSubject(t)
+	subject.Provider = "unknown-provider"
+	route := accessgrants.RouteSubject{
+		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID,
+		ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
+		Provider: "unknown-provider", CloudflareConnectionID: subject.CloudflareConnectionID,
+	}
+	if err := accessgrants.RequireRouteSubject(subject, route); !errors.Is(err, accessgrants.ErrSubjectMismatch) {
+		t.Fatalf("unknown provider accepted: %v", err)
+	}
+}
+
 func TestStableErrorsDoNotExposeCredentialOrClaims(t *testing.T) {
 	fixture := newCredentialFixture(t)
 	token := rewriteClaims(t, fixture.token, fixture.privateKey, func(claims map[string]any) { claims["aud"] = "chalk-sync" })

@@ -9,12 +9,12 @@ describe("native diagnostics", () => {
     expect(buildDevDiagnosticsCopyText()).not.toContain("inviteToken");
   });
 
-  it("uses the broker as the single environment boundary", () => {
+  it("uses the public-invite API as the single environment boundary", () => {
     setDevDiagnosticsEnvironment({
-      brokerUrl: "http://localhost:8787/local-chalk",
+      apiBaseURL: "http://localhost:8787",
     });
     expect(getDevDiagnosticsState().environment.target).toBe("local");
-    expect(classifyTarget("https://chalkmeet.com/local-chalk")).toBe("production");
+    expect(classifyTarget("https://api.chalkmeet.com")).toBe("production");
   });
 
   it("records failures without legacy auth or transport state", () => {

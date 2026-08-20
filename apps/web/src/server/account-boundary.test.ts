@@ -216,6 +216,75 @@ describe("account boundary", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("proxies public-invite management and admission-request operations with their contracts intact", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const spaceID = "22222222-2222-4222-8222-222222222222";
+    const requestHandle = "request-handle-123456";
+    const invite = { canonical_url: "/space/design-lab#cspi1=opaque", enabled: true, generation: 1 };
+    const admissionRequest = { display_name: "Ada", expires_at: "2030-01-01T00:05:00Z", request_handle: requestHandle, requested_at: "2030-01-01T00:00:00Z", state: "pending" };
+    const responses = [
+      Response.json(invite, { status: 200 }),
+      Response.json({ ...invite, enabled: false }, { status: 202 }),
+      Response.json({ ...invite, generation: 2 }, { status: 201 }),
+      Response.json({ requests: [admissionRequest] }, { status: 206 }),
+      Response.json({ ...admissionRequest, state: "approved" }, { status: 207 }),
+      Response.json({ ...admissionRequest, state: "denied" }, { status: 208 }),
+    ];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer server-held-account-token");
+      const response = responses[fetcher.mock.calls.length - 1];
+      if (!response) throw new Error(`Unexpected upstream call: ${String(input)}`);
+      return response;
+    });
+
+    const accountHeaders = { Cookie: "__Host-chalk_account=server-held-account-token" };
+    const mutationHeaders = (idempotencyKey: string) => ({
+      "Content-Type": "application/json",
+      Origin: secureOrigin,
+      Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
+      "X-Chalk-CSRF": "csrf-token",
+      "Idempotency-Key": idempotencyKey,
+    });
+
+    const getResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-invite`, { headers: accountHeaders }), upstream, fetcher);
+    const updateResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-invite`, { method: "PATCH", headers: mutationHeaders("public-update-0001"), body: JSON.stringify({ enabled: false }) }), upstream, fetcher);
+    const rotateResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-invite/rotations`, { method: "POST", headers: mutationHeaders("public-rotate-0001"), body: "{}" }), upstream, fetcher);
+    const listResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests?state=pending&discarded=true`, { headers: accountHeaders }), upstream, fetcher);
+    const approveResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/approval`, { method: "POST", headers: mutationHeaders("public-approve-0001"), body: "{}" }), upstream, fetcher);
+    const denyResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/denial`, { method: "POST", headers: mutationHeaders("public-deny-0001"), body: "{}" }), upstream, fetcher);
+
+    expect([getResponse, updateResponse, rotateResponse, listResponse, approveResponse, denyResponse].map((response) => response.status)).toEqual([200, 202, 201, 206, 207, 208]);
+    await expect(getResponse.json()).resolves.toEqual(invite);
+    await expect(updateResponse.json()).resolves.toMatchObject({ enabled: false });
+    await expect(rotateResponse.json()).resolves.toMatchObject({ generation: 2 });
+    await expect(listResponse.json()).resolves.toEqual({ requests: [admissionRequest] });
+    await expect(approveResponse.json()).resolves.toMatchObject({ state: "approved" });
+    await expect(denyResponse.json()).resolves.toMatchObject({ state: "denied" });
+
+    const calls = fetcher.mock.calls;
+    expect(String(calls[0]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-invite`);
+    expect(calls[0]?.[1]).toEqual(expect.objectContaining({ method: "GET" }));
+    expect(String(calls[1]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-invite`);
+    expect(calls[1]?.[1]).toEqual(expect.objectContaining({ method: "PATCH" }));
+    expect(String(calls[2]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-invite/rotations`);
+    expect(calls[2]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(String(calls[3]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests?state=pending`);
+    expect(calls[3]?.[1]).toEqual(expect.objectContaining({ method: "GET" }));
+    expect(String(calls[4]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/approval`);
+    expect(calls[4]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(String(calls[5]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/denial`);
+    expect(calls[5]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+
+    await expect(new Response(fetcher.mock.calls[1]?.[1]?.body).text()).resolves.toBe(JSON.stringify({ enabled: false }));
+    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("origin")).toBe(secureOrigin);
+    expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get("origin")).toBe(secureOrigin);
+    expect(new Headers(fetcher.mock.calls[4]?.[1]?.headers).get("origin")).toBe(secureOrigin);
+    expect(new Headers(fetcher.mock.calls[5]?.[1]?.headers).get("origin")).toBe(secureOrigin);
+    expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get("idempotency-key")).toBe("public-rotate-0001");
+    expect(new Headers(fetcher.mock.calls[5]?.[1]?.headers).get("idempotency-key")).toBe("public-deny-0001");
+  });
+
   it("forwards a slug-based Dashboard Space grant without stripping its opaque credentials", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const grant = {

@@ -2,35 +2,35 @@ import Constants from "expo-constants";
 
 import { getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
 
-const PRODUCTION_BROKER_URL = "https://chalkmeet.com/local-chalk";
+const PRODUCTION_API_BASE_URL = "https://api.chalkmeet.com";
 
 type MobileExpoExtra = {
-  readonly brokerUrl?: unknown;
+  readonly apiBaseURL?: unknown;
   readonly telemetryEnabled?: unknown;
 };
 
 export type MobileRuntimeConfig = {
-  readonly brokerUrl: string;
+  readonly apiBaseURL: string;
   readonly telemetryEnabled: boolean;
 };
 
 export function getMobileRuntimeConfig(): MobileRuntimeConfig {
   const extra = readMobileExpoExtra();
-  const configuredBrokerUrl = supportedBrokerUrl(extra.brokerUrl) ? extra.brokerUrl.trim() : undefined;
+  const configuredApiBaseURL = supportedApiBaseURL(extra.apiBaseURL) ? extra.apiBaseURL.trim() : undefined;
 
   return {
-    brokerUrl: resolveAppRuntimeUrl({
-      configuredUrl: configuredBrokerUrl,
+    apiBaseURL: resolveAppRuntimeUrl({
+      configuredUrl: configuredApiBaseURL,
       scriptUrl: getReactNativeScriptUrl(),
-      fallbackUrl: PRODUCTION_BROKER_URL,
+      fallbackUrl: PRODUCTION_API_BASE_URL,
       allowDeviceLocal: typeof __DEV__ !== "undefined" && __DEV__,
     }),
     telemetryEnabled: extra.telemetryEnabled === true,
   };
 }
 
-export function getBrokerUrl(): string {
-  return getMobileRuntimeConfig().brokerUrl;
+export function getApiBaseURL(): string {
+  return getMobileRuntimeConfig().apiBaseURL;
 }
 
 export function isMobileTelemetryEnabled(): boolean {
@@ -42,10 +42,8 @@ function readMobileExpoExtra(): MobileExpoExtra {
   return isRecord(extra) ? extra : {};
 }
 
-function supportedBrokerUrl(value: unknown): value is string {
-  if (typeof value !== "string" || !value.trim()) {
-    return false;
-  }
+function supportedApiBaseURL(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
 
   try {
     const parsed = new URL(value.trim());

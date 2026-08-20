@@ -39,13 +39,13 @@ defmodule ChalkSync.WhiteboardV1.SQL do
   def ensure_scene do
     """
     insert into sync_whiteboard_scenes (
-      tenant_id, space_id, scene_id
+      tenant_id, space_id, episode_id, scene_id
     )
-    select $1, $2, $4
+    select $1, $2, $3, $4
     where not exists (
       select 1
       from sync_whiteboard_scenes
-      where tenant_id = $1 and space_id = $2 and is_current
+      where tenant_id = $1 and space_id = $2 and episode_id = $3 and is_current
     ) and $3::uuid is not null
     on conflict do nothing
     """
@@ -55,7 +55,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
     select scene_id, revision, app_state, coalesce(presenting_episode_id = $3, false) as is_presenting
     from sync_whiteboard_scenes
-    where tenant_id = $1 and space_id = $2 and is_current and $3::uuid is not null
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and is_current
     for update
     """
   end
@@ -141,15 +141,15 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
     update sync_whiteboard_scenes
     set is_current = false, updated_at = now()
-    where tenant_id = $1 and space_id = $2 and scene_id = $4 and is_current and $3::uuid is not null
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and scene_id = $4 and is_current
     """
   end
 
   def insert_scene do
     """
     insert into sync_whiteboard_scenes (
-      tenant_id, space_id, scene_id, is_current, presenting_episode_id, revision
-    ) select $1, $2, $4, true, case when $5 then $3::uuid else null end, 0 where $3::uuid is not null
+      tenant_id, space_id, episode_id, scene_id, is_current, presenting_episode_id, revision
+    ) select $1, $2, $3, $4, true, case when $5 then $3::uuid else null end, 0 where $3::uuid is not null
     """
   end
 
@@ -160,7 +160,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       presenting_episode_id = case when $5 then $3::uuid else null end,
       revision = revision + 1,
       updated_at = now()
-    where tenant_id = $1 and space_id = $2 and scene_id = $4 and is_current and $3::uuid is not null
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and scene_id = $4 and is_current
     returning revision, coalesce(presenting_episode_id = $3, false) as is_presenting
     """
   end

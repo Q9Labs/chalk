@@ -130,7 +130,8 @@ func issueAccessGrantEndpoint(
 					err = accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
 						TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
 						ParticipantID: request.ParticipantID, ParticipantGeneration: request.Body.ParticipantGeneration,
-						Provider: subject.Provider, CloudflareConnectionID: subject.CloudflareConnectionID,
+						Provider: subject.Provider, ProviderSubject: subject.ProviderSubject,
+						CloudflareConnectionID: subject.CloudflareConnectionID,
 					})
 				}
 				if err != nil {
@@ -222,8 +223,15 @@ func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 	if err != nil {
 		return mediaplane.Join{}, err
 	}
+	connectionRef := subject.CloudflareConnectionID
+	if service.Provider() == mediaplane.ProviderCloudflareRTK {
+		connectionRef = subject.ProviderSubject
+	}
+	if strings.TrimSpace(connectionRef) == "" {
+		return mediaplane.Join{}, mediaplane.ErrInvalidConnectionRef
+	}
 	return service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
-		Provider: service.Provider(), Episode: episode, ExternalParticipantID: request.ParticipantID.String(), ConnectionRef: subject.CloudflareConnectionID,
+		Provider: service.Provider(), Episode: episode, ExternalParticipantID: request.ParticipantID.String(), ConnectionRef: connectionRef,
 	})
 }
 
@@ -232,7 +240,7 @@ func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, te
 	if err != nil {
 		return nil, mediaplane.Episode{}, err
 	}
-	if service == nil || service.Provider() != mediaplane.ProviderCloudflareSFU {
+	if service == nil || (service.Provider() != mediaplane.ProviderCloudflareSFU && service.Provider() != mediaplane.ProviderCloudflareRTK) {
 		return nil, mediaplane.Episode{}, mediaplane.ErrPlaneUnavailable
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{Provider: service.Provider(), EpisodeKey: episodeID.String(), Metadata: map[string]string{"tenant_id": tenantID.String(), "space_id": spaceID.String()}})
@@ -240,16 +248,29 @@ func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, te
 }
 
 func accessGrantSubjectForJoin(request issueAccessGrantRequest, join mediaplane.Join) (accessgrants.Subject, error) {
-	connectionID, ok := join.ClientPayload["connectionId"].(string)
-	connectionID = strings.TrimSpace(connectionID)
-	if !ok || connectionID == "" || join.Provider != mediaplane.ProviderCloudflareSFU {
-		return accessgrants.Subject{}, mediaplane.ErrProviderFailed
-	}
-	return accessgrants.Subject{
+	subject := accessgrants.Subject{
 		TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
 		ParticipantID: request.ParticipantID, ParticipantGeneration: request.Body.ParticipantGeneration,
-		Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: connectionID,
-	}, nil
+	}
+	switch join.Provider {
+	case mediaplane.ProviderCloudflareSFU:
+		connectionID, ok := join.ClientPayload["connectionId"].(string)
+		if !ok || strings.TrimSpace(connectionID) == "" {
+			return accessgrants.Subject{}, mediaplane.ErrProviderFailed
+		}
+		subject.Provider = accessgrants.ProviderCloudflareSFU
+		subject.CloudflareConnectionID = strings.TrimSpace(connectionID)
+	case mediaplane.ProviderCloudflareRTK:
+		participantRef := strings.TrimSpace(join.ParticipantRef)
+		if participantRef == "" {
+			return accessgrants.Subject{}, mediaplane.ErrProviderFailed
+		}
+		subject.Provider = accessgrants.ProviderCloudflareRTK
+		subject.ProviderSubject = participantRef
+	default:
+		return accessgrants.Subject{}, mediaplane.ErrInvalidProvider
+	}
+	return subject, nil
 }
 
 func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctokens.Token, mediaCredential accessgrants.MediaCredential, join mediaplane.Join) accessGrantResponse {

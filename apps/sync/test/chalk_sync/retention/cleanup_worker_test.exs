@@ -1039,10 +1039,10 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
       connection,
       """
       insert into sync_whiteboard_scenes (
-        tenant_id, space_id, scene_id, app_state
-      ) values ($1, $2, $3, '{"view_background_color":"#ffffff"}'::jsonb)
+        tenant_id, space_id, episode_id, scene_id, app_state
+      ) values ($1, $2, $3, $4, '{"view_background_color":"#ffffff"}'::jsonb)
       """,
-      space_scope(fixture) ++ [UUID.dump!(scene_id)]
+      space_scope(fixture) ++ [UUID.dump!(fixture.episode.episode_id), UUID.dump!(scene_id)]
     )
 
     scene_id

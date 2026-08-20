@@ -6,7 +6,7 @@ const AUTHENTICATED_EXPORT_DEPENDENCY_ERROR = "Journey telemetry export requires
 export interface MobileTelemetryOptions {
   readonly enabled: boolean;
   readonly fetch?: typeof globalThis.fetch;
-  /** The broker chooses the API origin with the participant credential. */
+  /** The public-invite API supplies the telemetry origin. */
   readonly getApiBaseURL: () => string | undefined;
   /**
    * Wave 6 SDK-owned bridge for the verified Cloudflare participant bearer accepted by

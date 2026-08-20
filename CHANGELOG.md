@@ -29,6 +29,32 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
 
+## [4.1.7] - 2026-08-20
+
+### Added
+
+- Added one `cspi1` public link and one API-owned arrival flow for every Space,
+  including capability-first web and native clients, Dashboard link controls,
+  `open` and `knock` admission, browser and native Guest credentials, and
+  Cloudflare SFU and RealtimeKit media access.
+- Added managed public Space creation with configurable bounded retention,
+  durable cleanup and archive retries, and Episode-scoped Chat and Whiteboard
+  content that cannot expose a prior Episode to a public Participant.
+
+### Changed
+
+- Made Space creation materialize its public invite in the same database
+  transaction and made public arrival, refresh, leave, rotation, disablement,
+  approval, denial, audit, tracing, and status use the API control plane.
+- Added provider-neutral SDK media access and production RealtimeKit adapters
+  for browsers and React Native while preserving the Cloudflare SFU path.
+
+### Removed
+
+- Removed both Episode broker workers, their public routes and cookies, the
+  legacy 43-character invite format, and their runtime, monitor, development,
+  mobile, and bootstrap configuration.
+
 ## [4.1.6] - 2026-08-20
 
 ### Fixed
@@ -168,6 +194,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added account-scoped Episode Debugger launch links to Episode details and the
   Developer page, with safe Episode references that resolve to canonical
   diagnostics only after tenant authorization.
+- Added one public Space invite contract for customer-managed and auto-created
+  Spaces, with collaborator Guest admission, open and knock policies, durable
+  rotation controls, browser and React Native clients, and SFU or RealtimeKit
+  media grants.
 
 ### Changed
 
@@ -183,6 +213,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   with database-free checks.
 - Made detached local web releases reuse the main checkout's Turbo cache while
   keeping web build inputs and the exact release SHA in the cache key.
+- Moved public Space creation, admission, credential refresh, leave, and timed
+  auto-Space archival into the API, so every canonical invite resolves an exact
+  Tenant and Space before account or Guest identity is selected.
 - Removed the unfinished standalone API performance harness. A replacement can
   return when it has stable workload, latency, and regression contracts.
 

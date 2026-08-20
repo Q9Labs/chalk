@@ -1,8 +1,6 @@
 import { FailureKind, failure } from "./model.mjs";
 import { runChecked } from "./chalk-resources.mjs";
 
-const brokerScope = "episodes:write";
-
 export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, fetchImpl = fetch, now = () => new Date(), fresh = false } = {}) {
   if (!apiOrigin || !systemToken || !runtimeId) throw failure(FailureKind.CONFIG, "API bootstrap requires origin, system token, and runtime id", { stage: "bootstrap" });
   const marker = fixtureMarker || runtimeMarker(runtimeId);
@@ -29,26 +27,12 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
       systemToken,
       method: "POST",
       body: { name: `Chalk local Space ${marker}`, slug: spaceSlug, media_plane: "cf_sfu" },
+      headers: { "Idempotency-Key": `chalk-local-space-${marker}` },
     });
   }
-  const keys = await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys?page_size=100`, { systemToken });
-  const keyName = `chalk-local-broker-${marker}`;
-  const existing = keys.api_keys?.find((entry) => entry.name === keyName && !entry.revoked_at);
-  if (existing && (!Array.isArray(existing.scopes) || existing.scopes.length !== 1 || existing.scopes[0] !== brokerScope)) {
-    throw failure(FailureKind.STARTUP, "runtime broker key has incompatible scopes", { stage: "bootstrap" });
-  }
-  const expiresAt = new Date(now().getTime() + 24 * 60 * 60 * 1000).toISOString();
-  const key = existing
-    ? await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys/${existing.id}/rotate`, { systemToken, method: "POST", body: { expires_at: expiresAt } })
-    : await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys`, { systemToken, method: "POST", body: { name: keyName, scopes: [brokerScope], expires_at: expiresAt } });
-  const secret = key.secret;
-  if (typeof secret !== "string" || secret.length < 8) throw failure(FailureKind.STARTUP, "API bootstrap did not return a broker key secret", { stage: "bootstrap" });
   return {
     tenantId: tenant.id,
     spaceId: space.id,
-    apiKeyId: key.api_key?.id || existing?.id,
-    apiKey: secret,
-    brokerURL: "/local-chalk",
     fresh,
     marker,
   };
@@ -69,11 +53,6 @@ export async function retireLocalFixture({ apiOrigin, systemToken, marker, runti
       method: "PATCH",
       body: { slug: `${spaceSlug}-retired-${runtimeId.slice(0, 8)}` },
     });
-  }
-  const keys = await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys?page_size=100`, { systemToken });
-  const keyName = `chalk-local-broker-${marker}`;
-  for (const key of keys.api_keys?.filter((entry) => entry.name === keyName && !entry.revoked_at) || []) {
-    await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}/api-keys/${key.id}`, { systemToken, method: "DELETE" });
   }
   const deletedTenant = await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}`, {
     systemToken,
@@ -127,10 +106,10 @@ function listSpaces(response) {
   return response.spaces || [];
 }
 
-async function request(fetchImpl, origin, path, { systemToken, method = "GET", body, ignoreStatuses = [] } = {}) {
+async function request(fetchImpl, origin, path, { systemToken, method = "GET", body, headers = {}, ignoreStatuses = [] } = {}) {
   const response = await fetchImpl(new URL(path, origin), {
     method,
-    headers: { Authorization: `Bearer ${systemToken}`, ...(body ? { "content-type": "application/json" } : {}) },
+    headers: { Authorization: `Bearer ${systemToken}`, ...(body ? { "content-type": "application/json" } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();

@@ -4,6 +4,7 @@ import { ChalkAPIError, ChalkServerOnlyError, errorCode, requestId } from "./err
 describe("server errors", () => {
   it("keeps only bounded machine codes from API error bodies", () => {
     expect(errorCode({ error: { code: "rate_limited", message: "untrusted" } })).toBe("rate_limited");
+    expect(errorCode({ error: { code: "space_public_invite.unavailable", message: "untrusted" } })).toBe("space_public_invite.unavailable");
     expect(errorCode({ error: { code: "UPPERCASE" } })).toBe("request_failed");
     expect(errorCode({ error: { code: `a${"b".repeat(64)}` } })).toBe("request_failed");
     expect(errorCode({ error: null })).toBe("request_failed");

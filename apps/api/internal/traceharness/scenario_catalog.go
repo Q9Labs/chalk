@@ -117,6 +117,7 @@ func ScenarioNames() []string {
 		ServiceEpisodeDiagnosticsScenario,
 		ServiceDashboardSpaceJoinScenario,
 		RouteChatAttachmentUploadScenario,
+		RoutePublicInviteObservabilityScenario,
 		RouteWhiteboardFileUploadScenario,
 		RouteAPIKeyCustomerFlowScenario,
 		EdgeAPIKeyRejectedScopeScenario,

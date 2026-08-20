@@ -22,11 +22,11 @@ export async function createParticipantContext(browser, options) {
   return { context, page };
 }
 
-function joinURL(webURL, joinPath, name, hash = "") {
-  const url = new URL(webURL);
-  url.pathname = joinPath;
+function joinURL(webURL, joinPath, name, hash = "", inviteURL) {
+  const url = new URL(inviteURL || webURL);
+  if (!inviteURL) url.pathname = joinPath;
   url.searchParams.set("name", name);
-  url.hash = hash;
+  if (hash) url.hash = hash;
   return url.toString();
 }
 
@@ -35,8 +35,8 @@ async function countLocator(locator) {
 }
 
 export async function joinParticipant(participant, runtime) {
-  const { page, name, inviteHash } = participant;
-  await page.goto(joinURL(runtime.webURL, runtime.webJoinPath, name, inviteHash), { waitUntil: "domcontentloaded", timeout: runtime.joinTimeoutMs });
+  const { page, name, inviteHash, inviteURL } = participant;
+  await page.goto(joinURL(runtime.webURL, runtime.webJoinPath, name, inviteHash, inviteURL), { waitUntil: "domcontentloaded", timeout: runtime.joinTimeoutMs });
   const nameInput = page.getByPlaceholder("Enter your name", { exact: true });
   await requireJoinControl(nameInput, "Enter your name", runtime.joinTimeoutMs);
   await nameInput.fill(name);

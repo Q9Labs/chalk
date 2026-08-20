@@ -79,10 +79,10 @@ export function createMediaSmokeInitScript() {
     const OriginalFetch = window.fetch;
     if (typeof OriginalFetch === "function") {
       const isRequest = (input) => typeof Request === "function" && input instanceof Request;
-      const localChalkURL = (input) => {
+      const publicAPIURL = (input) => {
         try {
           const url = new URL(isRequest(input) ? input.url : input, window.location.href);
-          return url.origin === window.location.origin && url.pathname.startsWith("/local-chalk/");
+          return url.origin === window.location.origin && url.pathname.startsWith("/v1/public/");
         } catch {
           return false;
         }
@@ -93,7 +93,7 @@ export function createMediaSmokeInitScript() {
         const requestInput = isRequest(input);
         const headers = new Headers(init?.headers !== undefined ? init.headers : requestInput ? input.headers : undefined);
         recordJourney(headers.get("x-chalk-journey-id"));
-        if (!localChalkURL(input) || headers.has("x-chalk-journey-id")) return OriginalFetch(...args);
+        if (!publicAPIURL(input) || headers.has("x-chalk-journey-id")) return OriginalFetch(...args);
         headers.set("x-chalk-journey-id", contextJourneyID);
         if (requestInput) return OriginalFetch(new Request(input, { ...(init || {}), headers }));
         return OriginalFetch(input, { ...(init || {}), headers });

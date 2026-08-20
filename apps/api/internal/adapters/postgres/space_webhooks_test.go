@@ -1,14 +1,30 @@
 package postgres
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestCreateSpaceParamsPreservesPublicInviteHandle(t *testing.T) {
+	id := mustSpaceWebhookTestID(t, "11111111-1111-4111-8111-111111111111")
+	tenantID := mustSpaceWebhookTestID(t, "22222222-2222-4222-8222-222222222222")
+	var handle [32]byte
+	for index := range handle {
+		handle[index] = byte(index + 1)
+	}
+
+	params := createSpaceParams(spaces.CreateSpaceInput{ID: id, TenantID: tenantID, PublicInviteHandle: handle})
+	if !bytes.Equal(params.PublicInviteHandle, handle[:]) {
+		t.Fatalf("public invite handle = %x, want %x", params.PublicInviteHandle, handle)
+	}
+}
 
 func TestMapCreatedSpacePreservesInsertedRow(t *testing.T) {
 	id := mustSpaceWebhookTestID(t, "11111111-1111-4111-8111-111111111111")

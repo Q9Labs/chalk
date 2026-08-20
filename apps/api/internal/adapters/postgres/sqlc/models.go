@@ -92,6 +92,22 @@ type AuthIdentity struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type AutoSpaceLifecycle struct {
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	SpaceID              pgtype.UUID        `json:"space_id"`
+	DeadlineAt           pgtype.Timestamptz `json:"deadline_at"`
+	CreatorArrivalHandle pgtype.UUID        `json:"creator_arrival_handle"`
+	State                string             `json:"state"`
+	ClaimExpiresAt       pgtype.Timestamptz `json:"claim_expires_at"`
+	NextRetryAt          pgtype.Timestamptz `json:"next_retry_at"`
+	RetryCount           int32              `json:"retry_count"`
+	LastErrorFamily      pgtype.Text        `json:"last_error_family"`
+	ArchiveCompletedAt   pgtype.Timestamptz `json:"archive_completed_at"`
+	JourneyID            pgtype.UUID        `json:"journey_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DiagnosticBranch struct {
 	TenantID         pgtype.UUID        `json:"tenant_id"`
 	DiagnosticID     pgtype.UUID        `json:"diagnostic_id"`
@@ -705,6 +721,64 @@ type SpaceMember struct {
 	RoleID     pgtype.UUID        `json:"role_id"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type SpacePublicAdmissionRequest struct {
+	RequestHandle      pgtype.UUID        `json:"request_handle"`
+	ArrivalHandle      pgtype.UUID        `json:"arrival_handle"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	DisplayName        string             `json:"display_name"`
+	State              string             `json:"state"`
+	RequestedAt        pgtype.Timestamptz `json:"requested_at"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	DecidedAt          pgtype.Timestamptz `json:"decided_at"`
+	DecidedBy          pgtype.UUID        `json:"decided_by"`
+	DecisionRequestKey pgtype.Text        `json:"decision_request_key"`
+}
+
+type SpacePublicArrival struct {
+	ArrivalHandle          pgtype.UUID        `json:"arrival_handle"`
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	SpaceID                pgtype.UUID        `json:"space_id"`
+	InviteHandle           []byte             `json:"invite_handle"`
+	InviteGeneration       int64              `json:"invite_generation"`
+	InviteStateEpoch       int64              `json:"invite_state_epoch"`
+	IdentityMode           string             `json:"identity_mode"`
+	DisplayName            string             `json:"display_name"`
+	GuestCredentialHash    []byte             `json:"guest_credential_hash"`
+	AccountID              pgtype.UUID        `json:"account_id"`
+	CredentialFamily       pgtype.Text        `json:"credential_family"`
+	IdempotencyKey         string             `json:"idempotency_key"`
+	IdempotencyFingerprint []byte             `json:"idempotency_fingerprint"`
+	State                  string             `json:"state"`
+	EpisodeID              pgtype.UUID        `json:"episode_id"`
+	ParticipantID          pgtype.UUID        `json:"participant_id"`
+	ParticipantGeneration  pgtype.Int8        `json:"participant_generation"`
+	Provider               pgtype.Text        `json:"provider"`
+	ProviderSubject        pgtype.Text        `json:"provider_subject"`
+	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
+	TerminalReason         pgtype.Text        `json:"terminal_reason"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	TerminalAt             pgtype.Timestamptz `json:"terminal_at"`
+}
+
+type SpacePublicInvite struct {
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	SpaceID                pgtype.UUID        `json:"space_id"`
+	Handle                 []byte             `json:"handle"`
+	Generation             int64              `json:"generation"`
+	StateEpoch             int64              `json:"state_epoch"`
+	Enabled                bool               `json:"enabled"`
+	PublicRole             string             `json:"public_role"`
+	AdmissionMode          string             `json:"admission_mode"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
+	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
+	LastActorID            pgtype.UUID        `json:"last_actor_id"`
+	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
 }
 
 type SpaceRole struct {

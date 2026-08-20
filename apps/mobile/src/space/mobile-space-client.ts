@@ -1,29 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { GetAccess, SpaceClient } from "@q9labsai/chalk-client";
 import { createNativeSpaceClient } from "@q9labsai/chalk-react-native/client";
-import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 
-import type { ParticipantCredential, SpaceRoute } from "../lib/spaces";
+import type { StoredSpaceArrival } from "../lib/spaces";
 import type { EntranceSettings } from "@q9labsai/chalk-react-native";
 
 type MobileSpaceClientOptions = {
-  readonly credential: ParticipantCredential;
+  readonly apiBaseURL: string;
   readonly defaults: Pick<EntranceSettings, "camera" | "microphone">;
   readonly getAccess: GetAccess;
-  readonly journey?: TelemetryJourney;
-  readonly space: SpaceRoute["space"];
+  readonly space: string;
 };
 
-export function createMobileSpaceClient({ credential, defaults, getAccess, journey, space }: MobileSpaceClientOptions): SpaceClient {
+export function createMobileSpaceClient({ apiBaseURL, defaults, getAccess, space }: MobileSpaceClientOptions): SpaceClient {
   return createNativeSpaceClient({
-    baseUrl: credential.apiBaseURL,
+    baseUrl: apiBaseURL,
     camera: defaults.camera,
     getAccess,
     microphone: defaults.microphone,
     space,
     storage: AsyncStorage,
-    syncUrl: credential.syncURL,
-    telemetry: journey,
   });
 }
 
@@ -31,10 +27,10 @@ export type MobileSpaceClientOwner = {
   readonly release: () => Promise<void>;
 };
 
-export type MobileSpaceRelease = (credential?: ParticipantCredential) => Promise<void>;
+export type MobileSpaceRelease = (credential?: StoredSpaceArrival) => Promise<void>;
 
 type MobileSpaceReleaseOptions = {
-  readonly cleanupCredential: (credential: ParticipantCredential) => Promise<void>;
+  readonly cleanupCredential: (credential: StoredSpaceArrival) => Promise<void>;
   readonly onClose: () => Promise<void>;
   readonly onReleaseFailure?: () => void;
   readonly onReleaseStart?: () => void;

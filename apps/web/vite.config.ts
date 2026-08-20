@@ -19,8 +19,7 @@ const buildTime = new Date().toISOString();
 const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
 const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
 const localWebOrigin = `http://127.0.0.1:${localWebPort}`;
-const localBrokerPort = process.env.CHALK_DEV_BROKER_PORT?.trim();
-const localBrokerTarget = process.env.CHALK_DEV_BROKER_ORIGIN?.trim() || (localBrokerPort ? `http://127.0.0.1:${localBrokerPort}` : "http://127.0.0.1:8787");
+const localAPIOrigin = process.env.CHALK_DEV_API_ORIGIN?.trim() || "http://127.0.0.1:8080";
 const diagnosticsMode = process.env.CHALK_EPISODE_DIAGNOSTICS?.trim();
 const diagnosticsEnvironment = process.env.CHALK_ENVIRONMENT?.trim() || (diagnosticsMode === "localhost" ? "localhost" : undefined);
 const diagnosticsConfig = resolveEpisodeDiagnosticsConfig(diagnosticsMode, diagnosticsEnvironment, process.env.CHALK_EPISODE_DIAGNOSTICS_GATEWAY, process.env.CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN);
@@ -63,8 +62,6 @@ function resolveCommitHash(configuredHash: string | undefined): string {
   return candidate;
 }
 
-// SPA mode for Cloudflare Pages deployment
-// SSR requires Cloudflare Workers, but our token only has Pages permission
 const config = defineConfig({
   define: {
     __COMMIT_HASH__: JSON.stringify(commitHash),
@@ -79,8 +76,8 @@ const config = defineConfig({
     host: "127.0.0.1",
     port: localWebPort,
     proxy: {
-      "/local-chalk": {
-        target: localBrokerTarget,
+      "/v1": {
+        target: localAPIOrigin,
         changeOrigin: true,
         configure(proxy) {
           proxy.on("proxyReq", (proxyRequest) => {

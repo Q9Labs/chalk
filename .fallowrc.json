@@ -18,8 +18,6 @@
     "infrastructure/observability/scripts/smoke.mjs",
     "infrastructure/observability/scripts/webhook-canary.mjs",
     "infrastructure/observability/scripts/webhook-receiver.mjs",
-    "infrastructure/episode-broker/test/fake-api-worker.mjs",
-    "infrastructure/episode-broker/test/wrangler-e2e.mjs",
     "packages/whiteboard/src/embedded/renderer.tsx",
     "sdks/typescript/client/src/generated/http-api.ts",
     "sdks/typescript/client/src/generated/openapi-types.d.ts",
@@ -107,8 +105,7 @@
       "scratchpad/sdk-schema-generator-spike/**",
       "scripts/codegen/generate-effect-http-api.mjs",
       "scripts/codegen/generate-effect-schemas.mjs",
-      "apps/transcription-dispatcher/**",
-      "infrastructure/episode-broker/**"
+      "apps/transcription-dispatcher/**"
     ]
   },
   "dynamicallyLoaded": ["sdks/typescript/client/scripts/node-restart-sync-worker.mjs", "sdks/typescript/client/scripts/sync-breaker-v1-wire-sdk.mjs"],

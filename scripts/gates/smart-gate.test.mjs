@@ -30,7 +30,6 @@ const workspaces = [
   { name: "@q9labsai/chalk-client", directory: "sdks/typescript/client", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: [], isPublic: true },
   { name: "@q9labsai/chalk-react", directory: "sdks/typescript/react", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-client"], isPublic: true },
   { name: "web", directory: "apps/web", scripts: { build: "build" }, dependencies: ["@q9labsai/chalk-react"], isPublic: false },
-  { name: "@chalk/episode-broker", directory: "infrastructure/episode-broker", scripts: { "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-client"], isPublic: false },
 ];
 
 const targetWorkspaces = [
@@ -43,7 +42,6 @@ const targetWorkspaces = [
   { name: "web", directory: "apps/web", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-react"], isPublic: false },
   { name: "@q9labsai/chalk-mobile", directory: "apps/mobile", scripts: { build: "pnpm run prepare:native-dependencies && expo export", "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-react-native"], isPublic: false },
   { name: "@chalk/sdk-web-consumer-e2e", directory: "tools/sdk-web-consumer-e2e", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-react"], isPublic: false },
-  { name: "@chalk/episode-broker", directory: "infrastructure/episode-broker", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-client"], isPublic: false },
   { name: "@chalk/presence-broker", directory: "infrastructure/presence-broker", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-client"], isPublic: false },
   { name: "@chalk/contract-fixture-proof", directory: "tools/contract-fixture-proof", scripts: { "check-types": "types", test: "test" }, dependencies: [], isPublic: false },
 ];
@@ -120,15 +118,6 @@ test("client changes include transitive workspace dependents and one test task",
   assert.equal(testTask.command.at(-1), "--coverage");
 });
 
-test("Episode broker changes select its type check and coverage tests", () => {
-  const plan = createGatePlan(["infrastructure/episode-broker/src/worker.ts"], { workspaces });
-  const typeTask = plan.tasks.find((task) => task.id === "types");
-  const testTask = plan.tasks.find((task) => task.id === "tests");
-  assert.equal(plan.full, false);
-  assert.deepEqual(typeTask.command, ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "@chalk/episode-broker", "run", "check-types"]);
-  assert.deepEqual(testTask.command, ["pnpm", "--filter", "@chalk/episode-broker", "run", "test", "--coverage"]);
-});
-
 test("API changes select migrated service gates and contracts", () => {
   const plan = createGatePlan(["apps/api/internal/httpapi/router.go"], { workspaces });
   assert.equal(selected(plan, "services"), true);
@@ -161,7 +150,12 @@ test("lockfile changes select all JavaScript workspaces and dependency checks", 
 
 test("workspace type checks run one at a time in dependency order", () => {
   const typeTask = createGatePlan(["pnpm-lock.yaml"], { workspaces }).tasks.find((task) => task.id === "types");
-  assert.deepEqual(typeTask.command, ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "@q9labsai/chalk-client", "--filter", "@q9labsai/chalk-react", "--filter", workspaces[3].name, "run", "check-types"]);
+  assert.deepEqual(typeTask.command, ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "@q9labsai/chalk-client", "--filter", "@q9labsai/chalk-react", "run", "check-types"]);
+});
+
+test("workspace tests run one at a time in dependency order", () => {
+  const testTask = createGatePlan(["pnpm-lock.yaml"], { workspaces }).tasks.find((task) => task.id === "tests");
+  assert.deepEqual(testTask.command, ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "@q9labsai/chalk-client", "--filter", "@q9labsai/chalk-react", "run", "test", "--coverage"]);
 });
 
 test("workspace builds run one at a time in dependency order", () => {
@@ -227,7 +221,7 @@ test("web target removes only affected mobile-exclusive workspaces", () => {
   );
   assert.deepEqual(
     plan.selectedWorkspaces.map((workspace) => workspace.name),
-    ["@q9labsai/chalk-client", "@q9labsai/chalk-react", "web", "@chalk/sdk-web-consumer-e2e", "@chalk/episode-broker", "@chalk/presence-broker"],
+    ["@q9labsai/chalk-client", "@q9labsai/chalk-react", "web", "@chalk/sdk-web-consumer-e2e", "@chalk/presence-broker"],
   );
 });
 
@@ -236,10 +230,6 @@ test("mobile target removes only affected web-exclusive workspaces", () => {
   assert.deepEqual(
     plan.excludedWorkspaces.map((workspace) => workspace.name),
     ["@q9labsai/chalk-react", "web", "@chalk/sdk-web-consumer-e2e"],
-  );
-  assert.equal(
-    plan.selectedWorkspaces.some((workspace) => workspace.name === "@chalk/episode-broker"),
-    true,
   );
   assert.equal(
     plan.selectedWorkspaces.some((workspace) => workspace.name === "@q9labsai/chalk-react-native"),
@@ -313,7 +303,6 @@ test("client target plans remove every opposite platform workspace command", () 
     }
     for (const id of ["types", "tests", "build"]) {
       const command = plan.tasks.find((task) => task.id === id).command;
-      assert.equal(command.includes("@chalk/episode-broker"), true, `${variant.target}/${id}/episode-broker`);
       assert.equal(command.includes("@chalk/presence-broker"), true, `${variant.target}/${id}/presence-broker`);
     }
   }

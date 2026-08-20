@@ -11,8 +11,9 @@ describe("HomeScreenShared", () => {
     expect(source).toContain("SpaceHistoryIllustration");
     expect(source).toContain("CreateSpaceSheet");
     expect(source).toContain("setCreateSheetOpen(true)");
-    expect(source).toContain("const createEnabled = false");
-    expect(source).toContain("Open local Space");
-    expect(source).not.toContain('accessibilityLabel="Create a Space"');
+    expect(source).toContain("createPublicSpaceRoute");
+    expect(source).toContain("Open Space invite");
+    expect(source).toContain('accessibilityLabel="Create a Space"');
+    expect(source).not.toContain("local Space");
   });
 });

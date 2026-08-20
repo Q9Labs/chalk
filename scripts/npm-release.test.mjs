@@ -13,8 +13,8 @@ test("dry-run is the default and publish requires an explicit flag", () => {
 
 test("publish dispatch is pinned to the exact origin commit and has a clear confirmation", () => {
   const revision = "ae5da214f4ec1fd4f86db07f789be45fa914865d";
-  assert.equal(chalkReleaseVersion, "4.1.6");
-  assert.equal(publishConfirmationPhrase("4.1.6", revision.slice(0, 8)), "PUBLISH CHALK 4.1.6 FROM ae5da214");
+  assert.equal(chalkReleaseVersion, "4.1.7");
+  assert.equal(publishConfirmationPhrase("4.1.7", revision.slice(0, 8)), "PUBLISH CHALK 4.1.7 FROM ae5da214");
   assert.deepEqual(publishWorkflowArguments(revision), ["workflow", "run", ".github/workflows/npm-publish.yml", "--repo", "Q9Labs/chalk", "--ref", "master", "-f", "dry_run=false", "-f", `release_sha=${revision}`]);
 });
 

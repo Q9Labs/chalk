@@ -4,10 +4,43 @@ const createSpaceClientForPlatform = vi.hoisted(() => vi.fn());
 const addAppStateListener = vi.hoisted(() => vi.fn());
 const createV1SyncClient = vi.hoisted(() => vi.fn());
 const createCloudflareSFUHTTPTransport = vi.hoisted(() => vi.fn(() => ({})));
+const CloudflareRTKClient = vi.hoisted(() =>
+  vi.fn(
+    class MockCloudflareRTKClient {
+      setLocalPublicationTarget = vi.fn();
+      observeLocalPublications = vi.fn();
+      observeRemotePublications = vi.fn();
+      start = vi.fn();
+      stop = vi.fn();
+      restart = vi.fn();
+      prepareLocalTrack = vi.fn();
+      clearPreparedLocalTrack = vi.fn();
+      getSnapshot = vi.fn();
+      subscribe = vi.fn();
+    },
+  ),
+);
+const CloudflareSFUClient = vi.hoisted(() =>
+  vi.fn(
+    class MockCloudflareSFUClient {
+      setLocalPublicationTarget = vi.fn();
+      observeLocalPublications = vi.fn();
+      observeRemotePublications = vi.fn();
+      start = vi.fn();
+      stop = vi.fn();
+      restart = vi.fn();
+      prepareLocalTrack = vi.fn();
+      clearPreparedLocalTrack = vi.fn();
+      getSnapshot = vi.fn();
+      subscribe = vi.fn();
+    },
+  ),
+);
 
 vi.mock("@q9labsai/chalk-client", () => ({
   AsyncStorageV1PendingTargetStore: vi.fn(),
-  CloudflareSFUClient: vi.fn(),
+  CloudflareRTKClient,
+  CloudflareSFUClient,
   createChalkChatFileHttpTransport: vi.fn(),
   createChalkWhiteboardV1Client: vi.fn(),
   createChalkWhiteboardV1FileHttpTransport: vi.fn(),
@@ -56,6 +89,26 @@ describe("native client creation", () => {
     createNativeSpaceClient({ ...options(), baseUrl: undefined, syncUrl: undefined });
 
     expect(createSpaceClientForPlatform.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ apiBaseUrl: "https://api.chalkmeet.com", syncUrl: "wss://sync.chalkmeet.com/v1/sync" }));
+  });
+
+  it("selects the native RealtimeKit adapter for RTK access grants", () => {
+    createNativeSpaceClient(options());
+    const platform = createSpaceClientForPlatform.mock.calls[0]?.[1] as {
+      readonly dependencies: { readonly createMediaClient: (input: unknown) => unknown };
+    };
+
+    platform.dependencies.createMediaClient({
+      access: {
+        subject: { tenantId: "tenant", spaceId: "space", episodeId: "episode", participantId: "participant", participantGeneration: 1 },
+        media: { provider: "cloudflare_rtk", clientPayload: { providerSubject: "provider-subject", token: "rtk-token" } },
+      },
+      credential: vi.fn(),
+      onFailure: vi.fn(),
+      onScreenEnded: vi.fn(),
+    });
+
+    expect(CloudflareRTKClient).toHaveBeenCalledWith(expect.objectContaining({ authToken: "rtk-token", participantId: "participant", clientFactory: expect.any(Function) }));
+    expect(createCloudflareSFUHTTPTransport).not.toHaveBeenCalled();
   });
 
   it("passes the closed access callback to the client", () => {

@@ -1209,7 +1209,7 @@ func TestCORSPreflightAllowedOrigin(t *testing.T) {
 			t.Fatalf("allow methods = %q, want %s", res.Header().Get("Access-Control-Allow-Methods"), method)
 		}
 	}
-	for _, header := range []string{"Idempotency-Key", "Traceparent", "Tracestate", "X-Chalk-Journey-ID"} {
+	for _, header := range []string{"Idempotency-Key", "Traceparent", "Tracestate", "X-Chalk-Arrival-Handle", "X-Chalk-Journey-ID"} {
 		if !strings.Contains(res.Header().Get("Access-Control-Allow-Headers"), header) {
 			t.Fatalf("allow headers = %q, want %s", res.Header().Get("Access-Control-Allow-Headers"), header)
 		}

@@ -6,7 +6,6 @@ import { parseArguments, verifyWebDeploy } from "./verify-web-deploy.mjs";
 const fullSHA = "040a7c52698f8cf9b87b0ef48f918b681de9bc35";
 let baseURL;
 let serviceWorkerRequests = 0;
-let localChalkHealthRequests = 0;
 let diagnosticsDocumentRequests = 0;
 let staleServiceWorkerResponses = 0;
 let server;
@@ -24,7 +23,6 @@ const requestHandlers = new Map([
   ["/api/healthz", respondBoundaryHealth],
   ["/_internal/episode-diagnostics/chalkdiag%3Av1%3Aproduction%3Adiag01", respondDiagnosticsGateway],
   ["/developer/episode-diagnostics/chalk.episode%3A00000000-0000-4000-8000-000000000001", respondDiagnosticsDocument],
-  ["/local-chalk/health", respondLocalChalkHealth],
 ]);
 
 function handleRequest(request, response) {
@@ -59,34 +57,24 @@ function respondDiagnosticsDocument(response) {
   response.end("<!doctype html><title>Chalk</title>");
 }
 
-function respondLocalChalkHealth(response) {
-  localChalkHealthRequests += 1;
-  response.writeHead(200);
-  response.end("ok");
-}
-
 after(async () => {
   await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 });
 
 test("verifies the Pages asset, account boundary, and diagnostics gateway", async () => {
   serviceWorkerRequests = 0;
-  localChalkHealthRequests = 0;
   diagnosticsDocumentRequests = 0;
   await verifyWebDeploy({ baseURL, expectedSHA: fullSHA, deadlineMs: 500, retryDelayMs: 5, requestTimeoutMs: 200 });
   assert.equal(serviceWorkerRequests, 1);
-  assert.equal(localChalkHealthRequests, 0);
   assert.equal(diagnosticsDocumentRequests, 1);
 });
 
-test("retries stale production edges and checks local Chalk health", async () => {
+test("retries stale production edges through the unified API boundary", async () => {
   staleServiceWorkerResponses = 1;
   serviceWorkerRequests = 0;
-  localChalkHealthRequests = 0;
   diagnosticsDocumentRequests = 0;
   await verifyWebDeploy({ baseURL, expectedSHA: fullSHA, production: true, deadlineMs: 500, retryDelayMs: 5, requestTimeoutMs: 50 });
   assert.equal(serviceWorkerRequests, 2);
-  assert.equal(localChalkHealthRequests, 1);
   assert.equal(diagnosticsDocumentRequests, 1);
 });
 

@@ -177,10 +177,10 @@ function PrivacyPolicy() {
           </tr>
           <tr>
             <td>
-              <code>__Secure-chalk_participant_credential</code>
+              <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>
             </td>
-            <td>Lets you return to a Space you were admitted to</td>
-            <td>1 hour</td>
+            <td>Keeps your public Space arrival available in this browser (HttpOnly, Secure)</td>
+            <td>Until you leave or close your browser</td>
           </tr>
         </tbody>
       </table>

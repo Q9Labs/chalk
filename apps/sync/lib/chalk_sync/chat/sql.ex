@@ -150,9 +150,9 @@ defmodule ChalkSync.Chat.Repository.SQL do
 
   def read_head do
     """
-    select head_sequence, retained_floor_sequence
-    from sync_chat_streams
-    where tenant_id = $1 and space_id = $2
+    select max(sequence), min(sequence)
+    from sync_chat_messages
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
     """
   end
 
@@ -184,11 +184,12 @@ defmodule ChalkSync.Chat.Repository.SQL do
       and attachment.message_sequence = message.sequence
     where message.tenant_id = $1
       and message.space_id = $2
-      and message.sequence > $3
-      and message.sequence <= $4
+      and message.episode_id = $3
+      and message.sequence > $4
+      and message.sequence <= $5
     group by message.tenant_id, message.space_id, message.sequence
     order by message.sequence asc
-    limit $5
+    limit $6
     """
   end
 
@@ -220,11 +221,12 @@ defmodule ChalkSync.Chat.Repository.SQL do
       and attachment.message_sequence = message.sequence
     where message.tenant_id = $1
       and message.space_id = $2
-      and message.sequence < $3
-      and message.sequence >= $4
+      and message.episode_id = $3
+      and message.sequence < $4
+      and message.sequence >= $5
     group by message.tenant_id, message.space_id, message.sequence
     order by message.sequence desc
-    limit $5
+    limit $6
     """
   end
 

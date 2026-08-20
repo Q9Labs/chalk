@@ -160,8 +160,6 @@ test("keeps release environment hashes on the web task and excludes credentials"
     "CHALK_API_URL",
     "CHALK_DEV_API_ORIGIN",
     "CHALK_DEV_WEB_PORT",
-    "CHALK_DEV_BROKER_PORT",
-    "CHALK_DEV_BROKER_ORIGIN",
     "GITHUB_SHA",
     "VITE_*",
   ]);

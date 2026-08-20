@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectFixtureRemoteTracks, recordFixtureRemoteTrack, reconcileFixtureRemoteTracks } from "../consumer/media-client.ts";
+import { FixtureMediaClient, projectFixtureRemoteTracks, recordFixtureRemoteTrack, reconcileFixtureRemoteTracks } from "../consumer/media-client.ts";
 
 describe("fixture remote media ordering", () => {
   it("retains a track that arrives before its publication state", () => {
@@ -45,6 +45,31 @@ describe("fixture remote media ordering", () => {
     expect(track.readyState).toBe("ended");
     expect(received).toEqual(new Map());
     expect(projectFixtureRemoteTracks([], received)).toEqual([]);
+  });
+});
+
+describe("fixture media provider boundary", () => {
+  it("rejects RealtimeKit access at construction because the fixture speaks SFU signaling", () => {
+    expect(
+      () =>
+        new FixtureMediaClient("ws://localhost/media", {
+          access: { subject: { participantId: "alice" }, media: { token: "media-token", expiresAt: "2026-08-20T00:00:00Z", provider: "cloudflare_rtk", clientPayload: { providerSubject: "alice", token: "rtk-token" } } },
+          credential: async () => "media-token",
+          onFailure: () => undefined,
+          onScreenEnded: () => undefined,
+        }),
+    ).toThrow("only supports Cloudflare SFU access");
+  });
+
+  it("rejects a RealtimeKit restart without changing the SFU fixture state", async () => {
+    const client = new FixtureMediaClient("ws://localhost/media", {
+      access: { subject: { participantId: "alice" }, media: { token: "media-token", expiresAt: "2026-08-20T00:00:00Z", provider: "cloudflare_sfu", clientPayload: { connectionId: "connection-1", stunServer: "stun:test" } } },
+      credential: async () => "media-token",
+      onFailure: () => undefined,
+      onScreenEnded: () => undefined,
+    });
+
+    await expect(client.restart({ token: "media-token", expiresAt: "2026-08-20T00:00:00Z", provider: "cloudflare_rtk", clientPayload: { providerSubject: "alice", token: "rtk-token" } })).rejects.toThrow("only supports Cloudflare SFU access");
   });
 });
 

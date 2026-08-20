@@ -15,12 +15,17 @@ import type {
   EpisodeEnd,
   IssueAccessGrantInput,
   ListAPIKeysInput,
+  ListPublicAdmissionRequestsInput,
   ListSpacesInput,
   ParticipantLifecycle,
   ParticipantRemoval,
+  PublicAdmissionRequest,
+  PublicAdmissionRequestPage,
   RemoveParticipantInput,
   Space,
+  SpacePublicInvite,
   SpaceList,
+  UpdateSpacePublicInviteInput,
 } from "./types.js";
 
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
@@ -83,6 +88,16 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       rotate: (apiKeyId, input) => request<APIKeyWithSecret>({ method: "POST", path: `${tenantPath}/api-keys/${segment(apiKeyId)}/rotate`, body: { expires_at: input?.expiresAt }, expectedStatus: 200, retry: "never" }),
       revoke: (apiKeyId) => request<void>({ method: "DELETE", path: `${tenantPath}/api-keys/${segment(apiKeyId)}`, expectedStatus: 204, retry: "always" }),
     },
+    publicInvites: {
+      get: (spaceId) => request<SpacePublicInvite>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite`, expectedStatus: 200, retry: "always" }),
+      update: (spaceId, input) => request<SpacePublicInvite>({ method: "PATCH", path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite`, body: publicInviteUpdateRequest(input), expectedStatus: 200, retry: "always" }),
+      rotate: (spaceId, idempotency) => request<SpacePublicInvite>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite/rotations`, expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
+    },
+    publicAdmissionRequests: {
+      list: (spaceId, input) => request<PublicAdmissionRequestPage>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests${publicAdmissionRequestQuery(input)}`, expectedStatus: 200, retry: "always" }),
+      approve: (spaceId, requestHandle, idempotency) => request<PublicAdmissionRequest>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests/${segment(requestHandle)}/approval`, expectedStatus: 200, idempotency, retry: "caller_idempotency" }),
+      deny: (spaceId, requestHandle, idempotency) => request<PublicAdmissionRequest>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests/${segment(requestHandle)}/denial`, expectedStatus: 200, idempotency, retry: "caller_idempotency" }),
+    },
   };
 }
 
@@ -133,6 +148,10 @@ function apiKeyCreateRequest(input: CreateAPIKeyInput): Record<string, unknown> 
   return { expires_at: input.expiresAt, name: input.name, scopes: [...input.scopes] };
 }
 
+function publicInviteUpdateRequest(input: UpdateSpacePublicInviteInput): Record<string, unknown> {
+  return { enabled: input.enabled };
+}
+
 function spaceQuery(input: ListSpacesInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "archived", input?.archived);
@@ -145,6 +164,12 @@ function apiKeyQuery(input: ListAPIKeysInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "cursor", input?.cursor);
   setQueryValue(query, "page_size", input?.pageSize);
+  return prefixedQuery(query.toString());
+}
+
+function publicAdmissionRequestQuery(input: ListPublicAdmissionRequestsInput | undefined): string {
+  const query = new URLSearchParams();
+  setQueryValue(query, "state", input?.state);
   return prefixedQuery(query.toString());
 }
 
@@ -207,7 +232,7 @@ function participantLifecycle(value: ParticipantLifecycleWire): ParticipantLifec
 }
 
 function accessGrant(value: AccessGrantWire): AccessGrant {
-  const payload = cloudflareClientPayload(value.media);
+  const payload = mediaClientPayload(value.media);
   return parseAccessGrant({
     subject: {
       tenant_id: value.subject.tenant_id,
@@ -220,19 +245,28 @@ function accessGrant(value: AccessGrantWire): AccessGrant {
     media: {
       token: value.media.token,
       expires_at: value.media.expires_at,
-      provider: "cloudflare_sfu",
+      provider: value.media.provider,
       client_payload: payload,
     },
     diagnostics: value.diagnostics,
   });
 }
 
-function cloudflareClientPayload(media: AccessGrantWire["media"]): { readonly connectionId: string; readonly stunServer: string } {
-  const { connectionId, stunServer } = media.client_payload;
-  if (media.provider !== "cloudflare_sfu" || typeof connectionId !== "string" || typeof stunServer !== "string") {
-    throw invalidResponse(201);
+function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<string, string>> {
+  switch (media.provider) {
+    case "cloudflare_sfu": {
+      const { connectionId, stunServer } = media.client_payload;
+      if (typeof connectionId !== "string" || typeof stunServer !== "string") throw invalidResponse(201);
+      return { connectionId, stunServer };
+    }
+    case "cloudflare_rtk": {
+      const { provider_subject, token } = media.client_payload;
+      if (typeof provider_subject !== "string" || typeof token !== "string") throw invalidResponse(201);
+      return { provider_subject, token };
+    }
+    default:
+      throw invalidResponse(201);
   }
-  return { connectionId, stunServer };
 }
 
 function requiredResponseID(value: string | undefined): string {

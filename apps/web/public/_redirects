@@ -6,7 +6,6 @@
 /whiteboard /_shell/ 200
 /space/* /_shell/ 200
 /share/* /_shell/ 200
-/j/* /_shell/ 200
 /home* /_shell/ 200
 /spaces* /_shell/ 200
 /episodes* /_shell/ 200
@@ -16,3 +15,4 @@
 /developer* /_shell/ 200
 /tenant* /_shell/ 200
 /account* /_shell/ 200
+/* /_shell.html 200

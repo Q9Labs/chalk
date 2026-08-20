@@ -1,177 +1,160 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseAccessGrant } from "@q9labsai/chalk-client/access";
 
 const secureStore = vi.hoisted(() => ({
   deleteItemAsync: vi.fn<(key: string) => Promise<void>>(),
   getItemAsync: vi.fn<(key: string) => Promise<string | null>>(),
   setItemAsync: vi.fn<(key: string, value: string) => Promise<void>>(),
 }));
-const expoConstants = vi.hoisted(() => ({
-  expoConfig: { extra: { brokerUrl: "https://chalkmeet.com/local-chalk", telemetryEnabled: false } },
+
+const publicClient = vi.hoisted(() => ({
+  arriveBySpacePublicInvite: vi.fn(),
+  createPublicSpace: vi.fn(),
+  getSpacePublicInviteArrival: vi.fn(),
+  leaveSpacePublicInviteArrival: vi.fn(),
+  refreshSpacePublicInviteAccess: vi.fn(),
 }));
+const createPublicClient = vi.hoisted(() => vi.fn(() => publicClient));
 
 vi.mock("expo-secure-store", () => secureStore);
-vi.mock("expo-constants", () => ({ default: expoConstants }));
-vi.mock("@q9labsai/chalk-react-native/runtime", () => ({
-  getDeviceInfo: vi.fn(),
-  getReactNativeScriptUrl: vi.fn(),
-  resolveAppRuntimeUrl: vi.fn(),
+vi.mock("@q9labsai/chalk-client/invites", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@q9labsai/chalk-client/invites")>();
+  return { ...actual, createChalkPublicClient: createPublicClient };
+});
+vi.mock("@q9labsai/chalk-react-native/invites", () => ({
+  parseSpaceInviteLink: (input: string) => {
+    const match = /^https:\/\/chalkmeet\.com\/space\/([^#]+)#spaceInviteToken=([^#]+)$/u.exec(input);
+    return match ? { slug: match[1], spaceInviteToken: match[2] } : null;
+  },
 }));
 
-import { cleanupParticipantCredential, createAccessGrantGetter, enterLocalSpaceRoute, getClipboardSpaceSuggestion, parseSpaceLink, prepareParticipantCredential, spaceInviteLink } from "./spaces";
+import { cleanupSpaceArrival, createGuestAccessGetter, createPublicSpaceRoute, getClipboardSpaceSuggestion, parseSpaceLink, prepareSpaceArrival, type SpaceRoute, type StoredSpaceArrival } from "./spaces";
 
-const spaceInviteToken = "i".repeat(43);
-const participantCredentialId = "c".repeat(43);
-const apiBaseURL = "https://api.chalkmeet.com";
-const syncURL = "wss://sync.chalkmeet.com/v1/sync";
+const token = "cspi1.header.payload.signature";
+const localApiBaseURL = "http://127.0.0.1:8787";
+const inviteLink = `https://chalkmeet.com/space/team#spaceInviteToken=${token}`;
+const route: SpaceRoute = { kind: "space", space: "team", spaceInviteToken: token, inviteLink, source: "space-link" };
+const mediaCredential = `v1.${Buffer.from(JSON.stringify({ aud: "chalk-media" })).toString("base64url")}.signature`;
+const access = parseAccessGrant({
+  media: { client_payload: { provider_subject: "subject", token: "provider-token" }, expires_at: "2030-01-01T00:00:00.000Z", provider: "cloudflare_rtk", token: mediaCredential },
+  subject: { episode_id: "episode", participant_generation: 1, participant_id: "participant", space_id: "team", tenant_id: "tenant" },
+  sync: { expires_at: "2030-01-01T00:00:00.000Z", token: `v1.${Buffer.from(JSON.stringify({ aud: "chalk-sync" })).toString("base64url")}.signature` },
+});
+const arrival = { arrival_handle: "arrival-handle", guest_credential: "guest-credential", state: "active", access };
+const stored: StoredSpaceArrival = { arrivalHandle: "arrival-handle", guestCredential: "guest-credential", slug: "team", spaceInviteToken: token };
 
 describe("space links", () => {
-  it("enters the existing local Space without claiming durable creation", async () => {
-    await expect(enterLocalSpaceRoute("  Team space  ")).resolves.toEqual({ kind: "space", space: "local-space", spaceName: "Team space", source: "local-space" });
+  it("parses canonical links with a slug and cspi token", () => {
+    expect(parseSpaceLink(inviteLink)).toEqual(route);
+    expect(getClipboardSpaceSuggestion(` https://chalkmeet.com/space/team#spaceInviteToken=${token} `)).toContain("/space/team#");
   });
 
-  it("accepts canonical Space links and keeps the token in the fragment", () => {
-    expect(parseSpaceLink(`https://chalkmeet.com/space#spaceInviteToken=${spaceInviteToken}`)).toEqual({
-      kind: "space",
-      space: "local-space",
-      spaceInviteToken,
-      source: "space-link",
-    });
-    expect(getClipboardSpaceSuggestion(`https://chalk.q9labs.ai/space#spaceInviteToken=${spaceInviteToken}`)).toBe(`https://chalk.q9labs.ai/space#spaceInviteToken=${spaceInviteToken}`);
-    expect(spaceInviteLink(spaceInviteToken)).toBe(`https://chalkmeet.com/space#spaceInviteToken=${spaceInviteToken}`);
-  });
-
-  it("rejects paths that do not target the Space", () => {
-    expect(parseSpaceLink(`https://chalkmeet.com/other#spaceInviteToken=${spaceInviteToken}`)).toBeNull();
-    expect(parseSpaceLink(`https://chalkmeet.com/space?spaceInviteToken=${spaceInviteToken}`)).toBeNull();
+  it("rejects legacy and non-Space paths", () => {
+    expect(parseSpaceLink("https://chalkmeet.com/legacy/join?invite=old")).toBeNull();
+    expect(parseSpaceLink(`https://chalkmeet.com/space?spaceInviteToken=${token}`)).toBeNull();
   });
 });
 
-describe("participant credentials", () => {
+describe("public Space arrivals", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    secureStore.deleteItemAsync.mockResolvedValue();
     secureStore.getItemAsync.mockResolvedValue(null);
     secureStore.setItemAsync.mockResolvedValue();
-    vi.stubGlobal("fetch", vi.fn());
-  });
-
-  it("retains validated broker endpoints before asking Chalk for opaque access", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(Response.json({ apiBaseURL, participantCredentialId, spaceInviteToken, syncURL }, { status: 201 }))
-      .mockResolvedValueOnce(Response.json({ any: "opaque access grant", media: { token: "episode-access-token" } }));
-
-    const credential = await prepareParticipantCredential({
-      brokerUrl: "https://chalkmeet.com/local-chalk",
-      displayName: "Ada",
-      spaceInviteToken,
+    secureStore.deleteItemAsync.mockResolvedValue();
+    publicClient.createPublicSpace.mockResolvedValue({
+      arrival,
+      guest_credential: "guest-credential",
+      invite_link: inviteLink,
+      space: { name: "Team" },
     });
-    const getAccess = createAccessGrantGetter({ brokerUrl: "https://chalkmeet.com/local-chalk", credential });
-    const access = await getAccess({ reason: "retry", space: "local-space" });
-
-    expect(credential).toEqual({ apiBaseURL, participantCredentialId, spaceInviteToken, syncURL });
-
-    expect(fetch).toHaveBeenNthCalledWith(
-      1,
-      "https://chalkmeet.com/local-chalk/participant-credentials",
-      expect.objectContaining({
-        body: JSON.stringify({ displayName: "Ada", spaceInviteToken }),
-        method: "POST",
-      }),
-    );
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
-      "https://chalkmeet.com/local-chalk/access-grants",
-      expect.objectContaining({
-        body: JSON.stringify({ participantCredentialId, replaceMediaConnection: true, spaceInviteToken }),
-        method: "POST",
-      }),
-    );
-    expect(access).toEqual({ any: "opaque access grant", media: { token: "episode-access-token" } });
+    publicClient.arriveBySpacePublicInvite.mockResolvedValue(arrival);
+    publicClient.getSpacePublicInviteArrival.mockResolvedValue({ ...arrival, state: "active" });
+    publicClient.refreshSpacePublicInviteAccess.mockResolvedValue({ media: { token: "refreshed-proof" } });
+    publicClient.leaveSpacePublicInviteArrival.mockResolvedValue(undefined);
   });
 
-  it("clears an expired stored credential and retries without it", async () => {
-    secureStore.getItemAsync.mockResolvedValueOnce(JSON.stringify({ apiBaseURL, participantCredentialId, spaceInviteToken, syncURL }));
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(new Response("expired", { status: 410 }))
-      .mockResolvedValueOnce(Response.json({ apiBaseURL, participantCredentialId, spaceInviteToken, syncURL }, { status: 201 }));
+  it("creates a public Space and stores the per-arrival handle and credential", async () => {
+    const result = await createPublicSpaceRoute({ apiBaseURL: localApiBaseURL, displayName: "Ada" });
 
-    await expect(prepareParticipantCredential({ brokerUrl: "https://chalkmeet.com/local-chalk", displayName: "Ada", spaceInviteToken })).resolves.toEqual({ apiBaseURL, participantCredentialId, spaceInviteToken, syncURL });
-
-    expect(fetch).toHaveBeenNthCalledWith(1, "https://chalkmeet.com/local-chalk/participant-credentials", expect.objectContaining({ body: JSON.stringify({ displayName: "Ada", participantCredentialId, spaceInviteToken }) }));
-    expect(fetch).toHaveBeenNthCalledWith(2, "https://chalkmeet.com/local-chalk/participant-credentials", expect.objectContaining({ body: JSON.stringify({ displayName: "Ada", spaceInviteToken }) }));
+    expect(publicClient.createPublicSpace).toHaveBeenCalledWith({ displayName: "Ada" }, expect.objectContaining({ idempotencyKey: expect.any(String) }));
+    expect(result.route).toEqual({ kind: "space", space: "team", spaceInviteToken: token, inviteLink, source: "created-space", spaceName: "Team" });
+    expect(result.arrival.credential).toEqual(stored);
+    expect(secureStore.setItemAsync).toHaveBeenCalledWith(expect.stringContaining("chalk_mobile_public_arrival_v1.arrival-handle"), JSON.stringify(stored));
   });
 
-  it("cleans up the broker credential after leaving a Space", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
-
-    await cleanupParticipantCredential({
-      brokerUrl: "https://chalkmeet.com/local-chalk",
-      credential: { apiBaseURL, participantCredentialId, spaceInviteToken, syncURL },
+  it("rejects a raw token instead of synthesizing an invite link", async () => {
+    publicClient.createPublicSpace.mockResolvedValueOnce({
+      arrival,
+      guest_credential: "guest-credential",
+      invite_link: token,
+      space: { name: "Team" },
     });
 
-    expect(fetch).toHaveBeenCalledWith(
-      "https://chalkmeet.com/local-chalk/participant-credentials/cleanup",
-      expect.objectContaining({
-        body: JSON.stringify({ participantCredentialId, spaceInviteToken }),
-        method: "POST",
-      }),
-    );
-    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(`chalk_mobile_participant_credential_v4.${spaceInviteToken}`);
-  });
-
-  it("rejects participant credentials with malformed endpoints before saving them", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ apiBaseURL: "file:///private/api", participantCredentialId, spaceInviteToken, syncURL }, { status: 201 }));
-
-    await expect(prepareParticipantCredential({ brokerUrl: "https://chalkmeet.com/local-chalk", displayName: "Ada", spaceInviteToken })).rejects.toThrow("Participant credential is invalid.");
+    await expect(createPublicSpaceRoute({ apiBaseURL: localApiBaseURL, displayName: "Ada" })).rejects.toThrow("invalid Space invite link");
     expect(secureStore.setItemAsync).not.toHaveBeenCalled();
   });
 
-  it("retains the local credential after a transient cleanup failure and retries later", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  it("resumes an active arrival through status and arrival", async () => {
+    secureStore.getItemAsync.mockResolvedValueOnce("arrival-handle").mockResolvedValueOnce(JSON.stringify(stored));
 
-    await expect(
-      cleanupParticipantCredential({
-        brokerUrl: "https://chalkmeet.com/local-chalk",
-        credential: { apiBaseURL, participantCredentialId, spaceInviteToken, syncURL },
-      }),
-    ).rejects.toThrow("Chalk could not complete the access request.");
+    const result = await prepareSpaceArrival({ apiBaseURL: localApiBaseURL, route, displayName: "Ada" });
 
-    expect(secureStore.deleteItemAsync).not.toHaveBeenCalled();
-
-    await expect(
-      cleanupParticipantCredential({
-        brokerUrl: "https://chalkmeet.com/local-chalk",
-        credential: { apiBaseURL, participantCredentialId, spaceInviteToken, syncURL },
-      }),
-    ).resolves.toBeUndefined();
-    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(`chalk_mobile_participant_credential_v4.${spaceInviteToken}`);
+    expect(publicClient.getSpacePublicInviteArrival).toHaveBeenCalledWith({ arrivalHandle: stored.arrivalHandle, guestCredential: stored.guestCredential });
+    expect(publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith({ displayName: "Ada", spaceInviteToken: token }, expect.objectContaining({ arrivalHandle: stored.arrivalHandle, guestCredential: stored.guestCredential }));
+    expect(createPublicClient).toHaveBeenLastCalledWith({ baseUrl: localApiBaseURL, guestCredential: stored.guestCredential, runtime: "react-native" });
+    expect(result.credential).toEqual(stored);
   });
 
-  it("does not expose a broker response body in a public error", async () => {
-    const secret = "participant-secret-from-broker";
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(secret, { status: 503 }));
+  it("uses the configured API origin for create, status, arrival, refresh, and leave", async () => {
+    await createPublicSpaceRoute({ apiBaseURL: localApiBaseURL, displayName: "Ada" });
+    secureStore.getItemAsync.mockResolvedValueOnce("arrival-handle").mockResolvedValueOnce(JSON.stringify(stored));
+    await prepareSpaceArrival({ apiBaseURL: localApiBaseURL, route, displayName: "Ada" });
+    const getAccess = createGuestAccessGetter({ apiBaseURL: localApiBaseURL, credential: stored, initialAccess: access });
+    await getAccess({ reason: "retry", space: "team" });
+    await cleanupSpaceArrival({ apiBaseURL: localApiBaseURL, credential: stored });
 
-    const error = await cleanupParticipantCredential({
-      brokerUrl: "https://chalkmeet.com/local-chalk",
-      credential: { apiBaseURL, participantCredentialId, spaceInviteToken, syncURL },
-    }).catch((cause: unknown) => cause);
-    expect(error).toBeInstanceOf(Error);
-    expect(error).toMatchObject({ code: "server_error", message: "Chalk could not complete the access request." });
-    expect((error as Error).message).not.toContain(secret);
+    expect(createPublicClient).toHaveBeenNthCalledWith(1, { baseUrl: localApiBaseURL, guestCredential: undefined, runtime: "react-native" });
+    expect(createPublicClient).toHaveBeenNthCalledWith(2, { baseUrl: localApiBaseURL, guestCredential: stored.guestCredential, runtime: "react-native" });
+    expect(createPublicClient).toHaveBeenNthCalledWith(3, { baseUrl: localApiBaseURL, guestCredential: stored.guestCredential, runtime: "react-native" });
+    expect(createPublicClient).toHaveBeenNthCalledWith(4, { baseUrl: localApiBaseURL, guestCredential: stored.guestCredential, runtime: "react-native" });
   });
 
-  it.each([401, 404, 410])("clears the local credential when cleanup confirms terminal absence with HTTP %s", async (status) => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status }));
+  it("drops a terminal stored arrival before starting a fresh arrival", async () => {
+    secureStore.getItemAsync.mockResolvedValueOnce("arrival-handle").mockResolvedValueOnce(JSON.stringify(stored));
+    publicClient.getSpacePublicInviteArrival.mockResolvedValueOnce({ ...arrival, state: "unavailable" });
 
-    await expect(
-      cleanupParticipantCredential({
-        brokerUrl: "https://chalkmeet.com/local-chalk",
-        credential: { apiBaseURL, participantCredentialId, spaceInviteToken, syncURL },
-      }),
-    ).resolves.toBeUndefined();
+    await expect(prepareSpaceArrival({ apiBaseURL: localApiBaseURL, route, displayName: "Ada" })).resolves.toMatchObject({ credential: stored });
+    expect(publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith({ displayName: "Ada", spaceInviteToken: token }, expect.objectContaining({ idempotencyKey: expect.any(String) }));
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith("chalk_mobile_public_arrival_v1.arrival-handle");
+  });
 
-    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(`chalk_mobile_participant_credential_v4.${spaceInviteToken}`);
+  it("refreshes access with the current media proof", async () => {
+    const getAccess = createGuestAccessGetter({ apiBaseURL: localApiBaseURL, credential: stored, initialAccess: access });
+
+    await expect(getAccess({ reason: "join", space: "team" })).resolves.toEqual(access);
+    await expect(getAccess({ reason: "retry", space: "team" })).resolves.toEqual({ media: { token: "refreshed-proof" } });
+    expect(publicClient.refreshSpacePublicInviteAccess).toHaveBeenCalledWith({ arrivalHandle: stored.arrivalHandle, guestCredential: stored.guestCredential, mediaProof: mediaCredential }, expect.objectContaining({ arrivalHandle: stored.arrivalHandle, guestCredential: stored.guestCredential }));
+  });
+
+  it("leaves the arrival and clears secure state", async () => {
+    await cleanupSpaceArrival({ apiBaseURL: localApiBaseURL, credential: stored });
+
+    expect(publicClient.leaveSpacePublicInviteArrival).toHaveBeenCalledWith({ arrivalHandle: stored.arrivalHandle, guestCredential: stored.guestCredential });
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith("chalk_mobile_public_arrival_v1.arrival-handle");
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(`chalk_mobile_public_arrival_index_v1.${token}`);
+  });
+
+  it("clears state when the server confirms a terminal arrival", async () => {
+    publicClient.leaveSpacePublicInviteArrival.mockRejectedValueOnce({ status: 410 });
+
+    await expect(cleanupSpaceArrival({ apiBaseURL: localApiBaseURL, credential: stored })).resolves.toBeUndefined();
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith("chalk_mobile_public_arrival_v1.arrival-handle");
+  });
+
+  it("clears state for the typed unavailable-arrival error", async () => {
+    publicClient.leaveSpacePublicInviteArrival.mockRejectedValueOnce({ error: { code: "arrival.unavailable" } });
+
+    await expect(cleanupSpaceArrival({ apiBaseURL: localApiBaseURL, credential: stored })).resolves.toBeUndefined();
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(`chalk_mobile_public_arrival_index_v1.${token}`);
   });
 });
