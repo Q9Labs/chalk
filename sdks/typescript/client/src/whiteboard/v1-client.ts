@@ -56,6 +56,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
   readonly #operations = new Map<string, OperationEntry>();
   readonly #reservedOperationIds = new Set<string>();
+  readonly #pendingStoreWrites = new Set<Promise<void>>();
   readonly #operationRetryTimers = new Map<string, unknown>();
   readonly #snapshots = new Map<string, SnapshotAssembly>();
   readonly #updateAssembler = new WhiteboardV1UpdateAssembler();
@@ -77,6 +78,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
   #initialSnapshot: Deferred<void> | null = null;
   #startPromise: Promise<void> | null = null;
+  #stopPromise: Promise<void> | null = null;
   #reconnectTimer: unknown;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -97,6 +99,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   startSceneSubscription(): Promise<void> {
+    if (this.#stopPromise) return this.#stopPromise.then(() => this.startSceneSubscription());
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     this.#useLegacyHello = false;
@@ -110,7 +113,21 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     return this.#startPromise;
   }
 
-  stopSceneSubscription(): void {
+  stopSceneSubscription(): Promise<void> {
+    if (this.#stopPromise) return this.#stopPromise;
+    if (this.#phase === "stopped" && !this.#started) return Promise.resolve();
+
+    this.#stopPromise = Promise.resolve().then(async () => {
+      while (this.#pendingStoreWrites.size > 0) {
+        await Promise.allSettled([...this.#pendingStoreWrites]);
+      }
+      this.#stopNow();
+      this.#stopPromise = null;
+    });
+    return this.#stopPromise;
+  }
+
+  #stopNow(): void {
     this.#started = false;
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
@@ -482,11 +499,19 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       throw error(failure("submit_update", "unavailable", true, "Whiteboard operation byte capacity is full."));
     }
     this.#reservedOperationIds.add(frame.operation_id);
+    let storeWrite: Promise<void>;
     try {
-      await this.#store.put(pending);
+      storeWrite = this.#store.put(pending);
+    } catch (cause) {
+      throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
+    }
+    this.#pendingStoreWrites.add(storeWrite);
+    try {
+      await storeWrite;
     } catch (cause) {
       throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
     } finally {
+      this.#pendingStoreWrites.delete(storeWrite);
       this.#reservedOperationIds.delete(frame.operation_id);
     }
     let deferred!: Deferred<ChalkWhiteboardV1Commit>;

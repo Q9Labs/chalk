@@ -29,6 +29,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   deep links load the SPA shell without redirect loops or incorrect asset
   content types.
 
+## [4.1.8] - 2026-08-20
+
+### Fixed
+
+- Preserved Board edits when a Participant closes the Board immediately after editing.
+
 ## [4.1.7] - 2026-08-20
 
 ### Added

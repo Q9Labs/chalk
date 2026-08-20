@@ -29,7 +29,7 @@ export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Trans
 
     return () => {
       disposed = true;
-      transport.stopSceneSubscription();
+      void Promise.resolve(transport.stopSceneSubscription());
     };
   }, [active, transport]);
 

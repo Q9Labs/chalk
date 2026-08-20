@@ -55,3 +55,11 @@ Date: 2026-08-19
 - Managed releases now derive their migration target from the release migration set, run an embedded one-shot migrator before API and Sync activation, keep its credential out of both runtimes, and fail readiness when the database is behind. Controller rollback remains forward-only for schema changes.
 - The next live pass exposed a detached `setPresentation` class method. The React SDK now calls it through the transport receiver, and its regression test fails when that receiver is lost.
 - SDK 4.1.6 carries the transport binding repair. Focused React, release-contract, Go migrator, API readiness, Sync readiness, and managed controller/configuration tests pass before the final gate.
+
+## Live 4.1.7 proof and remaining persistence race
+
+- Production now runs the exact bounded migration release, the database is at migration `20260820100000`, and the public invite endpoint accepts the `B3` request header. SDK 4.1.7 and the web app shipped from the same exact revision.
+- The live Board opens in the Presentation layout, so the presenting Participant sees the Board as the primary Stage content. A second browser reached the admission flow, but it did not complete admission, so cross-Participant focus still needs final proof.
+- Live drawing exposed a narrower teardown race: closing immediately and reopening produces a blank canvas even though the engine invokes its final-flush callback.
+- The verified cause is asynchronous ordering. Engine disposal starts `submitUpdate`, the client first awaits its durable pending store, and React synchronously stops the scene subscription during that gap. The socket closes before the final operation is registered and sent.
+- The next repair must make Board close drain pending and in-flight scene updates through the durable client queue before transport shutdown. Its regression test must defer persistence, not merely assert that `submitUpdate` was called.

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
-import type { ChalkWhiteboardV1FileTransport } from "./types";
+import type { ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation, ChalkWhiteboardV1PendingOperationStore } from "./types";
 
 const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 const sceneId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22";
@@ -74,7 +74,7 @@ describe("ChalkWhiteboardV1Client", () => {
     await expect(presented).resolves.toBeUndefined();
     expect(summaries.at(-1)).toMatchObject({ presenting: true });
 
-    client.stopSceneSubscription();
+    await client.stopSceneSubscription();
     expect(summaries.at(-1)).toMatchObject({ status: "unsubscribed", canDraw: false, canClear: false, presenting: false });
   });
 
@@ -223,6 +223,43 @@ describe("ChalkWhiteboardV1Client", () => {
     await settle();
     expect(await store.load()).toEqual([]);
     client.stopSceneSubscription();
+  });
+
+  it("waits for a pending update to reach durable storage before stopping", async () => {
+    let releaseWrite!: () => void;
+    const writeReleased = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    const stored: ChalkWhiteboardV1PendingOperation[] = [];
+    const store: ChalkWhiteboardV1PendingOperationStore = {
+      load: async () => stored,
+      put: async (operation) => {
+        await writeReleased;
+        stored.push(operation);
+      },
+      remove: async (operationId) => {
+        const index = stored.findIndex((operation) => operation.operationId === operationId);
+        if (index >= 0) stored.splice(index, 1);
+      },
+    };
+    const { client, socket, started } = await connectingClient({ pendingStore: store });
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+
+    const update = client.submitUpdate({ sceneId, syncAll: false, elements: [publicElement("durable-element")] });
+    const close = vi.spyOn(socket, "close");
+    const stopping = client.stopSceneSubscription();
+
+    await Promise.resolve();
+    expect(close).not.toHaveBeenCalled();
+    expect(stored).toEqual([]);
+
+    releaseWrite();
+    await stopping;
+    expect(close).toHaveBeenCalledOnce();
+    expect(stored).toHaveLength(1);
+    expect(socket.frames()).toContainEqual(expect.objectContaining({ type: "submit_update" }));
+    await expect(update).rejects.toMatchObject({ code: "unavailable", operation: "submit_update" });
   });
 
   it("sends and receives multipart updates as one logical operation", async () => {
