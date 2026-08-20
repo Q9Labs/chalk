@@ -162,11 +162,11 @@ On the host, `chalk-deployment-controller` performs this transaction:
 5. Stop the runtime, atomically publish `/run/chalk/env` and the checksummed
    release identity, and stream Podman secrets over standard input.
 6. Run the exact `minimum_migration` target from the release manifest in the
-   one-shot migration unit. The migrator applies any missing checked-in
-   migrations below a recorded newer version first, then applies the remaining
-   embedded migrations through that target. API and Sync activation waits for
-   this unit to succeed; the migrator credential is removed before the runtime
-   target starts.
+   one-shot migration unit. The unit may name an exact checked-in migration as
+   an allowed repair; the migrator applies only that missing version below a
+   recorded newer version and rejects any other out-of-order gap before it
+   continues through the target. API and Sync activation waits for this unit to
+   succeed; the migrator credential is removed before the runtime target starts.
 7. Start the hard dependency target and run aggregate health with bounded
    retries. The API readiness check also rejects a database below the manifest
    migration target.

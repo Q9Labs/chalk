@@ -51,9 +51,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
-- Made managed migration repair apply missing checked-in migrations before the
-  exact target from the release manifest, even when a newer version is already
-  recorded.
+- Made managed migration repair apply only explicitly allowed missing
+  checked-in migrations before the exact release target, while rejecting any
+  other out-of-order gap.
 
 ### Removed
 

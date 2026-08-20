@@ -11,7 +11,7 @@ ContainerName=chalk-api-migrate
 Network=chalk-runtime.network
 Secret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url,uid=65532,gid=65532,mode=0400
 PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate
-Exec=--database-url-file /run/chalk/migrate/database-url --target __DATABASE_MIGRATION_TARGET__
+Exec=--database-url-file /run/chalk/migrate/database-url --target __DATABASE_MIGRATION_TARGET__ --allow-missing-version 20260819120000
 User=65532
 Group=65532
 ReadOnly=true
