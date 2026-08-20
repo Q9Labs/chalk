@@ -39,6 +39,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and Sync start, and made API readiness fail when the database schema is behind.
 - Fetched managed runtime inputs in AWS SSM batches of at most 10, so releases
   can add required inputs without exceeding the service request limit.
+- Created new Podman secrets without replacement mode on Podman 4.9, and removed
+  candidate-only units when a managed release rolls back.
 
 ## [4.1.5] - 2026-08-19
 

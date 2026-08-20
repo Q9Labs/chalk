@@ -116,12 +116,27 @@ case "${1:-} ${2:-}" in
     mv "$temporary" "$state"
     ;;
   "secret create")
-    [[ "${3:-}" == --replace && "${5:-}" == - ]]
+    if [[ "${3:-}" == --replace ]]; then
+      secret_name="${4:?}"
+      [[ "${5:-}" == - ]]
+      grep -Fxq -- "$secret_name" "$state" || {
+        printf 'Error: deleting secret : : no secret data with ID \n' >&2
+        exit 125
+      }
+    else
+      secret_name="${3:?}"
+      [[ "${4:-}" == - ]]
+      ! grep -Fxq -- "$secret_name" "$state" || exit 125
+    fi
     [[ -p /dev/stdin ]]
+    if [[ -n "${FAKE_SECRET_CREATE_FAILURE:-}" && "$secret_name" == "$FAKE_SECRET_CREATE_FAILURE" ]]; then
+      printf 'test-only Podman secret error\n' >&2
+      exit 125
+    fi
     cat >/dev/null
     temporary="${state}.tmp"
-    awk -v name="${4:?}" '$0 != name' "$state" >"$temporary"
-    printf '%s\n' "${4:?}" >>"$temporary"
+    awk -v name="$secret_name" '$0 != name' "$state" >"$temporary"
+    printf '%s\n' "$secret_name" >>"$temporary"
     mv "$temporary" "$state"
     ;;
   "image inspect")
@@ -290,6 +305,7 @@ stops_after_adoption="$(grep -Fc 'stop chalk-runtime.target' "${fixture_root}/co
 [[ ! -e "${adoption_state}/active-release.json" ]] || fail "failed legacy adoption wrote an active pointer"
 printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
 printf '0' >"${fixture_root}/health-index"
+migration_starts_before_adoption="$(grep -Fc 'start chalk-api-migrate.service' "${fixture_root}/commands.log" || true)"
 if run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" 'ok,fail,ok' >"${fixture_root}/adoption-result.log" 2>&1; then
   fail "failed first candidate was accepted after legacy adoption"
 fi
@@ -301,6 +317,9 @@ jq -e '.release_id == "legacy"' "${fixture_root}/run/release/release-manifest.js
 cmp -s "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health" "${fixture_root}/install/chalk-runtime-health" || fail "legacy rollback did not replace the broken health helper"
 cmp -s "${fixture_root}/source/infrastructure/managed-episode/controller/chalk-deployment-controller" "${fixture_root}/install/chalk-deployment-controller" || fail "legacy rollback did not install the durable controller"
 [[ -e "${fixture_root}/restore-unit-enabled" ]] || fail "legacy rollback did not enable reboot restoration"
+[[ ! -e "${fixture_root}/user-quadlet/chalk-api-migrate.container" ]] || fail "legacy rollback kept the candidate-only migration unit"
+migration_starts_after_adoption="$(grep -Fc 'start chalk-api-migrate.service' "${fixture_root}/commands.log" || true)"
+[[ "$migration_starts_after_adoption" == "$((migration_starts_before_adoption + 1))" ]] || fail "legacy rollback restarted the candidate-only migration unit"
 find "${fixture_root}/run" -mindepth 1 -depth -delete
 find "${fixture_root}/user-quadlet" -mindepth 1 -depth -delete
 find "${fixture_root}/user-systemd" -mindepth 1 -depth -delete
@@ -321,6 +340,15 @@ make_manifest wrong-type >"${fixture_root}/wrong-type-manifest.json"
 if FAKE_STRING_SUFFIX=api.env run_controller "$wrong_type_state" "${fixture_root}/wrong-type-request.json" "${fixture_root}/wrong-type-manifest.json" >/dev/null 2>&1; then
   fail "plaintext environment input was accepted"
 fi
+
+secret_failure_state="${fixture_root}/secret-failure-state"
+mkdir -p "$secret_failure_state"
+make_request secret-failure "${fixture_root}/secret-failure-request.json"
+make_manifest secret-failure >"${fixture_root}/secret-failure-manifest.json"
+if FAKE_SECRET_CREATE_FAILURE=chalk-managed-migrator-database-url run_controller "$secret_failure_state" "${fixture_root}/secret-failure-request.json" "${fixture_root}/secret-failure-manifest.json" >"${fixture_root}/secret-failure.log" 2>&1; then
+  fail "Podman secret registration failure was accepted"
+fi
+grep -Fq 'Podman secret registration failed for chalk-managed-migrator-database-url: test-only Podman secret error' "${fixture_root}/secret-failure.log" || fail "Podman secret registration failure omitted its safe details"
 
 excluded_state="${fixture_root}/excluded-state"
 mkdir -p "$excluded_state"
@@ -377,7 +405,7 @@ else
 fi
 [[ "$runtime_root_mode" == 755 && "$runtime_env_mode" == 700 ]] || fail "runtime paths do not allow safe runtime-user traversal"
 (cd "${fixture_root}/run/release" && if command -v sha256sum >/dev/null 2>&1; then sha256sum --check --status release-manifest.sha256; else expected="$(awk '{print $1}' release-manifest.sha256)"; [[ "$(shasum -a 256 release-manifest.json | awk '{print $1}')" == "$expected" ]]; fi) || fail "runtime release identity was not published to /run"
-grep -Fq 'podman secret create --replace chalk-api-provider-server-cert -' "${fixture_root}/commands.log" || fail "Podman secrets were not atomically streamed on standard input"
+grep -Fq 'podman secret create chalk-api-provider-server-cert -' "${fixture_root}/commands.log" || fail "new Podman secrets were not atomically streamed on standard input"
 grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com' "${fixture_root}/commands.log" || fail "rootless ECR authentication did not use standard input"
 if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"

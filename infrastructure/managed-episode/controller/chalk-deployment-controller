@@ -493,6 +493,17 @@ install_runtime_files() {
   require_directory "$runtime_source"
   mkdir -p "$runtime_quadlet_dir" "$runtime_systemd_dir"
   chmod 700 "$runtime_quadlet_dir" "$runtime_systemd_dir"
+  remove_absent_runtime_files "${runtime_source}/quadlet" "$runtime_quadlet_dir" \
+    chalk-api-migrate.container \
+    chalk-api.container \
+    chalk-cloudflared.container \
+    chalk-redis.container \
+    chalk-runtime.network \
+    chalk-sync.container
+  remove_absent_runtime_files "${runtime_source}/systemd" "$runtime_systemd_dir" \
+    chalk-runtime.target \
+    chalk-runtime-watchdog.service \
+    chalk-runtime-watchdog.timer
   local file
   for file in "$runtime_source"/quadlet/*; do
     [[ -f "$file" && ! -L "$file" ]] || fail "rendered runtime contains an unsafe Quadlet"
@@ -509,6 +520,20 @@ install_runtime_files() {
     chown -R "${runtime_user}:$(id -gn "$runtime_user")" "$runtime_quadlet_dir" "$runtime_systemd_dir"
   fi
   run_user_systemctl daemon-reload
+}
+
+remove_absent_runtime_files() {
+  local source_directory="$1"
+  local destination_directory="$2"
+  shift 2
+  local name target
+  for name in "$@"; do
+    [[ -e "${source_directory}/${name}" ]] && continue
+    target="${destination_directory}/${name}"
+    [[ ! -e "$target" && ! -L "$target" ]] && continue
+    require_regular_file "$target"
+    rm -- "$target" || fail "obsolete managed runtime file could not be removed: ${name}"
+  done
 }
 
 install_restore_unit() {
@@ -658,8 +683,14 @@ reconcile_secrets() {
       fi
       continue
     fi
-    if ! cat "$source" | run_user_podman secret create --replace "$secret_name" - >/dev/null 2>"${stage_root}/secret-create-error.log"; then
-      fail "Podman secret registration failed"
+    local -a replace_option=()
+    if run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-inspect-error.log"; then
+      replace_option=(--replace)
+    fi
+    if ! cat "$source" | run_user_podman secret create "${replace_option[@]}" "$secret_name" - >/dev/null 2>"${stage_root}/secret-create-error.log"; then
+      local secret_error
+      secret_error="$(tr '\n' ' ' <"${stage_root}/secret-create-error.log" | cut -c 1-512)"
+      fail "Podman secret registration failed for ${secret_name}: ${secret_error:-unknown Podman error}"
     fi
     run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-verify-error.log" || fail "Podman secret registration could not be verified"
   done < <(jq -r '.[] | [.id, .destination] | @tsv' <<<"${input_records_json}")
