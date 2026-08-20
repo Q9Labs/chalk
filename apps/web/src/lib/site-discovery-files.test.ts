@@ -17,6 +17,7 @@ describe("public discovery files", () => {
     expect(sitemap).toContain("<loc>https://chalkmeet.com/status</loc>");
     expect(redirects).not.toContain("/ /index.html 200");
     expect(redirects.split("\n")).not.toContain("/* /_shell/ 200");
+    expect(redirects.split("\n")).not.toContain("/* /_shell.html 200");
     expect(redirects).toContain("/space/* /_shell/ 200");
     expect(redirects).toContain("/account* /_shell/ 200");
     expect(headers).toContain("Content-Type: application/xml; charset=utf-8");

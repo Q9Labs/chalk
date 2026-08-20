@@ -54,6 +54,7 @@ describe("mobile Metro configuration", () => {
     };
 
     expect(packageJson.scripts["prestart:raw"]).toBe("pnpm run prepare:native-dependencies");
+    expect(packageJson.scripts["eas-build-post-install"]).toBe("pnpm run prepare:native-dependencies");
     expect(packageJson.scripts["prepare:native-dependencies"]).toContain("pnpm --filter @q9labsai/diagnostics-contracts build");
   });
 });

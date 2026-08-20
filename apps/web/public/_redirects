@@ -15,4 +15,3 @@
 /developer* /_shell/ 200
 /tenant* /_shell/ 200
 /account* /_shell/ 200
-/* /_shell.html 200
