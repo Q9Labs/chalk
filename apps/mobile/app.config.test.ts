@@ -16,7 +16,8 @@ describe("createExpoConfig", () => {
       ["@cloudflare/realtimekit-react-native", { microphonePermission: "Chalk uses your microphone so participants can hear you in a Space.", cameraPermission: "Chalk uses your camera so participants can see you in a Space.", libraryPermission: false }],
     ]);
     expect(config.expo.experiments.tsconfigPaths).toBe(false);
-    expect(config.expo.extra).toEqual({ buildProfile: "development" });
+    expect(config.expo.owner).toBe("q9labs");
+    expect(config.expo.extra).toEqual({ buildProfile: "development", eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } });
     expect(config.expo.android.blockedPermissions).toContain("android.permission.SYSTEM_ALERT_WINDOW");
   });
 
