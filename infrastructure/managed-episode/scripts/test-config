@@ -188,9 +188,11 @@ if "${managed_root}/scripts/validate-runtime" \
   exit 1
 fi
 
-jq -e '
+expected_migration="$(find "${repo_root}/apps/api/db/migrations" -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
+  sed -n 's/^\([0-9]\{14\}\)_.*/\1/p' | sort -n | tail -n 1)"
+jq -e --argjson expected_migration "${expected_migration}" '
   .schema_version == 2 and
-  .database_compatibility.minimum_migration == 20260819130000 and
+  .database_compatibility.minimum_migration == $expected_migration and
   .affected_components == ["api", "sync"] and
   (.component_releases | (keys | sort) == ["api", "sync"])
 ' "${fixture_root}/release-manifest.json" >/dev/null

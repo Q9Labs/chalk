@@ -8,14 +8,11 @@ import java.io.FileInputStream
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def keystorePropertiesFile = rootProject.file("app/keystore.properties")
 def keystoreProperties = new Properties()
-def isReleaseTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
 def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '28').toString())
 def appVersionName = (findProperty('chalk.versionName') ?: '2.0.1').toString()
 
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-} else if (isReleaseTask) {
-    throw new GradleException("Missing app/keystore.properties. Copy keystore.properties.example and provide a real upload keystore before building release artifacts.")
 }
 
 /**

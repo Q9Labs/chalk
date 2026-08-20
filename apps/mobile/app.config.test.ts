@@ -5,6 +5,7 @@ import { createExpoConfig } from "./app.config";
 const iosInfoPlist = readFileSync(new URL("./ios/Chalk/Info.plist", import.meta.url), "utf8");
 const iosProject = readFileSync(new URL("./ios/Chalk.xcodeproj/project.pbxproj", import.meta.url), "utf8");
 const androidManifest = readFileSync(new URL("./android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+const androidBuild = readFileSync(new URL("./android/app/build.gradle", import.meta.url), "utf8");
 const androidStrings = readFileSync(new URL("./android/app/src/main/res/values/strings.xml", import.meta.url), "utf8");
 const easConfig = JSON.parse(readFileSync(new URL("./eas.json", import.meta.url), "utf8"));
 
@@ -38,6 +39,11 @@ describe("createExpoConfig", () => {
   it("keeps the RealtimeKit foreground service and blob authority configured", () => {
     expect(androidManifest).toContain("com.cloudflare.realtimekit.ForegroundService");
     expect(androidStrings).toContain("blob_provider_authority");
+  });
+
+  it("allows EAS to inject the production Android signing configuration", () => {
+    expect(androidBuild).toContain("signingConfig signingConfigs.release");
+    expect(androidBuild).not.toContain("Missing app/keystore.properties");
   });
 
   it("keeps archive inputs aligned with the Expo release version and build", () => {
