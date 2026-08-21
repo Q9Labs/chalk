@@ -1,8 +1,8 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
-  "globalEnv": ["NODE_ENV", "CI"],
-  "concurrency": "15",
+  "globalEnv": ["NODE_ENV", "CI", "GOMAXPROCS", "VITEST_MAX_WORKERS"],
+  "concurrency": "1",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -26,13 +26,17 @@
       "outputs": ["coverage/**"],
       "env": ["CI", "NODE_ENV"]
     },
-    "check-types": {
+    "@chalk/episode-diagnostics#test": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!**/node_modules/**", "!**/dist/**", "!**/coverage/**", "!**/.turbo/**", "!**/.astro/**", "!**/.next/**", "!**/.wrangler/**", "!**/.output/**", "!example/**", "!ios/**", "!android/**"],
+      "outputs": ["coverage/**"],
+      "env": ["CI", "NODE_ENV"]
+    },
+    "check-types": {
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!**/*.test.*", "!**/*.spec.*", "!**/node_modules/**", "!**/dist/**", "!**/coverage/**", "!**/.turbo/**", "!**/.astro/**", "!**/.next/**", "!**/.wrangler/**", "!**/.output/**", "!example/**", "!ios/**", "!android/**"],
       "outputs": []
     },
     "lint": {
-      "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
