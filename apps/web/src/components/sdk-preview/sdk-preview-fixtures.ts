@@ -153,12 +153,12 @@ interface PreviewSnapshotOptions {
   readonly participants: readonly GalleryParticipant[];
   readonly search: PreviewSearch;
   readonly displayName: string;
-  readonly episodeDuration: number;
+  readonly episodeStartedAt: string;
   readonly tracks: PreviewSnapshotTracks;
 }
 
 /** Pure, deterministic projection of URL state into the client snapshot consumed by SpaceView. */
-function createPreviewSnapshot({ participants, search, displayName, episodeDuration, tracks }: PreviewSnapshotOptions): SpaceSnapshot {
+function createPreviewSnapshot({ participants, search, displayName, episodeStartedAt, tracks }: PreviewSnapshotOptions): SpaceSnapshot {
   const capabilities = capabilitiesFor(search);
   const role = roleName(search);
   const base = createSnapshot(capabilities);
@@ -203,7 +203,7 @@ function createPreviewSnapshot({ participants, search, displayName, episodeDurat
   const incomingRequests = incomingMediaRequests(search);
   const chatFailure: SpaceSnapshot["chat"]["lastError"] = search.chat === "failure" ? { code: "client.internal_error", recoverable: true, message: "Chat is temporarily unavailable in this Space." } : null;
   const status = search.state === "reconnecting" ? "reconnecting" : search.state === "leaving" ? "leaving" : search.state === "left" ? "left" : search.state === "failure" ? "failed" : "live";
-  const episode = search.state === "left" ? null : { id: "preview-episode", startedAt: new Date(Date.parse(PREVIEW_EPOCH) - episodeDuration * 1_000).toISOString(), deadline: null };
+  const episode = search.state === "left" ? null : { id: "preview-episode", startedAt: episodeStartedAt, deadline: null };
 
   return {
     ...base,

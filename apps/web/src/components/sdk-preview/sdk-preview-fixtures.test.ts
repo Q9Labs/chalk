@@ -41,8 +41,9 @@ describe("SDK preview fixtures", () => {
       remote: new Map([["nora", { microphone: null, camera: null, screen: null }]]),
     };
 
-    const first = buildPreviewSnapshot({ participants, search, displayName: "Hasan", episodeDuration: 1122, tracks });
-    const second = buildPreviewSnapshot({ participants, search, displayName: "Hasan", episodeDuration: 1122, tracks });
+    const episodeStartedAt = "2026-08-01T09:41:18.000Z";
+    const first = buildPreviewSnapshot({ participants, search, displayName: "Hasan", episodeStartedAt, tracks });
+    const second = buildPreviewSnapshot({ participants, search, displayName: "Hasan", episodeStartedAt, tracks });
 
     expect(first.connection.episode?.startedAt).toBe("2026-08-01T09:41:18.000Z");
     expect(first.connection.episode?.startedAt).toBe(second.connection.episode?.startedAt);

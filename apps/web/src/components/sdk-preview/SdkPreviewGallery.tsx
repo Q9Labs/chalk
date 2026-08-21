@@ -38,6 +38,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   const panel = panelFor(search);
   const effectiveLayout: SpaceLayout = search.stage === "whiteboard" ? "focus" : search.layout;
   const episodeDuration = PREVIEW_EPISODE_DURATION_SECONDS;
+  const episodeStartedAt = useMemo(() => new Date(Date.now() - episodeDuration * 1_000).toISOString(), [episodeDuration]);
 
   const mediaAdapter = useMemo(() => createPreviewMediaAdapter(), []);
   useEffect(() => () => mediaAdapter.dispose(), [mediaAdapter]);
@@ -78,7 +79,7 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
     }),
     [trackBundle],
   );
-  const gallerySnapshot = useMemo(() => buildPreviewSnapshot({ participants, search, displayName, episodeDuration, tracks: snapshotTracks }), [displayName, episodeDuration, participants, search, snapshotTracks]);
+  const gallerySnapshot = useMemo(() => buildPreviewSnapshot({ participants, search, displayName, episodeStartedAt, tracks: snapshotTracks }), [displayName, episodeStartedAt, participants, search, snapshotTracks]);
 
   const observeCommand = useCallback(
     (command: PreviewClientCommand) => {
