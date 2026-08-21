@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Logo } from "@q9labsai/chalk-react";
 import { useState, type FormEvent } from "react";
 import { DashboardAPIError, listAllAccountTenants, loginAccount, registerAccount } from "../../lib/dashboard-api";
 
@@ -31,8 +32,8 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
   return (
     <main className="account-entry">
       <section className="account-entry-story" aria-label="Chalk introduction">
-        <Link to="/" className="account-entry-brand">
-          Chalk
+        <Link to="/" className="account-entry-brand" aria-label="Chalk home">
+          <Logo accessibilityLabel={null} color="currentColor" height={34} motion="orbit-burst" variant="wordmark" />
         </Link>
         <div>
           <p className="eyebrow">A place for shared work</p>

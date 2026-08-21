@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image, Platform, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../../ui/theme";
 import { useNativeTheme } from "../../ui/native-theme";
+import { Logo } from "../logo/Logo";
 
 export interface SpaceTopBarProps {
   spaceName: string;
@@ -16,7 +17,7 @@ export function SpaceTopBarAndroid({ spaceName, participantCount, formattedDurat
   return (
     <View style={[styles.topBar, { backgroundColor: theme.colors.darkCanvas, borderColor: theme.colors.border }]}>
       <View style={styles.topBarLeft}>
-        {logoUrl ? <Image accessibilityLabel="Chalk" source={{ uri: logoUrl }} style={styles.logo} /> : null}
+        {logoUrl ? <Image accessibilityLabel="Chalk" source={{ uri: logoUrl }} style={styles.logo} /> : <Logo height={24} variant="mark" />}
         <View style={[styles.connectionDot, { backgroundColor: theme.colors.success }]} />
         <Text style={[styles.topBarSpaceName, { color: theme.colors.foreground }]} numberOfLines={1}>
           {spaceName}

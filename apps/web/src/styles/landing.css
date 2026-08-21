@@ -141,7 +141,7 @@ body:has(.site) {
   height: 64px;
 }
 
-.nav-logo img {
+.nav-logo svg {
   width: auto;
   height: 26px;
 }
@@ -566,7 +566,7 @@ body:has(.site) {
   padding-bottom: 36px;
 }
 
-.footer-logo img {
+.footer-logo svg {
   width: auto;
   height: 28px;
 }

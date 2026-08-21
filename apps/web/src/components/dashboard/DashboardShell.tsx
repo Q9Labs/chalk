@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { Logo } from "@q9labsai/chalk-react";
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@q9labsai/chalk-ui";
 import { useDashboardAccount } from "./DashboardAccount";
 import { DashboardSidebar } from "./DashboardSidebar";
@@ -58,7 +59,7 @@ function DashboardMobileHeader({ onCreateSpace }: { onCreateSpace: () => void })
     <header className="dashboard-mobile-header">
       <SidebarTrigger className="dashboard-mobile-menu" />
       <Link to="/home" className="dashboard-brand">
-        <img src="/brand/chalk/chalk-icon.svg" alt="" />
+        <Logo accessibilityLabel={null} color="currentColor" height={22} motion="orbit-burst" variant="mark" />
         <span>Chalk</span>
       </Link>
       <button className="dashboard-mobile-create" type="button" onClick={onCreateSpace}>

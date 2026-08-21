@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./EntranceView", () => ({ EntranceView: "EntranceView" }));
+vi.mock("./logo/Logo", () => ({ Logo: "Logo" }));
 vi.mock("react-native", () => ({ Image: "Image" }));
 
 import { Entrance } from "./Entrance";
@@ -15,5 +16,11 @@ describe("Entrance", () => {
     const element = Entrance({ onCancel, onJoin: vi.fn(), spaceName: "Space" });
 
     expect(element.props.onCancel).toBe(onCancel);
+  });
+
+  it("uses the SDK wordmark when no custom logo URL is supplied", () => {
+    const element = Entrance({ onJoin: vi.fn(), spaceName: "Space" });
+
+    expect(element.props.logo).toMatchObject({ type: "Logo", props: { height: 32, variant: "wordmark" } });
   });
 });

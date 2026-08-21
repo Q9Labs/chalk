@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@hugeicons/core-free-icons/dist/esm/UserGroupIcon", () => ({ default: "UserGroupIcon" }));
 vi.mock("@hugeicons/react-native", () => ({ HugeiconsIcon: "HugeiconsIcon" }));
+vi.mock("../logo/Logo", () => ({ Logo: "Logo" }));
 vi.mock("react-native", () => ({
   Image: "Image",
   Platform: { OS: "android" },
@@ -23,6 +24,12 @@ describe("SpaceTopBarAndroid", () => {
     expect(images).toHaveLength(1);
     expect(images[0]).toMatchObject({ props: { accessibilityLabel: "Chalk", source: { uri: "https://cdn.example.test/logo.png" } } });
     expect(findText(tree)).toEqual(expect.arrayContaining(["Design space", "1:02", "4"]));
+  });
+
+  it("uses the SDK mark when no custom logo URL is supplied", () => {
+    const tree = SpaceTopBarAndroid({ spaceName: "Design space", participantCount: 4, formattedDuration: "1:02" });
+
+    expect(findElements(tree, "Logo")).toMatchObject([{ props: { height: 24, variant: "mark" } }]);
   });
 });
 

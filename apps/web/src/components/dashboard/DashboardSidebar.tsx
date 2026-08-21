@@ -14,6 +14,7 @@ import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
 import UnfoldMoreIcon from "@hugeicons/core-free-icons/UnfoldMoreIcon";
 import UserCircleIcon from "@hugeicons/core-free-icons/UserCircleIcon";
 import type { IconSvgElement } from "@hugeicons/react";
+import { Logo } from "@q9labsai/chalk-react";
 import {
   Menu,
   MenuContent,
@@ -73,7 +74,7 @@ export function DashboardSidebar({ pathname, onCreateSpace }: { pathname: string
       <SidebarHeader className="gap-3">
         <div className="flex h-9 items-center gap-2 px-1 group-data-[collapsible=icon]:px-0">
           <Link to="/home" aria-label="Chalk home" className="flex min-w-0 flex-1 items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
-            <img src="/brand/chalk/chalk-icon.svg" alt="" className="size-6 shrink-0" />
+            <Logo accessibilityLabel={null} color="currentColor" height={24} motion="orbit-burst" variant="mark" />
             <span className={cn("text-sidebar-primary text-base font-semibold tracking-tight", collapsedHidden)}>Chalk</span>
           </Link>
           <SidebarTrigger className={cn("text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring/60", collapsedHidden)} />

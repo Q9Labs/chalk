@@ -18,6 +18,8 @@ describe("SiteNav", () => {
     expect(markup).toContain('href="/docs"');
     expect(markup).toContain('href="/sign-in"');
     expect(markup).toContain('href="/sign-up"');
+    expect(markup).toContain('data-chalk-logo-motion="orbit-burst"');
+    expect(markup).not.toContain("/brand/chalk/chalk-logo.svg");
     expect(markup).not.toContain("import.meta.env.DEV");
   });
 

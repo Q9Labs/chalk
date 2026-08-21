@@ -17,6 +17,8 @@ describe("DocsHeader", () => {
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in");
     expect(screen.getByRole("link", { name: /Create an account/ }).getAttribute("href")).toBe("/sign-up");
     expect(screen.getByText("Docs")).toBeTruthy();
+    expect(document.querySelector('[data-chalk-logo-motion="orbit-burst"]')).toBeTruthy();
+    expect(document.querySelector(".docs-logo img")).toBeNull();
   });
 
   it("opens search and exposes the mobile navigation state", () => {

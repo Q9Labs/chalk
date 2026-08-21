@@ -78,6 +78,8 @@ describe("DashboardSidebar", () => {
 
     expect(screen.getByRole("button", { name: /Switch Tenant/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Account menu/ })).toBeTruthy();
+    expect(document.querySelector('[data-chalk-logo-motion="orbit-burst"]')).toBeTruthy();
+    expect(document.querySelector("img[src*='chalk-icon']")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /New Space/ }));
     expect(onCreateSpace).toHaveBeenCalledOnce();

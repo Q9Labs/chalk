@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f7f0" />
+    <title>Chalk logo motion study</title>
+    <style>
+      :root {
+        --ink: #173328;
+        --ink-soft: #506058;
+        --paper: #f7f7f0;
+        --paper-deep: #ecefe7;
+        --line: rgba(23, 51, 40, 0.13);
+        --green: #80b879;
+        --green-soft: #c5e5c0;
+        --yellow: #d9b641;
+        --yellow-soft: #fceab3;
+        --blue: #55aac9;
+        --blue-soft: #b2e0f0;
+        --pink: #d67b7b;
+        --pink-soft: #f8caca;
+        --ease-out: cubic-bezier(0.22, 0.8, 0.28, 1);
+        --shadow: 0 24px 70px rgba(23, 51, 40, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--paper);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        background: radial-gradient(circle at 12% 3%, rgba(197, 229, 192, 0.55), transparent 29rem), radial-gradient(circle at 93% 16%, rgba(178, 224, 240, 0.4), transparent 27rem), var(--paper);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .page-shell {
+        width: min(1160px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 44px 0 64px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 32px;
+        padding: 8px 4px 44px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        margin: 0 0 24px;
+        color: var(--ink-soft);
+        font-size: 0.72rem;
+        font-weight: 750;
+        letter-spacing: 0.15em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow:
+          13px 0 0 var(--yellow),
+          26px 0 0 var(--blue),
+          39px 0 0 var(--pink);
+        content: "";
+        margin-right: 39px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 730px;
+        margin-bottom: 18px;
+        font-size: clamp(3rem, 8vw, 6.7rem);
+        font-weight: 760;
+        letter-spacing: -0.075em;
+        line-height: 0.88;
+      }
+
+      h1 em {
+        color: var(--pink);
+        font-style: normal;
+      }
+
+      .hero-copy {
+        max-width: 530px;
+        margin-bottom: 0;
+        color: var(--ink-soft);
+        font-size: clamp(1rem, 1.8vw, 1.18rem);
+      }
+
+      .hero-tools {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 15px;
+      }
+
+      .replay-all,
+      .replay-card {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        border: 1px solid var(--ink);
+        border-radius: 999px;
+        color: var(--paper);
+        background: var(--ink);
+        cursor: pointer;
+        font-size: 0.83rem;
+        font-weight: 750;
+        letter-spacing: 0.01em;
+        transition:
+          transform 180ms ease,
+          background-color 180ms ease,
+          color 180ms ease;
+      }
+
+      .replay-all {
+        min-height: 48px;
+        padding: 0 19px;
+      }
+
+      .replay-card {
+        min-height: 36px;
+        padding: 0 14px;
+        border-color: var(--line);
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.35);
+      }
+
+      .replay-all:hover,
+      .replay-card:hover {
+        transform: translateY(-2px);
+      }
+
+      .replay-all:hover {
+        background: #244c3c;
+      }
+
+      .replay-card:hover {
+        border-color: var(--ink);
+        background: #fff;
+      }
+
+      .replay-all:active,
+      .replay-card:active {
+        transform: translateY(0);
+      }
+
+      button:focus-visible {
+        outline: 3px solid var(--blue);
+        outline-offset: 4px;
+      }
+
+      .button-icon {
+        display: inline-grid;
+        width: 19px;
+        height: 19px;
+        place-items: center;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        font-size: 0.9rem;
+        line-height: 1;
+      }
+
+      .hero-note {
+        color: var(--ink-soft);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .motion-card {
+        position: relative;
+        display: flex;
+        min-height: 460px;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.58);
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.75) inset,
+          var(--shadow);
+        isolation: isolate;
+      }
+
+      .motion-card::after {
+        position: absolute;
+        z-index: -1;
+        right: -90px;
+        bottom: -120px;
+        width: 260px;
+        height: 260px;
+        border-radius: 50%;
+        background: var(--card-wash, rgba(197, 229, 192, 0.35));
+        content: "";
+        filter: blur(2px);
+      }
+
+      .motion-card--draw {
+        --card-wash: rgba(197, 229, 192, 0.46);
+      }
+
+      .motion-card--orbit {
+        --card-wash: rgba(178, 224, 240, 0.48);
+      }
+
+      .motion-card--sweep {
+        --card-wash: rgba(252, 234, 179, 0.55);
+      }
+
+      .motion-card--burst {
+        --card-wash: rgba(248, 202, 202, 0.52);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 26px 28px 0;
+      }
+
+      .card-heading {
+        display: flex;
+        gap: 13px;
+      }
+
+      .card-number {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 9px;
+        color: var(--ink-soft);
+        background: var(--paper-deep);
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+      }
+
+      h2 {
+        margin-bottom: 5px;
+        font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+        font-weight: 720;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+
+      .card-description {
+        max-width: 300px;
+        margin-bottom: 0;
+        color: var(--ink-soft);
+        font-size: 0.86rem;
+        line-height: 1.45;
+      }
+
+      .motion-tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 25px;
+        flex: 0 0 auto;
+        padding: 0 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink-soft);
+        font-size: 0.64rem;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .logo-stage {
+        position: relative;
+        display: grid;
+        min-height: 278px;
+        flex: 1;
+        margin: 20px 13px 0;
+        place-items: center;
+        overflow: hidden;
+        border-radius: 20px;
+        background: rgba(247, 247, 240, 0.63);
+      }
+
+      .logo-stage::before {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 240px;
+        height: 240px;
+        border: 1px solid rgba(23, 51, 40, 0.08);
+        border-radius: 50%;
+        content: "";
+        transform: translate(-50%, -50%);
+      }
+
+      .logo-stage::after {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 178px;
+        height: 178px;
+        border: 1px dashed rgba(23, 51, 40, 0.1);
+        border-radius: 50%;
+        content: "";
+        transform: translate(-50%, -50%);
+      }
+
+      .logo-stage--orbit::before {
+        border-color: rgba(85, 170, 201, 0.22);
+      }
+
+      .logo-stage--orbit::after {
+        border-color: rgba(85, 170, 201, 0.23);
+      }
+
+      .chalk-logo {
+        position: relative;
+        z-index: 1;
+        display: block;
+        width: min(88%, 390px);
+        height: auto;
+        overflow: visible;
+        color: var(--ink);
+      }
+
+      .chalk-part,
+      .wordmark {
+        transform-box: fill-box;
+        transform-origin: center;
+      }
+
+      .chalk-part,
+      .wordmark {
+        opacity: 1;
+      }
+
+      .card-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px 28px 25px;
+      }
+
+      .palette {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .swatch {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.8);
+      }
+
+      .swatch--green {
+        background: var(--green);
+      }
+      .swatch--yellow {
+        background: var(--yellow);
+      }
+      .swatch--blue {
+        background: var(--blue);
+      }
+      .swatch--pink {
+        background: var(--pink);
+      }
+
+      .light-beam {
+        position: absolute;
+        z-index: 2;
+        top: -28%;
+        left: -25%;
+        width: 19%;
+        height: 156%;
+        pointer-events: none;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.86), transparent);
+        opacity: 0;
+        transform: skewX(-17deg);
+      }
+
+      /* Draw in: the same four groups arrive one beat at a time. */
+      @keyframes draw-stick {
+        0% {
+          opacity: 0;
+          transform: translateY(18px) scale(0.76) rotate(-4deg);
+        }
+        66% {
+          opacity: 1;
+          transform: translateY(-3px) scale(1.04) rotate(1deg);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1) rotate(0);
+        }
+      }
+
+      @keyframes draw-wordmark {
+        0% {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      .motion-card--draw.is-playing .chalk-part {
+        animation: draw-stick 760ms var(--ease-out) var(--delay, 0ms) both;
+      }
+
+      .motion-card--draw .chalk-part--green {
+        --delay: 50ms;
+      }
+      .motion-card--draw .chalk-part--yellow {
+        --delay: 160ms;
+      }
+      .motion-card--draw .chalk-part--blue {
+        --delay: 270ms;
+      }
+      .motion-card--draw .chalk-part--pink {
+        --delay: 380ms;
+      }
+
+      .motion-card--draw.is-playing .wordmark {
+        animation: draw-wordmark 560ms var(--ease-out) 640ms both;
+      }
+
+      /* Gentle orbit: each chalk group gets its own small, offset sway. */
+      @keyframes orbit-green {
+        0%,
+        100% {
+          transform: translate(0, 0) rotate(0deg);
+        }
+        50% {
+          transform: translate(-4px, 3px) rotate(-5deg);
+        }
+      }
+
+      @keyframes orbit-yellow {
+        0%,
+        100% {
+          transform: translate(0, 0) rotate(0deg);
+        }
+        50% {
+          transform: translate(3px, -4px) rotate(4deg);
+        }
+      }
+
+      @keyframes orbit-blue {
+        0%,
+        100% {
+          transform: translate(0, 0) rotate(0deg);
+        }
+        50% {
+          transform: translate(5px, 2px) rotate(5deg);
+        }
+      }
+
+      @keyframes orbit-pink {
+        0%,
+        100% {
+          transform: translate(0, 0) rotate(0deg);
+        }
+        50% {
+          transform: translate(-3px, -3px) rotate(-4deg);
+        }
+      }
+
+      .motion-card--orbit.is-playing .chalk-part {
+        animation-duration: 4.8s;
+        animation-iteration-count: infinite;
+        animation-timing-function: ease-in-out;
+      }
+
+      .motion-card--orbit.is-playing .chalk-part--green {
+        animation-name: orbit-green;
+        animation-delay: -120ms;
+      }
+      .motion-card--orbit.is-playing .chalk-part--yellow {
+        animation-name: orbit-yellow;
+        animation-delay: -760ms;
+      }
+      .motion-card--orbit.is-playing .chalk-part--blue {
+        animation-name: orbit-blue;
+        animation-delay: -1.35s;
+      }
+      .motion-card--orbit.is-playing .chalk-part--pink {
+        animation-name: orbit-pink;
+        animation-delay: -2.05s;
+      }
+
+      /* A pointer can preview the burst; focus-within keeps the same cue keyboard-accessible. */
+      @media (hover: hover) and (pointer: fine) {
+        .motion-card--orbit.is-playing:hover .chalk-part {
+          animation-duration: 1.1s;
+          animation-iteration-count: infinite;
+          animation-timing-function: var(--ease-out);
+        }
+
+        .motion-card--orbit.is-playing:hover .chalk-part--green {
+          animation-name: burst-green;
+          animation-delay: 0ms;
+        }
+        .motion-card--orbit.is-playing:hover .chalk-part--yellow {
+          animation-name: burst-yellow;
+          animation-delay: 0ms;
+        }
+        .motion-card--orbit.is-playing:hover .chalk-part--blue {
+          animation-name: burst-blue;
+          animation-delay: 0ms;
+        }
+        .motion-card--orbit.is-playing:hover .chalk-part--pink {
+          animation-name: burst-pink;
+          animation-delay: 0ms;
+        }
+      }
+
+      .motion-card--orbit.is-playing:focus-within .chalk-part {
+        animation-duration: 1.1s;
+        animation-iteration-count: infinite;
+        animation-timing-function: var(--ease-out);
+      }
+
+      .motion-card--orbit.is-playing:focus-within .chalk-part--green {
+        animation-name: burst-green;
+        animation-delay: 0ms;
+      }
+      .motion-card--orbit.is-playing:focus-within .chalk-part--yellow {
+        animation-name: burst-yellow;
+        animation-delay: 0ms;
+      }
+      .motion-card--orbit.is-playing:focus-within .chalk-part--blue {
+        animation-name: burst-blue;
+        animation-delay: 0ms;
+      }
+      .motion-card--orbit.is-playing:focus-within .chalk-part--pink {
+        animation-name: burst-pink;
+        animation-delay: 0ms;
+      }
+
+      /* Light sweep: a moving glint is paired with a tiny lift in each group. */
+      @keyframes sweep-beam {
+        0%,
+        13% {
+          opacity: 0;
+          transform: translateX(-135%) skewX(-17deg);
+        }
+        23% {
+          opacity: 0.9;
+        }
+        62% {
+          opacity: 0.72;
+        }
+        82%,
+        100% {
+          opacity: 0;
+          transform: translateX(670%) skewX(-17deg);
+        }
+      }
+
+      @keyframes sweep-lift {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        40% {
+          transform: translateY(-3px);
+        }
+        62% {
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes sweep-wordmark {
+        0%,
+        100% {
+          opacity: 0.82;
+          transform: translateY(0);
+        }
+        38%,
+        62% {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
+      }
+
+      .motion-card--sweep.is-playing .light-beam {
+        animation: sweep-beam 3.8s ease-in-out infinite;
+      }
+
+      .motion-card--sweep.is-playing .chalk-part {
+        animation: sweep-lift 3.8s ease-in-out infinite;
+      }
+
+      .motion-card--sweep.is-playing .chalk-part--green {
+        animation-delay: 50ms;
+      }
+      .motion-card--sweep.is-playing .chalk-part--yellow {
+        animation-delay: 110ms;
+      }
+      .motion-card--sweep.is-playing .chalk-part--blue {
+        animation-delay: 170ms;
+      }
+      .motion-card--sweep.is-playing .chalk-part--pink {
+        animation-delay: 230ms;
+      }
+
+      .motion-card--sweep.is-playing .wordmark {
+        animation: sweep-wordmark 3.8s ease-in-out infinite;
+      }
+
+      /* Chalk burst: all four groups bloom out, then return to the mark. */
+      @keyframes burst-green {
+        0%,
+        100% {
+          opacity: 1;
+          transform: translate(0, 0) scale(1) rotate(0);
+        }
+        24% {
+          opacity: 1;
+          transform: translate(-14px, -9px) scale(1.14) rotate(-8deg);
+        }
+        54% {
+          opacity: 1;
+          transform: translate(-2px, 2px) scale(0.98) rotate(2deg);
+        }
+      }
+
+      @keyframes burst-yellow {
+        0%,
+        100% {
+          opacity: 1;
+          transform: translate(0, 0) scale(1) rotate(0);
+        }
+        24% {
+          opacity: 1;
+          transform: translate(-4px, -14px) scale(1.14) rotate(-4deg);
+        }
+        54% {
+          opacity: 1;
+          transform: translate(1px, 1px) scale(0.98) rotate(1deg);
+        }
+      }
+
+      @keyframes burst-blue {
+        0%,
+        100% {
+          opacity: 1;
+          transform: translate(0, 0) scale(1) rotate(0);
+        }
+        24% {
+          opacity: 1;
+          transform: translate(14px, -6px) scale(1.16) rotate(8deg);
+        }
+        54% {
+          opacity: 1;
+          transform: translate(2px, 1px) scale(0.98) rotate(-2deg);
+        }
+      }
+
+      @keyframes burst-pink {
+        0%,
+        100% {
+          opacity: 1;
+          transform: translate(0, 0) scale(1) rotate(0);
+        }
+        24% {
+          opacity: 1;
+          transform: translate(11px, 12px) scale(1.13) rotate(7deg);
+        }
+        54% {
+          opacity: 1;
+          transform: translate(1px, -1px) scale(0.98) rotate(-1deg);
+        }
+      }
+
+      @keyframes burst-wordmark {
+        0%,
+        18%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        42% {
+          opacity: 0.78;
+          transform: scale(0.97);
+        }
+        67% {
+          opacity: 1;
+          transform: scale(1.01);
+        }
+      }
+
+      .motion-card--burst.is-playing .chalk-part,
+      .motion-card--burst.is-playing .wordmark {
+        animation-duration: 2.9s;
+        animation-iteration-count: infinite;
+        animation-timing-function: var(--ease-out);
+      }
+
+      .motion-card--burst.is-playing .chalk-part--green {
+        animation-name: burst-green;
+      }
+      .motion-card--burst.is-playing .chalk-part--yellow {
+        animation-name: burst-yellow;
+      }
+      .motion-card--burst.is-playing .chalk-part--blue {
+        animation-name: burst-blue;
+      }
+      .motion-card--burst.is-playing .chalk-part--pink {
+        animation-name: burst-pink;
+      }
+      .motion-card--burst.is-playing .wordmark {
+        animation-name: burst-wordmark;
+      }
+
+      .study-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 30px 4px 0;
+        color: var(--ink-soft);
+        font-size: 0.78rem;
+      }
+
+      .study-footer p {
+        margin-bottom: 0;
+      }
+
+      .footer-mark {
+        color: var(--ink);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+
+      @media (max-width: 800px) {
+        .hero {
+          grid-template-columns: 1fr;
+          align-items: start;
+          gap: 24px;
+        }
+
+        .hero-tools {
+          align-items: flex-start;
+          flex-direction: row;
+          flex-wrap: wrap;
+        }
+
+        .gallery {
+          grid-template-columns: 1fr;
+        }
+
+        .motion-card {
+          min-height: 430px;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .page-shell {
+          width: min(100% - 24px, 1160px);
+          padding-top: 28px;
+          padding-bottom: 38px;
+        }
+
+        .hero {
+          padding-bottom: 32px;
+        }
+
+        h1 {
+          font-size: clamp(3.15rem, 18vw, 5.3rem);
+        }
+
+        .card-header {
+          padding-right: 20px;
+          padding-left: 20px;
+        }
+
+        .motion-tag {
+          display: none;
+        }
+
+        .logo-stage {
+          min-height: 240px;
+          margin-right: 8px;
+          margin-left: 8px;
+        }
+
+        .card-footer {
+          padding-right: 20px;
+          padding-left: 20px;
+        }
+
+        .study-footer {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 6px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+
+        .motion-card .chalk-part,
+        .motion-card .wordmark {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+
+        .light-beam {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Chalk / motion study</p>
+          <h1>One mark.<br /><em>Four moods.</em></h1>
+          <p class="hero-copy">A small study in how the Chalk signature can enter, breathe, catch the light, and spring to life. Every frame uses the real SVG shapes.</p>
+        </div>
+        <div class="hero-tools">
+          <button class="replay-all" type="button" data-replay-all>
+            <span class="button-icon" aria-hidden="true">↻</span>
+            Replay all
+          </button>
+          <span class="hero-note">Inline SVG · CSS motion</span>
+        </div>
+      </header>
+
+      <main class="gallery" aria-label="Chalk logo motion studies">
+        <article class="motion-card motion-card--draw is-playing" data-motion-card>
+          <header class="card-header">
+            <div class="card-heading">
+              <span class="card-number" aria-hidden="true">01</span>
+              <div>
+                <h2>Draw in</h2>
+                <p class="card-description">Each chalk stick lands in sequence, then the wordmark settles beside it.</p>
+              </div>
+            </div>
+            <span class="motion-tag">Sequential</span>
+          </header>
+          <div class="logo-stage logo-stage--draw">
+            <svg class="chalk-logo" viewBox="0 0 200 80" fill="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="draw-grn" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#C5E5C0" />
+                  <stop offset="100%" stop-color="#80B879" />
+                </linearGradient>
+                <linearGradient id="draw-yel" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#FCEAB3" />
+                  <stop offset="100%" stop-color="#D9B641" />
+                </linearGradient>
+                <linearGradient id="draw-blu" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#B2E0F0" />
+                  <stop offset="100%" stop-color="#55AAC9" />
+                </linearGradient>
+                <linearGradient id="draw-pnk" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#F8CACA" />
+                  <stop offset="100%" stop-color="#D67B7B" />
+                </linearGradient>
+              </defs>
+              <g transform="translate(2, 2) scale(0.95)">
+                <g class="chalk-part chalk-part--green">
+                  <g transform="rotate(-15 20 60)">
+                    <path d="M9,20 L21,20 L22,63 A7,7 0 0 1 8,63 Z" fill="url(#draw-grn)" />
+                    <ellipse cx="15" cy="20" rx="6" ry="2.5" fill="#D8ECD4" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--yellow">
+                  <g transform="rotate(-8 32 55)">
+                    <path d="M23,15 L35,15 L36,60 A7,7 0 0 1 22,60 Z" fill="url(#draw-yel)" />
+                    <ellipse cx="29" cy="15" rx="6" ry="2.5" fill="#FEF3D1" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--blue">
+                  <g transform="rotate(12 60 30)">
+                    <path d="M36,8 L48,8 L49,56 A7,7 0 0 1 35,56 Z" fill="url(#draw-blu)" />
+                    <ellipse cx="42" cy="8" rx="6" ry="2.5" fill="#D0EDF8" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--pink">
+                  <g transform="rotate(5 55 50)">
+                    <path d="M49,70 L61,70 L62,29 A7,7 0 0 0 48,29 Z" fill="url(#draw-pnk)" />
+                    <ellipse cx="55" cy="70" rx="6" ry="2.5" fill="#FBE4E4" />
+                  </g>
+                </g>
+              </g>
+              <text class="wordmark" x="90" y="52" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="600" letter-spacing="-0.02em" fill="currentColor">chalk</text>
+            </svg>
+          </div>
+          <footer class="card-footer">
+            <div class="palette" aria-label="Green, yellow, blue, and pink chalk"><span class="swatch swatch--green"></span><span class="swatch swatch--yellow"></span><span class="swatch swatch--blue"></span><span class="swatch swatch--pink"></span></div>
+            <button class="replay-card" type="button" data-replay aria-label="Replay Draw in animation">Replay <span aria-hidden="true">↗</span></button>
+          </footer>
+        </article>
+
+        <article class="motion-card motion-card--orbit is-playing" data-motion-card>
+          <header class="card-header">
+            <div class="card-heading">
+              <span class="card-number" aria-hidden="true">02</span>
+              <div>
+                <h2>Gentle orbit</h2>
+                <p class="card-description">The sticks sway at rest; hover the card or focus its control to send them into a quick burst.</p>
+              </div>
+            </div>
+            <span class="motion-tag">Hover / burst</span>
+          </header>
+          <div class="logo-stage logo-stage--orbit">
+            <svg class="chalk-logo" viewBox="0 0 200 80" fill="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="orbit-grn" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#C5E5C0" />
+                  <stop offset="100%" stop-color="#80B879" />
+                </linearGradient>
+                <linearGradient id="orbit-yel" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#FCEAB3" />
+                  <stop offset="100%" stop-color="#D9B641" />
+                </linearGradient>
+                <linearGradient id="orbit-blu" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#B2E0F0" />
+                  <stop offset="100%" stop-color="#55AAC9" />
+                </linearGradient>
+                <linearGradient id="orbit-pnk" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#F8CACA" />
+                  <stop offset="100%" stop-color="#D67B7B" />
+                </linearGradient>
+              </defs>
+              <g transform="translate(2, 2) scale(0.95)">
+                <g class="chalk-part chalk-part--green">
+                  <g transform="rotate(-15 20 60)">
+                    <path d="M9,20 L21,20 L22,63 A7,7 0 0 1 8,63 Z" fill="url(#orbit-grn)" />
+                    <ellipse cx="15" cy="20" rx="6" ry="2.5" fill="#D8ECD4" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--yellow">
+                  <g transform="rotate(-8 32 55)">
+                    <path d="M23,15 L35,15 L36,60 A7,7 0 0 1 22,60 Z" fill="url(#orbit-yel)" />
+                    <ellipse cx="29" cy="15" rx="6" ry="2.5" fill="#FEF3D1" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--blue">
+                  <g transform="rotate(12 60 30)">
+                    <path d="M36,8 L48,8 L49,56 A7,7 0 0 1 35,56 Z" fill="url(#orbit-blu)" />
+                    <ellipse cx="42" cy="8" rx="6" ry="2.5" fill="#D0EDF8" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--pink">
+                  <g transform="rotate(5 55 50)">
+                    <path d="M49,70 L61,70 L62,29 A7,7 0 0 0 48,29 Z" fill="url(#orbit-pnk)" />
+                    <ellipse cx="55" cy="70" rx="6" ry="2.5" fill="#FBE4E4" />
+                  </g>
+                </g>
+              </g>
+              <text class="wordmark" x="90" y="52" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="600" letter-spacing="-0.02em" fill="currentColor">chalk</text>
+            </svg>
+          </div>
+          <footer class="card-footer">
+            <div class="palette" aria-label="Green, yellow, blue, and pink chalk"><span class="swatch swatch--green"></span><span class="swatch swatch--yellow"></span><span class="swatch swatch--blue"></span><span class="swatch swatch--pink"></span></div>
+            <button class="replay-card" type="button" data-replay aria-label="Replay Gentle orbit animation">Replay <span aria-hidden="true">↗</span></button>
+          </footer>
+        </article>
+
+        <article class="motion-card motion-card--sweep is-playing" data-motion-card>
+          <header class="card-header">
+            <div class="card-heading">
+              <span class="card-number" aria-hidden="true">03</span>
+              <div>
+                <h2>Light sweep</h2>
+                <p class="card-description">A quiet glint moves across the mark while the chalk keeps its shape.</p>
+              </div>
+            </div>
+            <span class="motion-tag">Reflective</span>
+          </header>
+          <div class="logo-stage logo-stage--sweep">
+            <span class="light-beam" aria-hidden="true"></span>
+            <svg class="chalk-logo" viewBox="0 0 200 80" fill="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="sweep-grn" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#C5E5C0" />
+                  <stop offset="100%" stop-color="#80B879" />
+                </linearGradient>
+                <linearGradient id="sweep-yel" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#FCEAB3" />
+                  <stop offset="100%" stop-color="#D9B641" />
+                </linearGradient>
+                <linearGradient id="sweep-blu" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#B2E0F0" />
+                  <stop offset="100%" stop-color="#55AAC9" />
+                </linearGradient>
+                <linearGradient id="sweep-pnk" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#F8CACA" />
+                  <stop offset="100%" stop-color="#D67B7B" />
+                </linearGradient>
+              </defs>
+              <g transform="translate(2, 2) scale(0.95)">
+                <g class="chalk-part chalk-part--green">
+                  <g transform="rotate(-15 20 60)">
+                    <path d="M9,20 L21,20 L22,63 A7,7 0 0 1 8,63 Z" fill="url(#sweep-grn)" />
+                    <ellipse cx="15" cy="20" rx="6" ry="2.5" fill="#D8ECD4" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--yellow">
+                  <g transform="rotate(-8 32 55)">
+                    <path d="M23,15 L35,15 L36,60 A7,7 0 0 1 22,60 Z" fill="url(#sweep-yel)" />
+                    <ellipse cx="29" cy="15" rx="6" ry="2.5" fill="#FEF3D1" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--blue">
+                  <g transform="rotate(12 60 30)">
+                    <path d="M36,8 L48,8 L49,56 A7,7 0 0 1 35,56 Z" fill="url(#sweep-blu)" />
+                    <ellipse cx="42" cy="8" rx="6" ry="2.5" fill="#D0EDF8" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--pink">
+                  <g transform="rotate(5 55 50)">
+                    <path d="M49,70 L61,70 L62,29 A7,7 0 0 0 48,29 Z" fill="url(#sweep-pnk)" />
+                    <ellipse cx="55" cy="70" rx="6" ry="2.5" fill="#FBE4E4" />
+                  </g>
+                </g>
+              </g>
+              <text class="wordmark" x="90" y="52" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="600" letter-spacing="-0.02em" fill="currentColor">chalk</text>
+            </svg>
+          </div>
+          <footer class="card-footer">
+            <div class="palette" aria-label="Green, yellow, blue, and pink chalk"><span class="swatch swatch--green"></span><span class="swatch swatch--yellow"></span><span class="swatch swatch--blue"></span><span class="swatch swatch--pink"></span></div>
+            <button class="replay-card" type="button" data-replay aria-label="Replay Light sweep animation">Replay <span aria-hidden="true">↗</span></button>
+          </footer>
+        </article>
+
+        <article class="motion-card motion-card--burst is-playing" data-motion-card>
+          <header class="card-header">
+            <div class="card-heading">
+              <span class="card-number" aria-hidden="true">04</span>
+              <div>
+                <h2>Chalk burst</h2>
+                <p class="card-description">The sticks pop outward together, then return to their compact signature.</p>
+              </div>
+            </div>
+            <span class="motion-tag">Expressive</span>
+          </header>
+          <div class="logo-stage logo-stage--burst">
+            <svg class="chalk-logo" viewBox="0 0 200 80" fill="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="burst-grn" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#C5E5C0" />
+                  <stop offset="100%" stop-color="#80B879" />
+                </linearGradient>
+                <linearGradient id="burst-yel" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#FCEAB3" />
+                  <stop offset="100%" stop-color="#D9B641" />
+                </linearGradient>
+                <linearGradient id="burst-blu" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#B2E0F0" />
+                  <stop offset="100%" stop-color="#55AAC9" />
+                </linearGradient>
+                <linearGradient id="burst-pnk" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#F8CACA" />
+                  <stop offset="100%" stop-color="#D67B7B" />
+                </linearGradient>
+              </defs>
+              <g transform="translate(2, 2) scale(0.95)">
+                <g class="chalk-part chalk-part--green">
+                  <g transform="rotate(-15 20 60)">
+                    <path d="M9,20 L21,20 L22,63 A7,7 0 0 1 8,63 Z" fill="url(#burst-grn)" />
+                    <ellipse cx="15" cy="20" rx="6" ry="2.5" fill="#D8ECD4" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--yellow">
+                  <g transform="rotate(-8 32 55)">
+                    <path d="M23,15 L35,15 L36,60 A7,7 0 0 1 22,60 Z" fill="url(#burst-yel)" />
+                    <ellipse cx="29" cy="15" rx="6" ry="2.5" fill="#FEF3D1" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--blue">
+                  <g transform="rotate(12 60 30)">
+                    <path d="M36,8 L48,8 L49,56 A7,7 0 0 1 35,56 Z" fill="url(#burst-blu)" />
+                    <ellipse cx="42" cy="8" rx="6" ry="2.5" fill="#D0EDF8" />
+                  </g>
+                </g>
+                <g class="chalk-part chalk-part--pink">
+                  <g transform="rotate(5 55 50)">
+                    <path d="M49,70 L61,70 L62,29 A7,7 0 0 0 48,29 Z" fill="url(#burst-pnk)" />
+                    <ellipse cx="55" cy="70" rx="6" ry="2.5" fill="#FBE4E4" />
+                  </g>
+                </g>
+              </g>
+              <text class="wordmark" x="90" y="52" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="600" letter-spacing="-0.02em" fill="currentColor">chalk</text>
+            </svg>
+          </div>
+          <footer class="card-footer">
+            <div class="palette" aria-label="Green, yellow, blue, and pink chalk"><span class="swatch swatch--green"></span><span class="swatch swatch--yellow"></span><span class="swatch swatch--blue"></span><span class="swatch swatch--pink"></span></div>
+            <button class="replay-card" type="button" data-replay aria-label="Replay Chalk burst animation">Replay <span aria-hidden="true">↗</span></button>
+          </footer>
+        </article>
+      </main>
+
+      <footer class="study-footer">
+        <p><span class="footer-mark">Chalk</span> / SVG shape study</p>
+        <p>Four loops, one familiar mark.</p>
+      </footer>
+    </div>
+
+    <script>
+      (() => {
+        const cards = [...document.querySelectorAll("[data-motion-card]")];
+
+        const replay = (card) => {
+          card.classList.remove("is-playing");
+          void card.offsetWidth;
+          card.classList.add("is-playing");
+        };
+
+        document.querySelector("[data-replay-all]").addEventListener("click", () => {
+          cards.forEach(replay);
+        });
+
+        cards.forEach((card) => {
+          card.querySelector("[data-replay]").addEventListener("click", () => {
+            replay(card);
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

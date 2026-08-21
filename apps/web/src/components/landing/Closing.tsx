@@ -1,4 +1,5 @@
 import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import { Logo } from "@q9labsai/chalk-react";
 
 import { Icon } from "./Icon";
 import { Illustration } from "./Illustration";
@@ -65,7 +66,7 @@ export function Closing() {
           <div className="footer-top">
             <div className="footer-brand">
               <a href="/" className="footer-logo" aria-label="Chalk home">
-                <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
+                <Logo accessibilityLabel={null} color="currentColor" height={28} motion="orbit-burst" variant="wordmark" />
               </a>
               <p className="footer-tagline">A Space that outlasts the call, for your team or for the product you are building.</p>
             </div>

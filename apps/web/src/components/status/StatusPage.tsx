@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Logo } from "@q9labsai/chalk-react";
 import "../../styles/status.css";
 
 export type StatusState = "operational" | "degraded" | "outage" | "unknown";
@@ -89,7 +90,7 @@ export function StatusPage({ fetcher = fetch, pollIntervalMs = POLL_INTERVAL_MS,
     <main className="status-page" aria-labelledby="status-title" aria-busy={loading || refreshing}>
       <header className="status-header">
         <a className="status-brand" href="/" aria-label="Chalk home">
-          <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
+          <Logo accessibilityLabel={null} color="currentColor" height={28} motion="orbit-burst" variant="wordmark" />
         </a>
         <p className="status-eyebrow">Public service status</p>
         <h1 id="status-title">Chalk status</h1>
