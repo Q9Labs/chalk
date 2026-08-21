@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
-import { listAllAccountTenants } from "../../lib/dashboard-api";
+import { listAllAccountTenants, listSpaces } from "../../lib/dashboard-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";
@@ -52,54 +52,57 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     [telemetry],
   );
 
-  const start = useCallback((settings: EntranceSettings = { displayName, microphone: true, camera: true }) => {
-    const normalizedDisplayName = settings.displayName.trim();
-    const inviteToken = spaceInviteToken();
-    if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
-    setDisplayName(normalizedDisplayName);
-    setEntranceSettings(settings);
-    const accountEntry = Boolean(slug && !inviteToken && hasDashboardSpaceEntry());
-    if (slug && !inviteToken && !accountEntry) {
-      setError(neutralSpaceError);
-      return;
-    }
-    setError(null);
-    setPreparing(true);
-    const preparation = accountEntry ? prepareDashboardSpace(slug!, normalizedDisplayName, journey) : arrive(client, normalizedDisplayName, slug, inviteToken);
-    void preparation
-      .then(async (result) => {
-        if (result.kind === "dashboard") {
-          complete(result.access, result.inviteLink, result.spaceName);
-          return;
-        }
-        try {
-          await navigatePublicSpace(result.canonicalSlug, result.inviteLink);
-        } catch (cause) {
-          await releasePublicPreparation(client, result);
-          throw cause;
-        }
-        if (!active.current) {
-          await releasePublicPreparation(client, result);
-          return;
-        }
-        const { arrival, inviteLink, spaceName } = result;
-        if (arrival.state === "pending") {
-          const nextPending = { arrival, inviteLink, spaceName } satisfies PendingArrival;
-          pendingRef.current = nextPending;
-          setPending(nextPending);
-          return;
-        }
-        if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
-        const prepared = result.prepared ?? createPreparedPublicSpace(client, arrival);
-        complete(prepared, inviteLink, spaceName);
-      })
-      .catch((cause: unknown) => {
-        if (active.current) setError(neutralMessage(cause));
-      })
-      .finally(() => {
-        if (active.current) setPreparing(false);
-      });
-  }, [client, complete, displayName, navigatePublicSpace, pending, preparing, slug, spaceAccess]);
+  const start = useCallback(
+    (settings: EntranceSettings = { displayName, microphone: true, camera: true }) => {
+      const normalizedDisplayName = settings.displayName.trim();
+      const inviteToken = spaceInviteToken();
+      if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
+      setDisplayName(normalizedDisplayName);
+      setEntranceSettings(settings);
+      const accountEntry = Boolean(slug && !inviteToken && hasDashboardSpaceEntry());
+      if (slug && !inviteToken && !accountEntry) {
+        setError(neutralSpaceError);
+        return;
+      }
+      setError(null);
+      setPreparing(true);
+      const preparation = accountEntry ? prepareDashboardSpace(slug!, normalizedDisplayName, journey) : arrive(client, normalizedDisplayName, slug, inviteToken);
+      void preparation
+        .then(async (result) => {
+          if (result.kind === "dashboard") {
+            complete(result.access, result.inviteLink, result.spaceName);
+            return;
+          }
+          try {
+            await navigatePublicSpace(result.canonicalSlug, result.inviteLink);
+          } catch (cause) {
+            await releasePublicPreparation(client, result);
+            throw cause;
+          }
+          if (!active.current) {
+            await releasePublicPreparation(client, result);
+            return;
+          }
+          const { arrival, inviteLink, spaceName } = result;
+          if (arrival.state === "pending") {
+            const nextPending = { arrival, inviteLink, spaceName } satisfies PendingArrival;
+            pendingRef.current = nextPending;
+            setPending(nextPending);
+            return;
+          }
+          if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
+          const prepared = result.prepared ?? createPreparedPublicSpace(client, arrival);
+          complete(prepared, inviteLink, spaceName);
+        })
+        .catch((cause: unknown) => {
+          if (active.current) setError(neutralMessage(cause));
+        })
+        .finally(() => {
+          if (active.current) setPreparing(false);
+        });
+    },
+    [client, complete, displayName, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+  );
 
   useEffect(() => {
     pendingRef.current = pending;
@@ -180,6 +183,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
         journey={journey}
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
+        spaceDescription={spaceAccess.prepared.spaceDescription}
       />
     );
   }
@@ -200,6 +204,7 @@ type JoinedSpaceAccess = {
 
 type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
+  readonly spaceDescription?: string;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 
@@ -250,9 +255,27 @@ async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: str
 async function prepareDashboardSpace(slug: string, displayName: string, journey: ReturnType<typeof useWebTelemetry>["journey"]): Promise<DashboardPreparation> {
   const tenantID = await resolveTenantID();
   if (!tenantID) throw new Error(neutralSpaceError);
-  const access = await joinDashboardSpace(tenantID, slug, displayName, journey);
+  const [access, spaceDescription] = await Promise.all([joinDashboardSpace(tenantID, slug, displayName, journey), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
   clearDashboardSpaceEntry();
-  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
+  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, spaceDescription, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
+}
+
+async function findSpaceDescription(tenantID: string, slug: string): Promise<string | undefined> {
+  let cursor: string | undefined;
+  do {
+    const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
+    const space = page.spaces.find((candidate) => candidate.slug === slug);
+    if (space) return descriptionFromMetadata(space.metadata);
+    cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
+  } while (cursor);
+  return undefined;
+}
+
+function descriptionFromMetadata(metadata: unknown): string | undefined {
+  if (typeof metadata !== "object" || metadata === null) return undefined;
+  const value = Reflect.get(metadata, "description");
+  if (typeof value !== "string") return undefined;
+  return value.trim() || undefined;
 }
 
 async function resolveTenantID(): Promise<string> {
@@ -301,6 +324,7 @@ function LocalSpace({
   journey,
   onFinish,
   spaceName,
+  spaceDescription,
 }: {
   readonly credential: PublicSpaceCredential | AccountSpaceCredential;
   readonly displayName: string;
@@ -312,6 +336,7 @@ function LocalSpace({
   readonly journey: ReturnType<typeof useWebTelemetry>["journey"];
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
+  readonly spaceDescription?: string;
 }) {
   const client = useMemo(() => {
     const nextClient = createLocalSpaceClient({ credential, getAccess, connectionAccess, journey });
@@ -359,7 +384,9 @@ function LocalSpace({
         defaults={defaults}
         logoUrl="/brand/chalk/chalk-logo.svg"
         spaceName={spaceName}
+        spaceDescription={spaceDescription}
         inviteLink={inviteLink}
+        diagnosticReference={diagnostics.reference}
         onEpisodeEnded={releaseFromLifecycle}
         onLeft={releaseFromLifecycle}
         onOpenDiagnostics={diagnostics.path ? openDiagnostics : undefined}
@@ -368,11 +395,7 @@ function LocalSpace({
   );
 }
 
-function selectEntranceDevices(
-  client: ReturnType<typeof createLocalSpaceClient>,
-  selection: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId"> | undefined,
-  journey: ReturnType<typeof useWebTelemetry>["journey"],
-): void {
+function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>, selection: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId"> | undefined, journey: ReturnType<typeof useWebTelemetry>["journey"]): void {
   const audioInputDeviceId = selection?.audioInputDeviceId;
   const videoInputDeviceId = selection?.videoInputDeviceId;
   const audioOutputDeviceId = selection?.audioOutputDeviceId;

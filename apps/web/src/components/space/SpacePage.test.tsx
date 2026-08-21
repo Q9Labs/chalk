@@ -57,6 +57,8 @@ describe("public Space entry", () => {
     enterName("Ada");
 
     await waitFor(() => expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-lab", "Ada", mocks.journey));
+    expect(mocks.listSpaces).toHaveBeenCalledWith({ tenantID: "tenant-1", cursor: undefined, pageSize: 100 });
+    expect(mocks.holder.chalkProps).toMatchObject({ spaceDescription: "A calm design review Space." });
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
     expect(mocks.publicClient.createPublicSpace).not.toHaveBeenCalled();
     expect(window.location.search).toBe("");
@@ -132,6 +134,7 @@ describe("public Space entry", () => {
   it("leaves the browser arrival when Chalk reports that the Participant left", async () => {
     await renderAdmittedSpace();
 
+    expect(mocks.holder.chalkProps).toMatchObject({ diagnosticReference: mocks.diagnosticsReference });
     const onLeft = mocks.holder.chalkProps?.onLeft;
     if (typeof onLeft !== "function") throw new Error("Chalk did not provide the leave callback.");
     act(() => onLeft());

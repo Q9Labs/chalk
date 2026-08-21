@@ -29,7 +29,8 @@ const spacePageTestMocks = vi.hoisted(() => {
   const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn() };
   const telemetry = { configureApiBaseURL: vi.fn() };
   const episodeID = "33333333-3333-4333-8333-333333333333";
-  const diagnosticsPath = `/developer/episode-diagnostics/${encodeURIComponent(`chalk.episode:${episodeID}`)}`;
+  const diagnosticsReference = `chalk.episode:${episodeID}`;
+  const diagnosticsPath = `/developer/episode-diagnostics/${encodeURIComponent(diagnosticsReference)}`;
   const clientSnapshot = { connection: { episode: { id: episodeID } } };
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), leave: vi.fn(async () => undefined), dispose: vi.fn() };
   const getAccess = vi.fn();
@@ -68,13 +69,24 @@ const spacePageTestMocks = vi.hoisted(() => {
     connectionAccess,
     finish,
     diagnosticsPath,
+    diagnosticsReference,
     localStorage: { getItem: vi.fn(), setItem: vi.fn() },
     open: vi.fn(),
-    useEpisodeDiagnosticsAvailability: vi.fn(() => ({ path: diagnosticsPath, status: "available", supported: true, retry: vi.fn() }) satisfies { readonly path?: string; readonly status: "available" | "checking" | "unavailable"; readonly supported: boolean; readonly retry: () => void }),
+    useEpisodeDiagnosticsAvailability: vi.fn(
+      () =>
+        ({ path: diagnosticsPath, reference: diagnosticsReference, status: "available", supported: true, retry: vi.fn() }) satisfies {
+          readonly path?: string;
+          readonly reference?: string;
+          readonly status: "available" | "checking" | "unavailable";
+          readonly supported: boolean;
+          readonly retry: () => void;
+        },
+    ),
     createPublicInviteClient: vi.fn(() => publicClient),
     createPreparedPublicSpace: vi.fn(() => prepared),
     joinDashboardSpace: vi.fn(() => dashboardAccess),
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
+    listSpaces: vi.fn(async () => ({ spaces: [{ slug: "design-lab", metadata: { description: "A calm design review Space." } }], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
     createLocalSpaceClient: vi.fn(() => client),
     createLocalSpaceRelease: vi.fn((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup)),
     Chalk: vi.fn((props: Record<string, unknown>) => {
@@ -90,7 +102,7 @@ vi.mock("../lib/chalk-access", () => ({
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
 }));
-vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants }));
+vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
 vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
@@ -134,10 +146,11 @@ export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.createPreparedPublicSpace.mockReset().mockReturnValue(spacePageTestMocks.prepared);
   spacePageTestMocks.joinDashboardSpace.mockReset().mockResolvedValue(spacePageTestMocks.dashboardAccess);
   spacePageTestMocks.listAllAccountTenants.mockReset().mockResolvedValue([{ tenant: { id: "tenant-1" } }]);
+  spacePageTestMocks.listSpaces.mockReset().mockResolvedValue({ spaces: [{ slug: "design-lab", metadata: { description: "A calm design review Space." } }], pagination: { page_size: 100, next_cursor: null, has_more: false } });
   spacePageTestMocks.prepared.finish.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.createLocalSpaceClient.mockReset().mockReturnValue(spacePageTestMocks.client);
   spacePageTestMocks.createLocalSpaceRelease.mockReset().mockImplementation((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup));
-  spacePageTestMocks.useEpisodeDiagnosticsAvailability.mockReset().mockReturnValue({ path: spacePageTestMocks.diagnosticsPath, status: "available", supported: true, retry: vi.fn() });
+  spacePageTestMocks.useEpisodeDiagnosticsAvailability.mockReset().mockReturnValue({ path: spacePageTestMocks.diagnosticsPath, reference: spacePageTestMocks.diagnosticsReference, status: "available", supported: true, retry: vi.fn() });
   spacePageTestMocks.Chalk.mockClear();
   spacePageTestMocks.open.mockReset();
   spacePageTestMocks.telemetry.configureApiBaseURL.mockReset();

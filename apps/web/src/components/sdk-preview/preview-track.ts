@@ -1,5 +1,5 @@
 /** A browser-shaped media track used when canvas or Web Audio is unavailable. */
-class PreviewSyntheticMediaTrack extends EventTarget implements MediaStreamTrack {
+export class PreviewSyntheticMediaTrack extends EventTarget implements MediaStreamTrack {
   readonly contentHint = "";
   enabled = true;
   readonly id: string;

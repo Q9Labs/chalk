@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createPreviewWhiteboard, createPreviewWhiteboardAdapter, createPreviewWhiteboardProps } from "./preview-whiteboard";
+import { PreviewWhiteboard, PreviewWhiteboardAdapter, createPreviewWhiteboard, createPreviewWhiteboardAdapter, createPreviewWhiteboardProps, type PreviewWhiteboardCursor, type PreviewWhiteboardFile, type PreviewWhiteboardProps, type PreviewWhiteboardSnapshot } from "./preview-whiteboard";
 
 const element = (id: string, version: number, versionNonce = version) => ({
   id,
@@ -45,20 +45,32 @@ describe("preview whiteboard adapter", () => {
 
     await adapter.collaboration.fileTransfer?.upload({ fileId: "image-1", mimeType: "image/png", byteLength: 3, sha256: "abc", dataURL: "data:image/png;base64,AA==" });
     await expect(adapter.collaboration.fileTransfer?.download("image-1")).resolves.toEqual({ mimeType: "image/png", dataURL: "data:image/png;base64,AA==" });
+    expect(adapter.getFile("image-1")).toEqual({ fileId: "image-1", mimeType: "image/png", dataURL: "data:image/png;base64,AA==" });
     await expect(adapter.collaboration.fileTransfer?.download("missing")).rejects.toThrow("missing");
 
     const commit = await adapter.collaboration.clear();
     expect(commit.operationId).toBe("preview-operation-2");
     expect(adapter.getSnapshot().elements).toEqual([]);
     expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ type: "snapshot", elements: [] }));
+    adapter.dispose();
+    expect(adapter.getFile("image-1")).toBeNull();
   });
 
   it("returns the typed SpaceView whiteboard binding to the real SDK view", () => {
-    const adapter = createPreviewWhiteboardAdapter();
+    const adapter = new PreviewWhiteboardAdapter();
     const props = createPreviewWhiteboardProps({ adapter, canDraw: true, theme: "dark" });
     const binding = createPreviewWhiteboard({ adapter, canDraw: true, theme: "dark" });
+    const componentProps: PreviewWhiteboardProps = { adapter, canDraw: true, theme: "dark" };
+    const view = PreviewWhiteboard(componentProps);
+    const snapshot: PreviewWhiteboardSnapshot = adapter.getSnapshot();
+    const cursor: PreviewWhiteboardCursor = { x: 1, y: 2 };
+    const file: PreviewWhiteboardFile = { fileId: "fixture", mimeType: "image/png", dataURL: "data:image/png;base64,AA==" };
 
     expect(props.collab).toBe(adapter.collaboration);
     expect(binding).toEqual({ isOpen: true, props });
+    expect(view.props.collab).toBe(adapter.collaboration);
+    expect(snapshot.sceneId).toBe("preview-scene");
+    expect(cursor).toEqual({ x: 1, y: 2 });
+    expect(file.fileId).toBe("fixture");
   });
 });

@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PREVIEW_DEVICE_FIXTURES } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
-
-import { createPreviewMediaAdapter, createPreviewMediaDevices, PREVIEW_MEDIA_DEVICES } from "./preview-media-adapter";
+import { PREVIEW_DEVICE_FIXTURES, createPreviewDevices, createPreviewMediaAdapter, createPreviewMediaDevices, createPreviewTrackBundle, PREVIEW_MEDIA_DEVICES } from "./preview-media-adapter";
+import { PreviewSyntheticMediaTrack } from "./preview-track";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -13,6 +12,7 @@ describe("preview media adapter", () => {
   it("returns deterministic devices without asking for permission", () => {
     expect(PREVIEW_MEDIA_DEVICES).toBe(PREVIEW_DEVICE_FIXTURES);
     expect(createPreviewMediaDevices()).toEqual(PREVIEW_MEDIA_DEVICES);
+    expect(createPreviewDevices()).toEqual(PREVIEW_MEDIA_DEVICES);
     expect(createPreviewMediaDevices()).toEqual(createPreviewMediaDevices());
     expect(PREVIEW_MEDIA_DEVICES.microphones[0]).toEqual({ deviceId: "preview-microphone", label: "Preview microphone" });
   });
@@ -62,5 +62,33 @@ describe("preview media adapter", () => {
     expect(bundle.local.screen?.track.kind).toBe("video");
     expect(bundle.local.camera?.track.id).toBe("preview-local-camera");
     bundle.stop();
+  });
+
+  it("creates a standalone disposable fixture bundle", () => {
+    const bundle = createPreviewTrackBundle({ local: { microphone: true } });
+    expect(bundle.local.microphone?.track.readyState).toBe("live");
+    bundle.stop();
+    bundle.stop();
+    expect(bundle.local.microphone?.track.readyState).toBe("ended");
+  });
+
+  it("exposes the complete synthetic MediaStreamTrack boundary for focused preview fixtures", async () => {
+    const track = new PreviewSyntheticMediaTrack("audio", "direct-audio", "Direct audio");
+    expect(track).toMatchObject({ id: "direct-audio", kind: "audio", label: "Direct audio", readyState: "live" });
+    expect(track.contentHint).toBe("");
+    expect(track.enabled).toBe(true);
+    expect(track.muted).toBe(false);
+    expect(track.onended).toBeNull();
+    expect(track.onmute).toBeNull();
+    expect(track.onunmute).toBeNull();
+    await expect(track.applyConstraints()).resolves.toBeUndefined();
+    expect(track.getCapabilities()).toEqual({});
+    expect(track.getConstraints()).toEqual({});
+    expect(track.getSettings()).toEqual({});
+    const clone = track.clone();
+    expect(clone).toMatchObject({ id: "direct-audio-clone", kind: "audio", label: "Direct audio", readyState: "live" });
+    clone.stop();
+    track.stop();
+    expect(track.readyState).toBe("ended");
   });
 });

@@ -75,11 +75,11 @@ describe("createPreviewScreenTrack", () => {
     expect(context.fillRect).toHaveBeenCalledTimes(stoppedPaintCount);
   });
 
-  it("returns null when the canvas cannot provide a capture stream or context", () => {
+  it("falls back when the canvas cannot provide a capture stream or context", () => {
     const canvasWithoutCapture = { width: 0, height: 0, getContext: vi.fn() };
     vi.stubGlobal("document", { createElement: vi.fn(() => canvasWithoutCapture) });
 
-    expect(createPreviewScreenTrack()).toBeNull();
+    expect(createPreviewScreenTrack("missing-capture").track).toMatchObject({ id: "missing-capture", kind: "video" });
     expect(canvasWithoutCapture.getContext).not.toHaveBeenCalled();
 
     const canvasWithoutContext = {
@@ -90,8 +90,28 @@ describe("createPreviewScreenTrack", () => {
     };
     vi.stubGlobal("document", { createElement: vi.fn(() => canvasWithoutContext) });
 
-    expect(createPreviewScreenTrack()).toBeNull();
+    expect(createPreviewScreenTrack("missing-context").track).toMatchObject({ id: "missing-context", kind: "video" });
     expect(canvasWithoutContext.getContext).toHaveBeenCalledWith("2d");
     expect(canvasWithoutContext.captureStream).not.toHaveBeenCalled();
+  });
+
+  it("falls back when canvas context or capture creation throws", () => {
+    const contextFailure = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => {
+        throw new Error("context unavailable");
+      }),
+      captureStream: vi.fn(),
+    };
+    vi.stubGlobal("document", { createElement: vi.fn(() => contextFailure) });
+    expect(createPreviewScreenTrack("context-fallback").track.id).toBe("context-fallback");
+
+    const captureFailure = createCanvasHarness();
+    captureFailure.captureStream.mockImplementation(() => {
+      throw new Error("capture unavailable");
+    });
+    vi.stubGlobal("document", { createElement: captureFailure.createElement });
+    expect(createPreviewScreenTrack("capture-fallback").track.id).toBe("capture-fallback");
   });
 });

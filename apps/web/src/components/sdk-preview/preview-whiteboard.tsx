@@ -1,6 +1,8 @@
+import type React from "react";
+
 import type { WhiteboardCollaborationEvent } from "@q9labsai/chalk-whiteboard";
 import type { WhiteboardFileTransfer, WhiteboardWireElement } from "@q9labsai/chalk-whiteboard";
-import type { WhiteboardViewProps } from "../../../../../sdks/typescript/react/src/components/whiteboard-view/WhiteboardView";
+import { WhiteboardView, type WhiteboardViewProps } from "../../../../../sdks/typescript/react/src/components/whiteboard-view/WhiteboardView";
 import type { SpaceViewWhiteboard } from "../../../../../sdks/typescript/react/src/components/space-view/SpaceView";
 
 type WhiteboardCollab = NonNullable<WhiteboardViewProps["collab"]>;
@@ -13,7 +15,7 @@ const DEFAULT_SCENE_GENERATION = "preview-generation-0";
 const DEFAULT_REVISION = "preview-revision-0";
 const PREVIEW_TIMESTAMP = "2030-01-01T00:00:00.000Z";
 
-interface PreviewWhiteboardSnapshot {
+export interface PreviewWhiteboardSnapshot {
   readonly sceneId: string;
   readonly sceneGeneration: string;
   readonly revision: string;
@@ -29,13 +31,13 @@ export interface PreviewWhiteboardAdapterOptions {
   readonly canDraw?: boolean;
 }
 
-interface PreviewWhiteboardFile {
+export interface PreviewWhiteboardFile {
   readonly fileId: string;
   readonly mimeType: string;
   readonly dataURL: string;
 }
 
-interface PreviewWhiteboardCursor {
+export interface PreviewWhiteboardCursor {
   readonly x: number;
   readonly y: number;
 }
@@ -53,7 +55,7 @@ export interface PreviewWhiteboardSpaceOptions extends PreviewWhiteboardViewOpti
  * It keeps scene, cursor, and file state in memory so copied preview URLs never
  * depend on RealtimeKit or a server-backed board.
  */
-class PreviewWhiteboardAdapter {
+export class PreviewWhiteboardAdapter {
   readonly collaboration: WhiteboardCollab;
   private readonly listeners = new Set<WhiteboardEventListener>();
   private readonly files = new Map<string, PreviewWhiteboardFile>();
@@ -202,6 +204,14 @@ export function createPreviewWhiteboardProps({ adapter, ...viewProps }: PreviewW
 
 export function createPreviewWhiteboard({ adapter, isOpen = true, ...viewProps }: PreviewWhiteboardSpaceOptions): SpaceViewWhiteboard {
   return { isOpen, props: createPreviewWhiteboardProps({ adapter, ...viewProps }) };
+}
+
+export interface PreviewWhiteboardProps extends Omit<WhiteboardViewProps, "collab"> {
+  readonly adapter: PreviewWhiteboardAdapter;
+}
+
+export function PreviewWhiteboard({ adapter, ...viewProps }: PreviewWhiteboardProps): React.JSX.Element {
+  return <WhiteboardView {...viewProps} collab={adapter.collaboration} />;
 }
 
 function revisionName(value: number): string {
