@@ -95,7 +95,7 @@ describe("React bindings", () => {
     const view = render(<Chalk client={createTestClient()} />);
 
     await waitFor(() => expect(getUserMedia).toHaveBeenCalled());
-    fireEvent.click(view.getByRole("button", { name: "Camera On" }));
+    fireEvent.click(view.getByRole("button", { name: "Camera" }));
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(firstTrack.stop).toHaveBeenCalled());
     view.unmount();
@@ -492,7 +492,8 @@ describe("React bindings", () => {
     const view = render(<Chalk client={client} features={{ settings: true }} />);
 
     fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
-    expect(view.container.querySelector("[data-chalk-drawer]")).toBeInTheDocument();
+    expect(document.querySelector('[role="dialog"]')).toBeInTheDocument();
+    expect(view.container.querySelector("[data-chalk-drawer]")).not.toBeInTheDocument();
     fireEvent.click(document.querySelector('[role="dialog"] button[aria-label="Close settings"]')!);
 
     await waitFor(() => {
@@ -509,7 +510,8 @@ describe("React bindings", () => {
     fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
     fireEvent.click(within(document.body).getByRole("button", { name: /Appearance/ }));
 
-    expect(view.container.querySelector('button[aria-label="Layout: Grid"]')).not.toBeNull();
+    expect(view.container.querySelector('button[aria-label^="Layout:"]')).not.toBeNull();
+    expect(within(document.body).getByRole("dialog", { name: "Space settings" }).querySelector('button[aria-label^="Layout:"]')).toBeNull();
   });
 
   it("keeps a texture-only theme following system palette changes", () => {

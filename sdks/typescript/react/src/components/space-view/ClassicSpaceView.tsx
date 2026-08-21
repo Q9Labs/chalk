@@ -85,7 +85,7 @@ export function ClassicSpaceView({
   useEffect(() => setActivePanel(initialPanel), [initialPanel]);
 
   useEffect(() => {
-    if (feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("admission");
+    if (feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
   }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission]);
   const buttons: ControlBarButtonName[] = [
     "mic",
@@ -97,8 +97,6 @@ export function ClassicSpaceView({
     ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
     ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
-    ...(feature("info") && infoDialog ? ["info" as const] : []),
-    ...(feature("settings") ? ["settings" as const] : []),
     "leave",
   ];
 
@@ -110,7 +108,13 @@ export function ClassicSpaceView({
   useContentLayoutSwitch(hasStageContent, layout, updateLayout);
   useSoundCues(feature("sounds"));
   const prefersReducedMotion = usePrefersReducedMotion();
-  const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
+  const settingsDialogIsControlled = React.isValidElement<{ readonly isOpen?: boolean }>(settingsDialog) && typeof settingsDialog.props.isOpen === "boolean";
+  const drawerPanel = settingsDialogIsControlled && activePanel === "settings" ? null : activePanel;
+  const drawer = useDrawerPresence(drawerPanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
+  const openSettings = () => {
+    if (!settingsDialogIsControlled) setActivePanel("settings");
+    onOpenSettings?.();
+  };
 
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
     try {
@@ -162,12 +166,7 @@ export function ClassicSpaceView({
             onLayoutChange={updateLayout}
             onInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
             onSettings={
-              feature("settings")
-                ? () => {
-                    setActivePanel("settings");
-                    onOpenSettings?.();
-                  }
-                : undefined
+              feature("settings") ? openSettings : undefined
             }
             className="relative z-20"
           />
@@ -188,13 +187,10 @@ export function ClassicSpaceView({
                     onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                     onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                     onToggleWhiteboard={onToggleWhiteboard}
-                    onOpenReactions={() => setReactionPickerOpen(true)}
+                    onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                     onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                     onOpenDiagnostics={onOpenDiagnostics}
-                    onOpenSettings={() => {
-                      setActivePanel("settings");
-                      onOpenSettings?.();
-                    }}
+                    onOpenSettings={openSettings}
                     onCommandError={setCommandError}
                     onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
                   />{" "}
@@ -209,13 +205,10 @@ export function ClassicSpaceView({
                     onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                     onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                     onToggleWhiteboard={onToggleWhiteboard}
-                    onOpenReactions={() => setReactionPickerOpen(true)}
+                    onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                     onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                     onOpenDiagnostics={onOpenDiagnostics}
-                    onOpenSettings={() => {
-                      setActivePanel("settings");
-                      onOpenSettings?.();
-                    }}
+                    onOpenSettings={openSettings}
                     onCommandError={setCommandError}
                     onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
                   />{" "}
@@ -241,10 +234,11 @@ export function ClassicSpaceView({
               {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
               {drawer.panel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
               {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
-              {drawer.panel === "settings" && feature("settings") ? (settingsContent ?? <SettingsPanel className="w-full border-0 shadow-none" onClose={() => setActivePanel(null)} />) : null}
+              {drawer.panel === "settings" && feature("settings") && !settingsDialogIsControlled ? (settingsContent ?? <SettingsPanel className="w-full border-0 shadow-none" onClose={() => setActivePanel(null)} />) : null}
             </SpaceDrawer>
           </div>
 
+          {settingsDialogIsControlled ? settingsContent : null}
           {overlay}
           <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" palette={palette} texture={texture} />
           {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}

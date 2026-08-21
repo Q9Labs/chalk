@@ -132,7 +132,8 @@ describe("SpaceView", () => {
   it("uses the light Chalk wordmark on dark Space palettes", () => {
     renderView(createTestClient(), { palette: "warm-charcoal", logoUrl: "/brand/chalk/chalk-logo.svg" });
 
-    expect(screen.getByRole("img", { name: "Chalk" })).toHaveAttribute("src", "/brand/chalk/chalk-logo-on-dark.svg");
+    expect(screen.getByRole("img", { name: "Chalk" })).toHaveAttribute("data-chalk-logo", "true");
+    expect(screen.getByRole("img", { name: "Chalk" })).toHaveAttribute("color", "#F4F3EE");
   });
 
   it("uses the full host viewport instead of capping the Space chrome and stage", () => {

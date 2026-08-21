@@ -102,10 +102,8 @@ const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as 
 export function SpaceView(props: SpaceViewProps): React.JSX.Element {
   const skin = props.skin ?? "classic";
   const themedProps = { ...props, logoUrl: logoForPalette(props.logoUrl, props.palette ?? "light") };
-  const settingsOpen = React.isValidElement<{ readonly isOpen?: boolean }>(props.settingsDialog) && props.settingsDialog.props.isOpen === true;
-  const rendererProps = settingsOpen ? { ...themedProps, initialPanel: "settings" as const } : themedProps;
 
-  return <SkinProvider skin={skin}>{skin === "classic" ? <ClassicSpaceView {...rendererProps} /> : <ChalkSpaceView {...rendererProps} />}</SkinProvider>;
+  return <SkinProvider skin={skin}>{skin === "classic" ? <ClassicSpaceView {...themedProps} /> : <ChalkSpaceView {...themedProps} />}</SkinProvider>;
 }
 
 function logoForPalette(logoUrl: string | undefined, palette: ThemePalette): string | undefined {
@@ -165,7 +163,7 @@ function ChalkSpaceView({
   useEffect(() => setActivePanel(initialPanel), [initialPanel]);
 
   useEffect(() => {
-    if (feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("admission");
+    if (feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
   }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission]);
   const buttons: ControlBarButtonName[] = [
     "mic",
@@ -177,8 +175,6 @@ function ChalkSpaceView({
     ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
     ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
-    ...(feature("info") && infoDialog ? ["info" as const] : []),
-    ...(feature("settings") ? ["settings" as const] : []),
     "leave",
   ];
 
@@ -190,7 +186,13 @@ function ChalkSpaceView({
   useContentLayoutSwitch(hasStageContent, layout, updateLayout);
   useSoundCues(feature("sounds"));
   const prefersReducedMotion = usePrefersReducedMotion();
-  const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
+  const settingsDialogIsControlled = React.isValidElement<{ readonly isOpen?: boolean }>(settingsDialog) && typeof settingsDialog.props.isOpen === "boolean";
+  const drawerPanel = settingsDialogIsControlled && activePanel === "settings" ? null : activePanel;
+  const drawer = useDrawerPresence(drawerPanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
+  const openSettings = () => {
+    if (!settingsDialogIsControlled) setActivePanel("settings");
+    onOpenSettings?.();
+  };
 
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
     try {
@@ -243,12 +245,7 @@ function ChalkSpaceView({
               onLayoutChange={updateLayout}
               onInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
               onSettings={
-                feature("settings")
-                  ? () => {
-                      setActivePanel("settings");
-                      onOpenSettings?.();
-                    }
-                  : undefined
+                feature("settings") ? openSettings : undefined
               }
               className="relative z-20"
             />
@@ -271,13 +268,10 @@ function ChalkSpaceView({
                       onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                       onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                       onToggleWhiteboard={onToggleWhiteboard}
-                      onOpenReactions={() => setReactionPickerOpen(true)}
+                      onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                       onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                       onOpenDiagnostics={onOpenDiagnostics}
-                      onOpenSettings={() => {
-                        setActivePanel("settings");
-                        onOpenSettings?.();
-                      }}
+                      onOpenSettings={openSettings}
                       onCommandError={setCommandError}
                       onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
                     />{" "}
@@ -292,13 +286,10 @@ function ChalkSpaceView({
                       onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                       onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                       onToggleWhiteboard={onToggleWhiteboard}
-                      onOpenReactions={() => setReactionPickerOpen(true)}
+                      onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                       onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                       onOpenDiagnostics={onOpenDiagnostics}
-                      onOpenSettings={() => {
-                        setActivePanel("settings");
-                        onOpenSettings?.();
-                      }}
+                      onOpenSettings={openSettings}
                       onCommandError={setCommandError}
                       onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
                     />{" "}
@@ -324,10 +315,11 @@ function ChalkSpaceView({
                 {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
                 {drawer.panel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
                 {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
-                {drawer.panel === "settings" && feature("settings") ? (settingsContent ?? <SettingsPanel className="w-full border-0 shadow-none" onClose={() => setActivePanel(null)} />) : null}
+                {drawer.panel === "settings" && feature("settings") && !settingsDialogIsControlled ? (settingsContent ?? <SettingsPanel className="w-full border-0 shadow-none" onClose={() => setActivePanel(null)} />) : null}
               </SpaceDrawer>
             </div>
 
+            {settingsDialogIsControlled ? settingsContent : null}
             {overlay}
             <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" palette={palette} texture={texture} />
             {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
