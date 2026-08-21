@@ -276,6 +276,24 @@ returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, ad
     ) as role_defaults(name, capabilities)
     on conflict (tenant_id, space_id, name) do nothing
     returning id
+), invite_seeded as (
+    insert into space_public_invites (
+        tenant_id, space_id, handle, generation, state_epoch, enabled,
+        public_role, admission_mode, last_actor_id
+    )
+    select
+        inserted.tenant_id,
+        inserted.id,
+        $13,
+        1,
+        1,
+        true,
+        'collaborator',
+        inserted.admission_policy ->> 'mode',
+        inserted.created_by_user_id
+    from inserted
+    on conflict (tenant_id, space_id) do nothing
+    returning tenant_id, space_id
 )
 select
     inserted.id,
@@ -309,6 +327,7 @@ type CreateSpaceParams struct {
 	MaximumEpisodeDurationSeconds int32       `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32       `json:"linger_window_seconds"`
 	CreatedByUserID               pgtype.UUID `json:"created_by_user_id"`
+	PublicInviteHandle            []byte      `json:"public_invite_handle"`
 }
 
 type CreateSpaceRow struct {
@@ -343,6 +362,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		arg.MaximumEpisodeDurationSeconds,
 		arg.LingerWindowSeconds,
 		arg.CreatedByUserID,
+		arg.PublicInviteHandle,
 	)
 	var i CreateSpaceRow
 	err := row.Scan(

@@ -104,7 +104,16 @@ function validateRefresh(previous: ParsedAccessGrant, next: ParsedAccessGrant, r
   if (left.tenantId !== right.tenantId || left.spaceId !== right.spaceId || left.episodeId !== right.episodeId || left.participantId !== right.participantId || left.participantGeneration !== right.participantGeneration) {
     throw new TypeError("Access grant refresh changed its subject");
   }
-  if (!replaceMediaConnection && previous.media.clientPayload.connectionId !== next.media.clientPayload.connectionId) throw new TypeError("Access grant refresh unexpectedly replaced its media connection");
+  if (!replaceMediaConnection && (previous.media.provider !== next.media.provider || mediaBinding(previous) !== mediaBinding(next))) throw new TypeError("Access grant refresh unexpectedly replaced its media connection");
+}
+
+function mediaBinding(access: ParsedAccessGrant): string {
+  switch (access.media.provider) {
+    case "cloudflare_sfu":
+      return access.media.clientPayload.connectionId;
+    case "cloudflare_rtk":
+      return access.media.clientPayload.providerSubject;
+  }
 }
 
 function expiresAt(value: string): number {

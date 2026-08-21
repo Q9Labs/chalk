@@ -8,70 +8,70 @@ const spacePageTestMocks = vi.hoisted(() => {
   const episodeID = "33333333-3333-4333-8333-333333333333";
   const diagnosticsPath = `/developer/episode-diagnostics/${encodeURIComponent(`chalk.episode:${episodeID}`)}`;
   const clientSnapshot = { connection: { episode: { id: episodeID } } };
-  const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined) };
+  const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), leave: vi.fn(async () => undefined), dispose: vi.fn() };
   const getAccess = vi.fn();
-  const brokerConnectionAccess = vi.fn();
-  const dashboardGetAccess = vi.fn();
-  const connectionAccess = { access: "dashboard" };
-  const dashboardConnectionAccess = vi.fn();
-  const dashboardLeave = vi.fn(async (): Promise<void> => undefined);
-  const listAllAccountTenants = vi.fn();
-  const joinDashboardSpace = vi.fn();
+  const connectionAccess = vi.fn();
+  const finish = vi.fn(async () => undefined);
+  const dashboardAccess = {
+    credential: { apiBaseURL: "https://api.chalk.test", space: "space-1", access: { subject: {}, sync: { token: "sync" }, media: { token: "media" } }, participantGeneration: 3 },
+    getAccess,
+    connectionAccess,
+    leave: finish,
+    inviteLink: "/space/design-lab#spaceInviteToken=cspi1.account",
+  };
+  const publicClient = {
+    createPublicSpace: vi.fn(),
+    arriveBySpacePublicInvite: vi.fn(),
+    getSpacePublicInviteArrival: vi.fn(),
+    refreshSpacePublicInviteAccess: vi.fn(),
+    leaveSpacePublicInviteArrival: vi.fn(async () => undefined),
+  };
+  const prepared = {
+    arrival: undefined,
+    credential: { apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", space: "design-lab" },
+    getAccess,
+    connectionAccess,
+    finish,
+  };
   return {
     holder,
     journey,
     telemetry,
-    brokerConnectionAccess,
+    publicClient,
+    dashboardAccess,
+    prepared,
     client,
-    connectionAccess,
-    dashboardGetAccess,
-    diagnosticsPath,
-    episodeID,
     getAccess,
+    connectionAccess,
+    finish,
+    diagnosticsPath,
     localStorage: { getItem: vi.fn(), setItem: vi.fn() },
     open: vi.fn(),
-    useEpisodeDiagnosticsAvailability: vi.fn(() => ({ path: diagnosticsPath, status: "available", supported: true, retry: vi.fn() }) as { readonly path?: string; readonly status: "available" | "checking" | "unavailable"; readonly supported: boolean; readonly retry: () => void }),
-    dashboardConnectionAccess,
-    dashboardLeave,
-    listAllAccountTenants,
-    joinDashboardSpace,
+    useEpisodeDiagnosticsAvailability: vi.fn(() => ({ path: diagnosticsPath, status: "available", supported: true, retry: vi.fn() }) satisfies { readonly path?: string; readonly status: "available" | "checking" | "unavailable"; readonly supported: boolean; readonly retry: () => void }),
+    createPublicInviteClient: vi.fn(() => publicClient),
+    createPreparedPublicSpace: vi.fn(() => prepared),
+    joinDashboardSpace: vi.fn(() => dashboardAccess),
+    listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
+    createLocalSpaceClient: vi.fn(() => client),
+    createLocalSpaceRelease: vi.fn((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup)),
     Chalk: vi.fn((props: Record<string, unknown>) => {
       holder.chalkProps = props;
       return null;
     }),
-    cleanupParticipantCredential: vi.fn(async (): Promise<void> => undefined),
-    createAccessGrantProvider: vi.fn(() => getAccess),
-    createBrokerConnectionAccess: vi.fn(() => brokerConnectionAccess),
-    createParticipantCredential: vi.fn(),
-    isUnauthenticatedDashboardSpaceError: vi.fn((cause: unknown) => cause instanceof Error && "status" in cause && Number((cause as { readonly status?: unknown }).status) === 401),
-    createLocalSpaceClient: vi.fn(() => client),
-    createLocalSpaceRelease: vi.fn((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup)),
   };
 });
 
 vi.mock("@q9labsai/chalk-react", () => ({ Chalk: getSpacePageTestMocks().Chalk }));
 vi.mock("../lib/chalk-access", () => ({
-  cleanupParticipantCredential: getSpacePageTestMocks().cleanupParticipantCredential,
-  createAccessGrantProvider: getSpacePageTestMocks().createAccessGrantProvider,
-  createBrokerConnectionAccess: getSpacePageTestMocks().createBrokerConnectionAccess,
-  createParticipantCredential: getSpacePageTestMocks().createParticipantCredential,
-  isTerminalParticipantCredentialCleanupError,
-  isUnauthenticatedDashboardSpaceError: getSpacePageTestMocks().isUnauthenticatedDashboardSpaceError,
+  createPublicInviteClient: getSpacePageTestMocks().createPublicInviteClient,
+  createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
 }));
-vi.mock("../lib/dashboard-api", () => {
-  class DashboardAPIError extends Error {
-    constructor(
-      readonly status: number,
-      readonly code: string,
-      message: string,
-    ) {
-      super(message);
-    }
-  }
-  return { DashboardAPIError, listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants };
-});
-vi.mock("../lib/local-space-client", () => ({ createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient, createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease }));
+vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants }));
+vi.mock("../lib/local-space-client", () => ({
+  createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
+  createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
+}));
 vi.mock("../lib/web-telemetry-context", () => ({
   WebTelemetryProvider: ({ children }: { readonly children: ReactNode }) => children,
   useWebTelemetry: () => ({ journey: getSpacePageTestMocks().journey, telemetry: getSpacePageTestMocks().telemetry }),
@@ -82,49 +82,48 @@ export function getSpacePageTestMocks(): typeof spacePageTestMocks {
   return spacePageTestMocks;
 }
 
-export const spacePageTestCredential = {
-  apiBaseURL: "https://api.chalk.test/control",
-  syncURL: "wss://sync.chalk.test/v1/sync",
-  spaceInviteToken: "i".repeat(43),
+export const spacePageTestToken = "cspi1.test-capability";
+export const spacePageTestArrival = {
+  state: "admitted",
+  arrival_handle: "arrival-11111111",
+  identity: "guest",
+  space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" },
+  access: { subject: {}, sync: { token: "sync" }, media: { token: "media" } },
 };
-
-export const dashboardSpaceTestAccess = {
-  credential: {
-    apiBaseURL: "https://api.chalk.test",
-    space: "design-lab",
-    access: {},
-    participantGeneration: 1,
-  },
-  getAccess: spacePageTestMocks.dashboardGetAccess,
-  connectionAccess: spacePageTestMocks.dashboardConnectionAccess,
-  leave: spacePageTestMocks.dashboardLeave,
+export const spacePageTestCreated = {
+  invite_link: `http://localhost:3000/space/created-space#spaceInviteToken=${spacePageTestToken}`,
+  lifecycle_until: "2026-08-19T12:00:00Z",
+  space: { admission_mode: "open", name: "Created Space", slug: "created-space" },
+  arrival: spacePageTestArrival,
 };
-
-function isTerminalParticipantCredentialCleanupError(cause: unknown): boolean {
-  return cause instanceof Error && "status" in cause && [401, 404, 410].includes(Number((cause as { readonly status?: unknown }).status));
-}
 
 export function resetSpacePageTestMocks(): void {
   window.history.replaceState({}, "", "/space");
   vi.stubGlobal("localStorage", spacePageTestMocks.localStorage);
   vi.stubGlobal("open", spacePageTestMocks.open);
   spacePageTestMocks.holder.chalkProps = undefined;
-  spacePageTestMocks.createParticipantCredential.mockReset().mockResolvedValue(spacePageTestCredential);
+  spacePageTestMocks.publicClient.createPublicSpace.mockReset().mockResolvedValue(spacePageTestCreated);
+  spacePageTestMocks.publicClient.arriveBySpacePublicInvite.mockReset().mockResolvedValue(spacePageTestArrival);
+  spacePageTestMocks.publicClient.getSpacePublicInviteArrival.mockReset().mockResolvedValue(spacePageTestArrival);
+  spacePageTestMocks.publicClient.refreshSpacePublicInviteAccess.mockReset().mockResolvedValue(spacePageTestArrival.access);
+  spacePageTestMocks.publicClient.leaveSpacePublicInviteArrival.mockReset().mockResolvedValue(undefined);
+  spacePageTestMocks.createPublicInviteClient.mockClear();
+  spacePageTestMocks.createPreparedPublicSpace.mockReset().mockReturnValue(spacePageTestMocks.prepared);
+  spacePageTestMocks.joinDashboardSpace.mockReset().mockResolvedValue(spacePageTestMocks.dashboardAccess);
   spacePageTestMocks.listAllAccountTenants.mockReset().mockResolvedValue([{ tenant: { id: "tenant-1" } }]);
-  spacePageTestMocks.joinDashboardSpace.mockReset().mockResolvedValue(dashboardSpaceTestAccess);
-  spacePageTestMocks.dashboardLeave.mockReset().mockResolvedValue(undefined);
-  spacePageTestMocks.isUnauthenticatedDashboardSpaceError.mockClear();
-  spacePageTestMocks.cleanupParticipantCredential.mockReset().mockResolvedValue(undefined);
-  spacePageTestMocks.createAccessGrantProvider.mockReset().mockReturnValue(spacePageTestMocks.getAccess);
-  spacePageTestMocks.createBrokerConnectionAccess.mockReset().mockReturnValue(spacePageTestMocks.brokerConnectionAccess);
+  spacePageTestMocks.prepared.finish.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.createLocalSpaceClient.mockReset().mockReturnValue(spacePageTestMocks.client);
   spacePageTestMocks.createLocalSpaceRelease.mockReset().mockImplementation((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup));
-  spacePageTestMocks.localStorage.getItem.mockReset().mockReturnValue(null);
-  spacePageTestMocks.localStorage.setItem.mockReset();
   spacePageTestMocks.useEpisodeDiagnosticsAvailability.mockReset().mockReturnValue({ path: spacePageTestMocks.diagnosticsPath, status: "available", supported: true, retry: vi.fn() });
   spacePageTestMocks.Chalk.mockClear();
   spacePageTestMocks.open.mockReset();
   spacePageTestMocks.telemetry.configureApiBaseURL.mockReset();
+}
+
+export async function cleanupSpacePageTestMocks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
 }
 
 function makeRelease(cleanup: () => Promise<void>): ReturnType<typeof vi.fn> {

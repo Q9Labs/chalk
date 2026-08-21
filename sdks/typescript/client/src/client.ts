@@ -16,6 +16,8 @@ export type ChalkClientHeaders = Readonly<Record<string, string>>;
 export type ChalkEffectClientOptions = {
   readonly baseUrl: string | URL;
   readonly auth?: ChalkAuth;
+  /** Default fetch credentials mode for browser and edge requests. */
+  readonly credentials?: RequestCredentials;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: ChalkClientHeaders;
   /** Optional v1 journey context. Generated API calls receive lowercase x-chalk-journey-id and W3C trace headers. */
@@ -32,7 +34,9 @@ export const createChalkEffectClient = (options: ChalkEffectClientOptions) => {
       }),
   }).pipe(Effect.provide(FetchHttpClient.layer));
 
-  return options.fetch ? client.pipe(Effect.provideService(FetchHttpClient.Fetch, options.fetch)) : client;
+  const configuredClient = options.credentials === undefined ? client : client.pipe(Effect.provideService(FetchHttpClient.RequestInit, { credentials: options.credentials }));
+
+  return options.fetch ? configuredClient.pipe(Effect.provideService(FetchHttpClient.Fetch, options.fetch)) : configuredClient;
 };
 
 function requestHeaders(options: ChalkEffectClientOptions): Record<string, string> {

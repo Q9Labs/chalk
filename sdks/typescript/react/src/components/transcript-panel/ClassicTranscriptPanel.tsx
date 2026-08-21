@@ -488,8 +488,8 @@ const TranscriptPanelSurface = React.memo(
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col">
-            <div ref={containerRef} className={cn("rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px] flex-1", "bg-[var(--chalk-stage)] border border-[var(--chalk-line)]")} onScroll={handleScroll}>
+          <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+            <div ref={containerRef} className={cn("relative min-h-0 flex-1 space-y-1 overflow-y-auto rounded-2xl p-4", "bg-[var(--chalk-stage)] border border-[var(--chalk-line)]")} onScroll={handleScroll}>
               {renderTranscriptContent()}
               {renderNewContentIndicator()}
             </div>

@@ -116,6 +116,8 @@ func setProductionHostedDiagnosticsEnvironment(t *testing.T, optIn string) {
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.IntegrationsEnabled, "false")
 	t.Setenv(config.TranscriptionEnabled, "false")
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8443")
 	t.Setenv(config.ProviderBridgeServerCertFile, "/tmp/chalk-server.crt")
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/tmp/chalk-server.key")
@@ -126,6 +128,17 @@ func setProductionHostedDiagnosticsEnvironment(t *testing.T, optIn string) {
 	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
 	t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
 	t.Setenv(config.EpisodeDiagnosticsProductionOptIn, optIn)
+
+	publicInvitePublicKey, publicInvitePrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.PublicInviteManagedTenantID, "11111111-1111-4111-8111-111111111111")
+	t.Setenv(config.PublicInviteDefaultMediaPlane, "cf_rtk")
+	t.Setenv(config.PublicInviteWebOrigin, "https://app.chalk.test")
+	t.Setenv(config.PublicInviteKeyID, "public-1")
+	t.Setenv(config.PublicInvitePrivateKey, base64.RawURLEncoding.EncodeToString(publicInvitePrivateKey))
+	t.Setenv(config.PublicInviteVerificationKeys, `{"public-1":"`+base64.RawURLEncoding.EncodeToString(publicInvitePublicKey)+`"}`)
 
 	operatorPublicKey, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

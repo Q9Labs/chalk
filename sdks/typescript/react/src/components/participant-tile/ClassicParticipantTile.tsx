@@ -18,7 +18,7 @@ const aspectRatioClasses = {
   fill: "",
 };
 
-export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference }: ParticipantTileProps) => {
+export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference, hidden }: ParticipantTileProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [trackError, setTrackError] = useState<string | null>(null);
@@ -128,6 +128,7 @@ export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mir
         pinned && "ring-2",
         participant.isSpeaking && !prefersReducedMotion && "chalk-animate-harmonic-pulse",
         participant.isSpeaking && prefersReducedMotion && "border-solid",
+        hidden && "pointer-events-none",
         onClick && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-canvas)]",
         className,
       )}
@@ -146,7 +147,8 @@ export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mir
       onKeyDown={handleKeyDown}
       data-tour={participant.isLocal ? "local-video" : "video-grid"}
       role={onClick ? "button" : "region"}
-      tabIndex={onClick ? 0 : undefined}
+      tabIndex={onClick && !hidden ? 0 : undefined}
+      aria-hidden={hidden || undefined}
       aria-label={`Video tile for ${participant.displayName}`}
     >
       {/* Video element (always rendered, visibility controlled by CSS) */}

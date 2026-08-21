@@ -13,6 +13,26 @@ describe("whiteboard-v1 codec", () => {
     } as const;
 
     expect(decodeWhiteboardV1ClientFrame(JSON.parse(encodeWhiteboardV1ClientFrame(frame)))).toEqual(frame);
+
+    const extended = { ...frame, extensions: [{ name: "presentation_v1" }] } as const;
+    expect(decodeWhiteboardV1ClientFrame(JSON.parse(encodeWhiteboardV1ClientFrame(extended)))).toEqual(extended);
+  });
+
+  it("accepts both legacy and negotiated welcomes", () => {
+    const welcome = {
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: sceneId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard"],
+      participant_capabilities: ["drawWhiteboard"],
+      scene_id: sceneId,
+      revision: "1",
+      can_draw: true,
+    } as const;
+
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify(welcome))).toEqual(welcome);
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ ...welcome, presenting: true }))).toEqual({ ...welcome, presenting: true });
   });
 
   it("rejects unknown server fields", () => {

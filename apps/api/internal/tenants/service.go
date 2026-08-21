@@ -33,6 +33,11 @@ var (
 
 const accountTenantInstrumentationScope = "github.com/q9labs/chalk/apps/api/internal/tenants"
 
+const (
+	defaultOnboardedTenantMediaPlane     = "cf_sfu"
+	defaultOnboardedTenantProviderConfig = `{"enabled":true,"provider":"cf_sfu","mode":"chalk_managed"}`
+)
+
 var (
 	onboardingRequestKeyPattern      = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 	accountTenantTracer              = otel.Tracer(accountTenantInstrumentationScope)
@@ -175,7 +180,14 @@ func (s AccountService) OnboardTenant(ctx context.Context, input OnboardTenantIn
 	if err != nil {
 		return OnboardTenantResult{}, fmt.Errorf("generate tenant access id: %w", err)
 	}
-	tenantInput := CreateTenantInput{ID: tenantID, Name: input.Name, DefaultRegion: input.DefaultRegion}
+	defaultMediaPlane := defaultOnboardedTenantMediaPlane
+	tenantInput := CreateTenantInput{
+		ID:                       tenantID,
+		Name:                     input.Name,
+		DefaultRegion:            input.DefaultRegion,
+		DefaultMediaPlane:        &defaultMediaPlane,
+		MediaPlaneProviderConfig: json.RawMessage(defaultOnboardedTenantProviderConfig),
+	}
 	if err := prepareCreateTenantInput(&tenantInput); err != nil {
 		return OnboardTenantResult{}, err
 	}

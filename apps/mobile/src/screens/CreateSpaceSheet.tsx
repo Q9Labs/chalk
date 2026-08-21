@@ -7,7 +7,6 @@ import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, St
 import { CreateSpaceIllustration } from "./HomeIllustrations";
 
 interface CreateSpaceSheetProps {
-  readonly createEnabled: boolean;
   readonly isCreating: boolean;
   readonly isOpen: boolean;
   readonly name: string;
@@ -16,7 +15,7 @@ interface CreateSpaceSheetProps {
   readonly onCreate: () => void;
 }
 
-export function CreateSpaceSheet({ createEnabled, isCreating, isOpen, name, onChangeName, onClose, onCreate }: CreateSpaceSheetProps): React.JSX.Element {
+export function CreateSpaceSheet({ isCreating, isOpen, name, onChangeName, onClose, onCreate }: CreateSpaceSheetProps): React.JSX.Element {
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={isOpen}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.root}>
@@ -25,8 +24,8 @@ export function CreateSpaceSheet({ createEnabled, isCreating, isOpen, name, onCh
           <View style={styles.grip} />
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>{createEnabled ? "Create a Space" : "Open local Space"}</Text>
-              <Text style={styles.subtitle}>{createEnabled ? "A place for the work that keeps moving." : "A shared local Space for trying Chalk on this device."}</Text>
+              <Text style={styles.title}>Create a Space</Text>
+              <Text style={styles.subtitle}>A place for the work that keeps moving.</Text>
             </View>
             <Pressable accessibilityLabel="Close" accessibilityRole="button" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
               <HugeiconsIcon color={Theme.colors.ink} icon={Cancel01Icon} size={21} />
@@ -36,36 +35,30 @@ export function CreateSpaceSheet({ createEnabled, isCreating, isOpen, name, onCh
             <CreateSpaceIllustration />
             <Text style={styles.illustrationCopy}>Bring people, conversation, and shared work into one calm place.</Text>
           </View>
-          {createEnabled ? (
-            <View style={styles.field}>
-              <Text style={styles.label}>
-                Space name <Text style={styles.optional}>Optional</Text>
-              </Text>
-              <TextInput
-                accessibilityLabel="Space name"
-                autoCapitalize="sentences"
-                autoCorrect
-                maxLength={64}
-                onChangeText={onChangeName}
-                onSubmitEditing={onCreate}
-                placeholder="e.g. Product design"
-                placeholderTextColor={Theme.colors.placeholder}
-                returnKeyType="go"
-                style={styles.input}
-                value={name}
-              />
-            </View>
-          ) : (
-            <View style={styles.webNote}>
-              <Text style={styles.webNoteText}>This opens the shared local Space; it does not create or save a new Space.</Text>
-            </View>
-          )}
+          <View style={styles.field}>
+            <Text style={styles.label}>
+              Space name <Text style={styles.optional}>Optional</Text>
+            </Text>
+            <TextInput
+              accessibilityLabel="Space name"
+              autoCapitalize="sentences"
+              autoCorrect
+              maxLength={64}
+              onChangeText={onChangeName}
+              onSubmitEditing={onCreate}
+              placeholder="e.g. Product design"
+              placeholderTextColor={Theme.colors.placeholder}
+              returnKeyType="go"
+              style={styles.input}
+              value={name}
+            />
+          </View>
           <Pressable accessibilityRole="button" disabled={isCreating} onPress={onCreate} style={({ pressed }) => [styles.action, pressed && styles.actionPressed, isCreating && styles.disabled]}>
             {isCreating ? (
               <ActivityIndicator color={Theme.colors.primaryForeground} />
             ) : (
               <>
-                <Text style={styles.actionText}>{createEnabled ? "Create Space" : "Open local Space"}</Text>
+                <Text style={styles.actionText}>Create Space</Text>
                 <HugeiconsIcon color={Theme.colors.primaryForeground} icon={ArrowRight02Icon} size={20} />
               </>
             )}
@@ -91,8 +84,6 @@ const styles = StyleSheet.create({
   label: { color: Theme.colors.ink, fontSize: 14, fontWeight: "600" },
   optional: { color: Theme.colors.ink3, fontWeight: "500" },
   input: { backgroundColor: Theme.colors.surfaceMuted, borderColor: Theme.colors.lineStrong, borderRadius: Theme.radius.md, borderWidth: 1, color: Theme.colors.ink, fontSize: 16, minHeight: 54, paddingHorizontal: Theme.spacing.lg },
-  webNote: { backgroundColor: Theme.colors.washBlue, borderRadius: Theme.radius.md, padding: Theme.spacing.md },
-  webNoteText: { color: Theme.colors.ink2, fontSize: 14, lineHeight: 20 },
   action: { alignItems: "center", backgroundColor: Theme.colors.ink, borderRadius: Theme.radius.md, flexDirection: "row", gap: Theme.spacing.sm, justifyContent: "center", marginTop: Theme.spacing.lg, minHeight: 54 },
   actionText: { color: Theme.colors.primaryForeground, fontSize: 16, fontWeight: "700" },
   actionPressed: { opacity: 0.84, transform: [{ scale: 0.99 }] },

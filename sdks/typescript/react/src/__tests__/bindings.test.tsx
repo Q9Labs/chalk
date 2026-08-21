@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 
-import type { Capability, ChatUploadFile, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { Capability, ChalkWhiteboardV1Transport, ChatUploadFile, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { act, cleanup, fireEvent, render, renderHook, waitFor, within } from "@testing-library/react";
 import { type PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Chalk, ChalkProvider, useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useSelf, useSpaceClient, useWhiteboard } from "../index";
+import { createFakeMediaStreamTrack } from "../test-support/fake-media-track";
 
 const createSpaceClientSpy = vi.hoisted(() => vi.fn());
 const screenShareSpy = vi.hoisted(() =>
@@ -15,12 +16,14 @@ const screenShareSpy = vi.hoisted(() =>
     </button>
   )),
 );
+const whiteboardViewSpy = vi.hoisted(() => vi.fn(() => <div role="region" aria-label="Shared whiteboard" />));
 
 vi.mock("@q9labsai/chalk-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@q9labsai/chalk-client")>()),
   createSpaceClient: createSpaceClientSpy,
 }));
-vi.mock("../components/composite/ScreenShareView", () => ({ ScreenShareView: screenShareSpy }));
+vi.mock("../components/composite/ScreenShareView", () => ({ ScreenShareViewSurface: screenShareSpy }));
+vi.mock("../components/whiteboard-view/WhiteboardView", () => ({ WhiteboardView: whiteboardViewSpy }));
 
 type TestClient = SpaceClient & {
   readonly setSnapshot: (snapshot: SpaceSnapshot) => void;
@@ -307,7 +310,7 @@ describe("React bindings", () => {
   it("renders a local screen-share track in presentation mode and stops it through the controller", () => {
     screenShareSpy.mockClear();
     const client = createTestClient(createSnapshot(["publishScreen"]));
-    const track = { readyState: "live" } as MediaStreamTrack;
+    const track = createFakeMediaStreamTrack();
     const stopScreenShare = vi.spyOn(client.media, "setScreenShareEnabled").mockResolvedValue();
     const snapshot = client.getSnapshot();
     client.setSnapshot({
@@ -322,7 +325,10 @@ describe("React bindings", () => {
 
     const view = render(<Chalk client={client} entrance={false} layout="grid" />);
 
-    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ className: "h-full" }));
+    expect(within(view.container).getByRole("button", { name: "Layout: Presentation" })).toBeInTheDocument();
+    expect(screenShareSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ screenShareTrack: track, sharedByName: "You", showThumbnails: false }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "Stop active share" }));
+    expect(stopScreenShare).toHaveBeenCalledWith(false);
 
     act(() =>
       client.setSnapshot({
@@ -334,13 +340,13 @@ describe("React bindings", () => {
         },
       }),
     );
-    expect(within(view.container).getByRole("button", { name: "Grid layout" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(view.container).getByRole("button", { name: "Layout: Grid" })).toBeInTheDocument();
   });
 
   it("promotes a remote screen-share track and stops it through the participant controller", () => {
     screenShareSpy.mockClear();
     const client = createTestClient();
-    const track = { readyState: "live" } as MediaStreamTrack;
+    const track = createFakeMediaStreamTrack();
     const stopScreenShare = vi.spyOn(client.participants, "stopScreenShare").mockResolvedValue();
     const snapshot = client.getSnapshot();
     client.setSnapshot({
@@ -348,7 +354,7 @@ describe("React bindings", () => {
       connection: { ...snapshot.connection, status: "live" },
       participants: {
         ...snapshot.participants,
-        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "inactive", screenShare: "active" } }],
+        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, presence: { state: "connected", speaking: false, activeSpeaker: false }, media: { microphone: "inactive", camera: "inactive", screenShare: "active" } }],
       },
       media: {
         ...snapshot.media,
@@ -358,11 +364,13 @@ describe("React bindings", () => {
 
     const view = render(<Chalk client={client} entrance={false} layout="grid" />);
 
-    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ className: "h-full" }));
-    expect(within(view.container).getByRole("button", { name: "Presentation layout" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(view.container).getByRole("button", { name: "Layout: Presentation" })).toBeInTheDocument();
+    expect(screenShareSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ screenShareTrack: track, sharedByName: "Grace", showThumbnails: false }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "Stop active share" }));
+    expect(stopScreenShare).toHaveBeenCalledWith("grace");
 
     act(() => client.setSnapshot({ ...client.getSnapshot(), media: { ...client.getSnapshot().media, remote: [] } }));
-    expect(within(view.container).getByRole("button", { name: "Grid layout" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(view.container).getByRole("button", { name: "Layout: Grid" })).toBeInTheDocument();
   });
 
   it("shows directed media actions when the caller has the canonical request capability", () => {
@@ -374,7 +382,7 @@ describe("React bindings", () => {
       connection: { ...snapshot.connection, status: "live" },
       participants: {
         ...snapshot.participants,
-        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" } }],
+        roster: [{ participantId: "grace", displayName: "Grace", role: "member", eligibleRoles: ["member"], capabilities: [], handRaised: false, presence: { state: "connected", speaking: false, activeSpeaker: false }, media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" } }],
       },
     });
 
@@ -483,12 +491,12 @@ describe("React bindings", () => {
     const view = render(<Chalk client={client} features={{ settings: true }} />);
 
     fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
-    expect(view.container.querySelector("aside")).toBeInTheDocument();
+    expect(view.container.querySelector("[data-chalk-drawer]")).toBeInTheDocument();
     fireEvent.click(document.querySelector('[role="dialog"] button[aria-label="Close settings"]')!);
 
     await waitFor(() => {
       expect(document.querySelector('[role="dialog"]')).not.toBeInTheDocument();
-      expect(view.container.querySelector("aside")).not.toBeInTheDocument();
+      expect(view.container.querySelector("[data-chalk-drawer]")).not.toBeInTheDocument();
     });
   });
 
@@ -501,7 +509,7 @@ describe("React bindings", () => {
     fireEvent.click(within(document.body).getByRole("button", { name: /Appearance/ }));
     fireEvent.click(within(document.body).getByRole("button", { name: "Grid" }));
 
-    expect(view.container.querySelector('button[aria-label="Grid layout"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(view.container.querySelector('button[aria-label="Layout: Grid"]')).not.toBeNull();
   });
 
   it("keeps a texture-only theme following system palette changes", () => {
@@ -534,6 +542,35 @@ describe("React bindings", () => {
     expect(within(view.container).queryByRole("button", { name: "Chat" })).not.toBeInTheDocument();
   });
 
+  it("presents and hides the shared whiteboard from the Space snapshot", async () => {
+    const transport = createWhiteboardTransport();
+    const initial = createSnapshot(["drawWhiteboard"]);
+    const client = createTestClient(
+      {
+        ...initial,
+        connection: { ...initial.connection, status: "live" },
+        whiteboard: { open: true, engine: { status: "ready", sceneId: "scene-1", revision: "4", presenting: false, error: null } },
+      },
+      transport,
+    );
+    const view = render(<Chalk client={client} entrance={false} layout="presentation" />);
+
+    await waitFor(() => expect(transport.startSceneSubscription).toHaveBeenCalledOnce());
+    fireEvent.click(within(view.container).getAllByRole("button", { name: /Whiteboard|Board/ })[0]!);
+    expect(transport.setPresentation).toHaveBeenCalledWith(true);
+
+    act(() => client.setSnapshot({ ...client.getSnapshot(), whiteboard: { ...client.getSnapshot().whiteboard, engine: { ...client.getSnapshot().whiteboard.engine, presenting: true } } }));
+    expect(within(view.container).getByRole("region", { name: "Shared whiteboard" })).toBeInTheDocument();
+
+    fireEvent.click(within(view.container).getAllByRole("button", { name: /Whiteboard|Board/ })[0]!);
+    expect(transport.setPresentation).toHaveBeenLastCalledWith(false);
+
+    act(() => client.setSnapshot({ ...client.getSnapshot(), whiteboard: { ...client.getSnapshot().whiteboard, engine: { ...client.getSnapshot().whiteboard.engine, presenting: false } } }));
+    expect(within(view.container).queryByRole("region", { name: "Shared whiteboard" })).not.toBeInTheDocument();
+    expect(transport.startSceneSubscription).toHaveBeenCalledOnce();
+    expect(transport.stopSceneSubscription).not.toHaveBeenCalled();
+  });
+
   it("gates the separately confirmed End Episode action on the endEpisode capability", () => {
     const authorized = createTestClient(createSnapshot(["sendChat", "endEpisode"]));
     authorized.setSnapshot({ ...authorized.getSnapshot(), connection: { ...authorized.getSnapshot().connection, status: "live" } });
@@ -553,7 +590,7 @@ describe("React bindings", () => {
   });
 });
 
-function createTestClient(initialSnapshot = createSnapshot()): TestClient {
+function createTestClient(initialSnapshot = createSnapshot(), whiteboardTransport: ChalkWhiteboardV1Transport | null = null): TestClient {
   let snapshot = initialSnapshot;
   const listeners = new Set<() => void>();
   const unavailable = vi.fn(async () => undefined);
@@ -588,7 +625,7 @@ function createTestClient(initialSnapshot = createSnapshot()): TestClient {
       renameSelf: unavailable,
     },
     reactions: { send: unavailable },
-    whiteboard: { transport: () => null },
+    whiteboard: { transport: () => whiteboardTransport },
     join: vi.fn(async () => undefined),
     leave: vi.fn(async () => undefined),
     dispose: vi.fn(),
@@ -610,6 +647,24 @@ function createTestClient(initialSnapshot = createSnapshot()): TestClient {
   });
 }
 
+function createWhiteboardTransport(): ChalkWhiteboardV1Transport {
+  const transport: ChalkWhiteboardV1Transport = {
+    startSceneSubscription: vi.fn(async () => undefined),
+    stopSceneSubscription: vi.fn(),
+    subscribe: vi.fn(() => () => undefined),
+    submitUpdate: vi.fn(),
+    sendCursor: vi.fn(),
+    requestSnapshot: vi.fn(),
+    clear: vi.fn(),
+    setDrawPermission: vi.fn(),
+    setPresentation: vi.fn(async function (this: ChalkWhiteboardV1Transport) {
+      if (this !== transport) throw new Error("Whiteboard transport receiver was lost");
+    }),
+    files: { initiateUpload: vi.fn(), finalizeUpload: vi.fn(), getDownloadUrl: vi.fn() },
+  };
+  return transport;
+}
+
 function createSnapshot(capabilities: readonly Capability[] = ["sendChat"]): SpaceSnapshot {
   return {
     connection: { status: "idle", episode: null, lastError: null },
@@ -629,7 +684,7 @@ function createSnapshot(capabilities: readonly Capability[] = ["sendChat"]): Spa
     },
     chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },
-    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, error: null } },
+    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } },
   };
 }
 

@@ -21,15 +21,25 @@ export type ParticipantSyncAccess = {
   readonly expiresAt: string;
 };
 
-export type ParticipantMediaAccess = {
-  readonly token: ParticipantMediaCredential;
-  readonly expiresAt: string;
-  readonly provider: "cloudflare_sfu";
-  readonly clientPayload: {
-    readonly connectionId: string;
-    readonly stunServer: string;
-  };
-};
+export type ParticipantMediaAccess =
+  | {
+      readonly token: ParticipantMediaCredential;
+      readonly expiresAt: string;
+      readonly provider: "cloudflare_sfu";
+      readonly clientPayload: {
+        readonly connectionId: string;
+        readonly stunServer: string;
+      };
+    }
+  | {
+      readonly token: ParticipantMediaCredential;
+      readonly expiresAt: string;
+      readonly provider: "cloudflare_rtk";
+      readonly clientPayload: {
+        readonly providerSubject: string;
+        readonly token: string;
+      };
+    };
 
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
@@ -82,7 +92,7 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
       token: value.media.token,
       expires_at: value.media.expiresAt,
       provider: value.media.provider,
-      client_payload: { ...value.media.clientPayload },
+      client_payload: mediaClientPayload(value.media),
     },
     ...(value.diagnostics
       ? {
@@ -158,17 +168,44 @@ function parseSyncAccess(value: unknown): ParticipantSyncAccess {
 }
 
 function parseMediaAccess(value: unknown): ParticipantMediaAccess {
-  if (!isRecord(value) || value.provider !== "cloudflare_sfu" || !isRecord(value.client_payload ?? value.clientPayload)) throw new AccessGrantError();
-  const payload = (value.client_payload ?? value.clientPayload) as Record<string, unknown>;
-  return {
-    token: requireCredential(value.token, "chalk-media") as ParticipantMediaCredential,
-    expiresAt: requireDateTime(value.expires_at ?? value.expiresAt),
-    provider: value.provider,
-    clientPayload: {
-      connectionId: requireNonEmptyString(payload.connectionId),
-      stunServer: requireNonEmptyString(payload.stunServer),
-    },
-  };
+  if (!isRecord(value)) throw new AccessGrantError();
+  const payload = value.client_payload ?? value.clientPayload;
+  if (!isRecord(payload)) throw new AccessGrantError();
+  const token = requireCredential(value.token, "chalk-media") as ParticipantMediaCredential;
+  const expiresAt = requireDateTime(value.expires_at ?? value.expiresAt);
+  switch (value.provider) {
+    case "cloudflare_sfu":
+      return {
+        token,
+        expiresAt,
+        provider: value.provider,
+        clientPayload: {
+          connectionId: requireNonEmptyString(payload.connectionId),
+          stunServer: requireNonEmptyString(payload.stunServer),
+        },
+      };
+    case "cloudflare_rtk":
+      return {
+        token,
+        expiresAt,
+        provider: value.provider,
+        clientPayload: {
+          providerSubject: requireNonEmptyString(payload.provider_subject ?? payload.providerSubject),
+          token: requireNonEmptyString(payload.token),
+        },
+      };
+    default:
+      throw new AccessGrantError();
+  }
+}
+
+function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<string, string>> {
+  switch (value.provider) {
+    case "cloudflare_sfu":
+      return { connectionId: value.clientPayload.connectionId, stunServer: value.clientPayload.stunServer };
+    case "cloudflare_rtk":
+      return { provider_subject: value.clientPayload.providerSubject, token: value.clientPayload.token };
+  }
 }
 
 function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media"): string {

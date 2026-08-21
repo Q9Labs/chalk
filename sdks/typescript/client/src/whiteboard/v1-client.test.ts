@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
-import type { ChalkWhiteboardV1FileTransport } from "./types";
+import { whiteboardV1PendingOperationBytes } from "./v1-multipart";
+import type { ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation, ChalkWhiteboardV1PendingOperationStore } from "./types";
 
 const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 const sceneId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22";
@@ -18,13 +19,13 @@ describe("ChalkWhiteboardV1Client", () => {
       protocol: "whiteboard-v1",
       token: "participant-token",
       cursor: null,
+      extensions: [{ name: "presentation_v1" }],
     });
 
     welcome(socket);
     await settle();
     const request = socket.frames().find((frame) => frame.type === "request_snapshot")!;
     const events: unknown[] = [];
-    client.subscribe((event) => events.push(event));
     socket.receive({
       type: "snapshot_page",
       request_id: request.request_id,
@@ -37,7 +38,8 @@ describe("ChalkWhiteboardV1Client", () => {
     });
 
     await expect(started).resolves.toBeUndefined();
-    expect(socket.frames().at(-1)).toEqual({
+    client.subscribe((event) => events.push(event));
+    expect(socket.frames()).toContainEqual({
       type: "snapshot_ack",
       request_id: request.request_id,
       scene_id: sceneId,
@@ -60,10 +62,256 @@ describe("ChalkWhiteboardV1Client", () => {
       capabilities: ["drawWhiteboard", "manageWhiteboard"],
       canDraw: true,
       canClear: true,
+      presenting: false,
       error: null,
     });
+
+    const presented = client.setPresentation(true);
+    await settle();
+    const presentation = socket.frames().at(-1)!;
+    expect(presentation).toMatchObject({ type: "set_presentation", presenting: true });
+    socket.receive({ type: "presentation_updated", scene_id: sceneId, revision: "5", presenting: true });
+    socket.receive({ type: "commit", operation_id: presentation.operation_id, outcome: "committed", scene_id: sceneId, revision: "5" });
+    await expect(presented).resolves.toBeUndefined();
+    expect(summaries.at(-1)).toMatchObject({ presenting: true });
+
+    await client.stopSceneSubscription();
+    expect(summaries.at(-1)).toMatchObject({ status: "unsubscribed", canDraw: false, canClear: false, presenting: false });
+  });
+
+  it("accepts the legacy welcome without enabling presentation commands", async () => {
+    const { client, socket, started } = await connectingClient();
+    socket.receive({
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      scene_id: sceneId,
+      revision: "3",
+      can_draw: true,
+    });
+    await finishInitialSnapshot(socket, started);
+
+    await expect(client.setPresentation(true)).rejects.toMatchObject({ code: "unavailable", operation: "set_presentation" });
     client.stopSceneSubscription();
-    expect(summaries.at(-1)).toMatchObject({ status: "unsubscribed", canDraw: false, canClear: false });
+  });
+
+  it("refreshes a stale snapshot for a new subscriber without replaying it", async () => {
+    const { client, socket, started } = await connectingClient();
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+
+    const initialEvents: unknown[] = [];
+    const unsubscribeInitial = client.subscribe((event) => initialEvents.push(event));
+    expect(initialEvents).toEqual([{ type: "snapshot", sceneId, revision: "3", elements: [] }]);
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toHaveLength(2);
+    const initialRefresh = socket
+      .frames()
+      .filter((frame) => frame.type === "request_snapshot")
+      .at(-1)!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: initialRefresh.request_id,
+      scene_id: sceneId,
+      revision: "3",
+      page: 0,
+      page_count: 1,
+      elements: [],
+      app_state: null,
+    });
+    await settle();
+    unsubscribeInitial();
+
+    socket.receive({ type: "update", operation_id: ids[1], scene_id: sceneId, revision: "4", elements: [wireElement("live-element")] });
+    await settle();
+
+    const refreshedEvents: unknown[] = [];
+    client.subscribe((event) => refreshedEvents.push(event));
+    client.subscribe(() => undefined);
+    expect(refreshedEvents).toEqual([]);
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toHaveLength(3);
+    const request = socket
+      .frames()
+      .filter((frame) => frame.type === "request_snapshot")
+      .at(-1)!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "4",
+      page: 0,
+      page_count: 1,
+      elements: [wireElement("persisted-element")],
+      app_state: null,
+    });
+    await settle();
+
+    expect(refreshedEvents).toEqual([{ type: "snapshot", sceneId, revision: "4", elements: [publicElement("persisted-element")] }]);
+    client.stopSceneSubscription();
+  });
+
+  it("replays a same-revision cached snapshot while refreshing the reopened Board", async () => {
+    const { client, socket, started } = await connectingClient();
+    welcome(socket);
+    await settle();
+    const initialRequest = socket.frames().find((frame) => frame.type === "request_snapshot")!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: initialRequest.request_id,
+      scene_id: sceneId,
+      revision: "3",
+      page: 0,
+      page_count: 1,
+      elements: [wireTextElement("cached-text")],
+      app_state: null,
+    });
+    await started;
+
+    const firstEvents: unknown[] = [];
+    const unsubscribeFirst = client.subscribe((event) => firstEvents.push(event));
+    expect(firstEvents).toEqual([{ type: "snapshot", sceneId, revision: "3", elements: [publicTextElement("cached-text")] }]);
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toHaveLength(2);
+    const firstRefresh = socket
+      .frames()
+      .filter((frame) => frame.type === "request_snapshot")
+      .at(-1)!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: firstRefresh.request_id,
+      scene_id: sceneId,
+      revision: "3",
+      page: 0,
+      page_count: 1,
+      elements: [wireTextElement("cached-text")],
+      app_state: null,
+    });
+    await settle();
+    unsubscribeFirst();
+
+    const reopenedEvents: unknown[] = [];
+    const unsubscribeReopened = client.subscribe((event) => reopenedEvents.push(event));
+    expect(reopenedEvents).toEqual([{ type: "snapshot", sceneId, revision: "3", elements: [publicTextElement("cached-text")] }]);
+    client.subscribe(() => undefined);
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toHaveLength(3);
+    const reopenedRequest = socket
+      .frames()
+      .filter((frame) => frame.type === "request_snapshot")
+      .at(-1)!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: reopenedRequest.request_id,
+      scene_id: sceneId,
+      revision: "3",
+      page: 0,
+      page_count: 1,
+      elements: [wireFreedrawElement("fresh-freedraw"), wireTextElement("fresh-text")],
+      app_state: null,
+    });
+    await settle();
+
+    expect(reopenedEvents).toEqual([
+      { type: "snapshot", sceneId, revision: "3", elements: [publicTextElement("cached-text")] },
+      {
+        type: "snapshot",
+        sceneId,
+        revision: "3",
+        elements: [publicFreedrawElement("fresh-freedraw"), publicTextElement("fresh-text")],
+      },
+    ]);
+    unsubscribeReopened();
+    await client.stopSceneSubscription();
+  });
+
+  it("falls back to the legacy hello when an older Sync server rejects extensions", async () => {
+    const { client, sockets, clock } = reconnectingClient();
+
+    const started = client.startSceneSubscription();
+    await settle();
+    sockets[0]!.open();
+    await settle();
+    expect(sockets[0]!.frames()[0]).toMatchObject({ extensions: [{ name: "presentation_v1" }] });
+
+    sockets[0]!.close(1009);
+    clock.advance(10);
+    await settle();
+    sockets[1]!.open();
+    await settle();
+    expect(sockets[1]!.frames()[0]).toEqual({
+      type: "hello",
+      protocol: "whiteboard-v1",
+      token: "participant-token",
+      cursor: null,
+    });
+
+    sockets[1]!.receive({
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      scene_id: sceneId,
+      revision: "3",
+      can_draw: true,
+    });
+    await finishInitialSnapshot(sockets[1]!, started);
+    await expect(client.setPresentation(true)).rejects.toMatchObject({ code: "unavailable", operation: "set_presentation" });
+    client.stopSceneSubscription();
+  });
+
+  it("reconnects after a negotiated gap so welcome repairs presentation state", async () => {
+    const summaries: unknown[] = [];
+    const events: unknown[] = [];
+    const { client, sockets, clock } = reconnectingClient({ onSummary: (summary) => summaries.push(summary) });
+
+    const started = client.startSceneSubscription();
+    await settle();
+    sockets[0]!.open();
+    await settle();
+    welcome(sockets[0]!);
+    await finishInitialSnapshot(sockets[0]!, started);
+    client.subscribe((event) => events.push(event));
+    events.length = 0;
+
+    sockets[0]!.receive({ type: "reset_required", scene_id: sceneId, reason: "gap" });
+    await settle();
+    clock.advance(10);
+    await settle();
+    sockets[1]!.open();
+    await settle();
+    expect(sockets[1]!.frames()[0]).toMatchObject({ extensions: [{ name: "presentation_v1" }] });
+
+    sockets[1]!.receive({
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      scene_id: sceneId,
+      revision: "6",
+      can_draw: true,
+      presenting: true,
+    });
+    await settle();
+    const request = sockets[1]!.frames().find((frame) => frame.type === "request_snapshot")!;
+    sockets[1]!.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "6",
+      page: 0,
+      page_count: 1,
+      elements: [],
+      app_state: null,
+    });
+    await settle();
+
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "reset_required" }));
+    expect(summaries.at(-1)).toMatchObject({ status: "ready", revision: "6", presenting: true });
+    client.stopSceneSubscription();
   });
 
   it("persists updates before send and clears the retry row after a commit", async () => {
@@ -102,6 +350,91 @@ describe("ChalkWhiteboardV1Client", () => {
     await settle();
     expect(await store.load()).toEqual([]);
     client.stopSceneSubscription();
+  });
+
+  it("waits for a pending update to reach durable storage before stopping", async () => {
+    let releaseWrite!: () => void;
+    const writeReleased = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    const stored: ChalkWhiteboardV1PendingOperation[] = [];
+    const store: ChalkWhiteboardV1PendingOperationStore = {
+      load: async () => stored,
+      put: async (operation) => {
+        await writeReleased;
+        stored.push(operation);
+      },
+      remove: async (operationId) => {
+        const index = stored.findIndex((operation) => operation.operationId === operationId);
+        if (index >= 0) stored.splice(index, 1);
+      },
+    };
+    const { client, socket, started } = await connectingClient({ pendingStore: store });
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+
+    const update = client.submitUpdate({ sceneId, syncAll: false, elements: [publicElement("durable-element")] });
+    const close = vi.spyOn(socket, "close");
+    const stopping = client.stopSceneSubscription();
+
+    await Promise.resolve();
+    expect(close).not.toHaveBeenCalled();
+    expect(stored).toEqual([]);
+
+    releaseWrite();
+    await stopping;
+    expect(close).toHaveBeenCalledOnce();
+    expect(stored).toHaveLength(1);
+    expect(socket.frames()).toContainEqual(expect.objectContaining({ type: "submit_update" }));
+    await expect(update).rejects.toMatchObject({ code: "unavailable", operation: "submit_update" });
+  });
+
+  it("reconciles a restored update before requesting the startup snapshot", async () => {
+    const operation = restoredUpdate("restored-element");
+    const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    await store.put(operation);
+    const { client, socket, started } = await connectingClient({ pendingStore: store });
+    const events: unknown[] = [];
+    client.subscribe((event) => events.push(event));
+
+    welcome(socket);
+    await settle();
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toEqual([]);
+    const replay = socket.frames().find((frame) => frame.type === "submit_update")!;
+    socket.receive({ type: "commit", operation_id: replay.operation_id, outcome: "duplicate", scene_id: sceneId, revision: "5" });
+    await settle();
+
+    receiveRestoredSnapshot(socket, [wireElement("restored-element")]);
+
+    await expect(started).resolves.toBeUndefined();
+    expect(events).toContainEqual(expect.objectContaining({ type: "snapshot", revision: "5", elements: [publicElement("restored-element")] }));
+    expect(await store.load()).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("unblocks startup after a terminal restored operation error and removes the retry row", async () => {
+    const operation = restoredUpdate("rejected-element");
+    const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    await store.put(operation);
+    const { client, socket, started } = await connectingClient({ pendingStore: store });
+
+    welcome(socket);
+    await settle();
+    const replay = socket.frames().find((frame) => frame.type === "submit_update")!;
+    socket.receive({
+      type: "operation_error",
+      correlation_id: replay.operation_id,
+      operation: "submit_update",
+      code: "stale_scene",
+      recoverable: false,
+      message: "The restored update targets an old scene.",
+    });
+    await settle();
+
+    receiveRestoredSnapshot(socket, []);
+    await expect(started).resolves.toBeUndefined();
+    expect(await store.load()).toEqual([]);
+    await client.stopSceneSubscription();
   });
 
   it("sends and receives multipart updates as one logical operation", async () => {
@@ -238,12 +571,31 @@ async function connectingClient(overrides: Partial<ConstructorParameters<typeof 
   return { client, socket, started };
 }
 
+function reconnectingClient(overrides: Partial<ConstructorParameters<typeof ChalkWhiteboardV1Client>[0]> = {}) {
+  const sockets = [new TestSocket(), new TestSocket()];
+  const clock = new TestClock();
+  const availableIds = [...ids];
+  let socketIndex = 0;
+  const client = new ChalkWhiteboardV1Client({
+    url: "ws://sync.test/v1/whiteboard",
+    token: async () => "participant-token",
+    files: filesStub,
+    ids: { next: () => availableIds.shift()! },
+    webSocket: { connect: () => sockets[socketIndex++]! },
+    clock,
+    reconnectDelayMs: 10,
+    ...overrides,
+  });
+  return { client, sockets, clock };
+}
+
 async function subscribedClient(overrides: Partial<ConstructorParameters<typeof ChalkWhiteboardV1Client>[0]> = {}) {
   const { client, socket, started } = await connectingClient(overrides);
   welcome(socket);
   await finishInitialSnapshot(socket, started);
   const events: unknown[] = [];
   client.subscribe((event) => events.push(event));
+  events.length = 0;
   return { client, socket, events };
 }
 
@@ -258,6 +610,7 @@ function welcome(socket: TestSocket): void {
     scene_id: sceneId,
     revision: "3",
     can_draw: true,
+    presenting: false,
   });
 }
 
@@ -275,6 +628,20 @@ async function finishInitialSnapshot(socket: TestSocket, started: Promise<void>)
     app_state: null,
   });
   await started;
+}
+
+function receiveRestoredSnapshot(socket: TestSocket, elements: readonly ReturnType<typeof wireElement>[]): void {
+  const request = socket.frames().find((frame) => frame.type === "request_snapshot")!;
+  socket.receive({
+    type: "snapshot_page",
+    request_id: request.request_id,
+    scene_id: sceneId,
+    revision: "5",
+    page: 0,
+    page_count: 1,
+    elements,
+    app_state: null,
+  });
 }
 
 function wireElement(id: string) {
@@ -299,6 +666,80 @@ function publicElement(id: string) {
     isDeleted: false,
     payload: { x: 1, y: 2 },
   } as const;
+}
+
+function wireFreedrawElement(id: string) {
+  return {
+    id,
+    type: "freedraw",
+    version: 2,
+    version_nonce: 7,
+    index: "a0",
+    is_deleted: false,
+    payload: {
+      points: [
+        [1, 2],
+        [3, 4],
+      ],
+    },
+  } as const;
+}
+
+function publicFreedrawElement(id: string) {
+  return {
+    id,
+    type: "freedraw",
+    version: 2,
+    versionNonce: 7,
+    index: "a0",
+    isDeleted: false,
+    payload: {
+      points: [
+        [1, 2],
+        [3, 4],
+      ],
+    },
+  } as const;
+}
+
+function wireTextElement(id: string) {
+  return {
+    id,
+    type: "text",
+    version: 2,
+    version_nonce: 7,
+    index: "a0",
+    is_deleted: false,
+    payload: { text: "Board text" },
+  } as const;
+}
+
+function publicTextElement(id: string) {
+  return {
+    id,
+    type: "text",
+    version: 2,
+    versionNonce: 7,
+    index: "a0",
+    isDeleted: false,
+    payload: { text: "Board text" },
+  } as const;
+}
+
+function restoredUpdate(id: string): ChalkWhiteboardV1PendingOperation {
+  const frame = {
+    type: "submit_update",
+    operation_id: ids[0]!,
+    scene_id: sceneId,
+    sync_all: false,
+    elements: [wireElement(id)],
+  } as const;
+  return {
+    operationId: frame.operation_id,
+    frame,
+    createdAt: 1,
+    bytes: whiteboardV1PendingOperationBytes(frame),
+  };
 }
 
 const filesStub: ChalkWhiteboardV1FileTransport = {

@@ -109,8 +109,14 @@ defmodule ChalkSync.Stateholder.PostgresExternalOperationTest do
 
     assert {:ok, %{result: :pending} = pending} = Postgres.begin_operation(host, operation)
 
-    assert {:ok, [{_episode, claimed}]} = Postgres.claim_operations(64)
-    assert claimed.external_operation_id == pending.external_operation_id
+    assert {:ok, claimed_operations} = Postgres.claim_operations(64)
+
+    assert {_episode, claimed} =
+             Enum.find(claimed_operations, fn {episode, candidate} ->
+               episode == fixture.episode &&
+                 candidate.external_operation_id == pending.external_operation_id
+             end)
+
     assert claimed.producing_traceparent == @traceparent
     assert claimed.producing_tracestate == @tracestate
 

@@ -20,7 +20,7 @@ import { failure, FailureKind, RuntimeState } from "./model.mjs";
 
 async function tempConfig() {
   const root = await mkdtemp(join(tmpdir(), "chalk-dev-test-"));
-  const config = resolveDevConfig({ root, cwd: root, requiredTools: [], home: root, allowBusyPorts: Object.keys({ api: 8080, sync: 4100, web: 3070, bff: 3071, postgres: 5432, redis: 6380, grafana: 3000, broker: 8787 }) });
+  const config = resolveDevConfig({ root, cwd: root, requiredTools: [], home: root, allowBusyPorts: Object.keys({ api: 8080, sync: 4100, web: 3070, bff: 3071, postgres: 5432, redis: 6380, grafana: 3000 }) });
   return { root, config };
 }
 
@@ -269,6 +269,19 @@ test("local resource migration opts into Goose allow-missing without changing th
     assert.deepEqual(migration.args.slice(-2), ["--allow-missing", "up"]);
     assert.equal(config.databaseName, "chalk_dev");
     assert.match(migration.options.env.CHALK_DATABASE_URL, /\/chalk_dev\?/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("local resource preflight rejects a reusable container on a different host port", async () => {
+  const { root, config } = await tempConfig();
+  try {
+    config.ports.postgres = 65432;
+    const manager = createResourceManager(config, {
+      docker: async (name) => (name === "chalk-postgres" ? { running: true, hostPorts: [55432] } : undefined),
+    });
+    await assert.rejects(manager.preflight(), /chalk-postgres is already running without configured postgres port 65432/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

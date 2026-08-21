@@ -24,13 +24,10 @@
 /_serverFn/*
   X-Robots-Tag: noindex, nofollow, noarchive
 
+/_shell/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
 /space*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/share/*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/j/*
   X-Robots-Tag: noindex, nofollow, noarchive
 
 /home*

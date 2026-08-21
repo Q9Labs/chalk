@@ -1,6 +1,6 @@
 # Execution Trace Harness
 
-> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+> Descriptive snapshot, last verified against code on 2026-08-18. Not a source of truth.
 
 Use this when Hasan wants to review a finished Go API change by watching it run as a readable story, not by reading code and tests alone.
 
@@ -34,6 +34,8 @@ go run ./cmd/trace -scenario route:api-key-customer-flow
 go run ./cmd/trace -scenario edge:api-key-rejected-scope
 go run ./cmd/trace -scenario route:participant-media-sfu-auth
 go run ./cmd/trace -scenario edge:participant-media-wrong-audience
+go run ./cmd/trace -scenario service:media-plane-default-resolution
+go run ./cmd/trace -scenario edge:media-plane-disabled
 go run ./cmd/trace -color always
 go run ./cmd/trace -style tree
 go run ./cmd/trace -format json
@@ -104,6 +106,7 @@ Registered scenarios:
 - `route:auth-google-callback`
 - `route:me`
 - `route:tenant-create`
+- `service:media-plane-default-resolution`
 - `route:tenant-list-system`
 - `route:tenant-get-authorized`
 - `route:tenant-update-authorized`
@@ -127,6 +130,7 @@ Registered scenarios:
 - `route:chat-attachment-upload`
 - `route:whiteboard-file-upload`
 - `route:api-key-customer-flow`
+- `route:public-invite-observability`
 - `edge:api-key-rejected-scope`
 - `route:participant-media-sfu-auth`
 - `edge:participant-media-wrong-audience`
@@ -139,12 +143,14 @@ Registered scenarios:
 - `adapter:redis-rate-limit`
 - `adapter:cloudflare-r2-signed-url`
 - `adapter:cloudflare-sfu-bootstrap`
+- `adapter:cloudflare-sfu-failure-observability`
 - `adapter:provider-bridge-publication-grant`
 - `adapter:cloudflare-rtk-join`
 - `adapter:resend-send-email`
 - `edge:unauthenticated-route`
 - `edge:forbidden-tenant-route`
 - `edge:invalid-route-id`
+- `edge:media-plane-disabled`
 - `webhook:delivery-attempt`
 
 ## Web Launch Authentication Proof
@@ -154,6 +160,21 @@ The launch scenarios cover both customer API-key authentication and the particip
 The participant-media pair uses a real Ed25519 issuer and verifier. The accepted `chalk-media` credential reaches the active-participant check and the traced Cloudflare SFU adapter. The wrong-audience credential returns `401` before the active-participant check, media-plane resolver, or adapter runs. Neither trace records API-key material, participant credentials, scopes, network addresses, or SDP.
 
 Operational instrumentation is provided by `observability.NewLaunchTelemetry`. API-key services receive it through `apikeys.Config.Telemetry`; AccessGrant issuers and media verifiers are wrapped with `observability.InstrumentAccessGrantIssuer` and `observability.InstrumentParticipantMediaVerifier`. The resulting metrics use only bounded `outcome` and `reason` attributes while the wrappers preserve the active journey and W3C trace context.
+
+## Media Plane Resolution Proof
+
+`service:media-plane-default-resolution` runs the real
+`mediaplaneproviders.Registry` with a Space selecting `cf_sfu`, no Tenant
+provider configuration, and deployment-owned process configuration. It builds
+the local adapter without making a provider request and records
+`configuration_source=deployment_default`, `mode=chalk_managed`, and
+`outcome=resolved`.
+
+`edge:media-plane-disabled` supplies the concrete Tenant configuration
+`{"enabled":false}`. The Registry returns no service before adapter
+construction and records `configuration_source=disabled`, `mode=disabled`, and
+`outcome=disabled`. Both traces record only bounded provider state; process
+configuration values and the raw Tenant JSON stay out of the result.
 
 ## What A Good Trace Shows
 

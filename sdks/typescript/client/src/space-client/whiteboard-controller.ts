@@ -5,7 +5,7 @@ import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whit
 import { SpaceStore } from "./store";
 import type { WhiteboardSlice } from "./types";
 
-const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscribed", sceneId: null, revision: null, capabilities: Object.freeze([]), canDraw: false, canClear: false, error: null });
+const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscribed", sceneId: null, revision: null, capabilities: Object.freeze([]), canDraw: false, canClear: false, presenting: false, error: null });
 
 export type WhiteboardControllerEffects = { readonly transport: () => ChalkWhiteboardV1Transport | null; readonly dispose: () => void };
 export class WhiteboardControllerService extends Context.Service<WhiteboardControllerService, WhiteboardControllerEffects>()("@chalk/client/WhiteboardController") {}
@@ -52,7 +52,16 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
 
   observe(summary: ChalkWhiteboardSummary): void {
     if (!this.#connected && summary.status !== "unsubscribed") return;
-    this.#summary = Object.freeze({ status: summary.status, sceneId: summary.sceneId, revision: summary.revision, capabilities: Object.freeze([...summary.capabilities]), canDraw: summary.canDraw, canClear: summary.canClear, error: summary.error ? Object.freeze({ ...summary.error }) : null });
+    this.#summary = Object.freeze({
+      status: summary.status,
+      sceneId: summary.sceneId,
+      revision: summary.revision,
+      capabilities: Object.freeze([...summary.capabilities]),
+      canDraw: summary.canDraw,
+      canClear: summary.canClear,
+      presenting: summary.presenting,
+      error: summary.error ? Object.freeze({ ...summary.error }) : null,
+    });
     this.#publish();
   }
 
@@ -69,7 +78,7 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
   }
 
   #publish(): void {
-    const slice: WhiteboardSlice = Object.freeze({ open: this.#summary.status !== "unsubscribed", engine: Object.freeze({ status: this.#summary.status, sceneId: this.#summary.sceneId, revision: this.#summary.revision, error: this.#summary.error }) });
+    const slice: WhiteboardSlice = Object.freeze({ open: this.#summary.status !== "unsubscribed", engine: Object.freeze({ status: this.#summary.status, sceneId: this.#summary.sceneId, revision: this.#summary.revision, presenting: this.#summary.presenting, error: this.#summary.error }) });
     const current = this.#store.getSnapshot().whiteboard;
     if (sameWhiteboard(current, slice)) return;
     this.#store.updateWhiteboard(slice);
@@ -77,7 +86,7 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
 }
 
 function sameWhiteboard(left: WhiteboardSlice, right: WhiteboardSlice): boolean {
-  return left.open === right.open && left.engine.status === right.engine.status && left.engine.sceneId === right.engine.sceneId && left.engine.revision === right.engine.revision && sameError(left.engine.error, right.engine.error);
+  return left.open === right.open && left.engine.status === right.engine.status && left.engine.sceneId === right.engine.sceneId && left.engine.revision === right.engine.revision && left.engine.presenting === right.engine.presenting && sameError(left.engine.error, right.engine.error);
 }
 function sameError(left: WhiteboardSlice["engine"]["error"], right: WhiteboardSlice["engine"]["error"]): boolean {
   if (left === right) return true;

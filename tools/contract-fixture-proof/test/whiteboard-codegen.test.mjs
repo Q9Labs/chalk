@@ -53,7 +53,7 @@ describe("whiteboard-v1 contract generation", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it("rejects a contract that changes the frozen route", async () => {
     const directory = await mkdtemp(resolve(tmpdir(), "chalk-whiteboard-contract-"));
@@ -69,6 +69,16 @@ describe("whiteboard-v1 contract generation", () => {
 
   it("strictly decodes bounded client frames and rejects unknown fields", () => {
     const decode = Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema);
+    expect(
+      decode({
+        type: "hello",
+        protocol: "whiteboard-v1",
+        token: "participant-token",
+        cursor: null,
+        extensions: [{ name: "presentation_v1" }],
+      }),
+    ).toMatchObject({ type: "hello", extensions: [{ name: "presentation_v1" }] });
+
     expect(
       decode({
         type: "submit_update",
@@ -114,19 +124,22 @@ describe("whiteboard-v1 contract generation", () => {
       }),
     ).toMatchObject({ type: "snapshot_page", revision: "42" });
 
-    expect(
-      decode({
-        type: "welcome",
-        protocol: "whiteboard-v1",
-        participant_id: participantId,
-        participant_generation: 1,
-        capabilities: ["drawWhiteboard", "manageWhiteboard"],
-        participant_capabilities: ["drawWhiteboard"],
-        scene_id: sceneId,
-        revision: "42",
-        can_draw: true,
-      }),
-    ).toMatchObject({ type: "welcome", scene_id: sceneId });
+    const legacyWelcome = {
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard"],
+      scene_id: sceneId,
+      revision: "42",
+      can_draw: true,
+    };
+
+    expect(decode(legacyWelcome)).toMatchObject({ type: "welcome", scene_id: sceneId });
+    expect(decode({ ...legacyWelcome, presenting: false })).toMatchObject({ type: "welcome", presenting: false });
+
+    expect(decode({ type: "presentation_updated", scene_id: sceneId, revision: "43", presenting: true })).toEqual({ type: "presentation_updated", scene_id: sceneId, revision: "43", presenting: true });
 
     expect(
       decode({

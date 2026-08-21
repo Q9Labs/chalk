@@ -56,6 +56,29 @@ const createEngine = (excalidrawAPI: ExcalidrawImperativeAPI, overrides: Partial
     ...overrides,
   });
 
+function createPendingLocalChange(options: { readonly sceneGeneration?: string } = {}) {
+  const remoteElements = [createElement("remote", 1, 100)];
+  const localElements = [createElement("local", 1, 50)];
+  let sceneElements: readonly OrderedExcalidrawElement[] = remoteElements;
+  const api = createAPI(() => sceneElements);
+  const submitUpdate = vi.fn().mockResolvedValue({
+    operationId: "operation-0000000001",
+    sceneId: "10000000-0000-4000-8000-000000000001",
+    revision: "2",
+  });
+  const engine = createEngine(api, { submitUpdate });
+
+  engine.handleRemoteSnapshot({
+    sceneId: "10000000-0000-4000-8000-000000000001",
+    ...(options.sceneGeneration === undefined ? {} : { sceneGeneration: options.sceneGeneration }),
+    elements: remoteElements.map(toWireElement),
+  });
+  sceneElements = localElements;
+  engine.handleChange(localElements, {} as never, {});
+
+  return { engine, localElements, submitUpdate };
+}
+
 describe("ExcalidrawCollabEngine", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -67,28 +90,7 @@ describe("ExcalidrawCollabEngine", () => {
   });
 
   it("submits changed elements when the new hash is numerically lower", async () => {
-    const remoteElements = [createElement("remote", 1, 100)];
-    const localElements = [createElement("local", 1, 50)];
-    let sceneElements: readonly OrderedExcalidrawElement[] = remoteElements;
-
-    const api = createAPI(() => sceneElements);
-    const submitUpdate = vi.fn().mockResolvedValue({
-      operationId: "operation-0000000001",
-      sceneId: "10000000-0000-4000-8000-000000000001",
-      revision: "2",
-    });
-
-    const engine = createEngine(api, {
-      submitUpdate,
-    });
-
-    engine.handleRemoteSnapshot({
-      sceneId: "10000000-0000-4000-8000-000000000001",
-      sceneGeneration: "scene-generation-1",
-      elements: remoteElements.map(toWireElement),
-    });
-    sceneElements = localElements;
-    engine.handleChange(localElements, {} as never, {});
+    const { engine, localElements, submitUpdate } = createPendingLocalChange({ sceneGeneration: "scene-generation-1" });
     await vi.advanceTimersByTimeAsync(151);
 
     expect(submitUpdate).toHaveBeenCalledWith(
@@ -101,6 +103,72 @@ describe("ExcalidrawCollabEngine", () => {
     );
 
     engine.dispose();
+  });
+
+  it("flushes a pending local change before disposal", async () => {
+    const { engine, localElements, submitUpdate } = createPendingLocalChange();
+
+    engine.dispose();
+
+    expect(submitUpdate).toHaveBeenCalledOnce();
+    expect(submitUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elements: localElements.map(toWireElement),
+        sceneId: "10000000-0000-4000-8000-000000000001",
+        syncAll: false,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(submitUpdate).toHaveBeenCalledOnce();
+  });
+
+  it("submits a dirty teardown scene while an earlier submission is in flight", async () => {
+    const remoteElements = [createElement("remote", 1, 100)];
+    const firstLocalElements = [createElement("first", 1, 50)];
+    const finalLocalElements = [createElement("final", 1, 75)];
+    let sceneElements: readonly OrderedExcalidrawElement[] = remoteElements;
+    const api = createAPI(() => sceneElements);
+    const commit = {
+      operationId: "operation-0000000001",
+      sceneId: "10000000-0000-4000-8000-000000000001",
+      revision: "2",
+    };
+    let resolveFirstSubmission: (value: typeof commit) => void = () => undefined;
+    const firstSubmission = new Promise<typeof commit>((resolve) => {
+      resolveFirstSubmission = resolve;
+    });
+    const submitUpdate = vi
+      .fn()
+      .mockImplementationOnce(() => firstSubmission)
+      .mockResolvedValue(commit);
+    const engine = createEngine(api, { submitUpdate });
+
+    engine.handleRemoteSnapshot({
+      sceneId: commit.sceneId,
+      elements: remoteElements.map(toWireElement),
+    });
+    sceneElements = firstLocalElements;
+    engine.handleChange(firstLocalElements, {} as never, {});
+    await vi.advanceTimersByTimeAsync(151);
+
+    sceneElements = finalLocalElements;
+    engine.handleChange(finalLocalElements, {} as never, {});
+    engine.dispose();
+
+    expect(submitUpdate).toHaveBeenCalledTimes(2);
+    expect(submitUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        elements: finalLocalElements.map(toWireElement),
+        sceneId: commit.sceneId,
+        syncAll: false,
+      }),
+    );
+
+    resolveFirstSubmission(commit);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(submitUpdate).toHaveBeenCalledTimes(2);
   });
 
   it("does not infer an epoch clear when the canvas becomes empty", async () => {
@@ -132,7 +200,24 @@ describe("ExcalidrawCollabEngine", () => {
     engine.dispose();
   });
 
-  it("routes subscribed transport snapshots, cursors, and resets into the engine", () => {
+  it("reports a synchronous snapshot failure instead of throwing from a canvas change", async () => {
+    const api = createAPI(() => [createElement("local", 1, 50)]);
+    const failure = new Error("Whiteboard is not connected.");
+    const onSubmissionError = vi.fn();
+    const engine = createEngine(api, {
+      requestSnapshot: vi.fn(() => {
+        throw failure;
+      }),
+      onSubmissionError,
+    });
+
+    expect(() => engine.handleChange(api.getSceneElementsIncludingDeleted(), {} as never, {})).not.toThrow();
+    await vi.advanceTimersByTimeAsync(151);
+    expect(onSubmissionError).toHaveBeenCalledWith(failure);
+    engine.dispose();
+  });
+
+  it("routes subscribed transport snapshots, cursors, and resets into the engine", async () => {
     const api = createAPI(() => []);
     const requestSnapshot = vi.fn().mockResolvedValue(undefined);
     const unsubscribe = vi.fn();
@@ -177,6 +262,7 @@ describe("ExcalidrawCollabEngine", () => {
       sceneId: "10000000-0000-4000-8000-000000000002",
       reason: "scene_changed",
     });
+    await Promise.resolve();
     expect(requestSnapshot).toHaveBeenCalledOnce();
 
     engine.dispose();

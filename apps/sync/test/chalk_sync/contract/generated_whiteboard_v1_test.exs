@@ -96,17 +96,67 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
   end
 
   test "validates fixed snapshot pages, capabilities, and receipts" do
+    assert {:ok, {:hello, %{extensions: []}}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "hello",
+               "protocol" => "whiteboard-v1",
+               "token" => "participant-token",
+               "cursor" => nil
+             })
+
+    assert {:ok, {:hello, %{extensions: [%{"name" => "presentation_v1"}]}}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "hello",
+               "protocol" => "whiteboard-v1",
+               "token" => "participant-token",
+               "cursor" => nil,
+               "extensions" => [%{"name" => "presentation_v1"}]
+             })
+
+    legacy_welcome = %{
+      "type" => "welcome",
+      "protocol" => "whiteboard-v1",
+      "participant_id" => @participant_id,
+      "participant_generation" => 1,
+      "capabilities" => ["drawWhiteboard", "manageWhiteboard"],
+      "participant_capabilities" => ["drawWhiteboard"],
+      "scene_id" => @scene_id,
+      "revision" => "7",
+      "can_draw" => true
+    }
+
+    assert GeneratedWhiteboardV1.valid_server_frame?(legacy_welcome)
+
+    assert legacy_welcome
+           |> Map.put("presenting", false)
+           |> GeneratedWhiteboardV1.valid_server_frame?()
+
+    refute legacy_welcome
+           |> Map.put("unexpected", true)
+           |> GeneratedWhiteboardV1.valid_server_frame?()
+
+    assert {:error, :invalid_hello} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "hello",
+               "protocol" => "whiteboard-v1",
+               "token" => "participant-token",
+               "cursor" => nil,
+               "extensions" => [%{"name" => "unknown"}]
+             })
+
     assert GeneratedWhiteboardV1.valid_server_frame?(%{
-             "type" => "welcome",
-             "protocol" => "whiteboard-v1",
-             "participant_id" => @participant_id,
-             "participant_generation" => 1,
-             "capabilities" => ["drawWhiteboard", "manageWhiteboard"],
-             "participant_capabilities" => ["drawWhiteboard"],
+             "type" => "presentation_updated",
              "scene_id" => @scene_id,
-             "revision" => "7",
-             "can_draw" => true
+             "revision" => "8",
+             "presenting" => false
            })
+
+    assert {:ok, {:set_presentation, %{operation_id: @operation_id, presenting: true}}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "set_presentation",
+               "operation_id" => @operation_id,
+               "presenting" => true
+             })
 
     assert GeneratedWhiteboardV1.valid_server_frame?(%{
              "type" => "snapshot_page",

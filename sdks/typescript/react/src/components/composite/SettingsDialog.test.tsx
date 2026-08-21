@@ -76,6 +76,7 @@ function createSettings(): SettingsDialogValue {
       defaultOpenParticipants: false,
       defaultOpenTranscription: false,
       autoOpenPictureInPicture: false,
+      sounds: true,
     },
   };
 }

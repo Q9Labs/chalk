@@ -6,6 +6,7 @@
   "main": "./index.ts",
   "scripts": {
     "prepare:native-dependencies": "pnpm --filter @q9labsai/diagnostics-contracts build && pnpm --filter @q9labsai/chalk-client build && pnpm --filter @q9labsai/facehash build && pnpm --filter @q9labsai/chalk-whiteboard build:embedded && pnpm --filter @q9labsai/chalk-react-native build",
+    "eas-build-post-install": "pnpm run prepare:native-dependencies",
     "start": "node ../../scripts/dev-log.mjs start:raw",
     "prestart:raw": "pnpm run prepare:native-dependencies",
     "start:raw": "expo start --clear",
@@ -29,11 +30,12 @@
   "dependencies": {
     "@babel/runtime": "^7.28.4",
     "@cloudflare/react-native-webrtc": "~125.0.3",
+    "@cloudflare/realtimekit-react-native": "1.1.0",
     "@expo/vector-icons": "^15.0.2",
     "@hugeicons/core-free-icons": "^4.0.0",
     "@hugeicons/react-native": "^1.0.13",
-    "@q9labsai/chalk-client": "workspace:^4.0.1",
-    "@q9labsai/chalk-react-native": "workspace:^4.0.1",
+    "@q9labsai/chalk-client": "workspace:^4.1.11",
+    "@q9labsai/chalk-react-native": "workspace:^4.1.11",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "^55.0.6",
     "expo-clipboard": "~55.0.9",

@@ -184,6 +184,36 @@ export type CreateAPIKeyInput = { readonly expiresAt: string; readonly name: str
 export type ListAPIKeysInput = { readonly cursor?: string; readonly pageSize?: number };
 export type RotateAPIKeyInput = { readonly expiresAt?: string | null };
 
+export type SpacePublicInvite = {
+  readonly admission_mode: string;
+  readonly canonical_url: string;
+  readonly created_at: string;
+  readonly disabled_at?: string | null;
+  readonly enabled: boolean;
+  readonly generation: number;
+  readonly public_role: string;
+  readonly rotated_at?: string | null;
+  readonly schema_version: string;
+  readonly space_id: string;
+  readonly tenant_id: string;
+  readonly updated_at: string;
+};
+
+export type PublicAdmissionRequest = {
+  readonly display_name: string;
+  readonly expires_at: string;
+  readonly request_handle: string;
+  readonly requested_at: string;
+  readonly state: string;
+};
+
+export type PublicAdmissionRequestPage = {
+  readonly requests: readonly PublicAdmissionRequest[];
+};
+
+export type UpdateSpacePublicInviteInput = { readonly enabled: boolean };
+export type ListPublicAdmissionRequestsInput = { readonly state?: "pending" };
+
 export type ChalkServerClient = {
   readonly spaces: {
     archive(spaceId: string): Promise<Space>;
@@ -206,5 +236,15 @@ export type ChalkServerClient = {
     list(input?: ListAPIKeysInput): Promise<APIKeyList>;
     rotate(apiKeyId: string, input?: RotateAPIKeyInput): Promise<APIKeyWithSecret>;
     revoke(apiKeyId: string): Promise<void>;
+  };
+  readonly publicInvites: {
+    get(spaceId: string): Promise<SpacePublicInvite>;
+    update(spaceId: string, input: UpdateSpacePublicInviteInput): Promise<SpacePublicInvite>;
+    rotate(spaceId: string, options?: ChalkIdempotencyOptions): Promise<SpacePublicInvite>;
+  };
+  readonly publicAdmissionRequests: {
+    list(spaceId: string, input?: ListPublicAdmissionRequestsInput): Promise<PublicAdmissionRequestPage>;
+    approve(spaceId: string, requestHandle: string, options?: ChalkIdempotencyOptions): Promise<PublicAdmissionRequest>;
+    deny(spaceId: string, requestHandle: string, options?: ChalkIdempotencyOptions): Promise<PublicAdmissionRequest>;
   };
 };

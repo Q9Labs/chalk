@@ -1,6 +1,7 @@
 export const SITE_ORIGIN = "https://chalkmeet.com";
-export const SITE_NAME = "Chalk";
 export const SOCIAL_IMAGE_URL = `${SITE_ORIGIN}/images/social/chalk-og-product-20260819.png`;
+
+const SITE_NAME = "Chalk";
 
 type PublicSiteHeadInput = {
   readonly path: string;

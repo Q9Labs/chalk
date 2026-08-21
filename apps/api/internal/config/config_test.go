@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 func TestLoadRequiresSyncTokenSigningConfigInProduction(t *testing.T) {
@@ -85,6 +86,7 @@ func TestLoadRejectsMediaAudienceForSyncCredentials(t *testing.T) {
 }
 
 func TestLoadDefaults(t *testing.T) {
+	clearPublicInviteEnv(t)
 	t.Setenv(config.DatabaseURL, "")
 	cfg, err := config.Load()
 	if err != nil {
@@ -93,6 +95,9 @@ func TestLoadDefaults(t *testing.T) {
 
 	if cfg.API.Address != config.DefaultAPIAddress {
 		t.Fatalf("api address = %q, want %q", cfg.API.Address, config.DefaultAPIAddress)
+	}
+	if cfg.PublicInvite.Enabled || cfg.PublicInvite.ManagedTenantID != "" || cfg.PublicInvite.DefaultMediaPlane != "" || len(cfg.PublicInvite.PrivateKey) != 0 || len(cfg.PublicInvite.VerificationKeys) != 0 {
+		t.Fatalf("local public invite config = %#v, want disabled", cfg.PublicInvite)
 	}
 	if len(cfg.API.CORSAllowedOrigins) != 0 {
 		t.Fatalf("cors allowed origins = %#v, want empty", cfg.API.CORSAllowedOrigins)
@@ -235,6 +240,207 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Observability.SlowRequestThreshold != time.Duration(config.DefaultSlowRequestMS)*time.Millisecond {
 		t.Fatalf("slow request threshold = %s, want %dms", cfg.Observability.SlowRequestThreshold, config.DefaultSlowRequestMS)
 	}
+}
+
+func TestLoadDefaultMediaPlaneIsOptional(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DefaultMediaPlane != "" {
+		t.Fatalf("default media plane = %q, want empty", cfg.DefaultMediaPlane)
+	}
+}
+
+func TestLoadDefaultMediaPlaneAcceptsCloudflareSFU(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, string(spaces.MediaPlaneProviderCloudflareSFU))
+	t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "1000")
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DefaultMediaPlane != spaces.MediaPlaneProviderCloudflareSFU {
+		t.Fatalf("default media plane = %q, want %q", cfg.DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
+}
+
+func TestLoadRejectsRTKAsDeploymentDefault(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, string(spaces.MediaPlaneProviderCloudflareRTK))
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "Dashboard access-grant") {
+		t.Fatalf("load error = %v, want Dashboard-compatible default validation", err)
+	}
+}
+
+func TestLoadRejectsUnknownDefaultMediaPlane(t *testing.T) {
+	t.Setenv(config.DefaultMediaPlane, "mediasoup")
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.DefaultMediaPlane) {
+		t.Fatalf("load error = %v, want %s validation", err, config.DefaultMediaPlane)
+	}
+}
+
+func TestLoadValidatesDefaultMediaPlaneProcessConfig(t *testing.T) {
+	tests := []struct {
+		name string
+		set  func(*testing.T)
+		want string
+	}{
+		{
+			name: "sfu app id",
+			set: func(t *testing.T) {
+				t.Setenv(config.DefaultMediaPlane, "cf_sfu")
+				t.Setenv(config.CloudflareRealtimeAppID, "")
+				t.Setenv(config.CloudflareRealtimeAppSecret, "secret")
+			},
+			want: config.CloudflareRealtimeAppID,
+		},
+		{
+			name: "sfu app secret",
+			set: func(t *testing.T) {
+				t.Setenv(config.DefaultMediaPlane, "cf_sfu")
+				t.Setenv(config.CloudflareRealtimeAppID, "app")
+				t.Setenv(config.CloudflareRealtimeAppSecret, "")
+			},
+			want: config.CloudflareRealtimeAppSecret,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "1000")
+			t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+			t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
+			t.Setenv(config.CloudflareAccountID, "account")
+			t.Setenv(config.CloudflareAPIToken, "token")
+			t.Setenv(config.CloudflareRTKAppID, "rtk-app")
+			test.set(t)
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("load error = %v, want %s validation", err, test.want)
+			}
+		})
+	}
+}
+
+func TestLoadPublicInviteConfig(t *testing.T) {
+	setPublicInviteConfig(t)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load public invite config: %v", err)
+	}
+	if !cfg.PublicInvite.Enabled || cfg.PublicInvite.ManagedTenantID != "11111111-1111-4111-8111-111111111111" || cfg.PublicInvite.DefaultMediaPlane != "cf_rtk" || cfg.PublicInvite.WebOrigin != "https://app.chalk.test" {
+		t.Fatalf("public invite config = %#v", cfg.PublicInvite)
+	}
+	if cfg.PublicInvite.KeyID != "public-1" || len(cfg.PublicInvite.PrivateKey) != ed25519.PrivateKeySize {
+		t.Fatalf("public invite signer = %#v", cfg.PublicInvite)
+	}
+	if key := cfg.PublicInvite.VerificationKeys["public-1"]; !key.Equal(cfg.PublicInvite.PrivateKey.Public()) {
+		t.Fatalf("public invite verification key = %#v", key)
+	}
+	if cfg.PublicInvite.AutoLifecycleLifetime != 15*time.Minute {
+		t.Fatalf("public invite auto lifecycle = %s", cfg.PublicInvite.AutoLifecycleLifetime)
+	}
+	if cfg.PublicInvite.SchedulerInterval != 2500*time.Millisecond || cfg.PublicInvite.SchedulerBatch != 25 {
+		t.Fatalf("public invite scheduler = %s/%d", cfg.PublicInvite.SchedulerInterval, cfg.PublicInvite.SchedulerBatch)
+	}
+}
+
+func TestLoadPublicInviteConfigRequiresCompleteLocalOptIn(t *testing.T) {
+	clearPublicInviteEnv(t)
+	t.Setenv(config.PublicInviteManagedTenantID, "11111111-1111-4111-8111-111111111111")
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.PublicInviteDefaultMediaPlane) {
+		t.Fatalf("load error = %v, want complete public invite config validation", err)
+	}
+}
+
+func TestLoadRequiresPublicInviteConfigOutsideLocal(t *testing.T) {
+	setHostedEnvironment(t)
+	clearPublicInviteEnv(t)
+	clearEpisodeDiagnosticsEnv(t)
+	t.Setenv(config.APIEnvironment, "production")
+	setSyncTokenConfig(t)
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.PublicInviteManagedTenantID) {
+		t.Fatalf("load error = %v, want missing public invite config", err)
+	}
+}
+
+func TestLoadRejectsPublicInviteKeyAndSchedulerValues(t *testing.T) {
+	t.Run("key mismatch", func(t *testing.T) {
+		setPublicInviteConfig(t)
+		_, otherPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(config.PublicInvitePrivateKey, base64.RawURLEncoding.EncodeToString(otherPrivateKey))
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.PublicInviteVerificationKeys) {
+			t.Fatalf("load error = %v, want current key mismatch", err)
+		}
+	})
+
+	t.Run("scheduler interval bound", func(t *testing.T) {
+		setPublicInviteConfig(t)
+		t.Setenv(config.PublicInviteSchedulerIntervalMS, "86400001")
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.PublicInviteSchedulerIntervalMS) {
+			t.Fatalf("load error = %v, want scheduler interval validation", err)
+		}
+	})
+
+	t.Run("auto lifecycle bound", func(t *testing.T) {
+		setPublicInviteConfig(t)
+		t.Setenv(config.PublicInviteAutoLifecycleSeconds, "3601")
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.PublicInviteAutoLifecycleSeconds) {
+			t.Fatalf("load error = %v, want auto-lifecycle validation", err)
+		}
+	})
+}
+
+func TestLoadValidatesPublicInviteWebOrigin(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		origin string
+	}{
+		{name: "credentials", origin: "https://user:password@app.chalk.test"},
+		{name: "path", origin: "https://app.chalk.test/space"},
+		{name: "query", origin: "https://app.chalk.test?space=1"},
+		{name: "fragment", origin: "https://app.chalk.test/#invite"},
+		{name: "empty fragment", origin: "https://app.chalk.test#"},
+		{name: "relative", origin: "/app"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setPublicInviteConfig(t)
+			t.Setenv(config.PublicInviteWebOrigin, test.origin)
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.PublicInviteWebOrigin) {
+				t.Fatalf("load error = %v, want web-origin validation", err)
+			}
+		})
+	}
+
+	t.Run("local http allowed", func(t *testing.T) {
+		setPublicInviteConfig(t)
+		t.Setenv(config.PublicInviteWebOrigin, "http://localhost:3070")
+		if _, err := config.Load(); err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+	})
+
+	t.Run("hosted http rejected", func(t *testing.T) {
+		setHostedEnvironment(t)
+		clearEpisodeDiagnosticsEnv(t)
+		t.Setenv(config.APIEnvironment, "production")
+		setSyncTokenConfig(t)
+		t.Setenv(config.PublicInviteWebOrigin, "http://app.chalk.test")
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.PublicInviteWebOrigin) {
+			t.Fatalf("load error = %v, want hosted HTTPS validation", err)
+		}
+	})
 }
 
 func TestLoadRecentAuthSecret(t *testing.T) {
@@ -533,11 +739,14 @@ func clearEpisodeDiagnosticsEnv(t *testing.T) {
 func setHostedEnvironment(t *testing.T) {
 	t.Helper()
 	clearEpisodeDiagnosticsEnv(t)
+	setPublicInviteConfig(t)
 	t.Setenv(config.APIEnvironment, "development")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.IntegrationsEnabled, "false")
 	t.Setenv(config.TranscriptionEnabled, "false")
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8443")
 	t.Setenv(config.ProviderBridgeServerCertFile, "/tmp/chalk-server.crt")
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/tmp/chalk-server.key")
@@ -553,6 +762,40 @@ func setHostedEnvironment(t *testing.T) {
 	t.Setenv(config.EpisodeDiagnosticsServiceIssuer, "https://diagnostics.chalk.test")
 	t.Setenv(config.EpisodeDiagnosticsServiceKeyID, "diagnostics-1")
 	t.Setenv(config.EpisodeDiagnosticsServicePrivateKey, base64.RawURLEncoding.EncodeToString(diagnosticsPrivateKey))
+}
+
+func setPublicInviteConfig(t *testing.T) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.PublicInviteManagedTenantID, "11111111-1111-4111-8111-111111111111")
+	t.Setenv(config.PublicInviteDefaultMediaPlane, "cf_rtk")
+	t.Setenv(config.PublicInviteWebOrigin, "https://app.chalk.test")
+	t.Setenv(config.PublicInviteKeyID, "public-1")
+	t.Setenv(config.PublicInvitePrivateKey, base64.RawURLEncoding.EncodeToString(privateKey))
+	t.Setenv(config.PublicInviteVerificationKeys, `{"public-1":"`+base64.RawURLEncoding.EncodeToString(publicKey)+`"}`)
+	t.Setenv(config.PublicInviteAutoLifecycleSeconds, "900")
+	t.Setenv(config.PublicInviteSchedulerIntervalMS, "2500")
+	t.Setenv(config.PublicInviteSchedulerBatch, "25")
+}
+
+func clearPublicInviteEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{
+		config.PublicInviteManagedTenantID,
+		config.PublicInviteDefaultMediaPlane,
+		config.PublicInviteWebOrigin,
+		config.PublicInviteKeyID,
+		config.PublicInvitePrivateKey,
+		config.PublicInviteVerificationKeys,
+		config.PublicInviteAutoLifecycleSeconds,
+		config.PublicInviteSchedulerIntervalMS,
+		config.PublicInviteSchedulerBatch,
+	} {
+		t.Setenv(name, "")
+	}
 }
 
 func setHostedDiagnosticsOperatorIdentity(t *testing.T) {
@@ -779,6 +1022,27 @@ func TestLoadProviderBridgeConfig(t *testing.T) {
 	}
 }
 
+func TestLoadProviderBridgeRequiresSFUExecutorConfig(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		missing string
+	}{
+		{name: "app id", missing: config.CloudflareRealtimeAppID},
+		{name: "app secret", missing: config.CloudflareRealtimeAppSecret},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setProviderBridgeConfig(t)
+			t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+			t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
+			t.Setenv(test.missing, "")
+
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), test.missing) {
+				t.Fatalf("load error = %v, want missing ProviderBridge %s validation", err, test.missing)
+			}
+		})
+	}
+}
+
 func TestLoadRejectsInvalidProviderBridgeIdentityAndAddress(t *testing.T) {
 	for _, test := range []struct {
 		name        string
@@ -813,6 +1077,7 @@ func TestLoadRequiresProviderBridgeOutsideLocal(t *testing.T) {
 
 func TestLoadRejectsLocalCloudflareBaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	setPublicInviteConfig(t)
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
@@ -912,6 +1177,7 @@ func TestLoadComposio(t *testing.T) {
 
 func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	setPublicInviteConfig(t)
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.TranscriptionEnabled, "false")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
@@ -1017,6 +1283,7 @@ func TestLoadRejectsInsecureDatabaseURLOutsideLocal(t *testing.T) {
 
 func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	setPublicInviteConfig(t)
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.TranscriptionEnabled, "false")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
@@ -1104,6 +1371,7 @@ func TestLoadRejectsMissingComposioAPIKeyOutsideLocal(t *testing.T) {
 
 func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	setPublicInviteConfig(t)
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
@@ -1122,6 +1390,7 @@ func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
 
 func TestLoadAcceptsExplicitlyDisabledCapabilitiesOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	setPublicInviteConfig(t)
 	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.IntegrationsEnabled, "false")
@@ -1249,6 +1518,8 @@ func TestLoadOperationLogsDefaultToAllRequestLogs(t *testing.T) {
 
 func setProviderBridgeConfig(t *testing.T) {
 	t.Helper()
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
 	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8444")
 	t.Setenv(config.ProviderBridgeServerCertFile, "/run/secrets/provider-bridge-server.crt")
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/run/secrets/provider-bridge-server.key")

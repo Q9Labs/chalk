@@ -35,6 +35,32 @@ func TestValidateDraftCanonicalAndFingerprint(t *testing.T) {
 	}
 }
 
+func TestValidateParticipantProjectionRejectsLegacyServerValues(t *testing.T) {
+	participant := ParticipantProjectionV1{
+		SchemaVersion:  "ParticipantProjection/v1",
+		ParticipantID:  "participant01",
+		AnonymousLabel: "Participant 1",
+		IdentityKind:   "unknown",
+		State:          "joined",
+		Visibility:     "not_observable",
+		VisibilityGaps: []string{"identity_redacted"},
+		Display: ParticipantDisplay{
+			Label:       DisplayValue{Value: "Participant 1"},
+			RawIdentity: DisplayValue{UnknownReason: UnknownRedacted},
+		},
+	}
+	if err := ValidateParticipantProjection(participant); err != nil {
+		t.Fatalf("canonical Participant projection rejected: %v", err)
+	}
+
+	participant.AnonymousLabel = "participant-452a645d"
+	participant.IdentityKind = "anonymous"
+	participant.Visibility = "opaque"
+	if err := ValidateParticipantProjection(participant); err == nil {
+		t.Fatal("legacy server Participant projection was accepted")
+	}
+}
+
 func TestValidateDraftRejectsUnknownAndUnsafeValues(t *testing.T) {
 	event := draftFixture()
 	event.Name = "made_up.action"

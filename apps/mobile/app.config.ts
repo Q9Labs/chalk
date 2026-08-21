@@ -1,78 +1,36 @@
-const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
-const PUBLIC_WEB_HOSTS = ["chalkmeet.com", "chalk.q9labs.ai"] as const;
-const DEFAULT_BROKER_URL = "https://chalkmeet.com/local-chalk";
+const PUBLIC_WEB_HOSTS: readonly string[] = ["chalkmeet.com", "chalk.q9labs.ai"];
 
 export type MobileExpoExtra = {
-  readonly brokerUrl: string;
   readonly buildProfile: string;
-  readonly telemetryEnabled: boolean;
+  readonly eas: {
+    readonly projectId: string;
+  };
 };
 
-function isLocalUrl(url: string | undefined): boolean {
-  if (!url) {
-    return false;
-  }
-
-  try {
-    return LOCAL_HOSTNAMES.has(new URL(url).hostname);
-  } catch {
-    return false;
-  }
-}
-
-function isSupportedBrokerUrl(url: string | undefined): url is string {
-  if (!url) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(url);
-    return (parsed.protocol === "http:" || parsed.protocol === "https:") && !parsed.username && !parsed.password;
-  } catch {
-    return false;
-  }
-}
-
 export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development") {
-  const isProductionBuild = buildProfile === "production";
-  const configuredBrokerUrl = process.env.EXPO_PUBLIC_CHALK_BROKER_URL?.trim();
-  const brokerUrl = !isSupportedBrokerUrl(configuredBrokerUrl) || (isProductionBuild && isLocalUrl(configuredBrokerUrl)) ? DEFAULT_BROKER_URL : configuredBrokerUrl;
-  const telemetryEnabled = process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED?.trim().toLowerCase() === "true";
-
-  const extra: MobileExpoExtra = {
-    brokerUrl,
-    buildProfile,
-    telemetryEnabled,
-  };
+  const extra: MobileExpoExtra = { buildProfile, eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } };
 
   return {
     expo: {
       name: "Chalk",
+      owner: "q9labs",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "2.0.0",
+      version: "2.0.1",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
-      experiments: {
-        tsconfigPaths: false,
-      },
-      plugins: ["expo-secure-store"],
-      splash: {
-        image: "./assets/splash-logo.png",
-        resizeMode: "contain",
-        backgroundColor: "#F7F6F2",
-      },
+      experiments: { tsconfigPaths: false },
+      plugins: ["expo-secure-store", ["@cloudflare/realtimekit-react-native", { microphonePermission: "Chalk uses your microphone so participants can hear you in a Space.", cameraPermission: "Chalk uses your camera so participants can see you in a Space.", libraryPermission: false }]],
+      splash: { image: "./assets/splash-logo.png", resizeMode: "contain", backgroundColor: "#F7F6F2" },
       ios: {
         jsEngine: "jsc",
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
         buildNumber: "28",
         associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
-        entitlements: {
-          "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"],
-        },
+        entitlements: { "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"] },
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a Space.",
@@ -84,16 +42,13 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       android: {
         package: "ai.q9labs.chalk.mobile",
         versionCode: 28,
-        adaptiveIcon: {
-          foregroundImage: "./assets/adaptive-icon.png",
-          backgroundColor: "#030303",
-        },
+        adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", backgroundColor: "#030303" },
         intentFilters: [
           {
             action: "VIEW",
             autoVerify: true,
             category: ["BROWSABLE", "DEFAULT"],
-            data: [...PUBLIC_WEB_HOSTS.flatMap((host) => [{ scheme: "https", host, path: "/space" }])],
+            data: [...PUBLIC_WEB_HOSTS.flatMap((host) => [{ scheme: "https", host, pathPrefix: "/space" }])],
           },
         ],
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],

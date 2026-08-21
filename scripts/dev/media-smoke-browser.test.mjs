@@ -49,8 +49,8 @@ describe("media smoke browser launch", () => {
       },
     };
 
-    await expect(joinParticipant({ page, name: "Chalk smoke primary" }, { webURL: "http://127.0.0.1:3070", webJoinPath: "/local", joinTimeoutMs: 50 })).resolves.toBeUndefined();
-    expect(events).toEqual(["goto:http://127.0.0.1:3070/local?name=Chalk+smoke+primary", "wait:Enter your name", "fill:Chalk smoke primary", "wait:Join Space", "click:Join Space", "wait:Episode controls"]);
+    await expect(joinParticipant({ page, name: "Chalk smoke primary" }, { webURL: "http://127.0.0.1:3070", webJoinPath: "/space", joinTimeoutMs: 50 })).resolves.toBeUndefined();
+    expect(events).toEqual(["goto:http://127.0.0.1:3070/space?name=Chalk+smoke+primary", "wait:Enter your name", "fill:Chalk smoke primary", "wait:Join Space", "click:Join Space", "wait:Episode controls"]);
   });
 
   it("does not replace an explicit executable override after a launch error", async () => {

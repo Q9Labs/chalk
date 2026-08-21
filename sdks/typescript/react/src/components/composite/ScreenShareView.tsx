@@ -18,7 +18,7 @@ export interface ScreenShareViewProps {
   className?: string;
 }
 
-interface ScreenShareViewSurfaceProps extends ScreenShareViewProps {
+export interface ScreenShareViewSurfaceProps extends ScreenShareViewProps {
   readonly screenShareTrack: MediaStreamTrack;
   readonly sharedByName: string;
   readonly participants: Participant[];
@@ -52,7 +52,7 @@ const getContainedSize = (containerWidth: number, containerHeight: number, video
   };
 };
 
-const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
+export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 

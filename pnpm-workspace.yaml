@@ -5,7 +5,6 @@ packages:
   - apps/transcription-dispatcher
   - apps/mobile
   - apps/web
-  - infrastructure/*-broker
   - infrastructure/uptime-worker
 
 auditConfig:

@@ -354,7 +354,9 @@
   gap: var(--episode-gap-2);
   padding: var(--episode-gap-3);
   text-align: start;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
 }
 .episode-mini-issues > button:hover {
   background: color-mix(in srgb, var(--chalk-pink) 8%, var(--chalk-white));
@@ -602,7 +604,9 @@
   overflow: hidden;
   padding: 5px var(--episode-gap-2) 5px 5px;
   text-overflow: ellipsis;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
   white-space: nowrap;
 }
 .episode-run-block:hover,

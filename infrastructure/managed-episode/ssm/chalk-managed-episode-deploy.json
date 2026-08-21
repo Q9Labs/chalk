@@ -51,6 +51,12 @@
       "minChars": 2,
       "maxChars": 4096
     },
+    "AdoptExistingRelease": {
+      "type": "String",
+      "default": "false",
+      "interpolationType": "ENV_VAR",
+      "allowedValues": ["true", "false"]
+    },
     "RequestId": {
       "type": "String",
       "interpolationType": "ENV_VAR",
@@ -67,9 +73,9 @@
     },
     "ControllerVersion": {
       "type": "String",
-      "default": "1",
+      "default": "2",
       "interpolationType": "ENV_VAR",
-      "allowedPattern": "^1$",
+      "allowedPattern": "^2$",
       "minChars": 1,
       "maxChars": 1
     }
@@ -99,7 +105,7 @@
           "printf '%s' \"$SSM_ManifestBase64\" | base64 --decode >\"$manifest\"",
           "chmod 0600 \"$manifest\"",
           "request=\"$work_root/deployment-request.json\"",
-          "jq -n --arg release_id \"$SSM_ReleaseId\" --arg source_revision \"$SSM_SourceRevision\" --arg environment \"$SSM_Environment\" --arg aws_region \"$SSM_AwsRegion\" --arg parameter_prefix \"$SSM_ParameterPrefix\" --arg request_id \"$SSM_RequestId\" --arg requested_at \"$SSM_RequestedAt\" --argjson controller_version \"$SSM_ControllerVersion\" --argjson excluded_secrets \"$SSM_ExcludedSecrets\" '{schema_version:1,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,excluded_secrets:$excluded_secrets,request_id:$request_id,requested_at:$requested_at}' >\"$request\"",
+          "jq -n --arg release_id \"$SSM_ReleaseId\" --arg source_revision \"$SSM_SourceRevision\" --arg environment \"$SSM_Environment\" --arg aws_region \"$SSM_AwsRegion\" --arg parameter_prefix \"$SSM_ParameterPrefix\" --arg request_id \"$SSM_RequestId\" --arg requested_at \"$SSM_RequestedAt\" --argjson controller_version \"$SSM_ControllerVersion\" --argjson adopt_existing_release \"$SSM_AdoptExistingRelease\" --argjson excluded_secrets \"$SSM_ExcludedSecrets\" '{schema_version:2,controller_version:$controller_version,adopt_existing_release:$adopt_existing_release,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,excluded_secrets:$excluded_secrets,request_id:$request_id,requested_at:$requested_at}' >\"$request\"",
           "chmod 0600 \"$request\"",
           "controller=\"$source_root/infrastructure/managed-episode/controller/chalk-deployment-controller\"",
           "test -f \"$controller\" && test ! -L \"$controller\"",

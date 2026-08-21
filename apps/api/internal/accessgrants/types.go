@@ -27,18 +27,23 @@ var (
 
 const (
 	Audience              = "chalk-media"
+	ProviderCloudflareRTK = "cloudflare_rtk"
 	ProviderCloudflareSFU = "cloudflare_sfu"
 	Lifetime              = 5 * time.Minute
 	ClockSkew             = 30 * time.Second
 )
 
 type Subject struct {
-	TenantID               utilities.ID
-	SpaceID                utilities.ID
-	EpisodeID              utilities.ID
-	ParticipantID          utilities.ID
-	ParticipantGeneration  int64
-	Provider               string
+	TenantID              utilities.ID
+	SpaceID               utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
+	ParticipantGeneration int64
+	Provider              string
+	// ProviderSubject is the provider-owned participant binding. SFU uses a
+	// connection ID; RealtimeKit uses its participant reference. It is never a
+	// provider access token.
+	ProviderSubject        string
 	CloudflareConnectionID string
 }
 
@@ -49,6 +54,7 @@ type RouteSubject struct {
 	ParticipantID          utilities.ID
 	ParticipantGeneration  int64
 	Provider               string
+	ProviderSubject        string
 	CloudflareConnectionID string
 }
 
@@ -75,8 +81,23 @@ func RequireRouteSubject(subject Subject, route RouteSubject) error {
 		subject.ParticipantID != route.ParticipantID ||
 		subject.ParticipantGeneration != route.ParticipantGeneration ||
 		subject.Provider != route.Provider ||
-		subject.CloudflareConnectionID != route.CloudflareConnectionID {
+		!sameProviderBinding(subject, route) {
 		return ErrSubjectMismatch
 	}
 	return nil
+}
+
+func sameProviderBinding(subject Subject, route RouteSubject) bool {
+	switch subject.Provider {
+	case ProviderCloudflareSFU:
+		return subject.ProviderSubject == "" && route.ProviderSubject == "" &&
+			subject.CloudflareConnectionID != "" &&
+			subject.CloudflareConnectionID == route.CloudflareConnectionID
+	case ProviderCloudflareRTK:
+		return subject.CloudflareConnectionID == "" && route.CloudflareConnectionID == "" &&
+			subject.ProviderSubject != "" &&
+			subject.ProviderSubject == route.ProviderSubject
+	default:
+		return false
+	}
 }

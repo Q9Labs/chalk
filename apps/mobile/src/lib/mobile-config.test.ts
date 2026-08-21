@@ -11,9 +11,9 @@ const runtime = vi.hoisted(() => ({
 vi.mock("expo-constants", () => ({ default: expoConstants }));
 vi.mock("@q9labsai/chalk-react-native/runtime", () => runtime);
 
-import { getBrokerUrl, getMobileRuntimeConfig, isMobileTelemetryEnabled } from "./mobile-config";
+import { getApiBaseURL, getMobileRuntimeConfig, isMobileTelemetryEnabled } from "./mobile-config";
 
-const defaultBrokerUrl = "https://chalkmeet.com/local-chalk";
+const defaultApiBaseURL = "https://api.chalkmeet.com";
 
 describe("mobile runtime config", () => {
   beforeEach(() => {
@@ -22,21 +22,21 @@ describe("mobile runtime config", () => {
     runtime.resolveAppRuntimeUrl.mockClear();
   });
 
-  it("defaults to the production broker and telemetry off when extra is absent", () => {
-    expect(getMobileRuntimeConfig()).toEqual({ brokerUrl: defaultBrokerUrl, telemetryEnabled: false });
-    expect(getBrokerUrl()).toBe(defaultBrokerUrl);
+  it("defaults to the production public-invite API and telemetry off when extra is absent", () => {
+    expect(getMobileRuntimeConfig()).toEqual({ apiBaseURL: defaultApiBaseURL, telemetryEnabled: false });
+    expect(getApiBaseURL()).toBe(defaultApiBaseURL);
     expect(isMobileTelemetryEnabled()).toBe(false);
   });
 
-  it("uses the validated broker override and explicit telemetry opt-in from extra", () => {
-    expoConstants.expoConfig = { extra: { brokerUrl: "http://127.0.0.1:8787/local-chalk", telemetryEnabled: true } };
+  it("uses the validated API override and explicit telemetry opt-in from extra", () => {
+    expoConstants.expoConfig = { extra: { apiBaseURL: "http://127.0.0.1:8787", telemetryEnabled: true } };
 
-    expect(getMobileRuntimeConfig()).toEqual({ brokerUrl: "http://127.0.0.1:8787/local-chalk", telemetryEnabled: true });
+    expect(getMobileRuntimeConfig()).toEqual({ apiBaseURL: "http://127.0.0.1:8787", telemetryEnabled: true });
   });
 
-  it.each(["not-a-url", "ftp://chalkmeet.com/local-chalk", "https://user:password@chalkmeet.com/local-chalk"])("falls back for an invalid broker override (%s)", (brokerUrl) => {
-    expoConstants.expoConfig = { extra: { brokerUrl, telemetryEnabled: "true" } };
+  it.each(["not-a-url", "ftp://chalkmeet.com", "https://user:password@chalkmeet.com"])("falls back for an invalid API override (%s)", (apiBaseURL) => {
+    expoConstants.expoConfig = { extra: { apiBaseURL, telemetryEnabled: "true" } };
 
-    expect(getMobileRuntimeConfig()).toEqual({ brokerUrl: defaultBrokerUrl, telemetryEnabled: false });
+    expect(getMobileRuntimeConfig()).toEqual({ apiBaseURL: defaultApiBaseURL, telemetryEnabled: false });
   });
 });

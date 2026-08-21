@@ -1,4 +1,4 @@
-import type { Capability, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { Capability, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type React from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
@@ -29,12 +29,15 @@ import {
   type GalleryParticipant,
 } from "./sdk-preview-fixtures";
 import type { PreviewSearch, PreviewSearchPatch } from "./preview-state";
-import { ScreenShareMock } from "./ScreenShareMock";
+import { createPreviewAudioTrack } from "./preview-audio-track";
+import { createPreviewScreenTrack } from "./preview-screen-track";
 
 export interface SdkPreviewGalleryProps {
   readonly search: PreviewSearch;
   readonly onSearchChange: (patch: PreviewSearchPatch) => void;
 }
+
+const PREVIEW_EPISODE_DURATION_SECONDS = 18 * 60 + 42;
 
 export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(DISPLAY_NAME);
@@ -50,9 +53,28 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   const fixtureSearch = useMemo<PreviewSearch>(() => (search.state === "empty" ? { ...search, participants: 0 as const, chat: "empty" as const } : search), [search]);
   const participants = useMemo(() => participantsForCount(fixtureSearch.participants, fixtureSearch), [fixtureSearch]);
   const panel = search.panel === "none" ? null : search.panel;
-  const effectiveLayout: SpaceLayout = search.stage === "share" ? "presentation" : search.stage === "whiteboard" ? "focus" : search.layout;
-  const episodeDuration = 18 * 60 + 42;
-  const gallerySnapshot = useMemo(() => createGallerySnapshot(participants, fixtureSearch, search, displayName), [displayName, fixtureSearch, participants, search]);
+  const effectiveLayout: SpaceLayout = search.stage === "whiteboard" ? "focus" : search.layout;
+  const episodeDuration = PREVIEW_EPISODE_DURATION_SECONDS;
+  const [screenTrack, setScreenTrack] = useState<MediaStreamTrack | null>(null);
+  useEffect(() => {
+    if (search.stage !== "share") return;
+    const preview = createPreviewScreenTrack();
+    setScreenTrack(preview?.track ?? null);
+    return () => {
+      preview?.stop();
+      setScreenTrack(null);
+    };
+  }, [search.stage]);
+  const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
+  useEffect(() => {
+    const preview = createPreviewAudioTrack();
+    setAudioTrack(preview?.track ?? null);
+    return () => {
+      preview?.stop();
+      setAudioTrack(null);
+    };
+  }, []);
+  const gallerySnapshot = useMemo(() => createGallerySnapshot(participants, fixtureSearch, search, displayName, episodeDuration, { screen: screenTrack, audio: audioTrack }), [audioTrack, displayName, episodeDuration, fixtureSearch, participants, screenTrack, search]);
   const previewClient = useMemo(() => createPreviewClient(gallerySnapshot), []);
 
   useEffect(() => {
@@ -132,12 +154,6 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
 
   const toast = search.toast === "none" ? [] : ([{ id: `preview-toast-${search.toast}`, message: TOAST_MESSAGES[search.toast], type: search.toast }] satisfies Toast[]);
   const whiteboardFallback = search.stage === "whiteboard" ? <PreviewWhiteboardMock palette={mappedPalette} texture={mappedTexture} /> : null;
-  const screenShareFallback =
-    search.stage === "share" ? (
-      <div className="absolute inset-3 z-10 overflow-hidden rounded-[10px] border border-[var(--chalk-line)] bg-[var(--chalk-stage)] sm:inset-6">
-        <ScreenShareMock />
-      </div>
-    ) : null;
   const warningOverlay = search.state === "warning" ? <CommandErrorAlert message="Some Space actions are temporarily unavailable." /> : null;
   const confirmationOverlay = search.state === "confirmation" ? <LeaveDialog isOpen onClose={retrySpace} onConfirm={backToEntrance} palette={mappedPalette} texture={mappedTexture} /> : null;
 
@@ -155,7 +171,8 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         layout={effectiveLayout}
         onLayoutChange={(nextLayout) => patch({ layout: nextLayout })}
         initialPanel={search.dialog === "settings" ? "settings" : panel}
-        features={{ chat: true, participants: true, admission: true, screenShare: false, whiteboard: false, reactions: true, handRaise: true, info: true, settings: true, transcript: true }}
+        features={{ chat: true, participants: true, admission: true, screenShare: true, whiteboard: true, reactions: true, handRaise: true, info: true, settings: true, transcript: true }}
+        onToggleWhiteboard={() => patch({ stage: search.stage === "whiteboard" ? "people" : "whiteboard" })}
         infoDialog={{
           isOpen: search.dialog === "info",
           onOpenChange: (open) => patch({ dialog: open ? "info" : "none" }),
@@ -193,7 +210,6 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         reconnecting={statusOverlay(search, retrySpace, backToEntrance)}
         overlay={
           <Fragment>
-            {screenShareFallback}
             {whiteboardFallback}
             {warningOverlay}
             {confirmationOverlay}
@@ -232,7 +248,12 @@ const PREVIEW_CAPABILITIES: readonly Capability[] = [
   "clearSpaceContent",
 ];
 
-function createGallerySnapshot(participants: readonly GalleryParticipant[], fixtureSearch: PreviewSearch, search: PreviewSearch, displayName: string): SpaceSnapshot {
+interface PreviewTracks {
+  readonly screen: MediaStreamTrack | null;
+  readonly audio: MediaStreamTrack | null;
+}
+
+function createGallerySnapshot(participants: readonly GalleryParticipant[], fixtureSearch: PreviewSearch, search: PreviewSearch, displayName: string, episodeDuration: number, tracks: PreviewTracks): SpaceSnapshot {
   const base = createSnapshot(PREVIEW_CAPABILITIES);
   const roster = participants.map((participant) => ({
     participantId: participant.id,
@@ -241,6 +262,7 @@ function createGallerySnapshot(participants: readonly GalleryParticipant[], fixt
     eligibleRoles: ["member", "participant"],
     capabilities: [],
     handRaised: Boolean(participant.isHandRaised),
+    presence: { state: "connected", speaking: Boolean(participant.isSpeaking), activeSpeaker: false } satisfies SpaceSnapshot["participants"]["roster"][number]["presence"],
     media: {
       microphone: participant.isMuted ? ("inactive" as const) : ("active" as const),
       camera: participant.isVideoEnabled ? ("active" as const) : ("inactive" as const),
@@ -251,15 +273,29 @@ function createGallerySnapshot(participants: readonly GalleryParticipant[], fixt
     search.panel === "admission" && search.state !== "empty"
       ? WAITING_PARTICIPANTS.map((participant, index) => ({ requestId: participant.id, participantId: participant.id, displayName: participant.displayName, initialRole: "participant", eligibleRoles: ["participant"], expiresAt: new Date(Date.now() + (index + 1) * 60_000).toISOString() }))
       : [];
+  const sharer = participants.find((participant) => participant.isScreenSharing);
+  const remote: RemoteMedia[] = [];
+  if (sharer && tracks.screen) remote.push({ participantId: sharer.id, source: "screen", publicationId: `preview-${sharer.id}-screen`, track: tracks.screen });
+  if (tracks.audio) {
+    for (const participant of participants) {
+      if (participant.isLocal || participant.isMuted) continue;
+      remote.push({ participantId: participant.id, source: "microphone", publicationId: `preview-${participant.id}-microphone`, track: tracks.audio });
+    }
+  }
   const chatFailure = fixtureSearch.chat === "failure" ? { code: "client.internal_error" as const, recoverable: true, message: "Chat is temporarily unavailable in this Space." } : null;
 
   return {
     ...base,
-    connection: { ...base.connection, status: search.state === "reconnecting" ? "reconnecting" : "live" },
+    connection: {
+      ...base.connection,
+      status: search.state === "reconnecting" ? "reconnecting" : "live",
+      episode: { id: "preview-episode", startedAt: new Date(Date.now() - episodeDuration * 1_000).toISOString(), deadline: null },
+    },
     self: { ...base.self, participantId: "you", displayName, role: "member", capabilities: PREVIEW_CAPABILITIES, handRaised: search.hand, can: (capability) => PREVIEW_CAPABILITIES.includes(capability) },
     participants: { roster, admissionQueue },
     media: {
       ...base.media,
+      remote,
       local: {
         ...base.media.local,
         microphone: { ...base.media.local.microphone, state: fixtureSearch.mic ? "enabled" : "disabled" },

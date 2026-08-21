@@ -49,7 +49,7 @@ describe("webTelemetry", () => {
     expect(telemetryModule.createBrowserRuntimeTelemetryStorage).toHaveBeenCalledWith("chalk.web.telemetry.v1");
   });
 
-  it("keeps configured journey export unavailable until Wave 6 supplies API authentication", async () => {
+  it("keeps configured journey export unavailable until the API supplies authentication", async () => {
     vi.stubGlobal("window", {});
     vi.stubEnv("VITE_CHALK_TELEMETRY_ENABLED", "true");
     const { createWebTelemetry } = await import("./telemetry");

@@ -43,7 +43,7 @@ export type PreviewSkin = ThemeSkin;
 const PREVIEW_CHROME = ["visible", "hidden"] as const;
 export type PreviewChrome = (typeof PREVIEW_CHROME)[number];
 
-export const PREVIEW_PARTICIPANT_COUNTS = [0, 1, 2, 5] as const;
+export const PREVIEW_PARTICIPANT_COUNTS = [0, 1, 2, 5, 9, 12] as const;
 export type PreviewParticipants = (typeof PREVIEW_PARTICIPANT_COUNTS)[number];
 
 export const PREVIEW_CHAT_STATES = ["ready", "empty", "loading", "failure", "pending"] as const;

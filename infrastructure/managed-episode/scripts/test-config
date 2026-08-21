@@ -14,12 +14,15 @@ for argument in --entrypoint=/usr/local/bin/cloudflared --log-opt=tag=chalk-api 
   grep -Fq "PodmanArgs=${argument}" "${managed_root}/quadlet/"* || { echo "missing production-compatible Quadlet argument: ${argument}" >&2; exit 1; }
 done
 grep -Fq "Exec=redis-server --save '\"\"' --appendonly no" "${managed_root}/quadlet/chalk-redis.container.in" || { echo "Redis persistence disablement is not generator-safe" >&2; exit 1; }
+grep -Fq 'PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate' "${managed_root}/quadlet/chalk-api-migrate.container.in" || { echo "migration Quadlet must override the API image entrypoint" >&2; exit 1; }
+grep -Fq 'Exec=--database-url-file /run/chalk/migrate/database-url --target __DATABASE_MIGRATION_TARGET__ --allow-missing-version 20260819120000' "${managed_root}/quadlet/chalk-api-migrate.container.in" || { echo "migration Quadlet must pass the bounded out-of-order repair argument to its entrypoint" >&2; exit 1; }
 grep -Fq 'HealthCmd=["/usr/local/bin/chalk-healthcheck","http://127.0.0.1:8080/readyz"]' "${managed_root}/quadlet/chalk-api.container.in" || { echo "scratch API image healthcheck must use exec form" >&2; exit 1; }
+grep -Fq 'Requires=chalk-redis.service chalk-api-migrate.service' "${managed_root}/quadlet/chalk-api.container.in" || { echo "API must hard-require the migration unit" >&2; exit 1; }
 grep -Fq 'Requires=chalk-api.service' "${managed_root}/quadlet/chalk-sync.container.in" || { echo "Sync must hard-require the API unit" >&2; exit 1; }
 grep -Fq 'Requires=chalk-api.service chalk-sync.service' "${managed_root}/quadlet/chalk-cloudflared.container.in" || { echo "cloudflared must hard-require application units" >&2; exit 1; }
 grep -Fq 'Wants=network-online.target' "${managed_root}/quadlet/chalk-sync.container.in" || { echo "Sync must wait softly for the user-manager network target" >&2; exit 1; }
 grep -Fq 'Wants=network-online.target' "${managed_root}/quadlet/chalk-cloudflared.container.in" || { echo "cloudflared must wait softly for the user-manager network target" >&2; exit 1; }
-grep -Fq 'Requires=chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service' "${managed_root}/systemd/chalk-runtime.target" || { echo "runtime target must fail closed on partial start" >&2; exit 1; }
+grep -Fq 'Requires=chalk-api-migrate.service chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service' "${managed_root}/systemd/chalk-runtime.target" || { echo "runtime target must fail closed on partial start" >&2; exit 1; }
 grep -Fq 'After=network-online.target' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must wait for network-online" >&2; exit 1; }
 grep -Fq 'ExecStart=/usr/local/libexec/chalk-deployment-controller restore' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must invoke the versioned deployment controller" >&2; exit 1; }
 grep -Fq 'Restart=on-failure' "${managed_root}/systemd/chalk-runtime-restore.service" || { echo "restore unit must retry transient boot failures" >&2; exit 1; }
@@ -185,8 +188,11 @@ if "${managed_root}/scripts/validate-runtime" \
   exit 1
 fi
 
-jq -e '
+expected_migration="$(find "${repo_root}/apps/api/db/migrations" -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
+  sed -n 's/^\([0-9]\{14\}\)_.*/\1/p' | sort -n | tail -n 1)"
+jq -e --argjson expected_migration "${expected_migration}" '
   .schema_version == 2 and
+  .database_compatibility.minimum_migration == $expected_migration and
   .affected_components == ["api", "sync"] and
   (.component_releases | (keys | sort) == ["api", "sync"])
 ' "${fixture_root}/release-manifest.json" >/dev/null

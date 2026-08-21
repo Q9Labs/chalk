@@ -32,6 +32,7 @@ try {
   await assertGuard("browser", "require", "cjs");
   await assertGuard("react-native", "import", "esm");
   await assertGuard("react-native", "require", "cjs");
+  await assertPublicInviteEntry();
   await assertWorkerd();
 
   const packageJson = JSON.parse(await readFile(new URL("package.json", packageDirectory), "utf8"));
@@ -41,6 +42,23 @@ try {
   if (rootBundle.includes("createChalkServerClient") || rootBundle.includes("chalk_sk_")) throw new Error("The browser package root contains server-client code.");
 } finally {
   await rm(temporaryDirectory, { force: true, recursive: true });
+}
+
+async function assertPublicInviteEntry() {
+  const bundled = await build({
+    absWorkingDir: consumerDirectory,
+    bundle: true,
+    conditions: ["browser", "import"],
+    external: ["effect", "effect/unstable/httpapi", "effect/unstable/http"],
+    format: "esm",
+    platform: "browser",
+    stdin: { contents: 'export { createChalkPublicClient } from "@q9labsai/chalk-client/invites";', resolveDir: consumerDirectory },
+    write: false,
+  });
+  const output = bundled.outputFiles[0]?.text ?? "";
+  if (!output.includes("createChalkPublicClient") || output.includes("createChalkServerClient") || output.includes("ChalkServerOnlyError")) {
+    throw new Error("the browser public-invites entry includes server-only management code.");
+  }
 }
 
 async function assertGuard(condition, syntax, format) {

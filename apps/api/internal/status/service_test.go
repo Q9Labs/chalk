@@ -81,8 +81,8 @@ func TestSnapshotMarksMissingStaleAndFailedComponentsWithoutPrivateFields(t *tes
 	if err != nil {
 		t.Fatalf("snapshot: %v", err)
 	}
-	if snapshot.Overall != status.StateDegraded || len(snapshot.Components) != 4 {
-		t.Fatalf("snapshot = %#v, want degraded with four components", snapshot)
+	if snapshot.Overall != status.StateDegraded || len(snapshot.Components) != 3 {
+		t.Fatalf("snapshot = %#v, want degraded with three components", snapshot)
 	}
 	if snapshot.Components[0].State != "degraded" || snapshot.Components[1].State != "unknown" {
 		t.Fatalf("component states = %#v, want web degraded and api unknown", snapshot.Components)
@@ -109,7 +109,6 @@ func TestSnapshotMapsMonitorFailuresToOutageOrDegraded(t *testing.T) {
 		{MonitorKey: "api.health", Status: "failed", CheckedAt: now.Add(-time.Minute), LastChangedAt: now.Add(-time.Minute)},
 		{MonitorKey: "api.readiness", Status: "failed", CheckedAt: now.Add(-time.Minute), LastChangedAt: now.Add(-time.Minute)},
 		{MonitorKey: "sync.readiness", Status: "failed", CheckedAt: now.Add(-time.Minute), LastChangedAt: now.Add(-time.Minute)},
-		{MonitorKey: "broker.health", Status: "failed", CheckedAt: now.Add(-time.Minute), LastChangedAt: now.Add(-time.Minute)},
 	}
 	service := status.NewService(repository{current: func(context.Context) ([]status.CurrentResult, error) { return rows, nil }}, status.Config{Now: func() time.Time { return now }})
 
@@ -132,9 +131,6 @@ func TestSnapshotMapsMonitorFailuresToOutageOrDegraded(t *testing.T) {
 	}
 	if states["sync"] != status.StateDegraded {
 		t.Fatalf("sync state = %q, want degraded for readiness failure", states["sync"])
-	}
-	if states["broker"] != status.StateOutage {
-		t.Fatalf("broker state = %q, want outage for health failure", states["broker"])
 	}
 }
 

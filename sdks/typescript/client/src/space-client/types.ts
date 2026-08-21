@@ -103,6 +103,12 @@ export type SelfSlice = {
   readonly can: (capability: Capability) => boolean;
 };
 
+export type ParticipantPresence = {
+  readonly state: "connected" | "disconnected" | "unknown";
+  readonly speaking: boolean;
+  readonly activeSpeaker: boolean;
+};
+
 export type Participant = {
   readonly participantId: string;
   readonly displayName: string;
@@ -111,6 +117,7 @@ export type Participant = {
   readonly capabilities: readonly Capability[];
   readonly handRaised: boolean;
   readonly media: ChalkParticipantMediaState;
+  readonly presence: ParticipantPresence;
 };
 
 export type AdmissionRequest = {
@@ -184,6 +191,7 @@ export type WhiteboardSlice = {
     readonly status: "unsubscribed" | "loading" | "ready" | "recovering" | "failed";
     readonly sceneId: string | null;
     readonly revision: string | null;
+    readonly presenting: boolean;
     readonly error: ChalkWhiteboardV1Failure | null;
   };
 };

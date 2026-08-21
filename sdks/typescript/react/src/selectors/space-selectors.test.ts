@@ -17,6 +17,7 @@ const participant = (overrides: Partial<Participant> = {}): Participant => ({
   eligibleRoles: ["participant"],
   capabilities: [],
   media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
+  presence: { state: "connected", speaking: false, activeSpeaker: false },
   ...overrides,
 });
 
@@ -43,6 +44,18 @@ describe("space space selectors", () => {
       expect.objectContaining({ id: "local" }),
       expect.objectContaining({ id: "remote", isVideoEnabled: true, isScreenSharing: true, videoTrack: cameraTrack, screenShareTrack: screenTrack }),
     ]);
+  });
+
+  it("does not treat a screen share alone as an enabled camera", () => {
+    const screenTrack = { kind: "video" } as MediaStreamTrack;
+
+    expect(toVideoParticipants([participant()], [media("screen", screenTrack)], "local", "Ada", localMedia)[1]).toEqual(expect.objectContaining({ id: "remote", isVideoEnabled: false, isScreenSharing: true, screenShareTrack: screenTrack }));
+  });
+
+  it("projects sync presence onto speaking flags", () => {
+    const participants = [participant({ participantId: "local", presence: { state: "connected", speaking: true, activeSpeaker: false } }), participant({ participantId: "remote", presence: { state: "connected", speaking: true, activeSpeaker: true } })];
+
+    expect(toVideoParticipants(participants, [], "local", "Ada", localMedia)).toEqual([expect.objectContaining({ id: "local", isSpeaking: true, isActiveSpeaker: false }), expect.objectContaining({ id: "remote", isSpeaking: true, isActiveSpeaker: true })]);
   });
 
   it("selects the first real screen-share track for presentation mode", () => {

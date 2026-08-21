@@ -1,12 +1,13 @@
 "use client";
 
-import { createSpaceClient, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
+import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsDialog";
@@ -30,6 +31,8 @@ export type ChalkFeatures = {
   readonly handRaise?: boolean;
   readonly info?: boolean;
   readonly settings?: boolean;
+  /** Join / leave / message / hand-raise / reaction cues. The user can still mute them from Settings. */
+  readonly sounds?: boolean;
 };
 
 type SpaceIntegration = { readonly client: SpaceClient; readonly space?: never; readonly getAccess?: never } | { readonly client?: never; readonly space: string; readonly getAccess: GetAccess };
@@ -173,12 +176,12 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
   const client = useSpaceClient();
   const self = useSelf();
   const media = useMedia();
+  const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
-  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.skin ?? "classic", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
   const resolvedSkin: ThemeSkin = props.theme?.skin ?? "classic";
@@ -225,22 +228,31 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
     }
   }, []);
   const whiteboardTransport = client.whiteboard.transport();
+  const whiteboardAvailable = props.features?.whiteboard !== false;
+  const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardAvailable);
+  const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? bindWhiteboardPresentation(whiteboardSubscription.transport) : undefined;
+  useEffect(() => {
+    if (whiteboardSubscription.status === "failed") setCommandError(whiteboardSubscription.error.message);
+    else if (whiteboardSubscription.status === "loading" || whiteboardSubscription.status === "ready") setCommandError(null);
+  }, [whiteboardSubscription]);
   const whiteboard =
-    props.features?.whiteboard !== false && whiteboardOpen && canDrawWhiteboard && whiteboardTransport
+    whiteboardAvailable && whiteboardState.engine.presenting && whiteboardSubscription.status === "ready"
       ? {
           isOpen: true,
           props: {
             canDraw: canDrawWhiteboard,
             collab: {
               canDraw: canDrawWhiteboard,
-              subscribe: (listener: NonNullable<WhiteboardViewProps["collab"]>["subscribe"] extends (listener: infer T) => unknown ? T : never) => whiteboardTransport.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
-              submitUpdate: async (input: NonNullable<WhiteboardViewProps["collab"]>["submitUpdate"] extends (input: infer T) => unknown ? T : never) => whiteboardTransport.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
-              sendCursor: (input: NonNullable<WhiteboardViewProps["collab"]>["sendCursor"] extends (input: infer T) => unknown ? T : never) => whiteboardTransport.sendCursor(input),
-              requestSnapshot: () => whiteboardTransport.requestSnapshot(),
-              clear: () => whiteboardTransport.clear(),
-              initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => whiteboardTransport.files.initiateUpload(input),
-              finalizeUpload: (uploadId: string) => whiteboardTransport.files.finalizeUpload(uploadId),
-              presignDownload: (fileId: string) => whiteboardTransport.files.getDownloadUrl(fileId),
+              subscribe: (listener: NonNullable<WhiteboardViewProps["collab"]>["subscribe"] extends (listener: infer T) => unknown ? T : never) => whiteboardSubscription.transport.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
+              submitUpdate: async (input: NonNullable<WhiteboardViewProps["collab"]>["submitUpdate"] extends (input: infer T) => unknown ? T : never) =>
+                whiteboardSubscription.transport.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
+              sendCursor: (input: NonNullable<WhiteboardViewProps["collab"]>["sendCursor"] extends (input: infer T) => unknown ? T : never) => whiteboardSubscription.transport.sendCursor(input),
+              requestSnapshot: () => whiteboardSubscription.transport.requestSnapshot(),
+              onSubmissionError: (cause: unknown) => setCommandError(cause instanceof Error ? cause.message : "Whiteboard could not sync."),
+              clear: () => whiteboardSubscription.transport.clear(),
+              initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => whiteboardSubscription.transport.files.initiateUpload(input),
+              finalizeUpload: (uploadId: string) => whiteboardSubscription.transport.files.finalizeUpload(uploadId),
+              presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
             },
           },
         }
@@ -260,10 +272,10 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
         setSettings((current) => ({ ...current, appearance: { ...current.appearance, layout: nextLayout } }));
         props.onLayoutChange?.(nextLayout);
       }}
-      features={props.features}
+      features={{ ...props.features, sounds: props.features?.sounds !== false && settings.experience.sounds }}
       onOpenDiagnostics={props.onOpenDiagnostics}
       whiteboard={whiteboard}
-      onToggleWhiteboard={() => setWhiteboardOpen((open) => !open)}
+      onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
       infoDialog={props.features?.info !== false && props.inviteLink ? { isOpen: infoOpen, onOpenChange: setInfoOpen, spaceName: props.spaceName, inviteLink: props.inviteLink, onCopyLink: () => void navigator.clipboard?.writeText(props.inviteLink!) } : undefined}
       onOpenSettings={
         props.features?.settings !== false
@@ -335,6 +347,12 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
   );
 }
 
+function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((presenting: boolean) => Promise<void>) | undefined {
+  const setPresentation = transport.setPresentation;
+  if (!setPresentation) return undefined;
+  return (presenting) => setPresentation.call(transport, presenting);
+}
+
 function StatusView({ message, onRetry }: { readonly message: string; readonly onRetry?: () => void }): React.JSX.Element {
   const skin = useSkin();
   return (
@@ -392,6 +410,6 @@ function createSettings(displayName: string, layout: SpaceLayout, skin: ThemeSki
     audio: { outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
     video: { quality: "auto" },
     appearance: { layout, theme: palette === "light" ? "light" : "dark", skin, palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
-    experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
+    experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
   };
 }

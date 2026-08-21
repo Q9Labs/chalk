@@ -21,18 +21,18 @@ type JourneyExporterFactory = (apiBaseURL: string) => TelemetryExporter;
 
 /**
  * The API intake route requires an authenticated user credential or provider bearer.
- * The browser broker intentionally exposes neither: its AccessGrant is opaque
- * and its HttpOnly credential is scoped to broker routes. Wave 6 must provide
- * an authenticated intake relay or an explicit bearer provider here.
+ * Public Space arrivals expose only an opaque AccessGrant and a per-arrival
+ * HttpOnly guest cookie, so the web surface cannot export until an authenticated
+ * intake relay or explicit bearer provider is available.
  */
 export class JourneyTelemetryAuthenticationUnavailableError extends Error {
   constructor() {
-    super("Journey telemetry authentication is not available in the web surface yet.");
+    super("Journey telemetry cannot authenticate against the API in this web surface yet.");
     this.name = "JourneyTelemetryAuthenticationUnavailableError";
   }
 }
 
-/** Telemetry is explicitly opt-in; the broker chooses the only permitted export origin after identity arrival. */
+/** Telemetry is explicitly opt-in; the API origin is configured after Space access is established. */
 export function createWebTelemetry(): WebTelemetry {
   if (typeof window === "undefined") return createServerWebTelemetry();
 
@@ -96,7 +96,7 @@ function unavailableJourneyExporter(_apiBaseURL: string): TelemetryExporter {
 
 function telemetryOrigin(value: string): string {
   const url = new URL(value);
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new TypeError("The broker returned an invalid telemetry API origin.");
-  if (url.username || url.password) throw new TypeError("The broker returned an invalid telemetry API origin.");
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new TypeError("The API returned an invalid telemetry origin.");
+  if (url.username || url.password) throw new TypeError("The API returned an invalid telemetry origin.");
   return url.origin;
 }

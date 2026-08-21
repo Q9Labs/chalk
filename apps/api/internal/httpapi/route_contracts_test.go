@@ -86,6 +86,17 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/spaces/{space_id}"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/archive"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/restore"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite"},
+		{http.MethodPatch, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/approval"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/denial"},
+		{http.MethodPost, "/v1/public/spaces"},
+		{http.MethodPost, "/v1/public/space-invite-arrivals"},
+		{http.MethodGet, "/v1/public/space-invite-arrival"},
+		{http.MethodPost, "/v1/public/space-invite-arrival/access-grants"},
+		{http.MethodDelete, "/v1/public/space-invite-arrival"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}"},
@@ -166,6 +177,65 @@ func TestPreviewRouteContracts(t *testing.T) {
 	}
 	if len(seenOperations) != len(expected) {
 		t.Fatalf("expected %d route contracts, got %d", len(expected), len(seenOperations))
+	}
+}
+
+func TestPublicInviteRouteContracts(t *testing.T) {
+	contracts := make(map[string]httpapi.APIRouteContract)
+	for _, contract := range httpapi.PreviewRouteContracts() {
+		contracts[contract.OperationID] = contract
+	}
+	tests := []struct {
+		operationID string
+		method      string
+		path        string
+		auth        httpapi.APIAuth
+		status      int
+		body        string
+		parameters  []string
+	}{
+		{"getSpacePublicInvite", http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", httpapi.APIAuthSessionOrBearer, http.StatusOK, "", []string{"path:tenant_id", "path:space_id"}},
+		{"updateSpacePublicInvite", http.MethodPatch, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", httpapi.APIAuthSessionOrBearer, http.StatusOK, "UpdateSpacePublicInviteRequest", []string{"path:tenant_id", "path:space_id"}},
+		{"rotateSpacePublicInvite", http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations", httpapi.APIAuthSessionOrBearer, http.StatusCreated, "", []string{"path:tenant_id", "path:space_id", "header:Idempotency-Key"}},
+		{"listSpacePublicAdmissionRequests", http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests", httpapi.APIAuthSessionOrBearer, http.StatusOK, "", []string{"path:tenant_id", "path:space_id", "query:state"}},
+		{"approveSpacePublicAdmissionRequest", http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/approval", httpapi.APIAuthSessionOrBearer, http.StatusOK, "", []string{"path:tenant_id", "path:space_id", "path:request_handle", "header:Idempotency-Key"}},
+		{"denySpacePublicAdmissionRequest", http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/denial", httpapi.APIAuthSessionOrBearer, http.StatusOK, "", []string{"path:tenant_id", "path:space_id", "path:request_handle", "header:Idempotency-Key"}},
+		{"createPublicSpace", http.MethodPost, "/v1/public/spaces", "", http.StatusCreated, "CreatePublicSpaceRequest", []string{"header:Idempotency-Key"}},
+		{"arriveBySpacePublicInvite", http.MethodPost, "/v1/public/space-invite-arrivals", "", http.StatusCreated, "SpacePublicInviteArrivalRequest", []string{"header:Idempotency-Key", "header:X-Chalk-Arrival-Handle"}},
+		{"getSpacePublicInviteArrival", http.MethodGet, "/v1/public/space-invite-arrival", "", http.StatusOK, "", []string{"header:X-Chalk-Arrival-Handle"}},
+		{"refreshSpacePublicInviteAccess", http.MethodPost, "/v1/public/space-invite-arrival/access-grants", "", http.StatusCreated, "RefreshSpacePublicInviteAccessRequest", []string{"header:X-Chalk-Arrival-Handle"}},
+		{"leaveSpacePublicInviteArrival", http.MethodDelete, "/v1/public/space-invite-arrival", "", http.StatusNoContent, "", []string{"header:X-Chalk-Arrival-Handle"}},
+	}
+	for _, test := range tests {
+		contract, ok := contracts[test.operationID]
+		if !ok {
+			t.Fatalf("missing %s contract", test.operationID)
+		}
+		if contract.Method != test.method || contract.Path != test.path || contract.Auth != test.auth {
+			t.Fatalf("%s metadata = %s %s auth=%q", test.operationID, contract.Method, contract.Path, contract.Auth)
+		}
+		if response := responseForStatus(contract, test.status); response == nil {
+			t.Fatalf("%s missing success status %d", test.operationID, test.status)
+		}
+		if test.body == "" {
+			if contract.Request != nil {
+				t.Fatalf("%s unexpectedly has request body %#v", test.operationID, contract.Request)
+			}
+		} else if contract.Request == nil || contract.Request.Name != test.body {
+			t.Fatalf("%s request schema = %#v, want %q", test.operationID, contract.Request, test.body)
+		}
+		if got := parameterNames(contract.Parameters); !equalStrings(got, test.parameters) {
+			t.Fatalf("%s parameters = %v, want %v", test.operationID, got, test.parameters)
+		}
+		requiredErrors := []string{"service.unavailable", "service.internal_error"}
+		if test.auth != "" {
+			requiredErrors = append([]string{"access.unauthenticated", "access.forbidden"}, requiredErrors...)
+		}
+		for _, code := range requiredErrors {
+			if !contractHasErrorCode(contract, code) {
+				t.Fatalf("%s missing %q", test.operationID, code)
+			}
+		}
 	}
 }
 
@@ -458,11 +528,16 @@ type expectedRoute struct {
 
 func publicContract(method string, path string) bool {
 	public := map[string]struct{}{
-		http.MethodGet + " /v1/auth/google/callback": {},
-		http.MethodGet + " /v1/auth/google/start":    {},
-		http.MethodPost + " /v1/auth/login":          {},
-		http.MethodPost + " /v1/auth/register":       {},
-		http.MethodGet + " /v1/status":               {},
+		http.MethodGet + " /v1/auth/google/callback":                       {},
+		http.MethodGet + " /v1/auth/google/start":                          {},
+		http.MethodPost + " /v1/auth/login":                                {},
+		http.MethodPost + " /v1/auth/register":                             {},
+		http.MethodGet + " /v1/status":                                     {},
+		http.MethodPost + " /v1/public/spaces":                             {},
+		http.MethodPost + " /v1/public/space-invite-arrivals":              {},
+		http.MethodGet + " /v1/public/space-invite-arrival":                {},
+		http.MethodPost + " /v1/public/space-invite-arrival/access-grants": {},
+		http.MethodDelete + " /v1/public/space-invite-arrival":             {},
 	}
 	_, ok := public[method+" "+path]
 	return ok

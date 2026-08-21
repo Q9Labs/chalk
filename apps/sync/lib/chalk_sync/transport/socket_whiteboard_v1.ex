@@ -38,6 +38,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        hello_timer: timer,
        identity: nil,
        display_name: nil,
+       presentation_negotiated: false,
        scene_id: nil,
        revision: 0,
        snapshot: nil,
@@ -80,6 +81,32 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info(
         {:whiteboard_v1_frame, %{"type" => "cursor", "participant_id" => participant_id}},
         %{identity: %Identity{participant_id: participant_id}} = state
+      ),
+      do: {:ok, state}
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
+        %{phase: :live, presentation_negotiated: false} = state
+      ),
+      do: {:ok, state}
+
+  def handle_info(
+        {:whiteboard_v1_frame,
+         %{
+           "type" => "presentation_updated",
+           "scene_id" => scene_id,
+           "revision" => revision
+         } = frame},
+        %{phase: :live, presentation_negotiated: true, scene_id: scene_id} = state
+      ) do
+    if String.to_integer(revision) <= state.revision,
+      do: {:ok, state},
+      else: deliver_frame(state, frame)
+  end
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
+        %{phase: :live} = state
       ),
       do: {:ok, state}
 
@@ -130,7 +157,12 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info(:whiteboard_drain, state), do: push_next(state)
 
   defp replay_or_reset(state, identity, scene_id, revision) do
-    case Episode.read_after(identity, scene_id, state.revision) do
+    case Episode.read_after(
+           identity,
+           scene_id,
+           state.revision,
+           state.presentation_negotiated
+         ) do
       {:ok, frames} ->
         if frames_reach_revision?(frames, revision),
           do: enqueue_replay(state, scene_id, revision, frames),
@@ -153,12 +185,19 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     :ok
   end
 
-  defp handle_frame({:hello, %{token: token}}, %{phase: :awaiting_hello} = state) do
+  defp handle_frame(
+         {:hello, %{token: token, extensions: extensions}},
+         %{phase: :awaiting_hello} = state
+       ) do
+    presentation_negotiated =
+      Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
+
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
          {:ok, welcome} <- Episode.connect(identity) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
+      welcome = if presentation_negotiated, do: welcome, else: Map.delete(welcome, "presenting")
 
       {:push, {:text, Protocol.encode!(welcome)},
        %{
@@ -167,6 +206,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
            hello_timer: nil,
            identity: identity,
            display_name: claims.display_name,
+           presentation_negotiated: presentation_negotiated,
            scene_id: welcome["scene_id"],
            revision: String.to_integer(welcome["revision"])
        }
@@ -251,6 +291,28 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
       failure ->
         operation_failure(operation.operation_id, :set_draw_permission, failure, state)
+    end
+  end
+
+  defp handle_frame(
+         {:set_presentation, operation},
+         %{phase: :live, presentation_negotiated: false} = state
+       ) do
+    operation_failure(operation.operation_id, :set_presentation, {:error, :unavailable}, state)
+  end
+
+  defp handle_frame(
+         {:set_presentation, operation},
+         %{phase: :live, identity: identity} = state
+       ) do
+    case Episode.set_presentation(identity, operation) do
+      {:ok, commit, presentation} ->
+        Fanout.broadcast_local(identity.episode, presentation)
+        state = observe_operation(state, "set_presentation", "committed")
+        {:push, {:text, Protocol.encode!(commit)}, state}
+
+      failure ->
+        operation_failure(operation.operation_id, :set_presentation, failure, state)
     end
   end
 
@@ -405,7 +467,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp advance_cursor(state, %{"type" => type, "scene_id" => scene_id, "revision" => revision})
-       when type in ["update", "commit"] do
+       when type in ["update", "commit", "presentation_updated"] do
     %{state | scene_id: scene_id, revision: String.to_integer(revision)}
   end
 

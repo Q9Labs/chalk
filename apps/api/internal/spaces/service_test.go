@@ -44,6 +44,92 @@ func TestCreateSpaceAppliesSafeDurationDefaults(t *testing.T) {
 		repository.input.LingerWindowSeconds != spaces.DefaultLingerWindowSeconds {
 		t.Fatalf("defaults = %d/%d/%d, want %d/%d/%d", repository.input.DefaultEpisodeDurationSeconds, repository.input.MaximumEpisodeDurationSeconds, repository.input.LingerWindowSeconds, spaces.DefaultEpisodeDurationSeconds, spaces.DefaultMaximumEpisodeDurationSeconds, spaces.DefaultLingerWindowSeconds)
 	}
+	if repository.input.PublicInviteHandle == [32]byte{} {
+		t.Fatal("create did not generate a public invite handle")
+	}
+}
+
+func TestCreateSpaceUsesConfiguredDefaultMediaPlane(t *testing.T) {
+	repository := &spaceRepository{}
+	service := spaces.NewServiceWithDefaultProvider(repository, spaces.MediaPlaneProviderCloudflareSFU)
+	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+
+	if _, err := service.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+		TenantID: tenantID,
+		Name:     "Daily",
+		Slug:     "daily",
+	}); err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	if repository.input.MediaPlane != string(spaces.MediaPlaneProviderCloudflareSFU) {
+		t.Fatalf("media plane = %q, want %q", repository.input.MediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
+}
+
+func TestCreateSpaceRejectsExplicitInvalidMediaPlaneValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "null", value: ""},
+		{name: "empty", value: "   "},
+		{name: "unknown", value: "mediasoup"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := spaces.NewServiceWithDefaultProvider(&spaceRepository{}, spaces.MediaPlaneProviderCloudflareSFU)
+			tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+
+			_, err := service.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+				TenantID:      tenantID,
+				Name:          "Daily",
+				Slug:          "daily",
+				MediaPlane:    test.value,
+				MediaPlaneSet: true,
+			})
+			if !errors.Is(err, spaces.ErrInvalidMediaPlane) {
+				t.Fatalf("error = %v, want invalid media plane", err)
+			}
+		})
+	}
+}
+
+func TestCreateSpaceRejectsNonDashboardDeploymentDefault(t *testing.T) {
+	service := spaces.NewServiceWithDefaultProvider(&spaceRepository{}, spaces.MediaPlaneProviderCloudflareRTK)
+	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+
+	_, err := service.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+		TenantID: tenantID,
+		Name:     "Daily",
+		Slug:     "daily",
+	})
+	if !errors.Is(err, spaces.ErrInvalidMediaPlane) {
+		t.Fatalf("error = %v, want invalid deployment default", err)
+	}
+}
+
+func TestCreateSpaceAppliesMediaPlaneDefaultBeforeFingerprint(t *testing.T) {
+	firstRepository := &idempotentSpaceRepository{}
+	firstService := spaces.NewServiceWithDefaultProvider(firstRepository, spaces.MediaPlaneProviderCloudflareSFU)
+	secondRepository := &idempotentSpaceRepository{}
+	secondService := spaces.NewService(secondRepository)
+	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+	requestKey := "space-create-request-0001"
+
+	if _, err := firstService.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+		TenantID: tenantID, Name: "Daily", Slug: "daily", RequestKey: requestKey,
+	}); err != nil {
+		t.Fatalf("defaulted create: %v", err)
+	}
+	if _, err := secondService.CreateSpace(context.Background(), spaces.CreateSpaceInput{
+		TenantID: tenantID, Name: "Daily", Slug: "daily", MediaPlane: "cf_sfu", RequestKey: requestKey,
+	}); err != nil {
+		t.Fatalf("explicit create: %v", err)
+	}
+	if firstRepository.input.MediaPlane != secondRepository.input.MediaPlane || firstRepository.input.RequestFingerprint != secondRepository.input.RequestFingerprint {
+		t.Fatalf("defaulted fingerprint/input = %q/%x, explicit = %q/%x", firstRepository.input.MediaPlane, firstRepository.input.RequestFingerprint, secondRepository.input.MediaPlane, secondRepository.input.RequestFingerprint)
+	}
 }
 
 func TestUpdateSpaceRejectsDefaultAboveMaximum(t *testing.T) {
@@ -116,7 +202,7 @@ func TestCreateSpaceRequiresAValidRequestKeyForIdempotentCreates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("idempotent create: %v", err)
 	}
-	if repository.calls != 1 || repository.input.RequestKey != "space-create-request-0001" || repository.input.RequestFingerprint == [32]byte{} {
+	if repository.calls != 1 || repository.input.RequestKey != "space-create-request-0001" || repository.input.RequestFingerprint == [32]byte{} || repository.input.PublicInviteHandle == [32]byte{} {
 		t.Fatalf("idempotent input = %#v, calls = %d", repository.input, repository.calls)
 	}
 }
@@ -134,6 +220,31 @@ func TestCreateSpaceReturnsIdempotencyConflict(t *testing.T) {
 	}
 }
 
+func TestCreateSpaceFingerprintExcludesPublicInviteHandle(t *testing.T) {
+	repository := &idempotentSpaceRepository{}
+	service := spaces.NewService(repository)
+	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
+	input := spaces.CreateSpaceInput{
+		TenantID: tenantID, Name: "Daily", Slug: "daily", MediaPlane: "cf_rtk", RequestKey: "space-create-fingerprint-0001",
+	}
+
+	if _, err := service.CreateSpace(context.Background(), input); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	if _, err := service.CreateSpace(context.Background(), input); err != nil {
+		t.Fatalf("replayed create: %v", err)
+	}
+	if len(repository.inputs) != 2 {
+		t.Fatalf("captured inputs = %d, want 2", len(repository.inputs))
+	}
+	if repository.inputs[0].PublicInviteHandle == repository.inputs[1].PublicInviteHandle {
+		t.Fatal("replayed create unexpectedly reused invite handle before persistence")
+	}
+	if repository.inputs[0].RequestFingerprint != repository.inputs[1].RequestFingerprint {
+		t.Fatal("request fingerprint changed with generated invite handle")
+	}
+}
+
 type spaceRepository struct {
 	input spaces.CreateSpaceInput
 }
@@ -145,14 +256,16 @@ type archiveSpaceRepository struct {
 
 type idempotentSpaceRepository struct {
 	spaceRepository
-	input spaces.CreateSpaceInput
-	calls int
-	err   error
+	input  spaces.CreateSpaceInput
+	inputs []spaces.CreateSpaceInput
+	calls  int
+	err    error
 }
 
 func (r *idempotentSpaceRepository) CreateSpaceIdempotent(_ context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
 	r.calls++
 	r.input = input
+	r.inputs = append(r.inputs, input)
 	if r.err != nil {
 		return spaces.Space{}, r.err
 	}

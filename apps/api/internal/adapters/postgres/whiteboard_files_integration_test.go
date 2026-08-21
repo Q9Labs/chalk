@@ -131,9 +131,10 @@ func seedWhiteboardCleanupEpisode(
 	}
 	if _, err := pool.Exec(
 		ctx,
-		"insert into sync_whiteboard_scenes (tenant_id, space_id, scene_id, is_current) values ($1, $2, $3, $4)",
+		"insert into sync_whiteboard_scenes (tenant_id, space_id, episode_id, scene_id, is_current) values ($1, $2, $3, $4, $5)",
 		uuid(tenantID),
 		uuid(spaceID),
+		uuid(episode.episodeID),
 		uuid(episode.sceneID),
 		status == "active",
 	); err != nil {

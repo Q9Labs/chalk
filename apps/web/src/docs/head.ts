@@ -1,11 +1,9 @@
 import type { DocsPage } from "./manifest";
-
-const publicOrigin = "https://chalkmeet.com";
-const socialImage = `${publicOrigin}/images/landing/chalk-flow-hero-20260818.webp`;
+import { SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../lib/site-head";
 
 export function docsPageHead(page: DocsPage) {
   const title = `${page.title} | Chalk Docs`;
-  const canonicalUrl = `${publicOrigin}${page.href}`;
+  const canonicalUrl = `${SITE_ORIGIN}${page.href}`;
 
   return {
     meta: [
@@ -16,11 +14,11 @@ export function docsPageHead(page: DocsPage) {
       { property: "og:title", content: title },
       { property: "og:description", content: page.description },
       { property: "og:url", content: canonicalUrl },
-      { property: "og:image", content: socialImage },
+      { property: "og:image", content: SOCIAL_IMAGE_URL },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: page.description },
-      { name: "twitter:image", content: socialImage },
+      { name: "twitter:image", content: SOCIAL_IMAGE_URL },
     ],
     links: [{ rel: "canonical", href: canonicalUrl }],
   };

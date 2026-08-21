@@ -17,6 +17,7 @@ export interface AdmissionParticipant {
 export interface AdmissionPanelProps {
   loading?: boolean;
   className?: string;
+  onClose?: () => void;
 }
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
@@ -27,7 +28,7 @@ interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly onDenyAll?: () => void;
 }
 
-const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className }: AdmissionPanelSurfaceProps) => {
+const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -46,15 +47,22 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
   const hasPendingAdmission = participants.length > 0;
 
   return (
-    <ChalkPanel className={cn("w-80 overflow-hidden rounded-lg p-0 shadow-lg", "bg-[var(--chalk-surface)]", className)} role="complementary" aria-label="Admission requests">
-      <div className="flex h-full w-full flex-col">
+    <ChalkPanel className={cn("w-80 overflow-hidden rounded-lg p-0 shadow-lg", "bg-[var(--chalk-surface)]", className)} contentClassName="flex h-full min-h-0 flex-col" role="complementary" aria-label="Admission requests">
+      <div className="flex h-full min-h-0 w-full flex-col">
         <header className={cn("group relative flex items-center justify-between p-4", "bg-[var(--chalk-stage)]")}>
           <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-stage))" part="admission-header" />
           <div className="relative z-[1] flex items-center gap-2" aria-live="polite">
             <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Admission</h2>
             <ChalkBadge count={participants.length} />
           </div>
-          {loading && <ChalkSpinner className="relative z-[1] size-5" />}
+          <div className="relative z-[1] flex items-center gap-2">
+            {loading && <ChalkSpinner className="size-5" />}
+            {onClose ? (
+              <ChalkIconButton type="button" onClick={onClose} size="sm" className="text-[var(--chalk-muted-text)]" aria-label="Close admission">
+                <Cancel01Icon className="h-4 w-4" />
+              </ChalkIconButton>
+            ) : null}
+          </div>
         </header>
 
         {(onAdmitAll || onDenyAll) && (
@@ -73,7 +81,7 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
         )}
         {(onAdmitAll || onDenyAll) && <ChalkDivider className="m-0 h-3" />}
 
-        <ul className="max-h-80 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
+        <ul className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
           {!hasPendingAdmission ? (
             <li>
               <ChalkEmptyState className="px-4 py-8" title="No admission requests">

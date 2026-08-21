@@ -33,7 +33,14 @@ cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/render-runti
 set -euo pipefail
 output="$2"
 mkdir -p "$output/quadlet" "$output/systemd"
-printf 'Image=ghcr.io/q9labs/chalk-api@sha256:%064d\n' 0 >"$output/quadlet/chalk-api.container"
+image="$(jq -er '.images.api' "$1")"
+target="${FAKE_MIGRATION_TARGET:-}"
+if [[ -z "$target" ]]; then
+  target="$(jq -er '.database_compatibility.minimum_migration' "$1")"
+fi
+extra="${FAKE_MIGRATION_EXTRA:---allow-missing-version 20260819120000}"
+printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
+printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nPodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate\nExec=--database-url-file /run/chalk/migrate/database-url --target %s%s\n' "$image" "$target" "${extra:+ ${extra}}" >"$output/quadlet/chalk-api-migrate.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
 RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
@@ -49,6 +56,10 @@ cat >"${fixture_root}/bin/aws" <<'AWS'
 set -euo pipefail
 log="${FAKE_AWS_LOG:?}"
 printf '%s\n' "$*" >>"$log"
+if [[ "${1:-} ${2:-}" == "ecr get-login-password" ]]; then
+  printf '%s\n' test-only-registry-password
+  exit 0
+fi
 names=()
 while (($# > 0)); do
   if [[ "$1" == --names ]]; then
@@ -58,6 +69,10 @@ while (($# > 0)); do
   fi
   shift
 done
+if ((${#names[@]} > 10)); then
+  printf 'GetParameters accepts at most 10 names\n' >&2
+  exit 2
+fi
 parameters='[]'
 for name in "${names[@]}"; do
   base="$name"
@@ -70,6 +85,9 @@ for name in "${names[@]}"; do
     continue
   fi
   value=test-only-secret-bytes
+  if [[ "$base" == */api.env ]]; then
+    value=$'test-only-secret-bytes\n'
+  fi
   if [[ -n "${FAKE_EMPTY_SUFFIX:-}" && "$base" == *"/${FAKE_EMPTY_SUFFIX}" ]]; then
     value=""
   fi
@@ -91,6 +109,10 @@ set -euo pipefail
 printf 'podman %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 state="${FAKE_SECRET_STATE:?}"
 case "${1:-} ${2:-}" in
+  "login --username")
+    [[ "${3:-}" == AWS && "${4:-}" == --password-stdin && "${5:-}" =~ ^[0-9]{12}\.dkr\.ecr\.ap-southeast-1\.amazonaws\.com$ ]]
+    [[ "$(cat)" == test-only-registry-password ]]
+    ;;
   "secret inspect") grep -Fxq -- "${3:?}" "$state" ;;
   "secret rm")
     temporary="${state}.tmp"
@@ -98,9 +120,28 @@ case "${1:-} ${2:-}" in
     mv "$temporary" "$state"
     ;;
   "secret create")
-    [[ "${4:-}" == - ]]
+    if [[ "${3:-}" == --replace ]]; then
+      secret_name="${4:?}"
+      [[ "${5:-}" == - ]]
+      grep -Fxq -- "$secret_name" "$state" || {
+        printf 'Error: deleting secret : : no secret data with ID \n' >&2
+        exit 125
+      }
+    else
+      secret_name="${3:?}"
+      [[ "${4:-}" == - ]]
+      ! grep -Fxq -- "$secret_name" "$state" || exit 125
+    fi
+    [[ -p /dev/stdin ]]
+    if [[ -n "${FAKE_SECRET_CREATE_FAILURE:-}" && "$secret_name" == "$FAKE_SECRET_CREATE_FAILURE" ]]; then
+      printf 'test-only Podman secret error\n' >&2
+      exit 125
+    fi
     cat >/dev/null
-    printf '%s\n' "${3:?}" >>"$state"
+    temporary="${state}.tmp"
+    awk -v name="$secret_name" '$0 != name' "$state" >"$temporary"
+    printf '%s\n' "$secret_name" >>"$temporary"
+    mv "$temporary" "$state"
     ;;
   "image inspect")
     case "$(uname -m)" in
@@ -149,6 +190,8 @@ printf '%s' "$((index + 1))" >"$index_file"
 [[ "$value" == ok ]]
 HEALTH
 chmod 0755 "${fixture_root}/bin/"{aws,podman,systemctl} "${fixture_root}/health"
+cp "${fixture_root}/health" "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
+chmod 0755 "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
 
 source_revision="$(git -C "${managed_root}/../.." rev-parse HEAD)"
 case "$(uname -m)" in
@@ -165,7 +208,7 @@ make_manifest() {
     --argjson architectures "$test_architectures" \
     --arg api_digest "$(printf 'a%.0s' {1..64})" \
     --arg sync_digest "$(printf 'b%.0s' {1..64})" \
-    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("ghcr.io/q9labs/chalk-api@sha256:"+$api_digest),sync:("ghcr.io/q9labs/chalk-sync@sha256:"+$sync_digest),redis:("ghcr.io/q9labs/redis@sha256:"+$api_digest),cloudflared:("ghcr.io/cloudflare/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
+    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260819130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
 }
 
 make_request() {
@@ -173,8 +216,9 @@ make_request() {
   local output="$2"
   local excluded="${3:-[]}"
   local environment="${4:-production}"
-  jq -n --arg release_id "$release_id" --arg source_revision "$source_revision" --arg environment "$environment" --arg parameter_prefix "/chalk/${environment}" --argjson excluded "$excluded" \
-    '{schema_version:1,controller_version:1,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:"ap-southeast-1",parameter_prefix:$parameter_prefix,excluded_secrets:$excluded,request_id:("test-"+$release_id),requested_at:"2026-08-18T00:00:00Z"}' >"$output"
+  local adopt_existing_release="${5:-false}"
+  jq -n --arg release_id "$release_id" --arg source_revision "$source_revision" --arg environment "$environment" --arg parameter_prefix "/chalk/${environment}/managed-episode" --argjson excluded "$excluded" --argjson adopt_existing_release "$adopt_existing_release" \
+    '{schema_version:2,controller_version:2,adopt_existing_release:$adopt_existing_release,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:"ap-southeast-1",parameter_prefix:$parameter_prefix,excluded_secrets:$excluded,request_id:("test-"+$release_id),requested_at:"2026-08-18T00:00:00Z"}' >"$output"
   chmod 0600 "$output"
 }
 
@@ -186,7 +230,7 @@ run_controller() {
   FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
-  CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_SCRIPT="${fixture_root}/health" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
+  CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
   "$controller" deploy --request "$request" --manifest "$manifest" --source-root "${fixture_root}/source"
 }
 
@@ -196,7 +240,7 @@ run_restore() {
   FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
-  CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_SCRIPT="${fixture_root}/health" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
+  CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
   "$controller" restore
 }
 
@@ -206,15 +250,84 @@ make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
 jq '.unexpected = true' "${fixture_root}/request.json" >"$invalid_request"
 expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"
-jq '.schema_version = 2' "${fixture_root}/request.json" >"$invalid_request"
+jq '.schema_version = 1' "${fixture_root}/request.json" >"$invalid_request"
 expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"
 ln -s "${fixture_root}/request.json" "${fixture_root}/request-link.json"
 expect_failure "$controller" deploy --request "${fixture_root}/request-link.json" --manifest "$manifest" --source-root "${fixture_root}/source"
 
-for exclusions in '["api-env","api-env"]' '["api-env","nope"]' '["*"]' '["sync-env","api-env"]' '["planetscale-sync-proof"]'; do
+for exclusions in '["api-env","api-env"]' '["api-env","nope"]' '["*"]' '["sync-env","api-env"]' '["planetscale-sync-proof"]' '["managed-migrator-database-url"]'; do
   make_request invalid "${fixture_root}/request.json" "$exclusions"
   expect_failure "$controller" deploy --request "${fixture_root}/request.json" --manifest "$manifest" --source-root "${fixture_root}/source"
 done
+
+wrong_region_state="${fixture_root}/wrong-region-state"
+mkdir -p "$wrong_region_state"
+make_request wrong-region "${fixture_root}/wrong-region-request.json"
+make_manifest wrong-region | jq '(.images[] |= sub("ap-southeast-1"; "us-east-1"))' >"${fixture_root}/wrong-region-manifest.json"
+if run_controller "$wrong_region_state" "${fixture_root}/wrong-region-request.json" "${fixture_root}/wrong-region-manifest.json" >"${fixture_root}/wrong-region.log" 2>&1; then
+  fail "cross-region ECR image was accepted"
+fi
+grep -Fq 'ECR image registry does not match the deployment region' "${fixture_root}/wrong-region.log" || fail "cross-region ECR rejection was not reported"
+
+adoption_state="${fixture_root}/adoption-state"
+mkdir -p "$adoption_state" "${fixture_root}/run/env" "${fixture_root}/run/evidence" "${fixture_root}/run/release" "${fixture_root}/user-quadlet" "${fixture_root}/user-systemd" "${fixture_root}/install"
+printf '#!/usr/bin/env bash\nexit 1\n' >"${fixture_root}/install/chalk-runtime-health"
+chmod 0755 "${fixture_root}/install/chalk-runtime-health"
+make_manifest legacy >"${fixture_root}/run/release/release-manifest.json"
+printf '%s  release-manifest.json\n' "$(sha256sum "${fixture_root}/run/release/release-manifest.json" | awk '{print $1}')" >"${fixture_root}/run/release/release-manifest.sha256"
+printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
+printf '%s' test-only-secret-bytes >"${fixture_root}/run/env/sync.env"
+printf '%s' test-only-secret-bytes >"${fixture_root}/run/evidence/planetscale-sync-proof.json"
+for component_file in api:chalk-api.container sync:chalk-sync.container redis:chalk-redis.container cloudflared:chalk-cloudflared.container; do
+  component="${component_file%%:*}"
+  file="${component_file#*:}"
+  printf 'Image=%s\n' "$(jq -er --arg component "$component" '.images[$component]' "${fixture_root}/run/release/release-manifest.json")" >"${fixture_root}/user-quadlet/${file}"
+done
+printf '[Network]\n' >"${fixture_root}/user-quadlet/chalk-runtime.network"
+for file in chalk-runtime.target chalk-runtime-watchdog.service chalk-runtime-watchdog.timer; do
+  printf '[Unit]\nDescription=legacy %s\n' "$file" >"${fixture_root}/user-systemd/${file}"
+done
+printf '%s\n' \
+  chalk-api-provider-server-cert \
+  chalk-api-provider-server-key \
+  chalk-api-provider-client-ca \
+  chalk-sync-provider-client-cert \
+  chalk-sync-provider-client-key \
+  chalk-sync-provider-server-ca \
+  chalk-cloudflare-tunnel-token >"${fixture_root}/secret-state"
+make_request adoption-candidate "${fixture_root}/adoption-request.json" '[]' production true
+make_manifest adoption-candidate >"${fixture_root}/adoption-manifest.json"
+printf '%s' mismatched-live-bytes >"${fixture_root}/run/env/api.env"
+: >>"${fixture_root}/commands.log"
+stops_before_adoption="$(grep -Fc 'stop chalk-runtime.target' "${fixture_root}/commands.log" || true)"
+if run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" ok >"${fixture_root}/adoption-mismatch.log" 2>&1; then
+  fail "legacy adoption accepted live inputs that differ from SSM"
+fi
+grep -Fq 'live runtime input does not match' "${fixture_root}/adoption-mismatch.log" || fail "legacy adoption input mismatch was not reported"
+stops_after_adoption="$(grep -Fc 'stop chalk-runtime.target' "${fixture_root}/commands.log" || true)"
+[[ "$stops_after_adoption" == "$stops_before_adoption" ]] || fail "legacy adoption stopped the runtime before its inputs agreed"
+[[ ! -e "${adoption_state}/active-release.json" ]] || fail "failed legacy adoption wrote an active pointer"
+printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
+printf '0' >"${fixture_root}/health-index"
+migration_starts_before_adoption="$(grep -Fc 'start chalk-api-migrate.service' "${fixture_root}/commands.log" || true)"
+if run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" 'ok,fail,ok' >"${fixture_root}/adoption-result.log" 2>&1; then
+  fail "failed first candidate was accepted after legacy adoption"
+fi
+grep -Fq '"status":"rolled_back"' "${fixture_root}/adoption-result.log" || fail "legacy adoption did not provide automatic rollback"
+jq -e '.release_id == "legacy" and .controller_version == 2' "${adoption_state}/active-release.json" >/dev/null || fail "legacy release was not adopted as the durable rollback point"
+jq -e -s 'length == 1 and .[0].outcome == "adopted" and .[0].release_id == "legacy"' "${adoption_state}/ledger.jsonl" >/dev/null || fail "legacy adoption was not recorded"
+[[ "$(<"${fixture_root}/health-index")" == 3 ]] || fail "legacy adoption did not health-check before and after rollback"
+jq -e '.release_id == "legacy"' "${fixture_root}/run/release/release-manifest.json" >/dev/null || fail "legacy release identity was not restored"
+cmp -s "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health" "${fixture_root}/install/chalk-runtime-health" || fail "legacy rollback did not replace the broken health helper"
+cmp -s "${fixture_root}/source/infrastructure/managed-episode/controller/chalk-deployment-controller" "${fixture_root}/install/chalk-deployment-controller" || fail "legacy rollback did not install the durable controller"
+[[ -e "${fixture_root}/restore-unit-enabled" ]] || fail "legacy rollback did not enable reboot restoration"
+[[ ! -e "${fixture_root}/user-quadlet/chalk-api-migrate.container" ]] || fail "legacy rollback kept the candidate-only migration unit"
+migration_starts_after_adoption="$(grep -Fc 'start chalk-api-migrate.service' "${fixture_root}/commands.log" || true)"
+[[ "$migration_starts_after_adoption" == "$((migration_starts_before_adoption + 1))" ]] || fail "legacy rollback restarted the candidate-only migration unit"
+find "${fixture_root}/run" -mindepth 1 -depth -delete
+find "${fixture_root}/user-quadlet" -mindepth 1 -depth -delete
+find "${fixture_root}/user-systemd" -mindepth 1 -depth -delete
+: >"${fixture_root}/secret-state"
 
 missing_state="${fixture_root}/missing-state"
 mkdir -p "$missing_state"
@@ -231,6 +344,15 @@ make_manifest wrong-type >"${fixture_root}/wrong-type-manifest.json"
 if FAKE_STRING_SUFFIX=api.env run_controller "$wrong_type_state" "${fixture_root}/wrong-type-request.json" "${fixture_root}/wrong-type-manifest.json" >/dev/null 2>&1; then
   fail "plaintext environment input was accepted"
 fi
+
+secret_failure_state="${fixture_root}/secret-failure-state"
+mkdir -p "$secret_failure_state"
+make_request secret-failure "${fixture_root}/secret-failure-request.json"
+make_manifest secret-failure >"${fixture_root}/secret-failure-manifest.json"
+if FAKE_SECRET_CREATE_FAILURE=chalk-managed-migrator-database-url run_controller "$secret_failure_state" "${fixture_root}/secret-failure-request.json" "${fixture_root}/secret-failure-manifest.json" >"${fixture_root}/secret-failure.log" 2>&1; then
+  fail "Podman secret registration failure was accepted"
+fi
+grep -Fq 'Podman secret registration failed for chalk-managed-migrator-database-url: test-only Podman secret error' "${fixture_root}/secret-failure.log" || fail "Podman secret registration failure omitted its safe details"
 
 excluded_state="${fixture_root}/excluded-state"
 mkdir -p "$excluded_state"
@@ -256,13 +378,27 @@ mkdir -p "$staging_state"
 make_request staging "${fixture_root}/staging-request.json" '[]' staging
 make_manifest staging >"${fixture_root}/staging-manifest.json"
 run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
-jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
 
 stable_state="${fixture_root}/stable-state"
 mkdir -p "$stable_state"
 make_request stable "${fixture_root}/request.json"
+: >"${fixture_root}/commands.log"
+: >"${fixture_root}/secret-state"
+: >"${fixture_root}/aws.log"
 run_controller "$stable_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
-jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 10)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
+jq -e -R -s '
+  split("\n")
+  | map(select(startswith("ssm get-parameters --names ")) | split(" ") | .[3:index("--with-decryption")])
+  | map(length)
+  | sort == [1, 10]
+' "${fixture_root}/aws.log" >/dev/null || fail "runtime inputs were not fetched in SSM batches of at most 10 names"
+jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 11)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
+grep -Fq 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" || fail "database migration unit was not started"
+migration_start_line="$(grep -nF 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
+runtime_start_line="$(grep -nF 'systemctl --user start chalk-runtime.target' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
+[[ "${migration_start_line}" -lt "${runtime_start_line}" ]] || fail "runtime target started before database migrations"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "migration credential remained in the Podman secret store"
 [[ -s "${fixture_root}/run/env/api.env" && -s "${fixture_root}/run/env/sync.env" ]] || fail "runtime environment files were not published to /run"
 if stat -f '%Lp' "${fixture_root}/run" >/dev/null 2>&1; then
   runtime_root_mode="$(stat -f '%Lp' "${fixture_root}/run")"
@@ -273,12 +409,31 @@ else
 fi
 [[ "$runtime_root_mode" == 755 && "$runtime_env_mode" == 700 ]] || fail "runtime paths do not allow safe runtime-user traversal"
 (cd "${fixture_root}/run/release" && if command -v sha256sum >/dev/null 2>&1; then sha256sum --check --status release-manifest.sha256; else expected="$(awk '{print $1}' release-manifest.sha256)"; [[ "$(shasum -a 256 release-manifest.json | awk '{print $1}')" == "$expected" ]]; fi) || fail "runtime release identity was not published to /run"
-grep -Fq 'podman secret create chalk-api-provider-server-cert -' "${fixture_root}/commands.log" || fail "Podman secrets were not streamed on standard input"
-if grep -Fq 'test-only-secret-bytes' "${fixture_root}/commands.log"; then
+grep -Fq 'podman secret create chalk-api-provider-server-cert -' "${fixture_root}/commands.log" || fail "new Podman secrets were not atomically streamed on standard input"
+grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com' "${fixture_root}/commands.log" || fail "rootless ECR authentication did not use standard input"
+if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"
 fi
+make_manifest invalid-migration-unit >"${fixture_root}/invalid-migration-unit-manifest.json"
+make_request invalid-migration-unit "${fixture_root}/invalid-migration-unit-request.json"
+if FAKE_MIGRATION_EXTRA='--unexpected value' run_controller "$stable_state" "${fixture_root}/invalid-migration-unit-request.json" "${fixture_root}/invalid-migration-unit-manifest.json" ok >"${fixture_root}/invalid-migration-extra.log" 2>&1; then
+  fail "unknown migration arguments were accepted"
+fi
+grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-extra.log" || fail "unknown migration arguments did not fail closed"
+if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixture_root}/invalid-migration-unit-request.json" "${fixture_root}/invalid-migration-unit-manifest.json" ok >"${fixture_root}/invalid-migration-target.log" 2>&1; then
+  fail "a migration target below the manifest minimum was accepted"
+fi
+grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 make_request candidate "${fixture_root}/candidate-request.json"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_SYSTEMCTL_FAIL_ONCE='start chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/migration-failure.log" 2>&1; then
+  fail "database migration failure was accepted"
+fi
+grep -Fq 'database migration phase failed' "${fixture_root}/migration-failure.log" || fail "database migration failure was not reported"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer changed after migration failure"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "migration credential survived a failed migration"
 printf '0' >"${fixture_root}/health-index"
 if run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" 'fail,ok' >"${fixture_root}/rollback.log" 2>&1; then
   fail "candidate health failure was accepted"
@@ -350,6 +505,6 @@ if run_restore "$stable_state" ok >"${fixture_root}/tampered-runtime.log" 2>&1; 
 fi
 grep -Fq 'active rendered runtime hashes do not match pointer' "${fixture_root}/tampered-runtime.log" || fail "durable runtime tampering was not reported"
 
-jq -e '.schemaVersion == "2.2" and .mainSteps[0].name == "deployRelease" and .parameters.ManifestBase64.maxChars == 48000 and (.parameters | has("ExcludedSecrets")) and (.parameters | to_entries | all(.value.interpolationType == "ENV_VAR")) and (.mainSteps[0].inputs.runCommand[0] == "#!/bin/bash") and (.mainSteps[0].inputs.runCommand | all(contains("{{") | not) and all(contains("rm -rf") | not) and any(. == "controller_relative=\"controller/chalk-deployment-controller\"") and any(contains("find \"$work_root\" -depth -delete")) and any(contains("controller digest does not match release manifest"))) and (.parameters | has("Command") | not)' "${managed_root}/ssm/chalk-managed-episode-deploy.json" >/dev/null || fail "SSM document contract is unsafe"
+jq -e '.schemaVersion == "2.2" and .mainSteps[0].name == "deployRelease" and .parameters.ManifestBase64.maxChars == 48000 and .parameters.ControllerVersion.default == "2" and (.parameters | has("ExcludedSecrets") and has("AdoptExistingRelease")) and (.parameters | to_entries | all(.value.interpolationType == "ENV_VAR")) and (.mainSteps[0].inputs.runCommand[0] == "#!/bin/bash") and (.mainSteps[0].inputs.runCommand | all(contains("{{") | not) and all(contains("rm -rf") | not) and any(. == "controller_relative=\"controller/chalk-deployment-controller\"") and any(contains("find \"$work_root\" -depth -delete")) and any(contains("controller digest does not match release manifest"))) and (.parameters | has("Command") | not)' "${managed_root}/ssm/chalk-managed-episode-deploy.json" >/dev/null || fail "SSM document contract is unsafe"
 
 echo "PASS managed-episode deployment controller tests"

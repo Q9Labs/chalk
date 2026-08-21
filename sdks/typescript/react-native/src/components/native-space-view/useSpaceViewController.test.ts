@@ -46,6 +46,7 @@ vi.mock("../../hooks/space-hooks", () => ({
         capabilities: [],
         handRaised: false,
         media: { microphone: "active", camera: "active", screenShare: "inactive" },
+        presence: { state: "connected", speaking: false, activeSpeaker: false },
       },
     ],
     admissionQueue: [],

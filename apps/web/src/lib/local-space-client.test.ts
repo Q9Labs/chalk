@@ -7,10 +7,11 @@ import { createLocalSpaceClient, createLocalSpaceRelease } from "./local-space-c
 const credential = {
   apiBaseURL: "https://api.chalk.test",
   syncURL: "wss://sync.chalk.test/v1/sync",
+  space: "space-1",
 };
 
 describe("local Space client", () => {
-  it("uses the broker-selected API and sync endpoints with the stable access provider", () => {
+  it("uses the verified Space identity with the API and sync endpoints", () => {
     const getAccess = vi.fn<GetAccess>();
     const client = fakeSpaceClient();
     const createSpaceClient = vi.fn<(_: SpaceClientOptions, __: SpaceClientPlatform) => SpaceClient>(() => client);
@@ -18,20 +19,20 @@ describe("local Space client", () => {
 
     createLocalSpaceClient({ credential, getAccess, journey: operationJourney }, { createSpaceClient });
 
-    expect(createSpaceClient).toHaveBeenCalledWith({ space: "local-space", getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL, telemetry: operationJourney.context });
+    expect(createSpaceClient).toHaveBeenCalledWith({ space: credential.space, getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL, telemetry: operationJourney.context });
   });
 
-  it("uses the Dashboard Space slug and full refresh seam without a broker Sync override", () => {
+  it("uses the account Space subject ID and configured sync endpoint", () => {
     const getAccess = vi.fn<GetAccess>();
     const connectionAccess = vi.fn<NonNullable<SpaceClientPlatform["connectionAccess"]>>();
     const client = fakeSpaceClient();
     const createSpaceClient = vi.fn<(_: SpaceClientOptions, __: SpaceClientPlatform) => SpaceClient>(() => client);
     const operationJourney = journey();
-    const dashboardCredential = { apiBaseURL: "https://api.chalk.test", space: "design-lab", access: {} as never, participantGeneration: 3 };
+    const accountCredential = { apiBaseURL: "https://api.chalk.test", space: "space-1", access: {} as never, participantGeneration: 3 };
 
-    createLocalSpaceClient({ credential: dashboardCredential, getAccess, connectionAccess, journey: operationJourney }, { createSpaceClient });
+    createLocalSpaceClient({ credential: accountCredential, getAccess, connectionAccess, journey: operationJourney }, { createSpaceClient });
 
-    expect(createSpaceClient).toHaveBeenCalledWith({ space: "design-lab", getAccess, baseUrl: dashboardCredential.apiBaseURL }, { connectionAccess, telemetry: operationJourney.context });
+    expect(createSpaceClient).toHaveBeenCalledWith({ space: "space-1", getAccess, baseUrl: accountCredential.apiBaseURL }, { connectionAccess, telemetry: operationJourney.context });
   });
 
   it("records SDK client operations on the page journey", async () => {
@@ -58,7 +59,7 @@ describe("local Space client", () => {
     expect(recordDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ state: "failed", attributes: { operation: "leave", duration_ms: 0 } }));
   });
 
-  it("releases transport, disposal, and broker cleanup exactly once", async () => {
+  it("releases transport, disposal, and arrival cleanup exactly once", async () => {
     const leave = vi.fn(async () => Promise.reject(new Error("already left")));
     const dispose = vi.fn();
     const cleanup = vi.fn(async () => undefined);
@@ -71,7 +72,7 @@ describe("local Space client", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("deduplicates an in-flight release and retries broker cleanup after rejection", async () => {
+  it("deduplicates an in-flight release and retries arrival cleanup after rejection", async () => {
     let rejectCleanup: ((cause: Error) => void) | undefined;
     const leave = vi.fn(async () => undefined);
     const dispose = vi.fn();
@@ -86,8 +87,8 @@ describe("local Space client", () => {
     const first = release();
     expect(release()).toBe(first);
     await Promise.resolve();
-    rejectCleanup?.(new Error("broker unavailable"));
-    await expect(first).rejects.toThrow("broker unavailable");
+    rejectCleanup?.(new Error("arrival unavailable"));
+    await expect(first).rejects.toThrow("arrival unavailable");
 
     cleanup.mockResolvedValueOnce(undefined);
     await expect(release()).resolves.toBeUndefined();

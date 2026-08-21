@@ -49,7 +49,7 @@ describe("whiteboard public types", () => {
   });
 
   it("freezes operations, error codes, and failure values", () => {
-    expectTypeOf<ChalkWhiteboardV1Operation>().toEqualTypeOf<"start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download">();
+    expectTypeOf<ChalkWhiteboardV1Operation>().toEqualTypeOf<"start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_presentation" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download">();
     expectTypeOf<ChalkWhiteboardV1ErrorCode>().toEqualTypeOf<"unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "storage_unavailable" | "file_transfer_failed">();
     expectTypeOf<ChalkWhiteboardV1Failure>().toEqualTypeOf<{
       readonly operation: ChalkWhiteboardV1Operation;
@@ -60,19 +60,31 @@ describe("whiteboard public types", () => {
   });
 
   it("keeps the upload response and transport methods exact", () => {
-    expectTypeOf<ReturnType<ChalkWhiteboardV1FileTransport["initiateUpload"]>>().toEqualTypeOf<
-      Promise<{
-        readonly uploadId: string;
-        readonly method: "PUT";
-        readonly uploadUrl: string;
-        readonly headers: Readonly<Record<string, string>>;
-        readonly expiresAt: string;
-      }>
+    expectTypeOf<
+      [
+        ReturnType<ChalkWhiteboardV1FileTransport["initiateUpload"]>,
+        Parameters<ChalkWhiteboardV1Transport["submitUpdate"]>[0],
+        ReturnType<ChalkWhiteboardV1Transport["clear"]>,
+        Parameters<ChalkWhiteboardV1Transport["setDrawPermission"]>,
+        Parameters<ChalkWhiteboardV1Transport["setPresentation"]>,
+        ChalkWhiteboardV1Transport["files"],
+      ]
+    >().toEqualTypeOf<
+      [
+        Promise<{
+          readonly uploadId: string;
+          readonly method: "PUT";
+          readonly uploadUrl: string;
+          readonly headers: Readonly<Record<string, string>>;
+          readonly expiresAt: string;
+        }>,
+        ChalkWhiteboardV1UpdateInput,
+        Promise<ChalkWhiteboardV1Commit>,
+        [participantId: string, canDraw: boolean],
+        [presenting: boolean],
+        ChalkWhiteboardV1FileTransport,
+      ]
     >();
-    expectTypeOf<Parameters<ChalkWhiteboardV1Transport["submitUpdate"]>[0]>().toEqualTypeOf<ChalkWhiteboardV1UpdateInput>();
-    expectTypeOf<ReturnType<ChalkWhiteboardV1Transport["clear"]>>().toEqualTypeOf<Promise<ChalkWhiteboardV1Commit>>();
-    expectTypeOf<Parameters<ChalkWhiteboardV1Transport["setDrawPermission"]>>().toEqualTypeOf<[participantId: string, canDraw: boolean]>();
-    expectTypeOf<ChalkWhiteboardV1Transport["files"]>().toEqualTypeOf<ChalkWhiteboardV1FileTransport>();
   });
 });
 

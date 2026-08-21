@@ -69,10 +69,19 @@ classify_path() {
       classifications+=(shared)
       runtime_paths+=("${path}")
       ;;
+    infrastructure/managed-episode/env/api.env.example|infrastructure/managed-episode/scripts/validate-api-runtime|infrastructure/managed-episode/scripts/test-api-config)
+      classifications+=(api)
+      ;;
+    infrastructure/managed-episode/env/sync.env.example|infrastructure/managed-episode/scripts/validate-sync-runtime)
+      classifications+=(sync)
+      ;;
+    infrastructure/managed-episode/scripts/plan-release-components|infrastructure/managed-episode/scripts/validate-runtime)
+      classifications+=(none)
+      ;;
     infrastructure/managed-episode/*)
       classifications+=(shared)
       ;;
-    GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*)
+    CHANGELOG.md|GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|contract|contract/*|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*|scripts/dev|scripts/dev/*)
       classifications+=(none)
       ;;
     *)

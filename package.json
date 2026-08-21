@@ -9,7 +9,6 @@
     "apps/transcription-dispatcher",
     "apps/mobile",
     "apps/web",
-    "infrastructure/*-broker",
     "infrastructure/uptime-worker"
   ],
   "type": "module",
@@ -38,7 +37,7 @@
     "transcription:infra:check": "bash scripts/transcription-dispatcher/validate-contract.sh",
     "observability:webhook-canary": "bash infrastructure/observability/scripts/local.sh webhook-canary",
     "architecture:build": "node scripts/architecture-worker/build.mjs",
-    "architecture:test": "pnpm run architecture:build && pnpm exec vitest run infrastructure/architecture-worker/src/index.test.ts",
+    "architecture:test": "pnpm run architecture:build && pnpm exec vitest run infrastructure/architecture-worker/src/index.test.ts --exclude '**/.worktrees/**'",
     "architecture:deploy": "node scripts/architecture-worker/deploy-and-verify.mjs",
     "recorder:gate": "bash scripts/recorder/gate.sh",
     "recorder:validate": "node scripts/recorder/validate-config.mjs",

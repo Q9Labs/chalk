@@ -4,7 +4,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseJson } from "./managed-release-support.mjs";
 
-export const CONTROLLER_VERSION = 1;
+export const CONTROLLER_VERSION = 2;
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
@@ -14,8 +14,8 @@ const managedDocumentPath = join(repositoryRoot, "infrastructure/managed-episode
 const releasePattern = /^managed-episode-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8,12}-[0-9a-f]{8}$/;
 const shaPattern = /^[0-9a-f]{40}$/;
 const secretIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
-const expectedDocumentParameters = ["AwsRegion", "ControllerVersion", "Environment", "ExcludedSecrets", "ManifestBase64", "ParameterPrefix", "ReleaseId", "RequestId", "RequestedAt", "SourceRevision"];
-const approvedRunCommandSha256 = "cd4dbe0db93a4e6e2ac66caee815993f5daa81958b116e80820443e4e18cbabc";
+const expectedDocumentParameters = ["AdoptExistingRelease", "AwsRegion", "ControllerVersion", "Environment", "ExcludedSecrets", "ManifestBase64", "ParameterPrefix", "ReleaseId", "RequestId", "RequestedAt", "SourceRevision"];
+const approvedRunCommandSha256 = "5a520ff5801eb00538d43da8c6136f3e8288b066d51d3dbe79b75a7fb66c89a0";
 
 export async function loadAllowedSecretIds(path = runtimeInputsPath) {
   const contract = parseJson(await readFile(path, "utf8"), `runtime input contract is invalid: ${path}`);
@@ -52,8 +52,9 @@ export async function loadDocument(path) {
 
 export function buildDeploymentRequest({ manifest, options, exclusions, requestedAt }) {
   return {
-    schema_version: 1,
+    schema_version: 2,
     controller_version: CONTROLLER_VERSION,
+    adopt_existing_release: options.adoptExistingRelease,
     release_id: manifest.release_id,
     source_revision: manifest.source_revision,
     environment: options.environment,
@@ -67,6 +68,7 @@ export function buildDeploymentRequest({ manifest, options, exclusions, requeste
 
 export function buildDocumentParameters({ manifest, request, manifestBase64 }) {
   return {
+    AdoptExistingRelease: [String(request.adopt_existing_release)],
     ControllerVersion: [String(CONTROLLER_VERSION)],
     SourceRevision: [manifest.source_revision],
     ReleaseId: [manifest.release_id],
@@ -163,7 +165,7 @@ function assertDocumentContract(document) {
     () => step?.action === "aws:runShellScript",
     () => isApprovedRunCommand(commands),
   ];
-  if (rules.some((isValid) => !isValid())) throw new Error("controller v1 requires the exact constrained deployRelease contract");
+  if (rules.some((isValid) => !isValid())) throw new Error("controller v2 requires the exact constrained deployRelease contract");
 }
 
 function assertRuntimeInputContract(contract, path) {

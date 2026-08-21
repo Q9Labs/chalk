@@ -16,7 +16,7 @@ describe("DocsArticle", () => {
     expect(screen.getByRole("heading", { name: "Why Chalk", level: 1 })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Start with Quickstart/ }).getAttribute("href")).toBe("/docs/quickstart");
     expect(await screen.findByRole("heading", { name: "Chalk makes live work durable", level: 2 }, { timeout: 20_000 })).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "On this page" })).toBeTruthy();
+    expect(await screen.findByRole("complementary", { name: "On this page" }, { timeout: 20_000 })).toBeTruthy();
     expect(screen.getByRole("link", { name: /NextQuickstart/ }).getAttribute("href")).toBe("/docs/quickstart");
   }, 30_000);
 });

@@ -1,7 +1,7 @@
 import { encodedWhiteboardV1FrameBytes, WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import { encodeWhiteboardV1ClientFrame } from "./v1-codec";
 
-export type WhiteboardV1LogicalOperationFrame = Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>;
+export type WhiteboardV1LogicalOperationFrame = Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_presentation" }>;
 
 type SubmitUpdateFrame = Extract<WhiteboardV1LogicalOperationFrame, { readonly type: "submit_update" }>;
 type SubmitUpdatePartFrame = Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update_part" }>;

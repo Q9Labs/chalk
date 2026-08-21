@@ -1,256 +1,181 @@
-import type { GetAccess } from "@q9labsai/chalk-client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseAccessGrant } from "../../../../sdks/typescript/client/src/access/grant";
 
-import { cleanupParticipantCredential, createAccessGrantProvider, createBrokerConnectionAccess, createParticipantCredential, isUnauthenticatedDashboardSpaceError, joinDashboardSpace } from "./chalk-access";
+const sdk = vi.hoisted(() => ({ createChalkPublicClient: vi.fn() }));
+vi.mock("@q9labsai/chalk-client", async () => {
+  const actual = await vi.importActual<typeof import("@q9labsai/chalk-client")>("@q9labsai/chalk-client");
+  return { ...actual, createChalkPublicClient: sdk.createChalkPublicClient };
+});
 
-const participantCredential = {
-  apiBaseURL: "https://api.chalk.test",
-  syncURL: "wss://sync.chalk.test/v1/sync",
+import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, publicAPIBaseURL, publicSyncURL, type PublicInviteClient } from "./chalk-access";
+
+function accessToken(audience: string, suffix: string): string {
+  return `${btoa("header")}.${btoa(JSON.stringify({ aud: audience }))}.${suffix}`;
+}
+
+function accessWire(mediaSuffix = "media-token") {
+  return {
+    subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 3 },
+    sync: { token: accessToken("chalk-sync", "sync-token"), expires_at: "2026-08-20T00:00:00Z" },
+    media: {
+      token: accessToken("chalk-media", mediaSuffix),
+      expires_at: "2026-08-20T00:00:00Z",
+      provider: "cloudflare_sfu",
+      client_payload: { connectionId: "connection-1", stunServer: "stun:example.test" },
+    },
+  };
+}
+
+const accessWireValue = accessWire();
+const access = parseAccessGrant(accessWireValue);
+
+type PublicSDKMock = {
+  readonly createPublicSpace: ReturnType<typeof vi.fn>;
+  readonly arriveBySpacePublicInvite: ReturnType<typeof vi.fn>;
+  readonly getSpacePublicInviteArrival: ReturnType<typeof vi.fn>;
+  readonly refreshSpacePublicInviteAccess: ReturnType<typeof vi.fn>;
+  readonly leaveSpacePublicInviteArrival: ReturnType<typeof vi.fn>;
 };
 
-const access = {
-  subject: {
-    tenant_id: "tenant-1",
-    space_id: "space-1",
-    episode_id: "episode-1",
-    participant_id: "participant-1",
-    participant_generation: 3,
-  },
-  sync: { token: credential("chalk-sync"), expires_at: "2026-07-21T14:30:00Z" },
-  media: {
-    token: credential("chalk-media"),
-    expires_at: "2026-07-21T14:30:00Z",
-    provider: "cloudflare_sfu",
-    client_payload: { connectionId: "connection-1", stunServer: "stun:example.test" },
-  },
-};
+function sdkClient(): PublicSDKMock {
+  return {
+    createPublicSpace: vi.fn(),
+    arriveBySpacePublicInvite: vi.fn(),
+    getSpacePublicInviteArrival: vi.fn(),
+    refreshSpacePublicInviteAccess: vi.fn(),
+    leaveSpacePublicInviteArrival: vi.fn(),
+  };
+}
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", "https://api.chalk.test");
+  sdk.createChalkPublicClient.mockReset();
+});
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
-describe("local Chalk access client", () => {
-  it("creates an opaque participant credential with same-origin credentials", async () => {
-    const { requests } = stubFetch(jsonResponse(participantCredential, 201));
+describe("public Chalk access adapter", () => {
+  it("configures the browser SDK with the API origin and journey headers", () => {
+    const client = sdkClient();
+    sdk.createChalkPublicClient.mockReturnValue(client);
 
-    await expect(createParticipantCredential("Ada")).resolves.toEqual(participantCredential);
-    expectRequest(requests, "/local-chalk/participant-credentials", { displayName: "Ada" });
+    createPublicInviteClient({
+      headers: { traceparent: "00-trace" },
+      context: { journeyId: "journey-1", rootJourneyId: "journey-1", traceparent: "00-trace" },
+    });
+
+    expect(sdk.createChalkPublicClient).toHaveBeenCalledWith({
+      baseUrl: "https://api.chalk.test",
+      credentials: "include",
+      headers: { traceparent: "00-trace" },
+      telemetry: { journeyId: "journey-1", rootJourneyId: "journey-1", traceparent: "00-trace" },
+    });
   });
 
-  it("forwards the Space invite token to the same-origin broker", async () => {
-    vi.stubGlobal("location", { hostname: "chalkmeet.com" });
-    const { requests } = stubFetch(jsonResponse({ ...participantCredential, spaceInviteToken: "i".repeat(43) }, 201));
+  it("maps create and invite arrival operations to capability-first inputs", async () => {
+    const client = sdkClient();
+    const created = { invite_link: "https://app.chalk.test/space/design-lab#spaceInviteToken=cspi1.created", arrival: { state: "admitted" } };
+    const arrived = { state: "pending", arrival_handle: "arrival-1" };
+    client.createPublicSpace.mockResolvedValue(created);
+    client.arriveBySpacePublicInvite.mockResolvedValue(arrived);
+    sdk.createChalkPublicClient.mockReturnValue(client);
+    const adapter = createPublicInviteClient();
 
-    await expect(createParticipantCredential("Grace", "i".repeat(43))).resolves.toMatchObject({ spaceInviteToken: "i".repeat(43) });
+    await expect(adapter.createPublicSpace("Ada")).resolves.toBe(created);
+    await expect(adapter.arriveBySpacePublicInvite("cspi1.invite", "Grace")).resolves.toBe(arrived);
 
-    expectRequest(requests, "/local-chalk/participant-credentials", { displayName: "Grace", spaceInviteToken: "i".repeat(43) });
+    expect(client.createPublicSpace).toHaveBeenCalledWith({ displayName: "Ada" }, { idempotencyKey: expect.any(String) });
+    expect(client.arriveBySpacePublicInvite).toHaveBeenCalledWith({ spaceInviteToken: "cspi1.invite", displayName: "Grace" }, { idempotencyKey: expect.any(String) });
   });
 
-  it("forwards the Space invite token through the local broker proxy", async () => {
-    vi.stubGlobal("location", { hostname: "127.0.0.1" });
-    const { requests } = stubFetch(jsonResponse({ ...participantCredential, spaceInviteToken: "i".repeat(43) }, 201));
+  it("keeps arrival status, refresh, and leave on the public invite client", async () => {
+    const client = sdkClient();
+    const arrival = { state: "admitted", arrival_handle: "arrival-1" };
+    const refreshed = parseAccessGrant(accessWire());
+    client.getSpacePublicInviteArrival.mockResolvedValue(arrival);
+    client.refreshSpacePublicInviteAccess.mockResolvedValue(refreshed);
+    client.leaveSpacePublicInviteArrival.mockResolvedValue(undefined);
+    sdk.createChalkPublicClient.mockReturnValue(client);
+    const adapter = createPublicInviteClient();
 
-    await expect(createParticipantCredential("Ada", "i".repeat(43))).resolves.toMatchObject({ spaceInviteToken: "i".repeat(43) });
+    await expect(adapter.getSpacePublicInviteArrival("arrival-1")).resolves.toBe(arrival);
+    await expect(adapter.refreshSpacePublicInviteAccess("arrival-1", "media-proof")).resolves.toBe(refreshed);
+    await expect(adapter.leaveSpacePublicInviteArrival("arrival-1", { keepalive: true })).resolves.toBeUndefined();
 
-    expectRequest(requests, "/local-chalk/participant-credentials", { displayName: "Ada", spaceInviteToken: "i".repeat(43) });
+    expect(client.getSpacePublicInviteArrival).toHaveBeenCalledWith({ arrivalHandle: "arrival-1" });
+    expect(client.refreshSpacePublicInviteAccess).toHaveBeenCalledWith({ arrivalHandle: "arrival-1", mediaProof: "media-proof" });
+    expect(client.leaveSpacePublicInviteArrival).toHaveBeenCalledWith("arrival-1", { keepalive: true });
   });
 
-  it("validates and preserves the broker-selected API and Sync endpoints", async () => {
-    const credential = { apiBaseURL: "https://api.chalk.test/control", syncURL: "wss://sync.chalk.test/v1/sync?space=local" };
-    stubFetch(jsonResponse(credential, 201));
+  it("maps a resumed arrival to the typed arrival operation", async () => {
+    const client = sdkClient();
+    const resumed = { state: "admitted", arrival_handle: "arrival-1", access };
+    client.arriveBySpacePublicInvite.mockResolvedValue(resumed);
+    sdk.createChalkPublicClient.mockReturnValue(client);
+    const adapter = createPublicInviteClient();
 
-    await expect(createParticipantCredential("Ada")).resolves.toEqual(credential);
+    await expect(adapter.arriveBySpacePublicInvite("cspi1.invite", "Grace", { arrivalHandle: "arrival-1" })).resolves.toBe(resumed);
+
+    expect(client.arriveBySpacePublicInvite).toHaveBeenCalledWith({ spaceInviteToken: "cspi1.invite", displayName: "Grace" }, { idempotencyKey: expect.any(String), arrivalHandle: "arrival-1" });
   });
 
-  it.each([
-    [{ apiBaseURL: "not a URL", syncURL: participantCredential.syncURL }, "API"],
-    [{ apiBaseURL: "https://user:password@api.chalk.test", syncURL: participantCredential.syncURL }, "API"],
-    [{ apiBaseURL: participantCredential.apiBaseURL, syncURL: "https://sync.chalk.test/v1/sync" }, "Sync"],
-    [{ apiBaseURL: participantCredential.apiBaseURL, syncURL: "wss://user:password@sync.chalk.test/v1/sync" }, "Sync"],
-  ])("rejects an invalid broker-selected %s endpoint", async (body, label) => {
-    stubFetch(jsonResponse(body, 201));
-
-    await expect(createParticipantCredential("Ada")).rejects.toThrow(`invalid ${label} URL`);
-  });
-
-  it("does not request an access grant until the client invokes getAccess", async () => {
-    const { requests } = stubFetch(jsonResponse(access, 201));
-
-    const provider = createAccessGrantProvider();
-    expect(requests).toEqual([]);
-    const grant = await provider({ space: "local-space", reason: "join" });
-    expect(grant).toEqual(access);
-    expectRequest(requests, "/local-chalk/access-grants", {});
-  });
-
-  it("keeps public access context and the opaque grant at the client boundary", async () => {
-    const { requests } = stubFetch(jsonResponse(access, 201));
-    const provider = createAccessGrantProvider();
-    const context = { space: "local-space", reason: "refresh" } satisfies Parameters<GetAccess>[0];
-
-    await provider(context);
-
-    expectRequest(requests, "/local-chalk/access-grants", {});
-  });
-
-  it("propagates the page journey through the broker access boundary", async () => {
-    const { requests } = stubFetch(jsonResponse(access, 201));
-    const recordHttpRequest = vi.fn();
-    const journey = {
-      headers: { "x-chalk-journey-id": "journey-1", traceparent: "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01" },
-      recordHttpRequest,
+  it("returns the first grant, refreshes media access, and leaves once", async () => {
+    const refreshed = parseAccessGrant(accessWire("media-token-2"));
+    const client: PublicInviteClient = {
+      createPublicSpace: vi.fn(),
+      arriveBySpacePublicInvite: vi.fn(),
+      getSpacePublicInviteArrival: vi.fn(),
+      refreshSpacePublicInviteAccess: vi.fn().mockResolvedValue(refreshed),
+      leaveSpacePublicInviteArrival: vi.fn().mockResolvedValue(undefined),
     };
+    const prepared = createPreparedPublicSpace(client, {
+      state: "admitted",
+      arrival_handle: "arrival-1",
+      access,
+      space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" },
+    });
 
-    await createAccessGrantProvider(journey)({ space: "local-space", reason: "join" });
+    await expect(prepared.connectionAccess({ reason: "join", replaceMediaConnection: false })).resolves.toBe(access);
+    await expect(prepared.connectionAccess({ reason: "media_recovery", replaceMediaConnection: true })).resolves.toBe(refreshed);
+    await prepared.finish();
+    await prepared.finish();
 
-    const [, init] = requests[0] ?? [];
-    expect(init?.headers).toMatchObject(journey.headers);
-    expect(recordHttpRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", route: "/local-chalk/access-grants", statusCode: 201, state: "succeeded" }));
+    expect(client.refreshSpacePublicInviteAccess).toHaveBeenCalledWith("arrival-1", accessToken("chalk-media", "media-token"));
+    expect(client.leaveSpacePublicInviteArrival).toHaveBeenCalledOnce();
   });
 
-  it("cleans up the server-held participant credential and surfaces broker errors", async () => {
-    const { fetchMock, requests } = stubFetch(new Response(null, { status: 204 }));
-    await expect(cleanupParticipantCredential()).resolves.toBeUndefined();
-    expectRequest(requests, "/local-chalk/participant-credentials/cleanup", {});
-
-    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "The local participant credential is missing or expired." }, 401));
-    await expect(cleanupParticipantCredential()).rejects.toThrow("The local participant credential is missing or expired.");
+  it("derives the sync endpoint from the API origin", () => {
+    expect(publicAPIBaseURL()).toBe("https://api.chalk.test");
+    expect(publicSyncURL("https://api.chalk.test/control")).toBe("wss://sync.chalk.test/v1/sync");
+    expect(publicSyncURL("http://127.0.0.1:8080")).toBe("ws://127.0.0.1:8080/v1/sync");
   });
 
-  it("keeps cleanup alive while the page unloads", async () => {
-    const { requests } = stubFetch(new Response(null, { status: 204 }));
+  it("keeps the explicit account join on the authenticated API path", async () => {
+    const refreshed = accessWire("media-token-2");
+    const fetcher = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ csrf_token: "csrf-token" }))
+      .mockResolvedValueOnce(Response.json(accessWireValue, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({ canonical_url: "/space/design-lab#spaceInviteToken=cspi1.account" }))
+      .mockResolvedValueOnce(Response.json(refreshed, { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetcher);
 
-    await cleanupParticipantCredential(undefined, { keepalive: true });
+    const account = await joinDashboardSpace("tenant-1", "design-lab", "Ada", {
+      headers: { traceparent: "00-trace" },
+      context: { journeyId: "journey-1", rootJourneyId: "journey-1", traceparent: "00-trace" },
+    });
+    expect(account.inviteLink).toBe("/space/design-lab#spaceInviteToken=cspi1.account");
+    expect(account.credential.space).toBe("space-1");
+    await expect(account.getAccess({ space: "space-1", reason: "join" })).resolves.toEqual(accessWireValue);
+    await expect(account.getAccess({ space: "space-1", reason: "refresh" })).resolves.toEqual(refreshed);
+    await account.leave({ keepalive: true });
 
-    const [, init] = requests[0] ?? [];
-    expect(init).toMatchObject({ keepalive: true });
-  });
-
-  it("joins, refreshes, and leaves a Dashboard Space through the account boundary", async () => {
-    vi.stubGlobal("location", { origin: "https://chalkmeet.com" });
-    const requests: Array<Parameters<typeof fetch>> = [];
-    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-2" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-3" }, 200), new Response(null, { status: 204 })];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async (...input) => {
-        requests.push(input);
-        return responses.shift() ?? new Response(null, { status: 500 });
-      }),
-    );
-
-    const spaceAccess = await joinDashboardSpace("tenant-1", "design-lab", "Ada");
-    await expect(spaceAccess.connectionAccess({ reason: "join", replaceMediaConnection: false })).resolves.toEqual(access);
-    await expect(spaceAccess.connectionAccess({ reason: "scheduled_refresh", replaceMediaConnection: false, currentMediaToken: access.media.token as never, expectedParticipantGeneration: 3 })).resolves.toEqual(access);
-    await expect(spaceAccess.leave({ keepalive: true })).resolves.toBeUndefined();
-
-    expect(requests.map(([url]) => url)).toEqual([
-      "/api/auth/csrf",
-      "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self",
-      "/api/auth/csrf",
-      "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self/access-grants",
-      "/api/auth/csrf",
-      "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self",
-    ]);
-    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ display_name: "Ada" });
-    expect(JSON.parse(String(requests[3]?.[1]?.body))).toEqual({ current_media_token: access.media.token, participant_generation: 3, replace_media_connection: false });
-    expect(requests[5]?.[1]).toMatchObject({ method: "DELETE", keepalive: true });
-    expect(JSON.parse(String(requests[5]?.[1]?.body))).toEqual({ participant_generation: 3 });
-  });
-
-  it("identifies an unauthenticated Dashboard Space response for invite fallback", async () => {
-    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse({ error: "Authentication required" }, 401)];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async () => responses.shift() ?? new Response(null, { status: 500 })),
-    );
-
-    const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
-
-    expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
-  });
-
-  it("identifies an unauthenticated CSRF response for invite fallback", async () => {
-    stubFetch(jsonResponse({ error: "Authentication required" }, 401));
-
-    const cause = await joinDashboardSpace("tenant-1", "design-lab", "Ada").catch((error: unknown) => error);
-
-    expect(isUnauthenticatedDashboardSpaceError(cause)).toBe(true);
-  });
-
-  it("surfaces nested Dashboard API error messages", async () => {
-    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse({ error: { code: "media_plane.unavailable", message: "Media access is unavailable." } }, 503)];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async () => responses.shift() ?? new Response(null, { status: 500 })),
-    );
-
-    await expect(joinDashboardSpace("tenant-1", "design-lab", "Ada")).rejects.toThrow("Media access is unavailable.");
-  });
-
-  it("uses stored media proof when the public Dashboard provider refreshes access", async () => {
-    const requests: Array<Parameters<typeof fetch>> = [];
-    const responses = [jsonResponse({ csrf_token: "csrf-1" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-2" }, 200), jsonResponse(access, 201), jsonResponse({ csrf_token: "csrf-3" }, 200), jsonResponse(access, 201)];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async (...input) => {
-        requests.push(input);
-        return responses.shift() ?? new Response(null, { status: 500 });
-      }),
-    );
-
-    const spaceAccess = await joinDashboardSpace("tenant-1", "design-lab", "Ada");
-    await spaceAccess.connectionAccess({ reason: "join", replaceMediaConnection: false });
-    await expect(spaceAccess.getAccess({ space: "design-lab", reason: "refresh" })).resolves.toEqual(access);
-    await expect(spaceAccess.getAccess({ space: "design-lab", reason: "retry" })).resolves.toEqual(access);
-
-    expect(JSON.parse(String(requests[3]?.[1]?.body))).toEqual({ current_media_token: access.media.token, participant_generation: 3, replace_media_connection: false });
-    expect(JSON.parse(String(requests[5]?.[1]?.body))).toEqual({ participant_generation: 3, replace_media_connection: true });
-  });
-
-  it("forwards media proof and replacement intent to the broker connection access", async () => {
-    const requests: Array<Parameters<typeof fetch>> = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async (...input) => {
-        requests.push(input);
-        return jsonResponse(access, 201);
-      }),
-    );
-    const connectionAccess = createBrokerConnectionAccess();
-
-    await expect(connectionAccess({ reason: "scheduled_refresh", replaceMediaConnection: false, currentMediaToken: access.media.token as never, expectedParticipantGeneration: 3 })).resolves.toEqual(access);
-    await expect(connectionAccess({ reason: "access_retry", replaceMediaConnection: true, currentMediaToken: access.media.token as never, expectedParticipantGeneration: 3 })).resolves.toEqual(access);
-    await expect(connectionAccess()).resolves.toEqual(access);
-
-    expect(JSON.parse(String(requests[0]?.[1]?.body))).toEqual({ replaceMediaConnection: false, currentMediaToken: access.media.token });
-    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ replaceMediaConnection: true });
-    expect(JSON.parse(String(requests[2]?.[1]?.body))).toEqual({ replaceMediaConnection: false });
+    expect(fetcher).toHaveBeenNthCalledWith(2, "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self", expect.objectContaining({ method: "POST" }));
+    expect(fetcher).toHaveBeenNthCalledWith(3, "/api/tenants/tenant-1/spaces/space-1/public-invite", expect.objectContaining({ method: "GET" }));
+    expect(fetcher).toHaveBeenNthCalledWith(4, "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self/access-grants", expect.objectContaining({ method: "POST" }));
+    expect(fetcher).toHaveBeenNthCalledWith(5, "/api/tenants/tenant-1/spaces/by-slug/design-lab/participants/self", expect.objectContaining({ method: "DELETE", keepalive: true }));
   });
 });
-
-function credential(audience: "chalk-sync" | "chalk-media"): string {
-  const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
-  return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.signature`;
-}
-
-function stubFetch(response: Response) {
-  const requests: Array<Parameters<typeof fetch>> = [];
-  const fetchMock = vi.fn<typeof fetch>(async (...input) => {
-    requests.push(input);
-    return response;
-  });
-  vi.stubGlobal("fetch", fetchMock);
-  return { fetchMock, requests };
-}
-
-function jsonResponse(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-}
-
-function expectRequest(requests: readonly Parameters<typeof fetch>[], path: string, body: unknown): void {
-  expect(requests).toHaveLength(1);
-  const [url, init] = requests[0] ?? [];
-  expect(url).toBe(path);
-  expect(init).toMatchObject({ method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" } });
-  expect(JSON.parse(String(init?.body))).toEqual(body);
-}

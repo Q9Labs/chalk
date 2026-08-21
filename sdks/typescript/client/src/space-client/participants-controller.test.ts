@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { diagnosticRuntime } from "../episode-diagnostic-runtime.test.helpers";
 import { ControllerHarness, disposeControllerRuntimes, snapshot } from "./controller-parity.test.helpers";
 
@@ -20,6 +20,81 @@ describe("ParticipantsController", () => {
     await expect(runtime.runPromise(controller.mute("participant-2"))).rejects.toBeDefined();
     expect(diagnostics.inspect().ring.at(-1)).toMatchObject({ name: "moderation.microphone.disable", state: "failed" });
     diagnostics.dispose();
+  });
+
+  it("projects participant presence from the presence projection", () => {
+    const harness = new ControllerHarness(
+      snapshot({
+        presence: {
+          projectionId: "presence-1",
+          sequence: 1,
+          items: [
+            { participantId: "participant-1", state: "connected", speaking: true, activeSpeaker: true },
+            { participantId: "participant-2", state: "disconnected", speaking: false, activeSpeaker: false },
+          ],
+        },
+      }),
+    );
+    harness.participants();
+
+    harness.connect();
+
+    expect(harness.store.getSnapshot().participants.roster).toMatchObject([
+      { participantId: "participant-1", presence: { state: "connected", speaking: true, activeSpeaker: true } },
+      { participantId: "participant-2", presence: { state: "disconnected", speaking: false, activeSpeaker: false } },
+    ]);
+  });
+
+  it("uses unknown participant presence when the presence projection is null", () => {
+    const harness = new ControllerHarness(snapshot());
+    expectUnknownParticipantPresence(harness);
+  });
+
+  it("uses unknown participant presence when a participant is missing from the presence projection", () => {
+    const harness = new ControllerHarness(
+      snapshot({
+        presence: {
+          projectionId: "presence-1",
+          sequence: 1,
+          items: [{ participantId: "participant-2", state: "connected", speaking: false, activeSpeaker: false }],
+        },
+      }),
+    );
+    expectUnknownParticipantPresence(harness);
+  });
+
+  it("publishes a new participants slice when only participant presence changes", () => {
+    const harness = new ControllerHarness(
+      snapshot({
+        presence: {
+          projectionId: "presence-1",
+          sequence: 1,
+          items: [
+            { participantId: "participant-1", state: "connected", speaking: false, activeSpeaker: false },
+            { participantId: "participant-2", state: "connected", speaking: false, activeSpeaker: false },
+          ],
+        },
+      }),
+    );
+    harness.participants();
+    harness.connect();
+
+    const listener = vi.fn();
+    harness.store.subscribe(listener);
+    const before = harness.store.getSnapshot().participants;
+    harness.sync.snapshot = {
+      ...harness.sync.snapshot,
+      presence: {
+        ...harness.sync.snapshot.presence!,
+        items: harness.sync.snapshot.presence!.items.map((item) => (item.participantId === "participant-1" ? { ...item, speaking: true } : item)),
+      },
+    };
+
+    harness.sync.emit();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(harness.store.getSnapshot().participants).not.toBe(before);
+    expect(harness.store.getSnapshot().participants.roster[0]?.presence.speaking).toBe(true);
   });
 
   it("projects participant media and negotiated collaboration capabilities, maps commands, and clears the roster on leave", async () => {
@@ -87,3 +162,9 @@ describe("ParticipantsController", () => {
     expect(harness.store.getSnapshot()).toMatchObject({ self: { participantId: null, capabilities: [] }, participants: { roster: [], admissionQueue: [] } });
   });
 });
+
+function expectUnknownParticipantPresence(harness: ControllerHarness): void {
+  harness.participants();
+  harness.connect();
+  expect(harness.store.getSnapshot().participants.roster[0]?.presence).toEqual({ state: "unknown", speaking: false, activeSpeaker: false });
+}

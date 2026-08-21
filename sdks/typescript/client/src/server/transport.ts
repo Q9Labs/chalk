@@ -6,7 +6,7 @@ export type ServerRequest = {
   readonly body?: unknown;
   readonly expectedStatus: number;
   readonly idempotency?: ChalkIdempotencyOptions;
-  readonly method: "DELETE" | "GET" | "POST";
+  readonly method: "DELETE" | "GET" | "PATCH" | "POST";
   readonly path: string;
   readonly retry: RetryMode;
 };

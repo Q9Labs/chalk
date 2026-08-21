@@ -5,9 +5,10 @@
     "types": ["node", "expo/types"],
     "paths": {
       "@/*": ["./src/*"],
-      "@q9labsai/diagnostics-contracts": ["../../packages/diagnostics-contracts/src/index.ts"],
       "@q9labsai/chalk-client": ["../../sdks/typescript/client/src/index.ts"],
+      "@q9labsai/chalk-client/access": ["../../sdks/typescript/client/src/access/grant.ts"],
       "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"],
+      "@q9labsai/chalk-client/invites": ["../../sdks/typescript/client/src/public-invites/index.ts"],
       "@q9labsai/chalk-client/telemetry": ["../../sdks/typescript/client/src/telemetry/index.ts"],
       "@q9labsai/chalk-whiteboard/embedded": ["../../packages/whiteboard/src/embedded/index.ts"],
       "@q9labsai/facehash/react-native": ["../../packages/facehash/src/index.native.ts"],

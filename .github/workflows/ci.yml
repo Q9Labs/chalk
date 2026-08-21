@@ -419,6 +419,7 @@ jobs:
           set -euo pipefail
           manifest="${{ runner.temp }}/managed-release/${RELEASE_ID}.json"
           args=(
+            --adopt-existing-release
             --manifest "$manifest"
             --environment "$MANAGED_ENVIRONMENT"
             --region "$CHALK_MANAGED_AWS_REGION"

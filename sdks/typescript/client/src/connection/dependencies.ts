@@ -1,9 +1,9 @@
-import type { ClientMediaPlane, CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
+import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
-import type { ParsedAccessGrant, ParticipantMediaCredential } from "../access/grant";
+import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
 import type { JourneyTelemetryContext } from "../telemetry/types";
 import { Context, Layer } from "effect";
 
@@ -65,10 +65,10 @@ export type ConnectionSyncClient = V1CollaborationClient & {
 export type ConnectionMediaClient = ClientMediaPlane & {
   readonly start: (stream: MediaStream) => Promise<void>;
   readonly stop: () => void;
-  readonly restart: (input: CloudflareSFUBootstrap) => Promise<void>;
+  readonly restart: (input: CloudflareSFUBootstrap | ParticipantMediaAccess) => Promise<void>;
   readonly prepareLocalTrack: (source: "microphone" | "camera" | "screen", track: MediaStreamTrack) => void;
   readonly clearPreparedLocalTrack: (source: "microphone" | "camera" | "screen") => Promise<void>;
-  readonly getSnapshot: () => CloudflareSFUSnapshot;
+  readonly getSnapshot: () => ConnectionMediaSnapshot;
   readonly subscribe: (listener: () => void) => () => void;
 };
 

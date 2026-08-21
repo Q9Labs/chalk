@@ -39,6 +39,7 @@ test("parses pinned SSM controls and repeated exact exclusions", () => {
     "12345.2",
     "--log-group-name",
     "/chalk/staging/deployments",
+    "--adopt-existing-release",
     "--exclude-secret",
     "sync-env",
     "--exclude-secret=api-env",
@@ -47,8 +48,10 @@ test("parses pinned SSM controls and repeated exact exclusions", () => {
   ]);
 
   assert.equal(options.documentVersion, "7");
+  assert.equal(options.adoptExistingRelease, true);
   assert.deepEqual(options.excludedSecrets, ["sync-env", "api-env"]);
   assert.equal(options.timeoutSeconds, 1200);
+  assert.throws(() => parseArguments(requiredArguments().concat("--adopt-existing-release")), /more than once/);
   const unpinnedVersionArguments = requiredArguments();
   unpinnedVersionArguments[unpinnedVersionArguments.indexOf("7")] = "$LATEST";
   assert.throws(() => parseArguments(unpinnedVersionArguments), /pinned numeric/);
@@ -80,8 +83,10 @@ test("builds the versioned deployment request and constrained document parameter
   const parameters = buildDocumentParameters({ manifest, request, manifestBase64: "e30K" });
 
   assert.equal(request.controller_version, CONTROLLER_VERSION);
+  assert.equal(request.adopt_existing_release, true);
   assert.deepEqual(request.excluded_secrets, ["sync-env"]);
-  assert.deepEqual(parameters.ControllerVersion, ["1"]);
+  assert.deepEqual(parameters.AdoptExistingRelease, ["true"]);
+  assert.deepEqual(parameters.ControllerVersion, ["2"]);
   assert.deepEqual(parameters.ExcludedSecrets, ['["sync-env"]']);
 });
 
@@ -98,9 +103,10 @@ test("dry-run prints a redacted request and never invokes AWS", async () => {
   });
 
   assert.equal(result.dry_run, true);
+  assert.equal(result.request.adopt_existing_release, true);
   assert.deepEqual(result.request.excluded_secrets, ["sync-env"]);
   assert.match(result.parameters.ManifestBase64[0], /^<base64:/);
-  assert.match(result.target.document_version, /^<resolve:controller-v1-/);
+  assert.match(result.target.document_version, /^<resolve:controller-v2-/);
   assert.equal(result.document.format, "JSON");
   assert.equal(writes.join("").includes("runtime_artifacts"), false);
 });
@@ -119,7 +125,7 @@ test("rejects an untracked managed deployment document", async () => {
       commandRunner: async () => assert.fail("AWS must not run for an unsafe document"),
       stdout: { write: () => {} },
     }),
-    /must use the tracked controller v1 path/,
+    /must use the tracked controller v2 path/,
   );
 });
 
@@ -139,14 +145,14 @@ test("reuses or publishes the content-addressed SSM document version", async () 
       existingCalls.push(command);
       return {
         stdout: JSON.stringify({
-          DocumentVersions: [{ DocumentVersion: "4", VersionName: "controller-v1-0123456789abcdef", Status: "Active" }],
+          DocumentVersions: [{ DocumentVersion: "4", VersionName: "controller-v2-0123456789abcdef", Status: "Active" }],
         }),
       };
     },
     document: {
       format: "JSON",
       path: "/repo/chalk-managed-episode-deploy.json",
-      versionName: "controller-v1-0123456789abcdef",
+      versionName: "controller-v2-0123456789abcdef",
     },
     documentName: "Chalk-DeployManagedEpisode",
     region: "ap-southeast-1",
@@ -161,7 +167,7 @@ test("reuses or publishes the content-addressed SSM document version", async () 
       if (command.args.includes("list-document-versions")) {
         return {
           stdout: JSON.stringify({
-            DocumentVersions: [{ DocumentVersion: "6", VersionName: "controller-v1-0123456789abcdef", Status: "Creating" }],
+            DocumentVersions: [{ DocumentVersion: "6", VersionName: "controller-v2-0123456789abcdef", Status: "Creating" }],
           }),
         };
       }
@@ -170,7 +176,7 @@ test("reuses or publishes the content-addressed SSM document version", async () 
     document: {
       format: "JSON",
       path: "/repo/chalk-managed-episode-deploy.json",
-      versionName: "controller-v1-0123456789abcdef",
+      versionName: "controller-v2-0123456789abcdef",
     },
     documentName: "Chalk-DeployManagedEpisode",
     region: "ap-southeast-1",
@@ -194,7 +200,7 @@ test("reuses or publishes the content-addressed SSM document version", async () 
     document: {
       format: "JSON",
       path: "/repo/chalk-managed-episode-deploy.json",
-      versionName: "controller-v1-fedcba9876543210",
+      versionName: "controller-v2-fedcba9876543210",
     },
     documentName: "Chalk-DeployManagedEpisode",
     region: "ap-southeast-1",
@@ -219,7 +225,7 @@ test("reuses or publishes the content-addressed SSM document version", async () 
     document: {
       format: "JSON",
       path: "/repo/chalk-managed-episode-deploy.json",
-      versionName: "controller-v1-abcdef0123456789",
+      versionName: "controller-v2-abcdef0123456789",
     },
     documentName: "Chalk-DeployManagedEpisode",
     region: "ap-southeast-1",
@@ -301,6 +307,7 @@ test("workflow passes only explicit exclusions to a pinned SSM document", async 
   const workflow = await readFile(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
   assert.match(workflow, /managed_secret_exclusions:/);
   assert.match(workflow, /--document infrastructure\/managed-episode\/ssm\/chalk-managed-episode-deploy\.json/);
+  assert.match(workflow, /--adopt-existing-release/);
   assert.doesNotMatch(workflow, /CHALK_MANAGED_SSM_DOCUMENT_VERSION/);
   assert.match(workflow, /args\+=\(--exclude-secret "\$secret_id"\)/);
   assert.match(workflow, /--parameter-prefix "\$CHALK_MANAGED_PARAMETER_PREFIX"/);
@@ -327,6 +334,7 @@ function requiredArguments(manifestPath = "/tmp/manifest.json", documentPath) {
     "12345.2",
     "--log-group-name",
     "/chalk/staging/deployments",
+    "--adopt-existing-release",
   ];
   arguments_.splice(12, 0, ...(documentPath ? ["--document", documentPath] : ["--document-version", "7"]));
   return arguments_;

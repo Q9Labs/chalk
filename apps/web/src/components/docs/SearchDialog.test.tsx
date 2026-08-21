@@ -9,11 +9,7 @@ afterEach(cleanup);
 
 describe("SearchDialog", () => {
   it("focuses the search field, filters pages, and moves the active result", async () => {
-    const onClose = vi.fn();
-    render(<SearchDialog open onClose={onClose} />);
-
-    const input = screen.getByRole("combobox", { name: /Search documentation/ });
-    await waitFor(() => expect(document.activeElement).toBe(input));
+    const { input } = await renderOpenDialog(vi.fn());
 
     fireEvent.change(input, { target: { value: "webhook" } });
     const results = screen.getAllByRole("option");
@@ -34,9 +30,7 @@ describe("SearchDialog", () => {
     document.body.appendChild(trigger);
     trigger.focus();
 
-    const { rerender } = render(<SearchDialog open onClose={onClose} />);
-    const input = screen.getByRole("combobox", { name: /Search documentation/ });
-    await waitFor(() => expect(document.activeElement).toBe(input));
+    const { input, rerender } = await renderOpenDialog(onClose);
 
     fireEvent.change(input, { target: { value: "zzzz-no-doc-page" } });
     expect(screen.getByText("No pages match “zzzz-no-doc-page”. Try a broader term.")).toBeTruthy();
@@ -48,3 +42,12 @@ describe("SearchDialog", () => {
     expect(document.activeElement).toBe(trigger);
   });
 });
+
+async function renderOpenDialog(onClose: () => void) {
+  const view = render(<SearchDialog open onClose={onClose} />);
+  const input = screen.getByRole("combobox", { name: /Search documentation/ });
+
+  await waitFor(() => expect(document.activeElement).toBe(input));
+
+  return { input, ...view };
+}

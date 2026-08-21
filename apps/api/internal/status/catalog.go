@@ -8,7 +8,6 @@ func ComponentCatalog() []ComponentDefinition {
 		{ID: "web", Name: "Web", Description: "Chalk web application", MonitorKeys: []string{"web.space", "web.account_boundary"}},
 		{ID: "api", Name: "API", Description: "Chalk control plane API", MonitorKeys: []string{"api.health", "api.readiness"}},
 		{ID: "sync", Name: "Sync", Description: "Realtime collaboration service", MonitorKeys: []string{"sync.health", "sync.readiness"}},
-		{ID: "broker", Name: "Episode access", Description: "Episode access service", MonitorKeys: []string{"broker.health"}},
 	}
 }
 

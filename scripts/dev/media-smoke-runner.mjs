@@ -63,14 +63,14 @@ export async function runMediaProof(input, options = {}) {
       participants.push(participant);
       await joinParticipant(participant, runtime);
       participant.joined = true;
-      const inviteHash = new URL(participant.page.url()).hash;
-      if (!hasInviteCapability(inviteHash)) unsupported(UNSUPPORTED_ASSERTIONS.inviteCapability);
-      participant.inviteHash = inviteHash;
+      const inviteURL = new URL(participant.page.url());
+      if (!hasSpaceInviteToken(inviteURL.hash)) unsupported(UNSUPPORTED_ASSERTIONS.inviteCapability);
+      participant.inviteURL = inviteURL.toString();
       return participant;
     });
 
     const guest = await runPhase(report, PHASES.guestJoin, async () => {
-      const participant = { name: runtime.participantNames.guest, inviteHash: primary.inviteHash, ...(await createParticipantContext(browser, options)) };
+      const participant = { name: runtime.participantNames.guest, inviteURL: primary.inviteURL, ...(await createParticipantContext(browser, options)) };
       participants.push(participant);
       await joinParticipant(participant, runtime);
       participant.joined = true;
@@ -114,7 +114,8 @@ export async function runMediaProof(input, options = {}) {
   return redactProof(report);
 }
 
-function hasInviteCapability(hash) {
+function hasSpaceInviteToken(hash) {
   if (!hash || !hash.startsWith("#")) return false;
-  return [...new URLSearchParams(hash.slice(1)).values()].some((value) => value.trim() !== "");
+  const token = new URLSearchParams(hash.slice(1)).get("spaceInviteToken");
+  return typeof token === "string" && token.startsWith("cspi1");
 }

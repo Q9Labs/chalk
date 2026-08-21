@@ -8,11 +8,14 @@ import {
   type DateTimeString,
   type Episode,
   type EpisodeEnd,
+  type PublicAdmissionRequest,
+  type PublicAdmissionRequestPage,
   type Pagination,
   type RecentAuth,
   type RecentAuthGoogleStart as GeneratedRecentAuthGoogleStart,
   type Regions,
   type Space as GeneratedSpace,
+  type SpacePublicInvite,
   type Tenant as GeneratedTenant,
 } from "@q9labsai/chalk-client/effect";
 
@@ -32,8 +35,11 @@ export type DashboardEpisodePage = { episodes: DashboardEpisode[]; pagination: D
 export type DashboardAPIKey = DashboardValue<APIKeyList["api_keys"][number]>;
 export type DashboardAPIKeyPage = { api_keys: DashboardAPIKey[]; pagination: DashboardPagination };
 export type APIKeySecretResult = Omit<DashboardValue<APIKeyWithSecret>, "replayed"> & { replayed?: boolean };
+export type DashboardSpacePublicInvite = DashboardValue<SpacePublicInvite>;
+export type DashboardPublicAdmissionRequest = DashboardValue<PublicAdmissionRequest>;
+export type DashboardPublicAdmissionRequestPage = DashboardValue<PublicAdmissionRequestPage>;
 
-export function defaultSpaceMediaPlane(): "cf_rtk" | "cf_sfu" {
+function defaultSpaceMediaPlane(): "cf_rtk" | "cf_sfu" {
   const configured = (import.meta as ImportMeta & { readonly env?: Record<string, unknown> }).env?.VITE_CHALK_DEV_MEDIA_PLANE;
   return configured === "cf_sfu" ? "cf_sfu" : "cf_rtk";
 }
@@ -47,7 +53,7 @@ type LocalTenantMediaPlaneConfig = {
   };
 };
 
-export function localTenantMediaPlaneConfig(): LocalTenantMediaPlaneConfig | undefined {
+function localTenantMediaPlaneConfig(): LocalTenantMediaPlaneConfig | undefined {
   if (defaultSpaceMediaPlane() !== "cf_sfu") return undefined;
   return {
     default_media_plane: "cf_sfu",
@@ -144,7 +150,6 @@ export async function createSpace(input: {
   const { tenantID, ...values } = input;
   await configureLocalTenantMediaPlane(tenantID);
   const body = {
-    media_plane: defaultSpaceMediaPlane(),
     default_episode_duration_seconds: 86_400,
     maximum_episode_duration_seconds: 86_400,
     linger_window_seconds: 0,
@@ -185,6 +190,54 @@ export function archiveSpace(input: { tenantID: string; spaceID: string }): Prom
 
 export function restoreSpace(input: { tenantID: string; spaceID: string }): Promise<DashboardSpace> {
   return generatedRequest((client) => client.spaces.restoreSpace({ params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] } }));
+}
+
+export function getSpacePublicInvite(input: { tenantID: string; spaceID: string }): Promise<DashboardSpacePublicInvite> {
+  return generatedRequest((client) => client.spaces.getSpacePublicInvite({ params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] } }));
+}
+
+export function updateSpacePublicInvite(input: { tenantID: string; spaceID: string; enabled: boolean }): Promise<DashboardSpacePublicInvite> {
+  return generatedRequest((client) =>
+    client.spaces.updateSpacePublicInvite({
+      params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] },
+      payload: { enabled: input.enabled },
+    }),
+  );
+}
+
+export async function rotateSpacePublicInvite(input: { tenantID: string; spaceID: string }): Promise<DashboardSpacePublicInvite> {
+  const request = mutationRequestKey("space-public-invite-rotate", JSON.stringify({ tenantID: input.tenantID, spaceID: input.spaceID }));
+  const invite = await generatedRequest((client) =>
+    client.spaces.rotateSpacePublicInvite({
+      params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] },
+      headers: { "Idempotency-Key": request.key },
+    }),
+  );
+  clearMutationRequestKey(request.storageKey);
+  return invite;
+}
+
+export function listSpacePublicAdmissionRequests(input: { tenantID: string; spaceID: string }): Promise<DashboardPublicAdmissionRequestPage> {
+  return generatedRequest((client) => client.spaces.listSpacePublicAdmissionRequests({ params: { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"] }, query: { state: "pending" } }));
+}
+
+export async function approveSpacePublicAdmissionRequest(input: { tenantID: string; spaceID: string; requestHandle: string }): Promise<DashboardPublicAdmissionRequest> {
+  return decideSpacePublicAdmissionRequest("approve", input);
+}
+
+export async function denySpacePublicAdmissionRequest(input: { tenantID: string; spaceID: string; requestHandle: string }): Promise<DashboardPublicAdmissionRequest> {
+  return decideSpacePublicAdmissionRequest("deny", input);
+}
+
+async function decideSpacePublicAdmissionRequest(action: "approve" | "deny", input: { tenantID: string; spaceID: string; requestHandle: string }): Promise<DashboardPublicAdmissionRequest> {
+  const request = mutationRequestKey(`space-public-admission-${action}`, JSON.stringify(input));
+  const params = { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"], request_handle: input.requestHandle };
+  const result =
+    action === "approve"
+      ? await generatedRequest((client) => client.spaces.approveSpacePublicAdmissionRequest({ params, headers: { "Idempotency-Key": request.key } }))
+      : await generatedRequest((client) => client.spaces.denySpacePublicAdmissionRequest({ params, headers: { "Idempotency-Key": request.key } }));
+  clearMutationRequestKey(request.storageKey);
+  return result;
 }
 
 export async function listEpisodes(input: { tenantID: string; spaceID?: string; cursor?: string; pageSize?: number }): Promise<DashboardEpisodePage> {

@@ -2,6 +2,7 @@ package recorderworker
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -86,7 +87,12 @@ func TestBundleEncryptionAuthenticatesMetadataAndFencing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapped.Ciphertext = wrapped.Ciphertext[:len(wrapped.Ciphertext)-1] + "A"
+	wrappedCiphertext, err := base64.RawStdEncoding.DecodeString(wrapped.Ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrappedCiphertext[0] ^= 1
+	wrapped.Ciphertext = base64.RawStdEncoding.EncodeToString(wrappedCiphertext)
 	if _, err := UnwrapFixtureKey(wrapped); err == nil {
 		t.Fatal("tampered wrapped key accepted")
 	}

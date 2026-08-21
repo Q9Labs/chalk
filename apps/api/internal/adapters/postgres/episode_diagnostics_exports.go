@@ -511,6 +511,7 @@ func (r *EpisodeDiagnosticsRepository) runDiagnosticExportJob(ctx context.Contex
 	stream.firstElement["participants"] = true
 	stream.hashes["participants"] = sha256.New()
 	var participantAfter pgtype.UUID
+	participantOrdinal := 0
 	for {
 		participantRows, participantErr := queries.ListDiagnosticParticipantsAfter(ctx, sqlc.ListDiagnosticParticipantsAfterParams{TenantID: job.TenantID, DiagnosticID: job.DiagnosticID, AfterParticipantID: participantAfter, PageLimit: diagnosticExportPageLimit})
 		if participantErr != nil {
@@ -520,7 +521,8 @@ func (r *EpisodeDiagnosticsRepository) runDiagnosticExportJob(ctx context.Contex
 			break
 		}
 		for _, participantRow := range participantRows {
-			if err := stream.arrayValue("participants", mapDiagnosticParticipantAfter(participantRow)); err != nil {
+			participantOrdinal++
+			if err := stream.arrayValue("participants", mapDiagnosticParticipantAfter(participantRow, participantOrdinal)); err != nil {
 				return r.failDiagnosticExportJob(ctx, job, leaseID, fmt.Errorf("encode diagnostic export participant: %w", err))
 			}
 		}

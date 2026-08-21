@@ -28,7 +28,7 @@ describe("preview URL state", () => {
 
     expect(parsed.view).toBe("space");
     expect(parsed.layout).toBe("focus");
-    expect(parsed.participants).toBe(5);
+    expect(parsed.participants).toBe(12);
     expect(parsed.mic).toBe(false);
     expect(parsed.camera).toBe(false);
     expect(parsed.hand).toBe(true);
