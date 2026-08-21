@@ -155,6 +155,10 @@ function ChalkSpaceView({
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [isLeaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [leavePending, setLeavePending] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [endEpisodePending, setEndEpisodePending] = useState(false);
+  const [endEpisodeError, setEndEpisodeError] = useState<string | null>(null);
   const layout = controlledLayout ?? uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
@@ -163,8 +167,8 @@ function ChalkSpaceView({
   useEffect(() => setActivePanel(initialPanel), [initialPanel]);
 
   useEffect(() => {
-    if (feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
-  }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission]);
+    if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
+  }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
   const buttons: ControlBarButtonName[] = [
     "mic",
     "video",
@@ -203,6 +207,38 @@ function ChalkSpaceView({
     }
   }, []);
 
+  const leaveSpace = async () => {
+    if (!onLeft || leavePending) return;
+    setLeavePending(true);
+    setLeaveError(null);
+    try {
+      await onLeft();
+      setLeaveDialogOpen(false);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not leave this Space.";
+      setLeaveError(message);
+      setCommandError(message);
+    } finally {
+      setLeavePending(false);
+    }
+  };
+
+  const endEpisode = async () => {
+    if (!onEndEpisode || endEpisodePending) return;
+    setEndEpisodePending(true);
+    setEndEpisodeError(null);
+    try {
+      await onEndEpisode();
+      setLeaveDialogOpen(false);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not end this Episode.";
+      setEndEpisodeError(message);
+      setCommandError(message);
+    } finally {
+      setEndEpisodePending(false);
+    }
+  };
+
   const displayedCommandError = externalCommandError ?? commandError;
   const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const dismissCommandError = () => {
@@ -237,23 +273,12 @@ function ChalkSpaceView({
         >
           <section className="chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-chrome)]">
             <AudioOutput />
-            <SpaceHeader
-              spaceName={spaceName}
-              logoUrl={logoUrl}
-              duration={episodeDuration}
-              layout={layout}
-              onLayoutChange={updateLayout}
-              onInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
-              onSettings={
-                feature("settings") ? openSettings : undefined
-              }
-              className="relative z-20"
-            />
+            <SpaceHeader spaceName={spaceName} logoUrl={logoUrl} duration={episodeDuration} layout={layout} onLayoutChange={updateLayout} onInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined} onSettings={feature("settings") ? openSettings : undefined} className="relative z-20" />
 
             <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
-              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-14 sm:px-4 md:pb-16 lg:px-5">
-                <section className={cn("min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px]", stageBackground ? "chalk-textured-surface bg-[var(--chalk-app-stage)]" : "bg-transparent")} aria-label="Space stage">
-                  <ChalkPanel className={cn("h-full min-h-0 p-0", stageBackground ? "bg-[var(--chalk-app-stage)]" : "bg-transparent", skin === "classic" ? "rounded-[10px] border-0 shadow-none" : "rounded-none")} contentClassName="h-full min-h-0" seed="space-stage-shell">
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pt-1 sm:px-4 lg:px-5">
+                <section className="min-h-0 min-w-0 flex-1 overflow-hidden" aria-label="Space stage">
+                  <ChalkPanel filled={stageBackground} className={cn("h-full min-h-0 p-0", stageBackground ? "bg-[var(--chalk-app-stage)]" : "bg-transparent", skin === "classic" ? "rounded-[10px] border-0 shadow-none" : "rounded-none")} contentClassName="h-full min-h-0" seed="space-stage-shell">
                     <SpaceStage tiles={tiles} layout={layout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />
                   </ChalkPanel>
                 </section>
@@ -329,18 +354,13 @@ function ChalkSpaceView({
               <LeaveDialog
                 isOpen={isLeaveDialogOpen}
                 onClose={() => setLeaveDialogOpen(false)}
-                onConfirm={() => {
-                  setLeaveDialogOpen(false);
-                  void runCommand(() => Promise.resolve(onLeft()));
-                }}
-                onEndEpisode={
-                  onEndEpisode
-                    ? () => {
-                        setLeaveDialogOpen(false);
-                        void runCommand(() => Promise.resolve(onEndEpisode()));
-                      }
-                    : undefined
-                }
+                onConfirm={() => void leaveSpace()}
+                onEndEpisode={onEndEpisode ? () => void endEpisode() : undefined}
+                canEndEpisode={Boolean(onEndEpisode)}
+                leavePending={leavePending}
+                leaveError={leaveError}
+                endEpisodePending={endEpisodePending}
+                endEpisodeError={endEpisodeError}
                 palette={palette}
                 texture={texture}
               />

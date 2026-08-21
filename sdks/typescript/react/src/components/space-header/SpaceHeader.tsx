@@ -3,7 +3,7 @@ import React, { useRef } from "react";
 import { InformationCircleIcon, Settings01Icon, UserGroupIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { StatusBadge } from "../atomic/StatusBadge";
-import { ChalkControlGroup, ChalkDivider, ChalkIconButton } from "../chalk-ui";
+import { ChalkControlGroup, ChalkIconButton } from "../chalk-ui";
 import { LogoSource } from "../logo/LogoSource";
 import { useSkin } from "../skin-context";
 import { ClassicSpaceHeader } from "./ClassicSpaceHeader";
@@ -20,7 +20,7 @@ const ChalkSpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, logoUrl, dur
       <div ref={menuHost} className="absolute top-0 left-0 h-0 w-0" />
       <div className="flex min-w-0 items-center gap-3">
         <LogoSource className="h-7 w-auto shrink-0" height={28} logoUrl={logoUrl} />
-        <ChalkDivider className="hidden h-5 w-5 shrink-0 rotate-90 sm:block" seed="space-header-divider" />
+        <span className="hidden h-5 w-px shrink-0 bg-[var(--chalk-app-line)] sm:block" aria-hidden="true" />
         <h1 className="truncate text-sm font-semibold">{spaceName}</h1>
         <span className="hidden font-mono text-[11px] tabular-nums text-[var(--chalk-app-text-muted)] sm:block" aria-label={`Episode duration ${formatDuration(duration)}`}>
           {formatDuration(duration)}

@@ -53,7 +53,7 @@ describe("SettingsDialog appearance", () => {
     render(<SettingsDialog isOpen onClose={vi.fn()} settings={createSettings()} onUpdateIdentity={vi.fn()} onUpdateJoin={vi.fn()} onUpdateAudio={vi.fn()} onUpdateVideo={vi.fn()} onUpdateAppearance={onUpdateAppearance} onUpdateExperience={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
-    fireEvent.click(screen.getByRole("switch", { name: "Generated avatars" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Fun avatars" }));
 
     expect(onUpdateAppearance).toHaveBeenCalledWith({ generatedAvatars: false });
   });

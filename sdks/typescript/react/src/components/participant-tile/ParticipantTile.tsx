@@ -1,12 +1,11 @@
 import React, { useMemo, useRef } from "react";
+
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { HandIcon, MicrophoneOff01Icon, Monitor01Icon, WifiOffIcon } from "../../utils/icons";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkBadge } from "../chalk-ui";
-import { useSkin } from "../skin-context";
-import { ClassicParticipantTile } from "./ClassicParticipantTile";
 import { TileShell } from "./TileShell";
 import { useVideoTrack } from "./useVideoTrack";
 
@@ -51,7 +50,7 @@ const aspectRatioClasses = {
   fill: "",
 };
 
-const ChalkParticipantTile = React.memo(function ChalkParticipantTile({
+export const ParticipantTile = React.memo(function ParticipantTile({
   participant,
   videoTrack,
   mirror,
@@ -138,13 +137,6 @@ const ChalkParticipantTile = React.memo(function ChalkParticipantTile({
       {children}
     </TileShell>
   );
-});
-
-ChalkParticipantTile.displayName = "ChalkParticipantTile";
-
-export const ParticipantTile = React.memo((props: ParticipantTileProps) => {
-  const skin = useSkin();
-  return skin === "classic" ? <ClassicParticipantTile {...props} /> : <ChalkParticipantTile {...props} />;
 });
 
 ParticipantTile.displayName = "ParticipantTile";

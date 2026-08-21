@@ -9,11 +9,12 @@ import { SkinProvider } from "../skin-context";
 afterEach(cleanup);
 
 describe("SpaceHeader", () => {
-  it("renders the header with visible chalk chrome", () => {
+  it("renders the header with the recovered one-pixel divider", () => {
     render(<SpaceHeader spaceName="Design review" />);
 
-    expect(screen.getByRole("banner")).toHaveClass("text-[var(--chalk-app-text)]");
-    expect(screen.getByRole("banner").querySelector("svg[data-chalk-chrome='true']")).toBeInTheDocument();
+    const header = screen.getByRole("banner");
+    expect(header).toHaveClass("text-[var(--chalk-app-text)]");
+    expect(header.querySelector("span[aria-hidden='true']")).toHaveClass("h-5", "w-px", "bg-[var(--chalk-app-line)]");
   });
 
   it("opens space information and changes the layout through the menu", () => {

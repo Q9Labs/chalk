@@ -81,7 +81,7 @@ export function choosePrimary(items: readonly StageItem[], context: PrimaryConte
   const pinned = context.pinnedId ? items.find((item) => item.id === context.pinnedId) : undefined;
   if (pinned) return pinned;
 
-  const content = () => items.find((item) => item.kind === "whiteboard") ?? newestScreenShare(items, context.seenAt);
+  const content = () => newestScreenShare(items, context.seenAt) ?? items.find((item) => item.kind === "whiteboard");
   const speaker = () =>
     participantWhere(items, (participant) => participant.isActiveSpeaker === true) ?? participantWhere(items, (participant) => participant.isSpeaking === true) ?? (context.lastSpeakerId ? items.find((item) => item.kind === "participant" && item.id === context.lastSpeakerId) : undefined);
   const ordered = context.layout === "presentation" ? [content, speaker] : [speaker, content];

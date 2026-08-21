@@ -504,7 +504,7 @@ const ChalkSettingsDialog = React.memo(
               )}
 
               <SectionCard title="Avatars" description="Choose whether participants without photos use generated avatars or plain initials.">
-                <ToggleRow title="Generated avatars" description="Use generated avatars when no photo is set. Turn this off for plain initials." checked={settings.appearance.generatedAvatars} onChange={(checked) => onUpdateAppearance({ generatedAvatars: checked })} />
+                <ToggleRow title="Fun avatars" description="Use generated avatars when no photo is set. Turn this off for plain initials." checked={settings.appearance.generatedAvatars} onChange={(checked) => onUpdateAppearance({ generatedAvatars: checked })} />
               </SectionCard>
 
               <SectionCard title="Motion" description="Keep movement comfortable and predictable across the interface.">

@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 
 import { ChalkProvider } from "../../bindings/context";
-import { SkinProvider } from "../skin-context";
 import { createSnapshot, createTestClient } from "../../test-support/test-client";
 import { ParticipantGrid } from "./ParticipantGrid";
 
@@ -21,21 +20,6 @@ describe("ParticipantGrid", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("The Space is quiet");
     expect(document.querySelectorAll('svg[data-chalk-chrome="true"]').length).toBeGreaterThan(0);
-  });
-
-  it("restores the classic empty state without rough chrome", () => {
-    render(
-      <SkinProvider skin="classic">
-        <ChalkProvider client={createTestClient(createSnapshot())}>
-          <ParticipantGrid variant="desktop" />
-        </ChalkProvider>
-      </SkinProvider>,
-    );
-
-    const emptyState = screen.getByRole("status");
-    expect(emptyState).toHaveClass("flex", "px-6", "py-10");
-    expect(emptyState).toHaveTextContent("The Space is quiet");
-    expect(emptyState.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
   });
 
   it("derives participants from the provider store", () => {

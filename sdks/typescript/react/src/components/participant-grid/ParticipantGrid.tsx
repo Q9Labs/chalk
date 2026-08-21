@@ -2,8 +2,6 @@ import React, { useMemo } from "react";
 import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { UserGroupIcon } from "../../utils/icons";
 import { ChalkBadge, ChalkEmptyState } from "../chalk-ui";
-import { useSkin } from "../skin-context";
-import { ClassicParticipantGrid } from "./ClassicParticipantGrid";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { Stage } from "../stage/Stage";
@@ -49,11 +47,6 @@ const MIN_TILE_WIDTH = { desktop: 160, mobile: 140 } as const;
 
 /** Stage of participant tiles for the current Space; screen shares appear as their own tiles. */
 export function ParticipantGrid(props: ParticipantGridProps): React.JSX.Element {
-  const skin = useSkin();
-  return skin === "classic" ? <ClassicParticipantGrid {...props} /> : <ChalkParticipantGrid {...props} />;
-}
-
-function ChalkParticipantGrid(props: ParticipantGridProps): React.JSX.Element {
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
@@ -106,7 +99,5 @@ export function QuietSpace(): React.JSX.Element {
     </ChalkEmptyState>
   );
 }
-
-ChalkParticipantGrid.displayName = "ChalkParticipantGrid";
 
 ParticipantGrid.displayName = "ParticipantGrid";
