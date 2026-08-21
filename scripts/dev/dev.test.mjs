@@ -20,7 +20,7 @@ import { failure, FailureKind, RuntimeState } from "./model.mjs";
 
 async function tempConfig() {
   const root = await mkdtemp(join(tmpdir(), "chalk-dev-test-"));
-  const config = resolveDevConfig({ root, cwd: root, requiredTools: [], home: root, allowBusyPorts: Object.keys({ api: 8080, sync: 4100, web: 3070, bff: 3071, postgres: 5432, redis: 6380, grafana: 3000 }) });
+  const config = resolveDevConfig({ root, cwd: root, requiredTools: [], home: root, allowBusyPorts: Object.keys({ api: 8080, sync: 4100, web: 3070, bff: 3071, postgres: 5432, redis: 6380, grafana: 3000, broker: 8787 }) });
   return { root, config };
 }
 
@@ -269,6 +269,28 @@ test("local resource migration opts into Goose allow-missing without changing th
     assert.deepEqual(migration.args.slice(-2), ["--allow-missing", "up"]);
     assert.equal(config.databaseName, "chalk_dev");
     assert.match(migration.options.env.CHALK_DATABASE_URL, /\/chalk_dev\?/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("local resource manager can skip observability when the local image is unavailable", async () => {
+  const root = await mkdtemp(join(tmpdir(), "chalk-dev-no-observability-test-"));
+  const config = resolveDevConfig({ root, cwd: root, home: root, env: { CHALK_DEV_OBSERVABILITY: "disabled" }, requiredTools: [], allowBusyPorts: [] });
+  const calls = [];
+  try {
+    const manager = createResourceManager(config, {
+      docker: async () => undefined,
+      runner: async (command, args, options) => {
+        calls.push({ command, args, options });
+        if (args.at(-1) === "up") throw new Error("stop after migration command assertion");
+        return { stdout: "", stderr: "" };
+      },
+      identityGenerator: async () => ({ kid: "test", rawPrivateKey: "private", publicKeyring: {} }),
+    });
+    await assert.rejects(manager.start(), /stop after migration command assertion/);
+    assert.equal(calls.some(({ args }) => args.includes("infrastructure/observability/scripts/local.sh")), false);
+    assert.equal(calls.some(({ args }) => args.some((arg) => arg.endsWith("db-migrate.sh"))), true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

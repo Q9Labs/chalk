@@ -168,6 +168,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       environment: env.CHALK_API_ENV || "local",
     },
     secretResolver,
+    observabilityEnabled: env.CHALK_DEV_OBSERVABILITY !== "disabled",
     databaseName: "chalk_dev",
     redis: {
       port: redisPort,
