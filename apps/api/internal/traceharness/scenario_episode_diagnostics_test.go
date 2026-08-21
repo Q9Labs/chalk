@@ -43,8 +43,8 @@ func TestRunServiceEpisodeDiagnosticsScenario(t *testing.T) {
 			ReleaseLinked  bool   `json:"release_linked"`
 		} `json:"tracing"`
 		Stream struct {
-			Status         int  `json:"status"`
-			SnapshotMarker bool `json:"snapshot_marker"`
+			Status          int  `json:"status"`
+			SnapshotRefresh bool `json:"snapshot_refresh"`
 		} `json:"stream"`
 		Lifecycle struct {
 			State   string `json:"state"`
@@ -69,7 +69,7 @@ func TestRunServiceEpisodeDiagnosticsScenario(t *testing.T) {
 	if body.Tracing.JourneyIDClass != "chalk.journey" || body.Tracing.JourneyIDType != "safe_identifier" || body.Tracing.TraceIDClass != "w3c.trace" || body.Tracing.TraceIDType != "safe_identifier" || body.Tracing.SpanIDClass != "w3c.span" || body.Tracing.SpanIDType != "safe_identifier" || !body.Tracing.ReleaseLinked {
 		t.Fatalf("tracing = %#v", body.Tracing)
 	}
-	if body.Stream.Status != 200 || !body.Stream.SnapshotMarker {
+	if body.Stream.Status != 200 || !body.Stream.SnapshotRefresh {
 		t.Fatalf("stream = %#v", body.Stream)
 	}
 	if body.Lifecycle.State != "expired" || !body.Lifecycle.Expired {

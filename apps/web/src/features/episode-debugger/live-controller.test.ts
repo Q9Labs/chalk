@@ -283,4 +283,27 @@ describe("DiagnosticLiveController", () => {
       },
     );
   });
+
+  it("refreshes a snapshot marker without reporting a visibility gap or paging Events", async () => {
+    const refreshDelta = {
+      schemaVersion: "DiagnosticStreamDelta/v1" as const,
+      reference: TEST_REFERENCE,
+      cursor: 6,
+      kind: "gap" as const,
+      filterFingerprint: TEST_FILTER_FINGERPRINT,
+      gap: { fromCursor: 6, toCursor: 6, reason: "snapshot_refresh" },
+    };
+    const api = createLiveApi({
+      readSnapshot: snapshots(5, 6),
+      stream: streamWithDeltas(refreshDelta),
+    });
+    const controller = createController(api);
+
+    await runUntilCursor(controller, 6, () => {
+      expect(api.readSnapshot).toHaveBeenCalledTimes(2);
+      expect(api.readEvents).toHaveBeenCalledOnce();
+      expect(controller.getState().visibleGaps).toEqual([]);
+      expect(controller.getState().phase).toBe("live");
+    });
+  });
 });

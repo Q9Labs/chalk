@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +13,22 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/episodediagnostics"
 )
+
+const diagnosticMaxSSEDataBytes = 64*1024 - len("data: ")
+
+var errDiagnosticSSEDataTooLarge = errors.New("diagnostic SSE data payload exceeds the single-line decoder limit")
+
+type diagnosticSSEDataTooLargeError struct {
+	payloadBytes int
+}
+
+func (e *diagnosticSSEDataTooLargeError) Error() string {
+	return fmt.Sprintf("%s: got %d bytes, limit is %d", errDiagnosticSSEDataTooLarge, e.payloadBytes, diagnosticMaxSSEDataBytes)
+}
+
+func (e *diagnosticSSEDataTooLargeError) Unwrap() error {
+	return errDiagnosticSSEDataTooLarge
+}
 
 func episodeDiagnosticStreamHandler(options EpisodeDiagnosticsHTTPOptions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -134,28 +151,11 @@ func episodeDiagnosticStreamHandler(options EpisodeDiagnosticsHTTPOptions) http.
 					if change.Cursor <= startCursor {
 						continue
 					}
-					var payload map[string]any
-					var payloadErr error
-					if change.Kind == episodediagnostics.StreamSnapshot {
-						// Projection marker rows intentionally carry no unbounded
-						// composite payload. Re-read the bounded, filter-aware snapshot
-						// at this cursor so reconnects can replay one complete delta.
-						snapshot, snapshotErr := options.Service.Snapshot(streamContext, operator, reference, filter)
-						if snapshotErr != nil {
-							_ = writeDiagnosticStreamClose(w, "server_error", cursor)
-							return
-						}
-						if snapshot.ProjectedCursor < change.Cursor {
-							snapshot.ProjectedCursor = change.Cursor
-						}
-						payload = diagnosticStreamSnapshotPayload(reference, filterFingerprint, change.Cursor, snapshot)
-					} else {
-						payload, payloadErr = diagnosticStreamDeltaPayload(reference, filterFingerprint, matchingFilter, change)
-					}
+					payload, payloadErr := diagnosticStreamDeltaPayload(reference, filterFingerprint, matchingFilter, change)
 					if payloadErr != nil {
 						payload = diagnosticStreamGapPayload(reference, filterFingerprint, change.Cursor, "invalid_projection_payload")
 					}
-					if err := writeDiagnosticSSEWithDeadline(w, "delta", strconv.FormatInt(change.Cursor, 10), payload); err != nil {
+					if err := writeDiagnosticStreamDelta(streamContext, w, reference, filterFingerprint, change.Cursor, change.Kind, payload); err != nil {
 						return
 					}
 					if err := flushDiagnosticStream(w); err != nil {
@@ -169,7 +169,7 @@ func episodeDiagnosticStreamHandler(options EpisodeDiagnosticsHTTPOptions) http.
 					// The projector can advance without a retained change row. The
 					// next durable page refill is the only safe way to reconstruct it.
 					payload := diagnosticStreamGapPayload(reference, filterFingerprint, changedDiagnostic.ProjectedCursor, "projection_gap")
-					if err := writeDiagnosticSSEWithDeadline(w, "delta", strconv.FormatInt(changedDiagnostic.ProjectedCursor, 10), payload); err != nil {
+					if err := writeDiagnosticStreamDelta(streamContext, w, reference, filterFingerprint, changedDiagnostic.ProjectedCursor, episodediagnostics.StreamDeltaGap, payload); err != nil {
 						return
 					}
 					if err := flushDiagnosticStream(w); err != nil {
@@ -187,6 +187,9 @@ func writeDiagnosticSSE(w http.ResponseWriter, event, id string, payload any) er
 	if err != nil {
 		return err
 	}
+	if len(encoded) > diagnosticMaxSSEDataBytes {
+		return &diagnosticSSEDataTooLargeError{payloadBytes: len(encoded)}
+	}
 	if id != "" {
 		if _, err := fmt.Fprintf(w, "id: %s\n", id); err != nil {
 			return err
@@ -199,6 +202,34 @@ func writeDiagnosticSSE(w http.ResponseWriter, event, id string, payload any) er
 	}
 	_, err = fmt.Fprintf(w, "data: %s\n\n", encoded)
 	return err
+}
+
+func writeDiagnosticStreamDelta(ctx context.Context, w http.ResponseWriter, reference, filterFingerprint string, cursor int64, kind episodediagnostics.StreamDeltaKind, payload any) error {
+	id := strconv.FormatInt(cursor, 10)
+	err := writeDiagnosticSSEWithDeadline(w, "delta", id, payload)
+	if !errors.Is(err, errDiagnosticSSEDataTooLarge) {
+		return err
+	}
+	var oversized *diagnosticSSEDataTooLargeError
+	if errors.As(err, &oversized) && kind != episodediagnostics.StreamSnapshot {
+		slog.WarnContext(ctx, "episode diagnostics stream delta refilled",
+			"event", "episode_diagnostics.stream_delta_refilled",
+			"kind", diagnosticStreamKindForLog(kind),
+			"reason", "snapshot_refresh",
+			"payload_bytes", oversized.payloadBytes,
+			"limit_bytes", diagnosticMaxSSEDataBytes,
+		)
+	}
+	return writeDiagnosticSSEWithDeadline(w, "delta", id, diagnosticStreamRefreshPayload(reference, filterFingerprint, cursor))
+}
+
+func diagnosticStreamKindForLog(kind episodediagnostics.StreamDeltaKind) string {
+	switch kind {
+	case episodediagnostics.StreamEventAppended, episodediagnostics.StreamOperationUpdated, episodediagnostics.StreamIssueUpdated, episodediagnostics.StreamBranchUpdated, episodediagnostics.StreamDeltaGap:
+		return string(kind)
+	default:
+		return "unknown"
+	}
 }
 
 func writeDiagnosticSSEWithDeadline(w http.ResponseWriter, event, id string, payload any) error {
@@ -283,18 +314,7 @@ func diagnosticStreamDeltaPayload(reference, filterFingerprint string, filter ep
 		}
 		payload["branch"] = branch
 	case episodediagnostics.StreamSnapshot:
-		var snapshot episodediagnostics.DiagnosticSnapshotV1
-		if err := json.Unmarshal(change.Payload, &snapshot); err != nil {
-			var wrapped struct {
-				Snapshot episodediagnostics.DiagnosticSnapshotV1 `json:"snapshot"`
-			}
-			if wrappedErr := json.Unmarshal(change.Payload, &wrapped); wrappedErr != nil {
-				return nil, err
-			}
-			snapshot = wrapped.Snapshot
-		}
-		redactDiagnosticSnapshotProviders(&snapshot)
-		payload["snapshot"] = snapshotWireWithFingerprint(snapshot, filterFingerprint)
+		return diagnosticStreamRefreshPayload(reference, filterFingerprint, change.Cursor), nil
 	case episodediagnostics.StreamDeltaGap:
 		var gap episodediagnostics.StreamGap
 		if err := json.Unmarshal(change.Payload, &gap); err != nil {
@@ -328,26 +348,6 @@ func redactDiagnosticOperationProvider(operation *episodediagnostics.DiagnosticO
 	operation.ProviderLookupID = ""
 }
 
-func redactDiagnosticSnapshotProviders(snapshot *episodediagnostics.DiagnosticSnapshotV1) {
-	if snapshot == nil {
-		return
-	}
-	for index := range snapshot.Operations {
-		redactDiagnosticOperationProvider(&snapshot.Operations[index])
-	}
-}
-
-func diagnosticStreamSnapshotPayload(reference, filterFingerprint string, cursor int64, snapshot episodediagnostics.DiagnosticSnapshotV1) map[string]any {
-	return map[string]any{
-		"schemaVersion":     "DiagnosticStreamDelta/v1",
-		"reference":         reference,
-		"cursor":            cursor,
-		"kind":              episodediagnostics.StreamSnapshot,
-		"filterFingerprint": filterFingerprint,
-		"snapshot":          snapshotWireWithFingerprint(snapshot, filterFingerprint),
-	}
-}
-
 func diagnosticStreamGapPayload(reference, filterFingerprint string, cursor int64, reason string) map[string]any {
 	from := cursor
 	if from > 0 {
@@ -363,6 +363,21 @@ func diagnosticStreamGapPayload(reference, filterFingerprint string, cursor int6
 			FromCursor: &from,
 			ToCursor:   &cursor,
 			Reason:     reason,
+		},
+	}
+}
+
+func diagnosticStreamRefreshPayload(reference, filterFingerprint string, cursor int64) map[string]any {
+	return map[string]any{
+		"schemaVersion":     "DiagnosticStreamDelta/v1",
+		"reference":         reference,
+		"cursor":            cursor,
+		"kind":              episodediagnostics.StreamDeltaGap,
+		"filterFingerprint": filterFingerprint,
+		"gap": episodediagnostics.StreamGap{
+			FromCursor: &cursor,
+			ToCursor:   &cursor,
+			Reason:     "snapshot_refresh",
 		},
 	}
 }

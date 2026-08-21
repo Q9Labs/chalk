@@ -74,6 +74,30 @@ describe("diagnostic API fixture states", () => {
     expect(runningJob.state).toBe("running");
   });
 
+  it("emits a compact snapshot refresh directive on the live stream", async () => {
+    fixture = await createDiagnosticFixtureServer();
+    const headers = { authorization: `Bearer ${fixture.credential}` };
+    const reference = encodeURIComponent(fixture.reference("live"));
+    const stream = await fetch(`${fixture.url}/_internal/episode-diagnostics/${reference}/stream?after=10`, { headers });
+    const reader = stream.body.getReader();
+    const decoder = new TextDecoder();
+    let body = "";
+    try {
+      while (!body.includes("event: heartbeat")) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        body += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      await reader.cancel();
+    }
+
+    expect(body).toContain('"kind":"gap"');
+    expect(body).toContain('"reason":"snapshot_refresh"');
+    expect(body).not.toContain('"snapshot"');
+    expect(body).toContain('"schemaVersion":"DiagnosticStreamHeartbeat/v1"');
+  });
+
   it("emits contract fingerprints for the real client filter and Events", async () => {
     fixture = await createDiagnosticFixtureServer();
     const headers = { authorization: `Bearer ${fixture.credential}` };

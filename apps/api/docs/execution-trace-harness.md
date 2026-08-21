@@ -123,6 +123,7 @@ Registered scenarios:
 - `route:recording-transcribe`
 - `route:telemetry-journey-event-intake`
 - `route:status-monitor-ingest`
+- `service:episode-diagnostics`
 - `route:chat-attachment-upload`
 - `route:whiteboard-file-upload`
 - `route:api-key-customer-flow`

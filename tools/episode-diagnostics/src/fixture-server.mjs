@@ -900,8 +900,18 @@ function sendFixtureStream(response, reference, state, url, fingerprint, streams
   response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive" });
   streams.add(response);
   response.on("close", () => streams.delete(response));
-  const control = { schemaVersion: "DiagnosticStreamControl/v1", heartbeatIntervalSeconds: 15, maxConnectionSeconds: 1_800, afterCursor: after, filterFingerprint: fingerprint, maxPendingDeltas: 100 };
+  const control = { schemaVersion: "DiagnosticStreamControl/v1", heartbeatIntervalSeconds: 1, maxConnectionSeconds: 1_800, afterCursor: after, filterFingerprint: fingerprint, maxPendingDeltas: 100 };
   response.write(`id: ${after}\nevent: control\ndata: ${JSON.stringify(control)}\n\n`);
+  if (state === "live") {
+    const refreshCursor = Math.max(1, after);
+    const refresh = { schemaVersion: "DiagnosticStreamDelta/v1", reference, cursor: refreshCursor, kind: "gap", filterFingerprint: fingerprint, gap: { fromCursor: refreshCursor, toCursor: refreshCursor, reason: "snapshot_refresh" } };
+    response.write(`id: ${refreshCursor}\nevent: delta\ndata: ${JSON.stringify(refresh)}\n\n`);
+    const heartbeatTimer = setInterval(() => {
+      response.write(`event: heartbeat\ndata: ${JSON.stringify({ schemaVersion: "DiagnosticStreamHeartbeat/v1", at: FIXTURE_CLOCK })}\n\n`);
+    }, 500);
+    heartbeatTimer.unref();
+    response.on("close", () => clearInterval(heartbeatTimer));
+  }
   if (["reconnecting", "disconnected"].includes(state)) {
     const gapCursor = Math.max(1, after);
     const gap = { schemaVersion: "DiagnosticStreamDelta/v1", reference, cursor: gapCursor, kind: "gap", filterFingerprint: fingerprint, gap: { fromCursor: gapCursor, toCursor: gapCursor, reason: "not_observable" } };

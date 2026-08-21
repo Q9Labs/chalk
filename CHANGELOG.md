@@ -64,6 +64,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fixed Episode Debugger live evidence reconnect loops by replacing oversized
+  streamed snapshots with compact refill directives and bounding every SSE data
+  line to the browser decoder limit.
 - Fixed the dependency vulnerability gate under macOS's system Bash so its
   lockfile discovery no longer fails inside nested null-delimited reads.
 - Serialized web releases across SHAs, added guarded stale-lock recovery, and

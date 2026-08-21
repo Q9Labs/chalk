@@ -30,6 +30,8 @@ type episodeDiagnosticsHTTPServiceStub struct {
 	artifact        episodediagnostics.ExportArtifact
 	operator        episodediagnostics.OperatorPrincipal
 	snapshotTenant  string
+	snapshotCalls   int
+	changeAfters    []int64
 }
 
 func (s *episodeDiagnosticsHTTPServiceStub) Append(_ context.Context, principal episodediagnostics.ProducerPrincipal, _ episodediagnostics.AppendDiagnosticEventsRequest) (episodediagnostics.AppendDiagnosticEventsResult, error) {
@@ -45,6 +47,7 @@ func (s *episodeDiagnosticsHTTPServiceStub) AlternateReference(_ context.Context
 	return episodediagnostics.DiagnosticReference{Version: 1, Environment: episodediagnostics.EnvironmentLocalhost, DiagnosticID: "diagnostic_1"}, nil
 }
 func (s *episodeDiagnosticsHTTPServiceStub) Snapshot(_ context.Context, operator episodediagnostics.OperatorPrincipal, reference string, _ episodediagnostics.DiagnosticFilterV1) (episodediagnostics.DiagnosticSnapshotV1, error) {
+	s.snapshotCalls++
 	s.operator = operator
 	if s.snapshotTenant != "" {
 		authorized := false
@@ -71,7 +74,8 @@ func (s *episodeDiagnosticsHTTPServiceStub) Events(_ context.Context, _ episoded
 func (s *episodeDiagnosticsHTTPServiceStub) Operations(_ context.Context, _ episodediagnostics.OperatorPrincipal, reference string, _ episodediagnostics.DiagnosticFilterV1, _ *int64, _ int) (episodediagnostics.DiagnosticOperationPageV1, error) {
 	return episodediagnostics.DiagnosticOperationPageV1{Reference: reference, Operations: []episodediagnostics.DiagnosticOperationDetail{}, HasMore: false}, nil
 }
-func (s *episodeDiagnosticsHTTPServiceStub) Changes(_ context.Context, _ episodediagnostics.OperatorPrincipal, _ string, _ int64, _ int) (episodediagnostics.EpisodeDiagnostic, []episodediagnostics.ProjectionChange, error) {
+func (s *episodeDiagnosticsHTTPServiceStub) Changes(_ context.Context, _ episodediagnostics.OperatorPrincipal, _ string, after int64, _ int) (episodediagnostics.EpisodeDiagnostic, []episodediagnostics.ProjectionChange, error) {
+	s.changeAfters = append(s.changeAfters, after)
 	changes := s.changes
 	s.changes = nil
 	return episodediagnostics.EpisodeDiagnostic{}, changes, nil
@@ -430,7 +434,7 @@ func TestEpisodeDiagnosticsStreamPreservesMultiOrdinalCursorDeltas(t *testing.T)
 	}
 }
 
-func TestEpisodeDiagnosticsStreamReplaysProjectionMarkerAsSnapshot(t *testing.T) {
+func TestEpisodeDiagnosticsStreamProjectionMarkerUsesCompactRefresh(t *testing.T) {
 	service := &episodeDiagnosticsHTTPServiceStub{
 		snapshot: testDiagnosticSnapshot(),
 		changes:  []episodediagnostics.ProjectionChange{{Cursor: 7, Ordinal: 0, Kind: episodediagnostics.StreamSnapshot, Payload: json.RawMessage(`{}`)}},
@@ -445,8 +449,27 @@ func TestEpisodeDiagnosticsStreamReplaysProjectionMarkerAsSnapshot(t *testing.T)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	body := response.Body.String()
-	if !strings.Contains(body, `"kind":"snapshot"`) || !strings.Contains(body, `"schemaVersion":"DiagnosticSnapshot/v1"`) {
-		t.Fatalf("projection marker did not carry a complete snapshot delta: %s", body)
+	if service.snapshotCalls != 0 {
+		t.Fatalf("projection marker called Snapshot %d times", service.snapshotCalls)
+	}
+	if strings.Contains(body, `"kind":"snapshot"`) || strings.Contains(body, `"snapshot"`) {
+		t.Fatalf("projection marker carried a composite snapshot: %s", body)
+	}
+	delta := diagnosticStreamDeltaFromBody(t, body)
+	if delta["kind"] != string(episodediagnostics.StreamDeltaGap) || delta["cursor"] != float64(7) {
+		t.Fatalf("compact projection marker delta = %#v", delta)
+	}
+	if delta["filterFingerprint"] != episodediagnostics.FilterFingerprint(episodediagnostics.DiagnosticFilterV1{SchemaVersion: "DiagnosticFilter/v1"}) {
+		t.Fatalf("projection marker filter fingerprint = %#v", delta["filterFingerprint"])
+	}
+	gap, ok := delta["gap"].(map[string]any)
+	if !ok || gap["reason"] != "snapshot_refresh" || gap["toCursor"] != float64(7) {
+		t.Fatalf("projection marker gap = %#v", delta["gap"])
+	}
+	for _, data := range diagnosticSSEDataFromBody(body) {
+		if len(data) > diagnosticMaxSSEDataBytes {
+			t.Fatalf("serialized SSE data payload = %d bytes, limit = %d", len(data), diagnosticMaxSSEDataBytes)
+		}
 	}
 }
 
@@ -465,8 +488,11 @@ func TestEpisodeDiagnosticsStreamReconnectsAfterSnapshotMarkerWithoutLoss(t *tes
 	request.Header.Set("Authorization", "Bearer operator-secret")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if body := response.Body.String(); !strings.Contains(body, "id: 7\n") || !strings.Contains(body, `"kind":"snapshot"`) {
-		t.Fatalf("initial marker stream omitted cursor 7 snapshot: %s", body)
+	if body := response.Body.String(); !strings.Contains(body, "id: 7\n") || !strings.Contains(body, `"reason":"snapshot_refresh"`) || strings.Contains(body, `"kind":"snapshot"`) {
+		t.Fatalf("initial marker stream omitted cursor 7 refresh directive: %s", body)
+	}
+	if markerService.snapshotCalls != 0 {
+		t.Fatalf("projection marker called Snapshot %d times", markerService.snapshotCalls)
 	}
 
 	delta, err := json.Marshal(episodediagnostics.DiagnosticBranchDetail{ID: "branch_2", Kind: episodediagnostics.BranchArtifact, State: episodediagnostics.BranchSucceeded})
@@ -486,6 +512,55 @@ func TestEpisodeDiagnosticsStreamReconnectsAfterSnapshotMarkerWithoutLoss(t *tes
 	reconnectHandler.ServeHTTP(reconnectResponse, reconnectRequest)
 	if body := reconnectResponse.Body.String(); strings.Contains(body, "id: 7\n") || !strings.Contains(body, "id: 8\n") {
 		t.Fatalf("reconnect lost or replayed marker cursor: %s", body)
+	}
+	if len(reconnectService.changeAfters) == 0 || reconnectService.changeAfters[0] != 7 {
+		t.Fatalf("Last-Event-ID resume cursor = %v, want first Changes after cursor 7", reconnectService.changeAfters)
+	}
+}
+
+func TestEpisodeDiagnosticsStreamOversizedDeltaFallsBackToCompactRefresh(t *testing.T) {
+	checkpoints := make([]episodediagnostics.DiagnosticCheckpointDetail, 1500)
+	for index := range checkpoints {
+		checkpoints[index].Key = strings.Repeat("checkpoint", 16)
+	}
+	operationPayload, err := json.Marshal(episodediagnostics.DiagnosticOperationDetail{ID: "oversized_operation", Checkpoints: checkpoints})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &episodeDiagnosticsHTTPServiceStub{changes: []episodediagnostics.ProjectionChange{{Cursor: 7, Ordinal: 0, Kind: episodediagnostics.StreamOperationUpdated, Payload: operationPayload}}}
+	handler := NewRouter(Options{EpisodeDiagnostics: EpisodeDiagnosticsHTTPOptions{
+		Mode: "localhost", Environment: episodediagnostics.EnvironmentLocalhost, OperatorToken: "operator-secret", Service: service,
+		StreamHeartbeatInterval: 10 * time.Millisecond, StreamPollInterval: time.Millisecond, StreamDeadline: 30 * time.Millisecond,
+	}})
+	request := httptest.NewRequest(http.MethodGet, "/_internal/episode-diagnostics/"+diagnosticTestReference+"/stream", nil)
+	request.RemoteAddr = "127.0.0.1:8080"
+	request.Header.Set("Authorization", "Bearer operator-secret")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	body := response.Body.String()
+	if strings.Contains(body, `"id":"oversized_operation"`) || !strings.Contains(body, "id: 7\n") || !strings.Contains(body, `"reason":"snapshot_refresh"`) {
+		t.Fatalf("oversized delta did not fall back to cursor 7 refresh directive: %s", body)
+	}
+	delta := diagnosticStreamDeltaFromBody(t, body)
+	if delta["kind"] != string(episodediagnostics.StreamDeltaGap) || delta["cursor"] != float64(7) {
+		t.Fatalf("oversized delta fallback = %#v", delta)
+	}
+	for _, data := range diagnosticSSEDataFromBody(body) {
+		if len(data) > diagnosticMaxSSEDataBytes {
+			t.Fatalf("serialized SSE data payload = %d bytes, limit = %d", len(data), diagnosticMaxSSEDataBytes)
+		}
+	}
+}
+
+func TestWriteDiagnosticSSERejectsOversizedDataBeforeWriting(t *testing.T) {
+	response := httptest.NewRecorder()
+	payload := map[string]string{"value": strings.Repeat("x", diagnosticMaxSSEDataBytes)}
+	err := writeDiagnosticSSE(response, "delta", "7", payload)
+	if !errors.Is(err, errDiagnosticSSEDataTooLarge) {
+		t.Fatalf("oversized SSE error = %v, want payload bound error", err)
+	}
+	if response.Body.Len() != 0 {
+		t.Fatalf("oversized SSE wrote %d bytes before validation", response.Body.Len())
 	}
 }
 
@@ -802,4 +877,29 @@ func valueOrZero(value *int64) int64 {
 		return 0
 	}
 	return *value
+}
+
+func diagnosticSSEDataFromBody(body string) [][]byte {
+	var payloads [][]byte
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "data: ") {
+			payloads = append(payloads, []byte(strings.TrimPrefix(line, "data: ")))
+		}
+	}
+	return payloads
+}
+
+func diagnosticStreamDeltaFromBody(t *testing.T, body string) map[string]any {
+	t.Helper()
+	for _, data := range diagnosticSSEDataFromBody(body) {
+		var payload map[string]any
+		if err := json.Unmarshal(data, &payload); err != nil {
+			t.Fatalf("decode SSE data: %v", err)
+		}
+		if payload["schemaVersion"] == "DiagnosticStreamDelta/v1" {
+			return payload
+		}
+	}
+	t.Fatalf("stream body omitted diagnostic delta: %s", body)
+	return nil
 }
