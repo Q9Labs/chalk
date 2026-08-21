@@ -14,4 +14,10 @@ describe("Facehash", () => {
     expect(markup).toContain('font-family="monospace"');
     expect(markup).toContain(">H</text>");
   });
+
+  it("uses a dark foreground on a light generated background", () => {
+    const markup = renderToStaticMarkup(<Facehash colors={["#f8fafc"]} interactive={false} name="Nora" />);
+
+    expect(markup).toContain("color:#111827");
+  });
 });

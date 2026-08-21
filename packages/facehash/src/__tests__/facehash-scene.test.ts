@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createFacehashScene, getColor } from "../index";
+import { createFacehashScene, getColor, getForegroundColor } from "../index";
 
 describe("facehash scene", () => {
   it("stays deterministic for the same name", () => {
@@ -39,5 +39,10 @@ describe("facehash scene", () => {
 
   it("falls back to the default palette safely", () => {
     expect(getColor([], 7)).toBe("#3b82f6");
+  });
+
+  it("keeps facial features readable on light and dark backgrounds", () => {
+    expect(getForegroundColor("#f8fafc")).toBe("#111827");
+    expect(getForegroundColor("#315f72")).toBe("#ffffff");
   });
 });

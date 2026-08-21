@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { createFacehashScene, getColor, type Intensity3D, type Variant } from "./core/index";
+import { createFacehashScene, getColor, getForegroundColor, type Intensity3D, type Variant } from "./core/index";
 import { FacehashSceneSvgNative } from "./FacehashSceneSvg.native";
 
 export interface FacehashNativeProps {
@@ -34,11 +34,12 @@ export function FacehashNative({ name, size = 40, variant = "gradient", intensit
     [colorsLength, intensity3d, interactive, isPressed, name],
   );
   const backgroundColor = getColor(colors, scene.data.colorIndex);
+  const foregroundColor = getForegroundColor(backgroundColor);
   const idPrefix = React.useMemo(() => sanitizeId(`facehash-native-${name}`), [name]);
 
   return (
     <Pressable onPressIn={interactive ? () => setIsPressed(true) : undefined} onPressOut={interactive ? () => setIsPressed(false) : undefined} style={[styles.container, { width: size, height: size, borderRadius: size / 2, backgroundColor }]} testID={testID}>
-      <FacehashSceneSvgNative backgroundColor={backgroundColor} enableBlink={enableBlink} idPrefix={idPrefix} scene={scene} showInitial={showInitial && !renderMouth} size={size} variant={variant} />
+      <FacehashSceneSvgNative backgroundColor={backgroundColor} enableBlink={enableBlink} foregroundColor={foregroundColor} idPrefix={idPrefix} scene={scene} showInitial={showInitial && !renderMouth} size={size} variant={variant} />
       {renderMouth ? <View style={styles.mouth}>{renderMouth()}</View> : null}
     </Pressable>
   );

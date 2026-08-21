@@ -44,6 +44,25 @@ const SPHERE_POSITIONS = [
 export const DEFAULT_COLORS = ["#ec4899", "#f59e0b", "#3b82f6", "#f97316", "#10b981"] as const;
 
 const FALLBACK_COLOR = "#ec4899";
+const DARK_FOREGROUND = "#111827";
+const LIGHT_FOREGROUND = "#ffffff";
+
+function parseHexColor(color: string): readonly [number, number, number] | undefined {
+  const value = color.trim().replace(/^#/, "");
+  const expanded = value.length === 3 ? [...value].map((character) => `${character}${character}`).join("") : value;
+  if (!/^[\da-f]{6}$/i.test(expanded)) return undefined;
+
+  return [Number.parseInt(expanded.slice(0, 2), 16), Number.parseInt(expanded.slice(2, 4), 16), Number.parseInt(expanded.slice(4, 6), 16)];
+}
+
+function relativeLuminance(color: readonly [number, number, number]): number {
+  const linearize = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+
+  return 0.2126 * linearize(color[0]) + 0.7152 * linearize(color[1]) + 0.0722 * linearize(color[2]);
+}
 
 export function computeFacehash(options: ComputeFacehashOptions): FacehashData {
   const { name, colorsLength = DEFAULT_COLORS.length } = options;
@@ -74,4 +93,16 @@ export function computeFacehash(options: ComputeFacehashOptions): FacehashData {
 export function getColor(colors: readonly string[] | undefined, index: number): string {
   const palette = colors && colors.length > 0 ? colors : DEFAULT_COLORS;
   return palette[index % palette.length] ?? FALLBACK_COLOR;
+}
+
+export function getForegroundColor(backgroundColor: string): string {
+  const background = parseHexColor(backgroundColor);
+  const dark = parseHexColor(DARK_FOREGROUND);
+  const light = parseHexColor(LIGHT_FOREGROUND);
+  if (!background || !dark || !light) return LIGHT_FOREGROUND;
+
+  const backgroundLuminance = relativeLuminance(background);
+  const darkContrast = (backgroundLuminance + 0.05) / (relativeLuminance(dark) + 0.05);
+  const lightContrast = (relativeLuminance(light) + 0.05) / (backgroundLuminance + 0.05);
+  return darkContrast > lightContrast ? DARK_FOREGROUND : LIGHT_FOREGROUND;
 }

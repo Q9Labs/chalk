@@ -6,6 +6,7 @@ import { useBlinkTransform } from "./native-blink";
 type FacehashSceneSvgNativeProps = {
   backgroundColor: string;
   enableBlink?: boolean;
+  foregroundColor: string;
   idPrefix: string;
   scene: FacehashScene;
   showInitial: boolean;
@@ -13,17 +14,17 @@ type FacehashSceneSvgNativeProps = {
   variant: Variant;
 };
 
-function renderEye(paths: string[], transform: string | undefined): ReactNode {
+function renderEye(paths: string[], transform: string | undefined, foregroundColor: string): ReactNode {
   return (
     <G transform={transform}>
       {paths.map((path) => (
-        <Path d={path} fill="white" key={path} />
+        <Path d={path} fill={foregroundColor} key={path} />
       ))}
     </G>
   );
 }
 
-export function FacehashSceneSvgNative({ backgroundColor, enableBlink = false, idPrefix, scene, showInitial, size, variant }: FacehashSceneSvgNativeProps): React.JSX.Element {
+export function FacehashSceneSvgNative({ backgroundColor, enableBlink = false, foregroundColor, idPrefix, scene, showInitial, size, variant }: FacehashSceneSvgNativeProps): React.JSX.Element {
   const leftBlinkTransform = useBlinkTransform(enableBlink, scene.data.blinkTimings.left, scene.faceGeometry.leftEyeAnchor);
   const rightBlinkTransform = useBlinkTransform(enableBlink, scene.data.blinkTimings.right, scene.faceGeometry.rightEyeAnchor);
   const gradientId = `${idPrefix}-gradient`;
@@ -42,12 +43,12 @@ export function FacehashSceneSvgNative({ backgroundColor, enableBlink = false, i
 
       <G transform={scene.projection.svgTransform}>
         <G transform={`translate(${scene.faceBox.x} ${scene.faceBox.y}) scale(${scene.faceBox.width / scene.faceGeometry.viewBox.width} ${scene.faceBox.height / scene.faceGeometry.viewBox.height})`}>
-          {renderEye(scene.faceGeometry.leftEyePaths, leftBlinkTransform)}
-          {renderEye(scene.faceGeometry.rightEyePaths, rightBlinkTransform)}
+          {renderEye(scene.faceGeometry.leftEyePaths, leftBlinkTransform, foregroundColor)}
+          {renderEye(scene.faceGeometry.rightEyePaths, rightBlinkTransform, foregroundColor)}
         </G>
 
         {showInitial ? (
-          <SvgText alignmentBaseline="middle" fill="white" fontFamily="monospace" fontSize={scene.initialLayout.fontSize} fontWeight="700" textAnchor="middle" x={scene.initialLayout.x} y={scene.initialLayout.y}>
+          <SvgText alignmentBaseline="middle" fill={foregroundColor} fontFamily="monospace" fontSize={scene.initialLayout.fontSize} fontWeight="700" textAnchor="middle" x={scene.initialLayout.x} y={scene.initialLayout.y}>
             {scene.data.initial}
           </SvgText>
         ) : null}
