@@ -11,6 +11,103 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelDashboardParticipantJoin = `-- name: CancelDashboardParticipantJoin :one
+with superseded_intent as (
+    update sync_lifecycle_intents
+    set
+        status = 'superseded',
+        terminal_reason = 'participant_already_terminal',
+        completed_at = now(),
+        attempt_count = least(attempt_count::bigint + 1, 2147483647)::integer,
+        last_error_code = null
+    where
+        sync_lifecycle_intents.tenant_id = $1
+        and sync_lifecycle_intents.space_id = $2
+        and sync_lifecycle_intents.episode_id = $3
+        and sync_lifecycle_intents.participant_id = $4
+        and sync_lifecycle_intents.participant_generation = $5
+        and sync_lifecycle_intents.intent_name = 'participant_joined'
+        and sync_lifecycle_intents.status = 'pending'
+    returning lifecycle_intent_id
+), released_control as (
+    update sync_episode_control
+    set
+        snapshot_reserved_bytes = snapshot_reserved_bytes - $6,
+        lifecycle_reserved_events = lifecycle_reserved_events - 2,
+        lifecycle_reserved_bytes = lifecycle_reserved_bytes - 2 * $7::bigint,
+        lifecycle_reserved_intents = lifecycle_reserved_intents - 1,
+        lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes - $7::bigint,
+        updated_at = now()
+    where
+        sync_episode_control.tenant_id = $1
+        and sync_episode_control.space_id = $2
+        and sync_episode_control.episode_id = $3
+        and sync_episode_control.snapshot_reserved_bytes >= $6
+        and sync_episode_control.lifecycle_reserved_events >= 2
+        and sync_episode_control.lifecycle_reserved_bytes >= 2 * $7::bigint
+        and sync_episode_control.lifecycle_reserved_intents >= 1
+        and sync_episode_control.lifecycle_reserved_intent_bytes >= $7::bigint
+        and exists (select 1 from superseded_intent)
+    returning episode_id
+)
+update participants
+set
+    status = 'left',
+    left_at = coalesce(left_at, now()),
+    updated_at = now()
+where
+    participants.tenant_id = $1
+    and participants.space_id = $2
+    and participants.episode_id = $3
+    and participants.id = $4
+    and participants.generation = $5
+    and participants.status = 'joining'
+    and exists (select 1 from released_control)
+returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, generation, status, role, joined_at, left_at, updated_at, created_at
+`
+
+type CancelDashboardParticipantJoinParams struct {
+	TenantID                 pgtype.UUID `json:"tenant_id"`
+	SpaceID                  pgtype.UUID `json:"space_id"`
+	EpisodeID                pgtype.UUID `json:"episode_id"`
+	ParticipantID            pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration    int64       `json:"participant_generation"`
+	SnapshotReservationBytes int64       `json:"snapshot_reservation_bytes"`
+	ReservationBytes         int64       `json:"reservation_bytes"`
+}
+
+func (q *Queries) CancelDashboardParticipantJoin(ctx context.Context, arg CancelDashboardParticipantJoinParams) (Participant, error) {
+	row := q.db.QueryRow(ctx, cancelDashboardParticipantJoin,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+		arg.SnapshotReservationBytes,
+		arg.ReservationBytes,
+	)
+	var i Participant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Metadata,
+		&i.Capabilities,
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.AccountID,
+		&i.IdentityID,
+		&i.Generation,
+		&i.Status,
+		&i.Role,
+		&i.JoinedAt,
+		&i.LeftAt,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createDashboardLifecycleParticipant = `-- name: CreateDashboardLifecycleParticipant :one
 insert into participants (
     id, name, metadata, capabilities, role,

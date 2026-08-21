@@ -73,3 +73,57 @@ insert into participants (
     1, 'joining'
 )
 returning *;
+
+-- name: CancelDashboardParticipantJoin :one
+with superseded_intent as (
+    update sync_lifecycle_intents
+    set
+        status = 'superseded',
+        terminal_reason = 'participant_already_terminal',
+        completed_at = now(),
+        attempt_count = least(attempt_count::bigint + 1, 2147483647)::integer,
+        last_error_code = null
+    where
+        sync_lifecycle_intents.tenant_id = sqlc.arg(tenant_id)
+        and sync_lifecycle_intents.space_id = sqlc.arg(space_id)
+        and sync_lifecycle_intents.episode_id = sqlc.arg(episode_id)
+        and sync_lifecycle_intents.participant_id = sqlc.arg(participant_id)
+        and sync_lifecycle_intents.participant_generation = sqlc.arg(participant_generation)
+        and sync_lifecycle_intents.intent_name = 'participant_joined'
+        and sync_lifecycle_intents.status = 'pending'
+    returning lifecycle_intent_id
+), released_control as (
+    update sync_episode_control
+    set
+        snapshot_reserved_bytes = snapshot_reserved_bytes - sqlc.arg(snapshot_reservation_bytes),
+        lifecycle_reserved_events = lifecycle_reserved_events - 2,
+        lifecycle_reserved_bytes = lifecycle_reserved_bytes - 2 * sqlc.arg(reservation_bytes)::bigint,
+        lifecycle_reserved_intents = lifecycle_reserved_intents - 1,
+        lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes - sqlc.arg(reservation_bytes)::bigint,
+        updated_at = now()
+    where
+        sync_episode_control.tenant_id = sqlc.arg(tenant_id)
+        and sync_episode_control.space_id = sqlc.arg(space_id)
+        and sync_episode_control.episode_id = sqlc.arg(episode_id)
+        and sync_episode_control.snapshot_reserved_bytes >= sqlc.arg(snapshot_reservation_bytes)
+        and sync_episode_control.lifecycle_reserved_events >= 2
+        and sync_episode_control.lifecycle_reserved_bytes >= 2 * sqlc.arg(reservation_bytes)::bigint
+        and sync_episode_control.lifecycle_reserved_intents >= 1
+        and sync_episode_control.lifecycle_reserved_intent_bytes >= sqlc.arg(reservation_bytes)::bigint
+        and exists (select 1 from superseded_intent)
+    returning episode_id
+)
+update participants
+set
+    status = 'left',
+    left_at = coalesce(left_at, now()),
+    updated_at = now()
+where
+    participants.tenant_id = sqlc.arg(tenant_id)
+    and participants.space_id = sqlc.arg(space_id)
+    and participants.episode_id = sqlc.arg(episode_id)
+    and participants.id = sqlc.arg(participant_id)
+    and participants.generation = sqlc.arg(participant_generation)
+    and participants.status = 'joining'
+    and exists (select 1 from released_control)
+returning *;
