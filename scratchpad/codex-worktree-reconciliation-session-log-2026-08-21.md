@@ -20,3 +20,11 @@
 - Rebuilt the restored work into scoped conventional commits for repository hygiene, API join cleanup, client media errors, Facehash contrast, shared logo surfaces, the React SDK redesign, SDK preview parity, web Entrance integration, diagnostics, local development, bounded gate resources, and agent guidance.
 - Used interactive staging for each scope and checked each staged diff for whitespace errors before commit.
 - The staged-only pre-commit gate read unrelated unstaged vocabulary changes, so isolated slices could not pass independently. Recorded the gate isolation failure and used `--no-verify` for the scoped commits; the complete final tree still requires the canonical gate before push.
+
+## 2026-08-21: Browser dogfood completed
+
+- Started a fresh Vite instance on `127.0.0.1:3081` and verified the Entrance and Space preview flows in Helium instead of relying on the older long-running local servers.
+- Fixed a preview Episode timer that compared a fixed fixture timestamp with the current clock, then verified the corrected `00:19` range in the live Space header.
+- Removed duplicate Info and Settings dock actions, kept controlled Settings in one modal without an empty drawer, routed pending Admission requests through Participants, and restored reaction-picker toggling.
+- Focused verification passed for all 45 web preview tests, all 49 selected React integration tests, the five dev adapter tests, and the language vocabulary ratchet. Browser reloads produced no new warnings or errors after the fixes.
+- Saved final visual evidence to `scratchpad/screenshots/final-space-preview-20260821.png`; the ignored screenshots directory remains outside the public commit set.
