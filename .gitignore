@@ -42,13 +42,13 @@ scratchpad/.stage-shot.mjs
 scratchpad/prod-repro*.mjs
 scratchpad/prod-repro*.png
 scratchpad/sdk-core-chat-only.patch
-scratchpad/prod-owner-credential-discovery-session-log-*.md
-scratchpad/production-observability-secrets-session-log-*.md
-scratchpad/daily-brief-token-rotation-session-log-*.md
+scratchpad/prod-owner-credential-discovery-*.md
+scratchpad/production-observability-secrets-*.md
+scratchpad/daily-brief-token-rotation-*.md
 scratchpad/chalk-feedback-spec-*.md
-scratchpad/end-to-end-ship-session-log-*.md
-scratchpad/managed-episode-live-runtime-controller-session-log-*.md
-scratchpad/meeting-lifecycle-trace-codex-*.md
+scratchpad/end-to-end-ship-*.md
+scratchpad/managed-episode-live-runtime-controller-*.md
+scratchpad/*-lifecycle-trace-codex-*.md
 
 # Private operational scratchpad material
 scratchpad/access-grant-diagnostics-*.md
@@ -58,10 +58,10 @@ scratchpad/chalk-join-trace-rollback-*.md
 scratchpad/claude-diagnostics-ui-*.md
 scratchpad/codex-episode-diagnostics-reconnect-*.md
 scratchpad/diagnostics-backfill-*.md
-scratchpad/meeting-lifecycle-*.md
-scratchpad/meeting-reliability-*.md
+scratchpad/*-lifecycle-*.md
+scratchpad/*-reliability-*.md
 scratchpad/mobile-path-trace-*.md
-scratchpad/room-join-call-stack-*.md
+scratchpad/*-join-call-stack-*.md
 scratchpad/sync-diagnostics-*.md
 scratchpad/web-observability-audit-*.md
 scratchpad/chalk-recording-*.md

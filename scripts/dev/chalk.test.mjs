@@ -118,13 +118,10 @@ function response(status, body) {
 test("local adapter discovery finds the broker binding and web join route", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-discovery-test-"));
   try {
-    const legacyBrokerDirectory = join(root, "infrastructure", "meeting-broker");
     const brokerDirectory = join(root, "infrastructure", "episode-broker");
     const routesDirectory = join(root, "apps", "web", "src", "routes");
-    await mkdir(legacyBrokerDirectory, { recursive: true });
     await mkdir(brokerDirectory, { recursive: true });
     await mkdir(routesDirectory, { recursive: true });
-    await writeFile(join(legacyBrokerDirectory, "wrangler.toml"), '[routes]\npattern = "chalk.local/local-chalk/*"\n[secrets]\nrequired = ["CHALK_API_KEY", "CHALK_ROOM_ID", "CHALK_TENANT_ID"]\n');
     await writeFile(join(brokerDirectory, "wrangler.toml"), '[routes]\npattern = "chalk.local/local-chalk/*"\n[secrets]\nrequired = ["CHALK_API_KEY", "CHALK_SPACE_ID", "CHALK_TENANT_ID"]\n');
     await writeFile(join(routesDirectory, "space.tsx"), 'import { SpacePage } from "../../components/space/SpacePage";\nexport const Route = createFileRoute("/space")({ component: SpacePage });\n');
     assert.deepEqual(discoverBrokerRuntime(root), { configPath: join(brokerDirectory, "wrangler.toml"), configName: "wrangler.toml", directory: brokerDirectory, spaceBindingName: "CHALK_SPACE_ID" });
