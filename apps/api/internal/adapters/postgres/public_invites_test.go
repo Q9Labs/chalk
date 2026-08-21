@@ -160,7 +160,7 @@ func TestPublicInviteRepositoryCreateAdmissionRequestReplaysByArrival(t *testing
 	}
 	stub := &publicInviteQuerierStub{lockAdmissionArrival: arrival, createdAdmissionRequest: existing}
 	result, err := NewPublicInviteRepository(stub).CreateAdmissionRequest(context.Background(), publicinvites.AdmissionRequest{
-		RequestHandle: newRequestID, ArrivalHandle: arrivalID, TenantID: tenantID, SpaceID: spaceID,
+		RequestHandle: newRequestID, ArrivalHandle: arrivalID,
 		DisplayName: "Guest", State: publicinvites.AdmissionRequestPending, RequestedAt: now, ExpiresAt: future,
 	})
 	if err != nil {
@@ -168,6 +168,9 @@ func TestPublicInviteRepositoryCreateAdmissionRequestReplaysByArrival(t *testing
 	}
 	if result.RequestHandle != existingRequestID || stub.createdAdmissionRequestParams.RequestHandle != uuid(newRequestID) {
 		t.Fatalf("replay result = %#v, params = %#v", result, stub.createdAdmissionRequestParams)
+	}
+	if stub.createdAdmissionRequestParams.TenantID != uuid(tenantID) || stub.createdAdmissionRequestParams.SpaceID != uuid(spaceID) {
+		t.Fatalf("admission request scope = %v/%v, want locked arrival scope", stub.createdAdmissionRequestParams.TenantID, stub.createdAdmissionRequestParams.SpaceID)
 	}
 }
 

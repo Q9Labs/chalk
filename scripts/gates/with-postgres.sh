@@ -173,6 +173,7 @@ export_database_url() {
   export CHALK_CHAT_ATTACHMENT_TEST_DATABASE_URL="${database_url}"
   export CHALK_EPISODE_DIAGNOSTICS_TEST_DATABASE_URL="${database_url}"
   export CHALK_PROVIDER_BRIDGE_E2E_DATABASE_URL="${database_url}"
+  export CHALK_PUBLIC_INVITES_TEST_DATABASE_URL="${database_url}"
   export CHALK_SPACE_LIFECYCLE_TEST_DATABASE_URL="${database_url}"
   export CHALK_STATUS_TEST_DATABASE_URL="${database_url}"
   export CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL="${database_url}"

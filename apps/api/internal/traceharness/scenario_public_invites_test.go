@@ -18,6 +18,8 @@ func TestRunRoutePublicInviteObservabilityScenario(t *testing.T) {
 	}
 	assertEvent(t, result.Events, "http", "POST /v1/public/space-invite-arrivals")
 	assertEvent(t, result.Events, "service", "publicinvites.Runtime.Arrive")
+	assertEvent(t, result.Events, "repository", "PublicInviteRepository.CreateArrival")
+	assertEvent(t, result.Events, "repository", "PublicInviteRepository.CreateAdmissionRequest")
 
 	encoded, err := json.Marshal(result.Events)
 	if err != nil {

@@ -75,23 +75,36 @@ func (s tracedPublicInviteService) CreatePublicSpace(context.Context, publicinvi
 }
 
 func (s tracedPublicInviteService) Arrive(_ context.Context, _ publicinvites.PublicInviteArrivalInput) (publicinvites.PublicSpaceArrival, error) {
-	span := s.recorder.Start("service", "publicinvites.Runtime.Arrive", "resolve the public invite and admit the Guest", map[string]any{
+	span := s.recorder.Start("service", "publicinvites.Runtime.Arrive", "resolve the public invite and create a knock arrival", map[string]any{
 		"identity":     "guest",
 		"invite_token": "[redacted]",
 		"display_name": "[redacted]",
 		"credential":   "[redacted]",
-		"outcome":      "succeeded",
 	})
-	span.End("public arrival admitted", map[string]any{
-		"state":    string(publicinvites.ArrivalAdmitted),
+	arrival := s.recorder.Start("repository", "PublicInviteRepository.CreateArrival", "persist the idempotent pending arrival", map[string]any{
+		"request_key": "public-invite-trace-0001",
+	})
+	arrival.End("pending arrival committed", map[string]any{
+		"state": string(publicinvites.ArrivalPending),
+	}, nil)
+	admission := s.recorder.Start("repository", "PublicInviteRepository.CreateAdmissionRequest", "lock the arrival and derive its Tenant and Space scope", map[string]any{
+		"scope_source": "locked_arrival",
+	})
+	admission.End("admission request committed", map[string]any{
+		"state":    string(publicinvites.AdmissionRequestPending),
+		"replayed": false,
+	}, nil)
+	span.End("public arrival is waiting for admission", map[string]any{
+		"state":    string(publicinvites.ArrivalPending),
 		"identity": string(publicinvites.IdentityGuest),
 	}, nil)
-	presentation := publicinvites.PublicSpacePresentation{Name: "[redacted]", Slug: "trace-space", AdmissionMode: publicinvites.AdmissionOpen}
+	presentation := publicinvites.PublicSpacePresentation{Name: "[redacted]", Slug: "trace-space", AdmissionMode: publicinvites.AdmissionKnock}
 	return publicinvites.PublicSpaceArrival{
-		State:         publicinvites.ArrivalAdmitted,
+		State:         publicinvites.ArrivalPending,
 		Presentation:  &presentation,
 		Identity:      publicinvites.IdentityGuest,
 		ArrivalHandle: "44444444-4444-4444-8444-444444444444",
+		RetryAfter:    60,
 	}, nil
 }
 

@@ -139,6 +139,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made knock-mode Space arrivals create and replay their admission request from
+  the locked arrival's Tenant and Space scope instead of returning a false
+  idempotency conflict after the arrival was saved.
 - Kept a newly created public Space admitted while its index URL becomes the
   canonical invite route, so that route ownership cannot leave the creator and
   archive the Space before another Participant arrives.

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -10,6 +11,85 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestPublicInviteAdmissionRequestUsesLockedArrivalScope(t *testing.T) {
+	databaseURL := os.Getenv("CHALK_PUBLIC_INVITES_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("CHALK_PUBLIC_INVITES_TEST_DATABASE_URL is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		t.Fatal(err)
+	}
+
+	tenantID, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spaceID, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrivalID, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug := "public-invite-admission-" + spaceID.String()[:8]
+	inviteHandle := bytesOf(0x21, publicinvites.HandleBytes)
+	now := time.Now().UTC()
+	future := now.Add(time.Hour)
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+		_, _ = pool.Exec(cleanupCtx, `delete from space_public_admission_requests where tenant_id = $1 and space_id = $2`, uuid(tenantID), uuid(spaceID))
+		_, _ = pool.Exec(cleanupCtx, `delete from space_public_arrivals where tenant_id = $1 and space_id = $2`, uuid(tenantID), uuid(spaceID))
+		_, _ = pool.Exec(cleanupCtx, `delete from space_public_invites where tenant_id = $1 and space_id = $2`, uuid(tenantID), uuid(spaceID))
+		_, _ = pool.Exec(cleanupCtx, `delete from spaces where tenant_id = $1 and id = $2`, uuid(tenantID), uuid(spaceID))
+		_, _ = pool.Exec(cleanupCtx, `delete from tenants where id = $1`, uuid(tenantID))
+		pool.Close()
+	})
+	if _, err := pool.Exec(ctx, `insert into tenants (id, name) values ($1, $2)`, uuid(tenantID), "Public invite admission integration"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `insert into spaces (id, tenant_id, name, slug, media_plane) values ($1, $2, $3, $4, 'cf_rtk')`, uuid(spaceID), uuid(tenantID), "Public invite admission integration", slug); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `insert into space_public_invites (tenant_id, space_id, handle, generation, state_epoch, enabled, public_role, admission_mode) values ($1, $2, $3, 1, 1, true, 'collaborator', 'knock')`, uuid(tenantID), uuid(spaceID), inviteHandle); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `insert into space_public_arrivals (
+		arrival_handle, tenant_id, space_id, invite_handle, invite_generation, invite_state_epoch,
+		identity_mode, display_name, guest_credential_hash, idempotency_key,
+		idempotency_fingerprint, state, expires_at
+	) values ($1, $2, $3, $4, 1, 1, 'guest', 'jack', $5, $6, $7, 'pending', $8)`,
+		uuid(arrivalID), uuid(tenantID), uuid(spaceID), inviteHandle, bytesOf(0x31, 32),
+		"arrival-request-integration", bytesOf(0x41, 32), future,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	service := publicinvites.NewService(NewPublicInviteRepositoryWithPool(pool)).WithClock(func() time.Time { return now })
+	created, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrivalID, DisplayName: " jack "})
+	if err != nil {
+		t.Fatalf("create admission request: %v", err)
+	}
+	replayed, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrivalID, DisplayName: "jack"})
+	if err != nil {
+		t.Fatalf("replay admission request: %v", err)
+	}
+	if created.RequestHandle != replayed.RequestHandle || created.TenantID != tenantID || created.SpaceID != spaceID {
+		t.Fatalf("created/replayed admission request scope = %+v / %+v", created, replayed)
+	}
+	if _, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrivalID, DisplayName: "jill"}); !errors.Is(err, publicinvites.ErrIdempotencyConflict) {
+		t.Fatalf("changed admission request error = %v, want idempotency conflict", err)
+	}
+}
 
 func TestPublicInviteRepositoryLifecycleRetryRoundTrip(t *testing.T) {
 	databaseURL := os.Getenv("CHALK_PUBLIC_INVITES_TEST_DATABASE_URL")
@@ -176,7 +256,7 @@ func TestPublicInviteRepositoryDueLifecycleUsesCreatorArrival(t *testing.T) {
 	if _, err := pool.Exec(ctx, arrivalInsert, uuid(creatorArrivalID), uuid(tenantID), uuid(spaceID), inviteHandle, "Creator", credentialHash, "creator-arrival", fingerprint, "pending", future, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, arrivalInsert, uuid(otherArrivalID), uuid(tenantID), uuid(spaceID), inviteHandle, "Other", credentialHash, "other-arrival", bytesOf(0x62, 32), "left", future, "left", now); err != nil {
+	if _, err := pool.Exec(ctx, arrivalInsert, uuid(otherArrivalID), uuid(tenantID), uuid(spaceID), inviteHandle, "Other", credentialHash, "other-arrival", bytesOf(0x62, 32), "rejected", future, "rejected", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,7 +274,7 @@ func TestPublicInviteRepositoryDueLifecycleUsesCreatorArrival(t *testing.T) {
 	if len(due) != 0 {
 		t.Fatalf("different terminal arrival triggered lifecycle: %+v", due)
 	}
-	if _, err := pool.Exec(ctx, `update space_public_arrivals set state = 'left', terminal_reason = 'left', terminal_at = now() where tenant_id = $1 and space_id = $2 and arrival_handle = $3`, uuid(tenantID), uuid(spaceID), uuid(creatorArrivalID)); err != nil {
+	if _, err := pool.Exec(ctx, `update space_public_arrivals set state = 'rejected', terminal_reason = 'rejected', terminal_at = now() where tenant_id = $1 and space_id = $2 and arrival_handle = $3`, uuid(tenantID), uuid(spaceID), uuid(creatorArrivalID)); err != nil {
 		t.Fatal(err)
 	}
 	due, err = repository.ListDueAutoLifecycles(ctx, now, 10)

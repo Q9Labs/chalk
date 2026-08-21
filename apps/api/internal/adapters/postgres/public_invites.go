@@ -351,6 +351,8 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if publicinvites.ArrivalState(arrival.State) != publicinvites.ArrivalPending {
 			return publicinvites.ErrAdmissionRequestTerminal
 		}
+		request.TenantID = utilities.IDFromBytes(arrival.TenantID.Bytes)
+		request.SpaceID = utilities.IDFromBytes(arrival.SpaceID.Bytes)
 		row, err := queries.CreateSpacePublicAdmissionRequest(ctx, sqlc.CreateSpacePublicAdmissionRequestParams{
 			RequestHandle: uuid(request.RequestHandle), ArrivalHandle: uuid(request.ArrivalHandle),
 			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, DisplayName: request.DisplayName,
