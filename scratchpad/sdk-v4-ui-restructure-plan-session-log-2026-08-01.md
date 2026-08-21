@@ -1,0 +1,4 @@
+# SDK V4 UI restructure plan session log
+
+- 2026-08-01 00:00 PKT: Hasan confirmed the V4 boundary: preserve the V3 user experience, limit implementation work to the React and React Native UI packages, and use V2 structure as a design rule rather than reusing its code. Began a read-only plan grounded in the current package layouts; existing shared-worktree edits remain out of scope.
+- 2026-08-01 09:30:14 PKT: Corrected the initial log timestamp. Current composition roots confirm the migration shape: React `SessionMeetingRoom` owns meeting state, commands, panel state, whiteboard wiring, and layout while React Native `NativeVideoConference` owns the lobby-to-session-to-end flow. V4 should replace these roots with feature-owned coordinators and retain only V3 visual treatment through small prop-driven views.

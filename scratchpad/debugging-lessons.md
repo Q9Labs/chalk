@@ -245,3 +245,11 @@ A top-level `404.html` can return the correct app shell with HTTP 404 while the
 client router later renders the route. Do not emit that file for a Cloudflare
 Pages SPA that needs automatic deep-link fallback, and make deployment checks
 assert that a real dynamic document URL returns both HTML and HTTP 200.
+
+## Reconcile Staging Inventory Before Cutover
+
+A fail-closed preflight should verify the exact host staging roots recorded by
+the previous attempt before it removes or reuses any root. If a required input
+or bundle root is absent, keep the live runtime running and stop before the
+downtime window; a generic remote-command exit is not enough evidence to
+continue safely.
