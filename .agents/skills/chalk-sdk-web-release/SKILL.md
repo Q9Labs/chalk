@@ -1,6 +1,6 @@
 ---
 name: chalk-sdk-web-release
-description: "used when Hassan asks for shipping the SDK packages or the web application"
+description: "used when user asks for shipping the SDK packages or the web application"
 ---
 
 # Chalk SDK and Web Release
