@@ -210,6 +210,9 @@ domains:
     - capability: "Server-only Promise SDK for Spaces, Episodes, AccessGrants, and API keys"
       done: true
       evidence: ["sdks/typescript/client/src/server", "sdks/typescript/client/scripts/check-server-package.mjs"]
+    - capability: "Public `appName` client identity flows from SDK options through the transport to server spans and logs"
+      done: false
+      evidence: ["sdks/typescript/client/src/client.ts", "sdks/typescript/react/src/components/chalk/Chalk.tsx", "apps/api/internal/httpapi/middleware.go"]
     - capability: "All public API routes are represented in OpenAPI and generated SDKs"
       done: false
       evidence: ["apps/api/AGENTS.md"]

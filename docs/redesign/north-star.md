@@ -79,6 +79,8 @@ export function SpaceSurface({ getAccess }: { getAccess: GetAccess }) {
 
 For custom UI, create a `SpaceClient`, pass it to `ChalkProvider`, and read the closed hook set: `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and `useCan`.
 
+An embedding customer can reuse one API key across several products, so the SDK carries an optional **app name**: a static label for the calling application. It is one top-level `appName` string with the same name on `createChalkEffectClient`, `createSpaceClient`, and `<Chalk />`, and an optional `app` on an AccessGrant request so the Episode and Participant inherit it. It is deliberately not telemetry configuration: telemetry options cover per-request correlation and exporter setup, while the app name is client identity that must travel even when telemetry is off. The transport sends it beside the journey ID, and the API stamps it on request spans and logs. Because it becomes a metric and log dimension, the server bounds its cardinality: trimmed, normalized to `[a-z0-9._-]`, capped near 64 characters, and dropped when empty.
+
 ## Roles and capabilities
 
 The system checks **Capabilities**, while a customer names bundles as **Roles**. The default role bundles are `owner`, `collaborator`, and `observer`; a customer can define another name without changing enforcement. `Permission` is reserved for OS and browser device grants.
