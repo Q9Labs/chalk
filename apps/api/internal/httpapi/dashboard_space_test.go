@@ -24,6 +24,8 @@ type dashboardLifecycleService struct {
 	findErr     error
 	leaveErr    error
 	leaveInput  episodes.SelfLeaveInput
+	leaveCtxErr error
+	leaveTimed  bool
 	joinCalled  bool
 	findCalled  bool
 	leaveCalled bool
@@ -37,9 +39,11 @@ func (s *dashboardLifecycleService) FindSelf(_ context.Context, _ episodes.SelfA
 	s.findCalled = true
 	return s.findResult, s.findErr
 }
-func (s *dashboardLifecycleService) LeaveSelf(_ context.Context, input episodes.SelfLeaveInput) (episodes.SelfLeaveResult, error) {
+func (s *dashboardLifecycleService) LeaveSelf(ctx context.Context, input episodes.SelfLeaveInput) (episodes.SelfLeaveResult, error) {
 	s.leaveCalled = true
 	s.leaveInput = input
+	s.leaveCtxErr = ctx.Err()
+	_, s.leaveTimed = ctx.Deadline()
 	return episodes.SelfLeaveResult{}, s.leaveErr
 }
 
@@ -114,23 +118,30 @@ func TestDashboardSpaceSelfJoinCleansUpWhenGrantPreparationFails(t *testing.T) {
 	fixture := newAccessGrantFixture(t)
 	service := &dashboardLifecycleService{
 		joinResult: episodes.SelfJoinResult{
-			Episode:     episodes.Episode{TenantID: fixture.tenantID, SpaceID: fixture.spaceID, ID: fixture.episodeID, Status: episodes.EpisodeStatusActive},
-			Participant: episodes.Participant{ID: fixture.participantID, TenantID: fixture.tenantID, SpaceID: fixture.spaceID, EpisodeID: fixture.episodeID, Generation: 7, Status: episodes.ParticipantStatusJoining},
-			Intent:      episodes.Intent{ID: mustTenantID(t, "55555555-5555-4555-8555-555555555555"), IntentName: episodes.IntentParticipantJoined},
+			Episode:            episodes.Episode{TenantID: fixture.tenantID, SpaceID: fixture.spaceID, ID: fixture.episodeID, Status: episodes.EpisodeStatusActive},
+			Participant:        episodes.Participant{ID: fixture.participantID, TenantID: fixture.tenantID, SpaceID: fixture.spaceID, EpisodeID: fixture.episodeID, Generation: 7, Status: episodes.ParticipantStatusJoining},
+			Intent:             episodes.Intent{ID: mustTenantID(t, "55555555-5555-4555-8555-555555555555"), IntentName: episodes.IntentParticipantJoined},
+			ParticipantCreated: true,
 		},
 	}
+	var cancelRequest context.CancelFunc = func() {}
 	options := authenticatedOptions(t, httpapi.Options{
 		Episodes: service,
 		SyncTokens: syncTokenIssuerFunc(func(context.Context, synctokens.Input) (synctokens.Token, error) {
 			return synctokens.Token{Value: "sync-dashboard", ExpiresAt: fixtureExpiry()}, nil
 		}),
 		ParticipantMediaIssuer: participantMediaIssuerFunc(func(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error) {
+			cancelRequest()
 			return accessgrants.MediaCredential{}, errors.New("media issuer unavailable")
 		}),
 		Spaces: fixture.spaceService(), Tenants: fixture.tenants(), MediaPlane: fixture.resolver(),
 	})
 
 	request := bearerRequestWithBody(http.MethodPost, dashboardSelfPath(fixture, "team-space"), authenticatedFixtureToken(), `{"display_name":"Ada"}`)
+	requestContext, cancel := context.WithCancel(request.Context())
+	defer cancel()
+	cancelRequest = cancel
+	request = request.WithContext(requestContext)
 	request.Header.Set("Idempotency-Key", "dashboard-self-join-0001")
 	response := requestWithOptionsAndRequest(t, request, options)
 
@@ -145,6 +156,36 @@ func TestDashboardSpaceSelfJoinCleansUpWhenGrantPreparationFails(t *testing.T) {
 	}
 	if service.leaveInput.Request.Key == "dashboard-self-join-0001" || len(service.leaveInput.Request.Key) < 16 {
 		t.Fatalf("cleanup request key = %q, want an independent valid key", service.leaveInput.Request.Key)
+	}
+	if service.leaveCtxErr != nil || !service.leaveTimed {
+		t.Fatalf("cleanup context error/deadline = %v/%t, want detached bounded context", service.leaveCtxErr, service.leaveTimed)
+	}
+}
+
+func TestDashboardSpaceSelfJoinDoesNotCleanUpReusedParticipantWhenGrantPreparationFails(t *testing.T) {
+	fixture := newAccessGrantFixture(t)
+	service := &dashboardLifecycleService{
+		joinResult: episodes.SelfJoinResult{
+			Episode:     episodes.Episode{TenantID: fixture.tenantID, SpaceID: fixture.spaceID, ID: fixture.episodeID, Status: episodes.EpisodeStatusActive},
+			Participant: episodes.Participant{ID: fixture.participantID, TenantID: fixture.tenantID, SpaceID: fixture.spaceID, EpisodeID: fixture.episodeID, Generation: 7, Status: episodes.ParticipantStatusJoining},
+			Intent:      episodes.Intent{ID: mustTenantID(t, "55555555-5555-4555-8555-555555555555"), IntentName: episodes.IntentParticipantJoined},
+		},
+	}
+	request := bearerRequestWithBody(http.MethodPost, dashboardSelfPath(fixture, "team-space"), authenticatedFixtureToken(), `{"display_name":"Ada"}`)
+	request.Header.Set("Idempotency-Key", "dashboard-self-join-0001")
+	response := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{
+		Episodes: service,
+		ParticipantMediaIssuer: participantMediaIssuerFunc(func(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error) {
+			return accessgrants.MediaCredential{}, errors.New("media issuer unavailable")
+		}),
+		Spaces: fixture.spaceService(), Tenants: fixture.tenants(), MediaPlane: fixture.resolver(),
+	}))
+
+	if response.Code < http.StatusInternalServerError {
+		t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
+	}
+	if service.leaveCalled {
+		t.Fatal("grant failure for a reused Participant requested cleanup")
 	}
 }
 

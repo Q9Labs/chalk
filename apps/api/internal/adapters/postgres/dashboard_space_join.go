@@ -144,7 +144,7 @@ func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes
 		if err != nil {
 			return fmt.Errorf("create dashboard participant intent: %w", err)
 		}
-		result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent), EpisodeCreated: episodeCreated}
+		result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent), EpisodeCreated: episodeCreated, ParticipantCreated: true}
 		return nil
 	})
 	if err != nil {

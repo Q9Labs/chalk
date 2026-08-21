@@ -154,10 +154,11 @@ type SelfLeaveInput struct {
 }
 
 type SelfJoinResult struct {
-	Episode        Episode
-	Participant    Participant
-	Intent         Intent
-	EpisodeCreated bool
+	Episode            Episode
+	Participant        Participant
+	Intent             Intent
+	EpisodeCreated     bool
+	ParticipantCreated bool
 }
 
 type SelfLeaveResult struct {
