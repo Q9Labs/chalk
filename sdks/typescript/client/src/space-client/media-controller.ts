@@ -419,7 +419,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (isAccessInvalid(input.cause)) return Effect.fail(input.cause);
     input.restoreIntent?.();
     const rollback = input.track ? this.#discardCaptured(input.source, input.track, input.media, input.prepared) : input.fallback;
-    const failure = isPermissionDenied(input.cause) ? captureError(input.cause, input.action, input.permissionMessage) : input.cause;
+    const captureWasUnavailable = input.action === "startScreenShare" && !input.prepared && input.track === null;
+    const failure = isPermissionDenied(input.cause) || captureWasUnavailable ? captureError(input.cause, input.action, input.permissionMessage) : input.cause;
     return rollback.pipe(Effect.andThen(Effect.sync(() => this.#publish())), Effect.andThen(Effect.fail(failure)));
   }
   #assertActivePorts(ports: ConnectionPorts, action: "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare" | "stopScreenShare"): void {
@@ -603,7 +604,7 @@ function sameDeviceList(left: MediaSlice["devices"]["microphones"], right: Media
 }
 function captureError(cause: unknown, action: "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare", permissionMessage: string): ConnectionError {
   if (isPermissionDenied(cause)) return new ConnectionError({ code: "permission_denied", action, recoverable: true, message: permissionMessage }, { cause });
-  return new ConnectionError({ code: "unsupported_environment", action, recoverable: false, message: "Media capture is unavailable" }, { cause });
+  return new ConnectionError({ code: "unsupported_environment", action, recoverable: false, message: action === "startScreenShare" ? "Screen sharing is unavailable in this browser." : "Media capture is unavailable" }, { cause });
 }
 function isPermissionDenied(cause: unknown): boolean {
   return cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "SecurityError");

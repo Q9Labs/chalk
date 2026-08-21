@@ -70,6 +70,14 @@ describe("MediaController", () => {
     await expect(harness.controller.setMicrophoneEnabled(true)).rejects.toMatchObject({ code: "media.permission_denied" });
   });
 
+  it("maps an unavailable screen-capture surface to a recoverable user-facing error", async () => {
+    const harness = createMediaControllerHarness();
+    harness.activate();
+    harness.getDisplayMedia.mockRejectedValueOnce(new DOMException("Invalid state", "InvalidStateError"));
+
+    await expect(harness.controller.setScreenShareEnabled(true)).rejects.toMatchObject({ code: "environment.unsupported", message: "Screen sharing is unavailable in this browser." });
+  });
+
   it("serializes overlapping source changes and leaves the source disabled", async () => {
     const harness = createMediaControllerHarness();
     const { capture, enable, microphone } = startMicrophoneCapture(harness, "microphone");
