@@ -32,13 +32,13 @@ const PARTICIPANT_FIXTURES: readonly GalleryParticipant[] = [
   { id: "amara", displayName: "Amara Diallo", isMuted: false, isVideoEnabled: true, connectionQuality: 3 },
 ];
 
-export const INITIAL_CHAT_MESSAGES: readonly ChalkChatMessage[] = [
+const INITIAL_CHAT_MESSAGES: readonly ChalkChatMessage[] = [
   { messageId: "preview-message-1", clientMessageId: "preview-client-1", sequence: "1", participantId: "nora", displayName: "Nora Williams", text: "The new Space direction feels much calmer.", createdAt: "2026-08-01T10:12:00.000Z", attachments: [] },
   { messageId: "preview-message-2", clientMessageId: "preview-client-2", sequence: "2", participantId: "you", displayName: DISPLAY_NAME, text: "Agreed. Let’s keep the controls out of the stage.", createdAt: "2026-08-01T10:13:00.000Z", attachments: [] },
   { messageId: "preview-message-3", clientMessageId: "preview-client-3", sequence: "3", participantId: "sofia", displayName: "Sofia Chen", text: "I’ll share the revised agenda here after the Space.", createdAt: "2026-08-01T10:14:00.000Z", attachments: [] },
 ];
 
-export const WAITING_PARTICIPANTS = [
+const WAITING_PARTICIPANTS = [
   { id: "participant-priya", displayName: "Priya Shah", joinedAt: new Date("2026-08-01T10:14:00.000Z") },
   { id: "participant-eli", displayName: "Eli Morgan", joinedAt: new Date("2026-08-01T10:16:00.000Z") },
 ];
@@ -59,7 +59,7 @@ export const TOAST_MESSAGES: Record<Exclude<PreviewSearch["toast"], "none">, str
   error: "The Space connection is unstable.",
 };
 
-export const REACTIONS: readonly ChalkReactionEvent[] = [{ eventId: "preview-reaction-1", participantId: "nora", displayName: "Nora Williams", reaction: "🎉", occurredAt: "2026-08-01T10:15:00.000Z", expiresAt: "2026-08-01T10:16:00.000Z" }];
+const REACTIONS: readonly ChalkReactionEvent[] = [{ eventId: "preview-reaction-1", participantId: "nora", displayName: "Nora Williams", reaction: "🎉", occurredAt: "2026-08-01T10:15:00.000Z", expiresAt: "2026-08-01T10:16:00.000Z" }];
 
 type LegacyPalette = "cosmic" | "midnight" | "slate" | "paper";
 type LegacyTexture = "soft-grid" | "soft-dots";

@@ -4,7 +4,7 @@ import { createPreviewScreenTrack, type PreviewScreenTrack } from "./preview-scr
 import { createPreviewSyntheticTrack } from "./preview-track";
 import { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices, type PreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
 
-export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
+export { createPreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
 export type { PreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
 
 export type PreviewMediaKind = "microphone" | "camera" | "screen";
@@ -38,8 +38,6 @@ export type PreviewMediaAdapter = {
 };
 
 export const PREVIEW_MEDIA_DEVICES = PREVIEW_DEVICE_FIXTURES;
-
-export const createPreviewDevices = createPreviewMediaDevices;
 
 export function createPreviewMediaAdapter(): PreviewMediaAdapter {
   const active = new Set<PreviewTrackHandle>();
@@ -117,23 +115,6 @@ function createFallbackTrack(kind: "audio" | "video", id: string, label: string)
       if (stopped) return;
       stopped = true;
       track.stop();
-    },
-  };
-}
-
-/** Convenience boundary for callers that need one disposable set of fixtures. */
-export function createPreviewTrackBundle(options: PreviewTrackBundleOptions = {}): PreviewTrackBundle {
-  const adapter = createPreviewMediaAdapter();
-  const bundle = adapter.createTrackBundle(options);
-  const stop = bundle.stop;
-  let stopped = false;
-  return {
-    ...bundle,
-    stop: () => {
-      if (stopped) return;
-      stopped = true;
-      stop();
-      adapter.dispose();
     },
   };
 }

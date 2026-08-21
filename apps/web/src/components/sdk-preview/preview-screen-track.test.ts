@@ -8,26 +8,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function createCanvasHarness() {
+  const track = { stop: vi.fn() };
+  const context = {
+    fillStyle: "",
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    font: "",
+    textAlign: "",
+    fillText: vi.fn(),
+    strokeStyle: "",
+    strokeRect: vi.fn(),
+  };
+  const getContext = vi.fn(() => context);
+  const getVideoTracks = vi.fn(() => [track]);
+  const captureStream = vi.fn(() => ({ getVideoTracks }));
+  const canvas = { width: 0, height: 0, getContext, captureStream };
+  const createElement = vi.fn(() => canvas);
+  return { track, context, getContext, getVideoTracks, captureStream, canvas, createElement };
+}
+
 describe("createPreviewScreenTrack", () => {
   it("paints and captures a 1280 by 720 canvas as a video track", () => {
-    const track = { stop: vi.fn() };
-    const context = {
-      fillStyle: "",
-      fillRect: vi.fn(),
-      beginPath: vi.fn(),
-      arc: vi.fn(),
-      fill: vi.fn(),
-      font: "",
-      textAlign: "",
-      fillText: vi.fn(),
-      strokeStyle: "",
-      strokeRect: vi.fn(),
-    };
-    const getContext = vi.fn(() => context);
-    const getVideoTracks = vi.fn(() => [track]);
-    const captureStream = vi.fn(() => ({ getVideoTracks }));
-    const canvas = { width: 0, height: 0, getContext, captureStream };
-    const createElement = vi.fn(() => canvas);
+    const { track, context, getContext, getVideoTracks, captureStream, canvas, createElement } = createCanvasHarness();
     vi.stubGlobal("document", { createElement });
 
     const preview = createPreviewScreenTrack();
@@ -45,26 +50,8 @@ describe("createPreviewScreenTrack", () => {
 
   it("repaints on its timer and clears the timer when stopped", () => {
     vi.useFakeTimers();
-    const track = { stop: vi.fn() };
-    const context = {
-      fillStyle: "",
-      fillRect: vi.fn(),
-      beginPath: vi.fn(),
-      arc: vi.fn(),
-      fill: vi.fn(),
-      font: "",
-      textAlign: "",
-      fillText: vi.fn(),
-      strokeStyle: "",
-      strokeRect: vi.fn(),
-    };
-    const canvas = {
-      width: 0,
-      height: 0,
-      getContext: vi.fn(() => context),
-      captureStream: vi.fn(() => ({ getVideoTracks: vi.fn(() => [track]) })),
-    };
-    vi.stubGlobal("document", { createElement: vi.fn(() => canvas) });
+    const { track, context, createElement } = createCanvasHarness();
+    vi.stubGlobal("document", { createElement });
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
 
     const preview = createPreviewScreenTrack();

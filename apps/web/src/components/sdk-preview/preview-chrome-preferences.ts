@@ -4,7 +4,7 @@
  * where another developer docks the panel or which tab they were on.
  */
 
-export const PREVIEW_DOCK_SIDES = ["left", "right"] as const;
+const PREVIEW_DOCK_SIDES = ["left", "right"] as const;
 export type PreviewDockSide = (typeof PREVIEW_DOCK_SIDES)[number];
 
 export const PREVIEW_CONTROL_TABS = ["states", "space", "media", "access", "look"] as const;
