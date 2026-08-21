@@ -5,19 +5,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsDialog";
-import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
-import { SkinProvider, useSkin } from "../skin-context";
+import { SkinProvider } from "../skin-context";
 import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
-import { ChalkButton } from "../chalk-ui";
+import { StatusSurface } from "./StatusSurface";
 
 export type SpaceLayout = "focus" | "grid" | "presentation";
 
@@ -59,6 +58,9 @@ export type ChalkProps = SpaceIntegration &
     readonly logoUrl?: string;
     readonly spaceName?: string;
     readonly inviteLink?: string;
+    readonly spaceDescription?: string;
+    readonly diagnosticReference?: string;
+    readonly onSendFeedback?: (context: Readonly<{ diagnosticReference: string }>) => void;
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
     readonly onOpenDiagnostics?: () => void;
@@ -106,14 +108,23 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
 function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
+  const participants = useParticipants();
   const previousStatus = useRef(connection.status);
   const hasObservedStatus = useRef(false);
   const hasBeenLive = useRef(connection.status === "live" || connection.status === "reconnecting");
   const autoJoinAttempted = useRef(false);
   const previousClient = useRef(client);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const lastEpisode = useRef(connection.episode);
+  const lastParticipantCount = useRef(participants.roster.length);
+  const [retryPending, setRetryPending] = useState(false);
+  const [episodeEnded, setEpisodeEnded] = useState(false);
+  const [endedAt, setEndedAt] = useState<string | null>(null);
   const entrance = props.entrance ?? true;
   const spaceName = props.spaceName ?? props.space ?? "Space";
+
+  if (connection.episode) lastEpisode.current = connection.episode;
+  if (participants.roster.length > 0) lastParticipantCount.current = participants.roster.length;
 
   if (previousClient.current !== client) {
     previousClient.current = client;
@@ -137,10 +148,23 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
   );
   const retryAutomaticJoin = useCallback(() => {
     autoJoinAttempted.current = true;
-    void join(defaultJoinOptions(props));
+    setRetryPending(true);
+    void join(defaultJoinOptions(props)).finally(() => setRetryPending(false));
   }, [join, props]);
 
   useEffect(() => setJoinError(null), [client]);
+  useEffect(() => {
+    setEpisodeEnded(false);
+    setEndedAt(null);
+  }, [client]);
+  useEffect(
+    () =>
+      client.on("episodeEnded", () => {
+        setEpisodeEnded(true);
+        setEndedAt(new Date().toISOString());
+      }),
+    [client],
+  );
   useEffect(() => {
     if (entrance || connection.status !== "idle" || autoJoinAttempted.current) return;
     autoJoinAttempted.current = true;
@@ -155,20 +179,34 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
     previousStatus.current = connection.status;
     hasObservedStatus.current = true;
     if (connection.status === "live" || connection.status === "reconnecting") hasBeenLive.current = true;
+    if (connection.status === "left" && previous !== "left") setEndedAt((current) => current ?? new Date().toISOString());
   }, [connection.status, props.onJoined, props.onLeft]);
 
   if (connection.status === "idle") {
-    if (!entrance) return <StatusView message={joinError ?? `Entering ${spaceName}…`} onRetry={joinError ? retryAutomaticJoin : undefined} />;
+    if (!entrance) return <StatusSurface message={joinError ?? `Entering ${spaceName}…`} onRetry={joinError ? retryAutomaticJoin : undefined} retryPending={retryPending} retryError={joinError} />;
     return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} theme={props.theme} onJoin={join} />;
   }
   if (connection.status === "joining")
-    return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} /> : <StatusView message={`Entering ${spaceName}…`} />;
+    return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} /> : <StatusSurface message={`Entering ${spaceName}…`} />;
   if (connection.status === "failed") {
     if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={connection.lastError?.message ?? joinError ?? "Unable to enter this Space."} theme={props.theme} onJoin={join} />;
-    return <StatusView message={connection.lastError?.message ?? joinError ?? "This Space is unavailable."} onRetry={() => void join(defaultJoinOptions(props))} />;
+    return <StatusSurface phase="failed" message={connection.lastError?.message ?? joinError ?? "This Space is unavailable."} onRetry={retryAutomaticJoin} retryPending={retryPending} retryError={joinError} />;
   }
-  if (connection.status === "leaving") return <StatusView message={`Leaving ${spaceName}…`} />;
-  if (connection.status === "left") return <StatusView message="You have left this Space." onRetry={() => void join(defaultJoinOptions(props))} />;
+  if (connection.status === "leaving") return <StatusSurface phase="leaving" message={`Leaving ${spaceName}…`} spaceName={spaceName} />;
+  if (connection.status === "left")
+    return (
+      <StatusSurface
+        phase={episodeEnded ? "episode-ended" : "left"}
+        message={episodeEnded ? "This Episode has ended for everyone." : "Your connection is closed. You can re-enter from here."}
+        spaceName={spaceName}
+        episode={lastEpisode.current}
+        endedAt={endedAt}
+        participantCount={lastParticipantCount.current}
+        onRetry={episodeEnded ? undefined : retryAutomaticJoin}
+        retryPending={retryPending}
+        retryError={joinError}
+      />
+    );
   return <SpaceSurface {...props} spaceName={spaceName} reconnecting={connection.status === "reconnecting"} />;
 }
 
@@ -267,6 +305,9 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       skin={settings.appearance.skin ?? resolvedSkin}
       palette={settings.appearance.palette ?? resolvedPalette}
       texture={settings.appearance.texture ?? resolvedTexture}
+      generatedAvatars={settings.appearance.generatedAvatars}
+      commandError={commandError ?? undefined}
+      onDismissCommandError={() => setCommandError(null)}
       layout={settings.appearance.layout === "focus" || settings.appearance.layout === "grid" || settings.appearance.layout === "presentation" ? settings.appearance.layout : (props.layout ?? "focus")}
       onLayoutChange={(nextLayout) => {
         setSettings((current) => ({ ...current, appearance: { ...current.appearance, layout: nextLayout } }));
@@ -276,7 +317,21 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       onOpenDiagnostics={props.onOpenDiagnostics}
       whiteboard={whiteboard}
       onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
-      infoDialog={props.features?.info !== false && props.inviteLink ? { isOpen: infoOpen, onOpenChange: setInfoOpen, spaceName: props.spaceName, inviteLink: props.inviteLink, onCopyLink: () => void navigator.clipboard?.writeText(props.inviteLink!) } : undefined}
+      infoDialog={
+        props.features?.info !== false && (props.inviteLink || props.diagnosticReference || props.spaceDescription)
+          ? {
+              isOpen: infoOpen,
+              onOpenChange: setInfoOpen,
+              spaceName: props.spaceName,
+              spaceDescription: props.spaceDescription,
+              inviteLink: props.inviteLink,
+              onCopyLink: props.inviteLink ? () => void navigator.clipboard?.writeText(props.inviteLink!) : undefined,
+              diagnosticReference: props.diagnosticReference,
+              onCopyDiagnosticReference: (reference) => void navigator.clipboard?.writeText(reference),
+              onSendFeedback: props.onSendFeedback,
+            }
+          : undefined
+      }
       onOpenSettings={
         props.features?.settings !== false
           ? () => {
@@ -340,7 +395,6 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
           {media.incomingRequests[0] ? (
             <MediaRequestDialog request={media.incomingRequests[0]} onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId))} onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId))} />
           ) : null}
-          <CommandErrorAlert message={commandError ?? undefined} />
         </>
       }
     />
@@ -351,24 +405,6 @@ function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((pr
   const setPresentation = transport.setPresentation;
   if (!setPresentation) return undefined;
   return (presenting) => setPresentation.call(transport, presenting);
-}
-
-function StatusView({ message, onRetry }: { readonly message: string; readonly onRetry?: () => void }): React.JSX.Element {
-  const skin = useSkin();
-  return (
-    <main data-chalk-skin={skin} className="grid h-full min-h-0 place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
-      <div className="grid max-w-sm gap-4 justify-items-center">
-        <p role="status" className="text-sm text-[var(--chalk-muted-text)]">
-          {message}
-        </p>
-        {onRetry ? (
-          <ChalkButton type="button" onClick={onRetry} variant="solid" tone="accent" className="text-sm font-semibold text-[var(--chalk-accent-text)]">
-            Try again
-          </ChalkButton>
-        ) : null}
-      </div>
-    </main>
-  );
 }
 
 function defaultJoinOptions(props: ChalkProps): JoinOptions {

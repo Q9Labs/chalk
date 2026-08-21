@@ -12,6 +12,9 @@ import { JoinFailedScreen } from "../components/join-failed-screen/JoinFailedScr
 import { LeaveDialog } from "../components/leave-dialog/LeaveDialog";
 import { SpaceView, type SpacePanel, type SpaceViewProps } from "../components/space-view/SpaceView";
 import { ChalkProvider } from "../bindings/context";
+import { chalkThemeStyle, type ChalkTheme } from "../theme";
+import { SkinProvider } from "../components/skin-context";
+import { StatusSurface } from "../components/chalk/StatusSurface";
 import { createPreviewClient } from "./preview-client";
 import { getThemeMode, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type ThemeAppearance, type ThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../components/theme";
 
@@ -22,6 +25,8 @@ import { getThemeMode, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type ThemeAp
 export type PreviewEntranceProps = Omit<EntranceProps, "defaults"> & {
   readonly microphone?: boolean;
   readonly camera?: boolean;
+  readonly previewError?: string | null;
+  readonly previewStream?: MediaStream | null;
 };
 
 /**
@@ -29,19 +34,67 @@ export type PreviewEntranceProps = Omit<EntranceProps, "defaults"> & {
  * never mounts production media acquisition effects, so URL-driven gallery
  * states remain deterministic in browsers, tests, and documentation embeds.
  */
-export function PreviewEntrance({ microphone = true, camera = true, defaultDisplayName = "", joining = false, error, onJoin, onCancel, spaceName, logoUrl, theme }: PreviewEntranceProps): React.JSX.Element {
+export function PreviewEntrance({
+  microphone = true,
+  camera = true,
+  defaultDisplayName = "",
+  joining = false,
+  error,
+  previewError,
+  previewStream = null,
+  onJoin,
+  onCancel,
+  spaceName,
+  logoUrl,
+  theme,
+  audioInputDevices,
+  videoInputDevices,
+  audioOutputDevices,
+  selectedAudioInput,
+  selectedVideoInput,
+  selectedAudioOutput,
+  onAudioInputChange,
+  onVideoInputChange,
+  onAudioOutputChange,
+}: PreviewEntranceProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(microphone);
   const [cameraEnabled, setCameraEnabled] = useState(camera);
+  const [audioInputDeviceId, setAudioInputDeviceId] = useState(selectedAudioInput ?? "");
+  const [videoInputDeviceId, setVideoInputDeviceId] = useState(selectedVideoInput ?? "");
+  const [audioOutputDeviceId, setAudioOutputDeviceId] = useState(selectedAudioOutput ?? "");
 
   useEffect(() => setDisplayName(defaultDisplayName), [defaultDisplayName]);
   useEffect(() => setMicrophoneEnabled(microphone), [microphone]);
   useEffect(() => setCameraEnabled(camera), [camera]);
+  useEffect(() => setAudioInputDeviceId(selectedAudioInput ?? ""), [selectedAudioInput]);
+  useEffect(() => setVideoInputDeviceId(selectedVideoInput ?? ""), [selectedVideoInput]);
+  useEffect(() => setAudioOutputDeviceId(selectedAudioOutput ?? ""), [selectedAudioOutput]);
+
+  const selectAudioInput = (deviceId: string) => {
+    setAudioInputDeviceId(deviceId);
+    void onAudioInputChange?.(deviceId);
+  };
+  const selectVideoInput = (deviceId: string) => {
+    setVideoInputDeviceId(deviceId);
+    void onVideoInputChange?.(deviceId);
+  };
+  const selectAudioOutput = (deviceId: string) => {
+    setAudioOutputDeviceId(deviceId);
+    void onAudioOutputChange?.(deviceId);
+  };
 
   const onSubmit = () => {
     const normalizedDisplayName = displayName.trim();
     if (!normalizedDisplayName || joining) return;
-    void onJoin({ displayName: normalizedDisplayName, microphone: microphoneEnabled, camera: cameraEnabled });
+    void onJoin({
+      displayName: normalizedDisplayName,
+      microphone: microphoneEnabled,
+      camera: cameraEnabled,
+      ...(audioInputDeviceId ? { audioInputDeviceId } : {}),
+      ...(videoInputDeviceId ? { videoInputDeviceId } : {}),
+      ...(audioOutputDeviceId ? { audioOutputDeviceId } : {}),
+    });
   };
 
   return (
@@ -54,14 +107,53 @@ export function PreviewEntrance({ microphone = true, camera = true, defaultDispl
       joining={joining}
       error={error}
       theme={theme}
+      previewError={previewError}
+      previewStream={previewStream}
+      audioInputDevices={audioInputDevices}
+      videoInputDevices={videoInputDevices}
+      audioOutputDevices={audioOutputDevices}
+      selectedAudioInput={audioInputDeviceId}
+      selectedVideoInput={videoInputDeviceId}
+      selectedAudioOutput={audioOutputDeviceId}
       onDisplayNameChange={setDisplayName}
       onMicrophoneChange={setMicrophoneEnabled}
       onCameraChange={setCameraEnabled}
+      onAudioInputChange={selectAudioInput}
+      onVideoInputChange={selectVideoInput}
+      onAudioOutputChange={selectAudioOutput}
       onSubmit={onSubmit}
       onCancel={onCancel}
     />
   );
 }
+
+export type PreviewStatusState = "failed" | "leaving" | "left";
+
+export interface PreviewStatusSurfaceProps {
+  readonly state: PreviewStatusState;
+  readonly spaceName: string;
+  readonly error?: string;
+  readonly theme?: ChalkTheme;
+  readonly onRetry?: () => void;
+}
+
+/** DEV-only adapter for post-live lifecycle states that use Chalk's status surface. */
+export function PreviewStatusSurface({ state, spaceName, error, theme, onRetry }: PreviewStatusSurfaceProps): React.JSX.Element {
+  const skin = theme?.skin ?? "classic";
+  const colorScheme = theme?.palette ? getThemeMode(theme.palette) : theme?.colorScheme === "dark" ? "dark" : "light";
+  const message = state === "leaving" ? `Leaving ${spaceName}…` : state === "left" ? "You have left this Space." : (error ?? "This Space is unavailable.");
+
+  return (
+    <SkinProvider skin={skin}>
+      <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={theme?.palette} data-chalk-texture={theme?.texture} data-chalk-skin={skin} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(theme, colorScheme)}>
+        <StatusSurface message={message} onRetry={state === "leaving" ? undefined : onRetry} />
+      </div>
+    </SkinProvider>
+  );
+}
+
+export type PreviewStatusProps = PreviewStatusSurfaceProps;
+export const PreviewStatus = PreviewStatusSurface;
 
 /** The gallery supplies all state and commands; the production Chalk wrapper is never involved. */
 export type PreviewSpaceViewProps = SpaceViewProps & { readonly client?: SpaceClient };

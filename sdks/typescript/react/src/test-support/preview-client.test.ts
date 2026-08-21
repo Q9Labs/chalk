@@ -23,10 +23,42 @@ describe("createPreviewClient", () => {
     expect(notifications).toBe(1);
   });
 
-  it("resolves commands as no-ops so previews never throw", async () => {
+  it("projects visible commands into the local snapshot", async () => {
     const client = createPreviewClient();
-    await expect(client.media.setMicrophoneEnabled(true)).resolves.toBeUndefined();
-    await expect(client.chat.send({ text: "hello" })).resolves.toBeUndefined();
+    await client.media.setMicrophoneEnabled(true);
+    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+
+    const request = await client.participants.requestMedia("nora", "camera");
+    expect(request.status).toBe("delivered");
+    expect(client.getSnapshot().media.incomingRequests).toHaveLength(1);
+    await client.media.declineRequest(request.requestId);
+    expect(client.getSnapshot().media.incomingRequests).toHaveLength(0);
+
+    await client.chat.send({ text: "hello" });
+    expect(client.getSnapshot().chat.pendingSends[0]?.text).toBe("hello");
+  });
+
+  it("accepts an incoming request and updates the requested local source", async () => {
+    const client = createPreviewClient();
+    const request = await client.participants.requestMedia("nora", "microphone");
+
+    await client.media.acceptRequest(request.requestId);
+
+    expect(client.getSnapshot().media.incomingRequests).toHaveLength(0);
+    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+  });
+
+  it("allows integration owners to replace command projection and observe commands", async () => {
+    const commands: string[] = [];
+    const client = createPreviewClient(createSnapshot(), {
+      updateCommand: (snapshot, command) => (command.type === "renameSelf" ? { ...snapshot, self: { ...snapshot.self, displayName: command.displayName } } : snapshot),
+      onCommand: (command) => commands.push(command.type),
+    });
+
+    await client.participants.renameSelf("Local reviewer");
+
+    expect(client.getSnapshot().self.displayName).toBe("Local reviewer");
+    expect(commands).toEqual(["renameSelf"]);
   });
 });
 
@@ -35,5 +67,14 @@ describe("createSnapshot", () => {
     const snapshot = createSnapshot(["sendChat"]);
     expect(snapshot.self.can("sendChat")).toBe(true);
     expect(snapshot.self.can("manageAdmission")).toBe(false);
+  });
+
+  it("provides deterministic media devices and selections for settings", () => {
+    const snapshot = createSnapshot();
+    expect(snapshot.media.devices.cameras).toEqual([
+      { deviceId: "preview-camera", label: "Preview camera" },
+      { deviceId: "preview-camera-wide", label: "Preview camera · wide" },
+    ]);
+    expect(snapshot.media.selection).toEqual({ microphone: "preview-microphone", camera: "preview-camera", speaker: "preview-speaker" });
   });
 });

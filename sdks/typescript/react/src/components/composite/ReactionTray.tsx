@@ -62,7 +62,7 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
       onClick={() => handleSelect(emoji)}
       className={cn(
         "grid h-11 w-11 shrink-0 place-items-center rounded-full text-[26px] leading-none transition-transform duration-150 ease-out focus-visible:outline-none active:scale-95",
-        skin === "classic" ? "hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60" : "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
+        skin === "classic" ? "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]" : "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
         !prefersReducedMotion && "hover:-translate-y-1 hover:scale-125 focus-visible:-translate-y-1 focus-visible:scale-125",
       )}
       aria-label={`React with ${emoji}`}
@@ -75,9 +75,15 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
       {skin === "classic" ? (
-        <div ref={listRef} className={cn(trayClassName, "flex items-center gap-0.5 rounded-full bg-[var(--chalk-app-control-primary)] p-1.5 shadow-[var(--chalk-app-shadow-control)] ring-1 ring-white/10")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
+        <div
+          ref={listRef}
+          className={cn(trayClassName, "flex items-center gap-0.5 rounded-full bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] ring-1 ring-[var(--chalk-app-line)]")}
+          role="toolbar"
+          aria-label="Reactions"
+          onKeyDown={handleKeyDown}
+        >
           {buttons}
         </div>
       ) : (

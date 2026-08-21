@@ -85,7 +85,7 @@ export const ClassicReactionPicker = React.memo(({ isOpen, onClose, onSelect, re
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
 
       {/* Picker Panel */}
       <div

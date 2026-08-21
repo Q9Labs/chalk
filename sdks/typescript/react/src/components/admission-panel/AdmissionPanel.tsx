@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
-import { Tick01Icon, Cancel01Icon, UserGroupIcon } from "../../utils/icons";
+import { Cancel01Icon, UserAdd01Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
-import { ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
+import { ChalkBadge, ChalkButton, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicAdmissionPanel } from "./ClassicAdmissionPanel";
 
@@ -18,6 +18,8 @@ export interface AdmissionPanelProps {
   loading?: boolean;
   className?: string;
   onClose?: () => void;
+  /** Render the requests as a section inside another surface. */
+  inline?: boolean;
 }
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
@@ -28,7 +30,22 @@ interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly onDenyAll?: () => void;
 }
 
-const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose }: AdmissionPanelSurfaceProps) => {
+const ROW_CLASS = "flex min-h-14 items-center gap-3 px-1 py-2";
+const BULK_BUTTON_CLASS = "h-8 min-h-0 rounded-[8px] px-2.5 text-xs font-semibold";
+
+function getWaitingLabel(date?: Date): string {
+  if (!date) return "Waiting to join";
+  const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (minutes < 1) return "Waiting to join";
+  return `Waiting ${minutes} min`;
+}
+
+/**
+ * Admission lives inside the Participants panel as a quiet section: a title with a live count,
+ * one 56px row per waiting person with a decisive Admit and a quiet Deny, and bulk actions only
+ * once there is more than one request. Standalone use wraps the same section in a panel.
+ */
+const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -36,91 +53,83 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
     return () => clearInterval(timer);
   }, []);
 
-  const getAdmissionLabel = (date?: Date) => {
-    if (!date) return "Requested access";
-    const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
-    if (minutes < 1) return "Joined just now";
-    if (minutes === 1) return "Requested 1 min ago";
-    return `Requested ${minutes} min ago`;
-  };
+  const pending = participants.length;
+  const showBulkActions = pending > 1 && (onAdmitAll !== undefined || onDenyAll !== undefined);
 
-  const hasPendingAdmission = participants.length > 0;
+  const section = (
+    <>
+      <header className="flex min-h-10 items-center justify-between gap-3 px-1">
+        <div className="flex min-w-0 items-center gap-2" aria-live="polite">
+          <h3 className="text-sm font-semibold text-[var(--chalk-app-text)]">Admission</h3>
+          <ChalkBadge tone="accent" count={pending} className="!min-h-5 !min-w-5 !px-1.5 !text-[11px] !text-[var(--chalk-app-control-active-text)]" />
+          {loading ? <ChalkSpinner className="size-4" /> : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {showBulkActions && onAdmitAll ? (
+            <ChalkButton variant="ghost" onClick={onAdmitAll} className={BULK_BUTTON_CLASS}>
+              Admit all
+            </ChalkButton>
+          ) : null}
+          {showBulkActions && onDenyAll ? (
+            <ChalkButton variant="ghost" onClick={onDenyAll} className={cn(BULK_BUTTON_CLASS, "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-danger)]")}>
+              Deny all
+            </ChalkButton>
+          ) : null}
+          {onClose ? (
+            <ChalkIconButton type="button" onClick={onClose} size="sm" className="text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]" aria-label="Close admission">
+              <Cancel01Icon size={16} />
+            </ChalkIconButton>
+          ) : null}
+        </div>
+      </header>
+
+      {pending === 0 ? (
+        <p role="status" className="flex min-h-11 items-center gap-2.5 px-1 text-[13px] text-[var(--chalk-app-text-muted)]">
+          <UserAdd01Icon size={16} className="shrink-0 opacity-70" aria-hidden="true" />
+          No one is waiting to join
+        </p>
+      ) : (
+        <ul className={cn("m-0 list-none p-0", !inline && "max-h-80 overflow-y-auto")} aria-label="Admission requests">
+          {participants.map((p) => (
+            <li key={p.id} className={ROW_CLASS}>
+              <Avatar src={p.avatarUrl} name={p.displayName} size="sm" />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-semibold text-[var(--chalk-app-text)]" title={p.displayName}>
+                  {p.displayName}
+                </span>
+                <span className="text-xs text-[var(--chalk-app-text-muted)]">{getWaitingLabel(p.joinedAt)}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <ChalkButton variant="solid" tone="accent" onClick={() => onAdmit(p.id)} className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold !text-[var(--chalk-app-control-active-text)]" aria-label={`Admit ${p.displayName}`}>
+                  Admit
+                </ChalkButton>
+                <ChalkIconButton size="sm" onClick={() => onDeny(p.id)} className="text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-danger)]" aria-label={`Deny ${p.displayName}`}>
+                  <Cancel01Icon size={16} />
+                </ChalkIconButton>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+
+  if (inline) {
+    return (
+      <section role="region" aria-label="Admission requests" className={cn("mb-2 border-b border-[var(--chalk-app-line)] pb-3", className)}>
+        {section}
+      </section>
+    );
+  }
 
   return (
-    <ChalkPanel className={cn("w-80 overflow-hidden rounded-lg p-0 shadow-lg", "bg-[var(--chalk-surface)]", className)} contentClassName="flex h-full min-h-0 flex-col" role="complementary" aria-label="Admission requests">
-      <div className="flex h-full min-h-0 w-full flex-col">
-        <header className={cn("group relative flex items-center justify-between p-4", "bg-[var(--chalk-stage)]")}>
-          <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-stage))" part="admission-header" />
-          <div className="relative z-[1] flex items-center gap-2" aria-live="polite">
-            <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Admission</h2>
-            <ChalkBadge count={participants.length} />
-          </div>
-          <div className="relative z-[1] flex items-center gap-2">
-            {loading && <ChalkSpinner className="size-5" />}
-            {onClose ? (
-              <ChalkIconButton type="button" onClick={onClose} size="sm" className="text-[var(--chalk-muted-text)]" aria-label="Close admission">
-                <Cancel01Icon className="h-4 w-4" />
-              </ChalkIconButton>
-            ) : null}
-          </div>
-        </header>
-
-        {(onAdmitAll || onDenyAll) && (
-          <div className="flex gap-2 p-2">
-            {onAdmitAll && (
-              <ChalkButton type="button" onClick={onAdmitAll} disabled={!hasPendingAdmission} variant="solid" tone="accent" className="min-h-8 flex-1 rounded-md px-3 py-1.5 text-xs font-medium">
-                Admit All
-              </ChalkButton>
-            )}
-            {onDenyAll && (
-              <ChalkButton type="button" onClick={onDenyAll} disabled={!hasPendingAdmission} tone="danger" className="min-h-8 flex-1 rounded-md px-3 py-1.5 text-xs font-medium text-[var(--chalk-danger)]">
-                Deny All
-              </ChalkButton>
-            )}
-          </div>
-        )}
-        {(onAdmitAll || onDenyAll) && <ChalkDivider className="m-0 h-3" />}
-
-        <ul className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
-          {!hasPendingAdmission ? (
-            <li>
-              <ChalkEmptyState className="px-4 py-8" title="No admission requests">
-                <UserGroupIcon size={24} className="mt-2 text-[var(--chalk-muted-text)]" aria-hidden="true" />
-              </ChalkEmptyState>
-            </li>
-          ) : (
-            participants.map((p) => (
-              <li key={p.id}>
-                <ChalkPanel className={cn("rounded-md p-2 transition-colors", "hover:bg-[var(--chalk-stage)]")}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Avatar src={p.avatarUrl} name={p.displayName} size="sm" />
-                      <div className="flex min-w-0 flex-col">
-                        <span className="truncate text-sm font-medium text-[var(--chalk-text)]" title={p.displayName}>
-                          {p.displayName}
-                        </span>
-                        <span className="text-xs text-[var(--chalk-muted-text)]">{getAdmissionLabel(p.joinedAt)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-1">
-                      <ChalkIconButton size="sm" tone="success" onClick={() => onAdmit(p.id)} aria-label={`Admit ${p.displayName}`}>
-                        <Tick01Icon className="w-4 h-4" />
-                      </ChalkIconButton>
-                      <ChalkIconButton size="sm" tone="danger" onClick={() => onDeny(p.id)} aria-label={`Deny ${p.displayName}`}>
-                        <Cancel01Icon className="w-4 h-4" />
-                      </ChalkIconButton>
-                    </div>
-                  </div>
-                </ChalkPanel>
-              </li>
-            ))
-          )}
-        </ul>
-      </div>
+    <ChalkPanel className={cn("w-80 rounded-lg bg-[var(--chalk-app-panel)] p-3 shadow-[var(--chalk-app-shadow-sm)]", className)} contentClassName="flex min-h-0 flex-col" role="complementary" aria-label="Admission requests">
+      {section}
     </ChalkPanel>
   );
 });
+
+AdmissionPanelSurface.displayName = "AdmissionPanelSurface";
 
 function ChalkAdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
   const client = useSpaceClient();

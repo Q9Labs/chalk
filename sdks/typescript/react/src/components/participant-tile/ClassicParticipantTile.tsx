@@ -18,7 +18,7 @@ const aspectRatioClasses = {
   fill: "",
 };
 
-export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference, hidden }: ParticipantTileProps) => {
+export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, generatedAvatars = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference, hidden }: ParticipantTileProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [trackError, setTrackError] = useState<string | null>(null);
@@ -157,7 +157,7 @@ export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mir
       {/* Avatar background when video is off or loading */}
       {!showVideo && showAvatar && (
         <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 flex items-center justify-center transition-opacity duration-300">
-          <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={Boolean(participant.avatarUrl)} className="opacity-90" gradientPreference={gradientPreference} />
+          <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} className="opacity-90" gradientPreference={gradientPreference} />
         </div>
       )}
 
@@ -175,7 +175,7 @@ export const ClassicParticipantTile = React.memo(({ participant, videoTrack, mir
         <div className="pointer-events-none absolute right-2 bottom-2 left-2">
           <div className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--chalk-line)] bg-[var(--chalk-text)] px-2 py-1">
             {/* Small avatar when video is off */}
-            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={Boolean(participant.avatarUrl)} gradientPreference={gradientPreference} />}
+            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} gradientPreference={gradientPreference} />}
 
             {/* Name */}
             {showName && (

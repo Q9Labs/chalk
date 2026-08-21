@@ -278,7 +278,7 @@ describe("React bindings", () => {
       connection: { ...client.getSnapshot().connection, status: "live" },
       media: {
         ...client.getSnapshot().media,
-        incomingRequests: [{ requestId: "request-1", kind: "unmute", actorParticipantId: "moderator", actorDisplayName: "Ada", expiresAt: "2026-08-05T12:00:00.000Z" }],
+        incomingRequests: [{ requestId: "request-1", kind: "unmute", actorParticipantId: "moderator", actorDisplayName: "Ada", expiresAt: "2099-08-05T12:00:00.000Z" }],
       },
     });
 
@@ -297,7 +297,7 @@ describe("React bindings", () => {
       connection: { ...snapshot.connection, status: "live" },
       media: {
         ...snapshot.media,
-        incomingRequests: [{ requestId: "request-2", kind: "start_camera", actorParticipantId: "moderator", actorDisplayName: "Ada", expiresAt: "2026-08-05T12:00:00.000Z" }],
+        incomingRequests: [{ requestId: "request-2", kind: "start_camera", actorParticipantId: "moderator", actorDisplayName: "Ada", expiresAt: "2099-08-05T12:00:00.000Z" }],
       },
     });
 
@@ -373,7 +373,7 @@ describe("React bindings", () => {
     expect(within(view.container).getByRole("button", { name: "Layout: Grid" })).toBeInTheDocument();
   });
 
-  it("shows directed media actions when the caller has the canonical request capability", () => {
+  it("shows directed media actions when the caller has the canonical request capability", async () => {
     const client = createTestClient(createSnapshot(["requestMediaOthers"]));
     const requestMedia = vi.spyOn(client.participants, "requestMedia").mockResolvedValue({ status: "delivered", requestId: "request-2" });
     const snapshot = client.getSnapshot();
@@ -387,11 +387,12 @@ describe("React bindings", () => {
     });
 
     const view = render(<Chalk client={client} entrance={false} />);
-    fireEvent.click(within(view.container).getAllByRole("button", { name: "People" })[0]!);
+    fireEvent.click(within(view.container).getAllByRole("button", { name: "Participants" })[0]!);
     fireEvent.click(within(view.container).getByRole("button", { name: "Options for Grace" }));
     fireEvent.click(within(view.container).getByRole("button", { name: "Ask to unmute" }));
 
-    expect(requestMedia).toHaveBeenCalledWith("grace", "microphone");
+    await waitFor(() => expect(requestMedia).toHaveBeenCalledWith("grace", "microphone"));
+    await waitFor(() => expect(within(view.container).queryByRole("menu")).not.toBeInTheDocument());
 
     fireEvent.click(within(view.container).getByRole("button", { name: "Options for Grace" }));
     fireEvent.click(within(view.container).getByRole("button", { name: "Ask to start camera" }));
@@ -485,7 +486,7 @@ describe("React bindings", () => {
     expect(onOpenDiagnostics).toHaveBeenCalledOnce();
   });
 
-  it("clears the settings sidebar when turnkey Settings closes", async () => {
+  it("opens turnkey Settings without also mounting the duplicate settings sidebar", async () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
     const view = render(<Chalk client={client} features={{ settings: true }} />);
@@ -500,14 +501,13 @@ describe("React bindings", () => {
     });
   });
 
-  it("applies the Settings layout selector to the live stage", () => {
+  it("removes the duplicate layout selector from Settings", () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } });
     const view = render(<Chalk client={client} features={{ settings: true }} />);
 
     fireEvent.click(within(view.container).getAllByRole("button", { name: "Settings" })[0]!);
     fireEvent.click(within(document.body).getByRole("button", { name: /Appearance/ }));
-    fireEvent.click(within(document.body).getByRole("button", { name: "Grid" }));
 
     expect(view.container.querySelector('button[aria-label="Layout: Grid"]')).not.toBeNull();
   });
@@ -578,7 +578,7 @@ describe("React bindings", () => {
 
     fireEvent.click(within(view.container).getAllByRole("button", { name: "Leave" })[0]!);
     fireEvent.click(within(view.container).getByRole("button", { name: "End Episode for everyone" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "End Episode" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "End Episode for everyone" }));
     expect(authorized.endEpisode).toHaveBeenCalledOnce();
 
     view.unmount();

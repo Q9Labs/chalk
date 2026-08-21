@@ -455,13 +455,7 @@ const TranscriptPanelSurface = React.memo(
     // Sidebar variant
     if (variant === "sidebar") {
       return (
-        <div
-          className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative", "bg-transparent", !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
-          data-tour="transcription-panel"
-          role="complementary"
-          aria-label="Live transcription"
-          style={themeVariables as React.CSSProperties}
-        >
+        <div className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative", "bg-transparent", className)} data-tour="transcription-panel" role="complementary" aria-label="Live transcription" style={themeVariables as React.CSSProperties}>
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-4">
             <div className="flex items-center gap-3">

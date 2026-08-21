@@ -11,6 +11,16 @@ afterEach(() => {
 });
 
 describe("MessageBubble", () => {
+  it("uses the shared generated avatar preference", () => {
+    const view = render(<MessageBubble content="Hello" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" />);
+
+    expect(view.container.querySelector("[data-facehash]")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Avatar for Ada" })).toHaveStyle({ width: "32px", height: "32px" });
+
+    view.rerender(<MessageBubble content="Hello" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" generatedAvatars={false} />);
+    expect(view.container.querySelector("[data-facehash]")).not.toBeInTheDocument();
+  });
+
   it("renders canonical attachments and resolves protected downloads", async () => {
     const popup = { opener: window, location: { href: "about:blank" }, close: vi.fn() };
     const open = vi.spyOn(window, "open").mockImplementation(() => popup as unknown as Window);

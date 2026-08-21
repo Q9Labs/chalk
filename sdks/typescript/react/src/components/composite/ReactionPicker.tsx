@@ -100,7 +100,7 @@ const ChalkReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReact
   return (
     <>
       {/* Backdrop */}
-      <ChalkBackdrop className="z-40 !bg-transparent" onClick={onClose} />
+      <ChalkBackdrop className="z-20 !bg-transparent" onClick={onClose} />
 
       {/* Picker Panel */}
       <ChalkDialogPanel

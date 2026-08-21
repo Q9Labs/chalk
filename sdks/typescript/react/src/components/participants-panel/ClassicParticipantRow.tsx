@@ -16,9 +16,11 @@ export function ClassicParticipantRow({
   onRequestStartCamera,
   onRemoveParticipant,
   onUpdateDisplayName,
+  onCommandError,
   participantVolumes,
   onParticipantVolumeChange,
   participantGradientPreference,
+  generatedAvatars = true,
   menuOpen,
   onMenuToggle,
   onMenuClose,
@@ -59,7 +61,7 @@ export function ClassicParticipantRow({
     <div className={cn("group relative flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-[var(--chalk-app-control-hover)]", variant === "sidebar" && "rounded-none px-1 py-3.5 hover:bg-[var(--chalk-app-control-hover)]")}>
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="relative">
-          <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={Boolean(participant.avatarUrl)} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
+          <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={generatedAvatars} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
           {participant.isHandRaised && <HandRaiseIndicator raised={true} size="sm" className="-right-0.5 -top-0.5" />}
         </div>
 
@@ -134,6 +136,7 @@ export function ClassicParticipantRow({
                     }
                     participantVolumes={participantVolumes}
                     onParticipantVolumeChange={onParticipantVolumeChange}
+                    onCommandError={onCommandError}
                   />
                 </div>
               </>

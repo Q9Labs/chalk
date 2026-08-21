@@ -66,7 +66,7 @@ const SettingsPanelSurface = React.memo(
     className,
   }: SettingsPanelSurfaceProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
-    const [activeTab, setActiveTab] = useState<"audio" | "video" | "general">("audio");
+    const [activeTab, setActiveTab] = useState<"audio-video" | "general">("audio-video");
     const [speakerVolume, setSpeakerVolume] = useState(100);
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
@@ -84,37 +84,28 @@ const SettingsPanelSurface = React.memo(
           )}
         </div>
 
-        <div className="flex border-b border-[var(--chalk-line)]">
+        <div className="flex border-b border-[var(--chalk-line)]" role="tablist" aria-label="Settings categories">
           <ChalkButton
             variant="ghost"
             type="button"
-            onClick={() => setActiveTab("audio")}
-            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-3 !text-sm !font-medium transition-colors", activeTab === "audio" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
-            aria-selected={activeTab === "audio"}
+            onClick={() => setActiveTab("audio-video")}
+            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-2.5 !text-sm !font-medium transition-colors", activeTab === "audio-video" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            aria-selected={activeTab === "audio-video"}
+            role="tab"
           >
             <div className="flex items-center justify-center gap-2">
               <Microphone01Icon className="w-4 h-4" />
-              Audio
-            </div>
-          </ChalkButton>
-          <ChalkButton
-            variant="ghost"
-            type="button"
-            onClick={() => setActiveTab("video")}
-            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-3 !text-sm !font-medium transition-colors", activeTab === "video" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
-            aria-selected={activeTab === "video"}
-          >
-            <div className="flex items-center justify-center gap-2">
               <Video01Icon className="w-4 h-4" />
-              Video
+              Audio &amp; video
             </div>
           </ChalkButton>
           <ChalkButton
             variant="ghost"
             type="button"
             onClick={() => setActiveTab("general")}
-            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-3 !text-sm !font-medium transition-colors", activeTab === "general" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            className={cn("!min-h-0 !flex-1 !rounded-none !border-b-2 !px-2 !py-2.5 !text-sm !font-medium transition-colors", activeTab === "general" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
             aria-selected={activeTab === "general"}
+            role="tab"
           >
             <div className="flex items-center justify-center gap-2">
               <Settings01Icon className="w-4 h-4" />
@@ -124,8 +115,8 @@ const SettingsPanelSurface = React.memo(
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {activeTab === "audio" && (
-            <div className={cn("space-y-6", !prefersReducedMotion && "animate-in fade-in duration-200")}>
+          {activeTab === "audio-video" && (
+            <div className={cn("space-y-5", !prefersReducedMotion && "animate-in fade-in duration-200")}>
               <div className="space-y-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--chalk-muted-text)]">Microphone</h3>
                 <DeviceSelector type="audioinput" devices={audioInputDevices} selectedDeviceId={selectedAudioInput} onChange={(id) => onAudioInputChange?.(id)} label="Input Device" audioLevel={audioLevel} participantColorSeed={participantColorSeed} />
@@ -133,7 +124,7 @@ const SettingsPanelSurface = React.memo(
                 {onNoiseSuppressionChange && <NoiseSuppressionToggle enabled={noiseSuppression} onChange={onNoiseSuppressionChange} level="medium" onLevelChange={() => {}} />}
               </div>
 
-              <div className="space-y-4 pt-4 border-t border-[var(--chalk-line)]">
+              <div className="space-y-4 border-t border-[var(--chalk-line)] pt-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--chalk-muted-text)]">Speakers</h3>
                 <DeviceSelector type="audiooutput" devices={audioOutputDevices} selectedDeviceId={selectedAudioOutput} onChange={(id) => onAudioOutputChange?.(id)} label="Output Device" participantColorSeed={participantColorSeed} />
 
@@ -142,12 +133,7 @@ const SettingsPanelSurface = React.memo(
                   <VolumeSlider value={speakerVolume} onChange={setSpeakerVolume} showValue />
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === "video" && (
-            <div className={cn("space-y-6", !prefersReducedMotion && "animate-in fade-in duration-200")}>
-              <div className="space-y-4">
+              <div className="space-y-4 border-t border-[var(--chalk-line)] pt-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--chalk-muted-text)]">Camera</h3>
                 <DeviceSelector type="videoinput" devices={videoInputDevices} selectedDeviceId={selectedVideoInput} onChange={(id) => onVideoInputChange?.(id)} label="Input Device" previewTrack={videoTrack} participantColorSeed={participantColorSeed} />
               </div>

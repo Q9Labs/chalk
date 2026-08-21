@@ -8,6 +8,10 @@ import type { Participant } from "../participant-grid/ParticipantGrid";
 import { Stage } from "./Stage";
 import { buildStageItems, screenShareItemId, type StageItem } from "./stage-items";
 
+vi.mock("@q9labsai/facehash/react", () => ({
+  Facehash: ({ name }: { readonly name: string }) => <span data-testid="facehash-avatar">{name}</span>,
+}));
+
 const box = vi.hoisted(() => ({ width: 960, height: 540 }));
 vi.mock("../chalk-ui/useResizeObserver", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../chalk-ui/useResizeObserver")>()),
@@ -50,7 +54,9 @@ describe("Stage", () => {
     expect(tile("p1")).not.toHaveAttribute("aria-hidden");
     expect(screen.getByLabelText("Video tile for p9")).toHaveAttribute("aria-hidden", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    const nextPage = screen.getByRole("button", { name: "Next page" });
+    expect(nextPage).toHaveClass("bg-[var(--chalk-app-control-group)]", "text-[var(--chalk-app-text-muted)]", "ring-inset", "ring-[var(--chalk-app-line-strong)]");
+    fireEvent.click(nextPage);
     expect(screen.getByLabelText("Video tile for p1")).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByRole("button", { name: "Go to page 2" })).toHaveAttribute("aria-current", "page");
 
@@ -72,6 +78,18 @@ describe("Stage", () => {
     expect(tile("ada")).toBe(adaBefore);
     expect(size(tile("ada"))).not.toEqual(gridSize);
     expect(Number.parseFloat(tile("ada").style.width)).toBeGreaterThan(Number.parseFloat(tile("grace").style.width));
+  });
+
+  it.each(["focus", "grid", "presentation"] as const)("uses the generated avatars preference in %s layout", (layout) => {
+    const items = buildStageItems([person("hasan", { displayName: "Hasan" }), person("nora", { displayName: "Nora Williams" })], false);
+    const view = render(<Stage items={items} layout={layout} generatedAvatars />);
+
+    expect(screen.getAllByTestId("facehash-avatar")).toHaveLength(4);
+
+    view.rerender(<Stage items={items} layout={layout} generatedAvatars={false} />);
+    expect(screen.queryByTestId("facehash-avatar")).not.toBeInTheDocument();
+    expect(screen.getAllByText("H")).toHaveLength(2);
+    expect(screen.getAllByText("NW")).toHaveLength(2);
   });
 
   it("puts a screen share first in presentation and hands it to the primary renderer", () => {

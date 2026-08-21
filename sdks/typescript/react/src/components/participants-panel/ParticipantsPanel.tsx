@@ -4,6 +4,7 @@ import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ChalkBadge, ChalkButton, ChalkChrome, ChalkEmptyState, ChalkIconButton, ChalkInput, ChalkPanel } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicParticipantsPanel } from "./ClassicParticipantsPanel";
@@ -26,12 +27,21 @@ export interface ParticipantsPanelProps {
   onAddPeople?: () => void;
   searchable?: boolean;
   onClose?: () => void;
+  /** Override the media request actions when the host surface owns command feedback. */
+  onRequestUnmute?: (id: string) => void | Promise<unknown>;
+  onRequestStartCamera?: (id: string) => void | Promise<unknown>;
+  /** Receives a cleared value after a successful command and a message after a failed command. */
+  onCommandError?: (message: string | null) => void;
   /** Per-participant volume overrides (0-100). Only contains adjusted participants. */
   participantVolumes?: ReadonlyMap<string, number>;
   /** Called when a participant's volume is changed via the slider. */
   onParticipantVolumeChange?: (id: string, volume: number) => void;
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
+  /** Show a generated Facehash when a Participant has no uploaded avatar. */
+  generatedAvatars?: boolean;
+  /** Show the capability-gated admission section when the Space enables it. */
+  admissionEnabled?: boolean;
   className?: string;
   variant?: ParticipantListVariant;
   title?: string;
@@ -40,12 +50,14 @@ export interface ParticipantsPanelProps {
 interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
   readonly participants: ParticipantListParticipant[];
   readonly onMuteParticipant?: (id: string) => void;
-  readonly onRequestUnmute?: (id: string) => void;
+  readonly onRequestUnmute?: (id: string) => void | Promise<unknown>;
   readonly onStopParticipantCamera?: (id: string) => void;
-  readonly onRequestStartCamera?: (id: string) => void;
+  readonly onRequestStartCamera?: (id: string) => void | Promise<unknown>;
   readonly onRemoveParticipant?: (id: string) => void;
   readonly onUpdateDisplayName?: (name: string) => void;
+  readonly onCommandError?: (message: string | null) => void;
   readonly canManageParticipants?: boolean;
+  readonly canManageAdmission?: boolean;
 }
 
 function getParticipantIdentity(participant: ParticipantListParticipant): string {
@@ -61,12 +73,16 @@ const ParticipantsPanelSurface = React.memo(
     onRequestStartCamera,
     onRemoveParticipant,
     onUpdateDisplayName,
+    onCommandError,
     onAddPeople,
     participantVolumes,
     onParticipantVolumeChange,
     participantColorSeed,
     participantGradientPreference,
+    generatedAvatars = true,
+    admissionEnabled = true,
     canManageParticipants = false,
+    canManageAdmission = false,
     searchable = true,
     onClose,
     className,
@@ -114,9 +130,11 @@ const ParticipantsPanelSurface = React.memo(
               onRequestStartCamera={onRequestStartCamera}
               onRemoveParticipant={onRemoveParticipant}
               onUpdateDisplayName={onUpdateDisplayName}
+              onCommandError={onCommandError}
               participantVolumes={participantVolumes}
               onParticipantVolumeChange={onParticipantVolumeChange}
               participantGradientPreference={participant.isLocal ? participantGradientPreference : undefined}
+              generatedAvatars={generatedAvatars}
               menuOpen={activeMenuId === participant.id}
               onMenuToggle={() => setActiveMenuId((prev) => (prev === participant.id ? null : participant.id))}
               onMenuClose={() => setActiveMenuId(null)}
@@ -125,6 +143,7 @@ const ParticipantsPanelSurface = React.memo(
         )}
       </div>
     );
+    const admissionSection = canManageAdmission && admissionEnabled ? <AdmissionPanel inline /> : null;
 
     // Mobile variant - fills container, no header (the parent provides it)
     if (variant === "mobile") {
@@ -134,16 +153,20 @@ const ParticipantsPanelSurface = React.memo(
             {onAddPeople && (
               <ChalkButton variant="solid" tone="accent" onClick={onAddPeople} className="mb-4 min-h-[48px] w-full rounded-full px-4 py-3 !text-[var(--chalk-app-control-active-text)]">
                 <UserGroupIcon className="w-4 h-4" />
-                <span>Add people</span>
+                <span>Invite Participants</span>
               </ChalkButton>
             )}
 
             {/* Section Label */}
             <div className="mb-3 px-1">
-              <p className="text-[var(--chalk-app-text-muted)] text-[10px] font-semibold uppercase tracking-[0.1em]">IN THIS SPACE ({participants.length})</p>
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--chalk-app-text-muted)]">Participants</h2>
+                <ChalkBadge count={participants.length} className="min-w-5 rounded-full px-1.5 py-0.5 text-[11px] text-[var(--chalk-app-text-muted)]" />
+              </div>
             </div>
 
             {/* Participants List */}
+            {admissionSection}
             {rows}
           </div>
         </ChalkPanel>
@@ -156,8 +179,8 @@ const ParticipantsPanelSurface = React.memo(
           <header className="group relative flex items-center justify-between px-5 py-[18px]">
             <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-panel))" part="participants-header" />
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title === "Participants" ? "People" : title}</h2>
-              <ChalkBadge count={participants.length} className="min-w-6 rounded-full px-1.5 py-0.5 text-xs text-[var(--chalk-app-text-muted)]" />
+              <h2 className="text-base font-semibold tracking-[-0.02em] text-[var(--chalk-app-text)]">{title}</h2>
+              <ChalkBadge count={participants.length} className="min-w-5 rounded-full px-1.5 py-0.5 text-[11px] text-[var(--chalk-app-text-muted)]" />
             </div>
 
             <div className="flex items-center gap-2">
@@ -168,7 +191,7 @@ const ParticipantsPanelSurface = React.memo(
                 </ChalkButton>
               )}
               {onClose && (
-                <ChalkIconButton type="button" size="sm" onClick={onClose} className="rounded-full text-[var(--chalk-app-text-muted)]" aria-label="Close">
+                <ChalkIconButton type="button" size="sm" onClick={onClose} className="rounded-full text-[var(--chalk-app-text-muted)]" aria-label="Close participants panel">
                   <Cancel01Icon className="w-5 h-5" />
                 </ChalkIconButton>
               )}
@@ -179,12 +202,22 @@ const ParticipantsPanelSurface = React.memo(
             <div className="px-5 py-4">
               <div className="relative">
                 <Search01Icon className="pointer-events-none absolute left-3 top-1/2 z-[2] h-4 w-4 -translate-y-1/2 text-[var(--chalk-app-text-muted)]" />
-                <ChalkInput placeholder="Search people" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} wrapperClassName="w-full" className="w-full rounded-[7px] bg-[var(--chalk-app-input)] pl-9 transition-all placeholder:text-[var(--chalk-app-text-muted)]" />
+                <ChalkInput
+                  aria-label="Search participants"
+                  placeholder="Search participants"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  wrapperClassName="w-full"
+                  className="w-full rounded-[8px] bg-[var(--chalk-app-input)] pl-9 transition-all placeholder:text-[var(--chalk-app-text-muted)]"
+                />
               </div>
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto px-5 pb-5">{rows}</div>
+          <div className="flex-1 overflow-y-auto px-5 pb-5">
+            {admissionSection}
+            {rows}
+          </div>
         </ChalkPanel>
       );
     }
@@ -205,7 +238,7 @@ const ParticipantsPanelSurface = React.memo(
             <ChalkBadge count={participants.length} />
           </div>
           {onClose && (
-            <ChalkIconButton size="sm" onClick={onClose} aria-label="Close participant list">
+            <ChalkIconButton type="button" size="sm" onClick={onClose} aria-label="Close participants panel">
               <Cancel01Icon className="w-4 h-4" />
             </ChalkIconButton>
           )}
@@ -215,12 +248,15 @@ const ParticipantsPanelSurface = React.memo(
           <div className="p-4 pb-2">
             <div className="relative">
               <Search01Icon className="pointer-events-none absolute left-3 top-1/2 z-[2] h-4 w-4 -translate-y-1/2" />
-              <ChalkInput placeholder="Search participants..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} wrapperClassName="w-full" className="w-full pl-9" />
+              <ChalkInput aria-label="Search participants" placeholder="Search participants" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} wrapperClassName="w-full" className="w-full rounded-[8px] pl-9" />
             </div>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-2">{rows}</div>
+        <div className="flex-1 overflow-y-auto p-2">
+          {admissionSection}
+          {rows}
+        </div>
       </ChalkPanel>
     );
   },
@@ -234,6 +270,7 @@ const ChalkParticipantsPanel = React.memo((props: ParticipantsPanelProps): React
   const canStopVideoOthers = useCan("stopVideoOthers");
   const canRequestMedia = useCan("requestMediaOthers");
   const canRemoveParticipants = useCan("removeParticipant");
+  const canManageAdmission = useCan("manageAdmission");
   const contextVolumeState = useParticipantVolumeContext();
   const [localVolumes, setLocalVolumes] = useState<ReadonlyMap<string, number>>(new Map());
   const isControlled = props.participantVolumes !== undefined && props.onParticipantVolumeChange !== undefined;
@@ -268,10 +305,11 @@ const ChalkParticipantsPanel = React.memo((props: ParticipantsPanelProps): React
       onParticipantVolumeChange={onParticipantVolumeChange}
       participants={participants}
       canManageParticipants={canMuteOthers || canStopVideoOthers || canRequestMedia || canRemoveParticipants}
+      canManageAdmission={canManageAdmission}
       onMuteParticipant={canMuteOthers ? (id) => void client.participants.mute(id) : undefined}
-      onRequestUnmute={canRequestMedia ? (id) => void client.participants.requestMedia(id, "microphone") : undefined}
+      onRequestUnmute={canRequestMedia ? (props.onRequestUnmute ?? ((id) => client.participants.requestMedia(id, "microphone"))) : undefined}
       onStopParticipantCamera={canStopVideoOthers ? (id) => void client.participants.stopVideo(id) : undefined}
-      onRequestStartCamera={canRequestMedia ? (id) => void client.participants.requestMedia(id, "camera") : undefined}
+      onRequestStartCamera={canRequestMedia ? (props.onRequestStartCamera ?? ((id) => client.participants.requestMedia(id, "camera"))) : undefined}
       onRemoveParticipant={canRemoveParticipants ? (id) => void client.participants.remove(id) : undefined}
       onUpdateDisplayName={(displayName) => void client.participants.renameSelf(displayName)}
       participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined}

@@ -37,6 +37,8 @@ export interface ParticipantTileProps {
   style?: React.CSSProperties;
   children?: React.ReactNode;
   showAvatar?: boolean;
+  /** Show a generated Facehash when the Participant has no uploaded avatar. */
+  generatedAvatars?: boolean;
   gradientPreference?: ParticipantGradientPreference;
   /** Keeps the tile mounted but out of the accessibility tree and tab order (off-page on the stage). */
   hidden?: boolean;
@@ -49,7 +51,24 @@ const aspectRatioClasses = {
   fill: "",
 };
 
-const ChalkParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference, hidden }: ParticipantTileProps) => {
+const ChalkParticipantTile = React.memo(function ChalkParticipantTile({
+  participant,
+  videoTrack,
+  mirror,
+  showName = true,
+  showStatus = true,
+  showAvatar = true,
+  generatedAvatars = true,
+  aspectRatio = "16:9",
+  onClick,
+  onDoubleClick,
+  pinned,
+  className,
+  style,
+  children,
+  gradientPreference,
+  hidden,
+}: ParticipantTileProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const status = useVideoTrack(videoRef, videoTrack, participant.isVideoEnabled === true);
@@ -79,7 +98,7 @@ const ChalkParticipantTile = React.memo(({ participant, videoTrack, mirror, show
       chip={
         showName || showStatus ? (
           <>
-            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={Boolean(participant.avatarUrl)} gradientPreference={gradientPreference} className="hidden shrink-0 @[240px]:flex" />}
+            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} gradientPreference={gradientPreference} className="hidden shrink-0 @[240px]:flex" />}
             {showName && (
               <span className="min-w-0 truncate text-[11px] leading-4 font-medium tracking-[-0.01em] text-white @[240px]:text-[13px] @[240px]:leading-5" title={participant.displayName}>
                 {participant.displayName}
@@ -112,7 +131,7 @@ const ChalkParticipantTile = React.memo(({ participant, videoTrack, mirror, show
       {!showVideo && showAvatar && (
         <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 z-10 flex items-center justify-center">
           <span className={cn("relative grid place-items-center rounded-full", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}>
-            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={Boolean(participant.avatarUrl)} className="opacity-90" gradientPreference={gradientPreference} />
+            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} className="opacity-90" gradientPreference={gradientPreference} />
           </span>
         </div>
       )}

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Badge, IconButton, Spinner } from "@q9labsai/chalk-ui";
+import { IconButton, Spinner } from "@q9labsai/chalk-ui";
+
 import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
-import { Tick01Icon, Cancel01Icon, UserGroupIcon } from "../../utils/icons";
-import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
+import { Cancel01Icon } from "../../utils/icons";
+import { Avatar } from "../atomic";
 import type { AdmissionPanelProps, AdmissionParticipant } from "./AdmissionPanel";
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
@@ -14,102 +15,105 @@ interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly onDenyAll?: () => void;
 }
 
-const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose }: AdmissionPanelSurfaceProps) => {
+const TEXT_BUTTON_CLASS =
+  "inline-flex h-7 items-center rounded-[6px] px-2 text-xs font-semibold text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
+const ADMIT_BUTTON_CLASS =
+  "inline-flex h-8 items-center rounded-[7px] border border-transparent bg-[var(--chalk-app-control-active)] px-3 text-[13px] font-semibold text-[var(--chalk-app-control-active-text)] transition-colors hover:border-[var(--chalk-app-control-active-line)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
+const DENY_BUTTON_CLASS =
+  "inline-flex h-8 items-center rounded-[7px] px-2.5 text-[13px] font-semibold text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
+
+function getWaitingLabel(joinedAt?: Date): string {
+  if (!joinedAt) return "Waiting to join";
+  const minutes = Math.floor((Date.now() - joinedAt.getTime()) / 60_000);
+  if (minutes < 1) return "Waiting to join";
+  return `Waiting ${minutes} min`;
+}
+
+/**
+ * Flat list of people waiting at the door. Rendered inline inside the Participants panel
+ * (no surrounding card), or as a standalone floating panel when a host mounts it directly.
+ */
+const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 60000);
-    return () => clearInterval(timer);
+    const timer = window.setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const getAdmissionLabel = (date?: Date) => {
-    if (!date) return "Requested access";
-    const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
-    if (minutes < 1) return "Joined just now";
-    if (minutes === 1) return "Requested 1 min ago";
-    return `Requested ${minutes} min ago`;
-  };
+  const pending = participants.length;
 
-  const hasPendingAdmission = participants.length > 0;
-
-  return (
-    <div className={cn("flex flex-col w-80 overflow-hidden rounded-lg shadow-lg", "bg-[var(--chalk-surface)]", "border border-[var(--chalk-line)]", className)} role="complementary" aria-label="Admission requests">
-      <div className={cn("flex items-center justify-between p-4", "border-b border-[var(--chalk-line)]", "bg-[var(--chalk-stage)]")}>
-        <div className="flex items-center gap-2" aria-live="polite">
-          <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Admission</h2>
-          <Badge variant="default" count={participants.length} />
+  const list = (
+    <>
+      {pending > 0 ? (
+        <div className="flex h-9 items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--chalk-app-text-muted)]" aria-live="polite">
+            {pending === 1 ? "1 waiting" : `${pending} waiting`}
+          </span>
+          <div className="flex items-center gap-1">
+            {loading ? <Spinner size="sm" aria-label="Updating admission" /> : null}
+            {pending > 1 && onAdmitAll ? (
+              <button type="button" onClick={onAdmitAll} className={TEXT_BUTTON_CLASS}>
+                Admit all
+              </button>
+            ) : null}
+            {pending > 1 && onDenyAll ? (
+              <button type="button" onClick={onDenyAll} className={TEXT_BUTTON_CLASS}>
+                Deny all
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {loading && <Spinner size="sm" />}
-          {onClose ? <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close admission" /> : null}
-        </div>
-      </div>
+      ) : null}
 
-      {(onAdmitAll || onDenyAll) && (
-        <div className="p-2 border-b border-[var(--chalk-line)] flex gap-2">
-          {onAdmitAll && (
-            <button
-              type="button"
-              onClick={onAdmitAll}
-              disabled={!hasPendingAdmission}
-              className={cn(
-                "flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-              )}
-            >
-              Admit All
-            </button>
-          )}
-          {onDenyAll && (
-            <button
-              type="button"
-              onClick={onDenyAll}
-              disabled={!hasPendingAdmission}
-              className={cn(
-                "flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                "bg-[var(--chalk-stage)] text-[var(--chalk-danger)] hover:bg-[var(--chalk-danger-surface)]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-              )}
-            >
-              Deny All
-            </button>
-          )}
-        </div>
-      )}
-
-      <ul className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 list-none m-0" aria-label="Admission requests">
-        {!hasPendingAdmission ? (
-          <li className="flex flex-col items-center gap-2 p-8 text-center">
-            <UserGroupIcon size={24} className="text-[var(--chalk-muted-text)]" />
-            <span className="text-sm text-[var(--chalk-muted-text)]">No admission requests</span>
+      <ul aria-label="Waiting to join" className="m-0 list-none divide-y divide-[var(--chalk-app-line)] p-0">
+        {pending === 0 ? (
+          <li className="py-10 text-center text-sm text-[var(--chalk-app-text-muted)]" role="status">
+            No one is waiting to join
           </li>
         ) : (
-          participants.map((p) => (
-            <li key={p.id} className={cn("flex items-center justify-between p-2 rounded-md transition-colors", "hover:bg-[var(--chalk-stage)]")}>
-              <div className="flex items-center gap-3 min-w-0">
-                <Avatar src={p.avatarUrl} name={p.displayName} size="sm" />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium truncate text-[var(--chalk-text)]" title={p.displayName}>
-                    {p.displayName}
-                  </span>
-                  <span className="text-xs text-[var(--chalk-muted-text)]">{getAdmissionLabel(p.joinedAt)}</span>
-                </div>
+          participants.map((participant) => (
+            <li key={participant.id} className="flex items-center gap-3 py-3">
+              <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" className="h-10 w-10" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-[var(--chalk-app-text)]">{participant.displayName}</p>
+                <p className="text-xs text-[var(--chalk-app-text-muted)]">{getWaitingLabel(participant.joinedAt)}</p>
               </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                <IconButton icon={<Tick01Icon className="w-4 h-4" />} size="sm" variant="ghost" className="text-[var(--chalk-positive)] hover:bg-[var(--chalk-positive)]" onClick={() => onAdmit(p.id)} aria-label={`Admit ${p.displayName}`} />
-                <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" className="text-[var(--chalk-danger)] hover:bg-[var(--chalk-danger)]" onClick={() => onDeny(p.id)} aria-label={`Deny ${p.displayName}`} />
+              <div className="flex shrink-0 items-center gap-1">
+                <button type="button" onClick={() => onAdmit(participant.id)} className={ADMIT_BUTTON_CLASS} aria-label={`Admit ${participant.displayName}`}>
+                  Admit
+                </button>
+                <button type="button" onClick={() => onDeny(participant.id)} className={DENY_BUTTON_CLASS} aria-label={`Deny ${participant.displayName}`}>
+                  Deny
+                </button>
               </div>
             </li>
           ))
         )}
       </ul>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <section role="region" aria-label="Admission requests" className={cn("flex flex-col", className)}>
+        {list}
+      </section>
+    );
+  }
+
+  return (
+    <div className={cn("chalk-textured-surface flex w-80 flex-col overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] shadow-[var(--chalk-app-shadow-sm)]", className)} role="complementary" aria-label="Admission requests">
+      <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-4 py-3">
+        <h2 className="text-sm font-semibold text-[var(--chalk-app-text)]">Waiting to join</h2>
+        {onClose ? <IconButton icon={<Cancel01Icon className="h-4 w-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close admission" className="text-[var(--chalk-app-text-muted)] hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" /> : null}
+      </div>
+      <div className="max-h-80 overflow-y-auto px-4 pb-2">{list}</div>
     </div>
   );
 });
+
+AdmissionPanelSurface.displayName = "AdmissionPanelSurface";
 
 export function ClassicAdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
   const client = useSpaceClient();

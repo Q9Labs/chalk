@@ -11,10 +11,10 @@ import { SpaceView } from "./SpaceView";
 
 const audioOutputSpy = vi.hoisted(() => vi.fn(() => null));
 const controlBarSpy = vi.hoisted(() =>
-  vi.fn((props: { readonly buttons?: readonly string[]; readonly onOpenDiagnostics?: () => void; readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
+  vi.fn((props: { readonly buttons?: readonly string[]; readonly onOpenDiagnostics?: () => void; readonly onOpenReactions?: () => void; readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
     <>
       <button type="button" onClick={props.onToggleParticipants}>
-        People
+        Participants
       </button>
       <button type="button" onClick={props.onLeft}>
         Leave space
@@ -22,7 +22,7 @@ const controlBarSpy = vi.hoisted(() =>
     </>
   )),
 );
-const spaceStageSpy = vi.hoisted(() => vi.fn((props: { readonly layout: string; readonly tiles: readonly { readonly id: string; readonly screenShareTrack?: MediaStreamTrack | null }[] }) => <div data-testid="space-stage">{props.layout}</div>));
+const spaceStageSpy = vi.hoisted(() => vi.fn((props: { readonly layout: string; readonly generatedAvatars?: boolean; readonly tiles: readonly { readonly id: string; readonly screenShareTrack?: MediaStreamTrack | null }[] }) => <div data-testid="space-stage">{props.layout}</div>));
 
 vi.mock("../audio-output/AudioOutput", () => ({ AudioOutput: audioOutputSpy }));
 vi.mock("../control-bar/ControlBar", () => ({ ControlBar: controlBarSpy }));
@@ -59,6 +59,12 @@ describe("SpaceView", () => {
     expect(controlBarSpy.mock.calls[0]?.[0]).not.toHaveProperty("controls");
   });
 
+  it("passes the generated avatars preference to the Stage", () => {
+    renderView(createTestClient(), { generatedAvatars: false });
+
+    expect(spaceStageSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ generatedAvatars: false }));
+  });
+
   it("omits diagnostics unless an open handler is provided", () => {
     renderView();
 
@@ -72,12 +78,61 @@ describe("SpaceView", () => {
     expect(controlBarSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ buttons: expect.arrayContaining(["diagnostics"]), onOpenDiagnostics }));
   });
 
+  it("toggles the reaction tray from the same control", () => {
+    renderView(createTestClient(createSnapshot(["sendReaction"])), { features: { reactions: true } });
+    const onOpenReactions = controlBarSpy.mock.calls[0]?.[0].onOpenReactions;
+
+    act(() => onOpenReactions?.());
+    expect(screen.getByRole("toolbar", { name: "Reactions" })).toBeInTheDocument();
+
+    act(() => onOpenReactions?.());
+    expect(screen.queryByRole("toolbar", { name: "Reactions" })).not.toBeInTheDocument();
+  });
+
+  it("can remove the stage fill", () => {
+    renderView(createTestClient(), { stageBackground: false });
+
+    expect(screen.getByRole("region", { name: "Space stage" })).toHaveClass("bg-transparent");
+    expect(screen.getByRole("region", { name: "Space stage" })).not.toHaveClass("chalk-textured-surface");
+  });
+
+  it("shows the live Episode duration in the header and keeps header actions out of the dock", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T12:00:05.000Z"));
+    const client = createTestClient();
+    client.setSnapshot({
+      ...client.getSnapshot(),
+      connection: {
+        status: "live",
+        episode: { id: "episode-1", startedAt: "2026-08-18T12:00:03.000Z", deadline: null },
+        lastError: null,
+      },
+    });
+
+    renderView(client, {
+      features: { info: true, settings: true },
+      infoDialog: { isOpen: false, onOpenChange: vi.fn(), spaceName: "Design review", inviteLink: "https://chalk.test/design", onCopyLink: vi.fn() },
+    });
+
+    expect(screen.getByLabelText("Episode duration 00:00:02")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Space information" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(controlBarSpy.mock.calls[0]?.[0].buttons).not.toContain("info");
+    expect(controlBarSpy.mock.calls[0]?.[0].buttons).not.toContain("settings");
+  });
+
   it("keeps the typed skin, palette, and texture attributes on the layout", () => {
     renderView(createTestClient(), { skin: "chalk", palette: "warm-charcoal", texture: "paper" });
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-theme", "dark");
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-skin", "chalk");
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-palette", "warm-charcoal");
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-texture", "paper");
+  });
+
+  it("uses the light Chalk wordmark on dark Space palettes", () => {
+    renderView(createTestClient(), { palette: "warm-charcoal", logoUrl: "/brand/chalk/chalk-logo.svg" });
+
+    expect(screen.getByRole("img", { name: "Chalk" })).toHaveAttribute("src", "/brand/chalk/chalk-logo-on-dark.svg");
   });
 
   it("uses the full host viewport instead of capping the Space chrome and stage", () => {
@@ -139,13 +194,13 @@ describe("SpaceView", () => {
   it("returns focus to the opener when the drawer closes", () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     const { container } = renderView(client, { features: { participants: true } });
-    const opener = screen.getAllByRole("button", { name: "People" })[0]!;
+    const opener = screen.getAllByRole("button", { name: "Participants" })[0]!;
 
     opener.focus();
     fireEvent.click(opener);
     expect(container.querySelector("[data-chalk-drawer]")).toContainElement(document.activeElement);
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close participants panel" }));
 
     expect(document.activeElement).toBe(opener);
   });
@@ -162,7 +217,7 @@ describe("SpaceView", () => {
   it("opens the provider-backed participant panel from the control bar", () => {
     const client = createTestClient(createSnapshot(["sendChat"]));
     renderView(client, { features: { participants: true } });
-    fireEvent.click(screen.getAllByRole("button", { name: "People" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Participants" })[0]!);
     expect(screen.getByRole("complementary", { name: "Participants list" })).toBeInTheDocument();
   });
 
@@ -176,7 +231,9 @@ describe("SpaceView", () => {
 
     renderView(client, { features: { admission: true } });
 
-    expect(screen.getByRole("complementary", { name: "Admission requests" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Participants list" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Admission requests" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Admission requests" })).not.toBeInTheDocument();
     expect(screen.getByText("Guest")).toBeInTheDocument();
   });
 

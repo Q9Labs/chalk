@@ -105,6 +105,6 @@ export function getParticipantAvatarRecipe(identity = "chalk", preference?: Part
     darkerAvatarGradient: `linear-gradient(135deg, ${colors.primary}, #111827)`,
     color: colors.primary,
     border: colors.primary,
-    facehashColors: [colors.primary, colors.secondary, "#f8fafc"],
+    facehashColors: [colors.primary],
   };
 }

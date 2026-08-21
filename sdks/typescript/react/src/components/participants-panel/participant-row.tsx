@@ -14,14 +14,16 @@ export interface ParticipantRowProps {
   variant: ParticipantListVariant;
   canManageParticipants: boolean;
   onMuteParticipant?: (id: string) => void;
-  onRequestUnmute?: (id: string) => void;
+  onRequestUnmute?: (id: string) => void | Promise<unknown>;
   onStopParticipantCamera?: (id: string) => void;
-  onRequestStartCamera?: (id: string) => void;
+  onRequestStartCamera?: (id: string) => void | Promise<unknown>;
   onRemoveParticipant?: (id: string) => void;
   onUpdateDisplayName?: (name: string) => void;
+  onCommandError?: (message: string | null) => void;
   participantVolumes?: ReadonlyMap<string, number>;
   onParticipantVolumeChange?: (id: string, volume: number) => void;
   participantGradientPreference?: ParticipantGradientPreference;
+  generatedAvatars?: boolean;
   menuOpen: boolean;
   onMenuToggle: () => void;
   onMenuClose: () => void;
@@ -37,9 +39,11 @@ function ChalkParticipantRow({
   onRequestStartCamera,
   onRemoveParticipant,
   onUpdateDisplayName,
+  onCommandError,
   participantVolumes,
   onParticipantVolumeChange,
   participantGradientPreference,
+  generatedAvatars = true,
   menuOpen,
   onMenuToggle,
   onMenuClose,
@@ -81,7 +85,7 @@ function ChalkParticipantRow({
       <div className={cn("flex w-full items-center justify-between rounded-lg p-3", variant === "sidebar" && "rounded-none px-1 py-3.5")}>
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="relative">
-            <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={Boolean(participant.avatarUrl)} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
+            <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={generatedAvatars} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
             {participant.isHandRaised && <HandRaiseIndicator raised={true} size="sm" className="-right-0.5 -top-0.5" />}
           </div>
 
@@ -159,6 +163,7 @@ function ChalkParticipantRow({
                       }
                       participantVolumes={participantVolumes}
                       onParticipantVolumeChange={onParticipantVolumeChange}
+                      onCommandError={onCommandError}
                     />
                   </ChalkMenu>
                 </>

@@ -175,6 +175,8 @@
   --chalk-app-control-group: #f0efeb;
   --chalk-app-control-primary: #202329;
   --chalk-app-control-primary-hover: #343840;
+  --chalk-entrance-primary: #202329;
+  --chalk-entrance-primary-hover: #343840;
   --chalk-app-control-active: #dff2f7;
   --chalk-app-control-active-line: #9dcfe1;
   --chalk-app-control-active-text: #202329;
@@ -1724,6 +1726,199 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
 
 .chalk-animate-search-highlight {
   animation: chalk-search-highlight 2s ease-in-out infinite;
+}
+
+/* Canonical logo motion: the chalk sticks move while the wordmark stays fixed. */
+.chalk-logo {
+  display: block;
+  overflow: visible;
+}
+
+.chalk-logo__stick {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes chalk-logo-orbit-green {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  50% {
+    transform: translate(-4px, 3px) rotate(-5deg);
+  }
+}
+
+@keyframes chalk-logo-orbit-yellow {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  50% {
+    transform: translate(3px, -4px) rotate(4deg);
+  }
+}
+
+@keyframes chalk-logo-orbit-blue {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  50% {
+    transform: translate(5px, 2px) rotate(5deg);
+  }
+}
+
+@keyframes chalk-logo-orbit-pink {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  50% {
+    transform: translate(-3px, -3px) rotate(-4deg);
+  }
+}
+
+@keyframes chalk-logo-burst-green {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+
+  24% {
+    transform: translate(-14px, -9px) scale(1.14) rotate(-8deg);
+  }
+
+  54% {
+    transform: translate(-2px, 2px) scale(0.98) rotate(2deg);
+  }
+}
+
+@keyframes chalk-logo-burst-yellow {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+
+  24% {
+    transform: translate(-4px, -14px) scale(1.14) rotate(-4deg);
+  }
+
+  54% {
+    transform: translate(1px, 1px) scale(0.98) rotate(1deg);
+  }
+}
+
+@keyframes chalk-logo-burst-blue {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+
+  24% {
+    transform: translate(14px, -6px) scale(1.16) rotate(8deg);
+  }
+
+  54% {
+    transform: translate(2px, 1px) scale(0.98) rotate(-2deg);
+  }
+}
+
+@keyframes chalk-logo-burst-pink {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+
+  24% {
+    transform: translate(11px, 12px) scale(1.13) rotate(7deg);
+  }
+
+  54% {
+    transform: translate(1px, -1px) scale(0.98) rotate(-1deg);
+  }
+}
+
+[data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick {
+  animation-duration: 4.8s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  will-change: transform;
+}
+
+[data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--green {
+  animation-name: chalk-logo-orbit-green;
+  animation-delay: -120ms;
+}
+
+[data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--yellow {
+  animation-name: chalk-logo-orbit-yellow;
+  animation-delay: -760ms;
+}
+
+[data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--blue {
+  animation-name: chalk-logo-orbit-blue;
+  animation-delay: -1.35s;
+}
+
+[data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--pink {
+  animation-name: chalk-logo-orbit-pink;
+  animation-delay: -2.05s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-chalk-logo-motion="orbit-burst"]:hover .chalk-logo__stick {
+    animation-duration: 1.1s;
+    animation-delay: 0ms;
+    animation-timing-function: var(--chalk-ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  }
+
+  [data-chalk-logo-motion="orbit-burst"]:hover .chalk-logo__stick--green {
+    animation-name: chalk-logo-burst-green;
+  }
+
+  [data-chalk-logo-motion="orbit-burst"]:hover .chalk-logo__stick--yellow {
+    animation-name: chalk-logo-burst-yellow;
+  }
+
+  [data-chalk-logo-motion="orbit-burst"]:hover .chalk-logo__stick--blue {
+    animation-name: chalk-logo-burst-blue;
+  }
+
+  [data-chalk-logo-motion="orbit-burst"]:hover .chalk-logo__stick--pink {
+    animation-name: chalk-logo-burst-pink;
+  }
+}
+
+:where(a, button):focus-visible [data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick,
+[data-chalk-logo-motion="orbit-burst"]:focus-visible .chalk-logo__stick {
+  animation-duration: 1.1s;
+  animation-delay: 0ms;
+  animation-timing-function: var(--chalk-ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+:where(a, button):focus-visible [data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--green,
+[data-chalk-logo-motion="orbit-burst"]:focus-visible .chalk-logo__stick--green {
+  animation-name: chalk-logo-burst-green;
+}
+
+:where(a, button):focus-visible [data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--yellow,
+[data-chalk-logo-motion="orbit-burst"]:focus-visible .chalk-logo__stick--yellow {
+  animation-name: chalk-logo-burst-yellow;
+}
+
+:where(a, button):focus-visible [data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--blue,
+[data-chalk-logo-motion="orbit-burst"]:focus-visible .chalk-logo__stick--blue {
+  animation-name: chalk-logo-burst-blue;
+}
+
+:where(a, button):focus-visible [data-chalk-logo-motion="orbit-burst"] .chalk-logo__stick--pink,
+[data-chalk-logo-motion="orbit-burst"]:focus-visible .chalk-logo__stick--pink {
+  animation-name: chalk-logo-burst-pink;
 }
 
 /* Low confidence text styling */

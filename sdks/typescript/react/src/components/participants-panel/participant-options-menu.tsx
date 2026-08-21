@@ -1,27 +1,28 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { VolumeHighIcon, VolumeMute01Icon } from "../../utils/icons";
-import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import { ChalkButton, ChalkDivider, ChalkIconButton, ChalkMenuItem, ChalkSlider } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicParticipantOptionsMenu } from "./ClassicParticipantOptionsMenu";
+import { runParticipantAction, type ParticipantOptionsMenuProps } from "./participant-options-menu-contract";
 
-export interface ParticipantOptionsMenuProps {
-  participant: ParticipantListParticipant;
-  variant: ParticipantListVariant;
-  canManageParticipants: boolean;
-  onClose: () => void;
-  onMuteParticipant?: (id: string) => void;
-  onRequestUnmute?: (id: string) => void;
-  onStopParticipantCamera?: (id: string) => void;
-  onRequestStartCamera?: (id: string) => void;
-  onRemoveParticipant?: (id: string) => void;
-  onEditName?: () => void;
-  participantVolumes?: ReadonlyMap<string, number>;
-  onParticipantVolumeChange?: (id: string, volume: number) => void;
-}
+export { runParticipantAction, type ParticipantOptionsMenuProps } from "./participant-options-menu-contract";
 
-function ChalkParticipantOptionsMenu({ participant, variant, canManageParticipants, onClose, onMuteParticipant, onRequestUnmute, onStopParticipantCamera, onRequestStartCamera, onRemoveParticipant, onEditName, participantVolumes, onParticipantVolumeChange }: ParticipantOptionsMenuProps) {
+function ChalkParticipantOptionsMenu({
+  participant,
+  variant,
+  canManageParticipants,
+  onClose,
+  onMuteParticipant,
+  onRequestUnmute,
+  onStopParticipantCamera,
+  onRequestStartCamera,
+  onRemoveParticipant,
+  onEditName,
+  participantVolumes,
+  onParticipantVolumeChange,
+  onCommandError,
+}: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
   const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant);
@@ -65,8 +66,7 @@ function ChalkParticipantOptionsMenu({ participant, variant, canManageParticipan
           {!participant.isMuted && onMuteParticipant ? (
             <MenuAction
               onSelect={() => {
-                onMuteParticipant(participant.id);
-                onClose();
+                void runParticipantAction(() => onMuteParticipant(participant.id), onClose, onCommandError);
               }}
             >
               <MicrophoneOff01Icon className="h-4 w-4" />
@@ -77,8 +77,7 @@ function ChalkParticipantOptionsMenu({ participant, variant, canManageParticipan
           {participant.isMuted && onRequestUnmute ? (
             <MenuAction
               onSelect={() => {
-                onRequestUnmute(participant.id);
-                onClose();
+                void runParticipantAction(() => onRequestUnmute(participant.id), onClose, onCommandError);
               }}
             >
               <Microphone01Icon className="h-4 w-4" />
@@ -89,8 +88,7 @@ function ChalkParticipantOptionsMenu({ participant, variant, canManageParticipan
           {participant.isVideoEnabled && onStopParticipantCamera ? (
             <MenuAction
               onSelect={() => {
-                onStopParticipantCamera(participant.id);
-                onClose();
+                void runParticipantAction(() => onStopParticipantCamera(participant.id), onClose, onCommandError);
               }}
             >
               <VideoOffIcon className="h-4 w-4" />
@@ -101,8 +99,7 @@ function ChalkParticipantOptionsMenu({ participant, variant, canManageParticipan
           {!participant.isVideoEnabled && onRequestStartCamera ? (
             <MenuAction
               onSelect={() => {
-                onRequestStartCamera(participant.id);
-                onClose();
+                void runParticipantAction(() => onRequestStartCamera(participant.id), onClose, onCommandError);
               }}
             >
               <Video01Icon className="h-4 w-4" />
@@ -114,8 +111,7 @@ function ChalkParticipantOptionsMenu({ participant, variant, canManageParticipan
             <MenuAction
               tone="danger"
               onSelect={() => {
-                onRemoveParticipant(participant.id);
-                onClose();
+                void runParticipantAction(() => onRemoveParticipant(participant.id), onClose, onCommandError);
               }}
             >
               <UserRemove01Icon className="h-4 w-4" />

@@ -47,6 +47,16 @@ describe("SettingsDialog appearance", () => {
     expect(document.querySelector('[data-chalk-skin="classic"]')).toBeInTheDocument();
     expect(document.querySelector(".rounded-\\[14px\\]")).toBeInTheDocument();
   });
+
+  it("keeps the generated avatars preference in Appearance", () => {
+    const onUpdateAppearance = vi.fn();
+    render(<SettingsDialog isOpen onClose={vi.fn()} settings={createSettings()} onUpdateIdentity={vi.fn()} onUpdateJoin={vi.fn()} onUpdateAudio={vi.fn()} onUpdateVideo={vi.fn()} onUpdateAppearance={onUpdateAppearance} onUpdateExperience={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
+    fireEvent.click(screen.getByRole("switch", { name: "Generated avatars" }));
+
+    expect(onUpdateAppearance).toHaveBeenCalledWith({ generatedAvatars: false });
+  });
 });
 
 function createSettings(): SettingsDialogValue {

@@ -97,6 +97,11 @@ describe("participant volume contracts", () => {
       </ChalkProvider>,
     );
 
+    expect(screen.getByRole("heading", { name: "Participants" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "People" })).not.toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search participants" })).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Options for Remote" }));
     expect(screen.getByRole("menu")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mute volume" }));

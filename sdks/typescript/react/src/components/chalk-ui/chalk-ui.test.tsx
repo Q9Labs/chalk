@@ -105,11 +105,10 @@ describe("chalk-ui primitives", () => {
     expect(dangerBadge).toHaveClass("border-[var(--chalk-app-danger,var(--chalk-danger))]");
     expect(successBadge).toHaveClass("border-[var(--chalk-app-success,var(--chalk-positive))]");
     expect(dangerBadge).not.toHaveClass("border-[var(--chalk-app-success,var(--chalk-positive))]");
-    const dangerToggle = screen.getByRole("button", { name: "Danger toggle" });
-    const successToggle = screen.getByRole("button", { name: "Success toggle" });
-    expect(dangerToggle).toHaveClass("bg-[var(--chalk-app-danger,var(--chalk-danger))]");
-    expect(successToggle).toHaveClass("bg-[var(--chalk-app-success,var(--chalk-positive))]");
-    expect(dangerToggle).not.toHaveClass("bg-[var(--chalk-app-success,var(--chalk-positive))]");
+    const dangerToggle = screen.getByRole("switch", { name: "Danger toggle" });
+    const successToggle = screen.getByRole("switch", { name: "Success toggle" });
+    expect(dangerToggle).toHaveAttribute("data-chalk-tone", "danger");
+    expect(successToggle).toHaveAttribute("data-chalk-tone", "success");
     expect(screen.getByRole("alert")).toHaveClass("border-[var(--chalk-app-success,var(--chalk-positive))]");
     expect(screen.getByRole("button", { name: "Danger icon" })).toHaveClass("border-[var(--chalk-app-danger,var(--chalk-danger))]");
     expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
@@ -134,16 +133,16 @@ describe("chalk-ui primitives", () => {
     expect(screen.getByRole("button", { name: "More" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Notes" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ready" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("switch", { name: "Ready" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("separator")).toBeInTheDocument();
     expect(document.querySelectorAll("svg[data-chalk-chrome='true']").length).toBeGreaterThan(0);
   });
 
-  it("updates pressed state on the real toggle button", () => {
+  it("updates checked state on the real switch button", () => {
     render(<ChalkToggle aria-label="Ready" />);
-    const toggle = screen.getByRole("button", { name: "Ready" });
+    const toggle = screen.getByRole("switch", { name: "Ready" });
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
     expect(toggle).toHaveAttribute("data-pressed", "true");
   });
 

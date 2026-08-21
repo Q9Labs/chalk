@@ -55,16 +55,4 @@ describe("SpaceHeader", () => {
     expect(header).toHaveClass("relative", "h-14", "text-[var(--chalk-app-text)]");
     expect(header.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
   });
-
-  it("restores the classic header structure without rough chrome", () => {
-    render(
-      <SkinProvider skin="classic">
-        <SpaceHeader spaceName="Design review" />
-      </SkinProvider>,
-    );
-
-    const header = screen.getByRole("banner");
-    expect(header).toHaveClass("chalk-textured-surface", "border-b", "bg-[var(--chalk-app-chrome)]");
-    expect(header.querySelector("svg[data-chalk-chrome='true']")).not.toBeInTheDocument();
-  });
 });

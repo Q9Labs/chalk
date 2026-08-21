@@ -4,6 +4,7 @@ import type { Reaction } from "@q9labsai/chalk-client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -23,7 +24,7 @@ import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay
 import { SpaceHeader } from "../space-header/SpaceHeader";
 import { SpaceInfoDialog } from "../space-info-dialog/SpaceInfoDialog";
 import { TranscriptPanel } from "../transcript-panel/TranscriptPanel";
-import { CommandErrorAlert } from "../composite/CommandErrorAlert";
+import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { getThemeMode } from "../theme";
 import type { SpacePanel, SpaceViewFeatures, SpaceViewProps } from "./SpaceView";
 import { SpaceDrawer } from "./SpaceDrawer";
@@ -40,6 +41,7 @@ export function ClassicSpaceView({
   pickChatFiles,
   palette = "light",
   texture = "none",
+  stageBackground = true,
   layout: controlledLayout,
   onLayoutChange,
   initialPanel = null,
@@ -47,6 +49,9 @@ export function ClassicSpaceView({
   infoDialog,
   inviteDialog,
   settingsDialog,
+  generatedAvatars = true,
+  commandError: externalCommandError,
+  onDismissCommandError,
   onOpenDiagnostics,
   onOpenSettings,
   onToggleWhiteboard,
@@ -66,6 +71,7 @@ export function ClassicSpaceView({
   const canSendReaction = useCan("sendReaction");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const canManageAdmission = useCan("manageAdmission");
+  const episodeDuration = useEpisodeDuration();
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus" | "presentation">("focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
@@ -115,6 +121,13 @@ export function ClassicSpaceView({
     }
   }, []);
 
+  const displayedCommandError = externalCommandError ?? commandError;
+  const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
+  const dismissCommandError = () => {
+    setCommandError(null);
+    onDismissCommandError?.();
+  };
+
   const settingsContent = React.isValidElement<{ readonly onClose?: () => void }>(settingsDialog)
     ? React.cloneElement(settingsDialog, {
         onClose: () => {
@@ -144,6 +157,7 @@ export function ClassicSpaceView({
           <SpaceHeader
             spaceName={spaceName}
             logoUrl={logoUrl}
+            duration={episodeDuration}
             layout={layout}
             onLayoutChange={updateLayout}
             onInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
@@ -160,14 +174,15 @@ export function ClassicSpaceView({
 
           <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-14 sm:px-4 md:pb-16 lg:px-5">
-              <section className="chalk-textured-surface min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px] bg-[var(--chalk-app-stage)]" aria-label="Space stage">
-                <SpaceStage tiles={tiles} layout={layout} whiteboard={whiteboard} className="h-full" />
+              <section className={cn("min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px]", stageBackground ? "chalk-textured-surface bg-[var(--chalk-app-stage)]" : "bg-transparent")} aria-label="Space stage">
+                <SpaceStage tiles={tiles} layout={layout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />
               </section>
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
                 <div className="pointer-events-auto hidden md:block">
                   <ControlBar
                     placement="floating"
                     density="comfortable"
+                    duration={episodeDuration}
                     buttons={buttons}
                     activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
                     onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
@@ -188,6 +203,7 @@ export function ClassicSpaceView({
                   <ControlBar
                     placement="floating"
                     density="compact"
+                    duration={episodeDuration}
                     buttons={buttons}
                     activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
                     onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
@@ -221,8 +237,8 @@ export function ClassicSpaceView({
             </div>
 
             <SpaceDrawer state={drawer.state} onClose={() => setActivePanel(null)}>
-              {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-              {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
+              {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+              {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
               {drawer.panel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
               {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
               {drawer.panel === "settings" && feature("settings") ? (settingsContent ?? <SettingsPanel className="w-full border-0 shadow-none" onClose={() => setActivePanel(null)} />) : null}
@@ -230,9 +246,9 @@ export function ClassicSpaceView({
           </div>
 
           {overlay}
-          <CommandErrorAlert message={commandError ?? undefined} />
+          <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" palette={palette} texture={texture} />
           {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
-          {infoDialog ? <SpaceInfoDialog {...infoDialog} isOpen={infoDialog.isOpen} onClose={() => infoDialog.onOpenChange(false)} /> : null}
+          {infoDialog ? <SpaceInfoDialog {...infoDialog} duration={episodeDuration} isOpen={infoDialog.isOpen} onClose={() => infoDialog.onOpenChange(false)} /> : null}
           {inviteDialog ? <InviteDialog {...inviteDialog} inviteLink={inviteDialog.inviteLink || inviteLink || ""} isOpen={inviteDialog.isOpen} onClose={() => inviteDialog.onOpenChange(false)} /> : null}
           {onLeft ? (
             <LeaveDialog

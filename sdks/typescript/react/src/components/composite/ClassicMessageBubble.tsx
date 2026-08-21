@@ -27,6 +27,7 @@ export const ClassicMessageBubble = React.memo<MessageBubbleProps>(
     showSender: _showSender = true,
     showTimestamp = true,
     showAvatar = true,
+    generatedAvatars = true,
     isFirstInGroup: _isFirstInGroup = true,
     isLastInGroup = true,
     status = "sent",
@@ -187,7 +188,7 @@ export const ClassicMessageBubble = React.memo<MessageBubbleProps>(
 
     return (
       <div className={cn("flex items-end gap-3 w-full px-4", isLastInGroup ? "mb-4" : "mb-1", isLocal ? "justify-end" : "justify-start", className)} style={{ "--primary": senderColors.primary } as React.CSSProperties}>
-        {!isLocal && <div className="w-10 shrink-0">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={Boolean(senderAvatar)} className="!h-10 !w-10" />}</div>}
+        {!isLocal && <div className="flex w-10 shrink-0 justify-center">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={generatedAvatars} />}</div>}
 
         <div className={cn("flex flex-col max-w-[70%]", isLocal ? "items-end" : "items-start")}>
           <div className={cn("chalk-textured-surface px-4 py-3", isLocal ? "rounded-[16px_4px_16px_16px] bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]" : "rounded-[4px_16px_16px_16px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)]")}>
@@ -203,7 +204,7 @@ export const ClassicMessageBubble = React.memo<MessageBubbleProps>(
           )}
         </div>
 
-        {isLocal && <div className="w-10 shrink-0">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={Boolean(senderAvatar)} className="!h-10 !w-10" />}</div>}
+        {isLocal && <div className="flex w-10 shrink-0 justify-center">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={generatedAvatars} />}</div>}
       </div>
     );
   },

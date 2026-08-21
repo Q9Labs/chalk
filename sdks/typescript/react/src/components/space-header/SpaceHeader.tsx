@@ -4,30 +4,13 @@ import { InformationCircleIcon, Settings01Icon, UserGroupIcon } from "../../util
 import { cn } from "../../utils/cn";
 import { StatusBadge } from "../atomic/StatusBadge";
 import { ChalkControlGroup, ChalkDivider, ChalkIconButton } from "../chalk-ui";
+import { LogoSource } from "../logo/LogoSource";
 import { useSkin } from "../skin-context";
 import { ClassicSpaceHeader } from "./ClassicSpaceHeader";
 import { LayoutMenu } from "./LayoutMenu";
+import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
-export interface SpaceHeaderProps {
-  spaceName: string;
-  logoUrl?: string;
-  duration?: number;
-  isRecording?: boolean;
-  isTranscribing?: boolean;
-  layout?: "grid" | "focus" | "presentation";
-  onLayoutChange?: (layout: "grid" | "focus" | "presentation") => void;
-  onInvite?: () => void;
-  onInfo?: () => void;
-  onSettings?: () => void;
-  className?: string;
-}
-
-export const formatDuration = (seconds: number): string => {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-};
+export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
 const ChalkSpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, logoUrl, duration = 0, isRecording = false, isTranscribing = false, layout = "focus", onLayoutChange, onInvite, onInfo, onSettings, className }) => {
   const menuHost = useRef<HTMLDivElement>(null);
@@ -35,8 +18,8 @@ const ChalkSpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, logoUrl, dur
     <header className={cn("relative flex h-14 shrink-0 items-center justify-between gap-3 px-3 text-[var(--chalk-app-text)] sm:px-5 lg:px-6", className)} role="banner">
       {/* Out-of-flow host for the layout menu so the popup inherits the header theme without joining the flex row. */}
       <div ref={menuHost} className="absolute top-0 left-0 h-0 w-0" />
-      <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-        {logoUrl ? <img src={logoUrl} alt="Chalk" className="h-auto w-[84px] shrink-0 sm:w-[92px]" draggable={false} /> : <span className="shrink-0 text-lg font-bold tracking-tight">Chalk</span>}
+      <div className="flex min-w-0 items-center gap-3">
+        <LogoSource className="h-7 w-auto shrink-0" height={28} logoUrl={logoUrl} />
         <ChalkDivider className="hidden h-5 w-5 shrink-0 rotate-90 sm:block" seed="space-header-divider" />
         <h1 className="truncate text-sm font-semibold">{spaceName}</h1>
         <span className="hidden font-mono text-[11px] tabular-nums text-[var(--chalk-app-text-muted)] sm:block" aria-label={`Episode duration ${formatDuration(duration)}`}>

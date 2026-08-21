@@ -13,12 +13,13 @@ import type { SpaceViewWhiteboard } from "./SpaceView";
 export interface SpaceStageProps {
   readonly tiles: readonly Participant[];
   readonly layout: StageLayout;
+  readonly generatedAvatars?: boolean;
   readonly whiteboard?: SpaceViewWhiteboard;
   readonly className?: string;
 }
 
 /** The Space's stage: participants, screen shares and the whiteboard as tiles, with the app's renderers for focused content. */
-export function SpaceStage({ tiles, layout, whiteboard, className }: SpaceStageProps): React.JSX.Element {
+export function SpaceStage({ tiles, layout, generatedAvatars = true, whiteboard, className }: SpaceStageProps): React.JSX.Element {
   const client = useSpaceClient();
   const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true), [tiles, whiteboard?.isOpen]);
 
@@ -33,7 +34,7 @@ export function SpaceStage({ tiles, layout, whiteboard, className }: SpaceStageP
     [client, whiteboard],
   );
 
-  return <Stage items={items} layout={layout} renderPrimaryContent={renderPrimaryContent} emptyState={<QuietSpace />} className={className} />;
+  return <Stage items={items} layout={layout} renderPrimaryContent={renderPrimaryContent} generatedAvatars={generatedAvatars} emptyState={<QuietSpace />} className={className} />;
 }
 
 SpaceStage.displayName = "SpaceStage";

@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 
 import type { IncomingMediaRequest } from "@q9labsai/chalk-client";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MediaRequestDialog } from "./MediaRequestDialog";
+
+afterEach(cleanup);
 
 describe("MediaRequestDialog", () => {
   it("renders the requested media action and actor name", () => {
@@ -13,7 +15,7 @@ describe("MediaRequestDialog", () => {
       kind: "unmute",
       actorParticipantId: "moderator",
       actorDisplayName: "Grace",
-      expiresAt: "2026-08-01T08:00:00.000Z",
+      expiresAt: "2099-08-01T08:00:00.000Z",
     };
 
     const view = render(<MediaRequestDialog request={request} onDecline={vi.fn()} onAllow={vi.fn()} />);
@@ -30,11 +32,46 @@ describe("MediaRequestDialog", () => {
       kind: "start_camera",
       actorParticipantId: "participant-2",
       actorDisplayName: null,
-      expiresAt: "2026-08-01T08:00:00.000Z",
+      expiresAt: "2099-08-01T08:00:00.000Z",
     };
 
     render(<MediaRequestDialog request={request} onDecline={vi.fn()} onAllow={vi.fn()} />);
 
     expect(screen.getByRole("dialog", { name: "Camera request" })).toHaveTextContent("A participant is asking you to start your camera");
+  });
+
+  it("disables actions and explains when a request has expired", () => {
+    const request: IncomingMediaRequest = {
+      requestId: "request-expired",
+      kind: "unmute",
+      actorParticipantId: "participant-3",
+      actorDisplayName: "Ari",
+      expiresAt: "2020-01-01T00:00:00.000Z",
+    };
+
+    render(<MediaRequestDialog request={request} onDecline={vi.fn()} onAllow={vi.fn()} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("This request has expired.");
+    expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Expired" })).toBeDisabled();
+  });
+
+  it("reports a rejected action while keeping the request visible for recovery", async () => {
+    const onAllow = vi.fn().mockRejectedValue(new Error("Microphone permission changed"));
+    const onActionError = vi.fn();
+    const request: IncomingMediaRequest = {
+      requestId: "request-failure",
+      kind: "unmute",
+      actorParticipantId: "participant-4",
+      actorDisplayName: "Sam",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    };
+
+    render(<MediaRequestDialog request={request} onDecline={vi.fn()} onAllow={onAllow} onActionError={onActionError} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Microphone permission changed"));
+    expect(onActionError).toHaveBeenCalledWith("Microphone permission changed", "allow");
   });
 });
