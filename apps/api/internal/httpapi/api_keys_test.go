@@ -280,6 +280,15 @@ func TestAPIKeyBearerMutationsBypassDashboardRecentAuth(t *testing.T) {
 	if len(verifier.calls) != 0 {
 		t.Fatalf("bearer mutations invoked Dashboard recent-auth: %+v", verifier.calls)
 	}
+
+	system := authentication.Principal{Kind: authentication.PrincipalSystem}
+	systemCreate := serveAPIKeyRequestWithRecentAuth(t, service, authorizer, verifier, system, http.MethodPost, apiKeyCollectionPath(apiKeyTestTenantID), `{"name":"system","scopes":["spaces:read"],"expires_at":"2026-08-01T00:00:00Z"}`, "")
+	if systemCreate.Code != http.StatusCreated {
+		t.Fatalf("system create = %d %s", systemCreate.Code, systemCreate.Body.String())
+	}
+	if len(verifier.calls) != 0 {
+		t.Fatalf("system mutation invoked Dashboard recent-auth: %+v", verifier.calls)
+	}
 }
 
 func TestAPIKeyCreateAndRotateRequireIdempotencyKey(t *testing.T) {

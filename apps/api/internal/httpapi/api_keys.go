@@ -415,7 +415,7 @@ func verifyAPIKeyRecentAuth(ctx context.Context, verifier APIKeyRecentAuthVerifi
 	if !ok {
 		return apiErrorAPIKeyRecentAuthRequired
 	}
-	if principal.Kind == authentication.PrincipalAPIKey {
+	if principal.Kind == authentication.PrincipalAPIKey || principal.Kind == authentication.PrincipalSystem {
 		return nil
 	}
 	if principal.Kind != authentication.PrincipalUser || principal.UserID.IsZero() {

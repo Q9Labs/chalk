@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -45,6 +48,8 @@ type dashboardSpaceSelfLeaveRequest struct {
 	ParticipantGeneration int64
 }
 
+const dashboardJoinCleanupRequestPrefix = "dashboard-join-cleanup-"
+
 func dashboardSpaceSelfEndpoints(service DashboardSpaceJoinService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		dashboardSpaceSelfJoinEndpoint(service, tokens, refresh, mediaTokens, diagnosticsTokens, spacesService, tenantsService, resolver, authorizer),
@@ -69,28 +74,44 @@ func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens Sy
 		if err != nil {
 			return accessGrantResponse{}, err
 		}
+		cleanupFailedJoin := func(cause error) error {
+			if joined.Participant.Status != episodes.ParticipantStatusJoining {
+				return cause
+			}
+			_, cleanupErr := service.LeaveSelf(ctx, episodes.SelfLeaveInput{
+				TenantID:              request.TenantID,
+				AccountID:             accountID,
+				SpaceSlug:             request.SpaceSlug,
+				ParticipantGeneration: joined.Participant.Generation,
+				Request:               episodes.Request{Key: dashboardJoinCleanupRequestKey(request.RequestKey)},
+			})
+			if cleanupErr != nil {
+				slog.ErrorContext(ctx, "dashboard Space join cleanup failed", "tenant_id", request.TenantID.String(), "space_slug", request.SpaceSlug, "participant_generation", joined.Participant.Generation, "error", cleanupErr)
+			}
+			return cause
+		}
 		var syncCredential synctokens.Token
 		if tokens != nil {
 			syncCredential, err = tokens.Issue(ctx, synctokens.Input{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, ParticipantID: joined.Participant.ID, ParticipantGeneration: joined.Participant.Generation, AdmissionLifecycleIntentID: joined.Intent.ID, DisplayName: request.Body.DisplayName, Role: joined.Participant.Role, Capabilities: append([]string(nil), joined.Participant.Capabilities...)})
 		} else if refresh != nil {
 			syncCredential, err = refresh.IssueForParticipant(ctx, synctokens.SubjectKey{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, ParticipantID: joined.Participant.ID})
 		} else {
-			return accessGrantResponse{}, apiErrorServiceUnavailable
+			return accessGrantResponse{}, cleanupFailedJoin(apiErrorServiceUnavailable)
 		}
 		if err != nil {
-			return accessGrantResponse{}, err
+			return accessGrantResponse{}, cleanupFailedJoin(err)
 		}
 		join, err := createParticipantJoin(ctx, spacesService, tenantsService, resolver, joined.Participant)
 		if err != nil {
-			return accessGrantResponse{}, err
+			return accessGrantResponse{}, cleanupFailedJoin(err)
 		}
 		subject, err := accessGrantSubjectForJoin(issueAccessGrantRequest{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, ParticipantID: joined.Participant.ID, Body: issueAccessGrantBody{ParticipantGeneration: joined.Participant.Generation}}, join)
 		if err != nil {
-			return accessGrantResponse{}, err
+			return accessGrantResponse{}, cleanupFailedJoin(err)
 		}
 		mediaCredential, err := mediaTokens.Issue(ctx, subject)
 		if err != nil {
-			return accessGrantResponse{}, err
+			return accessGrantResponse{}, cleanupFailedJoin(err)
 		}
 		response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
 		attachDiagnosticsCredential(ctx, &response, diagnosticsTokens, subject)
@@ -99,6 +120,11 @@ func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens Sy
 		Parameters(tenantIDParameter(), spaceSlugParameter(), idempotencyKeyParameter()).RequestBody("DashboardSpaceSelfJoinRequest", dashboardSpaceSelfJoinBody{}).
 		Responds(http.StatusCreated, "AccessGrant", accessGrantResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceSlug, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).MapErrors(dashboardSpaceEndpointAPIError)
+}
+
+func dashboardJoinCleanupRequestKey(requestKey string) string {
+	digest := sha256.Sum256([]byte(requestKey))
+	return dashboardJoinCleanupRequestPrefix + hex.EncodeToString(digest[:])
 }
 
 func dashboardSpaceSelfAccessEndpoint(service DashboardSpaceJoinService, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[dashboardSpaceSelfAccessRequest, accessGrantResponse] {
