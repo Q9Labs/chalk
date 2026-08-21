@@ -1,36 +1,20 @@
-import type { Capability, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type React from "react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { CommandErrorAlert, JoinFailedScreen, LeaveDialog, PreviewEpisodeEnded, PreviewEntrance, PreviewJoiningScreen, PreviewSpaceView, type SpaceLayout, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
+import { MediaRequestDialog } from "../../../../../sdks/typescript/react/src/components/media-request-dialog/MediaRequestDialog";
 import { SettingsDialog, type SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
 import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
 import { ToastStack } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
-import { createPreviewClient, createSnapshot } from "../../../../../sdks/typescript/react/src/test-support/preview-client";
+import { CommandErrorAlert, LeaveDialog, PreviewEpisodeEnded, PreviewEntrance, PreviewSpaceView, PreviewStatus, type SpaceLayout, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
+import { createPreviewClient, type PreviewClientCommand } from "../../../../../sdks/typescript/react/src/test-support/preview-client";
 import { COSMIC_CHALK_THEME } from "../../../../../sdks/typescript/react/src/theme";
 
 import { PreviewGalleryToolbar } from "./PreviewGalleryToolbar";
-import {
-  DISPLAY_NAME,
-  INITIAL_CHAT_MESSAGES,
-  INITIAL_SETTINGS,
-  productionPalette,
-  productionTexture,
-  previewPalette,
-  previewTexture,
-  participantsForCount,
-  REACTIONS,
-  SPACE_LINK,
-  SPACE_NAME,
-  statusOverlay,
-  TOAST_MESSAGES,
-  WAITING_PARTICIPANTS,
-  chatPending,
-  type GalleryParticipant,
-} from "./sdk-preview-fixtures";
+import { DIAGNOSTIC_REFERENCE, DISPLAY_NAME, INITIAL_SETTINGS, SPACE_DESCRIPTION, SPACE_LINK, SPACE_NAME, TOAST_MESSAGES, buildPreviewSnapshot, panelFor, participantsForCount, productionPalette, productionTexture, statusOverlay, type PreviewSnapshotTracks } from "./sdk-preview-fixtures";
 import type { PreviewSearch, PreviewSearchPatch } from "./preview-state";
-import { createPreviewAudioTrack } from "./preview-audio-track";
-import { createPreviewScreenTrack } from "./preview-screen-track";
+import { createPreviewMediaAdapter, type PreviewTrackBundle } from "./preview-media-adapter";
+import { createPreviewWhiteboard, createPreviewWhiteboardAdapter } from "./preview-whiteboard";
 
 export interface SdkPreviewGalleryProps {
   readonly search: PreviewSearch;
@@ -42,44 +26,115 @@ const PREVIEW_EPISODE_DURATION_SECONDS = 18 * 60 + 42;
 export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(DISPLAY_NAME);
   const [keepAppearanceOpen, setKeepAppearanceOpen] = useState(false);
+  const [diagnosticsToastVisible, setDiagnosticsToastVisible] = useState(false);
+  const searchRef = useRef(search);
+  searchRef.current = search;
   const skin: ThemeSkin = search.skin;
   const mappedPalette: ThemePalette = productionPalette(search.palette);
   const mappedTexture: ThemeTexture = productionTexture(search.texture);
   const entranceTheme = mappedPalette === "cosmic-chalk" ? { ...COSMIC_CHALK_THEME, skin, palette: mappedPalette, texture: mappedTexture } : { skin, palette: mappedPalette, texture: mappedTexture };
-  const [settings, setSettings] = useState<SettingsDialogValue>(() => ({
-    ...INITIAL_SETTINGS,
-    appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, skin, palette: mappedPalette, texture: mappedTexture },
-  }));
-  const fixtureSearch = useMemo<PreviewSearch>(() => (search.state === "empty" ? { ...search, participants: 0 as const, chat: "empty" as const } : search), [search]);
-  const participants = useMemo(() => participantsForCount(fixtureSearch.participants, fixtureSearch), [fixtureSearch]);
-  const panel = search.panel === "none" ? null : search.panel;
+  const [settings, setSettings] = useState<SettingsDialogValue>(() => ({ ...INITIAL_SETTINGS, appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, skin, palette: mappedPalette, texture: mappedTexture } }));
+  const participants = useMemo(() => participantsForCount(search.participants, search), [search]);
+  const panel = panelFor(search);
   const effectiveLayout: SpaceLayout = search.stage === "whiteboard" ? "focus" : search.layout;
   const episodeDuration = PREVIEW_EPISODE_DURATION_SECONDS;
-  const [screenTrack, setScreenTrack] = useState<MediaStreamTrack | null>(null);
-  useEffect(() => {
-    if (search.stage !== "share") return;
-    const preview = createPreviewScreenTrack();
-    setScreenTrack(preview?.track ?? null);
-    return () => {
-      preview?.stop();
-      setScreenTrack(null);
-    };
-  }, [search.stage]);
-  const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
-  useEffect(() => {
-    const preview = createPreviewAudioTrack();
-    setAudioTrack(preview?.track ?? null);
-    return () => {
-      preview?.stop();
-      setAudioTrack(null);
-    };
-  }, []);
-  const gallerySnapshot = useMemo(() => createGallerySnapshot(participants, fixtureSearch, search, displayName, episodeDuration, { screen: screenTrack, audio: audioTrack }), [audioTrack, displayName, episodeDuration, fixtureSearch, participants, screenTrack, search]);
-  const previewClient = useMemo(() => createPreviewClient(gallerySnapshot), []);
 
+  const mediaAdapter = useMemo(() => createPreviewMediaAdapter(), []);
+  useEffect(() => () => mediaAdapter.dispose(), [mediaAdapter]);
+
+  const effectiveScreenShare = !search.features.screenShare ? "none" : search.screenShare === "none" && search.stage === "share" ? "remote" : search.screenShare;
+  const remoteTrackSelections = useMemo(() => {
+    const selections: Record<string, { readonly microphone: boolean; readonly camera: boolean; readonly screen: boolean }> = {};
+    for (const participant of participants) {
+      if (participant.isLocal) continue;
+      selections[participant.id] = {
+        microphone: !participant.isMuted,
+        // The gallery has no remote camera footage. Let the canonical tile render
+        // the Participant avatar instead of presenting a fabricated camera image.
+        camera: false,
+        screen: Boolean(effectiveScreenShare === "remote" && participant.isScreenSharing),
+      };
+    }
+    return selections;
+  }, [effectiveScreenShare, participants]);
+  const trackBundle = useMemo<PreviewTrackBundle>(
+    () =>
+      mediaAdapter.createTrackBundle({
+        local: {
+          microphone: search.mic === "enabled" || search.mic === "requesting",
+          camera: search.camera === "enabled" || search.camera === "requesting",
+          screen: effectiveScreenShare === "local",
+        },
+        remote: remoteTrackSelections,
+      }),
+    [effectiveScreenShare, mediaAdapter, remoteTrackSelections, search.camera, search.mic],
+  );
+  useEffect(() => () => trackBundle.stop(), [trackBundle]);
+
+  const snapshotTracks = useMemo<PreviewSnapshotTracks>(
+    () => ({
+      local: { microphone: trackBundle.local.microphone?.track ?? null, camera: trackBundle.local.camera?.track ?? null, screen: trackBundle.local.screen?.track ?? null },
+      remote: new Map([...trackBundle.remote.entries()].map(([participantId, tracks]) => [participantId, { microphone: tracks.microphone?.track ?? null, camera: tracks.camera?.track ?? null, screen: tracks.screen?.track ?? null }])),
+    }),
+    [trackBundle],
+  );
+  const gallerySnapshot = useMemo(() => buildPreviewSnapshot({ participants, search, displayName, episodeDuration, tracks: snapshotTracks }), [displayName, episodeDuration, participants, search, snapshotTracks]);
+
+  const observeCommand = useCallback(
+    (command: PreviewClientCommand) => {
+      switch (command.type) {
+        case "setMicrophoneEnabled":
+          onSearchChange({ mic: command.enabled ? "enabled" : "disabled" });
+          return;
+        case "setCameraEnabled":
+          onSearchChange({ camera: command.enabled ? "enabled" : "disabled" });
+          return;
+        case "setScreenShareEnabled":
+          onSearchChange(command.enabled ? { screenShare: "local" } : { screenShare: "none", ...(searchRef.current.stage === "share" ? { stage: "people" } : {}) });
+          return;
+        case "raiseHand":
+          onSearchChange({ hand: true });
+          return;
+        case "lowerHand":
+          onSearchChange({ hand: false });
+          return;
+        case "renameSelf":
+          setDisplayName(command.displayName);
+          return;
+        case "acceptRequest": {
+          const requestKind = searchRef.current.incomingMediaRequest;
+          onSearchChange(requestKind === "unmute" ? { incomingMediaRequest: "none", mic: "enabled" } : { incomingMediaRequest: "none", camera: "enabled" });
+          return;
+        }
+        case "declineRequest":
+          onSearchChange({ incomingMediaRequest: "none" });
+          return;
+        case "leave":
+          onSearchChange({ view: "space", state: "leaving" });
+          return;
+        case "endEpisode":
+          onSearchChange({ view: "space", state: "ended" });
+          return;
+        default:
+          return;
+      }
+    },
+    [onSearchChange],
+  );
+  const previewClient = useMemo(() => createPreviewClient(gallerySnapshot, { onCommand: observeCommand }), [observeCommand]);
+  const [clientSnapshot, setClientSnapshot] = useState<SpaceSnapshot>(gallerySnapshot);
   useEffect(() => {
     previewClient.setSnapshot(gallerySnapshot);
   }, [gallerySnapshot, previewClient]);
+  useEffect(() => {
+    setClientSnapshot(gallerySnapshot);
+    return previewClient.subscribe(() => setClientSnapshot(previewClient.getSnapshot()));
+  }, [gallerySnapshot, previewClient]);
+
+  const canDrawWhiteboard = gallerySnapshot.self.can("drawWhiteboard");
+  const whiteboardAdapter = useMemo(() => createPreviewWhiteboardAdapter({ canDraw: canDrawWhiteboard }), [canDrawWhiteboard]);
+  useEffect(() => () => whiteboardAdapter.dispose(), [whiteboardAdapter]);
+  const whiteboard = search.stage === "whiteboard" && search.features.whiteboard && canDrawWhiteboard ? createPreviewWhiteboard({ adapter: whiteboardAdapter, isOpen: true }) : undefined;
 
   useEffect(() => {
     setSettings((current) => {
@@ -87,7 +142,6 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
       return { ...current, appearance: { ...current.appearance, layout: search.layout, skin, palette: mappedPalette, texture: mappedTexture } };
     });
   }, [mappedPalette, mappedTexture, search.layout, skin]);
-
   useEffect(() => {
     if (search.dialog !== "settings") setKeepAppearanceOpen(false);
   }, [search.dialog]);
@@ -95,50 +149,69 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   const patch = (updates: PreviewSearchPatch) => onSearchChange(updates);
   const backToEntrance = () => patch({ view: "entrance", state: "ready", panel: "none", dialog: "none" });
   const retrySpace = () => patch({ view: "space", state: "happy" });
+  const leaveSpace = () => void previewClient.leave();
+  const endEpisode = () => void previewClient.endEpisode();
   const updateSettings = <Section extends keyof SettingsDialogValue>(section: Section, updates: Partial<SettingsDialogValue[Section]>) => {
     setSettings((current) => ({ ...current, [section]: { ...current[section], ...updates } }));
-    if (section !== "appearance") return;
-    const appearance = updates as Partial<SettingsDialogValue["appearance"]>;
-    if (appearance.skin) setKeepAppearanceOpen(true);
+  };
+  const updateAppearance = (updates: Partial<SettingsDialogValue["appearance"]>) => {
+    updateSettings("appearance", updates);
+    if (updates.skin) setKeepAppearanceOpen(true);
     patch({
-      ...(appearance.layout === "focus" || appearance.layout === "grid" || appearance.layout === "presentation" ? { layout: appearance.layout } : {}),
-      ...(appearance.skin === "classic" || appearance.skin === "chalk" ? { skin: appearance.skin } : {}),
-      ...(appearance.palette ? { palette: previewPalette(appearance.palette) } : {}),
-      ...(appearance.texture ? { texture: previewTexture(appearance.texture) } : {}),
+      ...(updates.layout === "focus" || updates.layout === "grid" || updates.layout === "presentation" ? { layout: updates.layout } : {}),
+      ...(updates.skin === "classic" || updates.skin === "chalk" ? { skin: updates.skin } : {}),
+      ...(updates.palette ? { palette: updates.palette } : {}),
+      ...(updates.texture ? { texture: updates.texture } : {}),
     });
   };
 
+  const entrancePreviewStream = useMemo(() => {
+    const cameraTrack = trackBundle.local.camera?.track;
+    if (!cameraTrack || search.camera === "disabled" || search.camera === "failed" || typeof MediaStream === "undefined") return null;
+    try {
+      return new MediaStream([cameraTrack]);
+    } catch {
+      return null;
+    }
+  }, [search.camera, trackBundle]);
+
   if (search.view === "entrance") {
+    const joining = search.state === "joining" || search.state === "waiting";
+    const lifecycleError = search.state === "failure" ? "We could not prepare your Entrance for this Space." : search.state === "timeout" ? "The Entrance took too long to prepare. Try again when you’re ready." : search.state === "waiting" ? "Your request is with a Space collaborator." : undefined;
+    const mediaError = search.state === "warning" || search.mic === "failed" || search.camera === "failed" ? "Preview is unavailable. You can still enter with devices disabled." : undefined;
     return (
       <div data-preview-view="entrance" data-preview-state={search.state} className="relative h-screen overflow-hidden">
         <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
-        {search.state === "ready" || search.state === "warning" ? (
-          <PreviewEntrance
-            spaceName={SPACE_NAME}
-            logoUrl="/brand/chalk/chalk-logo.svg"
-            defaultDisplayName={displayName}
-            microphone={search.mic}
-            camera={search.camera}
-            theme={entranceTheme}
-            error={search.state === "warning" ? "Camera or microphone access failed. Turn both devices off or try again." : undefined}
-            onJoin={(nextSettings) => {
-              setDisplayName(nextSettings.displayName);
-              patch({ view: "space", state: "happy", mic: nextSettings.microphone, camera: nextSettings.camera, panel: "none", dialog: "none" });
-            }}
-          />
-        ) : search.state === "joining" ? (
-          <PreviewJoiningScreen displayName={displayName} message={`Preparing to enter ${SPACE_NAME}`} supportingMessages={["Checking your AccessGrant", "Starting the Episode"]} />
-        ) : search.state === "waiting" ? (
-          <PreviewJoiningScreen displayName={displayName} message={`Waiting for admission to ${SPACE_NAME}`} supportingMessages={["Your request is with a Space collaborator"]} />
-        ) : (
-          <JoinFailedScreen
-            title={search.state === "timeout" ? "Entrance timed out" : "Could not enter the Space"}
-            message={search.state === "timeout" ? "The Entrance took too long to prepare. Try again when you’re ready." : "We could not prepare your Entrance for this Space."}
-            supportCode={search.state === "timeout" ? "entrance-timeout-408" : "entrance-failure-403"}
-            onRetry={() => patch({ view: "entrance", state: "ready" })}
-            onBack={backToEntrance}
-          />
-        )}
+        <PreviewEntrance
+          spaceName={SPACE_NAME}
+          logoUrl="/brand/chalk/chalk-logo.svg"
+          defaultDisplayName={displayName}
+          joining={joining}
+          microphone={search.mic === "enabled" || search.mic === "requesting"}
+          camera={search.camera === "enabled" || search.camera === "requesting"}
+          previewError={mediaError}
+          previewStream={entrancePreviewStream}
+          audioInputDevices={trackBundle.devices.microphones}
+          videoInputDevices={trackBundle.devices.cameras}
+          audioOutputDevices={trackBundle.devices.speakers}
+          error={lifecycleError}
+          theme={entranceTheme}
+          onJoin={(nextSettings) => {
+            setDisplayName(nextSettings.displayName);
+            patch({ view: "space", state: "happy", mic: nextSettings.microphone ? "enabled" : "disabled", camera: nextSettings.camera ? "enabled" : "disabled", panel: "none", dialog: "none" });
+          }}
+          onCancel={backToEntrance}
+        />
+      </div>
+    );
+  }
+
+  if (search.state === "failure" || search.state === "leaving" || search.state === "left") {
+    const status = search.state === "failure" ? "failed" : search.state;
+    return (
+      <div data-preview-view="space" data-preview-state={search.state} className="relative h-screen overflow-hidden">
+        <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
+        <PreviewStatus state={status} spaceName={SPACE_NAME} theme={entranceTheme} error="The Space connection failed before recovery completed." onRetry={retrySpace} />
       </div>
     );
   }
@@ -148,14 +221,17 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
       <div data-preview-view="space" data-preview-state="ended" className="relative h-screen overflow-hidden">
         <PreviewGalleryToolbar search={search} onChange={onSearchChange} />
         <PreviewEpisodeEnded spaceName={SPACE_NAME} duration={episodeDuration} participantCount={search.participants} onRejoin={retrySpace} onGoHome={backToEntrance} />
+        <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-[var(--chalk-muted-text)]">Embedding-app callback fixture state</p>
       </div>
     );
   }
 
-  const toast = search.toast === "none" ? [] : ([{ id: `preview-toast-${search.toast}`, message: TOAST_MESSAGES[search.toast], type: search.toast }] satisfies Toast[]);
-  const whiteboardFallback = search.stage === "whiteboard" ? <PreviewWhiteboardMock palette={mappedPalette} texture={mappedTexture} /> : null;
+  const baseToast = search.toast === "none" ? [] : ([{ id: `preview-toast-${search.toast}`, message: TOAST_MESSAGES[search.toast], type: search.toast }] satisfies Toast[]);
+  const diagnosticsToast = diagnosticsToastVisible ? ([{ id: "preview-diagnostics-toast", message: "Diagnostics invoked locally for this preview.", type: "info" }] satisfies Toast[]) : [];
   const warningOverlay = search.state === "warning" ? <CommandErrorAlert message="Some Space actions are temporarily unavailable." /> : null;
-  const confirmationOverlay = search.state === "confirmation" ? <LeaveDialog isOpen onClose={retrySpace} onConfirm={backToEntrance} palette={mappedPalette} texture={mappedTexture} /> : null;
+  const canEndEpisode = gallerySnapshot.self.can("endEpisode");
+  const confirmationOverlay = search.state === "confirmation" ? <LeaveDialog isOpen onClose={retrySpace} onConfirm={leaveSpace} onEndEpisode={canEndEpisode ? endEpisode : undefined} palette={mappedPalette} texture={mappedTexture} /> : null;
+  const incomingRequest = clientSnapshot.media.incomingRequests[0];
 
   return (
     <div data-preview-view="space" data-preview-state={search.state} className="relative h-screen overflow-hidden">
@@ -167,179 +243,100 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         skin={skin}
         palette={mappedPalette}
         texture={mappedTexture}
+        stageBackground={search.stageBackground}
         inviteLink={SPACE_LINK}
         layout={effectiveLayout}
         onLayoutChange={(nextLayout) => patch({ layout: nextLayout })}
-        initialPanel={search.dialog === "settings" ? "settings" : panel}
-        features={{ chat: true, participants: true, admission: true, screenShare: true, whiteboard: true, reactions: true, handRaise: true, info: true, settings: true, transcript: true }}
+        generatedAvatars={settings.appearance.generatedAvatars}
+        initialPanel={panel}
+        features={search.features}
+        onOpenDiagnostics={search.diagnostics ? () => setDiagnosticsToastVisible(true) : undefined}
+        onOpenSettings={search.features.settings ? () => patch({ dialog: "settings" }) : undefined}
         onToggleWhiteboard={() => patch({ stage: search.stage === "whiteboard" ? "people" : "whiteboard" })}
-        infoDialog={{
-          isOpen: search.dialog === "info",
-          onOpenChange: (open) => patch({ dialog: open ? "info" : "none" }),
-          spaceName: SPACE_NAME,
-          inviteLink: SPACE_LINK,
-          onCopyLink: () => {
-            void navigator.clipboard?.writeText(SPACE_LINK);
-            patch({ toast: "success" });
-          },
-          duration: episodeDuration,
-        }}
+        whiteboard={whiteboard}
+        infoDialog={
+          search.features.info
+            ? {
+                isOpen: search.dialog === "info",
+                onOpenChange: (open) => patch({ dialog: open ? "info" : "none" }),
+                spaceName: SPACE_NAME,
+                spaceDescription: SPACE_DESCRIPTION,
+                inviteLink: SPACE_LINK,
+                onCopyLink: () => {
+                  void navigator.clipboard?.writeText(SPACE_LINK);
+                  patch({ toast: "success" });
+                },
+                diagnosticReference: DIAGNOSTIC_REFERENCE,
+                onCopyDiagnosticReference: (reference) => void navigator.clipboard?.writeText(reference),
+                onSendFeedback: () => setDiagnosticsToastVisible(true),
+                duration: episodeDuration,
+                stats: { resolution: "1080p · 30fps", latency: 28, packetLoss: 0.1, region: "Frankfurt, DE" },
+              }
+            : undefined
+        }
         settingsDialog={
-          <SettingsDialog
-            isOpen={search.dialog === "settings"}
-            onClose={() => {
-              setKeepAppearanceOpen(false);
-              patch({ dialog: "none" });
-            }}
-            settings={settings}
-            initialSection={keepAppearanceOpen ? "appearance" : undefined}
-            onUpdateIdentity={(updates) => {
-              updateSettings("identity", updates);
-              if (updates.displayName) setDisplayName(updates.displayName);
-            }}
-            onUpdateJoin={(updates) => updateSettings("join", updates)}
-            onUpdateAudio={(updates) => updateSettings("audio", updates)}
-            onUpdateVideo={(updates) => updateSettings("video", updates)}
-            onUpdateAppearance={(updates) => updateSettings("appearance", updates)}
-            onUpdateExperience={(updates) => updateSettings("experience", updates)}
-            videoTrack={null}
-            participantColorSeed={displayName}
-          />
+          search.features.settings ? (
+            <SettingsDialog
+              isOpen={search.dialog === "settings"}
+              onClose={() => {
+                setKeepAppearanceOpen(false);
+                patch({ dialog: "none" });
+              }}
+              settings={settings}
+              initialSection={keepAppearanceOpen ? "appearance" : undefined}
+              onUpdateIdentity={(updates) => {
+                updateSettings("identity", updates);
+                if (updates.displayName) void previewClient.participants.renameSelf(updates.displayName);
+              }}
+              onUpdateJoin={(updates) => {
+                updateSettings("join", updates);
+                if (updates.audioEnabled !== undefined) void previewClient.media.setMicrophoneEnabled(updates.audioEnabled);
+                if (updates.videoEnabled !== undefined) void previewClient.media.setCameraEnabled(updates.videoEnabled);
+              }}
+              onUpdateAudio={(updates) => {
+                updateSettings("audio", updates);
+                if (updates.selectedInput) void previewClient.media.selectMicrophone(updates.selectedInput);
+                if (updates.selectedOutput) void previewClient.media.selectSpeaker(updates.selectedOutput);
+              }}
+              onUpdateVideo={(updates) => {
+                updateSettings("video", updates);
+                if (updates.selectedInput) void previewClient.media.selectCamera(updates.selectedInput);
+              }}
+              onUpdateAppearance={updateAppearance}
+              onUpdateExperience={(updates) => updateSettings("experience", updates)}
+              audioInputDevices={mediaAdapter.devices.microphones.map((device) => selectableDevice(device, "audioinput"))}
+              audioOutputDevices={mediaAdapter.devices.speakers.map((device) => selectableDevice(device, "audiooutput"))}
+              videoInputDevices={mediaAdapter.devices.cameras.map((device) => selectableDevice(device, "videoinput"))}
+              videoTrack={trackBundle.local.camera?.track ?? null}
+              participantColorSeed={displayName}
+            />
+          ) : undefined
         }
         inviteDialog={{ isOpen: search.dialog === "invite", onOpenChange: (open) => patch({ dialog: open ? "invite" : "none" }), inviteLink: SPACE_LINK, onCopyLink: () => patch({ toast: "success" }) }}
-        reconnecting={statusOverlay(search, retrySpace, backToEntrance)}
+        reconnecting={statusOverlay(search, retrySpace, leaveSpace)}
+        onLeft={leaveSpace}
+        onEndEpisode={canEndEpisode ? endEpisode : undefined}
         overlay={
           <Fragment>
-            {whiteboardFallback}
+            {incomingRequest ? <MediaRequestDialog request={incomingRequest} onDecline={() => void previewClient.media.declineRequest(incomingRequest.requestId)} onAllow={() => void previewClient.media.acceptRequest(incomingRequest.requestId)} /> : null}
             {warningOverlay}
             {confirmationOverlay}
-            <ToastStack toasts={toast} onDismiss={() => patch({ toast: "none" })} palette={mappedPalette} texture={mappedTexture} />
+            <ToastStack
+              toasts={[...baseToast, ...diagnosticsToast]}
+              onDismiss={(id) => {
+                if (id === "preview-diagnostics-toast") setDiagnosticsToastVisible(false);
+                else patch({ toast: "none" });
+              }}
+              palette={mappedPalette}
+              texture={mappedTexture}
+            />
           </Fragment>
         }
-        onLeft={backToEntrance}
       />
     </div>
   );
 }
 
-const PREVIEW_CAPABILITIES: readonly Capability[] = [
-  "publishAudio",
-  "publishVideo",
-  "publishScreen",
-  "subscribe",
-  "raiseHand",
-  "renameSelf",
-  "sendChat",
-  "sendReaction",
-  "drawWhiteboard",
-  "manageWhiteboard",
-  "manageAdmission",
-  "assignRoles",
-  "muteOthers",
-  "stopVideoOthers",
-  "stopScreenOthers",
-  "requestMediaOthers",
-  "removeParticipant",
-  "manageRecording",
-  "startEpisode",
-  "extendEpisode",
-  "endEpisode",
-  "manageMembers",
-  "clearSpaceContent",
-];
-
-interface PreviewTracks {
-  readonly screen: MediaStreamTrack | null;
-  readonly audio: MediaStreamTrack | null;
-}
-
-function createGallerySnapshot(participants: readonly GalleryParticipant[], fixtureSearch: PreviewSearch, search: PreviewSearch, displayName: string, episodeDuration: number, tracks: PreviewTracks): SpaceSnapshot {
-  const base = createSnapshot(PREVIEW_CAPABILITIES);
-  const roster = participants.map((participant) => ({
-    participantId: participant.id,
-    displayName: participant.isLocal ? displayName : participant.displayName,
-    role: participant.isLocal ? "member" : "participant",
-    eligibleRoles: ["member", "participant"],
-    capabilities: [],
-    handRaised: Boolean(participant.isHandRaised),
-    presence: { state: "connected", speaking: Boolean(participant.isSpeaking), activeSpeaker: false } satisfies SpaceSnapshot["participants"]["roster"][number]["presence"],
-    media: {
-      microphone: participant.isMuted ? ("inactive" as const) : ("active" as const),
-      camera: participant.isVideoEnabled ? ("active" as const) : ("inactive" as const),
-      screenShare: participant.isScreenSharing ? ("active" as const) : ("inactive" as const),
-    },
-  }));
-  const admissionQueue =
-    search.panel === "admission" && search.state !== "empty"
-      ? WAITING_PARTICIPANTS.map((participant, index) => ({ requestId: participant.id, participantId: participant.id, displayName: participant.displayName, initialRole: "participant", eligibleRoles: ["participant"], expiresAt: new Date(Date.now() + (index + 1) * 60_000).toISOString() }))
-      : [];
-  const sharer = participants.find((participant) => participant.isScreenSharing);
-  const remote: RemoteMedia[] = [];
-  if (sharer && tracks.screen) remote.push({ participantId: sharer.id, source: "screen", publicationId: `preview-${sharer.id}-screen`, track: tracks.screen });
-  if (tracks.audio) {
-    for (const participant of participants) {
-      if (participant.isLocal || participant.isMuted) continue;
-      remote.push({ participantId: participant.id, source: "microphone", publicationId: `preview-${participant.id}-microphone`, track: tracks.audio });
-    }
-  }
-  const chatFailure = fixtureSearch.chat === "failure" ? { code: "client.internal_error" as const, recoverable: true, message: "Chat is temporarily unavailable in this Space." } : null;
-
-  return {
-    ...base,
-    connection: {
-      ...base.connection,
-      status: search.state === "reconnecting" ? "reconnecting" : "live",
-      episode: { id: "preview-episode", startedAt: new Date(Date.now() - episodeDuration * 1_000).toISOString(), deadline: null },
-    },
-    self: { ...base.self, participantId: "you", displayName, role: "member", capabilities: PREVIEW_CAPABILITIES, handRaised: search.hand, can: (capability) => PREVIEW_CAPABILITIES.includes(capability) },
-    participants: { roster, admissionQueue },
-    media: {
-      ...base.media,
-      remote,
-      local: {
-        ...base.media.local,
-        microphone: { ...base.media.local.microphone, state: fixtureSearch.mic ? "enabled" : "disabled" },
-        camera: { ...base.media.local.camera, state: fixtureSearch.camera ? "enabled" : "disabled" },
-      },
-    },
-    chat: {
-      ...base.chat,
-      status: fixtureSearch.chat === "loading" ? "loading" : fixtureSearch.chat === "failure" ? "failed" : fixtureSearch.chat === "ready" ? "ready" : "idle",
-      messages: fixtureSearch.chat === "ready" ? INITIAL_CHAT_MESSAGES : [],
-      pendingSends: chatPending(fixtureSearch),
-      unreadCount: fixtureSearch.chat === "ready" ? 3 : 0,
-      lastError: chatFailure,
-    },
-    reactions: { active: search.state === "empty" ? [] : REACTIONS },
-  };
-}
-
-function PreviewWhiteboardMock({ palette, texture }: { readonly palette: ThemePalette; readonly texture: ThemeTexture }): React.JSX.Element {
-  return (
-    <div
-      data-testid="preview-whiteboard"
-      data-preview-whiteboard="local"
-      data-preview-palette={palette}
-      data-preview-texture={texture}
-      className="absolute inset-3 z-10 overflow-hidden rounded-[10px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)] sm:inset-6"
-    >
-      <div className="flex items-center justify-between border-b border-[var(--chalk-line)] bg-[var(--chalk-chrome)] px-4 py-3 text-xs text-[var(--chalk-muted-text)]">
-        <span className="font-semibold text-[var(--chalk-text)]">Whiteboard preview</span>
-        <span>Local fixture · {texture}</span>
-      </div>
-      <div
-        className="relative h-[calc(100%-49px)] overflow-hidden bg-[var(--chalk-canvas)]"
-        style={{ backgroundImage: "linear-gradient(90deg, color-mix(in srgb, var(--chalk-line) 35%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--chalk-line) 35%, transparent) 1px, transparent 1px)", backgroundSize: "32px 32px" }}
-      >
-        <div className="absolute left-[18%] top-[22%] h-28 w-48 rotate-[-3deg] rounded-xl border-2 border-[var(--chalk-accent)] bg-[var(--chalk-surface)] p-4 shadow-[var(--chalk-shadow)]">
-          <p className="text-sm font-semibold text-[var(--chalk-text)]">Shared direction</p>
-          <p className="mt-2 text-xs leading-5 text-[var(--chalk-muted-text)]">A calm local canvas for the SDK preview.</p>
-        </div>
-        <div className="absolute right-[18%] top-[42%] h-24 w-40 rotate-[4deg] rounded-xl border-2 border-[var(--chalk-positive)] bg-[var(--chalk-surface)] p-4 shadow-[var(--chalk-shadow)]">
-          <p className="text-sm font-semibold text-[var(--chalk-text)]">Next step</p>
-          <p className="mt-2 text-xs leading-5 text-[var(--chalk-muted-text)]">No network canvas loaded.</p>
-        </div>
-      </div>
-    </div>
-  );
+function selectableDevice(device: { readonly deviceId: string; readonly label: string }, kind: "audioinput" | "audiooutput" | "videoinput"): Pick<MediaDeviceInfo, "deviceId" | "kind" | "label"> {
+  return { ...device, kind };
 }

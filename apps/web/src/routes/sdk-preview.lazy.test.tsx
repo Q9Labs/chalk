@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PreviewGallery, PreviewUnavailable, SdkPreviewRouteSurface } from "./sdk-preview.lazy";
-import { DEFAULT_PREVIEW_SEARCH } from "../components/sdk-preview/preview-state";
+import { DEFAULT_PREVIEW_SEARCH, normalizePreviewSearch, serializePreviewSearch } from "../components/sdk-preview/preview-state";
 
 afterEach(cleanup);
 
@@ -39,5 +39,12 @@ describe("SDK preview lazy route", () => {
 
     expect(screen.getByRole("heading", { name: "SDK preview unavailable" })).toBeTruthy();
     expect(screen.getByText("This development gallery is not included in the production build.")).toBeTruthy();
+  });
+
+  it("restores a copied preview URL with canonical palette and lifecycle state", () => {
+    const restored = normalizePreviewSearch(new URLSearchParams("view=space&state=left&palette=cosmic&texture=soft-dots&feature-chat=false"));
+
+    expect(restored).toMatchObject({ view: "space", state: "left", palette: "cosmic-chalk", texture: "slate", features: { chat: false } });
+    expect(serializePreviewSearch(restored)).toContain("state=left");
   });
 });
