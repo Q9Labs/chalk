@@ -1,4 +1,4 @@
-import { Chalk } from "@q9labsai/chalk-react";
+import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
@@ -15,6 +15,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   const client = useMemo(() => createPublicInviteClient(journey), [journey]);
   const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
   const [displayName, setDisplayName] = useState(initialDisplayName);
+  const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(null);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,10 +52,12 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     [telemetry],
   );
 
-  const start = useCallback(() => {
-    const normalizedDisplayName = displayName.trim();
+  const start = useCallback((settings: EntranceSettings = { displayName, microphone: true, camera: true }) => {
+    const normalizedDisplayName = settings.displayName.trim();
     const inviteToken = spaceInviteToken();
     if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
+    setDisplayName(normalizedDisplayName);
+    setEntranceSettings(settings);
     const accountEntry = Boolean(slug && !inviteToken && hasDashboardSpaceEntry());
     if (slug && !inviteToken && !accountEntry) {
       setError(neutralSpaceError);
@@ -164,10 +167,13 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   );
 
   if (spaceAccess) {
+    const settings = entranceSettings ?? { displayName: displayName.trim(), microphone: true, camera: true };
     return (
       <LocalSpace
         credential={spaceAccess.prepared.credential}
-        displayName={displayName.trim()}
+        displayName={settings.displayName}
+        defaults={{ microphone: settings.microphone, camera: settings.camera }}
+        deviceSelection={settings}
         getAccess={spaceAccess.prepared.getAccess}
         connectionAccess={spaceAccess.prepared.connectionAccess}
         inviteLink={spaceAccess.inviteLink}
@@ -178,7 +184,12 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     );
   }
 
-  return <SpaceArrival displayName={displayName} error={error} pending={pending !== null} preparing={preparing} onCancel={cancel} onDisplayNameChange={setDisplayName} onEnter={start} />;
+  if (pending) return <SpaceArrival displayName={displayName} error={error} pending preparing={preparing} onCancel={cancel} onDisplayNameChange={setDisplayName} onEnter={() => start()} />;
+  return (
+    <main className="h-dvh min-h-0 w-full overflow-hidden">
+      <Entrance spaceName={slug ?? "Space"} defaultDisplayName={displayName} defaults={{ microphone: true, camera: true }} joining={preparing} error={error ?? undefined} onJoin={start} />
+    </main>
+  );
 }
 
 type JoinedSpaceAccess = {
@@ -282,6 +293,8 @@ function neutralMessage(_cause: unknown): string {
 function LocalSpace({
   credential,
   displayName,
+  defaults,
+  deviceSelection,
   getAccess,
   connectionAccess,
   inviteLink,
@@ -291,6 +304,8 @@ function LocalSpace({
 }: {
   readonly credential: PublicSpaceCredential | AccountSpaceCredential;
   readonly displayName: string;
+  readonly defaults: { readonly microphone: boolean; readonly camera: boolean };
+  readonly deviceSelection?: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId">;
   readonly getAccess: PreparedPublicSpace["getAccess"];
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly inviteLink?: string;
@@ -298,7 +313,11 @@ function LocalSpace({
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
 }) {
-  const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess, journey }), [connectionAccess, credential, getAccess, journey]);
+  const client = useMemo(() => {
+    const nextClient = createLocalSpaceClient({ credential, getAccess, connectionAccess, journey });
+    selectEntranceDevices(nextClient, deviceSelection, journey);
+    return nextClient;
+  }, [connectionAccess, credential, deviceSelection, getAccess, journey]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const episodeID = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection.episode?.id;
   const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
@@ -335,9 +354,9 @@ function LocalSpace({
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       <Chalk
         client={client}
-        entrance
+        entrance={false}
         displayName={displayName}
-        defaults={{ microphone: true, camera: true }}
+        defaults={defaults}
         logoUrl="/brand/chalk/chalk-logo.svg"
         spaceName={spaceName}
         inviteLink={inviteLink}
@@ -347,6 +366,26 @@ function LocalSpace({
       />
     </main>
   );
+}
+
+function selectEntranceDevices(
+  client: ReturnType<typeof createLocalSpaceClient>,
+  selection: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId"> | undefined,
+  journey: ReturnType<typeof useWebTelemetry>["journey"],
+): void {
+  const audioInputDeviceId = selection?.audioInputDeviceId;
+  const videoInputDeviceId = selection?.videoInputDeviceId;
+  const audioOutputDeviceId = selection?.audioOutputDeviceId;
+  const requested = [
+    audioInputDeviceId ? { kind: "microphone", select: () => client.media.selectMicrophone(audioInputDeviceId) } : undefined,
+    videoInputDeviceId ? { kind: "camera", select: () => client.media.selectCamera(videoInputDeviceId) } : undefined,
+    audioOutputDeviceId ? { kind: "speaker", select: () => client.media.selectSpeaker(audioOutputDeviceId) } : undefined,
+  ].filter((item): item is { readonly kind: "microphone" | "camera" | "speaker"; readonly select: () => Promise<void> } => item !== undefined);
+  for (const item of requested) {
+    void item.select().catch(() => {
+      journey.recordDiagnostic({ category: "device", code: "space.entrance_device_selection_failed", phase: "media", state: "failed", attributes: { device_kind: item.kind } });
+    });
+  }
 }
 
 function SpaceArrival({

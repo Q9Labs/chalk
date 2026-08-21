@@ -1,5 +1,28 @@
-import type { ReactNode } from "react";
+import { createElement, useState, type ChangeEvent, type ReactNode } from "react";
 import { vi } from "vitest";
+
+function MockEntrance({
+  defaultDisplayName = "",
+  joining = false,
+  error,
+  onJoin,
+}: {
+  readonly defaultDisplayName?: string;
+  readonly joining?: boolean;
+  readonly error?: string;
+  readonly onJoin: (settings: { readonly displayName: string; readonly microphone: boolean; readonly camera: boolean }) => void | Promise<void>;
+}) {
+  const [displayName, setDisplayName] = useState(defaultDisplayName);
+  const onDisplayNameChange = (event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value);
+  return createElement(
+    "main",
+    null,
+    createElement("label", { htmlFor: "mock-entrance-name" }, "Your name"),
+    createElement("input", { id: "mock-entrance-name", "aria-label": "Your name", value: displayName, onChange: onDisplayNameChange }),
+    error ? createElement("p", { role: "alert" }, error) : null,
+    createElement("button", { type: "button", onClick: () => void onJoin({ displayName: displayName.trim(), microphone: true, camera: true }), disabled: joining || !displayName.trim() }, joining ? "Joining…" : "Continue"),
+  );
+}
 
 const spacePageTestMocks = vi.hoisted(() => {
   const holder: { chalkProps?: Record<string, unknown> } = {};
@@ -61,7 +84,7 @@ const spacePageTestMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@q9labsai/chalk-react", () => ({ Chalk: getSpacePageTestMocks().Chalk }));
+vi.mock("@q9labsai/chalk-react", () => ({ Chalk: getSpacePageTestMocks().Chalk, Entrance: MockEntrance }));
 vi.mock("../lib/chalk-access", () => ({
   createPublicInviteClient: getSpacePageTestMocks().createPublicInviteClient,
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
