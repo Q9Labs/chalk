@@ -443,8 +443,11 @@ async function up() {
   log("sfu probe verified");
 
   // 8. Sync (Elixir).
+  const syncRoot = join(repoRoot, "apps", "sync");
+  await run("mix", ["deps.get"], { cwd: syncRoot, env: { MIX_ENV: "prod" } });
+  await run("mix", ["compile"], { cwd: syncRoot, env: { MIX_ENV: "prod" } });
   spawnService("sync", "mix", ["run", "--no-halt"], {
-    cwd: join(repoRoot, "apps", "sync"),
+    cwd: syncRoot,
     logFile: join(runtimeRoot, "sync.log"),
     env: {
       MIX_ENV: "prod",
