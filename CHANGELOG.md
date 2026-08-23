@@ -12,6 +12,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.1.12] - 2026-08-23
+
 ### Added
 
 - Added public docs at `/docs` with Why Chalk, a working Quickstart,
