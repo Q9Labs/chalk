@@ -2,7 +2,6 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Retention.CleanupWorker
-  alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -46,24 +45,17 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     )
 
     assert {:error, {:invalid_history, :event_digest_mismatch}} = run_cleanup(connection)
-    assert [events, _receipts, intents] = history_counts(connection, fixture)
+    assert [events, intents] = history_counts(connection, fixture)
     assert events > 0
     assert intents > 0
     refute checkpointed?(connection, fixture)
   end
 
-  defp seed_ended_episode(connection, age_seconds, options \\ []) do
+  defp seed_ended_episode(connection, age_seconds) do
     fixture = SyncPostgres.seed_pending_join(connection)
 
     assert {:ok, %{result: :applied}} =
              Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
-
-    if Keyword.get(options, :command?, false) do
-      assert {:ok, command} =
-               Command.new("retention-command-0001", :set_hand_raised, %{"raised" => true})
-
-      assert {:ok, %{result: :committed}} = Postgres.decide_command(fixture.identity, command)
-    end
 
     assert {:ok, operation} = Operation.new("retention_episode_end", :end_episode, %{})
 
@@ -92,24 +84,23 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     )
   end
 
-  defp run_cleanup(connection, options \\ []) do
-    CleanupWorker.run_once(connection, Keyword.put(options, :clock, fn -> @now end))
+  defp run_cleanup(connection) do
+    CleanupWorker.run_once(connection, clock: fn -> @now end)
   end
 
   defp history_counts(connection, fixture) do
-    [[events, receipts, intents]] =
+    [[events, intents]] =
       Postgrex.query!(
         connection,
         """
         select
           (select count(*) from sync_control_events where tenant_id = $1 and episode_id = $2),
-          (select count(*) from sync_command_receipts where tenant_id = $1 and episode_id = $2),
           (select count(*) from sync_lifecycle_intents where tenant_id = $1 and episode_id = $2)
         """,
         episode_ids(fixture)
       ).rows
 
-    [events, receipts, intents]
+    [events, intents]
   end
 
   defp cleaned_at(connection, fixture) do

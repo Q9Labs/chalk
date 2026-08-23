@@ -59,6 +59,24 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
              |> JWTTokenVerifier.verify()
   end
 
+  test "rejects expiry exactly at the clock-skew boundary", %{private_key: private_key} do
+    assert {:error, :invalid_token} =
+             private_key
+             |> token(Map.put(claims(), "exp", @now - 30))
+             |> JWTTokenVerifier.verify()
+  end
+
+  test "rejects a signature from an untrusted key", %{private_key: private_key} do
+    {_other_public_key, other_private_key} = :crypto.generate_key(:eddsa, :ed25519)
+
+    assert {:error, :invalid_token} =
+             other_private_key
+             |> token(Map.put(claims(), "jti", "tampered-signature"))
+             |> JWTTokenVerifier.verify()
+
+    assert {:ok, _verified} = JWTTokenVerifier.verify(token(private_key, claims()))
+  end
+
   defp claims do
     participant = "44444444-4444-4444-8444-444444444444"
 
