@@ -20,7 +20,6 @@
     "apps/web/public/terms/index.html",
     "contract/generated/frontend-proof.ir.json",
     "contract/generated/frontend-proof.report.md",
-    "contract/schema/proof/invalid/**",
-    "scratchpad/sync-codewalk.html"
+    "contract/schema/proof/invalid/**"
   ]
 }
