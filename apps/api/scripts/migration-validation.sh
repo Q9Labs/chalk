@@ -10,6 +10,12 @@ run_proof() {
   "$@"
 }
 
+prepare_sync_dependencies() {
+  cd "${repository_root}/apps/sync"
+  env MIX_ENV=test mix deps.get --check-locked
+}
+
+run_proof "Sync migration proof dependencies" prepare_sync_dependencies
 run_proof "Membership role migration" "${repository_root}/apps/api/scripts/membership-role-migration-test.sh" "$@"
 run_proof "Space/Episode bridge migration" "${repository_root}/apps/api/scripts/space-episode-bridge-migration-test.sh" "$@"
 run_proof "Sync retained-event repair migration" "${repository_root}/apps/api/scripts/sync-retained-event-schema-repair-migration-test.sh" "$@"

@@ -107,10 +107,6 @@ database_tests_and_lifecycle() {
   run "Migration validation" "${script_directory}/migration-validation.sh"
 }
 
-migration_validation() {
-  run "Migration validation" "${script_directory}/migration-validation.sh"
-}
-
 run_race_tests() {
   run "Race tests" go test -race -vet=off ./...
 }
@@ -206,12 +202,6 @@ if ((direct_database_lane)); then
   start_lane "Database tests + lifecycle" run_postgres_gate
 else
   start_lane "Database tests + lifecycle" database_tests_and_lifecycle
-fi
-
-if ((direct_database_lane)); then
-  :
-else
-  start_lane "Migration validation" migration_validation
 fi
 
 run "Go version" go version
