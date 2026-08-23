@@ -51,3 +51,45 @@ export function markChatSequenceRead(sequence: string, lastMarkedSequenceRef: Re
     if (lastMarkedSequenceRef.current === sequence) lastMarkedSequenceRef.current = previous;
   });
 }
+
+export interface ChatScrollWorkOptions {
+  readonly getScroller: () => HTMLElement | null;
+  readonly getLatestSequence: () => string | null;
+  readonly lastMarkedSequenceRef: React.MutableRefObject<string | null>;
+  readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
+  readonly onAtBottomChange?: (atBottom: boolean) => void;
+}
+
+/**
+ * Scroll handler that coalesces scroll events to one read per animation frame.
+ * Scroll events fire far faster than frames; the visible-sequence scan reads
+ * getBoundingClientRect on the scroller plus every message node, so running it
+ * per event forces layouts continuously while scrolling.
+ */
+export function createChatScrollWork(options: ChatScrollWorkOptions): { readonly onScroll: () => void; readonly dispose: () => void } {
+  let frame: number | null = null;
+  const run = () => {
+    frame = null;
+    const scroller = options.getScroller();
+    if (!scroller) return;
+    const atBottom = isChatScrollAtBottom(scroller);
+    options.onAtBottomChange?.(atBottom);
+    if (atBottom) {
+      const latest = options.getLatestSequence();
+      if (latest) markChatSequenceRead(latest, options.lastMarkedSequenceRef, options.onMarkRead);
+      return;
+    }
+    const visibleSequence = latestVisibleChatSequence(scroller);
+    if (visibleSequence) markChatSequenceRead(visibleSequence, options.lastMarkedSequenceRef, options.onMarkRead);
+  };
+  return {
+    onScroll: () => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(run);
+    },
+    dispose: () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+    },
+  };
+}

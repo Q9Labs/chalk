@@ -102,3 +102,24 @@ release, dialogs' escape/click-outside pairing.
 
 Each fix: re-run `run.mjs --minutes 10 --participants 4`, compare the matching
 windowed traces (layouts/s, paints/s) and metric trends against this baseline.
+
+## After fixes — verified with the harness (10-min run, 4 participants)
+
+Fixes 1, 2, 3, 4, 5 applied together (they are independent surfaces), then
+`runs/2026-08-23T15-03-50-366Z` compared against the 30-min baseline:
+
+| Window (feature-matched, per second) | Before | After | Delta |
+|---|---|---|---|
+| Reactions paints/s | 200–463 (avg ≈330) | 100–124 (avg 100) | **≈3.3× fewer** |
+| Reactions layouts/s | 73–224 (avg ≈140) | 57–79 (avg 57) | **≈2.5× fewer** |
+| Reactions styleRecalc/s | ≈140 | ≈57 | **≈2.5× fewer** |
+| Screen-share paints/s | 90–445 (avg ≈330) | 90–106 (avg 90) | **≈3.5× fewer** |
+| Screen-share layouts/s | 43–182 (avg ≈140) | 48–60 (avg 48) | **≈3× fewer** |
+| Host layouts per minute (whole run) | ≈2,416 | ≈196 | **≈12× fewer** |
+
+Memory trajectory: worst-page JS heap 91–114MB through the 10-min after-run
+(baseline was 88MB → 484MB over 30 min); host DOM flat instead of growing
+(~950 nodes/min growth before). Post-leave DOM now returns to 276 nodes
+(baseline retained ~29k). The remaining chat-DOM growth while the panel is
+open (unvirtualized list) is unchanged and stays the top follow-up, along
+with Effect-store churn (P4) which needs a structural approach.

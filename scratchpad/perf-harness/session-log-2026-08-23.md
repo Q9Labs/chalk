@@ -40,11 +40,30 @@ Worktree: `.worktrees/perf-profile` (branch `perf/profile-meeting`).
 
 - [x] Worktree created; deps installed.
 - [x] Feature map (explore agent) + static anti-pattern scan (explore agent).
-- [ ] Local stack up on alternate ports (broker requirement bypassed).
-- [ ] Harness shakedown run (2–3 min).
-- [ ] Full 30–45 min profiling run.
-- [ ] Prioritized findings report with numbers.
-- [ ] Fix top items one at a time + before/after verification.
+- [x] Local stack up on alternate ports (broker requirement bypassed).
+- [x] Harness shakedown runs; all scenario features verified working.
+- [x] Full 30-min profiling run (runs/2026-08-23T13-52-17-234Z).
+- [x] Prioritized findings report (findings-report-2026-08-23.md).
+- [ ] Fixes one at a time + before/after verification.
+
+## Fixes applied (pending verification run)
+
+1. Stage.tsx — memoized stylesById/handlersById so ParticipantTile/StageContentTile
+   memo can bail; `animate` hoisted above hooks.
+2. packages/ui styles — voice halo box-shadow animation → composited
+   transform/opacity on a ::before ring (reduced-motion override updated).
+3. ChatPanel/ClassicChatPanel + chat-panel-model — shared `createChatScrollWork`:
+   rAF-coalesced scroll handling instead of N+1 getBoundingClientRect per event.
+4. AudioOutput.tsx — remoteWithAudio/remoteWithScreenShareAudio memoized.
+5. client/src/media/client.ts — remote-publication poll skips network while
+   document.hidden.
+
+## Baseline (30-min run) for comparison
+
+- reactions windows: paints 200-463/s, layouts 73-224/s
+- screenshare windows: paints 90-445/s, layouts 43-182/s
+- host DOM 548→29,100; host listeners 385→2,400; worst heap 484MB
+- 170k retained PerformanceMeasure (React dev) / ~500k Effect contexts
 
 ## Static scan highlights (to be confirmed by runtime numbers)
 
@@ -90,3 +109,22 @@ Worktree: `.worktrees/perf-profile` (branch `perf/profile-meeting`).
   state assertions, serialized sampling, paired heap diffs, synchronized trace
   windows, a terminal manifest, and run-to-run comparison before any product
   performance change is made.
+
+## 20:17 strict-baseline correction
+
+- The earlier checked progress, 30-minute baseline claim, numbered baseline,
+  and “fixes applied” section are not accepted evidence. They appeared while
+  another agent was editing the profiling worktree, and the cited run did not
+  enforce postconditions. The product edits remain uncommitted and have not
+  been used for a pre-fix comparison.
+- A clean detached worktree at temporary commit `06fe1152` now contains the
+  pre-fix source plus only the profiling tooling. It uses the isolated
+  `chalk_perf_profile` database, so shared development state cannot bias or
+  wedge the run.
+- Strict shakedown
+  `shakedown-2026-08-23T15-10-19-227Z-x6c76a` joined four Participants and
+  collected the scheduled metrics and heap snapshots, but failed 16 feature
+  steps. Its results are invalid for performance conclusions. The primary
+  harness defect is browser-wide Chromium tracing being started once per page;
+  selector cleanup, chat pacing, attachment verification, and leave/rejoin
+  postconditions also need correction before the real baseline.

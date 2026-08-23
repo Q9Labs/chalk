@@ -530,6 +530,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (this.#stopped || !this.#started || this.#pollTimer !== undefined) return;
     this.#pollTimer = globalThis.setTimeout(async () => {
       this.#pollTimer = undefined;
+      // Skip the network round-trip while the tab is hidden; the poll
+      // reschedules itself and resumes on the next tick after visibility.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        this.#schedulePoll();
+        return;
+      }
       try {
         await this.refreshRemotePublications();
       } catch {
