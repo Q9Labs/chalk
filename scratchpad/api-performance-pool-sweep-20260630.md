@@ -45,10 +45,7 @@ The multi-millisecond DB bucket in the API reports is therefore not explained by
 
 ## Artifacts
 
-- Pool 10: `apps/api/scratchpad/api-performance-pool10-c90.html`
-- Pool 16: `apps/api/scratchpad/api-performance-pool16-c90.html`
-- Pool 24: `apps/api/scratchpad/api-performance-pool24-c90.html`
-- Pool 32: `apps/api/scratchpad/api-performance-pool32-c90.html`
-- Pool 90: `apps/api/scratchpad/api-performance-pool90-c90.html`
+The five per-pool run reports were removed once this summary carried their
+numbers and interpretation; they remain in git history.
 
 Raw trace logs are under `apps/api/.private/api-perf-pool*-c90/` and are intentionally local-only.

@@ -1,5 +1,0 @@
-# Wave 8 Whiteboard Metro review session log
-
-- 2026-08-05 00:00 PKT: Began read-only review of Luna's unstaged `packages/whiteboard/src` Metro-resolution changes in the Wave 8 reconciliation worktree.
-- 2026-08-05 11:22 PKT: Found P1: the 17 source-only relative `.js` removals make `tsc --emitDeclarationOnly` produce extensionless public `.d.ts` specifiers. The resulting root, React, collaboration, and embedded declarations fail NodeNext with TS2834/TS2835. The Metro/tsup/embedded-renderer source graph, external `@noble/hashes/*.js` imports, JSON manifest, public runtime exports, and renderer asset manifest remain intact.
-- 2026-08-05 11:35 PKT: Final re-review: P1 is fixed. Both declaration build paths run the new rewriter and an in-memory NodeNext consumer resolves the root, React, collaboration, and embedded declarations with no Whiteboard diagnostics. Found P2 follow-ups: the rewriter changes `.d.ts` but leaves enabled `.d.ts.map` generated-column mappings stale, and its extension allowlist would corrupt valid relative `.svg` and `.mts` specifiers. The new proof is a unit string test, not a build-and-consumer proof across public entrypoints.

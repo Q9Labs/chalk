@@ -8,3 +8,6 @@ metadata, credentials, and private operational context out of this directory.
 
 Default to summaries over verbatim logs. Preserve root causes, tradeoffs,
 verification steps, and durable product decisions.
+
+Weekly digests of past session logs live in `history/`. Fold a week's logs into
+its digest once the week is closed, then remove the originals.

@@ -14,7 +14,7 @@
 - `sdks/typescript/react-native/src/components/native-space-view/useSpaceViewController.test.ts` — added presence to the client roster fixture.
 - `apps/web/src/components/sdk-preview/SdkPreviewGallery.tsx` — projected preview speaking into presence and set active speaker to false.
 - `apps/mobile/src/dev-preview/sdk-preview-store.ts` — added connected/default-false presence to preview roster entries.
-- `scratchpad/codex-client-presence-session-log-2026-08-18.md` — recorded implementation milestones.
+- `scratchpad/history/2026-W34.md` — condensed implementation milestones.
 
 Pre-existing dirty files were preserved. Nothing was staged or committed.
 No dependencies were added.
