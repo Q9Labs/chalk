@@ -58,6 +58,7 @@ const (
 	RouteStatusMonitorIngestScenario      = "route:status-monitor-ingest"
 	ServiceEpisodeDiagnosticsScenario     = "service:episode-diagnostics"
 	ServiceDashboardSpaceJoinScenario     = "service:dashboard-space-join"
+	ServicePublicInviteLifecycleScenario  = "service:public-invite-lifecycle"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
 	PolicyTenantAPIKeyScopeScenario = "policy:tenant-api-key-scope"
@@ -116,6 +117,7 @@ func ScenarioNames() []string {
 		RouteStatusMonitorIngestScenario,
 		ServiceEpisodeDiagnosticsScenario,
 		ServiceDashboardSpaceJoinScenario,
+		ServicePublicInviteLifecycleScenario,
 		RouteChatAttachmentUploadScenario,
 		RoutePublicInviteObservabilityScenario,
 		RouteWhiteboardFileUploadScenario,

@@ -127,6 +127,7 @@ Registered scenarios:
 - `route:telemetry-journey-event-intake`
 - `route:status-monitor-ingest`
 - `service:episode-diagnostics`
+- `service:public-invite-lifecycle`
 - `route:chat-attachment-upload`
 - `route:whiteboard-file-upload`
 - `route:api-key-customer-flow`

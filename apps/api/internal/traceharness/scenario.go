@@ -101,6 +101,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runServiceEpisodeDiagnostics(ctx)
 	case ServiceDashboardSpaceJoinScenario:
 		return runServiceDashboardSpaceJoin(ctx)
+	case ServicePublicInviteLifecycleScenario:
+		return runServicePublicInviteLifecycle(ctx)
 	case ServiceMediaPlaneDefaultResolutionScenario:
 		return runServiceMediaPlaneDefaultResolution(ctx)
 	case RouteWhiteboardFileUploadScenario:
