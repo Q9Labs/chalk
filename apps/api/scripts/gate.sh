@@ -29,6 +29,7 @@ Checks:
   - go mod tidy -diff
   - go tool sqlc vet
   - go test -vet=off ./... and lifecycle smoke test in one lane
+  - migration validation proofs in one PostgreSQL lane
   - go vet ./..., staticcheck, and govulncheck in parallel lanes
 
 Optional:
@@ -102,7 +103,8 @@ run_lane_command() {
 
 database_tests_and_lifecycle() {
   run_lane_command "Tests" go test -vet=off ./... || return "$?"
-  run_lane_command "Lifecycle smoke test" ./scripts/smoke-lifecycle.mjs
+  run_lane_command "Lifecycle smoke test" ./scripts/smoke-lifecycle.mjs || return "$?"
+  run "Migration validation" "${script_directory}/migration-validation.sh"
 }
 
 run_race_tests() {

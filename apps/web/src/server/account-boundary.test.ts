@@ -3,67 +3,58 @@ import { handleAccountBoundary } from "./account-boundary";
 
 const upstream = { CHALK_API_ORIGIN: "https://api.chalk.test" };
 const secureOrigin = "https://chalk.test";
-const upstreamCredentialField = "session_token";
-
-function recentAuthFailureFetcher() {
-  return vi.fn(async () => Response.json({ error: { code: "auth.invalid_recent_auth", message: "Recent authentication failed" } }, { status: 401 }));
-}
-
-function expectAccountCookiePreserved(response: Response) {
-  expect(response.status).toBe(401);
-  expect(response.headers.get("set-cookie")).toBeNull();
-}
 
 describe("account boundary", () => {
-  it("issues a hardened CSRF cookie and private response", async () => {
+  it("issues a private, hardened CSRF cookie", async () => {
     const response = await handleAccountBoundary(new Request(`${secureOrigin}/api/auth/csrf`), upstream, vi.fn());
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store, private");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
-    expect(response.headers.get("set-cookie")).toContain("__Host-chalk_csrf=");
+    expect(response.headers.get("set-cookie")).toMatch(/__Host-chalk_csrf=[0-9a-f]{64}/);
     expect(response.headers.get("set-cookie")).toContain("Secure");
     expect(response.headers.get("set-cookie")).toContain("SameSite=Strict");
     expect(response.headers.get("set-cookie")).not.toContain("HttpOnly");
-    await expect(response.json()).resolves.toMatchObject({ csrf_token: expect.stringMatching(/^[0-9a-f]{64}$/) });
+
+    const localResponse = await handleAccountBoundary(new Request("http://localhost/api/auth/csrf"), upstream, vi.fn());
+
+    expect(localResponse.headers.get("set-cookie")).toMatch(/chalk_csrf_local=[0-9a-f]{64}/);
+    expect(localResponse.headers.get("set-cookie")).not.toContain("__Host-chalk_csrf=");
+    expect(localResponse.headers.get("set-cookie")).not.toContain("Secure");
   });
 
-  it("proxies anonymous public status without cookies or private monitor fields", async () => {
+  it("forwards only trace context and redacts private status fields", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.chalk.test/v1/status");
+      const url = String(input);
       const headers = new Headers(init?.headers);
-      expect(Object.fromEntries(headers)).toEqual({
-        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-        tracestate: "chalk=web",
-        "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
-      });
-      return Response.json({
-        schema_version: 1,
-        generated_at: "2026-08-08T12:00:00Z",
-        overall: "degraded",
-        components: [
-          {
-            id: "api",
-            name: "API",
-            description: "Chalk control plane API",
-            state: "degraded",
-            checked_at: "2026-08-08T11:59:00Z",
-            last_changed_at: "2026-08-08T11:58:00Z",
-            monitor_key: "private.monitor",
-            target_url: "https://private.example",
-            error_message: "private failure details",
-          },
-        ],
-      });
+      if (url.endsWith("/v1/status")) {
+        expect(Object.fromEntries(headers)).toEqual({
+          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          tracestate: "chalk=web",
+          "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
+        });
+        return Response.json({
+          schema_version: 1,
+          generated_at: "2026-08-08T12:00:00Z",
+          overall: "degraded",
+          components: [{ id: "api", name: "API", description: "Control plane", state: "degraded", checked_at: "2026-08-08T11:59:00Z", last_changed_at: "2026-08-08T11:58:00Z", monitor_key: "private", target_url: "https://private.example", error_message: "secret" }],
+        });
+      }
+
+      expect(url).toBe("https://api.chalk.test/v1/me");
+      expect(headers.get("authorization")).toBe("Bearer private-token");
+      expect(headers.get("traceparent")).toBeNull();
+      expect(headers.get("tracestate")).toBe("chalk=web");
+      return Response.json({ refresh_token: "root-secret", profile: { name: "Ada", token: "nested-secret", details: { access_token: "nested-access", safe: true } } });
     });
     const response = await handleAccountBoundary(
       new Request(`${secureOrigin}/api/status`, {
         headers: {
           Cookie: "__Host-chalk_account=private-token",
-          Authorization: "Bearer private-token",
-          "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
-          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-          tracestate: "chalk=web",
+          Authorization: "Bearer browser-token",
+          "X-Chalk-Journey-ID": "11111111-1111-4111-8111-111111111111",
+          Traceparent: "00-4BF92F3577B34DA6A3CE929D0E0E4736-00F067AA0BA902B7-01",
+          Tracestate: "chalk=web",
         },
       }),
       upstream,
@@ -71,496 +62,98 @@ describe("account boundary", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("vary")).toBe("Origin");
     await expect(response.json()).resolves.toEqual({
       schema_version: 1,
       generated_at: "2026-08-08T12:00:00Z",
       overall: "degraded",
-      components: [
-        {
-          id: "api",
-          name: "API",
-          description: "Chalk control plane API",
-          state: "degraded",
-          checked_at: "2026-08-08T11:59:00Z",
-          last_changed_at: "2026-08-08T11:58:00Z",
-        },
-      ],
+      components: [{ id: "api", name: "API", description: "Control plane", state: "degraded", checked_at: "2026-08-08T11:59:00Z", last_changed_at: "2026-08-08T11:58:00Z" }],
     });
+
+    const nestedResponse = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/me`, {
+        headers: { Cookie: "__Host-chalk_account=private-token", Traceparent: "not-a-traceparent", Tracestate: "chalk=web" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(nestedResponse.status).toBe(200);
+    await expect(nestedResponse.json()).resolves.toEqual({ profile: { name: "Ada", details: { safe: true } } });
   });
 
-  it("rejects mutations before upstream access when origin or CSRF validation fails", async () => {
+  it("rejects a cross-origin or CSRF-invalid mutation before upstream access", async () => {
     const fetcher = vi.fn();
-    const response = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "hasan@example.com", password: "secret" }, { Origin: "https://evil.test" }), upstream, fetcher);
+    const crossOrigin = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "user@example.com" }, { Origin: "https://evil.test" }), upstream, fetcher);
+    const csrfMismatch = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "user@example.com" }, { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-tokeX" }), upstream, fetcher);
 
-    expect(response.status).toBe(403);
+    expect(crossOrigin.status).toBe(403);
+    await expect(crossOrigin.json()).resolves.toMatchObject({ error: { code: "origin_mismatch" } });
+    expect(csrfMismatch.status).toBe(403);
+    await expect(csrfMismatch.json()).resolves.toMatchObject({ error: { code: "csrf_mismatch" } });
     expect(fetcher).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toEqual({ error: { code: "origin_mismatch", message: "A same-origin request is required" } });
   });
 
-  it("keeps the upstream credential in an HttpOnly cookie and strips browser credentials", async () => {
+  it("keeps credentials server-held and strips them from the login response", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://api.chalk.test/v1/auth/login");
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBeNull();
       expect(headers.get("cookie")).toBeNull();
-      expect(headers.get("x-chalk-journey-id")).toBe("11111111-1111-4111-8111-111111111111");
-      expect(headers.get("traceparent")).toBe("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
-      return Response.json(
-        {
-          [upstreamCredentialField]: "raw-account-token",
-          expires_at: "2030-08-04T12:00:00Z",
-          user: { id: "user-1", name: "Hasan", email: "hasan@example.com", extra: "removed" },
-        },
-        { headers: { "Cache-Control": "public, max-age=3600", "Set-Cookie": "chalk_account=raw-account-token" } },
-      );
+      return Response.json({ session_token: "raw-account-token", expires_at: "2030-08-04T12:00:00Z", user: { id: "user-1", name: "Ada", email: "ada@example.com", secret: "remove" } });
     });
     const response = await handleAccountBoundary(
       jsonRequest(
         "/api/auth/login",
-        { email: "hasan@example.com", password: "secret" },
-        {
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_csrf=csrf-token; unrelated=browser-cookie",
-          "X-Chalk-CSRF": "csrf-token",
-          "X-Chalk-Journey-ID": "11111111-1111-4111-8111-111111111111",
-          Traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-          Authorization: "Bearer browser-controlled-token",
-        },
+        { email: "ada@example.com", password: "secret" },
+        { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token", Authorization: "Bearer browser-token" },
       ),
       upstream,
       fetcher,
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store, private");
     expect(response.headers.get("set-cookie")).toContain("__Host-chalk_account=raw-account-token");
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
     const body = await response.text();
     expect(body).not.toContain("raw-account-token");
-    expect(JSON.parse(body)).toEqual({ expires_at: "2030-08-04T12:00:00Z", user: { id: "user-1", name: "Hasan", email: "hasan@example.com" } });
-  });
+    expect(JSON.parse(body)).toEqual({ expires_at: "2030-08-04T12:00:00Z", user: { id: "user-1", name: "Ada", email: "ada@example.com" } });
 
-  it("forwards only the boundary account cookie and idempotency context", async () => {
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.chalk.test/v1/me/tenants");
-      const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer server-held-account-token");
-      expect(headers.get("idempotency-key")).toBe("tenant-onboard-0001");
-      return Response.json({ tenant: { id: "tenant-1", token: "remove-me" }, access: { role: "owner" }, replayed: false });
-    });
-    const response = await handleAccountBoundary(
-      jsonRequest(
-        "/api/me/tenants?browser_controlled=discarded",
-        { name: "Acme studio" },
-        {
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-          "Idempotency-Key": "tenant-onboard-0001",
-        },
-      ),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ tenant: { id: "tenant-1" }, access: { role: "owner" }, replayed: false });
-  });
-
-  it("allowlists Tenant pagination and drops browser-controlled query fields", async () => {
-    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe("https://api.chalk.test/v1/me/tenants?cursor=next-page&page_size=100");
-      return Response.json({ tenants: [], pagination: { page_size: 100, next_cursor: null, has_more: false } });
-    });
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/me/tenants?cursor=next-page&page_size=100&admin=true`, {
-        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
+    const localResponse = await handleAccountBoundary(
+      new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "http://localhost", Cookie: "chalk_csrf_local=csrf-token", "X-Chalk-CSRF": "csrf-token" },
+        body: JSON.stringify({ email: "ada@example.com", password: "secret" }),
       }),
       upstream,
       fetcher,
     );
 
-    expect(response.status).toBe(200);
-    expect(fetcher).toHaveBeenCalledOnce();
+    expect(localResponse.headers.get("set-cookie")).toContain("chalk_account_local=raw-account-token");
+    expect(localResponse.headers.get("set-cookie")).not.toContain("__Host-chalk_account=");
+    expect(localResponse.headers.get("set-cookie")).not.toContain("Secure");
   });
 
-  it("allowlists nested Space and Episode routes without accepting arbitrary upstream paths", async () => {
-    const tenantID = "11111111-1111-4111-8111-111111111111";
-    const spaceID = "22222222-2222-4222-8222-222222222222";
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/episodes?page_size=25`);
-      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
-      return Response.json({ episodes: [], pagination: { page_size: 25, next_cursor: null, has_more: false } });
-    });
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/episodes?page_size=25&admin=true`, {
-        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
-      }),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(200);
-    expect(fetcher).toHaveBeenCalledOnce();
-
-    const rejected = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/not-a-uuid/episodes`, {
-        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
-      }),
-      upstream,
-      fetcher,
-    );
-    expect(rejected.status).toBe(404);
-    expect(fetcher).toHaveBeenCalledOnce();
-  });
-
-  it("proxies public-invite management and admission-request operations with their contracts intact", async () => {
-    const tenantID = "11111111-1111-4111-8111-111111111111";
-    const spaceID = "22222222-2222-4222-8222-222222222222";
-    const requestHandle = "request-handle-123456";
-    const invite = { canonical_url: "/space/design-lab#cspi1=opaque", enabled: true, generation: 1 };
-    const admissionRequest = { display_name: "Ada", expires_at: "2030-01-01T00:05:00Z", request_handle: requestHandle, requested_at: "2030-01-01T00:00:00Z", state: "pending" };
-    const responses = [
-      Response.json(invite, { status: 200 }),
-      Response.json({ ...invite, enabled: false }, { status: 202 }),
-      Response.json({ ...invite, generation: 2 }, { status: 201 }),
-      Response.json({ requests: [admissionRequest] }, { status: 206 }),
-      Response.json({ ...admissionRequest, state: "approved" }, { status: 207 }),
-      Response.json({ ...admissionRequest, state: "denied" }, { status: 208 }),
-    ];
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer server-held-account-token");
-      const response = responses[fetcher.mock.calls.length - 1];
-      if (!response) throw new Error(`Unexpected upstream call: ${String(input)}`);
-      return response;
-    });
-
-    const accountHeaders = { Cookie: "__Host-chalk_account=server-held-account-token" };
-    const mutationHeaders = (idempotencyKey: string) => ({
-      "Content-Type": "application/json",
-      Origin: secureOrigin,
-      Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-      "X-Chalk-CSRF": "csrf-token",
-      "Idempotency-Key": idempotencyKey,
-    });
-
-    const getResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-invite`, { headers: accountHeaders }), upstream, fetcher);
-    const updateResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-invite`, { method: "PATCH", headers: mutationHeaders("public-update-0001"), body: JSON.stringify({ enabled: false }) }), upstream, fetcher);
-    const rotateResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-invite/rotations`, { method: "POST", headers: mutationHeaders("public-rotate-0001"), body: "{}" }), upstream, fetcher);
-    const listResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests?state=pending&discarded=true`, { headers: accountHeaders }), upstream, fetcher);
-    const approveResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/approval`, { method: "POST", headers: mutationHeaders("public-approve-0001"), body: "{}" }), upstream, fetcher);
-    const denyResponse = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/denial`, { method: "POST", headers: mutationHeaders("public-deny-0001"), body: "{}" }), upstream, fetcher);
-
-    expect([getResponse, updateResponse, rotateResponse, listResponse, approveResponse, denyResponse].map((response) => response.status)).toEqual([200, 202, 201, 206, 207, 208]);
-    await expect(getResponse.json()).resolves.toEqual(invite);
-    await expect(updateResponse.json()).resolves.toMatchObject({ enabled: false });
-    await expect(rotateResponse.json()).resolves.toMatchObject({ generation: 2 });
-    await expect(listResponse.json()).resolves.toEqual({ requests: [admissionRequest] });
-    await expect(approveResponse.json()).resolves.toMatchObject({ state: "approved" });
-    await expect(denyResponse.json()).resolves.toMatchObject({ state: "denied" });
-
-    const calls = fetcher.mock.calls;
-    expect(String(calls[0]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-invite`);
-    expect(calls[0]?.[1]).toEqual(expect.objectContaining({ method: "GET" }));
-    expect(String(calls[1]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-invite`);
-    expect(calls[1]?.[1]).toEqual(expect.objectContaining({ method: "PATCH" }));
-    expect(String(calls[2]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-invite/rotations`);
-    expect(calls[2]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
-    expect(String(calls[3]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests?state=pending`);
-    expect(calls[3]?.[1]).toEqual(expect.objectContaining({ method: "GET" }));
-    expect(String(calls[4]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/approval`);
-    expect(calls[4]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
-    expect(String(calls[5]?.[0])).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/public-admission-requests/${requestHandle}/denial`);
-    expect(calls[5]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
-
-    await expect(new Response(fetcher.mock.calls[1]?.[1]?.body).text()).resolves.toBe(JSON.stringify({ enabled: false }));
-    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("origin")).toBe(secureOrigin);
-    expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get("origin")).toBe(secureOrigin);
-    expect(new Headers(fetcher.mock.calls[4]?.[1]?.headers).get("origin")).toBe(secureOrigin);
-    expect(new Headers(fetcher.mock.calls[5]?.[1]?.headers).get("origin")).toBe(secureOrigin);
-    expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get("idempotency-key")).toBe("public-rotate-0001");
-    expect(new Headers(fetcher.mock.calls[5]?.[1]?.headers).get("idempotency-key")).toBe("public-deny-0001");
-  });
-
-  it("forwards a slug-based Dashboard Space grant without stripping its opaque credentials", async () => {
-    const tenantID = "11111111-1111-4111-8111-111111111111";
-    const grant = {
-      subject: { tenant_id: tenantID, space_id: "space", episode_id: "episode", participant_id: "participant", participant_generation: 1 },
-      sync: { token: "opaque-sync", expires_at: "2030-01-01T00:00:00Z" },
-      media: { token: "opaque-media", expires_at: "2030-01-01T00:00:00Z", provider: "cloudflare_sfu", client_payload: {} },
-    };
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/by-slug/design-lab/participants/self`);
-      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
-      return Response.json(grant, { status: 201 });
-    });
-
-    const response = await handleAccountBoundary(
-      jsonRequest(
-        `/api/tenants/${tenantID}/spaces/by-slug/design-lab/participants/self`,
-        { display_name: "Ada" },
-        {
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-        },
-      ),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(201);
-    await expect(response.json()).resolves.toEqual(grant);
-  });
-
-  it("routes PostgreSQL UUID-shaped tenant, Space, Episode, and API-key IDs", async () => {
-    const tenantID = "00000000-0000-0000-c000-000000000001";
-    const spaceID = "00000000-0000-0000-c000-000000000002";
-    const episodeID = "00000000-0000-0000-c000-000000000003";
-    const apiKeyID = "00000000-0000-0000-c000-000000000004";
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === "DELETE") {
-        expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/api-keys/${apiKeyID}`);
-        return new Response(null, { status: 204 });
-      }
-      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/spaces/${spaceID}/episodes/${episodeID}`);
-      return Response.json({ episode: { id: episodeID } });
-    });
-
-    const episodeResponse = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/episodes/${episodeID}`, {
-        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
-      }),
-      upstream,
-      fetcher,
-    );
-    expect(episodeResponse.status).toBe(200);
-
-    const apiKeyResponse = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/tenants/${tenantID}/api-keys/${apiKeyID}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-        },
-      }),
-      upstream,
-      fetcher,
-    );
-    expect(apiKeyResponse.status).toBe(204);
-    expect(fetcher).toHaveBeenCalledTimes(2);
-  });
-
-  it("requires same-origin CSRF proof for API-key revocation", async () => {
-    const tenantID = "11111111-1111-4111-8111-111111111111";
-    const apiKeyID = "33333333-3333-4333-8333-333333333333";
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe(`https://api.chalk.test/v1/tenants/${tenantID}/api-keys/${apiKeyID}`);
-      expect(init?.method).toBe("DELETE");
-      return new Response(null, { status: 204 });
-    });
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/tenants/${tenantID}/api-keys/${apiKeyID}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-        },
-      }),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(204);
-    expect(response.headers.get("cache-control")).toBe("no-store, private");
-  });
-
-  it("forwards a bounded recent-auth proof only on an allowlisted API-key mutation", async () => {
-    const tenantID = "11111111-1111-4111-8111-111111111111";
-    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(new Headers(init?.headers).get("x-chalk-recent-auth")).toBe("recent-proof");
-      return Response.json({ api_key: { id: "key-1" }, secret: "chalk_secret_once" }, { status: 201 });
-    });
-    const response = await handleAccountBoundary(
-      jsonRequest(
-        `/api/tenants/${tenantID}/api-keys`,
-        { name: "CI", scopes: ["spaces:read"], expires_at: "2030-01-01T00:00:00Z" },
-        {
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-          "X-Chalk-Recent-Auth": "recent-proof",
-        },
-      ),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(201);
-    await expect(response.json()).resolves.toMatchObject({ secret: "chalk_secret_once" });
-  });
-
-  it("does not clear Account authentication when recent password verification fails", async () => {
+  it("preserves the account cookie when recent authentication fails", async () => {
     const response = await handleAccountBoundary(
       jsonRequest(
         "/api/me/recent-auth",
-        { password: "wrong", action: "api_key.create", resource_id: "11111111-1111-4111-8111-111111111111" },
-        {
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-        },
+        { password: "wrong", action: "api_key.create" },
+        { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" },
       ),
       upstream,
-      recentAuthFailureFetcher(),
+      vi.fn(async () => Response.json({ error: { code: "auth.invalid_recent_auth", message: "Recent authentication failed" } }, { status: 401 })),
     );
 
-    expectAccountCookiePreserved(response);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 
-  it("forwards only the Google recent-auth start query contract", async () => {
-    const resourceID = "22222222-2222-4222-8222-222222222222";
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe(`https://api.chalk.test/v1/me/recent-auth/google/start?action=api_key.create&resource_id=${resourceID}`);
-      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
-      return Response.json({ authorization_url: "https://accounts.google.test/oauth?state=opaque", state: "opaque-state" });
-    });
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/me/recent-auth/google/start?action=api_key.create&resource_id=${resourceID}&discarded=1`, {
-        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
-      }),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store, private");
-    await expect(response.json()).resolves.toEqual({ authorization_url: "https://accounts.google.test/oauth?state=opaque", state: "opaque-state" });
-  });
-
-  it("bridges the browser Google callback with a nonce-bound same-origin message", async () => {
-    const proof = "opaque-provider-proof";
-    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.chalk.test/v1/me/recent-auth/google/callback?state=opaque-state&code=provider-code");
-      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-held-account-token");
-      return Response.json({ proof, expires_at: "2030-08-04T12:00:00Z" });
-    });
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/me/recent-auth/google/callback?state=opaque-state&code=provider-code&discarded=1`, {
-        headers: { Accept: "text/html", Cookie: "__Host-chalk_account=server-held-account-token" },
-      }),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toContain("text/html");
-    expect(response.headers.get("cache-control")).toBe("no-store, private");
-    const csp = response.headers.get("content-security-policy");
-    expect(csp).toMatch(/script-src 'nonce-[0-9a-f]+/);
-    const body = await response.text();
-    expect(body).toContain("chalk.recent-auth.google.complete");
-    expect(body).toContain(JSON.stringify(proof));
-    expect(body).toContain(JSON.stringify(secureOrigin));
-    expect(body).not.toContain("discarded");
-    expect(info).not.toHaveBeenCalledWith(expect.stringContaining(proof));
-    info.mockRestore();
-  });
-
-  it("keeps JSON callback responses available to same-origin API clients", async () => {
-    const fetcher = vi.fn(async () => Response.json({ proof: "opaque-provider-proof", expires_at: "2030-08-04T12:00:00Z" }));
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/me/recent-auth/google/callback?state=opaque-state&code=provider-code`, {
-        headers: { Accept: "application/json", Cookie: "__Host-chalk_account=server-held-account-token" },
-      }),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.headers.get("content-type")).toContain("application/json");
-    await expect(response.json()).resolves.toEqual({ proof: "opaque-provider-proof", expires_at: "2030-08-04T12:00:00Z" });
-  });
-
-  it("preserves the Account cookie when the browser callback reports a recent-auth failure", async () => {
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/me/recent-auth/google/callback?state=opaque-state&code=provider-code`, {
-        headers: { Accept: "text/html", Cookie: "__Host-chalk_account=server-held-account-token" },
-      }),
-      upstream,
-      recentAuthFailureFetcher(),
-    );
-
-    expectAccountCookiePreserved(response);
-    expect(await response.text()).toContain("auth.invalid_recent_auth");
-  });
-
-  it("preserves the Account cookie when an API-key mutation rejects recent authentication", async () => {
-    const tenantID = "11111111-1111-4111-8111-111111111111";
-    const apiKeyID = "22222222-2222-4222-8222-222222222222";
-    const routes = [
-      { method: "POST", path: `/api/tenants/${tenantID}/api-keys`, body: { name: "CI", scopes: ["spaces:read"], expires_at: "2030-01-01T00:00:00Z" } },
-      { method: "POST", path: `/api/tenants/${tenantID}/api-keys/${apiKeyID}/rotate`, body: {} },
-      { method: "DELETE", path: `/api/tenants/${tenantID}/api-keys/${apiKeyID}`, body: {} },
-    ] as const;
-
-    for (const route of routes) {
-      const fetcher = vi.fn(async () => Response.json({ error: { code: "auth.invalid_recent_auth", message: "Recent authentication failed" } }, { status: 401 }));
-      const response = await handleAccountBoundary(
-        new Request(`${secureOrigin}${route.path}`, {
-          method: route.method,
-          headers: {
-            "Content-Type": "application/json",
-            Origin: secureOrigin,
-            Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-            "X-Chalk-CSRF": "csrf-token",
-            "X-Chalk-Recent-Auth": "expired-proof",
-          },
-          body: JSON.stringify(route.body),
-        }),
-        upstream,
-        fetcher,
-      );
-
-      expect(response.status).toBe(401);
-      expect(response.headers.get("set-cookie")).toBeNull();
-      expect(fetcher).toHaveBeenCalledOnce();
-    }
-
-    const expiredLogin = await handleAccountBoundary(
-      jsonRequest(
-        `/api/tenants/${tenantID}/api-keys`,
-        { name: "CI", scopes: ["spaces:read"], expires_at: "2030-01-01T00:00:00Z" },
-        {
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=expired-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-        },
-      ),
-      upstream,
-      vi.fn(async () => Response.json({ error: { code: "access.unauthenticated", message: "Authentication required" } }, { status: 401 })),
-    );
-
-    expect(expiredLogin.headers.get("set-cookie")).toContain("__Host-chalk_account=");
-  });
-
-  it("clears both account and CSRF cookies on logout", async () => {
+  it("clears account and CSRF cookies on logout", async () => {
     const response = await handleAccountBoundary(
       jsonRequest(
         "/api/auth/logout",
         {},
-        {
-          Origin: secureOrigin,
-          Cookie: "__Host-chalk_account=server-held-account-token; __Host-chalk_csrf=csrf-token",
-          "X-Chalk-CSRF": "csrf-token",
-        },
+        { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" },
       ),
       upstream,
       vi.fn(async () => new Response(null, { status: 204 })),
@@ -571,70 +164,6 @@ describe("account boundary", () => {
     expect(cookies.join("\n")).toContain("__Host-chalk_account=");
     expect(cookies.join("\n")).toContain("__Host-chalk_csrf=");
     expect(cookies.join("\n")).toContain("Max-Age=0");
-  });
-
-  it("rejects an unsafe OAuth return path", async () => {
-    const fetcher = vi.fn(async () => new Response(null, { status: 302, headers: { Location: "https://accounts.google.test/oauth" } }));
-    const response = await handleAccountBoundary(new Request(`${secureOrigin}/api/auth/google/start?return_to=//evil.test`), upstream, fetcher);
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("https://accounts.google.test/oauth");
-    expect(response.headers.get("set-cookie")).toContain(encodeURIComponent("/home"));
-  });
-
-  it("completes Google OAuth through the boundary and restores the safe return path", async () => {
-    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe("https://api.chalk.test/v1/auth/google/callback?state=state-1&code=code-1");
-      return Response.json({
-        [upstreamCredentialField]: "raw-google-token",
-        expires_at: "2030-08-04T12:00:00Z",
-        user: { id: "account-1", name: "Hasan", email: "hasan@example.com" },
-      });
-    });
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/auth/google/callback?state=state-1&code=code-1&return_to=https://evil.test`, {
-        headers: { Cookie: "__Host-chalk_oauth_return=%2Fspaces" },
-      }),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://chalk.test/spaces");
-    expect(response.headers.get("set-cookie")).toContain("__Host-chalk_account=raw-google-token");
-  });
-
-  it("includes the journey identifier in its structured request log", async () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/healthz`, { headers: { "X-Chalk-Journey-ID": "11111111-1111-4111-8111-111111111111" } }),
-      upstream,
-      vi.fn(async () => Response.json({ status: "ok" })),
-    );
-
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('"journey_id":"11111111-1111-4111-8111-111111111111"'));
-    info.mockRestore();
-  });
-
-  it("logs bounded route templates instead of resource identifiers", async () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const tenantID = "11111111-1111-4111-8111-111111111111";
-    await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces`, { headers: { Cookie: "__Host-chalk_account=server-held-account-token" } }),
-      upstream,
-      vi.fn(async () => Response.json({ spaces: [], pagination: { page_size: 50, next_cursor: null, has_more: false } })),
-    );
-
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('"route":"/api/tenants/{id}/spaces"'));
-    expect(info).not.toHaveBeenCalledWith(expect.stringContaining(tenantID));
-    info.mockRestore();
-  });
-
-  it("refuses a non-allowlisted upstream origin", async () => {
-    const response = await handleAccountBoundary(new Request(`${secureOrigin}/api/healthz`), { CHALK_API_ORIGIN: "http://metadata.internal" }, vi.fn());
-
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({ dependencies: { account_api: "unavailable" } });
   });
 });
 

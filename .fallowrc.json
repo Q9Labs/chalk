@@ -35,7 +35,6 @@
     "scripts/codegen/generate-effect-http-api.mjs",
     "scripts/codegen/generate-effect-schemas.mjs",
     "scripts/gates/smart-gate.mjs",
-    "scripts/gates/smart-gate.test.mjs",
     "scripts/transcription-dispatcher/emit-manifest.mjs",
     "scripts/transcription-dispatcher/source-state.mjs"
   ],

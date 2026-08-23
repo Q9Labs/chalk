@@ -101,8 +101,8 @@ values (
     'ended',
     '${space_id}',
     '${tenant_id}',
-    now() - interval '9 days',
-    now() - interval '8 days',
+    '2026-08-09T00:00:00Z'::timestamptz,
+    '2026-08-10T00:00:00Z'::timestamptz,
     '{
       "roles": {
         "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand"],
@@ -133,8 +133,8 @@ values (
     1,
     'left',
     'facilitator',
-    now() - interval '9 days',
-    now() - interval '8 days'
+    '2026-08-09T00:00:00Z'::timestamptz,
+    '2026-08-10T00:00:00Z'::timestamptz
 );
 
 insert into sync_episode_control (
@@ -456,6 +456,10 @@ if [[ "${version}" != "20260809160000" ]]; then
   echo "Goose version changed after refused repair rollback: ${version}" >&2
   exit 1
 fi
+
+# The repair proof stops at its historical migration, but the current cleanup
+# worker expects the current schema. Advance before exercising that worker.
+goose up
 
 cleanup_output="$(
   cd "${repository_root}/apps/sync"

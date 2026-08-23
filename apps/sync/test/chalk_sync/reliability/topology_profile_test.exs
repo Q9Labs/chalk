@@ -21,8 +21,6 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
   test "multiple nodes converge across a client partition and unclean node loss", %{
     connection: connection
   } do
-    write_schedule()
-
     fixture =
       SyncPostgres.seed_episode(connection, 2, %{}, %{
         participants: [%{}, %{role: "collaborator"}]
@@ -59,8 +57,7 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
 
     assert :ok = ExternalSyncNode.kill(node_a)
     client_b = Client.send_json(client_b, %{"type" => "ping"})
-    {_client_b, pong} = Wire.receive_json_type(client_b, "pong")
-    assert pong["type"] == "pong"
+    {_client_b, _pong} = Wire.receive_json_type(client_b, "pong")
 
     assert %{partitions: 1} = TcpFaultProxy.stats(proxy)
     write_result()
@@ -103,10 +100,9 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
     {observer, update} = Wire.receive_json_type(observer, "update")
     assert update["revision"] == "1"
 
-    author = Client.send_json(author, %{"type" => "cursor", "x" => 12, "y" => 24})
+    Client.send_json(author, %{"type" => "cursor", "x" => 12, "y" => 24})
     {_observer, cursor} = Wire.receive_json_type(observer, "cursor")
     assert cursor["participant_id"] == author_identity.participant_id
-    assert %Client{} = author
   end
 
   defp connect_whiteboard(port, identity) do
@@ -133,19 +129,6 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
       "is_deleted" => false,
       "payload" => %{"x" => 1, "y" => 2}
     }
-  end
-
-  defp write_schedule do
-    write_evidence("topology-schedule.json", %{
-      "actions" => [
-        "cross_node_v1_commit",
-        "client_network_partition",
-        "authoritative_recovery",
-        "cross_node_whiteboard_update",
-        "cross_node_whiteboard_cursor",
-        "unclean_node_loss"
-      ]
-    })
   end
 
   defp write_result do

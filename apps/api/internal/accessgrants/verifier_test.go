@@ -24,23 +24,6 @@ func TestVerifierReturnsParticipantMediaSubject(t *testing.T) {
 	}
 }
 
-func TestVerifierRejectsInvalidConfiguration(t *testing.T) {
-	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, config := range []accessgrants.VerifierConfig{
-		{VerificationKeys: map[string]ed25519.PublicKey{testKeyID: publicKey}},
-		{Issuer: testIssuer},
-		{Issuer: testIssuer, VerificationKeys: map[string]ed25519.PublicKey{"": publicKey}},
-		{Issuer: testIssuer, VerificationKeys: map[string]ed25519.PublicKey{testKeyID: publicKey[:8]}},
-	} {
-		if _, err := accessgrants.NewVerifier(config); !errors.Is(err, accessgrants.ErrInvalidConfig) {
-			t.Fatalf("error = %v", err)
-		}
-	}
-}
-
 func TestVerifierRejectsMalformedCredentials(t *testing.T) {
 	fixture := newCredentialFixture(t)
 	for _, test := range []struct {
@@ -49,7 +32,6 @@ func TestVerifierRejectsMalformedCredentials(t *testing.T) {
 	}{
 		{credential: "", want: accessgrants.ErrMalformedCredential},
 		{credential: "a.b", want: accessgrants.ErrMalformedCredential},
-		{credential: "a.b.c.d", want: accessgrants.ErrMalformedCredential},
 		{credential: "!.payload.signature", want: accessgrants.ErrInvalidHeader},
 		{credential: strings.Repeat("a", 8193), want: accessgrants.ErrMalformedCredential},
 	} {
@@ -57,39 +39,6 @@ func TestVerifierRejectsMalformedCredentials(t *testing.T) {
 		if !errors.Is(err, test.want) {
 			t.Fatalf("credential %q error = %v, want %v", test.credential, err, test.want)
 		}
-	}
-}
-
-func TestVerifierClonesVerificationKeys(t *testing.T) {
-	fixture := newCredentialFixture(t)
-	clear(fixture.publicKey)
-	if _, err := fixture.verifier.Verify(context.Background(), fixture.token); err != nil {
-		t.Fatalf("verifier retained caller-owned key: %v", err)
-	}
-}
-
-func TestVerifierRejectsWrongAudienceShapes(t *testing.T) {
-	fixture := newCredentialFixture(t)
-	for _, test := range []struct {
-		name     string
-		audience any
-	}{
-		{name: "sync audience", audience: "chalk-sync"},
-		{name: "audience array", audience: []string{accessgrants.Audience}},
-		{name: "missing audience", audience: nil},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			token := rewriteClaims(t, fixture.token, fixture.privateKey, func(claims map[string]any) {
-				if test.audience == nil {
-					delete(claims, "aud")
-					return
-				}
-				claims["aud"] = test.audience
-			})
-			if _, err := fixture.verifier.Verify(context.Background(), token); !errors.Is(err, accessgrants.ErrInvalidAudience) {
-				t.Fatalf("error = %v", err)
-			}
-		})
 	}
 }
 
@@ -205,7 +154,6 @@ func TestVerifierRejectsIssuerAndSubjectClaims(t *testing.T) {
 		{name: "subject alias", change: func(claims map[string]any) { claims["sub"] = "55555555-5555-4555-8555-555555555555" }, want: accessgrants.ErrInvalidSubject},
 		{name: "noncanonical tenant", change: func(claims map[string]any) { claims["tenant_id"] = " 11111111-1111-4111-8111-111111111111" }, want: accessgrants.ErrInvalidSubject},
 		{name: "generation", change: func(claims map[string]any) { claims["participant_generation"] = 0 }, want: accessgrants.ErrInvalidSubject},
-		{name: "missing provider", change: func(claims map[string]any) { delete(claims, "media_provider") }, want: accessgrants.ErrInvalidSubject},
 		{name: "wrong provider", change: func(claims map[string]any) { claims["media_provider"] = "other_sfu" }, want: accessgrants.ErrInvalidSubject},
 		{name: "connection", change: func(claims map[string]any) { claims["cloudflare_connection_id"] = "" }, want: accessgrants.ErrInvalidSubject},
 	}

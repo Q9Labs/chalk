@@ -224,10 +224,15 @@ infrastructure/managed-episode/scripts/validate-runtime \
   --sync-proof /tmp/chalk-inputs/evidence/planetscale-sync-proof.json \
   --rendered-root /tmp/chalk-release/runtime
 
-infrastructure/managed-episode/scripts/test-config
 infrastructure/managed-episode/scripts/test-deployment-controller
 node --test scripts/deploy/deploy-managed-release.test.mjs
 ```
+
+The controller harness runs every group by default. Use `--group validation`,
+`adoption`, `inputs`, `healthy`, `rollback`, `restore`, or `ssm-contract` for a
+focused check. `rollback` includes the healthy deployment setup, and `restore`
+includes both earlier groups because those checks need the durable stable
+release.
 
 The controller runs this validator against its private `/run` stage. It removes
 the transient secret inputs after Podman registration, so they are not kept in

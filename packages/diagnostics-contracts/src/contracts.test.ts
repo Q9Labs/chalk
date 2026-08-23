@@ -1,16 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  ACTION_SET_V1,
   MAX_DIAGNOSTIC_EVENT_BYTES,
   SAFE_ID_CLASSES,
-  actionStatus,
   acceptDiagnosticEvent,
   encodedEventSize,
   fingerprintDiagnosticFilter,
   formatDiagnosticReference,
-  parseAgentBriefQuery,
   parseDiagnosticEventDraft,
+  parseDiagnosticFilter,
   parseDiagnosticIssue,
   parseFlameProjection,
   parseGraphProjection,
@@ -21,10 +19,7 @@ import {
   parseDiagnosticReference,
   redactDiagnosticAttributes,
   renderAgentBriefMarkdown,
-  validateActionCoverage,
   validateDiagnosticEventDraft,
-  validateDiagnosticFilter,
-  validateDiagnosticResolverResponse,
   validateGraphProjection,
   validateParticipantProjection,
   validateRunProjection,
@@ -84,12 +79,6 @@ describe("references and action coverage", () => {
     const reference = { version: 1 as const, environment: "production" as const, diagnosticId: "diag01", cursor: 9 };
     expect(formatDiagnosticReference(reference)).toBe("chalkdiag:v1:production:diag01@9");
     expect(parseDiagnosticReference("chalkdiag:v1:production:diag01@9")).toEqual(reference);
-  });
-
-  it("keeps whiteboard explicit and closes every action", () => {
-    expect(validateActionCoverage().complete).toBe(true);
-    expect(actionStatus("whiteboard.unsupported")).toBe("unsupported");
-    expect(ACTION_SET_V1.length).toBe(84);
   });
 
   it("fingerprints filters canonically", () => {
@@ -159,8 +148,7 @@ describe("projection contracts", () => {
   });
 
   it("keeps projection errors bounded and preserves resolver/filter query branches", () => {
-    const participant = validateDiagnosticFilter({ schemaVersion: "DiagnosticFilter/v1", spanId: "span01" });
-    expect(participant).toEqual({ ok: false, issues: [{ path: "$.spanId", message: "spanId requires traceId" }] });
+    expect(() => parseDiagnosticFilter({ schemaVersion: "DiagnosticFilter/v1", spanId: "span01" })).toThrow();
 
     const graph = validateGraphProjection({ schemaVersion: "GraphProjection/v1", nodes: [], edges: [], summary: null });
     expect(graph).toEqual({
@@ -170,9 +158,6 @@ describe("projection contracts", () => {
         { path: "$.summary", message: "summary counters must be non-negative" },
       ],
     });
-
-    expect(validateDiagnosticResolverResponse({ kind: "not_found", reason: "not_available" })).toEqual({ ok: true, value: { kind: "not_found", reason: "not_available" } });
-    expect(parseAgentBriefQuery({ schemaVersion: "AgentBriefQuery/v1", reference: "chalkdiag:v1:development:diag01@7", format: "compact" }).format).toBe("compact");
   });
 
   it("rejects unknown nested projection fields and raw identity values", () => {

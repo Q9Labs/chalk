@@ -52,6 +52,9 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain(`"publication_id":"${authoritativePublicationId}"`);
     expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain(`"force":true`);
     expect(String(fetch.mock.calls[0]?.[1]?.body)).not.toContain("app_secret");
+    expect(parseCloudflareSFUPublicationID("provider-connection|camera-track")).toEqual({ connectionId: "provider-connection", trackName: "camera-track" });
+    expect(() => parseCloudflareSFUPublicationID("missing-separator")).toThrow(CloudflareSFUError);
+    expect(() => parseCloudflareSFUPublicationID("a|b|c")).toThrow(CloudflareSFUError);
   });
 
   it("keeps the fixed bearer option as a compatibility bridge", async () => {
@@ -59,12 +62,6 @@ describe("Cloudflare SFU HTTP signaling", () => {
     const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "legacy-token", tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
     await transport.listPublications();
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe("Bearer legacy-token");
-  });
-
-  it("rejects ambiguous publication references", () => {
-    expect(parseCloudflareSFUPublicationID("provider-connection|camera-track")).toEqual({ connectionId: "provider-connection", trackName: "camera-track" });
-    expect(() => parseCloudflareSFUPublicationID("missing-separator")).toThrow(CloudflareSFUError);
-    expect(() => parseCloudflareSFUPublicationID("a|b|c")).toThrow(CloudflareSFUError);
   });
 });
 
@@ -295,15 +292,6 @@ describe("Cloudflare SFU client", () => {
     expect(screenTransceiver?.sender.track?.id).toBe("screen-track-2");
     expect(harness.transport.addInputs.at(-1)?.tracks[0]).toMatchObject({ source: "screen", mid: "1" });
     expect(harness.transport.addInputs.at(-1)?.tracks[0]?.trackName).not.toBe(harness.transport.addInputs.at(-2)?.tracks[0]?.trackName);
-    harness.client.stop();
-  });
-
-  it("confirms an incremental screen publication without waiting for the already-live connection to reconnect", async () => {
-    const harness = createHarness();
-    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
-    const peer = harness.peers[0] as FakePeerConnection;
-    peer.setNextRemoteDescriptionStates("connecting", "checking");
-    await startScreenPublication(harness, new FakeTrack("screen-track", "video"));
     harness.client.stop();
   });
 

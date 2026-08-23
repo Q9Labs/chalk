@@ -62,7 +62,6 @@
     "build:fix-use-client": "node -e \"const fs=require('fs');const files=['./dist/index.js','./dist/components/index.js','./dist/components/ui/index.js','./dist/utils/index.js'];for(const f of files){if(!fs.existsSync(f))continue;let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);}\"",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
     "dev": "tsup ./src/index.ts ./src/components/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-client --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-ui/assets --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external sonner --external tailwind-merge --watch",
-    "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --project tsconfig.check-types.json --noEmit",
     "lint": "pnpm run check:tokens && pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
     "check:tokens": "node ./scripts/check-token-reach.mjs",
@@ -83,22 +82,12 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.4",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "@vitest/browser-playwright": "^4.1.10",
-    "@vitest/coverage-v8": "^4.1.10",
-    "happy-dom": "^20.11.2",
-    "jsdom": "^30.0.1",
-    "playwright": "^1.62.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

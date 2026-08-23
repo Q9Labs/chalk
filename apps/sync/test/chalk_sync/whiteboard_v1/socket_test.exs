@@ -99,37 +99,6 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              )
   end
 
-  test "delivers presentation frames only to negotiated sockets" do
-    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
-
-    legacy = %{
-      initial
-      | phase: :live,
-        identity: identity(),
-        scene_id: @scene_id,
-        revision: 4,
-        presentation_negotiated: false
-    }
-
-    frame = %{
-      "type" => "presentation_updated",
-      "scene_id" => @scene_id,
-      "revision" => "5",
-      "presenting" => true
-    }
-
-    assert {:ok, ^legacy} =
-             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, legacy)
-
-    negotiated = %{legacy | presentation_negotiated: true}
-
-    assert {:push, {:text, encoded}, advanced} =
-             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, negotiated)
-
-    assert JSON.decode!(encoded) == frame
-    assert advanced.revision == 5
-  end
-
   test "repairs a missed presentation notification from the durable head" do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 

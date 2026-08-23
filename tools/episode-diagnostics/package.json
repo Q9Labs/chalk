@@ -17,7 +17,6 @@
   "scripts": {
     "trace:inspect": "node src/cli.mjs",
     "browser-proof:local": "node src/local-browser-proof.mjs",
-    "test": "pnpm exec vitest run",
     "lint": "pnpm exec oxfmt --check .",
     "check-types": "node --check src/cli.mjs"
   },

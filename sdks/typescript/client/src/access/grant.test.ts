@@ -10,6 +10,7 @@ describe("access grant parsing", () => {
     expect(parsed.subject).toEqual({ tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", participantGeneration: 3 });
     expect(isParsedAccessGrant(wire)).toBe(true);
     await expect(requireParsedAccessGrant(wire)).resolves.toEqual(parsed);
+    expect(JSON.parse(JSON.stringify(parseAccessGrant(wire)))).toEqual(wire);
   });
 
   it("rejects expired-shape and cross-audience data at the wire boundary", () => {
@@ -26,13 +27,6 @@ describe("access grant parsing", () => {
         subject: { tenant_id: "t", room_id: "r", session_id: "s", participant_session_id: "p", participant_generation: 3 },
       }),
     ).toThrowError(expect.objectContaining({ code: "access.invalid" }));
-  });
-
-  it("keeps a server-minted grant serializable for the browser handoff", () => {
-    const wire = accessWire();
-    const grant = parseAccessGrant(wire);
-
-    expect(JSON.parse(JSON.stringify(grant))).toEqual(wire);
   });
 
   it("parses and preserves the RealtimeKit participant binding and client token", () => {
