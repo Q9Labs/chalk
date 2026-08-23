@@ -72,13 +72,13 @@ This report is evidence, not a redesign proposal.
   (`docs/design.md:387-400`).
 - The React SDK vocabulary historically defined one Stage, grid/focus/
   presentation Layouts, ParticipantGrid, ParticipantTile, Filmstrip, and
-  ScreenShareView as separate concepts (`scratchpad/react-sdk-components-plan-session-log-2026-07-11.md:19-22`).
+  ScreenShareView as separate concepts (`scratchpad/history/2026-W28.md`).
 - The 2026-08-01 redesign pass reframed the live room around a speaker-view
   stage, one horizontal filmstrip, one control dock, and a compact mobile grid
-  (`scratchpad/chalk-ui-redesign-mockups-session-log-2026-08-01.md:9-17`).
+  (`scratchpad/history/2026-W31.md`).
 - The same redesign log records a four-person horizontal filmstrip, reserved
   controls below the stage, and browser verification without tile/control
-  overlap (`scratchpad/chalk-ui-redesign-mockups-session-log-2026-08-01.md:17-20`).
+  overlap (`scratchpad/history/2026-W31.md`).
 - The mobile mockup set is explicitly an implementation reference for the
   default Space stage and its progressive disclosures
   (`docs/redesign/mobile-sdk-mockups/INDEX.md:1-5`).
@@ -117,7 +117,6 @@ This report is evidence, not a redesign proposal.
 
 1. **Mobile three- and four-Participant composition conflicts with the stage
    contract.**
-
    - Symptom: the documented mobile default is a dominant tile or two-column
      hierarchy, but the current mobile branch renders three or four Participants
      as an equal 2x2 grid (`sdks/typescript/react/src/components/participant-grid/ParticipantGrid.tsx:228-237`).
@@ -129,7 +128,6 @@ This report is evidence, not a redesign proposal.
      test asserts the intended dominant/filmstrip relationship.
 
 2. **Mobile ignores the requested focus/presentation hierarchy.**
-
    - Symptom: `ParticipantGrid` enters the mobile count branches before the
      desktop `layout === "focus"` and `layout === "presentation"` branches;
      mobile 1/2/3-4/5+ behavior is selected only by count
@@ -142,7 +140,6 @@ This report is evidence, not a redesign proposal.
      (`ParticipantGrid.tsx:228-237`).
 
 3. **Pinned Participant is not authoritative in focus or presentation.**
-
    - Symptom: `pinnedParticipantId` only reorders the array by moving the pinned
      item to index zero (`ParticipantGrid.tsx:73-84`).
    - Focus chooses the first non-local speaking Participant, then the first
@@ -157,7 +154,6 @@ This report is evidence, not a redesign proposal.
 
 4. **The active-speaker rule is underspecified in code and excludes local
    speaker selection.**
-
    - Symptom: `getPrimaryParticipant` searches only non-local Participants for
      `isSpeaking`, then only non-local Participants, then falls back to the first
      item (`ParticipantGrid.tsx:91`).
@@ -170,7 +166,6 @@ This report is evidence, not a redesign proposal.
      (`participant-grid.test.tsx:40-99`).
 
 5. **Screen-share composition is split across two paths.**
-
    - Symptom: `ParticipantGrid` exposes `screenShareContent`, documented as an
      app-owned fallback when no real track exists, but uses it only inside the
      desktop presentation branch (`ParticipantGrid.tsx:28-40,337-357`).
@@ -186,7 +181,6 @@ This report is evidence, not a redesign proposal.
      (`ScreenShareView.tsx:229-232,320-350`).
 
 6. **Overflow can exceed the declared desktop grid.**
-
    - Symptom: the default grid adds a `+N more` item after slicing to the
      `maxVisibleParticipants` default of 25 (`ParticipantGrid.tsx:64-89,379-413`).
    - `getGridLayout(26)` returns five columns and five rows, but 25 visible
@@ -200,7 +194,6 @@ This report is evidence, not a redesign proposal.
      No test renders 25 or 26 Participants.
 
 7. **A muted live track can remain a visible frozen/black video element.**
-
    - Symptom: `isTrackUsable` checks only that the track exists, is live, and is
      enabled; it does not check `MediaStreamTrack.muted`
      (`ParticipantTile.tsx:40-42`).
@@ -214,11 +207,10 @@ This report is evidence, not a redesign proposal.
      (`participant-tile.test.tsx:11-23`).
 
 8. **The single-tile aspect fix is narrower than the turnkey default path.**
-
    - Historical symptom: the 2026-08-10 browser journey reported remaining SDK
      caps and a single-Participant aspect constraint; the session says the
      stage was widened and the single tile changed to fill the stage
-     (`scratchpad/browser-sync-recovery-and-space-layout-session-log-2026-08-10.md:13-17`).
+     (`scratchpad/history/2026-W33.md`).
    - Current code uses `aspectRatio="fill"` only in the default-grid single-
      Participant branch (`ParticipantGrid.tsx:383-390`).
    - `SpaceView` and `Chalk` still default to `focus`; the focus main tile omits
@@ -230,7 +222,6 @@ This report is evidence, not a redesign proposal.
      test exercises `layout="grid"` only (`participant-grid.test.tsx:56-70`).
 
 9. **Two full renderer trees duplicate the same layout behavior.**
-
    - Symptom: Chalk and Classic each carry the complete participant sorting,
      mobile branching, focus, presentation, grid, overflow, and carousel logic
      (`ParticipantGrid.tsx:1-422`, `ClassicParticipantGrid.tsx:1-366`). Tile media
@@ -239,7 +230,7 @@ This report is evidence, not a redesign proposal.
    - The 2026-08-18 skin log says the first Classic implementation reused the
      redesigned tree, live review showed the wrong layout, and separate
      pre-redesign renderers were then restored
-     (`scratchpad/codex-react-skins-session-log-2026-08-18.md:32-48`).
+     (`scratchpad/history/2026-W34.md`).
    - Current status: still present. This is a verified drift risk: a behavior fix
      must be made twice, and current tests assert only a small Classic export/
      structure seam (`ClassicParticipantGrid.test.tsx:1-8`,
@@ -248,30 +239,30 @@ This report is evidence, not a redesign proposal.
 10. **Known issue logs contain a real layout incident, but no tile-specific
     black-tile or mirror incident.**
 
-   - The 2026-08-10 log records a production browser failure, a missing definite
-     viewport-height parent, and later a wide-screen screenshot exposing SDK
-     caps and a single-Participant aspect constraint
-     (`scratchpad/browser-sync-recovery-and-space-layout-session-log-2026-08-10.md:5-17`).
-   - The same log records the resulting viewport and single-tile fixes, so those
-     historical symptoms are not all still present (`scratchpad/browser-sync-recovery-and-space-layout-session-log-2026-08-10.md:16`).
-   - Repository-wide scratchpad searches for the requested exact phrases
-     `black tile`, `object-fit`, and `mirror` found no direct incident entry;
-     `flicker` appears only in generic WebRTC/realtime lessons, not a
-     ParticipantGrid diagnosis. The current mute path above is code evidence,
-     not a recorded black-tile reproduction.
+- The 2026-08-10 log records a production browser failure, a missing definite
+  viewport-height parent, and later a wide-screen screenshot exposing SDK
+  caps and a single-Participant aspect constraint
+  (`scratchpad/history/2026-W33.md`).
+- The same log records the resulting viewport and single-tile fixes, so those
+  historical symptoms are not all still present (`scratchpad/history/2026-W33.md`).
+- Repository-wide scratchpad searches for the requested exact phrases
+  `black tile`, `object-fit`, and `mirror` found no direct incident entry;
+  `flicker` appears only in generic WebRTC/realtime lessons, not a
+  ParticipantGrid diagnosis. The current mute path above is code evidence,
+  not a recorded black-tile reproduction.
 
 11. **Geometry and media-state coverage is thin despite a green suite.**
 
-   - ParticipantGrid tests cover empty state, provider derivation, one grid
-     tile, and five-Participant mobile pagination
-     (`sdks/typescript/react/src/components/participant-grid/participant-grid.test.tsx:14-99`).
-   - ParticipantTile tests cover only the Classic visual seam and absence of
-     rough chrome (`sdks/typescript/react/src/components/participant-tile/participant-tile.test.tsx:11-23`).
-   - SpaceView tests cover composition, skin attributes, max-width absence,
-     panels, and that a live track chooses ScreenShareView, but not actual tile
-     geometry, pinned selection, active-speaker selection, muted tracks, or
-     `screenShareContent` (`sdks/typescript/react/src/components/space-view/SpaceView.test.tsx:56-175`).
-   - Current status: the missing cases remain unproved by automation.
+- ParticipantGrid tests cover empty state, provider derivation, one grid
+  tile, and five-Participant mobile pagination
+  (`sdks/typescript/react/src/components/participant-grid/participant-grid.test.tsx:14-99`).
+- ParticipantTile tests cover only the Classic visual seam and absence of
+  rough chrome (`sdks/typescript/react/src/components/participant-tile/participant-tile.test.tsx:11-23`).
+- SpaceView tests cover composition, skin attributes, max-width absence,
+  panels, and that a live track chooses ScreenShareView, but not actual tile
+  geometry, pinned selection, active-speaker selection, muted tracks, or
+  `screenShareContent` (`sdks/typescript/react/src/components/space-view/SpaceView.test.tsx:56-175`).
+- Current status: the missing cases remain unproved by automation.
 
 ## C. Test and typecheck status
 
@@ -317,7 +308,7 @@ This report is evidence, not a redesign proposal.
   slug route mounts `DashboardSpacePage`, which enters `JoinSpacePage`
   (`apps/web/src/routes/space.$slug.tsx:1-14`).
 - The live web wrapper gives the SDK a definite viewport: `<main
-  className="h-dvh min-h-0 w-full overflow-hidden">` and mounts turnkey
+className="h-dvh min-h-0 w-full overflow-hidden">` and mounts turnkey
   `<Chalk />` inside it (`apps/web/src/components/space/SpacePage.tsx:149-163`).
 - The wrapper enables Entrance, defaults microphone and camera on, supplies the
   logo and Space name, and leaves layout unspecified, so the SDK default is
@@ -386,12 +377,12 @@ This report is evidence, not a redesign proposal.
    tile to `aspectRatio="fill"`, and added regression tests.
 7. The same f209 session log says live wide-screen proof exposed the caps and
    single-Participant aspect constraint before that fix
-   (`scratchpad/browser-sync-recovery-and-space-layout-session-log-2026-08-10.md:13-17`).
+   (`scratchpad/history/2026-W33.md`).
 8. `487df466` (2026-08-18) added Classic and Chalk skins, including parallel
    Classic participant-grid/tile/SpaceView renderers.
 9. The 2026-08-18 skin log records that the first Classic attempt preserved the
    wrong redesigned layout; separate pre-redesign renderers were then restored
-   (`scratchpad/codex-react-skins-session-log-2026-08-18.md:32-48`).
+   (`scratchpad/history/2026-W34.md`).
 10. The requested path log contains no revert commit. The trajectory is additive
     redesign, a viewport/aspect correction, then a skin split that increased
     behavior duplication and left the mobile/pin/media-state questions open.

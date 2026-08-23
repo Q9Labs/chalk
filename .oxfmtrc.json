@@ -15,8 +15,6 @@
     "**/routeTree.gen.ts",
     "apps/api/docs/api-design.html",
     "apps/api/docs/app.js",
-    "apps/api/scratchpad/api-performance-*.html",
-    "apps/api/scratchpad/api-performance-*.md",
     "apps/web/public/privacy/index.html",
     "apps/web/public/privacy-policy/index.html",
     "apps/web/public/terms/index.html",
@@ -25,11 +23,6 @@
     "contract/schema/proof/invalid/**",
     "scratchpad/api-performance-*.html",
     "scratchpad/api-performance-*.md",
-    "scratchpad/chalk-cost-calculator.html",
-    "scratchpad/debrief-chalk-room-actions-2026-07-29.rr.html",
-    "scratchpad/debrief-chalk-room-receipts-attachments-2026-07-30.rr.html",
-    "scratchpad/chalk-room-actions-spec-2026-07-29.rr.html",
-    "scratchpad/live-episode-debugger-spec-2026-08-03.rr.html",
     "scratchpad/live-episode-debugger-spec-2026-08-03.html",
     "scratchpad/sync-codewalk.html"
   ]

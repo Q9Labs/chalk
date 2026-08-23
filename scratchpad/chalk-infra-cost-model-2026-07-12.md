@@ -332,10 +332,9 @@ This model recomputes forecasts from your own usage, room shape, and measured
 inputs. Every price parameter binds to the dated price catalog above; this
 section never restates prices, and the catalog governs when a cached value
 diverges. The recorder envelope and the 2,000-hour planning case above are
-instantiations of this model. The existing
-[`chalk-cost-calculator.html`](./chalk-cost-calculator.html) models live SFU
-traffic only until its recorder formulas implement the two-stage
-capture/render contract.
+instantiations of this model. An interactive calculator existed alongside this
+document and modelled live SFU traffic only; it never implemented the two-stage
+capture/render contract and has been removed.
 
 ### Usage inputs
 

@@ -3,7 +3,7 @@
 Design for the contract/schema rename wave that carries the durability
 re-scoping. Grounded in `apps/api/db/schema.sql` as of `1346f73f` and the
 locked rulings in `GLOSSARY.md` and
-`scratchpad/ubiquitous-language-decision-session-log-2026-08-03.md`.
+`scratchpad/history/2026-W32.md`.
 Sections marked **DECIDE** need Hasan's call before implementation; everything
 else follows mechanically from locked rulings.
 

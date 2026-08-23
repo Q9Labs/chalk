@@ -1,7 +1,0 @@
-# Mobile app store product brief session log — 2026-08-01
-
-- 2026-08-01 13:12 PKT — Started a repository-only research pass for the Chalk mobile app, covering `apps/mobile`, `product.yaml`, root README/changelog, mobile docs, the React Native SDK, permissions, telemetry, monetization, and store assets.
-- 2026-08-01 13:15 PKT — Found Android and iOS native release surfaces, package/application ID `ai.q9labs.chalk.mobile`, Expo/React Native configuration, Google Play upload configuration, and no store listing metadata bundle.
-- 2026-08-01 13:18 PKT — Traced the current mobile flow: create meeting, invite-link join, clipboard suggestion, pre-join lobby, camera/microphone, participant controls, chat/attachments, reactions, hand raise, and screen share. Found a status conflict for whiteboard: mobile feature flag and embedded SDK surface exist, but `product.yaml` and `docs/chalk-mobile-whiteboard/README.md` still mark native mobile whiteboard as incomplete/proposed.
-- 2026-08-01 13:19 PKT — Ran `pnpm --dir apps/mobile test`: 8 test files passed, 15 tests passed. Ran `pnpm --dir apps/mobile check-types`: completed without an error. This verifies focused source checks, not a real-device meeting or live store publication.
-- 2026-08-01 13:22 PKT — Wrote `scratchpad/mobile-app-store-product-brief.md` with file-path evidence, shipped versus uncleared feature boundaries, privacy/monetization findings, store assets, keywords, and claims to avoid.
