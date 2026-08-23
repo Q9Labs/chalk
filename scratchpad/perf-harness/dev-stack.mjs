@@ -22,7 +22,11 @@ const repoRoot = join(fileURLToPath(import.meta.url), "..", "..", "..");
 const runtimeRoot = join(repoRoot, ".private", "chalk-perf");
 
 const PORTS = { api: 18080, sync: 4100, web: 13070, postgres: 5432, redis: 6380, objectStorage: 19000 };
-const DATABASE_NAME = "chalk_perf_profile";
+const DATABASE_NAME = validatedDatabaseName(process.env.CHALK_PERF_DATABASE_NAME ?? "chalk_perf_profile");
+const POSTGRES_CONTAINER = process.env.CHALK_POSTGRES_CONTAINER ?? "chalk-postgres";
+const POSTGRES_VOLUME = process.env.CHALK_POSTGRES_VOLUME ?? "chalk-postgres";
+const REDIS_CONTAINER = process.env.CHALK_REDIS_CONTAINER ?? "chalk-perf-redis";
+const REDIS_VOLUME = process.env.CHALK_REDIS_VOLUME ?? "chalk-perf-redis";
 const URLS = {
   api: `http://127.0.0.1:${PORTS.api}`,
   sync: `ws://127.0.0.1:${PORTS.sync}/v1/sync`,
@@ -37,6 +41,13 @@ const OBJECT_STORAGE_ROLE_LABEL = "com.q9labs.chalk.perf.object-storage-role";
 const children = new Map();
 let objectStorage = null;
 let stopping = false;
+
+function validatedDatabaseName(candidate) {
+  if (!/^[a-z][a-z0-9_]{0,62}$/i.test(candidate)) {
+    throw new Error(`CHALK_PERF_DATABASE_NAME must be a PostgreSQL identifier, received ${JSON.stringify(candidate)}`);
+  }
+  return candidate;
+}
 
 function log(message) {
   process.stdout.write(`[dev-stack] ${message}\n`);
@@ -318,17 +329,28 @@ async function up() {
 
   // 1. Backing resources (idempotent scripts own container lifecycle).
   // Keep profiler state isolated from the shared development database.
-  await run("docker", ["start", "chalk-postgres"], { tolerateFailure: true });
+  const postgresEnvironment = {
+    CHALK_POSTGRES_CONTAINER: POSTGRES_CONTAINER,
+    CHALK_POSTGRES_VOLUME: POSTGRES_VOLUME,
+    CHALK_POSTGRES_PORT: String(PORTS.postgres),
+  };
+  await run("bash", ["apps/api/scripts/dev-postgres.sh", "start"], { env: postgresEnvironment });
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const ready = await run("docker", ["exec", "chalk-postgres", "pg_isready", "-U", "postgres", "-d", "postgres"], { tolerateFailure: true });
+    const ready = await run("docker", ["exec", POSTGRES_CONTAINER, "pg_isready", "-U", "postgres", "-d", "postgres"], { tolerateFailure: true });
     if (ready.code === 0) break;
     await sleep(500);
     if (attempt === 59) throw new Error("postgres container did not become ready");
   }
-  await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${DATABASE_NAME}" WITH (FORCE)`]);
-  await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${DATABASE_NAME}"`]);
+  await run("docker", ["exec", POSTGRES_CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${DATABASE_NAME}" WITH (FORCE)`]);
+  await run("docker", ["exec", POSTGRES_CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${DATABASE_NAME}"`]);
   log(`postgres ready (${DATABASE_NAME} recreated)`);
-  await run("bash", ["apps/api/scripts/dev-redis.sh", "start"]);
+  await run("bash", ["apps/api/scripts/dev-redis.sh", "start"], {
+    env: {
+      CHALK_REDIS_CONTAINER: REDIS_CONTAINER,
+      CHALK_REDIS_VOLUME: REDIS_VOLUME,
+      CHALK_REDIS_PORT: String(PORTS.redis),
+    },
+  });
 
   // 2. Migrations.
   await run("bash", ["apps/api/scripts/db-migrate.sh", "up"], { env: { CHALK_DATABASE_URL: DATABASE_URL } });
@@ -355,10 +377,21 @@ async function up() {
   await Promise.all([paths.caKey, paths.apiKey, paths.syncKey].map((path) => chmod(path, 0o600)));
   log("identity material generated");
 
-  // 4. SFU credentials from 1Password.
-  const { createOpSecretResolver } = await import(join(repoRoot, "scripts", "dev", "secrets.mjs"));
-  const provider = await createOpSecretResolver({ op: "op" })();
-  log(`sfu credentials resolved from vault item`);
+  // 4. SFU credentials from the environment or 1Password.
+  const configuredAppID = process.env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim();
+  const configuredAppSecret = process.env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim();
+  if (Boolean(configuredAppID) !== Boolean(configuredAppSecret)) {
+    throw new Error("CHALK_CLOUDFLARE_REALTIME_APP_ID and CHALK_CLOUDFLARE_REALTIME_APP_SECRET must be supplied together");
+  }
+  let provider;
+  if (configuredAppID && configuredAppSecret) {
+    provider = { appId: configuredAppID, appSecret: configuredAppSecret };
+    log("sfu credentials resolved from the process environment");
+  } else {
+    const { createOpSecretResolver } = await import(join(repoRoot, "scripts", "dev", "secrets.mjs"));
+    provider = await createOpSecretResolver({ op: "op" })();
+    log("sfu credentials resolved from a vault item");
+  }
 
   const systemToken = randomBytes(32).toString("base64url");
   const idEnv = identityEnvironment({
