@@ -86,7 +86,9 @@ for name in "${names[@]}"; do
   fi
   value=test-only-secret-bytes
   if [[ "$base" == */api.env ]]; then
-    value=$'test-only-secret-bytes\n'
+    value="$(printf 'CHALK_API_VERSION=%s' "${FAKE_API_RELEASE_ID:-test-release}")"
+  elif [[ "$base" == */sync.env ]]; then
+    value="$(printf 'CHALK_SYNC_INSTANCE_ID=sync-test-instance\nCHALK_SYNC_RELEASE_ID=%s\nCHALK_SYNC_SOURCE_COMMIT=%s\nOTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=%s,deployment.environment.name=production,service.instance.id=sync-test-instance' "${FAKE_SYNC_RELEASE_ID:-test-release}" "${FAKE_SYNC_SOURCE_COMMIT:-test-source-revision}" "${FAKE_SYNC_RELEASE_ID:-test-release}")"
   fi
   if [[ -n "${FAKE_EMPTY_SUFFIX:-}" && "$base" == *"/${FAKE_EMPTY_SUFFIX}" ]]; then
     value=""
@@ -227,7 +229,15 @@ run_controller() {
   local request="$2"
   local manifest="$3"
   local mode="${4:-ok}"
+  local api_release_id sync_release_id sync_source_commit
+  api_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "$manifest")"
+  sync_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "$manifest")"
+  sync_source_commit="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "$manifest")"
+  api_release_id="${FAKE_API_RELEASE_ID_OVERRIDE:-$api_release_id}"
+  sync_release_id="${FAKE_SYNC_RELEASE_ID_OVERRIDE:-$sync_release_id}"
+  sync_source_commit="${FAKE_SYNC_SOURCE_COMMIT_OVERRIDE:-$sync_source_commit}"
   FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
+  FAKE_API_RELEASE_ID="$api_release_id" FAKE_SYNC_RELEASE_ID="$sync_release_id" FAKE_SYNC_SOURCE_COMMIT="$sync_source_commit" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
   CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
@@ -275,8 +285,8 @@ printf '#!/usr/bin/env bash\nexit 1\n' >"${fixture_root}/install/chalk-runtime-h
 chmod 0755 "${fixture_root}/install/chalk-runtime-health"
 make_manifest legacy >"${fixture_root}/run/release/release-manifest.json"
 printf '%s  release-manifest.json\n' "$(sha256sum "${fixture_root}/run/release/release-manifest.json" | awk '{print $1}')" >"${fixture_root}/run/release/release-manifest.sha256"
-printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
-printf '%s' test-only-secret-bytes >"${fixture_root}/run/env/sync.env"
+printf '%s' 'CHALK_API_VERSION=legacy' >"${fixture_root}/run/env/api.env"
+printf 'CHALK_SYNC_INSTANCE_ID=sync-test-instance\nCHALK_SYNC_RELEASE_ID=legacy\nCHALK_SYNC_SOURCE_COMMIT=%s\nOTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=legacy,deployment.environment.name=production,service.instance.id=sync-test-instance' "$source_revision" >"${fixture_root}/run/env/sync.env"
 printf '%s' test-only-secret-bytes >"${fixture_root}/run/evidence/planetscale-sync-proof.json"
 for component_file in api:chalk-api.container sync:chalk-sync.container redis:chalk-redis.container cloudflared:chalk-cloudflared.container; do
   component="${component_file%%:*}"
@@ -307,10 +317,10 @@ grep -Fq 'live runtime input does not match' "${fixture_root}/adoption-mismatch.
 stops_after_adoption="$(grep -Fc 'stop chalk-runtime.target' "${fixture_root}/commands.log" || true)"
 [[ "$stops_after_adoption" == "$stops_before_adoption" ]] || fail "legacy adoption stopped the runtime before its inputs agreed"
 [[ ! -e "${adoption_state}/active-release.json" ]] || fail "failed legacy adoption wrote an active pointer"
-printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
+printf '%s' 'CHALK_API_VERSION=legacy' >"${fixture_root}/run/env/api.env"
 printf '0' >"${fixture_root}/health-index"
 migration_starts_before_adoption="$(grep -Fc 'start chalk-api-migrate.service' "${fixture_root}/commands.log" || true)"
-if run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" 'ok,fail,ok' >"${fixture_root}/adoption-result.log" 2>&1; then
+if FAKE_API_RELEASE_ID_OVERRIDE=legacy FAKE_SYNC_RELEASE_ID_OVERRIDE=legacy FAKE_SYNC_SOURCE_COMMIT_OVERRIDE="$source_revision" run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" 'ok,fail,ok' >"${fixture_root}/adoption-result.log" 2>&1; then
   fail "failed first candidate was accepted after legacy adoption"
 fi
 grep -Fq '"status":"rolled_back"' "${fixture_root}/adoption-result.log" || fail "legacy adoption did not provide automatic rollback"
@@ -400,6 +410,13 @@ runtime_start_line="$(grep -nF 'systemctl --user start chalk-runtime.target' "${
 [[ "${migration_start_line}" -lt "${runtime_start_line}" ]] || fail "runtime target started before database migrations"
 ! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "migration credential remained in the Podman secret store"
 [[ -s "${fixture_root}/run/env/api.env" && -s "${fixture_root}/run/env/sync.env" ]] || fail "runtime environment files were not published to /run"
+stable_manifest_api_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "$manifest")"
+stable_manifest_sync_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "$manifest")"
+stable_manifest_sync_source_revision="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "$manifest")"
+grep -Fxq "CHALK_API_VERSION=${stable_manifest_api_release_id}" "${fixture_root}/run/env/api.env" || fail "API runtime identity was not derived from the release manifest"
+grep -Fxq "CHALK_SYNC_RELEASE_ID=${stable_manifest_sync_release_id}" "${fixture_root}/run/env/sync.env" || fail "Sync runtime release identity was not derived from the release manifest"
+grep -Fxq "CHALK_SYNC_SOURCE_COMMIT=${stable_manifest_sync_source_revision}" "${fixture_root}/run/env/sync.env" || fail "Sync source commit was not derived from the release manifest"
+grep -Fxq "OTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=${stable_manifest_sync_release_id},deployment.environment.name=production,service.instance.id=sync-test-instance" "${fixture_root}/run/env/sync.env" || fail "Sync telemetry resource identity was not derived from the release manifest"
 if stat -f '%Lp' "${fixture_root}/run" >/dev/null 2>&1; then
   runtime_root_mode="$(stat -f '%Lp' "${fixture_root}/run")"
   runtime_env_mode="$(stat -f '%Lp' "${fixture_root}/run/env")"

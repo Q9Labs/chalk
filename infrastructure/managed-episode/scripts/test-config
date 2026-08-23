@@ -3,6 +3,7 @@ set -euo pipefail
 
 managed_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_root="$(cd "${managed_root}/../.." && pwd)"
+source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "${fixture_root}"' EXIT
 
@@ -55,6 +56,7 @@ render_example_env() {
     -e 's|__SYNC_INSTANCE_ID__|sync-test-instance|' \
     -e 's|__SYNC_GENERATION__|1|' \
     -e 's|__RELEASE_ID__|test-release|' \
+    -e "s|__SOURCE_COMMIT__|${source_revision}|" \
     -e 's|__SECRET[A-Z0-9_]*__|test-value|g' \
     "${source}" >"${output}"
 }
@@ -93,8 +95,21 @@ digest_b="$(printf 'b%.0s' {1..64})"
   --api-image "ghcr.io/q9labs/chalk-api@sha256:${digest_a}" \
   --sync-image "ghcr.io/q9labs/chalk-sync@sha256:${digest_b}" \
   --output "${fixture_root}/release-manifest.json" \
-  --source-revision "$(git -C "${repo_root}" rev-parse HEAD)" \
+  --source-revision "${source_revision}" \
   --allow-dirty >/dev/null
+manifest_api_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "${fixture_root}/release-manifest.json")"
+manifest_sync_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "${fixture_root}/release-manifest.json")"
+manifest_sync_source_revision="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "${fixture_root}/release-manifest.json")"
+sed -i.bak \
+  -e "s|^CHALK_API_VERSION=.*|CHALK_API_VERSION=${manifest_api_release_id}|" \
+  "${fixture_root}/env/api.env"
+rm "${fixture_root}/env/api.env.bak"
+sed -i.bak \
+  -e "s|^CHALK_SYNC_RELEASE_ID=.*|CHALK_SYNC_RELEASE_ID=${manifest_sync_release_id}|" \
+  -e "s|^CHALK_SYNC_SOURCE_COMMIT=.*|CHALK_SYNC_SOURCE_COMMIT=${manifest_sync_source_revision}|" \
+  -e "s|^OTEL_RESOURCE_ATTRIBUTES=.*|OTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=${manifest_sync_release_id},deployment.environment.name=production,service.instance.id=sync-test-instance|" \
+  "${fixture_root}/env/sync.env"
+rm "${fixture_root}/env/sync.env.bak"
 
 "${managed_root}/scripts/render-runtime" \
   "${fixture_root}/release-manifest.json" "${fixture_root}/rendered" >/dev/null
@@ -105,6 +120,27 @@ digest_b="$(printf 'b%.0s' {1..64})"
   --sync-proof "${fixture_root}/sync-proof.json" \
   --rendered-root "${fixture_root}/rendered" \
   --allow-dirty >/dev/null
+
+for mutation in \
+  'api.env|CHALK_API_VERSION|stale-api-release' \
+  'sync.env|CHALK_SYNC_RELEASE_ID|stale-sync-release' \
+  'sync.env|CHALK_SYNC_SOURCE_COMMIT|stale-sync-source'; do
+  IFS='|' read -r file_name env_name replacement <<<"${mutation}"
+  mismatch_env="${fixture_root}/identity-mismatch-${file_name}-${env_name}"
+  cp -R "${fixture_root}/env" "${mismatch_env}"
+  sed -i.bak "s|^${env_name}=.*|${env_name}=${replacement}|" "${mismatch_env}/${file_name}"
+  rm "${mismatch_env}/${file_name}.bak"
+  if "${managed_root}/scripts/validate-runtime" \
+    --env-root "${mismatch_env}" \
+    --secret-root "${fixture_root}/secrets" \
+    --manifest "${fixture_root}/release-manifest.json" \
+    --sync-proof "${fixture_root}/sync-proof.json" \
+    --rendered-root "${fixture_root}/rendered" \
+    --allow-dirty >/dev/null 2>&1; then
+    echo "runtime identity mismatch was accepted: ${env_name}" >&2
+    exit 1
+  fi
+done
 
 if "${managed_root}/scripts/validate-runtime" \
   --env-root "${fixture_root}/env" \
