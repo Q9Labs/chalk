@@ -10,7 +10,7 @@ import { TraceLifecycleError } from "../errors.mjs";
 import { aggregateTraceSummaries, analyzeRun, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
 import { deltaSample, diffHeapSummaries, sanitizePageUrl } from "../metrics.mjs";
 import { summarizeTrace } from "../tracing.mjs";
-import { createRecorder, shouldContinueCycles, supportFailed } from "../workload.mjs";
+import { createRecorder, runLeaveRejoin, shouldContinueCycles, supportFailed } from "../workload.mjs";
 
 test("CLI validates mode duration and Participant limits", () => {
   assert.equal(parseCli(["profile", "--minutes", "30", "--participants", "3", "--base", "http://localhost:13070"]).durationMs, 1_800_000);
@@ -115,6 +115,32 @@ test("only a strict feature failure suppresses later workload attempts", async (
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("leave and re-entry continue after a successful void Leave command", async () => {
+  const calls = [];
+  const anchor = { page: { id: "anchor" } };
+  const remote = { page: { id: "remote" } };
+  const state = {
+    people: [anchor, remote],
+    anchor,
+    recorder: {
+      async step(label, action) {
+        calls.push(label);
+        return action();
+      },
+    },
+    snapshot: async (label) => calls.push(label),
+  };
+  await runLeaveRejoin(state, 1, {
+    leaveSpace: async () => calls.push("leave command"),
+    assertRoster: async (_page, count) => calls.push(`roster ${count}`),
+    reenterParticipant: async () => {
+      calls.push("re-enter command");
+      return true;
+    },
+  });
+  assert.deepEqual(calls, ["anchor-before-remote-leave-1", "remote leave 1", "leave command", "roster after remote leave 1", "roster 1", "anchor-after-remote-leave-1", "remote rejoin 1", "re-enter command", "roster after remote rejoin 1", "roster 2", "anchor-after-remote-rejoin-1"]);
 });
 
 test("metric deltas preserve null when a counter is unavailable", () => {

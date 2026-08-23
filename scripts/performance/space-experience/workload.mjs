@@ -344,17 +344,26 @@ async function runChat(state, cycle) {
   await recorder.step(`close remote chat ${cycle}`, () => scenario.closePanel(remote.page, "chat"), { feature: "chat-receive" });
 }
 
-async function runLeaveRejoin(state, cycle) {
+const defaultLeaveRejoinCommands = { assertRoster, leaveSpace: scenario.leaveSpace, reenterParticipant };
+
+export async function runLeaveRejoin(state, cycle, commands = defaultLeaveRejoinCommands) {
   const { people, anchor, recorder, snapshot } = state;
   if (cycle === 1) await snapshot(`anchor-before-remote-leave-${cycle}`, anchor);
   const remote = people[1];
-  const left = await recorder.step(`remote leave ${cycle}`, () => scenario.leaveSpace(remote.page), { feature: "leave-rejoin" });
+  const left = await recorder.step(
+    `remote leave ${cycle}`,
+    async () => {
+      await commands.leaveSpace(remote.page);
+      return true;
+    },
+    { feature: "leave-rejoin" },
+  );
   if (!left) return;
-  await recorder.step(`roster after remote leave ${cycle}`, () => assertRoster(anchor.page, people.length - 1), { feature: "roster" });
+  await recorder.step(`roster after remote leave ${cycle}`, () => commands.assertRoster(anchor.page, people.length - 1), { feature: "roster" });
   if (cycle === 1) await snapshot(`anchor-after-remote-leave-${cycle}`, anchor);
-  const rejoined = await recorder.step(`remote rejoin ${cycle}`, () => reenterParticipant(remote), { feature: "leave-rejoin" });
+  const rejoined = await recorder.step(`remote rejoin ${cycle}`, () => commands.reenterParticipant(remote), { feature: "leave-rejoin" });
   if (!rejoined) return;
-  await recorder.step(`roster after remote rejoin ${cycle}`, () => assertRoster(anchor.page, people.length), { feature: "roster" });
+  await recorder.step(`roster after remote rejoin ${cycle}`, () => commands.assertRoster(anchor.page, people.length), { feature: "roster" });
   if (cycle === 1) await snapshot(`anchor-after-remote-rejoin-${cycle}`, anchor);
 }
 
