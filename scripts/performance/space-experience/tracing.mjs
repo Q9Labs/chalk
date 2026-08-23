@@ -81,6 +81,10 @@ function parseTraceEvents(text) {
   return parsed.traceEvents;
 }
 
+function appendEvents(target, source) {
+  for (const event of source) target.push(event);
+}
+
 function traceLifecycleError(message, result, cause) {
   const failure = new TraceLifecycleError(message, { cause, result });
   failure.fatal = true;
@@ -198,7 +202,7 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
   let stopErrors = [];
   let lifecycleFailure = null;
 
-  const onData = ({ value = [] } = {}) => events.push(...value);
+  const onData = ({ value = [] } = {}) => appendEvents(events, value);
   const onComplete = (payload) => complete?.resolve(payload);
   const onError = (error) => complete?.reject(error instanceof Error ? error : new Error(String(error)));
 
@@ -267,7 +271,7 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
       }
       const traceEvents = parseTraceEvents(Buffer.concat(chunks).toString("utf8"));
       events.length = 0;
-      events.push(...traceEvents);
+      appendEvents(events, traceEvents);
     } catch (error) {
       readError = error;
     } finally {

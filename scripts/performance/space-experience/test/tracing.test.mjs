@@ -141,6 +141,16 @@ test("drains the browser trace stream, decodes base64 chunks, and closes the str
   });
 });
 
+test("drains traces larger than the JavaScript argument limit", async () => {
+  await withOutput(async (outputPath) => {
+    const eventCount = 150_000;
+    const traceStream = JSON.stringify({ traceEvents: Array.from({ length: eventCount }, () => ({ name: "Paint", dur: 1 })) });
+    const record = await traceFeature({ participants: participants(1), browserCdp: browserCdp({ traceStream }), feature: "large-stream", action: () => {}, outputPath, observeMs: 0 });
+    assert.equal(record.browserTrace.eventCount, eventCount);
+    assert.equal(record.browserTrace.counts.Paint, eventCount);
+  });
+});
+
 test("preserves Unicode when a base64 stream splits a multibyte character", async () => {
   await withOutput(async (outputPath) => {
     const traceStream = JSON.stringify({ traceEvents: [{ name: "FunctionCall", dur: 1, args: { data: { functionName: "draw🙂", url: "/app.js" } } }] });
