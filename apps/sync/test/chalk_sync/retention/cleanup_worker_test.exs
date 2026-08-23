@@ -233,7 +233,7 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
 
     assert_receive :chat_stream_locked
     cleanup = Task.async(fn -> run_cleanup(cleanup_connection) end)
-    assert Task.yield(cleanup, 250) == nil
+    assert Task.yield(cleanup, 100) == nil
 
     send(append.pid, :append)
     assert {:ok, %Postgrex.Result{num_rows: 1}} = Task.await(append)
