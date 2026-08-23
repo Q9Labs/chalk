@@ -112,7 +112,7 @@ async function runMediaAndLayout(state, cycle) {
   const { people, anchor, recorder, trace } = state;
   const actor = people[cycle % people.length];
   const observer = actor === anchor ? people[1] : anchor;
-  const mediaSettled = await recorder.step(
+  await recorder.step(
     `microphone toggles ${cycle}`,
     async () => {
       let completedToggles = 0;
@@ -133,7 +133,7 @@ async function runMediaAndLayout(state, cycle) {
     },
     { feature: "microphone" },
   );
-  if (mediaSettled && !supportFailed(recorder, "camera-video")) {
+  if (!supportFailed(recorder, "camera-video")) {
     await recorder.step(`microphone command quiet window ${cycle}`, () => wait(5_000, state.signal));
     const cameraReady = await recorder.step(
       `camera initial playback ${cycle}`,
