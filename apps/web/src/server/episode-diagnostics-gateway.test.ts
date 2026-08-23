@@ -82,6 +82,37 @@ describe("Episode Diagnostics gateway", () => {
     expect(fetcher.mock.calls[2]?.[1]?.credentials).toBe("omit");
   });
 
+  it("rejects a signed download redirect outside the configured hosts", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ user: { id: "account-1" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { Location: "https://evil.test/diagnostics/job-1?signature=secret" } }));
+    const response = await handleEpisodeDiagnosticsGateway(
+      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }),
+      env,
+      fetcher,
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({ code: "download.redirect_invalid" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed when an upstream JSON response is malformed", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ user: { id: "account-1" } }))
+      .mockResolvedValueOnce(new Response("{not-json", { status: 200, headers: { "content-type": "application/json" } }));
+    const response = await handleEpisodeDiagnosticsGateway(
+      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/stream`, { headers: { Cookie: "__Host-chalk_account=account-token" } }),
+      env,
+      fetcher,
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({ code: "upstream.contract_error" });
+  });
+
   it("fails closed when production hosting lacks its explicit opt-in", async () => {
     const fetcher = vi.fn();
     const response = await handleEpisodeDiagnosticsGateway(

@@ -15,22 +15,37 @@ describe("account boundary", () => {
     expect(response.headers.get("set-cookie")).toContain("Secure");
     expect(response.headers.get("set-cookie")).toContain("SameSite=Strict");
     expect(response.headers.get("set-cookie")).not.toContain("HttpOnly");
+
+    const localResponse = await handleAccountBoundary(new Request("http://localhost/api/auth/csrf"), upstream, vi.fn());
+
+    expect(localResponse.headers.get("set-cookie")).toMatch(/chalk_csrf_local=[0-9a-f]{64}/);
+    expect(localResponse.headers.get("set-cookie")).not.toContain("__Host-chalk_csrf=");
+    expect(localResponse.headers.get("set-cookie")).not.toContain("Secure");
   });
 
   it("forwards only trace context and redacts private status fields", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.chalk.test/v1/status");
-      expect(Object.fromEntries(new Headers(init?.headers))).toEqual({
-        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-        tracestate: "chalk=web",
-        "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
-      });
-      return Response.json({
-        schema_version: 1,
-        generated_at: "2026-08-08T12:00:00Z",
-        overall: "degraded",
-        components: [{ id: "api", name: "API", description: "Control plane", state: "degraded", checked_at: "2026-08-08T11:59:00Z", last_changed_at: "2026-08-08T11:58:00Z", monitor_key: "private", target_url: "https://private.example", error_message: "secret" }],
-      });
+      const url = String(input);
+      const headers = new Headers(init?.headers);
+      if (url.endsWith("/v1/status")) {
+        expect(Object.fromEntries(headers)).toEqual({
+          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          tracestate: "chalk=web",
+          "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
+        });
+        return Response.json({
+          schema_version: 1,
+          generated_at: "2026-08-08T12:00:00Z",
+          overall: "degraded",
+          components: [{ id: "api", name: "API", description: "Control plane", state: "degraded", checked_at: "2026-08-08T11:59:00Z", last_changed_at: "2026-08-08T11:58:00Z", monitor_key: "private", target_url: "https://private.example", error_message: "secret" }],
+        });
+      }
+
+      expect(url).toBe("https://api.chalk.test/v1/me");
+      expect(headers.get("authorization")).toBe("Bearer private-token");
+      expect(headers.get("traceparent")).toBeNull();
+      expect(headers.get("tracestate")).toBe("chalk=web");
+      return Response.json({ refresh_token: "root-secret", profile: { name: "Ada", token: "nested-secret", details: { access_token: "nested-access", safe: true } } });
     });
     const response = await handleAccountBoundary(
       new Request(`${secureOrigin}/api/status`, {
@@ -53,12 +68,23 @@ describe("account boundary", () => {
       overall: "degraded",
       components: [{ id: "api", name: "API", description: "Control plane", state: "degraded", checked_at: "2026-08-08T11:59:00Z", last_changed_at: "2026-08-08T11:58:00Z" }],
     });
+
+    const nestedResponse = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/me`, {
+        headers: { Cookie: "__Host-chalk_account=private-token", Traceparent: "not-a-traceparent", Tracestate: "chalk=web" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(nestedResponse.status).toBe(200);
+    await expect(nestedResponse.json()).resolves.toEqual({ profile: { name: "Ada", details: { safe: true } } });
   });
 
   it("rejects a cross-origin or CSRF-invalid mutation before upstream access", async () => {
     const fetcher = vi.fn();
     const crossOrigin = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "user@example.com" }, { Origin: "https://evil.test" }), upstream, fetcher);
-    const csrfMismatch = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "user@example.com" }, { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "wrong-token" }), upstream, fetcher);
+    const csrfMismatch = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "user@example.com" }, { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-tokeX" }), upstream, fetcher);
 
     expect(crossOrigin.status).toBe(403);
     await expect(crossOrigin.json()).resolves.toMatchObject({ error: { code: "origin_mismatch" } });
@@ -91,6 +117,20 @@ describe("account boundary", () => {
     const body = await response.text();
     expect(body).not.toContain("raw-account-token");
     expect(JSON.parse(body)).toEqual({ expires_at: "2030-08-04T12:00:00Z", user: { id: "user-1", name: "Ada", email: "ada@example.com" } });
+
+    const localResponse = await handleAccountBoundary(
+      new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "http://localhost", Cookie: "chalk_csrf_local=csrf-token", "X-Chalk-CSRF": "csrf-token" },
+        body: JSON.stringify({ email: "ada@example.com", password: "secret" }),
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(localResponse.headers.get("set-cookie")).toContain("chalk_account_local=raw-account-token");
+    expect(localResponse.headers.get("set-cookie")).not.toContain("__Host-chalk_account=");
+    expect(localResponse.headers.get("set-cookie")).not.toContain("Secure");
   });
 
   it("preserves the account cookie when recent authentication fails", async () => {
