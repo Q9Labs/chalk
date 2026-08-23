@@ -417,8 +417,11 @@ async function up() {
   };
 
   // 6. API (Go) — includes the provider bridge listener.
-  spawnService("api", "go", ["run", "./cmd"], {
-    cwd: join(repoRoot, "apps", "api"),
+  const apiRoot = join(repoRoot, "apps", "api");
+  const apiBinary = join(runtimeRoot, "chalk-api");
+  await run("go", ["build", "-o", apiBinary, "./cmd"], { cwd: apiRoot });
+  spawnService("api", apiBinary, [], {
+    cwd: apiRoot,
     logFile: join(runtimeRoot, "api.log"),
     env: {
       CHALK_API_ADDR: `127.0.0.1:${PORTS.api}`,
@@ -437,7 +440,7 @@ async function up() {
 
   // 7. Verify the real Cloudflare SFU path once.
   await run("go", ["run", "./cmd/dev-sfu-probe"], {
-    cwd: join(repoRoot, "apps", "api"),
+    cwd: apiRoot,
     env: { CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId, CHALK_CLOUDFLARE_REALTIME_APP_SECRET: provider.appSecret },
   });
   log("sfu probe verified");
