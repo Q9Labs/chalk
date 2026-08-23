@@ -141,3 +141,18 @@ removed above. The HTML carried no content the Markdown lacked.
   `assets/chalk-recorder-system/` — diagrams whose only referrers were the
   debriefs removed above.
 - `chalk-observability-uptime-architecture.png` — no referrers.
+
+## Standalone HTML documents
+
+Guides, debriefs, and boards written directly as HTML, with no Markdown
+source. Their conclusions are in the weekly digests.
+
+- `chalk-logo-motion-study.html` — Chalk logo motion study
+- `debrief-chalk-room-actions-2026-07-29.html` — Chalk room actions — implementation debrief
+- `debrief-chalk-room-receipts-attachments-2026-07-30.html` — Chalk room chat — implementation debrief
+- `july-12-14-control-room-2026-07-14.html` — July 12 14 Control Room
+- `recorder-contract-flow-guide-2026-07-14.html` — Recorder Contract Flow
+- `recorder-shared-contracts-guide-2026-07-14.html` — Recorder Shared Contracts
+- `room-join-lifecycle-atlas-2026-08-01.html` — Chalk — the meeting, traced
+- `sync-codewalk.html` — apps/sync — code walk
+- `sync-orientation.html` — apps/sync — orientation
