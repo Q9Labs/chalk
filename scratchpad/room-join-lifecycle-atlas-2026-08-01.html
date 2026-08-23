@@ -1062,7 +1062,13 @@
           box-shadow: var(--ck-shadow);
         }
         .fig svg {
-          display: none;
+          width: 100%;
+          height: auto;
+          display: block;
+          border: 1px solid var(--ck-line);
+          border-radius: var(--ck-r-md);
+          background: #fff;
+          box-shadow: var(--ck-shadow);
         }
         .fig figcaption {
           font-family: var(--ck-mono);
@@ -1134,10 +1140,6 @@
           <h2>The whole world on one page</h2>
           <p class="flow-intro">Four territories: your apps, the client SDK they embed, Chalk's servers, and Cloudflare's media plane. Every flow in this atlas is traffic on one of these arrows.</p>
           <figure class="fig">
-            <img
-              src="room-join-lifecycle-atlas-assets/system-map.png"
-              alt="System map: web and mobile apps construct the Chalk client SDK; the SDK talks HTTPS to apps/api, WebSockets to apps/sync, and WebRTC to the Cloudflare SFU. Your backend admits participants through the server SDK, apps/api provisions Cloudflare connections server-to-server, and webhooks flow back to your backend."
-            />
             <svg
               viewBox="0 0 960 445"
               role="img"
@@ -1238,10 +1240,6 @@
             <span class="hint">or open any stage on its own</span>
           </div>
           <figure class="fig">
-            <img
-              src="room-join-lifecycle-atlas-assets/join-sequence.png"
-              alt="Join sequence: the client asks its backend for admission, which provisions a Cloudflare connection through the Chalk API and returns an access bundle. The client then opens Sync and negotiates media with the SFU in parallel, becoming live only after both branches finish."
-            />
             <svg
               viewBox="0 0 960 585"
               role="img"
@@ -1582,10 +1580,6 @@
           <h2>Every state it can be in</h2>
           <p class="flow-intro">When you supervise this in production, this is the whole space: seven states, and the budgets that decide which arrow fires. The one to internalize is that <span class="mono">failed</span> is permanent until someone calls <span class="mono">join()</span> again.</p>
           <figure class="fig">
-            <img
-              src="room-join-lifecycle-atlas-assets/session-state-machine.png"
-              alt="ChalkSession state machine: idle leads to joining, then live once Sync and media are both live. Live can leave or reconnect; reconnection returns to live when healthy or fails after three attempts in ten seconds. Failed can only reach joining through a new join call."
-            />
             <svg
               viewBox="0 0 960 310"
               role="img"
@@ -1941,10 +1935,6 @@
           </p>
 
           <figure class="fig">
-            <img
-              src="room-join-lifecycle-atlas-assets/timeout-budgets.png"
-              alt="Timing bars comparing the session's one-second publication poll, five-second waits, eight-second PeerConnection wait, ten-second server and recovery budgets, fifteen-second Sync target, twenty-second heartbeat, and the unbounded signaling fetch."
-            />
             <svg
               viewBox="0 0 960 540"
               role="img"

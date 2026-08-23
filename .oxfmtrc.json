@@ -23,7 +23,6 @@
     "contract/schema/proof/invalid/**",
     "scratchpad/api-performance-*.html",
     "scratchpad/api-performance-*.md",
-    "scratchpad/chalk-cost-calculator.html",
     "scratchpad/live-episode-debugger-spec-2026-08-03.html",
     "scratchpad/sync-codewalk.html"
   ]

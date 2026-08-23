@@ -91,7 +91,7 @@ Run `pnpm run gate` for the canonical repository quality gate;
 
 ## Cost model
 
-[`scratchpad/chalk-infra-cost-model-2026-07-12.md`](./scratchpad/chalk-infra-cost-model-2026-07-12.md) contains dated planning assumptions and formulas. It is a model, not a current hosting-price guarantee. The interactive calculator is [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html).
+[`scratchpad/chalk-infra-cost-model-2026-07-12.md`](./scratchpad/chalk-infra-cost-model-2026-07-12.md) contains dated planning assumptions and formulas. It is a model, not a current hosting-price guarantee.
 
 ## License
 
