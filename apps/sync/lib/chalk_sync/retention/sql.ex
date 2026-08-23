@@ -68,6 +68,7 @@ defmodule ChalkSync.Retention.SQL do
         select 1 from sync_screen_share_leases lease
         where lease.tenant_id = control.tenant_id
           and lease.episode_id = control.episode_id
+          and lease.hard_expires_at > $2
       )
       and not exists (
         select 1 from sync_publication_fences fence
@@ -90,6 +91,43 @@ defmodule ChalkSync.Retention.SQL do
         select 1 from sync_chat_attachments attachment
         where attachment.tenant_id = control.tenant_id
           and attachment.episode_id = control.episode_id
+      )
+      and (
+        not exists (
+          select 1
+          from sync_chat_messages candidate_message
+          where candidate_message.tenant_id = control.tenant_id
+            and candidate_message.space_id = control.space_id
+            and candidate_message.episode_id = control.episode_id
+        )
+        or exists (
+          select 1
+          from sync_chat_streams stream
+          cross join lateral (
+            select
+              min(candidate_message.sequence) as first_sequence,
+              max(candidate_message.sequence) as last_sequence,
+              count(*)::bigint as message_count
+            from sync_chat_messages candidate_message
+            where candidate_message.tenant_id = control.tenant_id
+              and candidate_message.space_id = control.space_id
+              and candidate_message.episode_id = control.episode_id
+          ) candidate_messages
+          where stream.tenant_id = control.tenant_id
+            and stream.space_id = control.space_id
+            and stream.retained_floor_sequence = candidate_messages.first_sequence
+            and candidate_messages.last_sequence <= stream.head_sequence
+            and not exists (
+              select 1
+              from sync_chat_messages other_message
+              where other_message.tenant_id = control.tenant_id
+                and other_message.space_id = control.space_id
+                and other_message.episode_id <> control.episode_id
+                and other_message.sequence < candidate_messages.last_sequence
+            )
+            and candidate_messages.message_count =
+              candidate_messages.last_sequence - candidate_messages.first_sequence + 1
+        )
       )
     order by episode.ended_at, control.tenant_id, control.episode_id
     limit $3
