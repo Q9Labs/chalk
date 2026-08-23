@@ -28,6 +28,14 @@ export class StepFailure extends Error {
   }
 }
 
+export class TraceLifecycleError extends Error {
+  constructor(message, { cause, result } = {}) {
+    super(message, { cause });
+    this.name = "TraceLifecycleError";
+    this.result = result;
+  }
+}
+
 export function isFeatureDispositionError(value) {
   return value instanceof FeatureDispositionError;
 }

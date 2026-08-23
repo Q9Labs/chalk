@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { parseCli, createRunId } from "../config.mjs";
+import { TraceLifecycleError } from "../errors.mjs";
 import { aggregateTraceSummaries, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
 import { deltaSample, diffHeapSummaries } from "../metrics.mjs";
 import { summarizeTrace } from "../tracing.mjs";
+import { createRecorder } from "../workload.mjs";
 
 test("CLI validates mode duration and Participant limits", () => {
   assert.equal(parseCli(["profile", "--minutes", "30", "--participants", "3", "--base", "http://localhost:13070"]).durationMs, 1_800_000);
@@ -17,6 +22,21 @@ test("CLI validates mode duration and Participant limits", () => {
 test("run identifiers remain unique and filesystem-safe", () => {
   const id = createRunId(new Date("2026-08-23T12:34:56.789Z"), 0);
   assert.match(id, /^2026-08-23T12-34-56-789Z-000000$/);
+});
+
+test("trace lifecycle failures abort the workload after recording evidence", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "chalk-recorder-test-"));
+  try {
+    const recorder = createRecorder(directory);
+    const failure = new TraceLifecycleError("browser trace is tainted");
+    await assert.rejects(
+      recorder.step("camera trace", () => Promise.reject(failure), { feature: "camera-video" }),
+      (error) => error === failure,
+    );
+    assert.equal(recorder.failures.length, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("metric deltas preserve null when a counter is unavailable", () => {

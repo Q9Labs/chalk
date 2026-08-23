@@ -1,7 +1,9 @@
 import { writeFile } from "node:fs/promises";
 
+import { TraceLifecycleError } from "./errors.mjs";
+
 const TIMELINE_EVENTS = new Set(["Paint", "PrePaint", "UpdateLayoutTree", "Layout", "RasterTask", "CompositeLayers", "Layerize", "GPUTask", "Commit", "ActivateLayerTree", "DrawFrame", "FunctionCall", "EventDispatch", "RunTask", "TimerFire", "FireAnimationFrame"]);
-const DEFAULT_TRACE_COMPLETE_TIMEOUT_MS = 10_000;
+const DEFAULT_TRACE_COMPLETE_TIMEOUT_MS = 60_000;
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
@@ -10,6 +12,7 @@ function errorMessage(error) {
 function errorRecord(phase, error) {
   const record = { phase, name: error instanceof Error ? error.name : "Error", message: errorMessage(error) };
   if (error instanceof AggregateError) record.causes = error.errors.map((cause) => errorRecord(phase, cause));
+  else if (error?.cause) record.cause = errorRecord(phase, error.cause);
   return record;
 }
 
@@ -57,6 +60,38 @@ function waitForCompletion(deferred, timeoutMs) {
     timer = setTimeout(() => reject(new Error(`Tracing.tracingComplete timed out after ${timeoutMs}ms`)), timeoutMs);
   });
   return Promise.race([deferred.promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function waitForOperation(operation, timeoutMs, message) {
+  if (timeoutMs <= 0) {
+    Promise.resolve(operation).catch(() => {});
+    return Promise.reject(new Error(`${message} timed out`));
+  }
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${message} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([operation, timeout]).finally(() => clearTimeout(timer));
+}
+
+function parseTraceEvents(text) {
+  const parsed = JSON.parse(text);
+  if (Array.isArray(parsed)) return parsed;
+  if (!Array.isArray(parsed.traceEvents)) throw new Error("Trace stream did not contain a traceEvents array");
+  return parsed.traceEvents;
+}
+
+function traceLifecycleError(message, result, cause) {
+  const failure = new TraceLifecycleError(message, { cause, result });
+  failure.fatal = true;
+  return failure;
+}
+
+function combineLifecycleCauses(operationError, lifecycleError, feature) {
+  const causes = [operationError, lifecycleError.cause].filter(Boolean);
+  lifecycleError.cause = causes.length > 1 ? new AggregateError(causes, `${feature} action and trace lifecycle failed`) : causes[0];
+  lifecycleError.causes = causes;
+  return lifecycleError;
 }
 
 function layerRecorder(person) {
@@ -161,9 +196,10 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
   let compositingReasons = [];
   let result = null;
   let stopErrors = [];
+  let lifecycleFailure = null;
 
   const onData = ({ value = [] } = {}) => events.push(...value);
-  const onComplete = () => complete?.resolve();
+  const onComplete = (payload) => complete?.resolve(payload);
   const onError = (error) => complete?.reject(error instanceof Error ? error : new Error(String(error)));
 
   function attachBrowserListeners() {
@@ -174,12 +210,14 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
     browserListenersAttached = true;
   }
 
-  function detachBrowserListeners() {
+  function detachBrowserListeners({ retainCompletion = false } = {}) {
     if (!browserListenersAttached) return;
     browserCdp.off("Tracing.dataCollected", onData);
-    browserCdp.off("Tracing.tracingComplete", onComplete);
     browserCdp.off("Inspector.targetCrashed", onError);
-    browserListenersAttached = false;
+    if (!retainCompletion) {
+      browserCdp.off("Tracing.tracingComplete", onComplete);
+      browserListenersAttached = false;
+    }
   }
 
   async function disableLayers() {
@@ -206,7 +244,46 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
     if (errors.length > 0) throw new AggregateError(errors, "LayerTree rollback failed");
   }
 
+  function markTainted(cause, message) {
+    if (!lifecycleFailure) {
+      lifecycleFailure = traceLifecycleError(message, makeResult(), cause);
+    }
+    state = "tainted";
+  }
+
+  async function drainTraceStream(payload, deadline) {
+    const stream = payload?.stream;
+    if (!stream) throw new Error("Tracing.tracingComplete did not include a trace stream");
+    const chunks = [];
+    let readError = null;
+    let closeError = null;
+    let eof = false;
+    try {
+      while (!eof) {
+        const remainingMs = deadline - Date.now();
+        const response = await waitForOperation(browserCdp.send("IO.read", { handle: stream }), remainingMs, "IO.read");
+        if (response.data) chunks.push(response.base64Encoded ? Buffer.from(response.data, "base64") : Buffer.from(response.data, "utf8"));
+        eof = response.eof === true;
+      }
+      const traceEvents = parseTraceEvents(Buffer.concat(chunks).toString("utf8"));
+      events.length = 0;
+      events.push(...traceEvents);
+    } catch (error) {
+      readError = error;
+    } finally {
+      try {
+        await waitForOperation(browserCdp.send("IO.close", { handle: stream }), deadline - Date.now(), "IO.close");
+      } catch (error) {
+        closeError = error;
+      }
+    }
+    const errors = [readError, closeError].filter(Boolean);
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, "Tracing stream drain and close failed");
+  }
+
   async function start() {
+    if (state === "tainted") throw lifecycleFailure ?? new Error("Tracing recorder is permanently tainted");
     if (state === "started") return;
     if (state === "starting") return startPromise;
     if (state === "stopping") return stopPromise;
@@ -220,6 +297,7 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
         for (const layer of layers) await layer.start();
         attachBrowserListeners();
         await browserCdp.send("Tracing.start", {
+          transferMode: "ReturnAsStream",
           traceConfig: {
             recordMode: "recordAsMuchAsPossible",
             includedCategories: categories,
@@ -245,8 +323,8 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
     }
   }
 
-  function makeResult(stoppedAt = Date.now()) {
-    if (result) return result;
+  function makeResult(stoppedAt = Date.now(), refresh = false) {
+    if (result && !refresh) return result;
     const shared = summarizeEvents(events);
     const participantResults = participants.map((person, index) => ({
       participant: person.name,
@@ -264,31 +342,39 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
   function finishStop() {
     state = "stopping";
     stopPromise = (async () => {
-      try {
-        compositingReasons = await Promise.all(layers.map((layer) => layer.compositingReasons()));
-        if (browserTracingStarted) {
+      if (browserTracingStarted) {
+        const deadline = Date.now() + traceCompleteTimeoutMs;
+        try {
+          await waitForOperation(browserCdp.send("Tracing.end"), deadline - Date.now(), "Tracing.end");
+        } catch (error) {
+          markTainted(error, `Tracing end failed: ${errorMessage(error)}`);
+        }
+        browserTracingStarted = false;
+        if (!lifecycleFailure) {
           try {
-            await browserCdp.send("Tracing.end");
+            const payload = await waitForCompletion(complete, Math.max(1, deadline - Date.now()));
+            await drainTraceStream(payload, deadline);
           } catch (error) {
-            stopErrors.push(error);
-          }
-          if (stopErrors.length === 0) {
-            try {
-              await waitForCompletion(complete, traceCompleteTimeoutMs);
-            } catch (error) {
-              stopErrors.push(error);
-            }
+            markTainted(error, `Tracing stream lifecycle failed: ${errorMessage(error)}`);
           }
         }
+      }
+      try {
+        compositingReasons = await Promise.all(layers.map((layer) => layer.compositingReasons()));
       } catch (error) {
         stopErrors.push(error);
-      } finally {
-        browserTracingStarted = false;
-        detachBrowserListeners();
-        stopErrors.push(...(await disableLayers()));
-        state = "idle";
       }
-      const traceResult = makeResult(Date.now());
+      stopErrors.push(...(await disableLayers()));
+      detachBrowserListeners({ retainCompletion: Boolean(lifecycleFailure) });
+      const traceResult = makeResult(Date.now(), true);
+      if (lifecycleFailure) {
+        lifecycleFailure.result = traceResult;
+        lifecycleFailure.partialResult = traceResult;
+        lifecycleFailure.layerErrors = stopErrors;
+        state = "tainted";
+        throw lifecycleFailure;
+      }
+      state = "idle";
       if (stopErrors.length > 0) {
         const failure = new AggregateError(stopErrors, `Tracing stop failed: ${errorMessage(stopErrors[0])}`);
         failure.result = traceResult;
@@ -301,6 +387,7 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
 
   async function stop() {
     if (stopPromise) return stopPromise;
+    if (state === "tainted") throw lifecycleFailure ?? new Error("Tracing recorder is permanently tainted");
     if (state === "starting") {
       const pendingStart = startPromise;
       stopPromise = (async () => {
@@ -322,14 +409,14 @@ export function createTraceRecorder({ browserCdp, participants, categories, trac
     start,
     stop,
     dispose() {
-      detachBrowserListeners();
+      detachBrowserListeners({ retainCompletion: Boolean(lifecycleFailure) });
       for (const layer of layers) layer.dispose();
     },
     result() {
       return makeResult();
     },
     wasStarted() {
-      return state === "started" || state === "stopping" || browserTracingStarted;
+      return state === "started" || state === "stopping" || state === "tainted" || browserTracingStarted;
     },
   };
 }
@@ -370,6 +457,7 @@ export async function traceFeature({
       };
     } catch (error) {
       stopError = error;
+      if (operationError && stopError instanceof TraceLifecycleError) combineLifecycleCauses(operationError, stopError, feature);
       const stopped = error.result ?? recorder.result();
       record = {
         feature,
@@ -387,6 +475,7 @@ export async function traceFeature({
     if (errors.length > 0) record.errors = errors;
     await writeFile(outputPath, `${JSON.stringify(record, null, 2)}\n`);
   }
+  if (operationError && stopError instanceof TraceLifecycleError) throw stopError;
   if (operationError && stopError) throw new AggregateError([operationError, stopError], `${feature} trace and ${operationPhase} failed`);
   if (stopError) throw stopError;
   if (operationError) throw operationError;

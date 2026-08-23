@@ -2,7 +2,7 @@ import { appendFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { assertRoster, joinParticipant } from "./browser.mjs";
-import { aggregateFailures, StepFailure, isFeatureDispositionError } from "./errors.mjs";
+import { aggregateFailures, StepFailure, TraceLifecycleError, isFeatureDispositionError } from "./errors.mjs";
 import * as scenario from "./scenario.mjs";
 
 function wait(milliseconds, signal) {
@@ -51,6 +51,7 @@ export function createRecorder(outDir) {
       await appendFile(stepsPath, `${JSON.stringify({ event: "step", label, feature, ok: false, startedAt, finishedAt: Date.now(), ms: Date.now() - startedAt, disposition: kind, allowedDisposition: disposition && allowDisposition, error: errorText(error) })}\n`);
       if (feature !== "workload") updateSupport(feature, disposition && allowDisposition ? kind : "failed", { label, reason: errorText(error), disposition: disposition ? kind : undefined });
       if (!disposition || !allowDisposition) failures.push(new StepFailure(label, error));
+      if (error instanceof TraceLifecycleError) throw error;
       return null;
     }
   }
@@ -103,27 +104,62 @@ async function runMediaAndLayout(state, cycle) {
   const { people, anchor, recorder, trace } = state;
   const actor = people[cycle % people.length];
   const observer = actor === anchor ? people[1] : anchor;
-  await recorder.step(
+  const mediaSettled = await recorder.step(
     `microphone toggles ${cycle}`,
     async () => {
-      await scenario.toggleMicrophone(actor.page);
-      await scenario.toggleMicrophone(actor.page);
+      let completedToggles = 0;
+      try {
+        const firstActive = await scenario.toggleMicrophone(actor.page);
+        completedToggles += 1;
+        await scenario.assertRemoteMicrophoneState(observer.page, actor.name, firstActive);
+        const secondActive = await scenario.toggleMicrophone(actor.page);
+        completedToggles += 1;
+        await scenario.assertRemoteMicrophoneState(observer.page, actor.name, secondActive);
+        return true;
+      } finally {
+        if (completedToggles % 2 === 1) {
+          const restoredActive = await scenario.toggleMicrophone(actor.page);
+          await scenario.assertRemoteMicrophoneState(observer.page, actor.name, restoredActive);
+        }
+      }
     },
     { feature: "microphone" },
   );
-  await recorder.step(
-    `camera video trace ${cycle}`,
-    () =>
-      trace("camera-video", cycle, async () => {
-        const firstState = await scenario.toggleCamera(actor.page);
-        await scenario.assertRemoteCameraState(observer.page, actor.name, firstState);
-        await wait(1_000, state.signal);
-        const secondState = await scenario.toggleCamera(actor.page);
-        await scenario.assertRemoteCameraState(observer.page, actor.name, secondState);
-        await wait(1_000, state.signal);
-      }),
-    { feature: "camera-video" },
-  );
+  if (mediaSettled) {
+    const cameraReady = await recorder.step(
+      `camera initial playback ${cycle}`,
+      async () => {
+        await scenario.assertRemoteCameraState(observer.page, actor.name, true);
+        return true;
+      },
+      { feature: "camera-video" },
+    );
+    if (cameraReady) {
+      await recorder.step(
+        `camera video trace ${cycle}`,
+        () =>
+          trace("camera-video", cycle, async () => {
+            let completedToggles = 0;
+            try {
+              const firstState = await scenario.toggleCamera(actor.page);
+              completedToggles += 1;
+              await scenario.assertRemoteCameraState(observer.page, actor.name, firstState);
+              await wait(1_000, state.signal);
+              const secondState = await scenario.toggleCamera(actor.page);
+              completedToggles += 1;
+              await scenario.assertRemoteCameraState(observer.page, actor.name, secondState);
+              await wait(1_000, state.signal);
+            } finally {
+              if (completedToggles % 2 === 1) {
+                const restoredState = await scenario.toggleCamera(actor.page);
+                await scenario.assertRemoteCameraState(observer.page, actor.name, restoredState);
+              }
+            }
+          }),
+        { feature: "camera-video" },
+      );
+    }
+  }
   await recorder.step(
     `layout changes ${cycle}`,
     async () => {

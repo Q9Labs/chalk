@@ -6,16 +6,33 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { cpuProfileFilePath, startParticipantCpuProfiles, stopParticipantCpuProfiles, validateGpuSystemInfo } from "../cli.mjs";
+import { TraceLifecycleError } from "../errors.mjs";
 import { createTraceRecorder, summarizeTrace, traceFeature } from "../tracing.mjs";
 
 class FakeCdp extends EventEmitter {
-  constructor({ layerEnableError = null, layerEnableDelayMs = 0, traceStartError = null, complete = true } = {}) {
+  constructor({ layerEnableError = null, layerEnableDelayMs = 0, traceStartError = null, traceEndDelayMs = 0, complete = true, traceStream = null, traceStreamBase64 = false, traceChunkSize = Number.POSITIVE_INFINITY, traceChunkBytes = false, readError = null, closeError = null } = {}) {
     super();
     this.calls = [];
     this.layerEnableError = layerEnableError;
     this.layerEnableDelayMs = layerEnableDelayMs;
     this.traceStartError = traceStartError;
+    this.traceEndDelayMs = traceEndDelayMs;
     this.complete = complete;
+    this.traceStream =
+      traceStream ??
+      JSON.stringify({
+        traceEvents: [
+          { name: "Paint", dur: 10 },
+          { name: "FunctionCall", dur: 5, args: { data: { functionName: "draw", url: "/app.js", lineNumber: 4 } } },
+        ],
+      });
+    this.traceBuffer = Buffer.from(this.traceStream);
+    this.traceStreamBase64 = traceStreamBase64;
+    this.traceChunkSize = traceChunkSize;
+    this.traceChunkBytes = traceChunkBytes;
+    this.readError = readError;
+    this.closeError = closeError;
+    this.traceOffset = 0;
   }
 
   async send(command, params) {
@@ -39,7 +56,33 @@ class FakeCdp extends EventEmitter {
         });
       });
     }
-    if (command === "Tracing.end" && this.complete) queueMicrotask(() => this.emit("Tracing.tracingComplete"));
+    if (command === "Tracing.end") {
+      if (this.traceEndDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.traceEndDelayMs));
+      if (this.complete) queueMicrotask(() => this.emit("Tracing.tracingComplete", { stream: "trace-stream" }));
+    }
+    if (command === "IO.read") {
+      if (this.readError) throw this.readError;
+      if (this.traceChunkBytes) {
+        const chunk = this.traceBuffer.subarray(this.traceOffset, this.traceOffset + this.traceChunkSize);
+        this.traceOffset += chunk.length;
+        return {
+          data: this.traceStreamBase64 ? chunk.toString("base64") : chunk.toString("utf8"),
+          eof: this.traceOffset >= this.traceBuffer.length,
+          base64Encoded: this.traceStreamBase64,
+        };
+      }
+      const chunk = this.traceStream.slice(this.traceOffset, this.traceOffset + this.traceChunkSize);
+      this.traceOffset += chunk.length;
+      return {
+        data: this.traceStreamBase64 ? Buffer.from(chunk).toString("base64") : chunk,
+        eof: this.traceOffset >= this.traceStream.length,
+        base64Encoded: this.traceStreamBase64,
+      };
+    }
+    if (command === "IO.close") {
+      if (this.closeError) throw this.closeError;
+      return {};
+    }
     if (command === "LayerTree.compositingReasons") return { compositingReasons: ["will-change-transform"] };
     return {};
   }
@@ -72,6 +115,7 @@ test("uses one browser Tracing start/end and one LayerTree recorder", async () =
     const browser = browserCdp();
     const record = await traceFeature({ participants: people, browserCdp: browser, feature: "single", action: () => {}, outputPath, observeMs: 0 });
     assert.equal(browser.count("Tracing.start"), 1);
+    assert.equal(browser.calls.find((call) => call.command === "Tracing.start").params.transferMode, "ReturnAsStream");
     assert.equal(browser.count("Tracing.end"), 1);
     assert.equal(people[0].cdp.count("LayerTree.enable"), 1);
     assert.equal(people[0].cdp.count("LayerTree.disable"), 1);
@@ -82,6 +126,27 @@ test("uses one browser Tracing start/end and one LayerTree recorder", async () =
     assert.equal(summary.counts.Paint, 1);
     const expectedRate = record.durationMs > 0 ? summary.counts.Paint / ((record.durationMs * record.participants.length) / 1_000) : null;
     assert.equal(summary.countsPerParticipantSecond.Paint, expectedRate);
+  });
+});
+
+test("drains the browser trace stream, decodes base64 chunks, and closes the stream", async () => {
+  await withOutput(async (outputPath) => {
+    const browser = browserCdp({ traceStreamBase64: true, traceChunkSize: 7 });
+    const record = await traceFeature({ participants: participants(1), browserCdp: browser, feature: "stream", action: () => {}, outputPath, observeMs: 0 });
+    assert.equal(record.browserTrace.counts.Paint, 1);
+    assert.equal(record.browserTrace.counts.FunctionCall, 1);
+    assert.ok(browser.count("IO.read") > 1);
+    assert.equal(browser.count("IO.close"), 1);
+    assert.deepEqual(browser.calls.find((call) => call.command === "IO.close").params, { handle: "trace-stream" });
+  });
+});
+
+test("preserves Unicode when a base64 stream splits a multibyte character", async () => {
+  await withOutput(async (outputPath) => {
+    const traceStream = JSON.stringify({ traceEvents: [{ name: "FunctionCall", dur: 1, args: { data: { functionName: "draw🙂", url: "/app.js" } } }] });
+    const browser = browserCdp({ traceStream, traceStreamBase64: true, traceChunkBytes: true, traceChunkSize: 1 });
+    const record = await traceFeature({ participants: participants(1), browserCdp: browser, feature: "unicode-stream", action: () => {}, outputPath, observeMs: 0 });
+    assert.equal(record.browserTrace.topFunctions[0].functionName, "draw🙂");
   });
 });
 
@@ -153,6 +218,95 @@ test("start and stop overlap finish once without a promise cycle", async () => {
     [1, 1],
   );
   recorder.dispose();
+});
+
+test("taints permanently on completion timeout and retains the completion listener", async () => {
+  const people = participants(1, { complete: false });
+  const browser = browserCdp({ complete: false });
+  const recorder = createTraceRecorder({ browserCdp: browser, participants: people, traceCompleteTimeoutMs: 10 });
+  await recorder.start();
+  let failure;
+  try {
+    await recorder.stop();
+    assert.fail("tracing timeout should reject");
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure instanceof TraceLifecycleError);
+  assert.equal(failure.fatal, true);
+  assert.equal(failure.result.browserTrace.counts.Paint, 1);
+  assert.equal(browser.count("Tracing.start"), 1);
+  assert.equal(browser.count("Tracing.end"), 1);
+  assert.equal(browser.listenerCount("Tracing.tracingComplete"), 1);
+  assert.equal(people[0].cdp.count("LayerTree.disable"), 1);
+  await assert.rejects(
+    () => recorder.start(),
+    (error) => error === failure,
+  );
+  assert.equal(browser.count("Tracing.start"), 1);
+  recorder.dispose();
+  assert.equal(browser.listenerCount("Tracing.tracingComplete"), 1);
+});
+
+test("bounds Tracing.end itself within the trace lifecycle deadline", async () => {
+  await withOutput(async (outputPath) => {
+    const browser = browserCdp({ traceEndDelayMs: 50 });
+    const startedAt = Date.now();
+    let failure;
+    try {
+      await traceFeature({ participants: participants(1), browserCdp: browser, feature: "end-timeout", action: () => {}, outputPath, observeMs: 0, traceCompleteTimeoutMs: 10 });
+      assert.fail("Tracing.end timeout should reject");
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure instanceof TraceLifecycleError);
+    assert.ok(Date.now() - startedAt < 500);
+    assert.equal(browser.count("IO.read"), 0);
+    assert.equal(browser.listenerCount("Tracing.tracingComplete"), 1);
+  });
+});
+
+test("taints when closing the trace stream fails", async () => {
+  await withOutput(async (outputPath) => {
+    const browser = browserCdp({ closeError: new Error("IO close failed") });
+    await assert.rejects(
+      () => traceFeature({ participants: participants(1), browserCdp: browser, feature: "stream-close-failure", action: () => {}, outputPath, observeMs: 0 }),
+      (error) => error instanceof TraceLifecycleError && /stream lifecycle failed/.test(error.message),
+    );
+    assert.equal(browser.count("IO.close"), 1);
+    const artifact = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.equal(artifact.errors[0].phase, "stop");
+  });
+});
+
+test("keeps lifecycle failure type and both causes when the action also fails", async () => {
+  await withOutput(async (outputPath) => {
+    const browser = browserCdp({ complete: false });
+    let failure;
+    try {
+      await traceFeature({
+        participants: participants(1),
+        browserCdp: browser,
+        feature: "action-and-trace-failure",
+        action: () => {
+          throw new Error("action broke");
+        },
+        outputPath,
+        observeMs: 0,
+        traceCompleteTimeoutMs: 10,
+      });
+      assert.fail("combined failure should reject");
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure instanceof TraceLifecycleError);
+    assert.equal(failure.result.browserTrace.counts.Paint, 1);
+    assert.ok(failure.cause instanceof AggregateError);
+    assert.equal(failure.cause.errors[0].message, "action broke");
+    assert.match(failure.cause.errors[1].message, /timed out/);
+    const artifact = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.equal(artifact.errors[1].cause.causes.length, 2);
+  });
 });
 
 test("writes an analyzable artifact and cleans up when the action throws", async () => {

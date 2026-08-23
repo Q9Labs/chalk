@@ -24,6 +24,8 @@ const MICROPHONE_CONTROL = /^(Mute|Unmute)( microphone)?$/i;
 const CAMERA_CONTROL = /^(Turn on camera|Turn off camera|Start Video|Stop Video|Camera)$/i;
 const SCREEN_SHARE_CONTROL = /^(Share Screen|Stop Share|Share screen|Stop share|Share)$/i;
 const HAND_CONTROL = /^(Raise hand|Lower hand|Raise|Lower)$/i;
+const MEDIA_STATE_TIMEOUT_MS = 20_000;
+const DECODED_FRAME_TIMEOUT_MS = 5_000;
 
 async function toolbarLabels(page) {
   await revealFloatingControls(page);
@@ -62,7 +64,7 @@ async function toggleControl(page, matcher, feature, description) {
 }
 
 export async function toggleMicrophone(page) {
-  await toggleControl(page, MICROPHONE_CONTROL, "microphone", "microphone");
+  return toggleControl(page, MICROPHONE_CONTROL, "microphone", "microphone");
 }
 
 export async function toggleCamera(page) {
@@ -403,16 +405,89 @@ export async function assertRemoteHand(page) {
   await page.locator('[aria-label="Hand raised"]:visible').first().waitFor({ state: "visible", timeout: 15_000 });
 }
 
+export async function assertRemoteMicrophoneState(page, displayName, active) {
+  try {
+    await page.waitForFunction(
+      ({ name, expectedMuted }) => {
+        const tileLabel = `Video tile for ${name}`;
+        const tile = [...document.querySelectorAll('[aria-label^="Video tile for "]')].find((node) => node.getAttribute("aria-label") === tileLabel);
+        if (!tile) return false;
+        return (tile.querySelector('[aria-label="Muted"]') !== null) === expectedMuted;
+      },
+      { name: displayName, expectedMuted: !active },
+      { timeout: MEDIA_STATE_TIMEOUT_MS },
+    );
+  } catch (error) {
+    const expected = active ? "active with no Muted indicator" : "muted with a Muted indicator";
+    const detail = error instanceof Error ? `: ${error.message}` : "";
+    throw new Error(`remote Participant ${displayName} microphone did not become ${expected}${detail}`);
+  }
+}
+
 export async function assertRemoteCameraState(page, displayName, enabled) {
-  await page.waitForFunction(
-    ({ name, expected }) => {
-      const tile = document.querySelector(`[aria-label="${CSS.escape(`Video tile for ${name}`)}"]`);
-      const video = tile?.querySelector("video");
-      return Boolean(video?.classList.contains("opacity-100")) === expected;
-    },
-    { name: displayName, expected: enabled },
-    { timeout: 20_000 },
-  );
+  try {
+    await page.waitForFunction(
+      ({ name, expectedEnabled }) => {
+        const tileLabel = `Video tile for ${name}`;
+        const tile = [...document.querySelectorAll('[aria-label^="Video tile for "]')].find((node) => node.getAttribute("aria-label") === tileLabel);
+        const video = tile?.querySelector("video");
+        if (!video) return false;
+        if (!expectedEnabled) return video.classList.contains("opacity-0") && video.srcObject === null && video.readyState === HTMLMediaElement.HAVE_NOTHING && video.paused;
+        const tracks = typeof video.srcObject?.getVideoTracks === "function" ? video.srcObject.getVideoTracks() : [];
+        return video.classList.contains("opacity-100") && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !video.paused && tracks.some((track) => track.kind === "video" && track.readyState === "live");
+      },
+      { name: displayName, expectedEnabled: enabled },
+      { timeout: MEDIA_STATE_TIMEOUT_MS },
+    );
+  } catch (error) {
+    const expected = enabled ? "enabled with a live video track" : "disabled with no attached video track";
+    const detail = error instanceof Error ? `: ${error.message}` : "";
+    throw new Error(`remote Participant ${displayName} camera did not become ${expected}${detail}`);
+  }
+
+  if (!enabled) return;
+
+  let frameProof;
+  try {
+    frameProof = await page.evaluate(
+      async ({ name, timeoutMs }) => {
+        const tileLabel = `Video tile for ${name}`;
+        const tile = [...document.querySelectorAll('[aria-label^="Video tile for "]')].find((node) => node.getAttribute("aria-label") === tileLabel);
+        const video = tile?.querySelector("video");
+        if (!video) return { ok: false, reason: "the exact Participant tile or video element disappeared" };
+
+        const readDecodedFrames = () => {
+          if (typeof video.getVideoPlaybackQuality === "function") {
+            const quality = video.getVideoPlaybackQuality();
+            if (Number.isFinite(quality.totalVideoFrames)) return quality.totalVideoFrames;
+          }
+          if (Number.isFinite(video.webkitDecodedFrameCount)) return video.webkitDecodedFrameCount;
+          return null;
+        };
+        const hasLiveVideoTrack = () => {
+          const tracks = typeof video.srcObject?.getVideoTracks === "function" ? video.srcObject.getVideoTracks() : [];
+          return tracks.some((track) => track.kind === "video" && track.readyState === "live");
+        };
+
+        const initialFrames = readDecodedFrames();
+        if (initialFrames === null) return { ok: false, reason: "the browser exposed no decoded-frame counter" };
+        const deadline = performance.now() + timeoutMs;
+        while (performance.now() < deadline) {
+          if (!video.classList.contains("opacity-100") || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.paused || !hasLiveVideoTrack()) {
+            return { ok: false, reason: "camera playback stopped satisfying the enabled state while waiting for decoded frames" };
+          }
+          if (readDecodedFrames() > initialFrames) return { ok: true };
+          await new Promise((resolve) => window.setTimeout(resolve, 100));
+        }
+        return { ok: false, reason: `decoded frame count did not advance from ${initialFrames}` };
+      },
+      { name: displayName, timeoutMs: DECODED_FRAME_TIMEOUT_MS },
+    );
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`remote Participant ${displayName} camera decoded-frame proof failed: ${detail}`);
+  }
+  if (!frameProof.ok) throw new Error(`remote Participant ${displayName} camera decoded-frame proof failed: ${frameProof.reason}`);
 }
 
 export async function assertRemoteShare(page, displayName, active = true) {
