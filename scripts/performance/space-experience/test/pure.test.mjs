@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { createRunId, measurementPlan, parseCli } from "../config.mjs";
+import { browserOptions } from "../cli.mjs";
 import { createDiagnosticRecorder } from "../browser.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
 import { aggregateTraceSummaries, analyzeRun, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
@@ -58,6 +59,14 @@ test("measurement plan keeps runtime profiling separate from the one-cycle snaps
   assert.equal(shouldContinueCycles(runtimeMeasurement, 0, 1), true);
   assert.equal(shouldContinueCycles(traceMeasurement, 0, 1), false);
   assert.equal(shouldContinueCycles(snapshotMeasurement, 0, 1), false);
+});
+
+test("browser launch keeps hardware GPU and fake media while muting physical output", () => {
+  const options = browserOptions();
+  assert.equal(options.ignoreDefaultArgs.includes("--disable-gpu"), true);
+  for (const argument of ["--enable-gpu", "--use-angle=metal", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--mute-audio"]) {
+    assert.equal(options.args.includes(argument), true);
+  }
 });
 
 test("run identifiers remain unique and filesystem-safe", () => {

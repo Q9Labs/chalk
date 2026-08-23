@@ -84,11 +84,11 @@ function formatError(error, indent = "") {
   return lines.join("\n");
 }
 
-function browserOptions() {
+export function browserOptions() {
   return {
     headless: true,
     ignoreDefaultArgs: ["--disable-gpu"],
-    args: ["--enable-gpu", "--use-angle=metal", "--use-gl=angle", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--disable-dev-shm-usage"],
+    args: ["--enable-gpu", "--use-angle=metal", "--use-gl=angle", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--mute-audio", "--disable-dev-shm-usage"],
   };
 }
 

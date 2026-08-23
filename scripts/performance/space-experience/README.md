@@ -1,6 +1,6 @@
 # Space experience profiler
 
-This directory contains a dependency-free Playwright and CDP profiler for the full Chalk Space surface. It creates three or four isolated headless Participants with fake camera and microphone devices. An init override maps `getDisplayMedia` to a fake `getUserMedia` video stream, so screen sharing stays deterministic.
+This directory contains a dependency-free Playwright and CDP profiler for the full Chalk Space surface. It creates three or four isolated headless Participants with fake camera and microphone devices. An init override maps `getDisplayMedia` to a fake `getUserMedia` video stream, so screen sharing stays deterministic. Chromium's physical audio output is muted, while microphone tracks and in-app audio attachment still execute.
 
 Start the isolated local stack, then run a short validation:
 
