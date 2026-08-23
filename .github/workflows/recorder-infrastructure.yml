@@ -26,14 +26,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.26.2
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.14.0
           cache: pnpm
-
-      - name: Setup pnpm
-        run: corepack enable && corepack prepare pnpm@10.26.2 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
