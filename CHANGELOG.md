@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Fixed Sync retention cleanup so expired Episode collaboration data no longer removes shared Space state that newer Episodes still use, and cleanup failures now report safe diagnostic classes.
+- Kept Sync retention cleanup on the current Space chat prefix and allowed expired screen-share leases to be removed, so cleanup cannot create an interior message-sequence gap or remain blocked by stale leases.
+- Kept public Space lifecycles active while an Episode still has a joining, active, or leaving Participant, so the creator leaving no longer ends the Episode for everyone else.
 - Bound managed API and Sync telemetry identity to each release manifest so deployments cannot serve current images under stale release metadata.
 
 ## [4.1.12] - 2026-08-23
