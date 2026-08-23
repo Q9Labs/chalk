@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  ACTION_SET_V1,
   MAX_DIAGNOSTIC_EVENT_BYTES,
   SAFE_ID_CLASSES,
   acceptDiagnosticEvent,
+  actionStatus,
   encodedEventSize,
   fingerprintDiagnosticFilter,
   formatDiagnosticReference,
@@ -20,6 +22,7 @@ import {
   redactDiagnosticAttributes,
   renderAgentBriefMarkdown,
   validateDiagnosticEventDraft,
+  validateActionCoverage,
   validateGraphProjection,
   validateParticipantProjection,
   validateRunProjection,
@@ -81,6 +84,13 @@ describe("references and action coverage", () => {
     expect(parseDiagnosticReference("chalkdiag:v1:production:diag01@9")).toEqual(reference);
   });
 
+  it("covers whiteboard lifecycle and closes every action", () => {
+    expect(validateActionCoverage().complete).toBe(true);
+    expect(actionStatus("whiteboard.connect")).toBe("supported");
+    expect(actionStatus("whiteboard.recover")).toBe("supported");
+    expect(actionStatus("whiteboard.disconnect")).toBe("supported");
+    expect(ACTION_SET_V1.length).toBe(86);
+  });
   it("fingerprints filters canonically", () => {
     const fingerprint = fingerprintDiagnosticFilter({ source: "sdk", state: "failed" });
     expect(fingerprint).toBe(fingerprintDiagnosticFilter({ state: "failed", source: "sdk" }));

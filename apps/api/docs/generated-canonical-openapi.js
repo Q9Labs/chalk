@@ -17579,8 +17579,11 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             minLength: 1,
             type: "string",
           },
+          replace_media_connection: {
+            type: "boolean",
+          },
         },
-        required: ["media_proof"],
+        required: ["media_proof", "replace_media_connection"],
         type: "object",
       },
       Regions: {

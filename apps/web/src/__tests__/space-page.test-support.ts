@@ -25,7 +25,7 @@ function MockEntrance({
 
 const spacePageTestMocks = vi.hoisted(() => {
   const holder: { chalkProps?: Record<string, unknown> } = {};
-  const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn() };
+  const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn(), recordRtcSummary: vi.fn() };
   const telemetry = { configureApiBaseURL: vi.fn() };
   const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } } };
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), media: {}, leave: vi.fn(async () => undefined), dispose: vi.fn() };

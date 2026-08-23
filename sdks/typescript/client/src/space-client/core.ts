@@ -10,6 +10,7 @@ import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
 import type { JourneyTelemetryContext } from "../telemetry/types";
+import type { CloudflareSFURtcSummaryRecorder } from "../media";
 import { EpisodeDiagnosticRuntime, type EpisodeDiagnosticOperation } from "./episode-diagnostic-runtime";
 import {
   episodeDiagnosticsForDependencies,
@@ -39,6 +40,7 @@ export type SpaceClientPlatform = {
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
   readonly telemetry?: JourneyTelemetryContext;
+  readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void;
 };
 
@@ -58,7 +60,7 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
     now: baseDependencies.clock.now,
     setTimeout: baseDependencies.clock.setTimeout,
     clearTimeout: baseDependencies.clock.clearTimeout,
-    release: { id: "chalk-client@4.1.12" },
+    release: { id: "chalk-client@4.1.13" },
   });
   const diagnosticSyncClients = new Set<ConnectionSyncClient>();
   const dependencies: ConnectionDependencies = {
@@ -79,6 +81,7 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
     initialMicrophoneEnabled: platform.initialMicrophoneEnabled,
     initialCameraEnabled: platform.initialCameraEnabled,
     telemetry: platform.telemetry,
+    recordRtcSummary: platform.recordRtcSummary,
     dependencies,
     diagnostics: {
       onEvent: (event) => {
@@ -126,7 +129,6 @@ export class SpaceClientCore {
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeStore: (() => void) | null = null;
-  #unsupportedReported = false;
   #leaveOperation: EpisodeDiagnosticOperation | undefined;
   #participantJoinOperation: EpisodeDiagnosticOperation | undefined;
   #syncConnectOperation: EpisodeDiagnosticOperation | undefined;
@@ -273,11 +275,6 @@ export class SpaceClientCore {
   #publishConnectionDiagnostics(): void {
     const snapshot = this.#connection.getSnapshot();
     if (!this.#episodeDiagnostics || snapshot.state !== "live") return;
-    if (!this.#unsupportedReported) {
-      this.#unsupportedReported = true;
-      const unsupported = this.#episodeDiagnostics.startOperation("whiteboard.unsupported");
-      unsupported?.succeed({ status: "unsupported" });
-    }
     if (!this.#participantJoinOperation) {
       this.#participantJoinOperation = this.#episodeDiagnostics.startOperation("participant.join");
       this.#participantJoinOperation?.succeed({ status: "live" });

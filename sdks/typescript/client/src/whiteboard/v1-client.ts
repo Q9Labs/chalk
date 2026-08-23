@@ -54,6 +54,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #options: ChalkWhiteboardV1ClientOptions;
   readonly #store;
   readonly #listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
+  readonly #summaryListeners = new Set<(summary: ChalkWhiteboardSummary) => void>();
   readonly #operations = new Map<string, OperationEntry>();
   readonly #reservedOperationIds = new Set<string>();
   readonly #awaitingOperationIds = new Set<string>();
@@ -163,6 +164,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     if (this.#snapshots.size === 0 && !this.#waitingForOperations) void this.#requestSnapshot().catch(() => undefined);
     return () => this.#listeners.delete(listener);
+  }
+
+  subscribeSummary(listener: (summary: ChalkWhiteboardSummary) => void): () => void {
+    this.#summaryListeners.add(listener);
+    this.#notifySummaryListener(listener, this.#summary());
+    return () => this.#summaryListeners.delete(listener);
   }
 
   submitUpdate(input: ChalkWhiteboardV1UpdateInput): Promise<ChalkWhiteboardV1Commit> {
@@ -699,7 +706,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #publishSummary(status: ChalkWhiteboardSummary["status"], summaryError: ChalkWhiteboardV1Failure | null): void {
     this.#summaryStatus = status;
     this.#summaryError = summaryError;
-    const summary: ChalkWhiteboardSummary = {
+    const summary = this.#summary();
+    try {
+      this.#options.onSummary?.(summary);
+    } catch {
+      // Consumer summary callbacks cannot interfere with transport ownership.
+    }
+    for (const listener of this.#summaryListeners) this.#notifySummaryListener(listener, summary);
+  }
+
+  #summary(): ChalkWhiteboardSummary {
+    return {
       status: this.#summaryStatus,
       sceneId: this.#sceneId,
       revision: this.#revision,
@@ -709,8 +726,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       presenting: this.#presenting,
       error: this.#summaryError,
     };
+  }
+
+  #notifySummaryListener(listener: (summary: ChalkWhiteboardSummary) => void, summary: ChalkWhiteboardSummary): void {
     try {
-      this.#options.onSummary?.(summary);
+      listener(summary);
     } catch {
       // Consumer summary callbacks cannot interfere with transport ownership.
     }

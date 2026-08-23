@@ -13,6 +13,12 @@ defmodule ChalkSync.Diagnostics.Transport do
           | {:retryable, atom()}
           | {:terminal, atom()}
 
+  @failure_reasons ~w(
+    connect_failed connection_closed connection_refused credential_unavailable dns_failed
+    fingerprint_conflict invalid_contract malformed_response request_timeout response_too_large scope_not_found
+    server_unavailable tls_failed transport_error unauthorized
+  )a
+
   @spec append(map(), map(), [map()]) :: response()
   def append(config, scope, events)
       when is_map(config) and is_map(scope) and is_list(events) and events != [] do
@@ -88,9 +94,7 @@ defmodule ChalkSync.Diagnostics.Transport do
     else
       {:error, :request_too_large} -> {:terminal, :invalid_contract}
       {:error, :destination_blocked} -> {:terminal, :invalid_contract}
-      {:error, :dns_failed} -> {:retryable, :transport_error}
-      {:error, reason} when reason in [:timeout, :connect_timeout] -> {:retryable, :timeout}
-      {:error, _reason} -> {:retryable, :transport_error}
+      {:error, reason} -> classify_request_error(reason)
     end
   end
 
@@ -149,6 +153,33 @@ defmodule ChalkSync.Diagnostics.Transport do
   defp decode_response(404, _body), do: {:terminal, :scope_not_found}
   defp decode_response(status, _body) when status in 400..499, do: {:terminal, :invalid_contract}
   defp decode_response(_status, _body), do: {:retryable, :server_unavailable}
+
+  @doc false
+  @spec classify_request_error(term()) :: {:retryable, atom()} | {:terminal, atom()}
+  def classify_request_error(:credential_unavailable), do: {:terminal, :credential_unavailable}
+  def classify_request_error(:response_too_large), do: {:terminal, :response_too_large}
+
+  def classify_request_error(reason) when reason in [:timeout, :connect_timeout],
+    do: {:retryable, :request_timeout}
+
+  def classify_request_error(reason) when reason in [:nxdomain, :dns_failed],
+    do: {:retryable, :dns_failed}
+
+  def classify_request_error(:econnrefused), do: {:retryable, :connection_refused}
+  def classify_request_error(:closed), do: {:retryable, :connection_closed}
+  def classify_request_error({:tls_alert, _detail}), do: {:retryable, :tls_failed}
+
+  def classify_request_error(
+        {:failed_connect, [{:to_address, _address}, {_transport, _options, reason}]}
+      ),
+      do: classify_request_error(reason)
+
+  def classify_request_error({:failed_connect, _detail}), do: {:retryable, :connect_failed}
+  def classify_request_error(_reason), do: {:retryable, :transport_error}
+
+  @doc false
+  @spec failure_reason?(atom()) :: boolean()
+  def failure_reason?(reason), do: reason in @failure_reasons
 
   defp validate_success(response) do
     with true <- is_binary(response["diagnosticReference"]),

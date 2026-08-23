@@ -227,6 +227,13 @@ function serviceMonitorDefinitions(env: Env): readonly MonitorDefinition[] {
       severity: "critical",
       expectedStatusCodes: [200],
     },
+    {
+      key: "sync.diagnostics",
+      method: "GET",
+      url: monitorURL(syncBaseURL, "/diagnostics/healthz", "SYNC_BASE_URL"),
+      severity: "major",
+      expectedStatusCodes: [200],
+    },
   ];
 }
 

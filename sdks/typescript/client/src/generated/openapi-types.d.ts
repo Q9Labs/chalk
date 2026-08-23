@@ -2228,6 +2228,7 @@ export interface components {
     };
     RefreshSpacePublicInviteAccessRequest: {
       media_proof: string;
+      replace_media_connection: boolean;
     };
     Regions: {
       regions: {

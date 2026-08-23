@@ -312,8 +312,9 @@ type AccessPort = Access
 type AccountsPort = Accounts
 
 type PublicAccessInput struct {
-	Arrival    Arrival
-	MediaProof string
+	Arrival                Arrival
+	MediaProof             string
+	ReplaceMediaConnection bool
 }
 
 // PublicSpaceCreated is the result of creating an auto-lifecycle public Space.
@@ -434,11 +435,12 @@ type PublicInviteArrivalStatusInput struct {
 }
 
 type PublicInviteRefreshInput struct {
-	ArrivalHandle   string
-	GuestCredential string
-	AccountID       utilities.ID
-	Native          bool
-	MediaProof      string
+	ArrivalHandle          string
+	GuestCredential        string
+	AccountID              utilities.ID
+	Native                 bool
+	MediaProof             string
+	ReplaceMediaConnection bool
 }
 
 type PublicInviteLeaveInput struct {

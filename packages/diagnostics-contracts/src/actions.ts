@@ -27,10 +27,16 @@ const GROUPS: readonly ActionGroupDefinition[] = [
   { group: "Cleanup", root: "cleanup", owner: "API + worker", proofPrefix: "diag.v1.cleanup", actions: ["resource.release", "fan_in", "complete"] },
   { group: "Artifact", root: "artifact", owner: "API + worker", proofPrefix: "diag.v1.artifact", actions: ["reserve", "write", "commit", "fail"] },
   { group: "Webhook", root: "webhook", owner: "API + worker", proofPrefix: "diag.v1.webhook", actions: ["enqueue", "attempt", "retry", "deliver", "exhaust"] },
-  { group: "Whiteboard", root: "whiteboard", owner: "whiteboard package", proofPrefix: "diag.v1.whiteboard", actions: ["unsupported"] },
+  { group: "Whiteboard", root: "whiteboard", owner: "whiteboard package + client SDK + Sync", proofPrefix: "diag.v1.whiteboard", actions: ["connect", "recover", "disconnect"] },
 ];
 
 const CHECKPOINT_OVERRIDES: Readonly<Record<string, readonly ActionCheckpointContract[]>> = {
+  "whiteboard.connect": [{ key: "transport_live", class: "required", displayOrder: 0 }],
+  "whiteboard.recover": [
+    { key: "recovery_started", class: "required", displayOrder: 0 },
+    { key: "restored_cursor", class: "required", displayOrder: 1 },
+  ],
+  "whiteboard.disconnect": [{ key: "terminal", class: "required", displayOrder: 0 }],
   "chat.send": [
     { key: "intent", class: "required", displayOrder: 0 },
     { key: "validation", class: "required", displayOrder: 1 },
@@ -92,7 +98,6 @@ const CHECKPOINT_OVERRIDES: Readonly<Record<string, readonly ActionCheckpointCon
     { key: "target_delivery", class: "required", displayOrder: 2 },
     { key: "target_application", class: "conditional", displayOrder: 3, predicate: "target is observable" },
   ],
-  "whiteboard.unsupported": [{ key: "unsupported", class: "required", displayOrder: 0, predicate: "whiteboard is outside v1" }],
 };
 
 const checkpoints = (...keys: readonly string[]): readonly ActionCheckpointContract[] => keys.map((key, displayOrder) => ({ key, class: "required", displayOrder }));
@@ -131,7 +136,6 @@ const makeCheckpoints = (operation: string): readonly ActionCheckpointContract[]
 
 const makeAction = (group: ActionGroupDefinition, action: string): ActionContractV1 => {
   const operation = `${group.root}.${action}`;
-  const unsupported = operation === "whiteboard.unsupported";
   return {
     version: 1,
     group: group.group,
@@ -143,9 +147,8 @@ const makeAction = (group: ActionGroupDefinition, action: string): ActionContrac
     expectationVersion: 1,
     checkpoints: makeCheckpoints(operation),
     expectationFixture: `expectation.${operation}.v1`,
-    successFixture: unsupported ? "success.whiteboard.unsupported.v1" : `success.${operation}.v1`,
-    failureFixture: unsupported ? "failure.whiteboard.unsupported.v1" : `failure.${operation}.v1`,
-    ...(unsupported ? { unsupported: true } : {}),
+    successFixture: `success.${operation}.v1`,
+    failureFixture: `failure.${operation}.v1`,
   };
 };
 
@@ -159,7 +162,7 @@ export const ALLOWED_EVENT_ACTION_ROOTS: readonly string[] = [...ACTION_OPERATIO
 const ACTION_BY_OPERATION = new Map(ACTION_SET_V1.map((action) => [action.operation, action]));
 
 export const getActionContract = (operation: string): ActionContractV1 | undefined => ACTION_BY_OPERATION.get(operation);
-export const isSupportedAction = (operation: string): boolean => ACTION_BY_OPERATION.has(operation) && operation !== "whiteboard.unsupported";
+export const isSupportedAction = (operation: string): boolean => ACTION_BY_OPERATION.has(operation);
 
 export const actionStatus = (operation: string): DiagnosticActionStatus => {
   const contract = getActionContract(operation);

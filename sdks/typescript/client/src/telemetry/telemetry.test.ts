@@ -311,7 +311,8 @@ describe("TelemetryClient", () => {
     const event = journey.recordRtcSummary({ connectionState: "connected", iceConnectionState: "completed", signalingState: "stable" }, [
       { type: "inbound-rtp", bytesReceived: 1200, packetsReceived: 30, packetsLost: 2, framesDropped: 1, jitter: 0.004 },
       { type: "outbound-rtp", bytesSent: 800, packetsSent: 12 },
-      { type: "candidate-pair", roundTripTime: 0.03 },
+      { type: "candidate-pair", roundTripTime: 0.03, selected: true, state: "succeeded" },
+      { type: "transport", dtlsState: "connected" },
     ]);
 
     expect(event).toMatchObject({ name: "rtc.summary", phase: "media", origin_kind: "rtc" });
@@ -323,6 +324,8 @@ describe("TelemetryClient", () => {
       packets_lost: 2,
       jitter_ms: 4,
       round_trip_time_ms: 30,
+      dtls_state: "connected",
+      selected_candidate_pair_state: "succeeded",
     });
     expect(event?.attributes).not.toHaveProperty("candidate");
     expect(event?.attributes).not.toHaveProperty("track");

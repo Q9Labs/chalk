@@ -938,6 +938,7 @@ export type RecordingReservation = typeof RecordingReservationSchema.Type;
 
 export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
   media_proof: Schema.String.check(Schema.isMinLength(1)),
+  replace_media_connection: Schema.Boolean,
 });
 export type RefreshSpacePublicInviteAccessRequest = typeof RefreshSpacePublicInviteAccessRequestSchema.Type;
 

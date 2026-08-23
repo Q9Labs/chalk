@@ -17,14 +17,14 @@ const attwIgnoreRules = ["cjs-resolves-to-esm", "internal-resolution-error"];
 const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"];
 
 export const releasePackages = Object.freeze([
-  { directory: "packages/diagnostics-contracts", name: "@q9labsai/diagnostics-contracts", version: "0.1.0" },
-  { directory: "packages/assets", name: "@q9labsai/chalk-assets", version: "4.1.12" },
-  { directory: "packages/facehash", name: "@q9labsai/facehash", version: "4.1.12" },
-  { directory: "packages/ui", name: "@q9labsai/chalk-ui", version: "4.1.12" },
-  { directory: "packages/whiteboard", name: "@q9labsai/chalk-whiteboard", version: "4.1.12" },
-  { directory: "sdks/typescript/client", name: "@q9labsai/chalk-client", version: "4.1.12" },
-  { directory: "sdks/typescript/react", name: "@q9labsai/chalk-react", version: "4.1.12" },
-  { directory: "sdks/typescript/react-native", name: "@q9labsai/chalk-react-native", version: "4.1.12" },
+  { directory: "packages/diagnostics-contracts", name: "@q9labsai/diagnostics-contracts", version: "0.1.1" },
+  { directory: "packages/assets", name: "@q9labsai/chalk-assets", version: "4.1.13" },
+  { directory: "packages/facehash", name: "@q9labsai/facehash", version: "4.1.13" },
+  { directory: "packages/ui", name: "@q9labsai/chalk-ui", version: "4.1.13" },
+  { directory: "packages/whiteboard", name: "@q9labsai/chalk-whiteboard", version: "4.1.13" },
+  { directory: "sdks/typescript/client", name: "@q9labsai/chalk-client", version: "4.1.13" },
+  { directory: "sdks/typescript/react", name: "@q9labsai/chalk-react", version: "4.1.13" },
+  { directory: "sdks/typescript/react-native", name: "@q9labsai/chalk-react-native", version: "4.1.13" },
 ]);
 
 const packageByName = new Map(releasePackages.map((releasePackage) => [releasePackage.name, releasePackage]));

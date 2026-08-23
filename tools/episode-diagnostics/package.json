@@ -21,7 +21,7 @@
     "check-types": "node --check src/cli.mjs"
   },
   "dependencies": {
-    "@q9labsai/diagnostics-contracts": "workspace:^0.1.0"
+    "@q9labsai/diagnostics-contracts": "workspace:^0.1.1"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

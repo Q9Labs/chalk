@@ -350,6 +350,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   platform.createMediaClient({
                     access: grant,
                     credential: () => toPromise(access.getMediaToken()),
+                    replaceMediaConnection: () => toPromise(access.refresh("media_recovery", true)).then((replacement) => replacement.media),
+                    ...(options.recordRtcSummary ? { recordRtcSummary: options.recordRtcSummary } : {}),
                     onFailure: () => enqueueBackground(handleMediaFailure()),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),

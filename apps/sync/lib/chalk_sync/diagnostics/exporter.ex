@@ -3,6 +3,8 @@ defmodule ChalkSync.Diagnostics.Exporter do
 
   use GenServer
 
+  require Logger
+
   alias ChalkSync.Diagnostics
   alias ChalkSync.Diagnostics.Buffer
   alias ChalkSync.Diagnostics.Transport
@@ -44,7 +46,12 @@ defmodule ChalkSync.Diagnostics.Exporter do
       retries: 0,
       exported: 0,
       dropped: 0,
+      dropped_batches: 0,
       failures: 0,
+      total_failures: 0,
+      last_failure_reason: nil,
+      last_failure_at_ms: nil,
+      last_success_at_ms: nil,
       active: nil
     }
 
@@ -62,7 +69,12 @@ defmodule ChalkSync.Diagnostics.Exporter do
        retries: state.retries,
        exported: state.exported,
        dropped: state.dropped,
+       dropped_batches: state.dropped_batches,
        failures: state.failures,
+       total_failures: state.total_failures,
+       last_failure_reason: state.last_failure_reason,
+       last_failure_age_ms: age_ms(state.last_failure_at_ms),
+       last_success_age_ms: age_ms(state.last_success_at_ms),
        active: not is_nil(state.active)
      }, state}
   end
@@ -134,7 +146,11 @@ defmodule ChalkSync.Diagnostics.Exporter do
     missing = Enum.reject(batch_ids, &MapSet.member?(returned, &1))
 
     Buffer.acknowledge(state.buffer, durable)
-    Buffer.drop_batch(state.buffer, terminal, :conflict)
+    Buffer.drop_batch(state.buffer, terminal, :fingerprint_conflict)
+
+    if terminal != [] do
+      summarize_gap(scope, entries, terminal, :fingerprint_conflict)
+    end
 
     if missing != [] do
       Buffer.drop_batch(state.buffer, missing, :malformed_response)
@@ -147,21 +163,32 @@ defmodule ChalkSync.Diagnostics.Exporter do
       %{outcome: :success}
     )
 
-    %{
+    next = %{
       state
       | retries: 0,
         failures: 0,
+        last_failure_reason: nil,
+        last_success_at_ms: now_ms(),
         exported: state.exported + length(durable),
         dropped: state.dropped + length(terminal) + length(missing)
     }
+
+    apply_partial_drop(next, terminal, missing)
   end
 
   defp apply_result(state, scope, entries, {:terminal, reason}) do
     ids = Enum.map(entries, & &1.event_id)
     Buffer.drop_batch(state.buffer, ids, reason)
     summarize_gap(scope, entries, ids, reason)
-    Telemetry.execute([:diagnostics, :export], %{count: length(ids)}, %{outcome: :dropped})
-    %{state | retries: 0, dropped: state.dropped + length(ids), failures: state.failures + 1}
+    observe_failure(:dropped, reason, length(ids))
+
+    state
+    |> record_failure(reason)
+    |> Map.merge(%{
+      retries: 0,
+      dropped: state.dropped + length(ids),
+      dropped_batches: state.dropped_batches + 1
+    })
   end
 
   defp apply_result(state, scope, entries, {:retryable, reason}) do
@@ -170,28 +197,67 @@ defmodule ChalkSync.Diagnostics.Exporter do
       Buffer.drop_batch(state.buffer, ids, :retry_exhausted)
       summarize_gap(scope, entries, ids, :retry_exhausted)
 
-      Telemetry.execute(
-        [:diagnostics, :export],
-        %{count: length(ids)},
-        %{outcome: :retry_exhausted}
-      )
+      observe_failure(:retry_exhausted, reason, length(ids))
 
-      %{
-        state
-        | retries: 0,
-          dropped: state.dropped + length(ids),
-          failures: state.failures + 1
-      }
+      state
+      |> record_failure(reason)
+      |> Map.merge(%{
+        retries: 0,
+        dropped: state.dropped + length(ids),
+        dropped_batches: state.dropped_batches + 1
+      })
     else
       failure(state, reason)
     end
   end
 
-  defp failure(state, reason) do
-    Telemetry.execute([:diagnostics, :export], %{count: 1}, %{outcome: :retryable})
-    _reason = reason
-    %{state | retries: state.retries + 1, failures: state.failures + 1}
+  defp apply_partial_drop(state, [], []), do: state
+
+  defp apply_partial_drop(state, terminal, missing) do
+    reason = if missing == [], do: :fingerprint_conflict, else: :malformed_response
+    count = length(terminal) + length(missing)
+    observe_failure(:dropped, reason, count)
+    next = record_failure(state, reason)
+    %{next | dropped_batches: state.dropped_batches + 1}
   end
+
+  defp failure(state, reason) do
+    observe_failure(:retryable, reason, 1)
+    next = record_failure(state, reason)
+    %{next | retries: state.retries + 1}
+  end
+
+  defp record_failure(state, reason) do
+    reason = bounded_reason(reason)
+
+    %{
+      state
+      | failures: state.failures + 1,
+        total_failures: state.total_failures + 1,
+        last_failure_reason: reason,
+        last_failure_at_ms: now_ms()
+    }
+  end
+
+  defp observe_failure(outcome, reason, count) do
+    reason = bounded_reason(reason)
+
+    Telemetry.execute(
+      [:diagnostics, :export],
+      %{count: count},
+      %{outcome: outcome, reason: reason}
+    )
+
+    Logger.warning(
+      "Episode Diagnostic export failed: outcome=#{outcome} reason=#{reason} event_count=#{count}"
+    )
+  end
+
+  defp bounded_reason(reason) when is_atom(reason) do
+    if Transport.failure_reason?(reason), do: reason, else: :transport_error
+  end
+
+  defp bounded_reason(_reason), do: :transport_error
 
   defp summarize_gap(scope, entries, dropped_ids, reason) do
     dropped = MapSet.new(dropped_ids)
@@ -226,4 +292,8 @@ defmodule ChalkSync.Diagnostics.Exporter do
   end
 
   defp schedule(delay), do: Process.send_after(self(), :export, max(delay, 1))
+
+  defp now_ms, do: System.monotonic_time(:millisecond)
+  defp age_ms(nil), do: nil
+  defp age_ms(timestamp), do: max(now_ms() - timestamp, 0)
 end

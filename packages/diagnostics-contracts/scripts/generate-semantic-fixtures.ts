@@ -10,8 +10,8 @@ mkdirSync(fixturesDirectory, { recursive: true });
 
 const actionOperations = ACTION_SET_V1.map(({ operation }) => operation);
 const outputs = [
-  { fileName: "action-success.v1.json", value: { schemaVersion: "EpisodeDiagnosticFixture/v1", kind: "success", operations: actionOperations, contentCaptured: false, whiteboard: "explicitly unsupported" } },
-  { fileName: "action-failure.v1.json", value: { schemaVersion: "EpisodeDiagnosticFixture/v1", kind: "failure_or_gap", operations: actionOperations, missingConfirmation: "first required checkpoint is named", contentCaptured: false, whiteboard: "unsupported marker remains explicit" } },
+  { fileName: "action-success.v1.json", value: { schemaVersion: "EpisodeDiagnosticFixture/v1", kind: "success", operations: actionOperations, contentCaptured: false } },
+  { fileName: "action-failure.v1.json", value: { schemaVersion: "EpisodeDiagnosticFixture/v1", kind: "failure_or_gap", operations: actionOperations, missingConfirmation: "first required checkpoint is named", contentCaptured: false } },
   {
     fileName: "agent-brief-parity.v1.json",
     value: {

@@ -12,8 +12,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.1.13] - 2026-08-23
+
+### Added
+
+- Added durable, bounded diagnostics for Whiteboard transport recovery, browser RTC state, Cloudflare SFU failures, and Sync diagnostics export health.
+- Added a fail-closed Sync diagnostics health check and a production uptime monitor that reports exporter degradation without stopping collaboration traffic.
+
 ### Fixed
 
+- Recovered stale Cloudflare media sessions before negotiation and replaced sessions after retryable provider failures, so Participants can enable media after a dormant join.
+- Reconnected a Whiteboard after its Sync transport closes, while preventing stale sockets and delayed callbacks from taking ownership of the recovered Board.
 - Fixed Sync retention cleanup so expired Episode collaboration data no longer removes shared Space state that newer Episodes still use, and cleanup failures now report safe diagnostic classes.
 - Kept Sync retention cleanup on the current Space chat prefix and allowed expired screen-share leases to be removed, so cleanup cannot create an interior message-sequence gap or remain blocked by stale leases.
 - Kept public Space lifecycles active while an Episode still has a joining, active, or leaving Participant, so the creator leaving no longer ends the Episode for everyone else.

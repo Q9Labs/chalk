@@ -24,13 +24,11 @@
     { "group": "Cleanup", "root": "cleanup", "owner": "API + worker", "proofPrefix": "diag.v1.cleanup", "actions": ["resource.release", "fan_in", "complete"] },
     { "group": "Artifact", "root": "artifact", "owner": "API + worker", "proofPrefix": "diag.v1.artifact", "actions": ["reserve", "write", "commit", "fail"] },
     { "group": "Webhook", "root": "webhook", "owner": "API + worker", "proofPrefix": "diag.v1.webhook", "actions": ["enqueue", "attempt", "retry", "deliver", "exhaust"] },
-    { "group": "Whiteboard", "root": "whiteboard", "owner": "whiteboard package", "proofPrefix": "diag.v1.whiteboard", "actions": ["unsupported"], "unsupported": true }
+    { "group": "Whiteboard", "root": "whiteboard", "owner": "whiteboard package + client SDK + Sync", "proofPrefix": "diag.v1.whiteboard", "actions": ["connect", "recover", "disconnect"] }
   ],
   "fixtures": {
     "expectationPattern": "expectation.<operation>.v1",
     "successPattern": "success.<operation>.v1",
-    "failurePattern": "failure.<operation>.v1",
-    "whiteboardSuccess": "success.whiteboard.unsupported.v1",
-    "whiteboardFailure": "failure.whiteboard.unsupported.v1"
+    "failurePattern": "failure.<operation>.v1"
   }
 }

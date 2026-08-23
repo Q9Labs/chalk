@@ -1,4 +1,5 @@
 import type { AccessSubject } from "../access/grant";
+import type { CloudflareSFURtcSummaryRecorder } from "../media";
 import type { ConnectionDiagnostic } from "./diagnostics";
 import type { ConnectionAccessProvider, ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "./dependencies";
 import type { ConnectionConnectionPhase, ConnectionFailure, ConnectionState } from "./types";
@@ -23,6 +24,7 @@ export type ConnectionOptions = {
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
   readonly telemetry?: JourneyTelemetryContext;
+  readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly accessRefreshWindowMs?: number;
   readonly recovery?: { readonly maxAttempts?: number; readonly budgetMs?: number; readonly backoffMs?: readonly number[] };
   readonly diagnostics?: { readonly limit?: number; readonly onEvent?: (event: ConnectionDiagnostic) => void };

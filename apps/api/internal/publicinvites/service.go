@@ -1137,12 +1137,26 @@ func (r Runtime) RefreshAccess(ctx context.Context, input PublicInviteRefreshInp
 	if arrival.State != ArrivalAdmitted {
 		return PublicAccessGrant{}, ErrArrivalUnavailable
 	}
-	grant, err := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaProof: input.MediaProof})
+	grant, err := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaProof: input.MediaProof, ReplaceMediaConnection: input.ReplaceMediaConnection})
 	if err != nil {
 		return PublicAccessGrant{}, err
 	}
 	if err := validateAccessGrant(grant, arrival); err != nil {
 		return PublicAccessGrant{}, err
+	}
+	if input.ReplaceMediaConnection {
+		if _, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
+			TenantID:              arrival.TenantID,
+			ArrivalHandle:         arrival.ArrivalHandle,
+			State:                 ArrivalAdmitted,
+			EpisodeID:             grant.EpisodeID,
+			ParticipantID:         grant.ParticipantID,
+			ParticipantGeneration: grant.ParticipantGeneration,
+			Provider:              grant.Provider,
+			ProviderSubject:       grant.ProviderSubject,
+		}); err != nil {
+			return PublicAccessGrant{}, err
+		}
 	}
 	return grant, nil
 }

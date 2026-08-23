@@ -185,6 +185,14 @@ defmodule ChalkSync.Diagnostics do
       {"cleanup.complete", "observed", "failed", "children_terminal"},
     cleanup_complete_succeeded: {"cleanup.complete", "succeeded", "succeeded", "fan_in_terminal"},
     cleanup_complete_failed: {"cleanup.complete", "failed", "failed", "fan_in_terminal"},
+    whiteboard_connect_succeeded:
+      {"whiteboard.connect", "connected", "succeeded", "transport_live"},
+    whiteboard_connect_failed: {"whiteboard.connect", "failed", "failed", "transport_live"},
+    whiteboard_recovery_started: {"whiteboard.recover", "started", "started", "recovery_started"},
+    whiteboard_recovery_succeeded:
+      {"whiteboard.recover", "reconnected", "succeeded", "restored_cursor"},
+    whiteboard_disconnect_observed:
+      {"whiteboard.disconnect", "disconnected", "observed", "terminal"},
     operation_rejected: {"operation.ended", "denied", "failed", "terminal"},
     coverage_gap: {"coverage.gap", "not_observable", "not_observable", "terminal"}
   }
@@ -192,7 +200,7 @@ defmodule ChalkSync.Diagnostics do
   @attribute_keys ~w(action checkpoint reason result status kind direction transport media_kind
     target_state response_class delivery_status storage_state attachment_type visibility recipient_count projection_count
     observable_recipient_count attempt retryable budget_remaining duration_ms latency_ms bytes
-    count cursor sequence grace_ms deadline_ms state_version policy_version release_channel)a
+    count cursor sequence grace_ms deadline_ms state_version policy_version release_channel close_code)a
 
   @safe_values ~w(
     accepted advanced already_applied applied authorized camera capability_denied committed
@@ -200,15 +208,16 @@ defmodule ChalkSync.Diagnostics do
     expired failed gap hosted invalid invalid_state local localhost loaded maximum_duration
     microphone natural newer not_observable not_requested older original participant presence provider
     reconnected rejected replay retry retryable retryable_failure satisfied screen snapshot staging started
-    succeeded superseded sync target_unavailable terminal terminal_failure timed_out unchanged unknown up_to_date
+    succeeded superseded sync target_unavailable terminal terminal_failure timed_out unchanged unknown up_to_date websocket
   )
 
   @safe_reason_values ~w(
     buffer_age buffer_bytes buffer_events capability_denied command_id_conflict
-    dependency_unavailable diagnostics_disabled episode_ended exporter_rejected invalid_contract
+    credential_unavailable dependency_unavailable diagnostics_disabled episode_ended exporter_rejected fingerprint_conflict invalid_contract
     invalid_state invalid_target malformed_response not_available not_observable overloaded
-    retry_exhausted scope_not_found server_unavailable stale_participant_generation timeout
-    transport_error unauthorized unknown
+    response_too_large retry_exhausted scope_not_found server_unavailable stale_participant_generation timeout
+    transport_error unauthorized unknown hello_timeout invalid_token permission_denied protocol_error
+    invalid_acknowledgement delivery_unavailable client_closed normal
   )
 
   @correlation_patterns %{

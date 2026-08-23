@@ -37,11 +37,15 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   test "enforces the hello deadline and strict text framing" do
     assert {:ok, state} = SocketWhiteboardV1.init(%{})
 
-    assert {:stop, :normal, {1008, "hello timeout"}, ^state} =
+    assert {:stop, :normal, {1008, "hello timeout"}, timeout_state} =
              SocketWhiteboardV1.handle_info(:hello_timeout, state)
 
-    assert {:stop, :normal, {1009, "text frames only"}, ^state} =
+    assert timeout_state.terminal == %{close_code: 1008, reason: :hello_timeout}
+
+    assert {:stop, :normal, {1009, "text frames only"}, frame_state} =
              SocketWhiteboardV1.handle_in({<<1, 2>>, [opcode: :binary]}, state)
+
+    assert frame_state.terminal == %{close_code: 1009, reason: :protocol_error}
 
     assert {:push, {:text, ~s({"type":"pong"})}, ^state} =
              SocketWhiteboardV1.handle_in(
