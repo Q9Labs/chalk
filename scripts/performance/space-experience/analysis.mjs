@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { summarizeTrace } from "./tracing.mjs";
+
 async function readJson(path, fallback = null) {
   try {
     return JSON.parse(await readFile(path, "utf8"));
@@ -324,7 +326,7 @@ export async function analyzeRun(runDir) {
   for (const entry of traceEntries) {
     if (entry.isFile() && entry.name.startsWith("trace-") && entry.name.endsWith(".json")) {
       const record = await readJson(join(runDir, "traces", entry.name));
-      if (record) traces.push({ ...record, summary: summarizeTraceRecord(record) });
+      if (record) traces.push({ ...record, summary: summarizeTrace(record) });
     }
   }
   for (const entry of entries) {
@@ -404,41 +406,6 @@ function compareFeatureMetrics(before, after) {
       ];
     }),
   );
-}
-
-function summarizeTraceRecord(record) {
-  const counts = {};
-  const durationsMicros = {};
-  const compositingReasons = {};
-  const functions = new Map();
-  let maxLayerCount = 0;
-  let layerPaintEvents = 0;
-  for (const participant of record.participants ?? []) {
-    for (const [name, value] of Object.entries(participant.counts ?? {})) counts[name] = (counts[name] ?? 0) + value;
-    for (const [name, value] of Object.entries(participant.durationsMicros ?? {})) durationsMicros[name] = (durationsMicros[name] ?? 0) + value;
-    maxLayerCount = Math.max(maxLayerCount, participant.layerTree?.maxLayerCount ?? 0);
-    layerPaintEvents += participant.layerTree?.layerPaintEvents ?? 0;
-    for (const [reason, count] of Object.entries(participant.layerTree?.compositingReasons ?? {})) compositingReasons[reason] = (compositingReasons[reason] ?? 0) + count;
-    for (const entry of participant.topFunctions ?? []) {
-      const key = `${entry.functionName}\u0000${entry.url}\u0000${entry.line ?? -1}`;
-      const current = functions.get(key) ?? { functionName: entry.functionName, url: entry.url, line: entry.line, calls: 0, durationMicros: 0 };
-      current.calls += entry.calls ?? 0;
-      current.durationMicros += entry.durationMicros ?? 0;
-      functions.set(key, current);
-    }
-  }
-  return {
-    feature: record.feature,
-    durationMs: record.durationMs,
-    participantCount: record.participants?.length ?? 0,
-    participantMillis: (record.durationMs ?? 0) * (record.participants?.length ?? 0),
-    counts,
-    durationsMicros,
-    maxLayerCount,
-    layerPaintEvents,
-    compositingReasons,
-    topFunctions: [...functions.values()].sort((left, right) => right.durationMicros - left.durationMicros).slice(0, 30),
-  };
 }
 
 export function reportJson(report) {

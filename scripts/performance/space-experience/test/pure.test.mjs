@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,7 +7,7 @@ import test from "node:test";
 import { createRunId, measurementPlan, parseCli } from "../config.mjs";
 import { createDiagnosticRecorder } from "../browser.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
-import { aggregateTraceSummaries, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
+import { aggregateTraceSummaries, analyzeRun, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
 import { deltaSample, diffHeapSummaries } from "../metrics.mjs";
 import { summarizeTrace } from "../tracing.mjs";
 import { createRecorder, shouldContinueCycles, supportFailed } from "../workload.mjs";
@@ -190,6 +190,35 @@ test("trace aggregation normalizes counts by participant time", () => {
   assert.equal(summary.occurrences, 2);
   assert.equal(summary.countsPerParticipantSecond.Paint, 5);
   assert.equal(summary.durationPercent.Layout, 0.5);
+});
+
+test("run analysis preserves browser-wide trace events", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "chalk-trace-analysis-test-"));
+  try {
+    await mkdir(join(directory, "traces"));
+    await writeFile(join(directory, "manifest.json"), JSON.stringify({ runId: "trace-test", status: "passed", mode: "shakedown", durationMs: 60_000 }));
+    await writeFile(
+      join(directory, "traces", "trace-idle-1.json"),
+      JSON.stringify({
+        feature: "idle",
+        durationMs: 1_000,
+        browserTrace: {
+          counts: { Layout: 4, Paint: 8 },
+          durationsMicros: { Layout: 2_000 },
+          topFunctions: [{ functionName: "render", url: "/apps/web/src/render.ts", line: 3, calls: 2, durationMicros: 1_000 }],
+        },
+        participants: [{ participant: "Avery", layerTree: { maxLayerCount: 12, layerPaintEvents: 3, compositingReasons: { video: 2 } } }],
+      }),
+    );
+    const report = await analyzeRun(directory);
+    assert.equal(report.traces[0].counts.Layout, 4);
+    assert.equal(report.traces[0].counts.Paint, 8);
+    assert.equal(report.traces[0].durationPercent.Layout, 0.2);
+    assert.equal(report.traces[0].maxLayerCount, 12);
+    assert.equal(report.traces[0].topFunctions[0].functionName, "render");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("CPU summary ranks application self time", () => {
