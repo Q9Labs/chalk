@@ -4,24 +4,71 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { parseCli, createRunId } from "../config.mjs";
+import { createRunId, measurementPlan, parseCli } from "../config.mjs";
+import { createDiagnosticRecorder } from "../browser.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
 import { aggregateTraceSummaries, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
 import { deltaSample, diffHeapSummaries } from "../metrics.mjs";
 import { summarizeTrace } from "../tracing.mjs";
-import { createRecorder } from "../workload.mjs";
+import { createRecorder, shouldContinueCycles, supportFailed } from "../workload.mjs";
 
 test("CLI validates mode duration and Participant limits", () => {
   assert.equal(parseCli(["profile", "--minutes", "30", "--participants", "3", "--base", "http://localhost:13070"]).durationMs, 1_800_000);
   assert.equal(parseCli(["shakedown", "--seconds", "300", "--participants", "4"]).durationMs, 300_000);
+  const snapshotPass = parseCli(["shakedown", "--snapshot-pass", "--seconds", "60"]);
+  assert.equal(snapshotPass.snapshotPass, true);
+  assert.throws(() => parseCli(["profile", "--snapshot-pass"]), /only valid for shakedown/);
+  assert.throws(() => parseCli(["shakedown", "--snapshot-pass", "--seconds", "59"]), /between 60 and 300/);
   assert.throws(() => parseCli(["profile", "--minutes", "29"]), /between 30 and 45/);
   assert.throws(() => parseCli(["shakedown", "--seconds", "301"]), /between 60 and 300/);
   assert.throws(() => parseCli(["shakedown", "--participants", "2"]), /between 3 and 4/);
 });
 
+test("measurement plan keeps runtime profiling separate from the one-cycle snapshot pass", () => {
+  const runtimeMeasurement = measurementPlan(parseCli(["shakedown"]));
+  assert.deepEqual(runtimeMeasurement, {
+    kind: "runtime-profile",
+    heapSnapshots: false,
+    metricsSampler: true,
+    cpuProfiles: true,
+    traceRecording: true,
+    singleCycle: false,
+  });
+  const snapshotMeasurement = measurementPlan(parseCli(["shakedown", "--snapshot-pass"]));
+  assert.deepEqual(snapshotMeasurement, {
+    kind: "snapshot-pass",
+    heapSnapshots: true,
+    metricsSampler: false,
+    cpuProfiles: false,
+    traceRecording: false,
+    singleCycle: true,
+  });
+  assert.equal(shouldContinueCycles(runtimeMeasurement, 0, 1), true);
+  assert.equal(shouldContinueCycles(snapshotMeasurement, 0, 1), false);
+});
+
 test("run identifiers remain unique and filesystem-safe", () => {
   const id = createRunId(new Date("2026-08-23T12:34:56.789Z"), 0);
   assert.match(id, /^2026-08-23T12-34-56-789Z-000000$/);
+});
+
+test("browser diagnostics coalesce repeats and remove URL query data", () => {
+  const entries = [];
+  let tick = 0;
+  const record = createDiagnosticRecorder(entries, () => `tick-${(tick += 1)}`);
+  record({ type: "websocket-error", fatal: false, url: "wss://example.test/socket?token=secret", message: "closed" });
+  record({ type: "websocket-error", fatal: false, url: "wss://example.test/socket?token=other", message: "closed" });
+  assert.deepEqual(entries, [
+    {
+      type: "websocket-error",
+      fatal: false,
+      url: "wss://example.test/socket",
+      message: "closed",
+      count: 2,
+      firstAt: "tick-1",
+      lastAt: "tick-2",
+    },
+  ]);
 });
 
 test("trace lifecycle failures abort the workload after recording evidence", async () => {
@@ -34,6 +81,20 @@ test("trace lifecycle failures abort the workload after recording evidence", asy
       (error) => error === failure,
     );
     assert.equal(recorder.failures.length, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("only a strict feature failure suppresses later workload attempts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "chalk-recorder-support-test-"));
+  try {
+    const recorder = createRecorder(directory);
+    assert.equal(supportFailed(recorder, "camera-video"), false);
+    recorder.updateSupport("camera-video", "unreachable", { reason: "not exposed" });
+    assert.equal(supportFailed(recorder, "camera-video"), false);
+    recorder.updateSupport("camera-video", "failed", { reason: "timeout" });
+    assert.equal(supportFailed(recorder, "camera-video"), true);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

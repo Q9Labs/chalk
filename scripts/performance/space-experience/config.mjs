@@ -52,6 +52,7 @@ export function usageText() {
     "  --base <url>          local Chalk web base URL",
     "  --storage-state <p>   Playwright storage state for the smoke-test login",
     "  --output-root <p>     private directory for run artifacts",
+    "  --snapshot-pass       shakedown-only heap snapshot pass",
     "  --help                print this text",
   ].join("\n");
 }
@@ -69,6 +70,7 @@ export function parseCli(argv, env = process.env) {
     storageState: env.CHALK_PERF_STORAGE_STATE,
     outputRoot: env.CHALK_PERF_OUTPUT_ROOT,
     duration: mode === "profile" ? PROFILE_MINUTES.default : SHAKEDOWN_SECONDS.default,
+    snapshotPass: false,
   };
   let explicitDuration = false;
 
@@ -95,6 +97,11 @@ export function parseCli(argv, env = process.env) {
       index += 1;
       continue;
     }
+    if (argument === "--snapshot-pass") {
+      if (mode !== "shakedown") throw new UsageError("--snapshot-pass is only valid for shakedown");
+      options.snapshotPass = true;
+      continue;
+    }
     if (argument === "--duration" || argument === "--minutes" || argument === "--seconds") {
       const expected = mode === "profile" ? "--minutes" : "--seconds";
       if (argument !== "--duration" && argument !== expected) throw new UsageError(`${argument} is only valid for ${argument === "--minutes" ? "profile" : "shakedown"}`);
@@ -112,6 +119,18 @@ export function parseCli(argv, env = process.env) {
   if (explicitDuration && mode === "shakedown" && !Number.isInteger(options.duration)) throw new UsageError("shakedown duration must be an integer number of seconds");
   options.durationMs = mode === "profile" ? options.duration * 60_000 : options.duration * 1_000;
   return options;
+}
+
+export function measurementPlan(options) {
+  const snapshotPass = options.snapshotPass === true;
+  return Object.freeze({
+    kind: snapshotPass ? "snapshot-pass" : "runtime-profile",
+    heapSnapshots: snapshotPass,
+    metricsSampler: !snapshotPass,
+    cpuProfiles: !snapshotPass,
+    traceRecording: !snapshotPass,
+    singleCycle: snapshotPass,
+  });
 }
 
 export function createRunId(now = new Date(), random = Math.random()) {

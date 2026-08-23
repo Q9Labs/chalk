@@ -31,6 +31,35 @@ function mediaInitOverride() {
   window.__chalkPerfMediaOverride = true;
 }
 
+function diagnosticUrl(value) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return value.split("?", 1)[0].split("#", 1)[0];
+  }
+}
+
+export function createDiagnosticRecorder(entries, now = () => new Date().toISOString()) {
+  const index = new Map();
+  return (entry) => {
+    const normalized = entry.url ? { ...entry, url: diagnosticUrl(entry.url) } : entry;
+    const key = [normalized.type, normalized.fatal, normalized.resourceType, normalized.url, normalized.message].join("\u0000");
+    const at = now();
+    const existing = index.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.lastAt = at;
+      return existing;
+    }
+    const recorded = { ...normalized, count: 1, firstAt: at, lastAt: at };
+    entries.push(recorded);
+    index.set(key, recorded);
+    return recorded;
+  };
+}
+
 export async function launchParticipant(browser, options, index) {
   const contextOptions = {
     viewport: { width: 1440, height: 900 },
@@ -43,14 +72,24 @@ export async function launchParticipant(browser, options, index) {
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   const errors = [];
-  page.on("pageerror", (error) => errors.push({ type: "pageerror", fatal: true, message: error.message }));
+  const recordDiagnostic = createDiagnosticRecorder(errors);
+  page.on("pageerror", (error) => recordDiagnostic({ type: "pageerror", fatal: true, message: error.message }));
   page.on("console", (message) => {
     if (message.type() !== "error" && message.type() !== "warning") return;
-    errors.push({ type: `console-${message.type()}`, fatal: false, message: message.text() });
+    const text = message.text();
+    const location = message.location();
+    recordDiagnostic({
+      type: `console-${message.type()}`,
+      fatal: message.type() === "error" && !text.startsWith("Failed to load resource:"),
+      url: location.url || undefined,
+      lineNumber: location.lineNumber,
+      columnNumber: location.columnNumber,
+      message: text,
+    });
   });
   page.on("requestfailed", (request) => {
     const message = request.failure()?.errorText ?? "unknown";
-    errors.push({
+    recordDiagnostic({
       type: "requestfailed",
       fatal: !/ERR_(?:ABORTED|CANCELED)/i.test(message),
       resourceType: request.resourceType(),
@@ -58,9 +97,14 @@ export async function launchParticipant(browser, options, index) {
       message,
     });
   });
+  page.on("response", (response) => {
+    const status = response.status();
+    if (status < 400) return;
+    recordDiagnostic({ type: "http-error", fatal: status >= 500, status, url: response.url(), message: `HTTP ${status}` });
+  });
   page.on("websocket", (socket) => {
-    socket.on("close", () => errors.push({ type: "websocket-close", fatal: false, url: socket.url(), message: "WebSocket closed" }));
-    socket.on("socketerror", (message) => errors.push({ type: "websocket-error", fatal: false, url: socket.url(), message }));
+    socket.on("close", () => recordDiagnostic({ type: "websocket-close", fatal: false, url: socket.url(), message: "WebSocket closed" }));
+    socket.on("socketerror", (message) => recordDiagnostic({ type: "websocket-error", fatal: false, url: socket.url(), message }));
   });
   // Playwright's external method uses legacy product language, so assemble it only at this boundary.
   const cdp = await context[["newCDP", "S", "ession"].join("")](page);

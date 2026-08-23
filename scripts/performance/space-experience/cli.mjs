@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
-import { parseCli, runDirectory, usageText } from "./config.mjs";
+import { measurementPlan, parseCli, runDirectory, usageText } from "./config.mjs";
 import { closeParticipant, launchParticipant, loadChromium } from "./browser.mjs";
 import { aggregateFailures } from "./errors.mjs";
 import { createMetricsSampler, enableCdpDomains, startCpuProfile, stopCpuProfile, takeHeapSnapshot, summarizeHeapSnapshot, diffHeapSummaries } from "./metrics.mjs";
@@ -105,11 +105,12 @@ async function writeManifest(path, manifest) {
 }
 
 export async function execute(options) {
+  const measurement = measurementPlan(options);
   const outDir = runDirectory(repoRoot, options);
   await mkdir(dirname(outDir), { recursive: true });
   await mkdir(outDir, { recursive: false });
   const tracesDir = join(outDir, "traces");
-  await mkdir(tracesDir);
+  if (measurement.traceRecording) await mkdir(tracesDir);
   const manifestPath = join(outDir, "manifest.json");
   const manifest = {
     runId: outDir.split("/").pop(),
@@ -119,6 +120,9 @@ export async function execute(options) {
     duration: options.duration,
     durationMs: options.durationMs,
     base: options.base,
+    measurementKind: measurement.kind,
+    measurement,
+    heapSnapshots: [],
     startedAt: new Date().toISOString(),
     outputDir: outDir,
   };
@@ -129,6 +133,7 @@ export async function execute(options) {
   let browserCdp = null;
   const people = [];
   const heapSummaries = new Map();
+  const heapSnapshots = [];
   const cleanupErrors = [];
   let sampler = null;
   let cpuProfileStates = [];
@@ -141,16 +146,14 @@ export async function execute(options) {
   process.on("SIGTERM", onTerminate);
 
   const snapshot = async (tag, person) => {
+    if (!measurement.heapSnapshots) return null;
     const fileTag = safeName(tag);
     const filePath = join(outDir, `heap-${fileTag}.heapsnapshot`);
     await person.page.waitForTimeout(1_000);
     await takeHeapSnapshot(person.cdp, filePath);
-    const summary = await summarizeHeapSnapshot(filePath);
-    summary.tag = tag;
-    summary.participant = person.name;
-    await writeFile(join(outDir, `heap-${fileTag}.summary.json`), JSON.stringify(summary, null, 2));
-    heapSummaries.set(tag, summary);
-    return summary;
+    const artifact = { tag, participant: person.name, file: filePath };
+    heapSnapshots.push(artifact);
+    return artifact;
   };
 
   const writeHeapDiffs = async (strict) => {
@@ -181,6 +184,31 @@ export async function execute(options) {
     return diffs;
   };
 
+  const finalizeHeapSnapshots = async () => {
+    if (!measurement.heapSnapshots) return;
+    const errors = [];
+    for (const artifact of heapSnapshots) {
+      try {
+        const summary = await summarizeHeapSnapshot(artifact.file);
+        summary.tag = artifact.tag;
+        summary.participant = artifact.participant;
+        const summaryFile = join(outDir, `heap-${safeName(artifact.tag)}.summary.json`);
+        await writeFile(summaryFile, JSON.stringify(summary, null, 2));
+        artifact.summaryFile = summaryFile;
+        heapSummaries.set(artifact.tag, summary);
+      } catch (error) {
+        errors.push(new Error(`heap summary failed for ${artifact.tag}`, { cause: error }));
+      }
+    }
+    manifest.heapSnapshots = heapSnapshots;
+    try {
+      await writeHeapDiffs(false);
+    } catch (error) {
+      errors.push(new Error("heap diff generation failed", { cause: error }));
+    }
+    if (errors.length > 0) throw new AggregateError(errors, "heap snapshot finalization failed");
+  };
+
   try {
     chromium = loadChromium(repoRoot);
     browser = await chromium.launch(browserOptions());
@@ -194,8 +222,10 @@ export async function execute(options) {
       await enableCdpDomains(person.cdp);
       people.push(person);
     }
-    sampler = createMetricsSampler({ participants: people, browserCdp, metricsPath: join(outDir, "metrics.ndjson") });
-    sampler.start();
+    if (measurement.metricsSampler) {
+      sampler = createMetricsSampler({ participants: people, browserCdp, metricsPath: join(outDir, "metrics.ndjson") });
+      sampler.start();
+    }
     await writeFile(join(outDir, "fixture-chat-upload.txt"), `Space profiler upload fixture for ${manifest.runId}\n`);
     const state = {
       options,
@@ -204,20 +234,23 @@ export async function execute(options) {
       anchor: people[0],
       recorder,
       signal: shutdown.signal,
+      measurement,
       startCpuProfiles: async () => {
         cpuProfileStates = await startParticipantCpuProfiles(people);
       },
       snapshot,
       fixturePath: join(outDir, "fixture-chat-upload.txt"),
       trace: (feature, cycle, action) =>
-        traceFeature({
-          participants: people,
-          browserCdp,
-          feature,
-          action,
-          outputPath: join(tracesDir, `trace-${safeName(feature)}-${cycle}.json`),
-          observeMs: options.mode === "profile" ? 2_000 : 750,
-        }),
+        measurement.traceRecording
+          ? traceFeature({
+              participants: people,
+              browserCdp,
+              feature,
+              action,
+              outputPath: join(tracesDir, `trace-${safeName(feature)}-${cycle}.json`),
+              observeMs: options.mode === "profile" ? 2_000 : 750,
+            })
+          : action(),
     };
     const result = await runWorkload(state);
     manifest.cycles = result.cycles;
@@ -259,21 +292,21 @@ export async function execute(options) {
         cleanupErrors.push(error);
       }
     }
-    const cpuResult = await stopParticipantCpuProfiles(cpuProfileStates, outDir);
-    manifest.cpuProfiles = cpuResult.summaries;
-    manifest.cpuProfileCoverage = summarizeParticipantCpuProfileCoverage(cpuResult.summaries, people);
-    if (!manifest.cpuProfileCoverage.valid) {
-      cleanupErrors.push(new Error(`CPU profile coverage is incomplete: captured ${manifest.cpuProfileCoverage.capturedParticipants}/${manifest.cpuProfileCoverage.expectedParticipants} Participants at ${(manifest.cpuProfileCoverage.durationRatio * 100).toFixed(1)}% minimum duration coverage`));
-    }
-    if (cpuResult.summaries.length > 0) {
-      const anchorSummary = cpuResult.summaries.find((summary) => summary.participantIndex === people[0]?.index);
-      if (anchorSummary) manifest.cpu = anchorSummary;
-    }
-    cleanupErrors.push(...cpuResult.errors);
-    try {
-      await writeHeapDiffs(primaryError === null);
-    } catch (error) {
-      cleanupErrors.push(error);
+    if (measurement.cpuProfiles) {
+      const cpuResult = await stopParticipantCpuProfiles(cpuProfileStates, outDir);
+      manifest.cpuProfiles = cpuResult.summaries;
+      manifest.cpuProfileCoverage = summarizeParticipantCpuProfileCoverage(cpuResult.summaries, people);
+      if (!manifest.cpuProfileCoverage.valid) {
+        cleanupErrors.push(new Error(`CPU profile coverage is incomplete: captured ${manifest.cpuProfileCoverage.capturedParticipants}/${manifest.cpuProfileCoverage.expectedParticipants} Participants at ${(manifest.cpuProfileCoverage.durationRatio * 100).toFixed(1)}% minimum duration coverage`));
+      }
+      if (cpuResult.summaries.length > 0) {
+        const anchorSummary = cpuResult.summaries.find((summary) => summary.participantIndex === people[0]?.index);
+        if (anchorSummary) manifest.cpu = anchorSummary;
+      }
+      cleanupErrors.push(...cpuResult.errors);
+    } else {
+      manifest.cpuProfiles = [];
+      manifest.cpuProfileCoverage = { skipped: true, reason: "snapshot-pass" };
     }
     try {
       manifest.features = await recorder.writeSupport();
@@ -300,6 +333,11 @@ export async function execute(options) {
       } catch (error) {
         cleanupErrors.push(error);
       }
+    }
+    try {
+      await finalizeHeapSnapshots();
+    } catch (error) {
+      cleanupErrors.push(error);
     }
     process.off("SIGINT", onInterrupt);
     process.off("SIGTERM", onTerminate);

@@ -33,6 +33,14 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export function supportFailed(recorder, feature) {
+  return recorder.supportStatus(feature) === "failed";
+}
+
+export function shouldContinueCycles(measurement, now, deadline) {
+  return measurement.singleCycle !== true && now < deadline;
+}
+
 export function createRecorder(outDir) {
   const stepsPath = join(outDir, "steps.ndjson");
   const support = new Map();
@@ -125,7 +133,7 @@ async function runMediaAndLayout(state, cycle) {
     },
     { feature: "microphone" },
   );
-  if (mediaSettled) {
+  if (mediaSettled && !supportFailed(recorder, "camera-video")) {
     await recorder.step(`microphone command quiet window ${cycle}`, () => wait(5_000, state.signal));
     const cameraReady = await recorder.step(
       `camera initial playback ${cycle}`,
@@ -215,6 +223,7 @@ async function runReactionAndHand(state, cycle) {
 async function runScreenShare(state, cycle) {
   const { people, anchor, recorder, trace } = state;
   const remote = people[1];
+  if (supportFailed(recorder, "screen-share") || supportFailed(recorder, "screen-share-zoom-pan")) return;
   await recorder.step(`screen share command quiet window ${cycle}`, () => wait(5_000, state.signal));
   await recorder.step(
     `screen share video trace ${cycle}`,
@@ -243,6 +252,7 @@ async function runPanels(state, cycle) {
   const { anchor, recorder, snapshot, trace } = state;
   for (const kind of scenario.panelKinds()) {
     const feature = `${kind}-panel`;
+    if (cycle > 1 && supportFailed(recorder, feature)) continue;
     if (kind === "transcript") {
       if (cycle === 1) await recorder.step(`probe ${kind} panel ${cycle}`, () => scenario.openPanel(anchor.page, kind), { feature, allowDisposition: true });
       continue;
@@ -318,17 +328,19 @@ async function runChat(state, cycle) {
     { feature: "chat-history" },
   );
   await recorder.step(`chat history scroll trace ${cycle}`, () => trace("chat-history-scroll", cycle, () => scenario.scrollChatHistory(anchor.page)), { feature: "chat-history" });
-  await recorder.step(
-    `chat file upload ${cycle}`,
-    async () => {
-      const fileName = await scenario.uploadChatFile(anchor.page, fixturePath);
-      await remote.page
-        .getByRole("button", { name: new RegExp(`^Download ${escapeRegExp(fileName)}$`, "i") })
-        .last()
-        .waitFor({ state: "visible", timeout: 20_000 });
-    },
-    { feature: "chat-file-upload" },
-  );
+  if (!supportFailed(recorder, "chat-file-upload")) {
+    await recorder.step(
+      `chat file upload ${cycle}`,
+      async () => {
+        const fileName = await scenario.uploadChatFile(anchor.page, fixturePath);
+        await remote.page
+          .getByRole("button", { name: new RegExp(`^Download ${escapeRegExp(fileName)}$`, "i") })
+          .last()
+          .waitFor({ state: "visible", timeout: 20_000 });
+      },
+      { feature: "chat-file-upload" },
+    );
+  }
   await recorder.step(`close remote chat ${cycle}`, () => scenario.closePanel(remote.page, "chat"), { feature: "chat-receive" });
 }
 
@@ -347,7 +359,11 @@ async function runLeaveRejoin(state, cycle) {
 
 export async function runWorkload(state) {
   await runJoinPhase(state);
-  await state.startCpuProfiles();
+  const measurement = state.measurement ?? {
+    cpuProfiles: state.options.snapshotPass !== true,
+    singleCycle: state.options.snapshotPass === true,
+  };
+  if (measurement.cpuProfiles) await state.startCpuProfiles();
   const startedAt = Date.now();
   const deadline = startedAt + state.options.durationMs;
   const idleMs = state.options.mode === "profile" ? 15_000 : 5_000;
@@ -365,6 +381,6 @@ export async function runWorkload(state) {
     await state.recorder.step(`idle window ${cycle}`, () => wait(state.options.mode === "profile" ? 20_000 : 5_000, state.signal), { feature: "idle" });
     if (cycle === 1 || (state.options.mode === "profile" && cycle === 2)) await runLeaveRejoin(state, cycle);
     cycle += 1;
-  } while (Date.now() < deadline);
+  } while (shouldContinueCycles(measurement, Date.now(), deadline));
   return { cycles: cycle - 1, startedAt, finishedAt: Date.now(), actualDurationMs: Date.now() - startedAt };
 }

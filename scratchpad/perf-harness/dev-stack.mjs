@@ -314,6 +314,7 @@ async function removeOwnedObjectStorageVolume(candidate) {
 
 async function up() {
   await mkdir(runtimeRoot, { recursive: true });
+  await Promise.all(["api", "sync", "web"].map((service) => writeFile(join(runtimeRoot, `${service}.log`), "")));
 
   // 1. Backing resources (idempotent scripts own container lifecycle).
   // Keep profiler state isolated from the shared development database.
@@ -324,11 +325,9 @@ async function up() {
     await sleep(500);
     if (attempt === 59) throw new Error("postgres container did not become ready");
   }
-  const hasDb = await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-tAc", `SELECT 1 FROM pg_database WHERE datname = '${DATABASE_NAME}'`]);
-  if (!hasDb.out.trim()) {
-    await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${DATABASE_NAME}"`]);
-  }
-  log(`postgres ready (${DATABASE_NAME} present)`);
+  await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${DATABASE_NAME}" WITH (FORCE)`]);
+  await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${DATABASE_NAME}"`]);
+  log(`postgres ready (${DATABASE_NAME} recreated)`);
   await run("bash", ["apps/api/scripts/dev-redis.sh", "start"]);
 
   // 2. Migrations.
