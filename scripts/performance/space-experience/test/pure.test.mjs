@@ -17,7 +17,10 @@ test("CLI validates mode duration and Participant limits", () => {
   assert.equal(parseCli(["shakedown", "--seconds", "300", "--participants", "4"]).durationMs, 300_000);
   const snapshotPass = parseCli(["shakedown", "--snapshot-pass", "--seconds", "60"]);
   assert.equal(snapshotPass.snapshotPass, true);
+  assert.equal(parseCli(["shakedown", "--trace-pass"]).tracePass, true);
   assert.throws(() => parseCli(["profile", "--snapshot-pass"]), /only valid for shakedown/);
+  assert.throws(() => parseCli(["profile", "--trace-pass"]), /only valid for shakedown/);
+  assert.throws(() => parseCli(["shakedown", "--trace-pass", "--snapshot-pass"]), /mutually exclusive/);
   assert.throws(() => parseCli(["shakedown", "--snapshot-pass", "--seconds", "59"]), /between 60 and 300/);
   assert.throws(() => parseCli(["profile", "--minutes", "29"]), /between 30 and 45/);
   assert.throws(() => parseCli(["shakedown", "--seconds", "301"]), /between 60 and 300/);
@@ -31,8 +34,17 @@ test("measurement plan keeps runtime profiling separate from the one-cycle snaps
     heapSnapshots: false,
     metricsSampler: true,
     cpuProfiles: true,
-    traceRecording: true,
+    traceRecording: false,
     singleCycle: false,
+  });
+  const traceMeasurement = measurementPlan(parseCli(["shakedown", "--trace-pass"]));
+  assert.deepEqual(traceMeasurement, {
+    kind: "trace-pass",
+    heapSnapshots: false,
+    metricsSampler: false,
+    cpuProfiles: false,
+    traceRecording: true,
+    singleCycle: true,
   });
   const snapshotMeasurement = measurementPlan(parseCli(["shakedown", "--snapshot-pass"]));
   assert.deepEqual(snapshotMeasurement, {
@@ -44,6 +56,7 @@ test("measurement plan keeps runtime profiling separate from the one-cycle snaps
     singleCycle: true,
   });
   assert.equal(shouldContinueCycles(runtimeMeasurement, 0, 1), true);
+  assert.equal(shouldContinueCycles(traceMeasurement, 0, 1), false);
   assert.equal(shouldContinueCycles(snapshotMeasurement, 0, 1), false);
 });
 

@@ -52,6 +52,7 @@ export function usageText() {
     "  --base <url>          local Chalk web base URL",
     "  --storage-state <p>   Playwright storage state for the smoke-test login",
     "  --output-root <p>     private directory for run artifacts",
+    "  --trace-pass          shakedown-only browser trace pass",
     "  --snapshot-pass       shakedown-only heap snapshot pass",
     "  --help                print this text",
   ].join("\n");
@@ -70,6 +71,7 @@ export function parseCli(argv, env = process.env) {
     storageState: env.CHALK_PERF_STORAGE_STATE,
     outputRoot: env.CHALK_PERF_OUTPUT_ROOT,
     duration: mode === "profile" ? PROFILE_MINUTES.default : SHAKEDOWN_SECONDS.default,
+    tracePass: false,
     snapshotPass: false,
   };
   let explicitDuration = false;
@@ -102,6 +104,11 @@ export function parseCli(argv, env = process.env) {
       options.snapshotPass = true;
       continue;
     }
+    if (argument === "--trace-pass") {
+      if (mode !== "shakedown") throw new UsageError("--trace-pass is only valid for shakedown");
+      options.tracePass = true;
+      continue;
+    }
     if (argument === "--duration" || argument === "--minutes" || argument === "--seconds") {
       const expected = mode === "profile" ? "--minutes" : "--seconds";
       if (argument !== "--duration" && argument !== expected) throw new UsageError(`${argument} is only valid for ${argument === "--minutes" ? "profile" : "shakedown"}`);
@@ -114,6 +121,7 @@ export function parseCli(argv, env = process.env) {
   }
 
   if (options.participants < PARTICIPANT_LIMITS.min || options.participants > PARTICIPANT_LIMITS.max) throw new UsageError("--participants must be between 3 and 4");
+  if (options.tracePass && options.snapshotPass) throw new UsageError("--trace-pass and --snapshot-pass are mutually exclusive");
   const bounds = mode === "profile" ? PROFILE_MINUTES : SHAKEDOWN_SECONDS;
   if (options.duration < bounds.min || options.duration > bounds.max) throw new UsageError(`${mode} duration must be between ${bounds.min} and ${bounds.max} ${mode === "profile" ? "minutes" : "seconds"}`);
   if (explicitDuration && mode === "shakedown" && !Number.isInteger(options.duration)) throw new UsageError("shakedown duration must be an integer number of seconds");
@@ -123,13 +131,14 @@ export function parseCli(argv, env = process.env) {
 
 export function measurementPlan(options) {
   const snapshotPass = options.snapshotPass === true;
+  const tracePass = options.tracePass === true;
   return Object.freeze({
-    kind: snapshotPass ? "snapshot-pass" : "runtime-profile",
+    kind: snapshotPass ? "snapshot-pass" : tracePass ? "trace-pass" : "runtime-profile",
     heapSnapshots: snapshotPass,
-    metricsSampler: !snapshotPass,
-    cpuProfiles: !snapshotPass,
-    traceRecording: !snapshotPass,
-    singleCycle: snapshotPass,
+    metricsSampler: !snapshotPass && !tracePass,
+    cpuProfiles: !snapshotPass && !tracePass,
+    traceRecording: tracePass,
+    singleCycle: snapshotPass || tracePass,
   });
 }
 

@@ -311,7 +311,7 @@ export async function execute(options) {
       cleanupErrors.push(...cpuResult.errors);
     } else {
       manifest.cpuProfiles = [];
-      manifest.cpuProfileCoverage = { skipped: true, reason: "snapshot-pass" };
+      manifest.cpuProfileCoverage = { skipped: true, reason: measurement.kind };
     }
     try {
       manifest.features = await recorder.writeSupport();
