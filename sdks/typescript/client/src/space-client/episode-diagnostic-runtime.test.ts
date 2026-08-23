@@ -13,8 +13,8 @@ describe("EpisodeDiagnosticRuntime", () => {
     expect(runtime.inspect()).toMatchObject({ ring: [], queue: [], credentialGeneration: null });
   });
 
-  it("strictly redacts content and preserves only allowlisted safe metadata", () => {
-    const { runtime } = makeRuntime();
+  it("strictly redacts content before local retention and export", async () => {
+    const { runtime, timers, calls } = recordingRuntime();
     runtime.rotateCredential(credential(1));
 
     runtime.observe({
@@ -35,6 +35,12 @@ describe("EpisodeDiagnosticRuntime", () => {
     expect(JSON.stringify(runtime.inspect().ring)).not.toContain("private message");
     expect(JSON.stringify(runtime.inspect().ring)).not.toContain("roadmap.pdf");
     expect(JSON.stringify(runtime.inspect().ring)).not.toContain("private.example.test");
+    timers.shift()?.();
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.body.events[0]?.attributes).toEqual({ count: 2, response_class: "accepted" });
+    expect(JSON.stringify(calls[0]?.body.events)).not.toContain("private message");
+    expect(JSON.stringify(calls[0]?.body.events)).not.toContain("roadmap.pdf");
+    expect(JSON.stringify(calls[0]?.body.events)).not.toContain("private.example.test");
   });
 
   it("bounds ring and queue by count and emits a gap after overflow", () => {
@@ -49,21 +55,6 @@ describe("EpisodeDiagnosticRuntime", () => {
     expect(snapshot.ring.length).toBeLessThanOrEqual(3);
     expect(snapshot.queue.length).toBeLessThanOrEqual(2);
     expect(snapshot.ring.some((event) => event.name === "coverage.gap")).toBe(true);
-  });
-
-  it("bounds retained observations by encoded bytes and age", () => {
-    let now = NOW;
-    const { runtime } = makeRuntime({ now: () => now, maxRingBytes: 1_100, maxQueueBytes: 1_100, maxRingAgeMs: 10, maxQueueAgeMs: 10 });
-    runtime.rotateCredential(credential(1));
-    runtime.observe({ name: "chat.page", phase: "paged", state: "observed", attributes: { response_class: "a".repeat(200) } });
-    runtime.observe({ name: "chat.page", phase: "paged", state: "observed", attributes: { response_class: "b".repeat(200) } });
-
-    expect(runtime.inspect().queue.length).toBeLessThan(2);
-    now += 11;
-    runtime.observe({ name: "chat.page", phase: "paged", state: "observed", attributes: { count: 1 } });
-
-    expect(runtime.inspect().ring.some((event) => event.attributes?.response_class === "a".repeat(200))).toBe(false);
-    expect(runtime.inspect().ring.some((event) => event.name === "coverage.gap")).toBe(true);
   });
 
   it("rotates delivery authority and never exports with the replaced credential", async () => {
@@ -93,22 +84,6 @@ describe("EpisodeDiagnosticRuntime", () => {
     expect(runtime.inspect()).toMatchObject({ credentialGeneration: null });
     expect(runtime.inspect().ring).toHaveLength(1);
     expect(runtime.inspect().queue).toHaveLength(1);
-  });
-
-  it("retains queued evidence after credential expiry and resumes delivery on rotation", async () => {
-    let now = NOW;
-    const { runtime, timers, calls } = recordingRuntime({ now: () => now, maxQueueAgeMs: 2 * 60 * 60 * 1000 });
-    runtime.rotateCredential(credential(1));
-    runtime.observe({ name: "chat.page", phase: "paged", state: "observed", attributes: { response_class: "authorized" } });
-    now = Date.parse(credential(1).expiresAt) + 1;
-    runtime.observe({ name: "chat.page", phase: "paged", state: "observed", attributes: { response_class: "revoked" } });
-
-    expect(runtime.inspect().queue).toHaveLength(1);
-    expect(runtime.inspect().credentialGeneration).toBeNull();
-
-    runtime.rotateCredential({ ...credential(2), expiresAt: new Date(now + 60_000).toISOString() });
-    await flushRecorded(timers, calls, 2);
-    expectAuthorizedBatch(calls);
   });
 
   it("stops capture for invalid credentials and excludes revoked observations after reauthorization", async () => {

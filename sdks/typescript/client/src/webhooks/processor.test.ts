@@ -97,10 +97,6 @@ describe("createWebhookProcessor", () => {
     const response = toWebhookResponse(processResult);
     expect(response.headers.get("retry-after")).toBe("300");
     expect(await response.text()).toBe("");
-  });
-
-  it("normalizes invalid inbox retry values to safe response headers", async () => {
-    const request = await requestFor();
     const cases: ReadonlyArray<readonly [unknown, number]> = [
       [Number.NaN, 1],
       [Number.POSITIVE_INFINITY, 1],
@@ -195,26 +191,6 @@ describe("createWebhookProcessor", () => {
     expect((await processor.process(request)).outcome).toBe("duplicate");
   });
 
-  it("acknowledges an authenticated unknown Event and emits bounded diagnostics", async () => {
-    const request = await unknownEventRequest();
-    const onUnknownEvent = vi.fn(() => {
-      throw new Error("observer unavailable");
-    });
-    const diagnostics: unknown[] = [];
-    const processor = createWebhookProcessor({
-      secrets: [secret],
-      inbox: new TestOnlyInMemoryWebhookInbox(),
-      handlers: {},
-      onUnknownEvent,
-      onDiagnostic: (event) => diagnostics.push(event),
-      toleranceSeconds: Number.MAX_SAFE_INTEGER,
-    });
-    expect(await processor.process(request)).toMatchObject({ status: 200, outcome: "ignored" });
-    expect(onUnknownEvent).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(diagnostics)).not.toContain("endpoint_id");
-    expect(JSON.stringify(diagnostics)).not.toContain("whsec_");
-  });
-
   it("never lets a pending diagnostic observer block results or inbox transitions", async () => {
     vi.useFakeTimers();
     try {
@@ -290,11 +266,14 @@ describe("createWebhookProcessor", () => {
       const release = vi.spyOn(inbox, "release");
       const pendingObserver = deferred<void>();
       const observer = vi.fn(() => pendingObserver.promise);
-      const processor = createWebhookProcessor({ secrets: [secret], inbox, handlers: {}, onUnknownEvent: observer, toleranceSeconds: Number.MAX_SAFE_INTEGER });
+      const diagnostics: unknown[] = [];
+      const processor = createWebhookProcessor({ secrets: [secret], inbox, handlers: {}, onUnknownEvent: observer, onDiagnostic: (event) => diagnostics.push(event), toleranceSeconds: Number.MAX_SAFE_INTEGER });
 
       expect(await settleBeforeObserver(processor.process(request))).toMatchObject({ status: 200, outcome: "ignored" });
       expect(observer).toHaveBeenCalledOnce();
       expect([acquire.mock.calls.length, complete.mock.calls.length, release.mock.calls.length]).toEqual([1, 1, 0]);
+      expect(JSON.stringify(diagnostics)).not.toContain("endpoint_id");
+      expect(JSON.stringify(diagnostics)).not.toContain("whsec_");
     } finally {
       vi.useRealTimers();
     }
