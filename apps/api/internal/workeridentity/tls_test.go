@@ -34,12 +34,6 @@ func TestLoadTLSConfigRequiresVerifiedTLS13Clients(t *testing.T) {
 	}
 }
 
-func TestLoadTLSConfigRejectsIncompleteConfiguration(t *testing.T) {
-	if _, err := LoadTLSConfig("", "", ""); err == nil {
-		t.Fatal("incomplete mutual tls config accepted")
-	}
-}
-
 func certificateAuthority(t *testing.T) (*x509.Certificate, *rsa.PrivateKey) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

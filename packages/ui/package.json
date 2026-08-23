@@ -196,11 +196,9 @@
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.18",
-    "@testing-library/react": "^16.3.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.2.3",
-    "happy-dom": "^20.11.2",
     "react-dom": "19.2.7",
     "tailwindcss": "^4.1.18",
     "tw-animate-css": "^1.3.0",

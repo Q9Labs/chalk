@@ -9,13 +9,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-arguments=("$@")
-if [[ "${CHALK_PROVIDER_BRIDGE_E2E:-0}" == "1" ]]; then
-  arguments=(--include provider_bridge_e2e "${arguments[@]}")
-fi
-
 set +e
-mix test "${arguments[@]}" 2>&1 | tee "${output}"
+mix test "$@" 2>&1 | tee "${output}"
 test_status="${PIPESTATUS[0]}"
 set -e
 

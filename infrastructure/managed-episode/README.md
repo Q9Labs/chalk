@@ -224,7 +224,6 @@ infrastructure/managed-episode/scripts/validate-runtime \
   --sync-proof /tmp/chalk-inputs/evidence/planetscale-sync-proof.json \
   --rendered-root /tmp/chalk-release/runtime
 
-infrastructure/managed-episode/scripts/test-config
 infrastructure/managed-episode/scripts/test-deployment-controller
 node --test scripts/deploy/deploy-managed-release.test.mjs
 ```

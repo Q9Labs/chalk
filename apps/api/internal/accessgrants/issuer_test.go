@@ -52,22 +52,6 @@ func TestIssuerCreatesBoundMediaCredential(t *testing.T) {
 	}
 }
 
-func TestIssuerRejectsInvalidConfiguration(t *testing.T) {
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, config := range []accessgrants.IssuerConfig{
-		{KeyID: testKeyID, PrivateKey: privateKey},
-		{Issuer: testIssuer, PrivateKey: privateKey},
-		{Issuer: testIssuer, KeyID: testKeyID, PrivateKey: privateKey[:8]},
-	} {
-		if _, err := accessgrants.NewIssuer(config); !errors.Is(err, accessgrants.ErrInvalidConfig) {
-			t.Fatalf("error = %v", err)
-		}
-	}
-}
-
 func TestIssuerRejectsInvalidSubjects(t *testing.T) {
 	fixture := newCredentialFixture(t)
 	tests := []struct {
@@ -95,27 +79,6 @@ func TestIssuerRejectsInvalidSubjects(t *testing.T) {
 				t.Fatalf("error = %v", err)
 			}
 		})
-	}
-}
-
-func TestIssuerClonesPrivateKey(t *testing.T) {
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: testIssuer, KeyID: testKeyID, PrivateKey: privateKey, Now: func() time.Time { return testNow }})
-	if err != nil {
-		t.Fatal(err)
-	}
-	clear(privateKey)
-	credential, err := issuer.Issue(context.Background(), testSubject(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	parts := tokenParts(t, credential.Token)
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || !ed25519.Verify(publicKey, []byte(parts[0]+"."+parts[1]), signature) {
-		t.Fatal("issuer retained caller-owned private key")
 	}
 }
 

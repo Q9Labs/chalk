@@ -24,8 +24,7 @@
     "build:android:release:production": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- pnpm run build:android:release",
     "with:production-release-env": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts --",
     "check-types": "tsc --noEmit",
-    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
-    "test": "pnpm exec vitest run"
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",

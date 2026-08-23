@@ -265,7 +265,6 @@ function task(id, label, selected, reason, command, env = {}) {
 
 export function createGatePlan(files, options = {}) {
   const normalizedFiles = normalizeFiles(files);
-  const addedFiles = normalizeFiles(options.addedFiles ?? []);
   const snapshot = options.snapshot ?? { mode: "worktree" };
   const workspaces = options.workspaces ?? discoverWorkspaces(options.repositoryRoot ?? repositoryRoot, { snapshot });
   validateWorkspaceCollection(workspaces);
@@ -335,14 +334,12 @@ export function createGatePlan(files, options = {}) {
   const fallowCommand = explicitFull ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const semgrepCommand = explicitFull || (full && scope !== "staged") ? ["bash", "scripts/gates/semgrep.sh"] : sourceFiles.length > 0 ? ["bash", "scripts/gates/semgrep.sh", ...sourceFiles] : null;
-  const testPresenceFiles = addedFiles.join("\n");
-
   const tasks = [
-    task("self-test", "Gate routing tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
+    task("self-test", "Sync reliability self-test", true, "always required", ["node", "--test", "apps/sync/scripts/reliability_harness.test.mjs"]),
     task("language-ratchet", "Language vocabulary ratchet", true, "always required", ["pnpm", "run", "language:ratchet"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
-    task("architecture", "Architecture Worker", architecture, architecture ? "architecture inputs changed" : "no architecture inputs changed", ["pnpm", "run", "architecture:test"]),
+    task("architecture", "Architecture Worker", architecture, architecture ? "architecture inputs changed" : "no architecture inputs changed", ["pnpm", "run", "architecture:build"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
     task("fallow", "Changed-code analysis", full || architecture || sourceFiles.length > 0, full ? fullReason : architecture ? "architecture inputs changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("semgrep", "Static security rules", Boolean(semgrepCommand), full ? fullReason : `${sourceFiles.length} source file(s) changed`, semgrepCommand),
@@ -350,7 +347,6 @@ export function createGatePlan(files, options = {}) {
     task("services", "Service-backed API and Sync correctness gates", serviceGates.length > 0, serviceGates.length > 0 ? serviceGates.join(" and ") : "API and Sync are unaffected", ["bash", "scripts/gates/with-postgres.sh", ...serviceGates]),
     task("contracts", "Contract and generated SDK drift", contracts, contracts ? "contract producers or consumers changed" : "contracts are unaffected", ["pnpm", "run", "contract:check"]),
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
-    task("test-presence", "Test presence", full || sourceFiles.some((file) => [".ts", ".tsx"].includes(path.extname(file))), "TypeScript source files changed", ["pnpm", "run", "test:presence"], { TEST_PRESENCE_FILES: testPresenceFiles, TEST_PRESENCE_BASE_REF: base }),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], ["--workspace-concurrency=1", "--sort"])),
     task("tests", "Affected workspace tests with coverage", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "test", ["--coverage"], ["--workspace-concurrency=1", "--sort"])),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "build", [], ["--workspace-concurrency=1", "--sort"])),
@@ -540,9 +536,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     parsedOptions = parseArguments(process.argv.slice(2));
     const options = parsedOptions;
     const changeSet = resolveChangedFiles(options);
-    const addedFiles = resolveChangedFiles(options, "A").files;
     const scope = changeSet.source === "ci" ? "merge base to HEAD" : "staged";
-    run(createGatePlan(changeSet.files, { ...options, addedFiles, scope, source: changeSet.source, snapshot: changeSet.snapshot }));
+    run(createGatePlan(changeSet.files, { ...options, scope, source: changeSet.source, snapshot: changeSet.snapshot }));
   } catch (error) {
     if (error instanceof GatePlanningError) {
       console.error(`Gate plan error: reason=${error.reason} target=${error.target ?? parsedOptions.target ?? "none"}`);

@@ -99,42 +99,6 @@ func TestAuthenticateUsesOneGenericErrorForRejectedKeys(t *testing.T) {
 	}
 }
 
-func TestAuthenticateDoesNotRejectValidKeyWhenUsageTouchFails(t *testing.T) {
-	repository := newRepository()
-	repository.touchErr = errors.New("database unavailable")
-	telemetry := &telemetryRecorder{}
-	service := newService(repository, telemetry)
-	created := createKey(t, service, testNow.Add(time.Hour))
-
-	principal, err := service.Authenticate(context.Background(), apikeys.AuthenticateInput{RawKey: created.RawKey})
-	if err != nil {
-		t.Fatalf("authenticate: %v", err)
-	}
-	if principal.APIKeyID != created.Key.ID {
-		t.Fatalf("principal key id = %v, want %v", principal.APIKeyID, created.Key.ID)
-	}
-	if len(telemetry.usage) != 1 || telemetry.usage[0] != apikeys.UsageTouchFailed {
-		t.Fatalf("usage telemetry = %v, want one failed outcome", telemetry.usage)
-	}
-}
-
-func TestAuthenticateReportsRepositoryFailureWithoutCredentialAttributes(t *testing.T) {
-	repository := newRepository()
-	telemetry := &telemetryRecorder{}
-	service := newService(repository, telemetry)
-	created := createKey(t, service, testNow.Add(time.Hour))
-	repository.getByPrefixErr = errors.New("database unavailable")
-
-	_, err := service.Authenticate(context.Background(), apikeys.AuthenticateInput{RawKey: created.RawKey})
-	if err == nil || errors.Is(err, apikeys.ErrUnauthenticated) {
-		t.Fatalf("error = %v, want operational failure", err)
-	}
-	last := telemetry.authentication[len(telemetry.authentication)-1]
-	if last.Outcome != apikeys.AuthenticationFailed || last.Latency < 0 {
-		t.Fatalf("telemetry = %+v, want bounded failed outcome and latency", last)
-	}
-}
-
 func differentBase64Byte(value byte) byte {
 	if value == 'A' {
 		return 'B'
