@@ -1,10 +1,10 @@
 import { join } from "node:path";
 
-export const PROFILE_MINUTES = Object.freeze({ min: 30, max: 45, default: 30 });
-export const SHAKEDOWN_SECONDS = Object.freeze({ min: 60, max: 300, default: 60 });
-export const PARTICIPANT_LIMITS = Object.freeze({ min: 3, max: 4, default: 4 });
+const PROFILE_MINUTES = Object.freeze({ min: 30, max: 45, default: 30 });
+const SHAKEDOWN_SECONDS = Object.freeze({ min: 60, max: 300, default: 60 });
+const PARTICIPANT_LIMITS = Object.freeze({ min: 3, max: 4, default: 4 });
 
-export class UsageError extends Error {
+class UsageError extends Error {
   constructor(message) {
     super(message);
     this.name = "UsageError";

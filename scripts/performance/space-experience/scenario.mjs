@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
+
 import { FeatureUnreachableError, FeatureUnsupportedError } from "./errors.mjs";
 import { clickFloatingControl, clickVisibleControl, revealFloatingControls } from "./browser.mjs";
 
@@ -16,6 +19,11 @@ const LAYOUT_LABELS = {
   spotlight: /spotlight/i,
   presentation: /presentation/i,
 };
+
+const MICROPHONE_CONTROL = /^(Mute|Unmute)( microphone)?$/i;
+const CAMERA_CONTROL = /^(Turn on camera|Turn off camera|Start Video|Stop Video|Camera)$/i;
+const SCREEN_SHARE_CONTROL = /^(Share Screen|Stop Share|Share screen|Stop share|Share)$/i;
+const HAND_CONTROL = /^(Raise hand|Lower hand|Raise|Lower)$/i;
 
 async function toolbarLabels(page) {
   await revealFloatingControls(page);
@@ -42,87 +50,101 @@ async function waitForControlChange(page, before, beforePressed, matcher, descri
     });
 }
 
-export async function toggleMicrophone(page) {
+async function toggleControl(page, matcher, feature, description) {
   const labels = await toolbarLabels(page);
-  const state = labels.find((entry) => /^(Mute|Unmute)$/i.test(entry.label ?? ""));
+  const state = labels.find((entry) => matcher.test(entry.label ?? ""));
   const before = state?.label ?? "";
-  if (!before) throw new FeatureUnreachableError("microphone", "microphone control is not visible");
-  await clickFloatingControl(page, /^(Mute|Unmute)$/i, "microphone");
-  await waitForControlChange(page, before, state.pressed, /^(Mute|Unmute)$/i, "microphone");
+  if (!before) throw new FeatureUnreachableError(feature, `${description} control is not visible`);
+  await clickFloatingControl(page, matcher, description);
+  await waitForControlChange(page, before, state.pressed, matcher, description);
+  const after = (await toolbarLabels(page)).find((entry) => matcher.test(entry.label ?? ""));
+  return after?.pressed === "true";
+}
+
+export async function toggleMicrophone(page) {
+  await toggleControl(page, MICROPHONE_CONTROL, "microphone", "microphone");
 }
 
 export async function toggleCamera(page) {
-  const labels = await toolbarLabels(page);
-  const state = labels.find((entry) => /^(Start|Stop) Video$|^Camera$/i.test(entry.label ?? ""));
-  const before = state?.label ?? "";
-  if (!before) throw new FeatureUnreachableError("camera-video", "camera control is not visible");
-  await clickFloatingControl(page, /^(Start|Stop) Video$|^Camera$/i, "camera-video");
-  await waitForControlChange(page, before, state.pressed, /^(Start|Stop) Video$|^Camera$/i, "camera-video");
-  const after = (await toolbarLabels(page)).find((entry) => /^(Start|Stop) Video$|^Camera$/i.test(entry.label ?? ""));
-  return after?.pressed === "true";
+  return toggleControl(page, CAMERA_CONTROL, "camera-video", "camera-video");
 }
 
 export async function toggleScreenShare(page) {
-  const labels = await toolbarLabels(page);
-  const state = labels.find((entry) => /^(Share Screen|Stop Share|Share screen|Stop share|Share)$/i.test(entry.label ?? ""));
-  const before = state?.label ?? "";
-  if (!before) throw new FeatureUnreachableError("screen-share", "screen share control is not visible");
-  await clickFloatingControl(page, /^(Share Screen|Stop Share|Share screen|Stop share|Share)$/i, "screen-share");
-  await waitForControlChange(page, before, state.pressed, /^(Share Screen|Stop Share|Share screen|Stop share|Share)$/i, "screen-share");
-  const after = (await toolbarLabels(page)).find((entry) => /^(Share Screen|Stop Share|Share screen|Stop share|Share)$/i.test(entry.label ?? ""));
-  return after?.pressed === "true";
+  return toggleControl(page, SCREEN_SHARE_CONTROL, "screen-share", "screen-share");
 }
 
 export async function toggleHandRaise(page) {
-  const labels = await toolbarLabels(page);
-  const state = labels.find((entry) => /^(Raise hand|Lower hand|Raise|Lower)$/i.test(entry.label ?? ""));
-  const before = state?.label ?? "";
-  if (!before) throw new FeatureUnreachableError("hand-raise", "hand control is not visible");
-  await clickFloatingControl(page, /^(Raise hand|Lower hand|Raise|Lower)$/i, "hand-raise");
-  await waitForControlChange(page, before, state.pressed, /^(Raise hand|Lower hand|Raise|Lower)$/i, "hand-raise");
-  const after = (await toolbarLabels(page)).find((entry) => /^(Raise hand|Lower hand|Raise|Lower)$/i.test(entry.label ?? ""));
-  return after?.pressed === "true";
+  return toggleControl(page, HAND_CONTROL, "hand-raise", "hand-raise");
 }
 
 export async function chooseReaction(page, emoji = "👍") {
-  await clickFloatingControl(page, /^(Reactions|React)$/i, "reactions");
-  const picker = page.locator('[role="toolbar"][aria-label="Reactions"]:visible, [aria-label="Reaction picker"]:visible').last();
-  if (!(await picker.isVisible())) throw new FeatureUnreachableError("reactions", "reaction picker did not open");
-  await clickVisibleControl(page, new RegExp(`^React with ${emoji.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), "reaction option", picker);
-  await page.keyboard.press("Escape");
-  await page
-    .waitForFunction(
-      () =>
-        ![...document.querySelectorAll('[role="toolbar"][aria-label="Reactions"], [aria-label="Reaction picker"]')].some((node) => {
-          const style = getComputedStyle(node);
-          const rect = node.getBoundingClientRect();
-          return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
-        }),
-      undefined,
-      { timeout: 5_000 },
-    )
-    .catch(() => {
-      throw new Error("reaction picker did not close");
-    });
+  try {
+    await clickFloatingControl(page, /^(Reactions|React)$/i, "reactions");
+    const picker = page.locator('[role="toolbar"][aria-label="Reactions"]:visible, [aria-label="Reaction picker"]:visible').last();
+    if (!(await picker.isVisible())) throw new FeatureUnreachableError("reactions", "reaction picker did not open");
+    await clickVisibleControl(page, new RegExp(`^React with ${emoji.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), "reaction option", picker);
+    await page.keyboard.press("Escape");
+    await page
+      .waitForFunction(
+        () =>
+          ![...document.querySelectorAll('[role="toolbar"][aria-label="Reactions"], [aria-label="Reaction picker"]')].some((node) => {
+            const style = getComputedStyle(node);
+            const rect = node.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+          }),
+        undefined,
+        { timeout: 5_000 },
+      )
+      .catch(() => {
+        throw new Error("reaction picker did not close");
+      });
+  } finally {
+    await dismissOverlays(page);
+  }
+}
+
+async function panelSurface(page, kind) {
+  const definition = PANEL_DEFINITIONS[kind];
+  if (kind === "settings") {
+    const named = page.getByRole("dialog", { name: /^Space settings$/i });
+    if ((await named.count()) > 0) return named.last();
+  }
+  return page.locator(definition.surface).last();
+}
+
+async function dismissOverlays(page) {
+  for (let index = 0; index < 2; index += 1) {
+    try {
+      await page.keyboard.press("Escape");
+    } catch {
+      return;
+    }
+  }
 }
 
 export async function openPanel(page, kind) {
   const definition = PANEL_DEFINITIONS[kind];
   if (!definition) throw new Error(`unknown panel ${kind}`);
-  const click = kind === "settings" || kind === "info" ? clickVisibleControl : clickFloatingControl;
-  await click(page, definition.control, `${kind} panel`);
-  const surface = page.locator(definition.surface).last();
-  await surface.waitFor({ state: "visible", timeout: kind === "whiteboard" ? 30_000 : 10_000 });
-  return surface;
+  try {
+    const click = kind === "settings" || kind === "info" ? clickVisibleControl : clickFloatingControl;
+    await click(page, definition.control, `${kind} panel`);
+    const surface = await panelSurface(page, kind);
+    await surface.waitFor({ state: "visible", timeout: kind === "whiteboard" ? 30_000 : 10_000 });
+    return surface;
+  } catch (error) {
+    await dismissOverlays(page);
+    throw error;
+  }
 }
 
 export async function closePanel(page, kind) {
   const definition = PANEL_DEFINITIONS[kind];
   if (!definition) throw new Error(`unknown panel ${kind}`);
+  const surface = await panelSurface(page, kind);
   if (kind === "settings" || kind === "info" || kind === "chat" || kind === "participants") {
-    const closePattern = kind === "settings" ? /close settings/i : kind === "info" ? /close space details/i : kind === "chat" ? /close chat/i : /close participants panel/i;
+    const closePattern = kind === "settings" ? /^Close settings$/i : kind === "info" ? /close space details/i : kind === "chat" ? /close chat/i : /close participants panel/i;
     try {
-      await clickVisibleControl(page, closePattern, `${kind} close control`);
+      await clickVisibleControl(page, closePattern, `${kind} close control`, surface);
     } catch (error) {
       if (!(error instanceof FeatureUnreachableError)) throw error;
       const toggle = kind === "settings" || kind === "info" ? clickVisibleControl : clickFloatingControl;
@@ -133,7 +155,6 @@ export async function closePanel(page, kind) {
   } else {
     await page.keyboard.press("Escape");
   }
-  const surface = page.locator(definition.surface).last();
   await surface.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {
     throw new Error(`${kind} panel did not close`);
   });
@@ -213,6 +234,15 @@ export async function markTileDragUnsupported(page) {
   throw new FeatureUnsupportedError("participant-tile-drag", "Stage does not expose participant tile dragging");
 }
 
+async function waitForComposerEnabled(page, composer) {
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    if (await composer.isEnabled()) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error("chat composer did not become enabled after durable send");
+}
+
 export async function sendChatMessage(page, text) {
   const panel = page.locator('[aria-label="Chat panel"]:visible').last();
   const composer = panel.locator('[aria-label="Message"]').first();
@@ -221,6 +251,7 @@ export async function sendChatMessage(page, text) {
   await composer.fill(text);
   await clickVisibleControl(page, /^Send message$/i, "chat send control", panel);
   await page.getByText(text, { exact: true }).last().waitFor({ state: "visible", timeout: 15_000 });
+  await waitForComposerEnabled(page, composer);
 }
 
 export async function scrollChatHistory(page, bursts = 16) {
@@ -244,11 +275,15 @@ export async function uploadChatFile(page, filePath) {
   const chooserPromise = page.waitForEvent("filechooser", { timeout: 8_000 });
   await clickVisibleControl(page, /^Attach files$/i, "chat file picker", panel);
   const chooser = await chooserPromise;
-  await chooser.setFiles(filePath);
-  const fileName = filePath.split("/").pop();
-  await panel.getByText(fileName, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  const fileName = basename(filePath);
+  await chooser.setFiles({ name: fileName, mimeType: "text/plain", buffer: await readFile(filePath) });
+  const attachments = panel.locator('[aria-label="Attachments"]');
+  await attachments.waitFor({ state: "visible", timeout: 10_000 });
+  await attachments.getByText(fileName, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  const composer = panel.locator('[aria-label="Message"]').first();
   await clickVisibleControl(page, /^Send message$/i, "send chat attachment", panel);
   await panel.locator('[aria-label="Attachments"]').waitFor({ state: "hidden", timeout: 15_000 });
+  await waitForComposerEnabled(page, composer);
   return fileName;
 }
 
@@ -335,7 +370,7 @@ export async function panZoomWhiteboard(page) {
   if (zoomed === panned) throw new Error("whiteboard pan did not redraw the canvas");
 }
 
-export async function moveWhiteboardCursor(page, moves = 80) {
+async function moveWhiteboardCursor(page, moves = 80) {
   const canvas = await whiteboardCanvas(page);
   const box = await canvas.boundingBox();
   if (!box) throw new Error("whiteboard canvas has no visible bounds");
@@ -416,7 +451,8 @@ export async function leaveSpace(page) {
   const dialog = page.getByRole("dialog").last();
   await dialog.waitFor({ state: "visible", timeout: 8_000 });
   await clickVisibleControl(page, /^Leave( space)?$/i, "leave confirmation", dialog);
-  await page.getByRole("button", { name: /^Enter Space$/i }).waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('[data-chalk-status="left"]').waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByRole("button", { name: /^Try again$/i }).waitFor({ state: "visible", timeout: 30_000 });
 }
 
 export function panelKinds() {

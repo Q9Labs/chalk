@@ -7,7 +7,7 @@ import { FeatureUnreachableError } from "./errors.mjs";
 const PARTICIPANT_NAMES = ["Avery", "Blake", "Casey", "Devon"];
 const READY_SELECTOR = '[data-tour="video-grid"]';
 
-export function participantName(index) {
+function participantName(index) {
   return PARTICIPANT_NAMES[index] ?? `Participant-${index + 1}`;
 }
 
@@ -111,8 +111,21 @@ export async function clickFloatingControl(page, pattern, description = String(p
 export async function revealFloatingControls(page) {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error("viewport is unavailable while revealing Space controls");
+  const toolbars = page.getByRole("toolbar", { name: "Space controls" });
+  const count = await toolbars.count();
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const toolbar = toolbars.nth(index);
+    if (!(await toolbar.isVisible())) continue;
+    await toolbar.scrollIntoViewIfNeeded();
+    const box = await toolbar.boundingBox();
+    if (!box) continue;
+    await toolbar.hover({ force: true });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(350);
+    return;
+  }
   await page.mouse.move(viewport.width / 2, Math.max(1, viewport.height - 24));
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(350);
 }
 
 export async function clickVisibleControl(page, pattern, description = String(pattern), scope = page) {
@@ -154,7 +167,7 @@ export async function assertRoster(page, expectedCount) {
   return expectedCount;
 }
 
-export async function assertReady(page) {
+async function assertReady(page) {
   const ready = page.locator(READY_SELECTOR).first();
   if (!(await ready.isVisible())) throw new Error("Stage is not visible after join");
 }

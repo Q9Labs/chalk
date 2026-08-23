@@ -9,7 +9,7 @@ export async function enableCdpDomains(cdp) {
   await cdp.send("Profiler.enable");
 }
 
-export async function samplePage(cdp, page) {
+async function samplePage(cdp, page) {
   const [performanceResult, memoryResult] = await Promise.allSettled([
     cdp.send("Performance.getMetrics"),
     page.evaluate(() => {
@@ -47,7 +47,7 @@ export async function samplePage(cdp, page) {
   };
 }
 
-export async function sampleProcesses(cdp) {
+async function sampleProcesses(cdp) {
   const { processInfo } = await cdp.send("SystemInfo.getProcessInfo");
   return {
     sampledAt: Date.now(),
@@ -71,6 +71,20 @@ export function deltaSample(previous, current) {
       return [`${field}Delta`, delta === null ? null : Number(delta.toFixed(4))];
     }),
   );
+}
+
+function errorSample(participant, participantIndex, scheduledAt, startedAt, clock, error) {
+  const sampledAt = clock();
+  return {
+    kind: "error",
+    participant,
+    participantIndex,
+    scheduledAt,
+    sampledAt,
+    sampleDurationMs: sampledAt - startedAt,
+    driftMs: sampledAt - scheduledAt,
+    error: error instanceof Error ? error.message : String(error),
+  };
 }
 
 function sleep(milliseconds) {
@@ -115,16 +129,7 @@ export function createMetricsSampler({ participants, browserCdp = null, metricsP
           ...deltaSample(prior, current),
         });
       } catch (error) {
-        const detail = {
-          kind: "error",
-          participant: person.name,
-          participantIndex: person.index,
-          scheduledAt,
-          sampledAt: clock(),
-          sampleDurationMs: clock() - startedAt,
-          driftMs: clock() - scheduledAt,
-          error: error instanceof Error ? error.message : String(error),
-        };
+        const detail = errorSample(person.name, person.index, scheduledAt, startedAt, clock, error);
         sampleErrors.push(detail);
         await write(detail);
       }
@@ -151,16 +156,7 @@ export function createMetricsSampler({ participants, browserCdp = null, metricsP
           });
         }
       } catch (error) {
-        const detail = {
-          kind: "error",
-          participant: "browser-processes",
-          participantIndex: null,
-          scheduledAt,
-          sampledAt: clock(),
-          sampleDurationMs: clock() - startedAt,
-          driftMs: clock() - scheduledAt,
-          error: error instanceof Error ? error.message : String(error),
-        };
+        const detail = errorSample("browser-processes", null, scheduledAt, startedAt, clock, error);
         sampleErrors.push(detail);
         await write(detail);
       }

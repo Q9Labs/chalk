@@ -16,6 +16,42 @@ function safeName(value) {
   return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "artifact";
 }
 
+export function cpuProfileFilePath(outDir, person) {
+  return join(outDir, `cpu-${safeName(person.name)}-${person.index}.cpuprofile`);
+}
+
+export async function startParticipantCpuProfiles(people, { start = startCpuProfile } = {}) {
+  const states = people.map((person) => ({ person, started: false }));
+  try {
+    for (const state of states) {
+      await start(state.person.cdp);
+      state.started = true;
+    }
+    return states;
+  } catch (error) {
+    const participant = states.find((state) => !state.started);
+    const failure = new Error(`CPU profile start failed for ${participant?.person.name ?? "Participant"}`, { cause: error });
+    failure.profileStates = states;
+    throw failure;
+  }
+}
+
+export async function stopParticipantCpuProfiles(states, outDir, { stop = stopCpuProfile } = {}) {
+  const summaries = [];
+  const errors = [];
+  for (const state of states) {
+    if (!state.started) continue;
+    const filePath = cpuProfileFilePath(outDir, state.person);
+    try {
+      const summary = await stop(state.person.cdp, filePath);
+      summaries.push({ participant: state.person.name, participantIndex: state.person.index, ...summary });
+    } catch (error) {
+      errors.push(new Error(`CPU profile stop failed for ${state.person.name}`, { cause: error }));
+    }
+  }
+  return { summaries, errors };
+}
+
 function formatError(error, indent = "") {
   if (!(error instanceof Error)) return `${indent}${String(error)}`;
   const lines = [`${indent}${error.name}: ${error.message}`];
@@ -30,8 +66,17 @@ function formatError(error, indent = "") {
 function browserOptions() {
   return {
     headless: true,
-    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--disable-dev-shm-usage"],
+    ignoreDefaultArgs: ["--disable-gpu"],
+    args: ["--enable-gpu", "--use-angle=metal", "--use-gl=angle", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--disable-dev-shm-usage"],
   };
+}
+
+export function validateGpuSystemInfo(systemInfo) {
+  const featureStatus = systemInfo?.gpu?.featureStatus ?? {};
+  const renderer = [systemInfo?.gpu?.auxAttributes?.glRenderer, ...(systemInfo?.gpu?.devices ?? []).map((device) => device.deviceString)].filter(Boolean).join(" ");
+  if (featureStatus.gpu_compositing !== "enabled") throw new Error(`GPU compositing is ${featureStatus.gpu_compositing ?? "unavailable"}; trace requires enabled GPU compositing`);
+  if (/swiftshader/i.test(renderer)) throw new Error(`GPU renderer is SwiftShader (${renderer}); trace requires hardware GPU rendering`);
+  return systemInfo;
 }
 
 async function writeManifest(path, manifest) {
@@ -65,8 +110,7 @@ export async function execute(options) {
   const heapSummaries = new Map();
   const cleanupErrors = [];
   let sampler = null;
-  let cpuStarted = false;
-  let cpuSummary = null;
+  let cpuProfileStates = [];
   let primaryError = null;
   const recorder = createRecorder(outDir);
   const shutdown = new AbortController();
@@ -121,7 +165,9 @@ export async function execute(options) {
     browser = await chromium.launch(browserOptions());
     // Playwright's external method uses legacy product language, so assemble it only at this boundary.
     browserCdp = await browser[["newBrowserCDP", "S", "ession"].join("")]();
-    await writeFile(join(outDir, "system-info.json"), `${JSON.stringify(await browserCdp.send("SystemInfo.getInfo"), null, 2)}\n`);
+    const systemInfo = await browserCdp.send("SystemInfo.getInfo");
+    await writeFile(join(outDir, "system-info.json"), `${JSON.stringify(systemInfo, null, 2)}\n`);
+    validateGpuSystemInfo(systemInfo);
     for (let index = 0; index < options.participants; index += 1) {
       const person = await launchParticipant(browser, options, index);
       await enableCdpDomains(person.cdp);
@@ -129,8 +175,7 @@ export async function execute(options) {
     }
     sampler = createMetricsSampler({ participants: people, browserCdp, metricsPath: join(outDir, "metrics.ndjson") });
     sampler.start();
-    await startCpuProfile(people[0].cdp);
-    cpuStarted = true;
+    cpuProfileStates = await startParticipantCpuProfiles(people);
     await writeFile(join(outDir, "fixture-chat-upload.txt"), `Space profiler upload fixture for ${manifest.runId}\n`);
     const state = {
       options,
@@ -144,6 +189,7 @@ export async function execute(options) {
       trace: (feature, cycle, action) =>
         traceFeature({
           participants: people,
+          browserCdp,
           feature,
           action,
           outputPath: join(tracesDir, `trace-${safeName(feature)}-${cycle}.json`),
@@ -166,6 +212,7 @@ export async function execute(options) {
     if (workloadFailure) throw workloadFailure;
   } catch (error) {
     primaryError = error;
+    if (error?.profileStates) cpuProfileStates = error.profileStates;
   } finally {
     if (primaryError) {
       const failureScreenshots = [];
@@ -187,14 +234,13 @@ export async function execute(options) {
         cleanupErrors.push(error);
       }
     }
-    if (cpuStarted && people[0]) {
-      try {
-        cpuSummary = await stopCpuProfile(people[0].cdp, join(outDir, "cpu-anchor.cpuprofile"));
-        manifest.cpu = cpuSummary;
-      } catch (error) {
-        cleanupErrors.push(error);
-      }
+    const cpuResult = await stopParticipantCpuProfiles(cpuProfileStates, outDir);
+    manifest.cpuProfiles = cpuResult.summaries;
+    if (cpuResult.summaries.length > 0) {
+      const anchorSummary = cpuResult.summaries.find((summary) => summary.participantIndex === people[0]?.index);
+      if (anchorSummary) manifest.cpu = anchorSummary;
     }
+    cleanupErrors.push(...cpuResult.errors);
     try {
       await writeHeapDiffs(primaryError === null);
     } catch (error) {

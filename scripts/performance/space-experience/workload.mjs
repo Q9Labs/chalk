@@ -29,6 +29,10 @@ function errorText(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function createRecorder(outDir) {
   const stepsPath = join(outDir, "steps.ndjson");
   const support = new Map();
@@ -147,10 +151,25 @@ async function runReactionAndHand(state, cycle) {
     `hand animation trace ${cycle}`,
     () =>
       trace("hand-animation", cycle, async () => {
-        await scenario.toggleHandRaise(remote.page);
-        await scenario.assertRemoteHand(anchor.page);
-        await wait(2_000, state.signal);
-        await scenario.toggleHandRaise(remote.page);
+        let raised = false;
+        let actionError = null;
+        try {
+          await scenario.toggleHandRaise(remote.page);
+          raised = true;
+          await scenario.assertRemoteHand(anchor.page);
+          await wait(2_000, state.signal);
+        } catch (error) {
+          actionError = error;
+          throw error;
+        } finally {
+          if (raised) {
+            try {
+              await scenario.toggleHandRaise(remote.page);
+            } catch (error) {
+              if (!actionError) throw error;
+            }
+          }
+        }
       }),
     { feature: "hand-raise" },
   );
@@ -183,7 +202,7 @@ async function runScreenShare(state, cycle) {
 }
 
 async function runPanels(state, cycle) {
-  const { anchor, recorder, snapshot, trace, fixturePath } = state;
+  const { anchor, recorder, snapshot, trace } = state;
   for (const kind of scenario.panelKinds()) {
     const feature = `${kind}-panel`;
     if (kind === "transcript") {
@@ -199,31 +218,36 @@ async function runPanels(state, cycle) {
       await recorder.step(`participants Waiting tab ${cycle}`, () => scenario.exerciseWaitingParticipantsTab(anchor.page), { feature: "admission-waiting", allowDisposition: true });
     }
     if (kind === "whiteboard") {
-      for (const remote of state.people.slice(1)) {
-        await recorder.step(`open remote whiteboard ${remote.name} ${cycle}`, () => scenario.openPanel(remote.page, "whiteboard"), { feature: "whiteboard-remote-cursors" });
-      }
-      await recorder.step(
-        `whiteboard draw pan zoom trace ${cycle}`,
-        () =>
-          trace("whiteboard-draw-pan-zoom", cycle, async () => {
-            await scenario.drawWhiteboard(anchor.page);
-            await scenario.panZoomWhiteboard(anchor.page);
-          }),
-        { feature: "whiteboard" },
-      );
-      await recorder.step(
-        `whiteboard remote cursor trace ${cycle}`,
-        () =>
-          trace("whiteboard-remote-cursors", cycle, () =>
-            scenario.moveRemoteWhiteboardCursors(
-              anchor.page,
-              state.people.slice(1).map((remote) => remote.page),
+      const openRemoteBoards = [];
+      try {
+        for (const remote of state.people.slice(1)) {
+          const opened = await recorder.step(`open remote whiteboard ${remote.name} ${cycle}`, () => scenario.openPanel(remote.page, "whiteboard"), { feature: "whiteboard-remote-cursors" });
+          if (opened) openRemoteBoards.push(remote);
+        }
+        await recorder.step(
+          `whiteboard draw pan zoom trace ${cycle}`,
+          () =>
+            trace("whiteboard-draw-pan-zoom", cycle, async () => {
+              await scenario.drawWhiteboard(anchor.page);
+              await scenario.panZoomWhiteboard(anchor.page);
+            }),
+          { feature: "whiteboard" },
+        );
+        await recorder.step(
+          `whiteboard remote cursor trace ${cycle}`,
+          () =>
+            trace("whiteboard-remote-cursors", cycle, () =>
+              scenario.moveRemoteWhiteboardCursors(
+                anchor.page,
+                state.people.slice(1).map((remote) => remote.page),
+              ),
             ),
-          ),
-        { feature: "whiteboard-remote-cursors" },
-      );
-      for (const remote of state.people.slice(1)) {
-        await recorder.step(`close remote whiteboard ${remote.name} ${cycle}`, () => scenario.closePanel(remote.page, "whiteboard"), { feature: "whiteboard-remote-cursors" });
+          { feature: "whiteboard-remote-cursors" },
+        );
+      } finally {
+        for (const remote of openRemoteBoards) {
+          await recorder.step(`close remote whiteboard ${remote.name} ${cycle}`, () => scenario.closePanel(remote.page, "whiteboard"), { feature: "whiteboard-remote-cursors" });
+        }
       }
     }
     await recorder.step(`close ${kind} panel ${cycle}`, () => scenario.closePanel(anchor.page, kind), { feature });
@@ -260,7 +284,10 @@ async function runChat(state, cycle) {
     `chat file upload ${cycle}`,
     async () => {
       const fileName = await scenario.uploadChatFile(anchor.page, fixturePath);
-      await remote.page.getByText(fileName, { exact: true }).last().waitFor({ state: "visible", timeout: 20_000 });
+      await remote.page
+        .getByRole("button", { name: new RegExp(`^Download ${escapeRegExp(fileName)}$`, "i") })
+        .last()
+        .waitFor({ state: "visible", timeout: 20_000 });
     },
     { feature: "chat-file-upload" },
   );

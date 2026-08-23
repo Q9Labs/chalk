@@ -1,4 +1,4 @@
-export class FeatureDispositionError extends Error {
+class FeatureDispositionError extends Error {
   constructor(kind, feature, message) {
     super(message);
     this.name = `${kind[0].toUpperCase()}${kind.slice(1)}FeatureError`;

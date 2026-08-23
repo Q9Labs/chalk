@@ -10,7 +10,7 @@ async function readJson(path, fallback = null) {
   }
 }
 
-export async function readNdjson(path) {
+async function readNdjson(path) {
   try {
     const text = await readFile(path, "utf8");
     return text
@@ -38,12 +38,13 @@ function isApplicationFrame(url) {
 
 export function summarizeMetrics(rows) {
   const samples = rows.filter((row) => row.kind === "sample");
+  const liveSamples = samples.filter((row) => row.url !== "about:blank");
   const errors = rows.filter((row) => row.kind === "error");
   const drift = rows.filter((row) => row.kind === "drift");
   const processRows = rows.filter((row) => row.kind === "process");
   const participants = {};
   const grouped = new Map();
-  for (const row of samples) {
+  for (const row of liveSamples) {
     const bucket = grouped.get(row.participant) ?? [];
     bucket.push(row);
     grouped.set(row.participant, bucket);
@@ -68,6 +69,8 @@ export function summarizeMetrics(rows) {
   }
   return {
     sampleCount: samples.length,
+    liveSampleCount: liveSamples.length,
+    setupSampleCount: samples.length - liveSamples.length,
     driftCount: drift.length,
     maxDriftMs: drift.length === 0 ? null : Math.max(...drift.map((row) => Math.abs(Number(row.driftMs) || 0))),
     errorCount: errors.length,
@@ -124,7 +127,7 @@ export function summarizeSteps(rows) {
   return { total: rows.length, failureCount: failures.length, failures, dispositionCount: dispositions.length, dispositions, byFeature };
 }
 
-export function summarizeHeapDiffs(diffs) {
+function summarizeHeapDiffs(diffs) {
   const entries = Array.isArray(diffs) ? diffs : [];
   return entries.map((diff) => ({
     tag: diff.tag,

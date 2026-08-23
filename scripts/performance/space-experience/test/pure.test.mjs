@@ -58,11 +58,14 @@ test("heap diff reports class-level count and byte changes", () => {
 test("metric and step summaries expose before-after and feature failure rows", () => {
   const metrics = summarizeMetrics([
     { kind: "drift", driftMs: 4 },
+    { kind: "sample", participant: "Avery", url: "about:blank", jsHeapUsed: 1, nodes: 1, listeners: 0, documents: 1, layoutCount: 0, recalcStyleCount: 0 },
     { kind: "sample", participant: "Avery", jsHeapUsed: 100, nodes: 4, listeners: 2, documents: 1, layoutCount: 3, recalcStyleCount: 2 },
     { kind: "sample", participant: "Avery", jsHeapUsed: 150, nodes: 5, listeners: 3, documents: 1, layoutCount: 7, recalcStyleCount: 4 },
     { kind: "error", participant: "Blake", error: "page closed" },
   ]);
   assert.equal(metrics.participants.Avery.beforeAfter.jsHeapUsed, 50);
+  assert.equal(metrics.liveSampleCount, 2);
+  assert.equal(metrics.setupSampleCount, 1);
   assert.equal(metrics.errorCount, 1);
   const steps = summarizeSteps([
     { event: "step", feature: "chat-send", ok: true, ms: 10 },
