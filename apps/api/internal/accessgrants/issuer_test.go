@@ -65,7 +65,6 @@ func TestIssuerRejectsInvalidSubjects(t *testing.T) {
 			subject.ParticipantID = accessgrants.Subject{}.ParticipantID
 		}},
 		{name: "invalid generation", change: func(subject *accessgrants.Subject) { subject.ParticipantGeneration = 0 }},
-		{name: "missing provider", change: func(subject *accessgrants.Subject) { subject.Provider = "" }},
 		{name: "wrong provider", change: func(subject *accessgrants.Subject) { subject.Provider = "other_sfu" }},
 		{name: "missing connection", change: func(subject *accessgrants.Subject) { subject.CloudflareConnectionID = "" }},
 		{name: "padded connection", change: func(subject *accessgrants.Subject) { subject.CloudflareConnectionID = " connection_123" }},

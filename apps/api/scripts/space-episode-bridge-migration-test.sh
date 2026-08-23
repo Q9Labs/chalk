@@ -151,6 +151,59 @@ fi
 
 source_digest="$(psql -At -c "select encode(state_digest, 'hex') from ${legacy_sync_control_table} where ${legacy_episode_id_column} = '00000000-0000-4000-8000-000000000003'")"
 
+# Recompute the target digest independently of the migration implementation.
+# PostgreSQL jsonb preserves object keys in a canonical order, while arrays
+# retain their wire order, which is the bridge's digest input contract.
+psql <<'SQL'
+create function fixture_bridge_canonical_json(value jsonb)
+returns text
+language plpgsql
+immutable
+strict
+as $$
+declare
+    encoded text;
+begin
+    case jsonb_typeof(value)
+        when 'object' then
+            select '{' || coalesce(
+                string_agg(
+                    to_jsonb(entry.key)::text || ':' || fixture_bridge_canonical_json(entry.value),
+                    ',' order by entry.key
+                ),
+                ''
+            ) || '}'
+            into encoded
+            from jsonb_each(value) entry;
+            return encoded;
+        when 'array' then
+            select '[' || coalesce(
+                string_agg(fixture_bridge_canonical_json(entry.value), ',' order by entry.ordinality),
+                ''
+            ) || ']'
+            into encoded
+            from jsonb_array_elements(value) with ordinality entry(value, ordinality);
+            return encoded;
+        else
+            return value::text;
+    end case;
+end;
+$$;
+
+create function fixture_bridge_state_digest(value jsonb)
+returns bytea
+language sql
+immutable
+strict
+as $$
+    select sha256(
+        convert_to('chalk-sync-state-v1', 'UTF8')
+        || int4send(1)
+        || convert_to(fixture_bridge_canonical_json(value), 'UTF8')
+    )
+$$;
+SQL
+
 if [[ "${proof_case}" == "unsupported_version" ]]; then
   psql <<SQL
 update ${legacy_sync_control_table}
@@ -236,5 +289,12 @@ if [[ -z "${target_digest}" || "${target_digest}" == "${source_digest}" ]]; then
   echo "Bridge copied the legacy digest instead of recomputing target integrity." >&2
   exit 1
 fi
+expected_digest="$(psql -At -c "select encode(fixture_bridge_state_digest(folded_state), 'hex') from sync_episode_control where episode_id = '00000000-0000-4000-8000-000000000003'")"
+if [[ "${target_digest}" != "${expected_digest}" ]]; then
+  echo "Bridge wrote a digest that does not match the independent target formula: target=${target_digest} expected=${expected_digest}" >&2
+  exit 1
+fi
+
+psql -c 'drop function fixture_bridge_state_digest(jsonb); drop function fixture_bridge_canonical_json(jsonb);'
 
 echo "Space/Episode bridge proof passed: v3 snapshots upgrade with fresh integrity; empty capabilities use role policy; explicit overrides and unsupported policies remain fail-closed."

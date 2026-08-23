@@ -107,6 +107,9 @@ func TestIssueAffectedSubjectIsAuthoritativeAndBranchNeverReopens(t *testing.T) 
 	if err := state.Reduce([]AcceptedDiagnosticEvent{accepted}); err != nil {
 		t.Fatalf("reduce failed event: %v", err)
 	}
+	if len(state.Issues) == 0 {
+		t.Fatal("failed event did not create an issue")
+	}
 	for _, issue := range state.Issues {
 		if issue.Affected == nil || issue.Affected.Kind != "participant" || issue.Affected.Identifier.IDClass != "chalk.participant" || issue.Affected.Identifier.Value != "participant01" {
 			t.Fatalf("issue affected subject = %+v", issue.Affected)

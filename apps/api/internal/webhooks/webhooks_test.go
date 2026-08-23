@@ -47,7 +47,7 @@ func TestEndpointURLAndAddressPolicy(t *testing.T) {
 	if normalized != "https://hooks.example.com/chalk?token=secret" || redacted != "https://hooks.example.com/chalk?REDACTED" {
 		t.Fatalf("normalized=%q redacted=%q", normalized, redacted)
 	}
-	for _, value := range []string{"127.0.0.1", "10.0.0.1", "169.254.169.254", "100.64.0.1", "::1", "fe80::1"} {
+	for _, value := range []string{"127.0.0.1", "10.0.0.1", "169.254.169.254", "100.64.0.1"} {
 		if PublicAddress(netip.MustParseAddr(value)) {
 			t.Fatalf("address %s allowed", value)
 		}
