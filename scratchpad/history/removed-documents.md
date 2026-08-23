@@ -156,3 +156,23 @@ source. Their conclusions are in the weekly digests.
 - `room-join-lifecycle-atlas-2026-08-01.html` — Chalk — the meeting, traced
 - `sync-codewalk.html` — apps/sync — code walk
 - `sync-orientation.html` — apps/sync — orientation
+
+## Follow-up sweep
+
+The follow-up sweep removed three unreferenced entrance-animation prototypes,
+the root favicon duplicated by the web public favicon, unused legacy and
+third-party brand exports, and the superseded marketing image set. Current
+landing images, technology marks, platform icons, product logos, and design
+reference galleries remain because code or durable documentation consumes them.
+
+- `entrance-animations/index.html`, `entrance-animations/blinds.html`, and
+  `entrance-animations/curtains.html` — unreferenced animation prototypes
+- `favicon.ico` — duplicate of `apps/web/public/favicon.ico`
+- `apps/web/public/brand/legacy/logo192.png` and `logo512.png` — unused legacy
+  web-app icons
+- `apps/web/public/brand/q9labs/` — unused third-party brand exports
+- `apps/web/public/brand/tanstack/` — unused third-party brand exports
+- `apps/web/public/images/marketing/hero-1*`, `hero-2.png`,
+  `devices-with-video.png`, `chalk-speaker-view-20260801.webp`, and
+  `chalk-stroke-blue-20260807.webp` — superseded marketing drafts with no
+  current code or documentation consumers
