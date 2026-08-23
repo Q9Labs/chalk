@@ -529,6 +529,7 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
       )
       |> finalize_episode_end("retention_prefix_episode_end")
 
+    synchronize_event_counters(connection, fixture)
     age_ended_episode(connection, fixture, age_seconds)
     fixture
   end
