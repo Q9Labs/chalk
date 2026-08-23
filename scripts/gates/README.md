@@ -95,6 +95,7 @@ errors keep their current behavior.
   replayed v1 breaker, and focused Sync and whiteboard SDK tests. Both use a
   disposable, migrated PostgreSQL container that is removed on exit.
 - Contract producers and consumers run generated-contract and SDK drift checks.
+- The patched image-size parser fixture runs when its patch or guard changes.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.

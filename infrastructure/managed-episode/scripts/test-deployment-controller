@@ -3,18 +3,52 @@ set -euo pipefail
 
 managed_root="$(cd "$(dirname "$0")/.." && pwd)"
 controller="${managed_root}/controller/chalk-deployment-controller"
-fixture_root="$(mktemp -d)"
-if [[ "${KEEP_TEST_FIXTURE:-false}" == true ]]; then
-  printf 'fixture=%s\n' "${fixture_root}" >&2
-else
-  trap 'rm -rf -- "${fixture_root}"' EXIT
-fi
 export CHALK_CONTROLLER_ALLOW_NON_ROOT_TESTS=true
 
 fail() {
   echo "FAIL test-deployment-controller: $1" >&2
   exit 1
 }
+
+usage() {
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|ssm-contract|all]\n' "$0"
+}
+
+test_group="all"
+if [[ "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+if [[ $# -gt 0 ]]; then
+  [[ "${1:-}" == "--group" && $# == 2 ]] || { usage >&2; fail "invalid test group arguments"; }
+  test_group="$2"
+fi
+case "${test_group}" in
+  all|validation|adoption|inputs|healthy|rollback|restore|ssm-contract) ;;
+  *) fail "unknown test group: ${test_group}" ;;
+esac
+
+group_enabled() {
+  local group="$1"
+  case "${test_group}:${group}" in
+    all:*) return 0 ;;
+    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|ssm-contract:ssm-contract) return 0 ;;
+    rollback:healthy|restore:healthy|restore:rollback) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+tmp_root="${TMPDIR:-/tmp}"
+if [[ "$(uname -s)" == Darwin ]]; then
+  tmp_root="$(cd "${tmp_root}" && pwd -P)"
+fi
+fixture_root="$(mktemp -d "${tmp_root%/}/chalk-managed-episode-controller.XXXXXX")"
+fixture_root="$(cd "${fixture_root}" && pwd -P)"
+if [[ "${KEEP_TEST_FIXTURE:-false}" == true ]]; then
+  printf 'fixture=%s\n' "${fixture_root}" >&2
+else
+  trap 'rm -rf -- "${fixture_root}"' EXIT
+fi
 
 expect_failure() {
   if "$@" >/dev/null 2>"${fixture_root}/expected-failure.log"; then
@@ -258,6 +292,7 @@ invalid_request="${fixture_root}/invalid-request.json"
 manifest="${fixture_root}/manifest.json"
 make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
+if group_enabled validation; then
 jq '.unexpected = true' "${fixture_root}/request.json" >"$invalid_request"
 expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"
 jq '.schema_version = 1' "${fixture_root}/request.json" >"$invalid_request"
@@ -278,8 +313,10 @@ if run_controller "$wrong_region_state" "${fixture_root}/wrong-region-request.js
   fail "cross-region ECR image was accepted"
 fi
 grep -Fq 'ECR image registry does not match the deployment region' "${fixture_root}/wrong-region.log" || fail "cross-region ECR rejection was not reported"
+fi
 
 adoption_state="${fixture_root}/adoption-state"
+if group_enabled adoption; then
 mkdir -p "$adoption_state" "${fixture_root}/run/env" "${fixture_root}/run/evidence" "${fixture_root}/run/release" "${fixture_root}/user-quadlet" "${fixture_root}/user-systemd" "${fixture_root}/install"
 printf '#!/usr/bin/env bash\nexit 1\n' >"${fixture_root}/install/chalk-runtime-health"
 chmod 0755 "${fixture_root}/install/chalk-runtime-health"
@@ -338,8 +375,10 @@ find "${fixture_root}/run" -mindepth 1 -depth -delete
 find "${fixture_root}/user-quadlet" -mindepth 1 -depth -delete
 find "${fixture_root}/user-systemd" -mindepth 1 -depth -delete
 : >"${fixture_root}/secret-state"
+fi
 
 missing_state="${fixture_root}/missing-state"
+if group_enabled inputs; then
 mkdir -p "$missing_state"
 make_request missing "${fixture_root}/request.json"
 make_manifest missing >"${fixture_root}/missing-manifest.json"
@@ -400,8 +439,10 @@ make_request staging "${fixture_root}/staging-request.json" '[]' staging
 make_manifest staging >"${fixture_root}/staging-manifest.json"
 run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
 jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+fi
 
 stable_state="${fixture_root}/stable-state"
+if group_enabled healthy; then
 mkdir -p "$stable_state"
 make_request stable "${fixture_root}/request.json"
 : >"${fixture_root}/commands.log"
@@ -452,7 +493,9 @@ if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixtur
   fail "a migration target below the manifest minimum was accepted"
 fi
 grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
+fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
+if group_enabled rollback; then
 make_request candidate "${fixture_root}/candidate-request.json"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed"
@@ -515,7 +558,9 @@ jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null
 assert_stable_installed_runtime
 find "${stable_state}/ledger.jsonl" -depth -delete
 cp "${fixture_root}/stable-ledger.jsonl" "${stable_state}/ledger.jsonl"
+fi
 
+if group_enabled restore; then
 printf '0' >"${fixture_root}/health-index"
 : >"${fixture_root}/aws.log"
 find "${fixture_root}/run" -mindepth 1 -depth -delete
@@ -532,7 +577,10 @@ if run_restore "$stable_state" ok >"${fixture_root}/tampered-runtime.log" 2>&1; 
   fail "tampered durable runtime was restored after reboot"
 fi
 grep -Fq 'active rendered runtime hashes do not match pointer' "${fixture_root}/tampered-runtime.log" || fail "durable runtime tampering was not reported"
+fi
 
+if group_enabled ssm-contract; then
 jq -e '.schemaVersion == "2.2" and .mainSteps[0].name == "deployRelease" and .parameters.ManifestBase64.maxChars == 48000 and .parameters.ControllerVersion.default == "2" and (.parameters | has("ExcludedSecrets") and has("AdoptExistingRelease")) and (.parameters | to_entries | all(.value.interpolationType == "ENV_VAR")) and (.mainSteps[0].inputs.runCommand[0] == "#!/bin/bash") and (.mainSteps[0].inputs.runCommand | all(contains("{{") | not) and all(contains("rm -rf") | not) and any(. == "controller_relative=\"controller/chalk-deployment-controller\"") and any(contains("find \"$work_root\" -depth -delete")) and any(contains("controller digest does not match release manifest"))) and (.parameters | has("Command") | not)' "${managed_root}/ssm/chalk-managed-episode-deploy.json" >/dev/null || fail "SSM document contract is unsafe"
+fi
 
-echo "PASS managed-episode deployment controller tests"
+echo "PASS managed-episode deployment controller tests (group=${test_group})"
