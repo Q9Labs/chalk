@@ -1,5 +1,6 @@
 import { createWriteStream } from "node:fs";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { availableParallelism, loadavg } from "node:os";
 
 const PAGE_METRIC_FIELDS = ["Nodes", "JSEventListeners", "Documents", "JSHeapUsedSize", "JSHeapTotalSize", "ScriptDuration", "TaskDuration", "LayoutCount", "RecalcStyleCount", "LayoutDuration", "RecalcStyleDuration"];
 
@@ -8,6 +9,15 @@ export function sanitizePageUrl(value) {
   url.search = "";
   url.hash = "";
   return url.toString();
+}
+
+export function hostLoadSample(values = loadavg(), parallelism = availableParallelism()) {
+  return {
+    hostLoad1m: Number(values[0] ?? 0),
+    hostLoad5m: Number(values[1] ?? 0),
+    hostLoad15m: Number(values[2] ?? 0),
+    hostAvailableParallelism: Number(parallelism),
+  };
 }
 
 export async function enableCdpDomains(cdp) {
@@ -117,6 +127,7 @@ export function createMetricsSampler({ participants, browserCdp = null, metricsP
       scheduledAt,
       sampledAt: tickStarted,
       driftMs: tickStarted - scheduledAt,
+      ...hostLoadSample(),
     });
     for (const person of participants) {
       const startedAt = clock();

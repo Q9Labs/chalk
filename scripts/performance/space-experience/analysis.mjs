@@ -43,6 +43,7 @@ export function summarizeMetrics(rows) {
   const liveSamples = samples.filter((row) => row.url !== "about:blank");
   const errors = rows.filter((row) => row.kind === "error");
   const drift = rows.filter((row) => row.kind === "drift");
+  const hostLoadRows = drift.filter((row) => Number.isFinite(row.hostLoad1m));
   const processRows = rows.filter((row) => row.kind === "process");
   const participants = {};
   const grouped = new Map();
@@ -75,6 +76,14 @@ export function summarizeMetrics(rows) {
     setupSampleCount: samples.length - liveSamples.length,
     driftCount: drift.length,
     maxDriftMs: drift.length === 0 ? null : Math.max(...drift.map((row) => Math.abs(Number(row.driftMs) || 0))),
+    host: {
+      sampleCount: hostLoadRows.length,
+      availableParallelism: hostLoadRows.at(-1)?.hostAvailableParallelism ?? null,
+      averageLoad1m: rounded(average(hostLoadRows, "hostLoad1m")),
+      maxLoad1m: hostLoadRows.length === 0 ? null : rounded(Math.max(...hostLoadRows.map((row) => row.hostLoad1m))),
+      maxLoad5m: hostLoadRows.length === 0 ? null : rounded(Math.max(...hostLoadRows.map((row) => row.hostLoad5m))),
+      maxLoad15m: hostLoadRows.length === 0 ? null : rounded(Math.max(...hostLoadRows.map((row) => row.hostLoad15m))),
+    },
     errorCount: errors.length,
     errors,
     participants,

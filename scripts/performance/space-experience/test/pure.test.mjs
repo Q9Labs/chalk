@@ -9,7 +9,7 @@ import { browserOptions } from "../cli.mjs";
 import { createDiagnosticRecorder } from "../browser.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
 import { aggregateTraceSummaries, analyzeRun, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
-import { deltaSample, diffHeapSummaries, sanitizePageUrl } from "../metrics.mjs";
+import { deltaSample, diffHeapSummaries, hostLoadSample, sanitizePageUrl } from "../metrics.mjs";
 import { summarizeTrace } from "../tracing.mjs";
 import { createRecorder, runLeaveRejoin, shouldContinueCycles, supportFailed } from "../workload.mjs";
 
@@ -95,6 +95,15 @@ test("browser diagnostics coalesce repeats and remove URL query data", () => {
 
 test("metric page URLs omit invite tokens", () => {
   assert.equal(sanitizePageUrl("http://127.0.0.1:13070/space/public-id?name=Avery#spaceInviteToken=secret"), "http://127.0.0.1:13070/space/public-id");
+});
+
+test("host load samples and summaries expose shared-host contention", () => {
+  assert.deepEqual(hostLoadSample([2, 3, 4], 10), { hostLoad1m: 2, hostLoad5m: 3, hostLoad15m: 4, hostAvailableParallelism: 10 });
+  const report = summarizeMetrics([
+    { kind: "drift", driftMs: 1, hostLoad1m: 2, hostLoad5m: 3, hostLoad15m: 4, hostAvailableParallelism: 10 },
+    { kind: "drift", driftMs: 2, hostLoad1m: 6, hostLoad5m: 5, hostLoad15m: 4.5, hostAvailableParallelism: 10 },
+  ]);
+  assert.deepEqual(report.host, { sampleCount: 2, availableParallelism: 10, averageLoad1m: 4, maxLoad1m: 6, maxLoad5m: 5, maxLoad15m: 4.5 });
 });
 
 test("trace lifecycle failures abort the workload after recording evidence", async () => {
