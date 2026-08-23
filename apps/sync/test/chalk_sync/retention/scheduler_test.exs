@@ -59,6 +59,37 @@ defmodule ChalkSync.Retention.SchedulerTest do
            } = Scheduler.health(:retention_scheduler_test)
   end
 
+  test "emits bounded failure class and reason metadata" do
+    handler_id = {__MODULE__, make_ref()}
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:chalk, :sync, :retention, :cleanup],
+        fn _event, _measurements, metadata, parent ->
+          send(parent, {:retention_failure, metadata})
+        end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    cleanup = fn -> {:error, {:invalid_history, :cleanup_counter_mismatch}} end
+
+    server =
+      start_supervised!({Scheduler, name: nil, auto_run?: false, cleanup_fun: cleanup})
+
+    assert {:error, {:invalid_history, :cleanup_counter_mismatch}} = Scheduler.run_now(server)
+
+    assert_receive {:retention_failure, metadata}
+    assert metadata.outcome == :failure
+    assert metadata.error_class == :invalid_history
+    assert metadata.error_reason == :cleanup_counter_mismatch
+    refute inspect(metadata) =~ "tenant"
+    refute inspect(metadata) =~ "episode"
+    refute inspect(metadata) =~ "payload"
+  end
+
   test "health stays responsive while cleanup is blocked" do
     parent = self()
 

@@ -147,6 +147,40 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     assert checkpointed?(connection, fixture)
   end
 
+  test "prunes an expired Episode without deleting newer Space collaboration data", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = seed_ended_episode(connection, @retention_seconds + 1)
+    cleanup_fixture(connection, fixture)
+    seed_collaboration_rows(connection, fixture)
+    newer = seed_shared_episode(connection, fixture)
+    seed_newer_collaboration_rows(connection, newer)
+
+    assert chat_stream_state(connection, fixture) == [2, 1, 2, 384]
+    assert collaboration_counts(connection, fixture) == [1, 1, 1, 1, 1, 2]
+
+    assert {:ok, %Result{episodes: 1}} = run_cleanup(connection)
+
+    assert chat_stream_state(connection, fixture) == [2, 2, 1, 256]
+    assert collaboration_counts(connection, fixture) == [0, 1, 0, 0, 0, 1]
+    assert checkpointed?(connection, fixture)
+
+    assert [[1]] =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_chat_messages where tenant_id = $1 and episode_id = $2",
+               [UUID.dump!(newer.tenant_id), UUID.dump!(newer.episode_id)]
+             ).rows
+
+    assert [[1]] =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_whiteboard_scenes where tenant_id = $1 and episode_id = $2",
+               [UUID.dump!(newer.tenant_id), UUID.dump!(newer.episode_id)]
+             ).rows
+  end
+
   test "waits for provider-backed whiteboard files to be removed", %{connections: connections} do
     connection = hd(connections)
     fixture = seed_ended_episode(connection, @retention_seconds + 1)
@@ -1030,6 +1064,118 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
       """,
       scope ++ [participant_id, generation, UUID.dump!(scene_id)]
     )
+  end
+
+  defp seed_shared_episode(connection, fixture) do
+    episode_id = UUID.generate()
+    participant_id = UUID.generate()
+
+    episode = %{
+      tenant_id: fixture.episode.tenant_id,
+      space_id: fixture.episode.space_id,
+      episode_id: episode_id
+    }
+
+    capabilities = Reducer.new(episode_id).role_capabilities["owner"]
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into episodes (id, status, space_id, tenant_id, started_at, config_snapshot)
+      values ($1, 'active', $2, $3, $4, $5)
+      """,
+      [
+        UUID.dump!(episode_id),
+        UUID.dump!(episode.space_id),
+        UUID.dump!(episode.tenant_id),
+        @now,
+        %{
+          "roles" => Reducer.new(episode_id).role_capabilities,
+          "admission_policy" => %{"mode" => "open"},
+          "default_episode_duration_seconds" => 86_400,
+          "maximum_episode_duration_seconds" => 86_400
+        }
+      ]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into participants (
+        id, name, capabilities, tenant_id, space_id, episode_id,
+        generation, status, joined_at, role
+      ) values ($1, 'Newer Participant', $2, $3, $4, $5, 1, 'active', $6, 'owner')
+      """,
+      [
+        UUID.dump!(participant_id),
+        capabilities,
+        UUID.dump!(episode.tenant_id),
+        UUID.dump!(episode.space_id),
+        UUID.dump!(episode.episode_id),
+        @now
+      ]
+    )
+
+    Map.put(episode, :participant_id, participant_id)
+  end
+
+  defp seed_newer_collaboration_rows(connection, newer) do
+    scope = [
+      UUID.dump!(newer.tenant_id),
+      UUID.dump!(newer.space_id),
+      UUID.dump!(newer.episode_id)
+    ]
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_messages (
+        tenant_id, space_id, episode_id, sequence, message_id,
+        participant_id, participant_generation,
+        client_message_id, request_fingerprint, display_name, message_text,
+        encoded_bytes, created_at
+      ) values (
+        $1, $2, $3, 2, $4, $5, 1, 'client-message-02',
+        decode(repeat('04', 32), 'hex'), 'Grace', 'newer', 256, $6
+      )
+      """,
+      scope ++ [UUID.dump!(UUID.generate()), UUID.dump!(newer.participant_id), @now]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_chat_streams
+      set head_sequence = 2, retained_floor_sequence = 1,
+          message_count = 2, message_bytes = 384
+      where tenant_id = $1 and space_id = $2
+      """,
+      Enum.take(scope, 2)
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_whiteboard_scenes (
+        tenant_id, space_id, episode_id, scene_id, app_state
+      ) values ($1, $2, $3, $4, '{"view_background_color":"#000000"}'::jsonb)
+      """,
+      scope ++ [UUID.dump!(UUID.generate())]
+    )
+  end
+
+  defp chat_stream_state(connection, fixture) do
+    [[head, floor, count, bytes]] =
+      Postgrex.query!(
+        connection,
+        """
+        select head_sequence, retained_floor_sequence, message_count, message_bytes
+        from sync_chat_streams where tenant_id = $1 and space_id = $2
+        """,
+        space_scope(fixture)
+      ).rows
+
+    [head, floor, count, bytes]
   end
 
   defp seed_whiteboard_scene(connection, fixture) do
