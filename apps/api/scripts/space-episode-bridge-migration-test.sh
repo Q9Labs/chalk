@@ -160,7 +160,7 @@ SQL
 fi
 
 set +e
-unsupported_output="$(goose up 2>&1)"
+unsupported_output="$(goose up-to 20260803000000 2>&1)"
 unsupported_status=$?
 set -e
 

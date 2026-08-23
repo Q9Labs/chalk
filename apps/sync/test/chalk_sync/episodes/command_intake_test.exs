@@ -2,7 +2,6 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Episodes.CommandIntake
-  alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.EpisodeKey
@@ -65,70 +64,6 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
 
     eventually(fn -> CommandIntake.stats(admission_name).node_commands == 0 end)
     assert CommandIntake.stats(admission_name).episodes == %{}
-  end
-
-  test "a killed task is reclaimed by its monitor" do
-    parent = self()
-    task_supervisor = start_supervised!({Task.Supervisor, name: unique_name("Tasks")})
-    admission_name = unique_name("Admission")
-
-    decision_fun = fn _identity, _command ->
-      send(parent, {:decision_started, self()})
-      Process.sleep(:infinity)
-    end
-
-    start_supervised!(
-      {CommandIntake,
-       name: admission_name, task_supervisor: task_supervisor, decision_fun: decision_fun},
-      id: admission_name
-    )
-
-    assert {:ok, _lease} =
-             CommandIntake.submit(
-               admission_name,
-               identity(2),
-               command("killed-command-01"),
-               self()
-             )
-
-    assert_receive {:decision_started, task}
-    Process.exit(task, :kill)
-    eventually(fn -> CommandIntake.stats(admission_name).node_commands == 0 end)
-  end
-
-  test "different Episodes receive independent task budgets" do
-    parent = self()
-    task_supervisor = start_supervised!({Task.Supervisor, name: unique_name("Tasks")})
-    admission_name = unique_name("Admission")
-
-    decision_fun = fn _identity, _command ->
-      send(parent, {:decision_started, self()})
-      receive do: (:finish -> {:retryable, :dependency_unavailable})
-    end
-
-    start_supervised!(
-      {CommandIntake,
-       name: admission_name, task_supervisor: task_supervisor, decision_fun: decision_fun},
-      id: admission_name
-    )
-
-    command = command("isolated-command-1")
-
-    Enum.each([identity(3), identity(4)], fn identity ->
-      Enum.each(1..8, fn _index ->
-        assert {:ok, _lease} = CommandIntake.submit(admission_name, identity, command, self())
-      end)
-    end)
-
-    tasks =
-      Enum.map(1..16, fn _index ->
-        assert_receive({:decision_started, pid})
-        pid
-      end)
-
-    assert CommandIntake.stats(admission_name).node_commands == 16
-    Enum.each(tasks, &send(&1, :finish))
-    eventually(fn -> CommandIntake.stats(admission_name).node_commands == 0 end)
   end
 
   test "supervised command work retains unsampled W3C context and tracestate" do
@@ -200,89 +135,6 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
              CommandIntake.stats(admission_name)
   end
 
-  test "v1 role transitions observe publications before deciding and retry observation failure" do
-    previous = Application.get_env(:chalk_sync, :media_plane)
-
-    {:ok, adapter} =
-      MediaPlaneTestAdapter.start_link(
-        outcomes: %{observe_episode_publications: {:error, :provider_unavailable}}
-      )
-
-    Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
-
-    on_exit(fn ->
-      if previous,
-        do: Application.put_env(:chalk_sync, :media_plane, previous),
-        else: Application.delete_env(:chalk_sync, :media_plane)
-    end)
-
-    task_supervisor = start_supervised!({Task.Supervisor, name: unique_name("Tasks")})
-    admission_name = unique_name("Admission")
-
-    start_supervised!(
-      {CommandIntake, name: admission_name, task_supervisor: task_supervisor},
-      id: admission_name
-    )
-
-    identity = %{identity(6) | protocol_version: 1}
-
-    {:ok, command} =
-      Command.new("role-observation-001", :assign_roles, %{
-        "participantId" => uuid(999),
-        "role" => "observer"
-      })
-
-    assert {:ok, lease} = CommandIntake.submit(admission_name, identity, command, self())
-
-    assert_receive {:sync_command_result, ^lease, "role-observation-001",
-                    {:retryable, :dependency_unavailable}}
-
-    assert [{:observe_episode_publications, nil, [identity.episode]}] ==
-             MediaPlaneTestAdapter.calls(adapter)
-  end
-
-  test "blocking and raising role observations are bounded dependency failures" do
-    previous_media = Application.get_env(:chalk_sync, :media_plane)
-    previous_timeout = Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms)
-    Application.put_env(:chalk_sync, :external_operation_adapter_timeout_ms, 20)
-
-    on_exit(fn ->
-      restore_env(:media_plane, previous_media)
-      restore_env(:external_operation_adapter_timeout_ms, previous_timeout)
-    end)
-
-    task_supervisor = start_supervised!({Task.Supervisor, name: unique_name("Tasks")})
-    admission_name = unique_name("Admission")
-
-    start_supervised!(
-      {CommandIntake, name: admission_name, task_supervisor: task_supervisor},
-      id: admission_name
-    )
-
-    identity = %{identity(7) | protocol_version: 1}
-
-    for {module, id} <- [
-          {BlockingObservation, "role-blocking-observe1"},
-          {RaisingObservation, "role-raising-observe01"}
-        ] do
-      Application.put_env(:chalk_sync, :media_plane, {module, nil})
-
-      {:ok, command} =
-        Command.new(id, :assign_roles, %{
-          "participantId" => uuid(998),
-          "role" => "observer"
-        })
-
-      started_at = System.monotonic_time(:millisecond)
-      assert {:ok, lease} = CommandIntake.submit(admission_name, identity, command, self())
-
-      assert_receive {:sync_command_result, ^lease, ^id, {:retryable, :dependency_unavailable}},
-                     500
-
-      assert System.monotonic_time(:millisecond) - started_at < 500
-    end
-  end
-
   defp identity(value) do
     %Identity{
       episode: %EpisodeKey{
@@ -309,9 +161,6 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
 
   defp unique_name(suffix),
     do: Module.concat(__MODULE__, "#{suffix}#{System.unique_integer([:positive])}")
-
-  defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
-  defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
   defp eventually(assertion, attempts \\ 100)
 

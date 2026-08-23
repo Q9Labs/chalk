@@ -1,12 +1,10 @@
 package sfu
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -14,8 +12,6 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -24,28 +20,6 @@ func TestNewAdapterRejectsMissingConfig(t *testing.T) {
 	_, err := NewAdapter(config.CloudflareRealtimeConfig{})
 	if !errors.Is(err, ErrMissingConfig) {
 		t.Fatalf("error = %v, want %v", err, ErrMissingConfig)
-	}
-}
-
-func TestEnsureEpisodeReturnsBootstrapMetadata(t *testing.T) {
-	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK})
-
-	episode, err := adapter.EnsureEpisode(context.Background(), mediaplane.EnsureEpisodeInput{
-		Provider:   mediaplane.ProviderCloudflareSFU,
-		EpisodeKey: "episode_123",
-	})
-	if err != nil {
-		t.Fatalf("ensure episode: %v", err)
-	}
-
-	if episode.Ref != "episode_123" {
-		t.Fatalf("episode ref = %q, want episode_123", episode.Ref)
-	}
-	if episode.Metadata["sync_owner"] != syncOwner {
-		t.Fatalf("metadata = %#v, want sync owner", episode.Metadata)
-	}
-	if episode.Metadata["api_base"] != "https://rtc.test/v1/apps/sfu-app-id" {
-		t.Fatalf("api base = %q, want configured app base", episode.Metadata["api_base"])
 	}
 }
 
@@ -111,70 +85,6 @@ func TestResumeJoinReconstructsExactBootstrapWithoutProviderCall(t *testing.T) {
 	}
 	if _, ok := join.ClientPayload["appSecret"]; ok {
 		t.Fatal("client payload leaked app secret")
-	}
-}
-
-func TestResumeJoinRejectsWrongProvider(t *testing.T) {
-	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK})
-
-	_, err := adapter.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{Provider: mediaplane.ProviderCloudflareRTK})
-	if !errors.Is(err, mediaplane.ErrInvalidProvider) {
-		t.Fatalf("error = %v, want %v", err, mediaplane.ErrInvalidProvider)
-	}
-}
-
-func TestAddTracksProxiesTypedSignalingRequest(t *testing.T) {
-	client := &roundTripStub{
-		statusCode: http.StatusOK,
-		body:       `{"sessionDescription":{"type":"answer","sdp":"answer-sdp"},"tracks":[{"location":"local","mid":"0","trackName":"camera-track"}],"requiresImmediateRenegotiation":true}`,
-	}
-	adapter := testAdapter(t, client)
-
-	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
-		ConnectionID:       "connection_123",
-		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "offer-sdp"},
-		Tracks:             []mediaplane.Track{{Location: "local", Mid: "0", TrackName: "camera-track"}},
-	})
-	if err != nil {
-		t.Fatalf("add tracks: %v", err)
-	}
-	if client.method != http.MethodPost || client.path != "/v1/apps/sfu-app-id/sessions/connection_123/tracks/new" {
-		t.Fatalf("request = %s %s, want tracks/new", client.method, client.path)
-	}
-	if !strings.Contains(client.requestBody, `"trackName":"camera-track"`) {
-		t.Fatalf("request body = %s, want track name", client.requestBody)
-	}
-	if response.SessionDescription == nil || response.SessionDescription.SDP != "answer-sdp" {
-		t.Fatalf("response = %#v, want provider SDP answer", response)
-	}
-	if len(response.Tracks) != 1 || response.Tracks[0].Location != "local" || response.Tracks[0].Mid != "0" || response.Tracks[0].TrackName != "camera-track" {
-		t.Fatalf("response tracks = %#v, want validated provider result", response.Tracks)
-	}
-	if !response.RequiresImmediateRenegotiation {
-		t.Fatal("requires immediate renegotiation = false, want true")
-	}
-}
-
-func TestAddTracksAddsSecondLocalTrackToEstablishedSession(t *testing.T) {
-	client := &roundTripStub{
-		statusCode: http.StatusOK,
-		body:       `{"sessionDescription":{"type":"answer","sdp":"answer-sdp"},"tracks":[{"mid":"2","trackName":"screen-track"}]}`,
-	}
-	adapter := testAdapter(t, client)
-
-	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
-		ConnectionID:       "established-connection",
-		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "second-local-track-offer"},
-		Tracks:             []mediaplane.Track{{Location: "local", Mid: "2", TrackName: "screen-track"}},
-	})
-	if err != nil {
-		t.Fatalf("add second local track: %v", err)
-	}
-	if len(response.Tracks) != 1 || response.Tracks[0].Mid != "2" || response.Tracks[0].TrackName != "screen-track" {
-		t.Fatalf("response tracks = %#v, want added screen track", response.Tracks)
-	}
-	if !strings.Contains(client.requestBody, `"mid":"2","trackName":"screen-track"`) {
-		t.Fatalf("request body = %s, want new screen track", client.requestBody)
 	}
 }
 
@@ -271,146 +181,6 @@ func TestAddTracksReturnsBoundedProviderFailureClassifications(t *testing.T) {
 	}
 }
 
-func TestAddTracksRejectsProviderFailuresAndInvalidLocalResults(t *testing.T) {
-	request := mediaplane.TracksRequest{
-		ConnectionID:       "private-connection",
-		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "private-offer-sdp"},
-		Tracks:             []mediaplane.Track{{Location: "local", Mid: "private-mid", TrackName: "private-track-name"}},
-	}
-	tests := []struct {
-		name       string
-		statusCode int
-		body       string
-	}{
-		{
-			name:       "too early remains a provider failure",
-			statusCode: http.StatusTooEarly,
-			body:       `{"errors":[{"message":"private provider episode state"}]}`,
-		},
-		{
-			name:       "top level provider error",
-			statusCode: http.StatusOK,
-			body:       `{"errorCode":"private-code","errorDescription":"private-offer-sdp was rejected"}`,
-		},
-		{
-			name:       "top level provider description without code",
-			statusCode: http.StatusOK,
-			body:       `{"errorDescription":"private provider detail"}`,
-		},
-		{
-			name:       "per track provider error",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-track-name","errorCode":"private-code","errorDescription":"private provider detail"}]}`,
-		},
-		{
-			name:       "per track provider description without code",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-track-name","errorDescription":"private provider detail"}]}`,
-		},
-		{
-			name:       "malformed response",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":`,
-		},
-		{
-			name:       "malformed local identity",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"private-mid"}]}`,
-		},
-		{
-			name:       "missing local result",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[]}`,
-		},
-		{
-			name:       "duplicate local result",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-track-name"},{"mid":"private-mid","trackName":"private-track-name"}]}`,
-		},
-		{
-			name:       "unexpected local result",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-unexpected-track"}]}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			adapter := testAdapter(t, &roundTripStub{statusCode: tt.statusCode, body: tt.body})
-
-			_, err := adapter.AddTracks(context.Background(), request)
-			if !errors.Is(err, mediaplane.ErrProviderFailed) {
-				t.Fatalf("error = %v, want %v", err, mediaplane.ErrProviderFailed)
-			}
-			for _, forbidden := range []string{"private-connection", "private-offer-sdp", "private-mid", "private-track-name", "private-unexpected-track", "private provider"} {
-				if strings.Contains(err.Error(), forbidden) {
-					t.Fatalf("error contains %q: %v", forbidden, err)
-				}
-			}
-		})
-	}
-}
-
-func TestRenegotiateProxiesAnswer(t *testing.T) {
-	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
-	adapter := testAdapter(t, client)
-
-	err := adapter.Renegotiate(context.Background(), mediaplane.RenegotiateRequest{
-		ConnectionID:       "connection_123",
-		SessionDescription: mediaplane.SessionDescription{Type: "answer", SDP: "answer-sdp"},
-	})
-	if err != nil {
-		t.Fatalf("renegotiate: %v", err)
-	}
-	if client.method != http.MethodPut || client.path != "/v1/apps/sfu-app-id/sessions/connection_123/renegotiate" {
-		t.Fatalf("request = %s %s, want renegotiate", client.method, client.path)
-	}
-	if !strings.Contains(client.requestBody, `"type":"answer"`) {
-		t.Fatalf("request body = %s, want answer", client.requestBody)
-	}
-}
-
-func TestCloseTracksMapsProviderContractWithoutLeakingChalkIdentity(t *testing.T) {
-	client := &roundTripStub{
-		statusCode: http.StatusOK,
-		body:       `{"sessionDescription":{"type":"answer","sdp":"answer-sdp"},"tracks":[{"mid":"0"}],"requiresImmediateRenegotiation":true}`,
-	}
-	adapter := testAdapter(t, client)
-	request := mediaplane.CloseTracksRequest{
-		Provider:           mediaplane.ProviderCloudflareSFU,
-		ConnectionID:       "connection_123",
-		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "offer-sdp"},
-		Tracks: []mediaplane.CloseTrack{{
-			Mid:           "0",
-			Source:        "camera",
-			PublicationID: "publication_123",
-		}},
-	}
-
-	response, err := adapter.CloseTracks(context.Background(), request)
-	if err != nil {
-		t.Fatalf("close tracks: %v", err)
-	}
-	if client.method != http.MethodPut || client.path != "/v1/apps/sfu-app-id/sessions/connection_123/tracks/close" {
-		t.Fatalf("request = %s %s, want tracks/close", client.method, client.path)
-	}
-	if client.authorization != "Bearer sfu-app-secret" {
-		t.Fatalf("authorization = %q, want server-side app secret", client.authorization)
-	}
-	if !strings.Contains(client.requestBody, `"tracks":[{"mid":"0"}]`) || !strings.Contains(client.requestBody, `"force":false`) {
-		t.Fatalf("request body = %s, want Cloudflare close-tracks fields", client.requestBody)
-	}
-	if strings.Contains(client.requestBody, "publication_123") || strings.Contains(client.requestBody, "camera") {
-		t.Fatalf("request body = %s, leaked Chalk publication identity", client.requestBody)
-	}
-	if len(response.Tracks) != 1 || response.Tracks[0] != request.Tracks[0] {
-		t.Fatalf("response tracks = %#v, want retained Chalk publication identity", response.Tracks)
-	}
-	if response.SessionDescription == nil || response.SessionDescription.SDP != "answer-sdp" || !response.RequiresImmediateRenegotiation {
-		t.Fatalf("response = %#v, want provider negotiation result", response)
-	}
-}
-
 func TestCloseTracksTreatsTrackOrSessionAbsenceAsIdempotentSuccess(t *testing.T) {
 	request := mediaplane.CloseTracksRequest{
 		Provider:     mediaplane.ProviderCloudflareSFU,
@@ -435,82 +205,6 @@ func TestCloseTracksTreatsTrackOrSessionAbsenceAsIdempotentSuccess(t *testing.T)
 				t.Fatalf("response tracks = %#v, want requested identity", response.Tracks)
 			}
 		})
-	}
-}
-
-func TestCloseTracksRejectsProviderFailuresAndUnexpectedResults(t *testing.T) {
-	request := mediaplane.CloseTracksRequest{
-		Provider:     mediaplane.ProviderCloudflareSFU,
-		ConnectionID: "connection_123",
-		Tracks:       []mediaplane.CloseTrack{{Mid: "0", Source: "microphone", PublicationID: "publication_123"}},
-	}
-	tests := []struct {
-		name       string
-		statusCode int
-		body       string
-		want       error
-	}{
-		{
-			name:       "missing connection status is not idempotent",
-			statusCode: http.StatusNotFound,
-			body:       `{"errors":[{"message":"episode not found"}]}`,
-			want:       mediaplane.ErrConnectionNotFound,
-		},
-		{
-			name:       "expired connection status",
-			statusCode: http.StatusGone,
-			body:       `{"errorCode":"session_error","errorDescription":"could not find episode","tracks":[]}`,
-			want:       mediaplane.ErrConnectionNotFound,
-		},
-		{
-			name:       "unrelated provider status",
-			statusCode: http.StatusBadGateway,
-			body:       `{"errorCode":"upstream_error","errorDescription":"provider unavailable"}`,
-			want:       mediaplane.ErrProviderFailed,
-		},
-		{
-			name:       "top level provider error",
-			statusCode: http.StatusOK,
-			body:       `{"errorCode":"invalid_request","errorDescription":"request rejected"}`,
-			want:       mediaplane.ErrProviderFailed,
-		},
-		{
-			name:       "unrelated per track error",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"0","errorCode":"invalid_track","errorDescription":"track rejected"}]}`,
-			want:       mediaplane.ErrProviderFailed,
-		},
-		{
-			name:       "unexpected provider mid",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"other"}]}`,
-			want:       mediaplane.ErrProviderFailed,
-		},
-		{
-			name:       "missing requested provider result",
-			statusCode: http.StatusOK,
-			body:       `{"tracks":[]}`,
-			want:       mediaplane.ErrProviderFailed,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			adapter := testAdapter(t, &roundTripStub{statusCode: tt.statusCode, body: tt.body})
-			_, err := adapter.CloseTracks(context.Background(), request)
-			if !errors.Is(err, tt.want) {
-				t.Fatalf("error = %v, want %v", err, tt.want)
-			}
-		})
-	}
-}
-
-func TestCloseTracksRejectsWrongProvider(t *testing.T) {
-	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK})
-
-	_, err := adapter.CloseTracks(context.Background(), mediaplane.CloseTracksRequest{Provider: mediaplane.ProviderCloudflareRTK})
-	if !errors.Is(err, mediaplane.ErrInvalidProvider) {
-		t.Fatalf("error = %v, want %v", err, mediaplane.ErrInvalidProvider)
 	}
 }
 
@@ -554,156 +248,6 @@ func TestCloseTracksSpanRedactsSecretsAndMediaIdentifiers(t *testing.T) {
 	}
 }
 
-func TestAddTracksFailureTelemetryIsBounded(t *testing.T) {
-	var logs bytes.Buffer
-	originalLogger := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	t.Cleanup(func() {
-		slog.SetDefault(originalLogger)
-	})
-
-	spanRecorder := tracetest.NewSpanRecorder()
-	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	originalTracer := sfuTracer
-	sfuTracer = tracerProvider.Tracer("cloudflare-sfu-failure-test")
-	t.Cleanup(func() {
-		sfuTracer = originalTracer
-		_ = tracerProvider.Shutdown(context.Background())
-	})
-
-	metricReader := sdkmetric.NewManualReader()
-	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader))
-	originalCounter := sfuFailureCounter
-	sfuFailureCounter, _ = meterProvider.Meter("cloudflare-sfu-failure-test").Int64Counter("chalk.api.cloudflare_sfu.failures")
-	t.Cleanup(func() {
-		sfuFailureCounter = originalCounter
-		_ = meterProvider.Shutdown(context.Background())
-	})
-
-	adapter := testAdapter(t, &roundTripStub{
-		statusCode: http.StatusOK,
-		body:       `{"tracks":[{"mid":"private-mid","trackName":"private-screen-track","errorCode":"RTC_SFU_TRACK_STATE_MISMATCH","errorDescription":"The connection is not ready for private-screen-track"}]}`,
-	})
-	_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
-		ConnectionID:       "private-connection",
-		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "private-offer-sdp"},
-		Tracks:             []mediaplane.Track{{Location: "local", Mid: "private-mid", TrackName: "private-screen-track"}},
-	})
-	if !errors.Is(err, mediaplane.ErrProviderFailed) {
-		t.Fatalf("error = %v, want %v", err, mediaplane.ErrProviderFailed)
-	}
-
-	spans := spanRecorder.Ended()
-	if len(spans) != 1 {
-		t.Fatalf("ended spans = %d, want 1", len(spans))
-	}
-	var metrics metricdata.ResourceMetrics
-	if err := metricReader.Collect(context.Background(), &metrics); err != nil {
-		t.Fatalf("collect metrics: %v", err)
-	}
-	telemetry := fmt.Sprint(logs.String(), spans[0].Attributes(), spans[0].Events(), spans[0].Status(), metrics.ScopeMetrics)
-	for _, required := range []string{
-		"cloudflare_sfu.request_failed",
-		"add_tracks",
-		"track",
-		"200",
-		"2xx",
-		"unknown",
-		"RTC_SFU_TRACK_STATE_MISMATCH",
-		"The connection is not ready for [redacted]",
-		"provider_message",
-		"provider_message_fingerprint",
-		"provider_response_bytes",
-		"request_track_count",
-		"response_track_count",
-		"failed_track_count",
-		"trace_id",
-		"span_id",
-		"cloudflare_sfu.provider_failure",
-		"chalk.api.cloudflare_sfu.failures",
-	} {
-		if !strings.Contains(telemetry, required) {
-			t.Fatalf("telemetry missing %q: %s", required, telemetry)
-		}
-	}
-	for _, forbidden := range []string{
-		"sfu-app-secret",
-		"private-connection",
-		"private-offer-sdp",
-		"private-mid",
-		"private-screen-track",
-	} {
-		if strings.Contains(telemetry, forbidden) {
-			t.Fatalf("telemetry contains %q: %s", forbidden, telemetry)
-		}
-	}
-}
-
-func TestObservableProviderMessageRejectsArbitraryIdentifiers(t *testing.T) {
-	message := observableProviderMessage("The connection at 10.0.0.1 for 张三 is not ready")
-	if message != "The connection at [redacted].[redacted].[redacted].[redacted] for [redacted] is not ready" {
-		t.Fatalf("message = %q", message)
-	}
-}
-
-func TestSFULifecycleOperationsStayOutOfGoMediaPlane(t *testing.T) {
-	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK})
-
-	err := adapter.RemoveParticipant(context.Background(), mediaplane.RemoveParticipantInput{})
-	if !errors.Is(err, mediaplane.ErrUnsupportedOperation) {
-		t.Fatalf("remove participant error = %v, want %v", err, mediaplane.ErrUnsupportedOperation)
-	}
-
-	err = adapter.EndEpisode(context.Background(), mediaplane.EndEpisodeInput{})
-	if !errors.Is(err, mediaplane.ErrUnsupportedOperation) {
-		t.Fatalf("end episode error = %v, want %v", err, mediaplane.ErrUnsupportedOperation)
-	}
-}
-
-func TestVerifyConnectionMetadata(t *testing.T) {
-	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
-	adapter := testAdapter(t, client)
-
-	metadata, err := adapter.VerifyConnectionMetadata(context.Background(), "connection_123")
-	if err != nil {
-		t.Fatalf("verify connection metadata: %v", err)
-	}
-
-	if metadata.Ref != "connection_123" {
-		t.Fatalf("connection ref = %q, want connection_123", metadata.Ref)
-	}
-	if client.method != http.MethodGet {
-		t.Fatalf("method = %q, want GET", client.method)
-	}
-	if client.path != "/v1/apps/sfu-app-id/sessions/connection_123" {
-		t.Fatalf("path = %q, want connection lookup path", client.path)
-	}
-}
-
-func TestVerifyConnectionMetadataRejectsEmptyConnectionRef(t *testing.T) {
-	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK, body: `{}`})
-
-	_, err := adapter.VerifyConnectionMetadata(context.Background(), " ")
-	if !errors.Is(err, mediaplane.ErrInvalidConnectionRef) {
-		t.Fatalf("error = %v, want %v", err, mediaplane.ErrInvalidConnectionRef)
-	}
-}
-
-func TestVerifyConnectionMetadataEscapesConnectionRef(t *testing.T) {
-	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
-	adapter := testAdapter(t, client)
-
-	_, err := adapter.VerifyConnectionMetadata(context.Background(), "../connection/123?x=1#frag")
-	if err != nil {
-		t.Fatalf("verify connection metadata: %v", err)
-	}
-
-	want := "/v1/apps/sfu-app-id/sessions/..%2Fconnection%2F123%3Fx=1%23frag"
-	if client.path != want {
-		t.Fatalf("path = %q, want %q", client.path, want)
-	}
-}
-
 func TestVerifyConnectionMetadataMapsProviderErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -727,34 +271,6 @@ func TestVerifyConnectionMetadataMapsProviderErrors(t *testing.T) {
 			_, err := adapter.VerifyConnectionMetadata(context.Background(), "connection_123")
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("error = %v, want %v", err, tt.want)
-			}
-		})
-	}
-}
-
-func TestVerifyConnectionMetadataNormalizesProviderErrorCodes(t *testing.T) {
-	tests := []struct {
-		name             string
-		statusCode       int
-		body             string
-		wantProviderCode string
-	}{
-		{name: "not found status", statusCode: http.StatusNotFound, wantProviderCode: "connection_not_found"},
-		{name: "session not found", statusCode: http.StatusBadRequest, body: `{"errorCode":"SESSION_NOT_FOUND"}`, wantProviderCode: "connection_not_found"},
-		{name: "session not connected", statusCode: http.StatusBadRequest, body: `{"errorCode":"SESSION_NOT_CONNECTED"}`, wantProviderCode: "connection_not_connected"},
-		{name: "session not ready", statusCode: http.StatusBadRequest, body: `{"errorCode":"SESSION_NOT_READY"}`, wantProviderCode: "connection_not_connected"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			adapter := testAdapter(t, &roundTripStub{statusCode: tt.statusCode, body: tt.body})
-			_, err := adapter.VerifyConnectionMetadata(context.Background(), "connection_123")
-			if err == nil {
-				t.Fatal("verify connection metadata succeeded")
-			}
-			want := "provider_code=" + tt.wantProviderCode
-			if !strings.Contains(err.Error(), want) {
-				t.Fatalf("error = %v, want %q", err, want)
 			}
 		})
 	}

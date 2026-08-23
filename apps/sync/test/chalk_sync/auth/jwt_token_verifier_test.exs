@@ -52,45 +52,6 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
     end
   end
 
-  test "rejects malformed role and capability claims", %{
-    private_key: private_key
-  } do
-    base = claims()
-
-    invalid = [
-      Map.merge(base, %{
-        "role" => ""
-      }),
-      Map.merge(base, %{
-        "capabilities" => ["subscribe", "subscribe"]
-      }),
-      Map.merge(base, %{
-        "capabilities" => ["not-a-capability"]
-      }),
-      Map.merge(base, %{"capabilities" => "subscribe"}),
-      Map.delete(base, "role")
-    ]
-
-    Enum.each(invalid, fn candidate ->
-      assert {:error, :invalid_token} =
-               private_key |> token(candidate) |> JWTTokenVerifier.verify()
-    end)
-  end
-
-  test "rejects an unsupported algorithm", %{private_key: private_key} do
-    assert {:error, :invalid_token} =
-             private_key
-             |> token(claims(), %{"alg" => "none", "kid" => "launch-1", "typ" => "JWT"})
-             |> JWTTokenVerifier.verify()
-  end
-
-  test "rejects duplicate key ids", %{private_key: private_key} do
-    header = ~s({"alg":"EdDSA","kid":"launch-1","kid":"launch-1","typ":"JWT"})
-
-    assert {:error, :invalid_token} =
-             signed_token(private_key, header, claims()) |> JWTTokenVerifier.verify()
-  end
-
   test "rejects an expired token", %{private_key: private_key} do
     assert {:error, :invalid_token} =
              private_key

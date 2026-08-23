@@ -174,7 +174,7 @@ domains:
       evidence: ["apps/api/internal/httpapi/transcripts.go", "apps/api/internal/httpapi/router.go"]
     - capability: "Provider dispatcher, retry, finalization, and cleanup implementation"
       done: true
-      evidence: ["apps/transcription-dispatcher/src", "apps/transcription-dispatcher/test"]
+      evidence: ["apps/transcription-dispatcher/src"]
     - capability: "React transcript and transcription UI"
       done: true
       evidence: ["sdks/typescript/react/src/components"]

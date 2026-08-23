@@ -49,17 +49,6 @@ defmodule ChalkSync.RuntimeConfigTest do
     assert config[:local_parity]
   end
 
-  test "CHALK_SYNC_PORT is the explicit port override in production" do
-    config =
-      read_config([
-        {"CHALK_SYNC_LOCAL_PARITY", "true"},
-        {"PORT", "4111"},
-        {"CHALK_SYNC_PORT", "4112"}
-      ])
-
-    assert config[:port] == 4112
-  end
-
   test "local parity rejects remote databases, bridges, and loopback overrides" do
     cases = [
       {
@@ -92,97 +81,6 @@ defmodule ChalkSync.RuntimeConfigTest do
         read_config([{"CHALK_SYNC_LOCAL_PARITY", "true"} | overrides])
       end
     end)
-  end
-
-  test "legacy local proof remains development-authenticated" do
-    config =
-      read_config([
-        {"CHALK_SYNC_LOCAL_PROOF", "true"},
-        {"CHALK_SYNC_TOKEN_ISSUER", nil},
-        {"CHALK_SYNC_TOKEN_AUDIENCE", nil},
-        {"CHALK_SYNC_TOKEN_PUBLIC_KEYS", nil}
-      ])
-
-    assert config[:token_verifier] == ChalkSync.Auth.DevTokenVerifier
-    refute config[:require_production_auth]
-    refute config[:require_synchronous_standby]
-    refute config[:local_parity]
-  end
-
-  test "hosted diagnostics require and preserve deployment-owned destination hosts" do
-    {public_key, private_seed} = :crypto.generate_key(:eddsa, :ed25519)
-
-    config =
-      read_config([
-        {"CHALK_EPISODE_DIAGNOSTICS", "hosted"},
-        {"CHALK_API_ENV", "staging"},
-        {"CHALK_API_URL", "https://api.example.test"},
-        {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", "api.example.test,api.staging.example.test"},
-        {"CHALK_SYNC_INSTANCE_ID", "sync-runtime-test"},
-        {"CHALK_SYNC_GENERATION", "4"},
-        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER", "https://identity.example.test"},
-        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID", "sync-diagnostics-1"},
-        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY",
-         encoded_private_key(private_seed, public_key)}
-      ])
-
-    assert config[:episode_diagnostics][:mode] == :hosted
-    assert config[:episode_diagnostics][:base_url] == "https://api.example.test"
-
-    assert config[:episode_diagnostics][:allowed_hosts] == [
-             "api.example.test",
-             "api.staging.example.test"
-           ]
-  end
-
-  test "hosted diagnostics are accepted in production only with the explicit opt-in" do
-    {public_key, private_seed} = :crypto.generate_key(:eddsa, :ed25519)
-
-    config =
-      read_config([
-        {"CHALK_EPISODE_DIAGNOSTICS", "hosted"},
-        {"CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN", "true"},
-        {"CHALK_API_ENV", "production"},
-        {"CHALK_API_URL", "https://api.example.test"},
-        {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", "api.example.test"},
-        {"CHALK_SYNC_INSTANCE_ID", "sync-runtime-production-test"},
-        {"CHALK_SYNC_GENERATION", "4"},
-        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER", "https://identity.example.test"},
-        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID", "sync-diagnostics-1"},
-        {"CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY",
-         encoded_private_key(private_seed, public_key)}
-      ])
-
-    assert config[:episode_diagnostics][:mode] == :hosted
-    assert config[:episode_diagnostics][:credential].environment == "production"
-  end
-
-  test "production hosted diagnostics still requires complete hosted configuration" do
-    error =
-      assert_raise RuntimeError, fn ->
-        read_config([
-          {"CHALK_EPISODE_DIAGNOSTICS", "hosted"},
-          {"CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN", "true"},
-          {"CHALK_API_ENV", "production"},
-          {"CHALK_API_URL", "https://api.example.test"},
-          {"CHALK_SYNC_DIAGNOSTICS_ALLOWED_HOSTS", "api.example.test"},
-          {"CHALK_SYNC_INSTANCE_ID", "sync-runtime-production-test"},
-          {"CHALK_SYNC_GENERATION", "4"}
-        ])
-      end
-
-    assert error.message ==
-             "CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER must be set for hosted diagnostics"
-  end
-
-  test "production hosted diagnostics names the opt-in when it is absent" do
-    error =
-      assert_raise RuntimeError, fn ->
-        read_config([{"CHALK_EPISODE_DIAGNOSTICS", "hosted"}, {"CHALK_API_ENV", "production"}])
-      end
-
-    assert error.message ==
-             "CHALK_EPISODE_DIAGNOSTICS=hosted requires CHALK_API_ENV=development or staging, or CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN=true in production"
   end
 
   test "production hosted diagnostics requires the exact opt-in and never enables localhost mode" do

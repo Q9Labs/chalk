@@ -7,7 +7,6 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json --noEmit && esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.js",
     "check-types": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

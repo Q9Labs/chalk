@@ -1,10 +1,10 @@
 {
   "apps/api": {
-    "meeting": 14,
+    "meeting": 10,
     "conference": 0,
     "videoconference": 0,
     "room": 0,
-    "session": 960,
+    "session": 805,
     "attendee": 0,
     "lobby": 0,
     "waitingroom": 0,
@@ -14,7 +14,7 @@
     "huddle": 0
   },
   "apps/sync": {
-    "meeting": 1,
+    "meeting": 0,
     "conference": 0,
     "videoconference": 0,
     "room": 0,
@@ -88,7 +88,7 @@
     "conference": 0,
     "videoconference": 0,
     "room": 0,
-    "session": 1,
+    "session": 0,
     "attendee": 0,
     "lobby": 0,
     "waitingroom": 0,

@@ -4,6 +4,7 @@ import { createJourneyIntakeExporter, createTelemetryClient, type TelemetryClien
 import { createKeyValueTelemetryStorage, createMemoryTelemetryStorage } from "./storage";
 import { withSyncTelemetryCorrelation } from "./sync";
 import { makeDeferredFacadeExporter } from "./test-support";
+import { createTraceContext, parseTraceparent } from "./trace";
 import type { JourneyIntakeEvent, TelemetryEvent } from "./types";
 
 const clients: TelemetryClient[] = [];
@@ -21,6 +22,13 @@ function createClient(options: ConstructorParameters<typeof TelemetryClient>[0] 
 }
 
 describe("TelemetryClient", () => {
+  it("continues a valid parent trace with a fresh span", () => {
+    const child = createTraceContext("00-11111111111111111111111111111111-2222222222222222-01");
+
+    expect(parseTraceparent(child.traceparent)?.traceId).toBe("11111111111111111111111111111111");
+    expect(child.spanId).not.toBe("2222222222222222");
+  });
+
   it("records a root journey from start through an idempotent terminal outcome", async () => {
     const exporter = vi.fn(async () => ({ accepted_count: 3, duplicate_count: 0 }));
     const telemetry = createClient({ exporter, now: () => new Date("2026-07-11T10:00:00.000Z") });

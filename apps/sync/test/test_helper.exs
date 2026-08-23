@@ -1,1 +1,1 @@
-ExUnit.start(exclude: [:provider_bridge_e2e, :reliability_topology])
+ExUnit.start(exclude: [:reliability_topology])

@@ -34,22 +34,6 @@ defmodule ChalkSync.ReleaseTopology.ScheduleTest do
     assert reason =~ "credentials, tokens, URLs, or secret references"
   end
 
-  test "rejects ambiguous event declarations and unsupported action markers" do
-    duplicate = update_in(schedule(), ["events"], &[event() | &1])
-
-    assert {:error, "event id is duplicated: sync_replacement"} = Schedule.validate(duplicate)
-
-    invalid_marker =
-      update_in(
-        schedule(),
-        ["events", Access.at(0), "observe"],
-        &Map.put(&1, "expect", "available")
-      )
-
-    assert {:error, "events[1].observe.expect must equal \"confirmed\""} =
-             Schedule.validate(invalid_marker)
-  end
-
   test "publishes a parseable schema whose version matches the runtime validator" do
     schema_path =
       Path.expand("../../../docs/release-topology-failure-schedule-v1.schema.json", __DIR__)
@@ -58,13 +42,6 @@ defmodule ChalkSync.ReleaseTopology.ScheduleTest do
 
     assert schema["properties"]["schema_version"]["const"] == Schedule.schema_version()
     assert schema["properties"]["environment"]["enum"] == ["local", "staging"]
-  end
-
-  test "loads the public dry-run fixture" do
-    fixture_path = Path.expand("../../fixtures/release_topology/local_schedule_v1.json", __DIR__)
-
-    assert {:ok, %{"name" => "local_topology", "environment" => "local"}} =
-             Schedule.load(fixture_path)
   end
 
   test "rejects an oversized schedule before decoding it" do

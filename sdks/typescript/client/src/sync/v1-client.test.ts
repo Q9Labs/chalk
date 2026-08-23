@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SnapshotSchema } from "../generated/sync";
-import { decodeV1ServerFrame } from "./v1-codec";
+import { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
 import { V1SyncClient, V1SyncError } from "./v1-client";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { AsyncStorageV1PendingTargetStore, IndexedDbV1PendingTargetStore } from "./v1-platform-persistence";
@@ -17,6 +17,21 @@ const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
 describe("V1SyncClient", () => {
+  it("round-trips approved frames and rejects aliases or unknown fields", () => {
+    const command = {
+      type: "command",
+      command_id: commandIds[0],
+      name: "set_hand_raised",
+      payload: { raised: true },
+    } as const;
+
+    expect(JSON.parse(encodeV1ClientFrame(command))).toEqual(command);
+    expect(decodeV1ClientFrame(command)).toEqual(command);
+    expect(decodeV1ServerFrame('{"type":"pong"}')).toEqual({ type: "pong" });
+    expect(() => decodeV1ClientFrame({ ...command, name: "raise_hand" })).toThrow();
+    expect(() => decodeV1ServerFrame('{"type":"pong","extra":true}')).toThrow();
+  });
+
   it("allows startup to be retried after pending-target restoration fails", async () => {
     const store = new FailOnceLoadStore();
     const sockets: TestSocket[] = [];

@@ -12,6 +12,15 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+func mustID(t *testing.T, value string) utilities.ID {
+	t.Helper()
+	id, err := utilities.ParseID(value)
+	if err != nil {
+		t.Fatalf("parse id: %v", err)
+	}
+	return id
+}
+
 func TestSFUExecutorRevokesExactPublicationAndReconcilesIdempotently(t *testing.T) {
 	participantID := mustID(t, "33333333-3333-4333-8333-333333333333")
 	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{{

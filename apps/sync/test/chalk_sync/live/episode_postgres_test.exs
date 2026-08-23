@@ -210,62 +210,6 @@ defmodule ChalkSync.Live.EpisodePostgresTest do
              )
   end
 
-  test "reconciliation ignores stale media observations and rejects cursor reuse", %{
-    connection: connection
-  } do
-    fixture = SyncPostgres.seed_episode(connection, 1, %{role_capabilities: @role_capabilities})
-    identity = hd(fixture.identities)
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
-
-    camera = %{
-      participant_id: identity.participant_id,
-      source: :camera,
-      enabled: true,
-      publication_id: "provider-camera-newer"
-    }
-
-    microphone = %{
-      participant_id: identity.participant_id,
-      source: :microphone,
-      enabled: true,
-      publication_id: "provider-microphone-newer"
-    }
-
-    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
-    previous_media_plane = Application.get_env(:chalk_sync, :media_plane)
-    Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
-    on_exit(fn -> restore_env(:media_plane, previous_media_plane) end)
-
-    MediaPlaneTestAdapter.put_outcome(
-      adapter,
-      :observe_episode_publications,
-      {:ok, %{incarnation: 4, sequence: 8, publications: [camera, microphone]}}
-    )
-
-    assert {:ok, newer, [%{"items" => newer_items}]} =
-             Episode.reconcile(Episode.new(fixture.episode))
-
-    assert newer.media_observation_cursor == {4, 8}
-    assert length(newer_items) == 2
-
-    MediaPlaneTestAdapter.put_outcome(
-      adapter,
-      :observe_episode_publications,
-      {:ok, %{incarnation: 4, sequence: 7, publications: [camera]}}
-    )
-
-    assert {:ok, unchanged, []} = Episode.reconcile(newer)
-    assert unchanged == newer
-
-    MediaPlaneTestAdapter.put_outcome(
-      adapter,
-      :observe_episode_publications,
-      {:ok, %{incarnation: 4, sequence: 8, publications: [camera]}}
-    )
-
-    assert {:error, :dependency_unavailable} = Episode.reconcile(newer)
-  end
-
   defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 

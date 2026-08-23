@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createChalkServerClient } from "./client";
-import { ChalkAPIError } from "./errors";
+import { ChalkAPIError, ChalkServerOnlyError } from "./errors";
 
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const spaceId = "22222222-2222-4222-8222-222222222222";
@@ -8,6 +8,10 @@ const episodeId = "33333333-3333-4333-8333-333333333333";
 const participantId = "44444444-4444-4444-8444-444444444444";
 
 describe("createChalkServerClient", () => {
+  it("fails evaluation of the server-only entrypoint with the stable guard error", async () => {
+    await expect(import("./server-only")).rejects.toEqual(new ChalkServerOnlyError());
+  });
+
   it("preserves the global receiver required by edge-runtime fetch", async () => {
     const edgeFetch = vi.fn(function (this: unknown) {
       if (this !== globalThis) throw new TypeError("Illegal invocation");

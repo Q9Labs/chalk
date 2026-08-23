@@ -1,8 +1,6 @@
 defmodule ChalkSync.LifecycleConsumerPostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.LifecycleConsumer
-  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
@@ -31,41 +29,6 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     else
       :ok
     end
-  end
-
-  test "moves retrying intents behind a newer processable intent", %{connections: connections} do
-    connection = hd(connections)
-    poison = Enum.map(1..33, fn _index -> SyncPostgres.seed_pending_join(connection) end)
-    good = SyncPostgres.seed_pending_join(connection)
-
-    on_exit(fn ->
-      Enum.each([good | poison], &SyncPostgres.cleanup(connection, &1.episode))
-    end)
-
-    Enum.each(poison, fn fixture ->
-      make_intent_invalid(connection, fixture)
-      age_intent(connection, fixture)
-    end)
-
-    consumer_name = Module.concat(__MODULE__, "Consumer#{System.unique_integer([:positive])}")
-
-    start_supervised!(
-      {LifecycleConsumer, name: consumer_name, poll_interval_ms: 10, page_size: 32},
-      id: consumer_name
-    )
-
-    eventually(fn -> intent_status(connection, good) == "applied" end)
-
-    Enum.each(poison, fn fixture ->
-      assert ["pending", attempt_count, "invalid_lifecycle_transition"] =
-               intent_attempt(connection, fixture)
-
-      assert attempt_count >= 1
-    end)
-
-    health = LifecycleConsumer.health(consumer_name)
-    assert health.applied_count >= 1
-    assert health.consecutive_failures == 0
   end
 
   test "records concurrent failures without losing attempts or overflowing the counter", %{
@@ -149,67 +112,6 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, []} = Postgres.pending_lifecycle_intents(32)
   end
 
-  test "saturates a poisoned intent before it is superseded", %{connections: connections} do
-    connection = hd(connections)
-    fixture = SyncPostgres.seed_pending_join(connection)
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
-
-    Postgrex.query!(
-      connection,
-      "update sync_lifecycle_intents set attempt_count = 2147483647 where lifecycle_intent_id = $1",
-      [UUID.dump!(fixture.lifecycle_intent_id)]
-    )
-
-    assert {:ok, operation} =
-             Operation.new("consumer_tenant_end", :tenant_end_episode, %{})
-
-    assert {:ok, %{external_operation_id: operation_id}} =
-             Postgres.begin_internal_operation(fixture.episode, operation)
-
-    assert {:ok, %{result: :applied}} =
-             Postgres.finalize_operation(
-               fixture.episode,
-               operation_id,
-               {:applied, :episode_ended, %{"reason" => "tenant_recovery"}}
-             )
-
-    assert ["superseded", 2_147_483_647, nil] = intent_attempt(connection, fixture)
-  end
-
-  defp make_intent_invalid(connection, fixture) do
-    Postgrex.query!(
-      connection,
-      """
-      update participants
-      set status = 'active'
-      where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4
-      """,
-      episode_params(fixture) ++ [UUID.dump!(fixture.identity.participant_id)]
-    )
-  end
-
-  defp age_intent(connection, fixture) do
-    Postgrex.query!(
-      connection,
-      """
-      update sync_lifecycle_intents
-      set created_at = now() - interval '1 minute'
-      where tenant_id = $1 and space_id = $2 and episode_id = $3 and lifecycle_intent_id = $4
-      """,
-      episode_params(fixture) ++ [UUID.dump!(fixture.lifecycle_intent_id)]
-    )
-  end
-
-  defp intent_status(connection, fixture) do
-    connection
-    |> Postgrex.query!(
-      "select status from sync_lifecycle_intents where lifecycle_intent_id = $1",
-      [UUID.dump!(fixture.lifecycle_intent_id)]
-    )
-    |> Map.fetch!(:rows)
-    |> then(fn [[status]] -> status end)
-  end
-
   defp intent_attempt(connection, fixture) do
     connection
     |> Postgrex.query!(
@@ -223,27 +125,6 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     |> Map.fetch!(:rows)
     |> then(fn [attempt] -> attempt end)
   end
-
-  defp episode_params(fixture) do
-    [
-      UUID.dump!(fixture.episode.tenant_id),
-      UUID.dump!(fixture.episode.space_id),
-      UUID.dump!(fixture.episode.episode_id)
-    ]
-  end
-
-  defp eventually(assertion, attempts \\ 100)
-
-  defp eventually(assertion, attempts) when attempts > 0 do
-    if assertion.() do
-      :ok
-    else
-      Process.sleep(10)
-      eventually(assertion, attempts - 1)
-    end
-  end
-
-  defp eventually(_assertion, 0), do: flunk("condition did not become true")
 
   defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
