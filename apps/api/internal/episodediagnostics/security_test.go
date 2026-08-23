@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+func draftFixture() DiagnosticEventDraft {
+	return DiagnosticEventDraft{
+		Version: 1, EventID: "event01", ProducerOperationRef: "op01", ProducerSequence: 1,
+		OccurredAt: time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC), Source: SourceSDK,
+		Name: "chat.send", Phase: "intent", State: EventStarted,
+		Attributes: DiagnosticAttributes{"status": "accepted", "retryable": false},
+	}
+}
+
 func TestValidateDiagnosticIntakeUsesAuthoritativeEndAndHardExpiry(t *testing.T) {
 	started := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
 	ended := started.Add(time.Hour)

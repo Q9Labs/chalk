@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
+import { createChalkWhiteboardV1Client } from "./v1-create";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 import { whiteboardV1PendingOperationBytes } from "./v1-multipart";
 import type { ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation, ChalkWhiteboardV1PendingOperationStore } from "./types";
@@ -11,6 +12,40 @@ const nextSceneId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const ids = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
 describe("ChalkWhiteboardV1Client", () => {
+  it("accepts explicit platform adapters", () => {
+    const client = createChalkWhiteboardV1Client({
+      url: "ws://sync.test/v1/whiteboard",
+      token: async () => "participant-token",
+      files: {
+        initiateUpload: async () => ({
+          uploadId: "upload",
+          method: "PUT",
+          uploadUrl: "https://uploads.test/object",
+          headers: {},
+          expiresAt: "2026-07-29T12:00:00.000Z",
+        }),
+        finalizeUpload: async () => undefined,
+        getDownloadUrl: async () => ({
+          downloadUrl: "https://downloads.test/object",
+          expiresAt: "2026-07-29T12:00:00.000Z",
+        }),
+      },
+      lifecycle: { subscribe: () => () => undefined },
+      webSocket: {
+        connect: () => ({
+          onopen: null,
+          onmessage: null,
+          onclose: null,
+          onerror: null,
+          send: () => undefined,
+          close: () => undefined,
+        }),
+      },
+    });
+
+    expect(client).toBeInstanceOf(Object);
+  });
+
   it("authenticates with the participant token and assembles an acknowledged snapshot", async () => {
     const summaries: unknown[] = [];
     const { client, socket, started } = await connectingClient({ onSummary: (summary) => summaries.push(summary) });

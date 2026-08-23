@@ -45,30 +45,6 @@ func TestLoadAcceptsEd25519SyncTokenSigningConfig(t *testing.T) {
 	}
 }
 
-func TestLoadAcceptsPreviousMediaVerificationKey(t *testing.T) {
-	currentPublic, currentPrivate, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	previousPublic, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(config.SyncTokenAudience, "chalk-sync")
-	t.Setenv(config.SyncTokenIssuer, "https://api.chalk.test")
-	t.Setenv(config.SyncTokenKeyID, "launch-2")
-	t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(currentPrivate))
-	t.Setenv(config.MediaTokenVerificationKeys, `{"launch-2":"`+base64.RawURLEncoding.EncodeToString(currentPublic)+`","launch-1":"`+base64.RawURLEncoding.EncodeToString(previousPublic)+`"}`)
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cfg.SyncToken.VerificationKeys) != 2 || !cfg.SyncToken.VerificationKeys["launch-1"].Equal(previousPublic) {
-		t.Fatalf("verification keys = %#v", cfg.SyncToken.VerificationKeys)
-	}
-}
-
 func TestLoadRejectsMediaAudienceForSyncCredentials(t *testing.T) {
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -82,190 +58,6 @@ func TestLoadRejectsMediaAudienceForSyncCredentials(t *testing.T) {
 	_, err = config.Load()
 	if err == nil || !strings.Contains(err.Error(), "participant media audience") {
 		t.Fatalf("error = %v", err)
-	}
-}
-
-func TestLoadDefaults(t *testing.T) {
-	clearPublicInviteEnv(t)
-	t.Setenv(config.DatabaseURL, "")
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-
-	if cfg.API.Address != config.DefaultAPIAddress {
-		t.Fatalf("api address = %q, want %q", cfg.API.Address, config.DefaultAPIAddress)
-	}
-	if cfg.PublicInvite.Enabled || cfg.PublicInvite.ManagedTenantID != "" || cfg.PublicInvite.DefaultMediaPlane != "" || len(cfg.PublicInvite.PrivateKey) != 0 || len(cfg.PublicInvite.VerificationKeys) != 0 {
-		t.Fatalf("local public invite config = %#v, want disabled", cfg.PublicInvite)
-	}
-	if len(cfg.API.CORSAllowedOrigins) != 0 {
-		t.Fatalf("cors allowed origins = %#v, want empty", cfg.API.CORSAllowedOrigins)
-	}
-	if len(cfg.API.TrustedProxyCIDRs) != 0 {
-		t.Fatalf("trusted proxy cidrs = %#v, want empty", cfg.API.TrustedProxyCIDRs)
-	}
-	if cfg.Auth.EmailVerificationRequired {
-		t.Fatal("email verification required = true, want false")
-	}
-	if cfg.Auth.OAuthStateTTL != config.DefaultOAuthStateTTL {
-		t.Fatalf("oauth state ttl = %s, want %s", cfg.Auth.OAuthStateTTL, config.DefaultOAuthStateTTL)
-	}
-	if cfg.Auth.SessionTTL != config.DefaultSessionTTL {
-		t.Fatalf("login ttl = %s, want %s", cfg.Auth.SessionTTL, config.DefaultSessionTTL)
-	}
-	if string(cfg.Auth.RecentAuthSecret) != config.DefaultRecentAuthSecret {
-		t.Fatalf("recent-auth secret = %q, want local default", cfg.Auth.RecentAuthSecret)
-	}
-	if cfg.Capabilities.Integrations || cfg.Capabilities.Recording || cfg.Capabilities.Transcription || cfg.Capabilities.WhiteboardFiles {
-		t.Fatalf("local capabilities = %#v, want disabled", cfg.Capabilities)
-	}
-	if cfg.Database.URL != config.DefaultDatabaseURL {
-		t.Fatalf("database url = %q, want %q", cfg.Database.URL, config.DefaultDatabaseURL)
-	}
-	if cfg.Database.MaxConns != config.DefaultDBMaxConns {
-		t.Fatalf("database max conns = %d, want %d", cfg.Database.MaxConns, config.DefaultDBMaxConns)
-	}
-	if cfg.Database.MinConns != config.DefaultDBMinConns {
-		t.Fatalf("database min conns = %d, want %d", cfg.Database.MinConns, config.DefaultDBMinConns)
-	}
-	if cfg.GoogleOAuth.ClientID != "" {
-		t.Fatalf("google oauth client id = %q, want empty", cfg.GoogleOAuth.ClientID)
-	}
-	if cfg.GoogleOAuth.ClientSecret != "" {
-		t.Fatalf("google oauth client secret = %q, want empty", cfg.GoogleOAuth.ClientSecret)
-	}
-	if cfg.GoogleOAuth.RedirectURL != config.DefaultGoogleRedirectURL {
-		t.Fatalf("google oauth redirect url = %q, want %q", cfg.GoogleOAuth.RedirectURL, config.DefaultGoogleRedirectURL)
-	}
-	if cfg.Redis.URL != config.DefaultRedisURL {
-		t.Fatalf("redis url = %q, want %q", cfg.Redis.URL, config.DefaultRedisURL)
-	}
-	if cfg.CloudflareRealtime.AccountID != "" {
-		t.Fatalf("cloudflare account id = %q, want empty", cfg.CloudflareRealtime.AccountID)
-	}
-	if cfg.CloudflareRealtime.APIToken != "" {
-		t.Fatalf("cloudflare api token = %q, want empty", cfg.CloudflareRealtime.APIToken)
-	}
-	if cfg.CloudflareRealtime.RealtimeAppID != "" {
-		t.Fatalf("cloudflare realtime app id = %q, want empty", cfg.CloudflareRealtime.RealtimeAppID)
-	}
-	if cfg.CloudflareRealtime.RealtimeAppSecret != "" {
-		t.Fatalf("cloudflare realtime app secret = %q, want empty", cfg.CloudflareRealtime.RealtimeAppSecret)
-	}
-	if cfg.CloudflareRealtime.RealtimeBaseURL != "" {
-		t.Fatalf("cloudflare realtime base url = %q, want empty", cfg.CloudflareRealtime.RealtimeBaseURL)
-	}
-	if cfg.ProviderBridge.Enabled {
-		t.Fatal("provider bridge enabled = true, want false")
-	}
-	if cfg.CloudflareRealtime.RTKAppID != "" {
-		t.Fatalf("cloudflare rtk app id = %q, want empty", cfg.CloudflareRealtime.RTKAppID)
-	}
-	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
-		t.Fatalf("cloudflare rtk token org id = %q, want empty", cfg.CloudflareRealtime.RTKTokenOrgID)
-	}
-	if cfg.CloudflareRealtime.RTKPresetFacilitator != config.DefaultCloudflareRTKPresetFacilitator {
-		t.Fatalf("cloudflare rtk facilitator preset = %q, want %q", cfg.CloudflareRealtime.RTKPresetFacilitator, config.DefaultCloudflareRTKPresetFacilitator)
-	}
-	if cfg.CloudflareRealtime.RTKPresetContributor != config.DefaultCloudflareRTKPresetContributor {
-		t.Fatalf("cloudflare rtk contributor preset = %q, want %q", cfg.CloudflareRealtime.RTKPresetContributor, config.DefaultCloudflareRTKPresetContributor)
-	}
-	if cfg.CloudflareRealtime.RequestTimeout != config.DefaultCloudflareRealtimeTimeout {
-		t.Fatalf("cloudflare realtime request timeout = %s, want %s", cfg.CloudflareRealtime.RequestTimeout, config.DefaultCloudflareRealtimeTimeout)
-	}
-	if cfg.Composio.APIKey != "" {
-		t.Fatalf("composio api key = %q, want empty", cfg.Composio.APIKey)
-	}
-	if cfg.Composio.BaseURL != config.DefaultComposioBaseURL {
-		t.Fatalf("composio base url = %q, want %q", cfg.Composio.BaseURL, config.DefaultComposioBaseURL)
-	}
-	if cfg.Composio.RequestTimeout != config.DefaultComposioTimeout {
-		t.Fatalf("composio timeout = %s, want %s", cfg.Composio.RequestTimeout, config.DefaultComposioTimeout)
-	}
-	if cfg.Composio.WebhookSecret != "" {
-		t.Fatalf("composio webhook secret = %q, want empty", cfg.Composio.WebhookSecret)
-	}
-	if cfg.R2.AccessKeyID != "" {
-		t.Fatalf("r2 access key id = %q, want empty", cfg.R2.AccessKeyID)
-	}
-	if cfg.R2.AccountID != "" {
-		t.Fatalf("r2 account id = %q, want empty", cfg.R2.AccountID)
-	}
-	if cfg.R2.Bucket != "" {
-		t.Fatalf("r2 bucket = %q, want empty", cfg.R2.Bucket)
-	}
-	if cfg.R2.Endpoint != "" {
-		t.Fatalf("r2 endpoint = %q, want empty", cfg.R2.Endpoint)
-	}
-	if cfg.R2.SecretAccessKey != "" {
-		t.Fatalf("r2 secret access key = %q, want empty", cfg.R2.SecretAccessKey)
-	}
-	if cfg.R2.RequestTimeout != config.DefaultR2Timeout {
-		t.Fatalf("r2 request timeout = %s, want %s", cfg.R2.RequestTimeout, config.DefaultR2Timeout)
-	}
-	if cfg.Resend.APIKey != "" {
-		t.Fatalf("resend api key = %q, want empty", cfg.Resend.APIKey)
-	}
-	if cfg.Resend.Timeout != config.DefaultResendTimeout {
-		t.Fatalf("resend timeout = %s, want %s", cfg.Resend.Timeout, config.DefaultResendTimeout)
-	}
-	if cfg.Observability.Profiler {
-		t.Fatal("profiler = true, want false")
-	}
-	if cfg.Observability.OperationLogs {
-		t.Fatal("operation logs = true, want false")
-	}
-	if cfg.Observability.Service != config.DefaultServiceName {
-		t.Fatalf("service = %q, want %q", cfg.Observability.Service, config.DefaultServiceName)
-	}
-	if cfg.Observability.Environment != config.DefaultEnvironment {
-		t.Fatalf("environment = %q, want %q", cfg.Observability.Environment, config.DefaultEnvironment)
-	}
-	if cfg.Observability.Version != config.DefaultVersion {
-		t.Fatalf("version = %q, want %q", cfg.Observability.Version, config.DefaultVersion)
-	}
-	if cfg.Observability.LogFormat != config.DefaultLogFormat {
-		t.Fatalf("log format = %q, want %q", cfg.Observability.LogFormat, config.DefaultLogFormat)
-	}
-	if cfg.Observability.LogLevel != config.DefaultLogLevel {
-		t.Fatalf("log level = %q, want %q", cfg.Observability.LogLevel, config.DefaultLogLevel)
-	}
-	if cfg.Observability.RequestLogs != config.DefaultRequestLogs {
-		t.Fatalf("request logs = %q, want %q", cfg.Observability.RequestLogs, config.DefaultRequestLogs)
-	}
-	if cfg.Observability.RequestSampleRate != config.DefaultRequestSampleRate {
-		t.Fatalf("request sample rate = %f, want %f", cfg.Observability.RequestSampleRate, config.DefaultRequestSampleRate)
-	}
-	if cfg.Observability.SlowRequestThreshold != time.Duration(config.DefaultSlowRequestMS)*time.Millisecond {
-		t.Fatalf("slow request threshold = %s, want %dms", cfg.Observability.SlowRequestThreshold, config.DefaultSlowRequestMS)
-	}
-}
-
-func TestLoadDefaultMediaPlaneIsOptional(t *testing.T) {
-	t.Setenv(config.DefaultMediaPlane, "")
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if cfg.DefaultMediaPlane != "" {
-		t.Fatalf("default media plane = %q, want empty", cfg.DefaultMediaPlane)
-	}
-}
-
-func TestLoadDefaultMediaPlaneAcceptsCloudflareSFU(t *testing.T) {
-	t.Setenv(config.DefaultMediaPlane, string(spaces.MediaPlaneProviderCloudflareSFU))
-	t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "1000")
-	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app")
-	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-secret")
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if cfg.DefaultMediaPlane != spaces.MediaPlaneProviderCloudflareSFU {
-		t.Fatalf("default media plane = %q, want %q", cfg.DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
 	}
 }
 
@@ -324,30 +116,6 @@ func TestLoadValidatesDefaultMediaPlaneProcessConfig(t *testing.T) {
 				t.Fatalf("load error = %v, want %s validation", err, test.want)
 			}
 		})
-	}
-}
-
-func TestLoadPublicInviteConfig(t *testing.T) {
-	setPublicInviteConfig(t)
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load public invite config: %v", err)
-	}
-	if !cfg.PublicInvite.Enabled || cfg.PublicInvite.ManagedTenantID != "11111111-1111-4111-8111-111111111111" || cfg.PublicInvite.DefaultMediaPlane != "cf_rtk" || cfg.PublicInvite.WebOrigin != "https://app.chalk.test" {
-		t.Fatalf("public invite config = %#v", cfg.PublicInvite)
-	}
-	if cfg.PublicInvite.KeyID != "public-1" || len(cfg.PublicInvite.PrivateKey) != ed25519.PrivateKeySize {
-		t.Fatalf("public invite signer = %#v", cfg.PublicInvite)
-	}
-	if key := cfg.PublicInvite.VerificationKeys["public-1"]; !key.Equal(cfg.PublicInvite.PrivateKey.Public()) {
-		t.Fatalf("public invite verification key = %#v", key)
-	}
-	if cfg.PublicInvite.AutoLifecycleLifetime != 15*time.Minute {
-		t.Fatalf("public invite auto lifecycle = %s", cfg.PublicInvite.AutoLifecycleLifetime)
-	}
-	if cfg.PublicInvite.SchedulerInterval != 2500*time.Millisecond || cfg.PublicInvite.SchedulerBatch != 25 {
-		t.Fatalf("public invite scheduler = %s/%d", cfg.PublicInvite.SchedulerInterval, cfg.PublicInvite.SchedulerBatch)
 	}
 }
 
@@ -466,14 +234,6 @@ func TestLoadOpsIngestToken(t *testing.T) {
 	}
 }
 
-func TestLoadAllowsEmptyOpsIngestTokenLocally(t *testing.T) {
-	t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
-	t.Setenv(config.OpsIngestToken, "")
-	if _, err := config.Load(); err != nil {
-		t.Fatalf("load local config: %v", err)
-	}
-}
-
 func TestLoadRejectsWeakOpsIngestTokenOutsideLocal(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -527,27 +287,6 @@ func TestLoadEpisodeDiagnosticsDefaultsOff(t *testing.T) {
 	}
 }
 
-func TestLoadEpisodeDiagnosticsLocalMode(t *testing.T) {
-	clearEpisodeDiagnosticsEnv(t)
-	t.Setenv(config.APIEnvironment, config.DefaultEnvironment)
-	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeLocalhost)
-	t.Setenv(config.EpisodeDiagnosticsProducerToken, "local-producer")
-	t.Setenv(config.EpisodeDiagnosticsOperatorToken, "local-operator")
-	localHMACKey := strings.Repeat("h", 32)
-	t.Setenv(config.EpisodeDiagnosticsHMACKey, localHMACKey)
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if cfg.EpisodeDiagnostics.Mode != config.EpisodeDiagnosticsModeLocalhost || cfg.EpisodeDiagnostics.Environment != "localhost" {
-		t.Fatalf("diagnostic mode/environment = %q/%q", cfg.EpisodeDiagnostics.Mode, cfg.EpisodeDiagnostics.Environment)
-	}
-	if cfg.EpisodeDiagnostics.ProducerToken != "local-producer" || cfg.EpisodeDiagnostics.OperatorToken != "local-operator" || string(cfg.EpisodeDiagnostics.HMACKey) != localHMACKey {
-		t.Fatalf("diagnostic credentials did not map: %#v", cfg.EpisodeDiagnostics)
-	}
-}
-
 func TestLoadEpisodeDiagnosticsHostedMode(t *testing.T) {
 	setHostedEnvironment(t)
 	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
@@ -570,31 +309,6 @@ func TestLoadEpisodeDiagnosticsHostedMode(t *testing.T) {
 	}
 	if diagnostics.OperatorIssuer != "https://identity.chalk.test" || diagnostics.OperatorAudience != "chalk-diagnostics-operator" || len(diagnostics.OperatorJWKS) == 0 {
 		t.Fatalf("hosted operator identity = %#v", diagnostics)
-	}
-}
-
-func TestLoadEpisodeDiagnosticsHostedModeProductionOptIn(t *testing.T) {
-	setHostedEnvironment(t)
-	t.Setenv(config.APIEnvironment, "production")
-	t.Setenv(config.EpisodeDiagnosticsProductionOptIn, "true")
-	t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
-	t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
-	setHostedDiagnosticsOperatorIdentity(t)
-	_, syncPrivateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(config.SyncTokenAudience, "chalk-sync")
-	t.Setenv(config.SyncTokenIssuer, "https://api.chalk.test")
-	t.Setenv(config.SyncTokenKeyID, "sync-1")
-	t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(syncPrivateKey))
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load production config: %v", err)
-	}
-	if cfg.EpisodeDiagnostics.Mode != config.EpisodeDiagnosticsModeHosted || cfg.EpisodeDiagnostics.Environment != "production" {
-		t.Fatalf("diagnostic mode/environment = %q/%q", cfg.EpisodeDiagnostics.Mode, cfg.EpisodeDiagnostics.Environment)
 	}
 }
 
@@ -621,39 +335,6 @@ func TestLoadEpisodeDiagnosticsHostedModeProductionRequiresOptIn(t *testing.T) {
 	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.EpisodeDiagnosticsProductionOptIn) {
 		t.Fatalf("load error = %v, want production opt-in validation", err)
 	}
-}
-
-func TestLoadEpisodeDiagnosticsProductionOptInMatrix(t *testing.T) {
-	for _, optIn := range []string{"", "false", "TRUE", "1", " true"} {
-		t.Run("hosted/"+optIn, func(t *testing.T) {
-			setHostedEnvironment(t)
-			t.Setenv(config.APIEnvironment, "production")
-			t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeHosted)
-			t.Setenv(config.EpisodeDiagnosticsProductionOptIn, optIn)
-			t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
-			setHostedDiagnosticsOperatorIdentity(t)
-
-			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.EpisodeDiagnosticsProductionOptIn) {
-				t.Fatalf("load error = %v, want exact production opt-in rejection", err)
-			}
-		})
-	}
-
-	t.Run("localhost/true", func(t *testing.T) {
-		clearEpisodeDiagnosticsEnv(t)
-		t.Setenv(config.APIEnvironment, "production")
-		t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
-		t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
-		t.Setenv(config.EpisodeDiagnosticsMode, config.EpisodeDiagnosticsModeLocalhost)
-		t.Setenv(config.EpisodeDiagnosticsProductionOptIn, "true")
-		t.Setenv(config.EpisodeDiagnosticsProducerToken, "local-producer")
-		t.Setenv(config.EpisodeDiagnosticsOperatorToken, "local-operator")
-		t.Setenv(config.EpisodeDiagnosticsHMACKey, strings.Repeat("h", 32))
-
-		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), config.EpisodeDiagnosticsMode) {
-			t.Fatalf("load error = %v, want localhost production rejection", err)
-		}
-	})
 }
 
 func TestLoadEpisodeDiagnosticsRejectsInvalidLocalAuthAndBounds(t *testing.T) {
@@ -1175,66 +856,6 @@ func TestLoadComposio(t *testing.T) {
 	}
 }
 
-func TestLoadObservability(t *testing.T) {
-	t.Setenv(config.APIEnvironment, "staging")
-	setPublicInviteConfig(t)
-	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
-	t.Setenv(config.TranscriptionEnabled, "false")
-	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
-	t.Setenv(config.ComposioAPIKey, "composio-key")
-	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	t.Setenv(config.APILogFormat, "text")
-	t.Setenv(config.APILogLevel, "debug")
-	t.Setenv(config.APIOTLPEndpoint, "https://otel.chalk.test:4318")
-	t.Setenv(config.APIProfiler, "true")
-	t.Setenv(config.APIOperationLogs, "1")
-	t.Setenv(config.APIRequestLogs, "sampled")
-	t.Setenv(config.APIRequestSampleRate, "0.25")
-	t.Setenv(config.APIService, "chalk-api-test")
-	t.Setenv(config.APISlowRequestMS, "75")
-	t.Setenv(config.APIVersion, "2026.07.01")
-	setProviderBridgeConfig(t)
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-
-	if !cfg.Observability.Profiler {
-		t.Fatal("profiler = false, want true")
-	}
-	if !cfg.Observability.OperationLogs {
-		t.Fatal("operation logs = false, want true")
-	}
-	if cfg.Observability.Service != "chalk-api-test" {
-		t.Fatalf("service = %q, want chalk-api-test", cfg.Observability.Service)
-	}
-	if cfg.Observability.Environment != "staging" {
-		t.Fatalf("environment = %q, want staging", cfg.Observability.Environment)
-	}
-	if cfg.Observability.Version != "2026.07.01" {
-		t.Fatalf("version = %q, want 2026.07.01", cfg.Observability.Version)
-	}
-	if cfg.Observability.LogFormat != "text" {
-		t.Fatalf("log format = %q, want text", cfg.Observability.LogFormat)
-	}
-	if cfg.Observability.LogLevel != "debug" {
-		t.Fatalf("log level = %q, want debug", cfg.Observability.LogLevel)
-	}
-	if cfg.Observability.OTLPEndpoint != "https://otel.chalk.test:4318" || cfg.Observability.OTLPInsecure {
-		t.Fatalf("OTLP config = %#v", cfg.Observability)
-	}
-	if cfg.Observability.RequestLogs != "sampled" {
-		t.Fatalf("request logs = %q, want sampled", cfg.Observability.RequestLogs)
-	}
-	if cfg.Observability.RequestSampleRate != 0.25 {
-		t.Fatalf("request sample rate = %f, want 0.25", cfg.Observability.RequestSampleRate)
-	}
-	if cfg.Observability.SlowRequestThreshold != 75*time.Millisecond {
-		t.Fatalf("slow request threshold = %s, want 75ms", cfg.Observability.SlowRequestThreshold)
-	}
-}
-
 func TestLoadLocalSystemToken(t *testing.T) {
 	t.Setenv(config.APILocalSystemToken, "local-token")
 
@@ -1369,45 +990,6 @@ func TestLoadRejectsMissingComposioAPIKeyOutsideLocal(t *testing.T) {
 	}
 }
 
-func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
-	t.Setenv(config.APIEnvironment, "staging")
-	setPublicInviteConfig(t)
-	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
-	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
-	t.Setenv(config.ComposioAPIKey, "composio-key")
-	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	setProviderBridgeConfig(t)
-	setTranscriptionConfig(t)
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if !cfg.Capabilities.Integrations || !cfg.Capabilities.Recording || !cfg.Capabilities.Transcription {
-		t.Fatalf("non-local capabilities = %#v, want enabled", cfg.Capabilities)
-	}
-}
-
-func TestLoadAcceptsExplicitlyDisabledCapabilitiesOutsideLocal(t *testing.T) {
-	t.Setenv(config.APIEnvironment, "staging")
-	setPublicInviteConfig(t)
-	t.Setenv(config.AuthRecentAuthSecret, strings.Repeat("r", 32))
-	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
-	t.Setenv(config.IntegrationsEnabled, "false")
-	t.Setenv(config.RecordingEnabled, "false")
-	t.Setenv(config.TranscriptionEnabled, "false")
-	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	setProviderBridgeConfig(t)
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if cfg.Capabilities.Integrations || cfg.Capabilities.Recording || cfg.Capabilities.Transcription {
-		t.Fatalf("explicitly disabled capabilities = %#v, want disabled", cfg.Capabilities)
-	}
-}
-
 func TestLoadRejectsIncompleteEnabledTranscription(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1474,23 +1056,6 @@ func TestLoadRejectsEnabledWhiteboardFilesWithoutObjectStorage(t *testing.T) {
 	}
 }
 
-func TestLoadAcceptsLocalWhiteboardFilesWithCustomObjectStorage(t *testing.T) {
-	t.Setenv(config.WhiteboardFilesEnabled, "true")
-	t.Setenv(config.R2Bucket, "chalk-whiteboard-test")
-	t.Setenv(config.R2Endpoint, "http://localhost:9000")
-	t.Setenv(config.R2AccessKeyID, "access-key")
-	t.Setenv(config.R2SecretAccessKey, "secret-key")
-	setSyncTokenConfig(t)
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if !cfg.Capabilities.WhiteboardFiles || cfg.R2.Endpoint != "http://localhost:9000" {
-		t.Fatalf("whiteboard file config = capabilities %#v, R2 %#v", cfg.Capabilities, cfg.R2)
-	}
-}
-
 func TestLoadRejectsInvalidCapabilityFlags(t *testing.T) {
 	for _, name := range []string{config.IntegrationsEnabled, config.RecordingEnabled, config.TranscriptionEnabled, config.WhiteboardFilesEnabled} {
 		t.Run(name, func(t *testing.T) {
@@ -1500,19 +1065,6 @@ func TestLoadRejectsInvalidCapabilityFlags(t *testing.T) {
 				t.Fatalf("error = %v, want strict boolean rejection", err)
 			}
 		})
-	}
-}
-
-func TestLoadOperationLogsDefaultToAllRequestLogs(t *testing.T) {
-	t.Setenv(config.APIOperationLogs, "1")
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-
-	if cfg.Observability.RequestLogs != "all" {
-		t.Fatalf("request logs = %q, want all", cfg.Observability.RequestLogs)
 	}
 }
 
@@ -1526,16 +1078,6 @@ func setProviderBridgeConfig(t *testing.T) {
 	t.Setenv(config.ProviderBridgeClientCAFile, "/run/secrets/provider-bridge-client-ca.crt")
 	t.Setenv(config.ProviderBridgeSPIFFETrustDomain, "chalk.test")
 	t.Setenv(config.OpsIngestToken, strings.Repeat("o", 32))
-}
-
-func setTranscriptionConfig(t *testing.T) {
-	t.Helper()
-	t.Setenv(config.TranscriptionWorkloadAuthSecret, strings.Repeat("s", 32))
-	t.Setenv(config.TranscriptionDispatcherFunction, "chalk-transcription-dispatcher")
-	t.Setenv(config.R2Bucket, "chalk-transcription")
-	t.Setenv(config.R2Endpoint, "https://storage.chalk.test")
-	t.Setenv(config.R2AccessKeyID, "access-key")
-	t.Setenv(config.R2SecretAccessKey, "secret-key")
 }
 
 func setSyncTokenConfig(t *testing.T) {

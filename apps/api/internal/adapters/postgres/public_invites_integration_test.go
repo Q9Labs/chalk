@@ -441,4 +441,10 @@ values ($1, $2, '{publishAudio,publishVideo,subscribe}'::text[], $3, $4, $5, 1, 
 	if len(due) != 1 || due[0].TenantID != tenantID || due[0].SpaceID != spaceID {
 		t.Fatalf("lifecycle after final participant left = %+v", due)
 	}
+func bytesOf(value byte, length int) []byte {
+	result := make([]byte, length)
+	for index := range result {
+		result[index] = value
+	}
+	return result
 }

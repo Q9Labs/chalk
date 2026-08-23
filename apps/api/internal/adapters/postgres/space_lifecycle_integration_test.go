@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func TestSpaceArchiveRestoreWritesAtomicJourneyTransitions(t *testing.T) {
@@ -30,12 +31,12 @@ func TestSpaceArchiveRestoreWritesAtomicJourneyTransitions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tenantID := mustSpaceWebhookTestID(t, "44444444-4444-4444-8444-444444444444")
-	spaceID := mustSpaceWebhookTestID(t, "55555555-5555-4555-8555-555555555555")
-	roleID := mustSpaceWebhookTestID(t, "66666666-6666-4666-8666-666666666666")
-	episodeID := mustSpaceWebhookTestID(t, "88888888-8888-4888-8888-888888888888")
-	participantID := mustSpaceWebhookTestID(t, "99999999-9999-4999-8999-999999999999")
-	journeyID := mustSpaceWebhookTestID(t, "77777777-7777-4777-8777-777777777777")
+	tenantID := newSpaceLifecycleTestID(t)
+	spaceID := newSpaceLifecycleTestID(t)
+	roleID := newSpaceLifecycleTestID(t)
+	episodeID := newSpaceLifecycleTestID(t)
+	participantID := newSpaceLifecycleTestID(t)
+	journeyID := newSpaceLifecycleTestID(t)
 	ctx = observability.ContextWithJourneyID(ctx, journeyID)
 
 	t.Cleanup(func() {
@@ -152,4 +153,13 @@ func TestSpaceArchiveRestoreWritesAtomicJourneyTransitions(t *testing.T) {
 			}
 		}
 	}
+}
+
+func newSpaceLifecycleTestID(t *testing.T) utilities.ID {
+	t.Helper()
+	id, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

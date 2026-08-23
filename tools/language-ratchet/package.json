@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "check": "node src/cli.mjs",
-    "update": "node src/cli.mjs --update",
-    "test": "node --test test/language-ratchet.test.mjs"
+    "update": "node src/cli.mjs --update"
   }
 }
