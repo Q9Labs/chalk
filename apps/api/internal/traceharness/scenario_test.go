@@ -54,6 +54,37 @@ func TestRunCreateTenantScenario(t *testing.T) {
 	assertEvent(t, result.Events, "database", "INSERT tenants RETURNING *")
 }
 
+func TestRunRouteUserGetForbiddenTrace(t *testing.T) {
+	result, err := Run(context.Background(), EdgeUserGetForbiddenScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.Name != EdgeUserGetForbiddenScenario {
+		t.Fatalf("name = %q, want %q", result.Name, EdgeUserGetForbiddenScenario)
+	}
+	if result.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusForbidden)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Code != "access.forbidden" {
+		t.Fatalf("error code = %q, want access.forbidden", body.Error.Code)
+	}
+
+	for _, event := range result.Events {
+		if event.Operation == "users.Service.GetUser" || event.Operation == "UserRepository.GetUser" || event.Operation == "SELECT users WHERE id = $1" {
+			t.Fatalf("forbidden trace reached user service: %#v", event)
+		}
+	}
+}
+
 func TestRunRouteSpaceCreateMemberScenario(t *testing.T) {
 	result, err := Run(context.Background(), RouteSpaceCreateMemberScenario)
 	if err != nil {

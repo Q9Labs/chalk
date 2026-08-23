@@ -90,6 +90,106 @@ defmodule ChalkSync.Chat.Repository.PostgresTest do
              Postgres.head(identity.episode)
   end
 
+  test "charges local admission only after durable authority and idempotency checks", %{
+    identity: identity
+  } do
+    input = %{
+      client_message_id: "chat-admission-order-0001",
+      text: "First message",
+      attachment_ids: []
+    }
+
+    assert {:ok, %{outcome: :committed}} = Postgres.append(identity, input)
+
+    reject_admission = fn ->
+      send(self(), :local_admission_charged)
+      {:error, :rate_limited}
+    end
+
+    assert {:ok, %{outcome: :duplicate}} =
+             Postgres.append(identity, input, reject_admission)
+
+    refute_receive :local_admission_charged
+
+    stale_identity = %{identity | participant_generation: identity.participant_generation + 1}
+
+    assert {:error, :participant_stale} =
+             Postgres.append(
+               stale_identity,
+               %{input | client_message_id: "chat-admission-order-0002"},
+               reject_admission
+             )
+
+    refute_receive :local_admission_charged
+
+    assert {:error, :rate_limited} =
+             Postgres.append(
+               identity,
+               %{input | client_message_id: "chat-admission-order-0003"},
+               reject_admission
+             )
+
+    assert_receive :local_admission_charged
+  end
+
+  test "enforces the retained participant cap and preserves duplicates", %{
+    connection: connection,
+    identity: identity
+  } do
+    fill_participant_capacity(connection, identity)
+
+    new_input = %{
+      client_message_id: "chat-cap-new-0001",
+      text: "x",
+      attachment_ids: []
+    }
+
+    assert {:error, :rate_limited} = Postgres.append(identity, new_input)
+
+    assert {:ok, %{outcome: :duplicate, message: duplicate}} =
+             Postgres.append(identity, %{
+               client_message_id: "chat-cap-00000000001",
+               text: "x",
+               attachment_ids: []
+             })
+
+    assert duplicate.sequence == "1"
+
+    Postgrex.query!(
+      connection,
+      "delete from sync_chat_messages where tenant_id = $1 and space_id = $2",
+      [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id)]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_chat_streams
+      set retained_floor_sequence = head_sequence + 1,
+          message_count = 0,
+          message_bytes = 0
+      where tenant_id = $1 and space_id = $2
+      """,
+      [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id)]
+    )
+
+    assert {:ok, %{outcome: :committed}} = Postgres.append(identity, new_input)
+  end
+
+  test "enforces the retained participant encoded-byte cap", %{
+    connection: connection,
+    identity: identity
+  } do
+    fill_participant_byte_capacity(connection, identity)
+
+    assert {:error, :rate_limited} =
+             Postgres.append(identity, %{
+               client_message_id: "chat-byte-new-0001",
+               text: "x",
+               attachment_ids: []
+             })
+  end
+
   test "serializes concurrent sends without gaps", %{identity: identity} do
     results =
       1..24
@@ -474,6 +574,153 @@ defmodule ChalkSync.Chat.Repository.PostgresTest do
     )
 
     attachment_id
+  end
+
+  defp fill_participant_capacity(connection, identity) do
+    participant_id = uuid(identity.participant_id)
+    first_client_message_id = "chat-cap-00000000001"
+    fingerprint = :crypto.hash(:sha256, "x")
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_streams (tenant_id, space_id)
+      values ($1, $2)
+      on conflict (tenant_id, space_id) do nothing
+      """,
+      [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id)]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_messages (
+        tenant_id,
+        space_id,
+        episode_id,
+        sequence,
+        message_id,
+        participant_id,
+        participant_generation,
+        client_message_id,
+        request_fingerprint,
+        display_name,
+        message_text,
+        encoded_bytes,
+        created_at
+      )
+      select
+        $1,
+        $2,
+        $3::uuid,
+        message_index,
+        md5(($3::uuid)::text || message_index::text)::uuid,
+        $4,
+        $5,
+        case
+          when message_index = 1 then $6
+          else 'chat-cap-' || lpad(message_index::text, 11, '0')
+        end,
+        $7,
+        $8,
+        'x',
+        1,
+        now()
+      from generate_series(1, 10000) as series(message_index)
+      """,
+      [
+        uuid(identity.episode.tenant_id),
+        uuid(identity.episode.space_id),
+        uuid(identity.episode.episode_id),
+        participant_id,
+        identity.participant_generation,
+        first_client_message_id,
+        fingerprint,
+        "Participant 1"
+      ]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_chat_streams
+      set head_sequence = 10000,
+          retained_floor_sequence = 1,
+          message_count = 10000,
+          message_bytes = 10000
+      where tenant_id = $1 and space_id = $2
+      """,
+      [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id)]
+    )
+  end
+
+  defp fill_participant_byte_capacity(connection, identity) do
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_streams (tenant_id, space_id)
+      values ($1, $2)
+      on conflict (tenant_id, space_id) do nothing
+      """,
+      [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id)]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_messages (
+        tenant_id,
+        space_id,
+        episode_id,
+        sequence,
+        message_id,
+        participant_id,
+        participant_generation,
+        client_message_id,
+        request_fingerprint,
+        display_name,
+        message_text,
+        encoded_bytes,
+        created_at
+      )
+      select
+        $1,
+        $2,
+        $3::uuid,
+        message_index,
+        md5(($3::uuid)::text || message_index::text)::uuid,
+        $4,
+        $5,
+        'chat-byte-' || lpad(message_index::text, 11, '0'),
+        $6,
+        'Participant 1',
+        'x',
+        32768,
+        now()
+      from generate_series(1, 2048) as series(message_index)
+      """,
+      [
+        uuid(identity.episode.tenant_id),
+        uuid(identity.episode.space_id),
+        uuid(identity.episode.episode_id),
+        uuid(identity.participant_id),
+        identity.participant_generation,
+        :crypto.hash(:sha256, "x")
+      ]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_chat_streams
+      set head_sequence = 2048,
+          retained_floor_sequence = 1,
+          message_count = 2048,
+          message_bytes = 67108864
+      where tenant_id = $1 and space_id = $2
+      """,
+      [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id)]
+    )
   end
 
   defp reader_id(index) do

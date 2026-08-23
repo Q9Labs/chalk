@@ -484,6 +484,8 @@ defmodule ChalkSync.DiagnosticsTest do
   end
 
   defmodule DuplicateChatRepository do
+    def append(identity, input, _admit_new_message), do: append(identity, input)
+
     def append(_identity, %{client_message_id: client_message_id}) do
       {:ok,
        %{
@@ -505,6 +507,10 @@ defmodule ChalkSync.DiagnosticsTest do
   defmodule CommittedChatRepository do
     def head(_episode), do: {:ok, %{retained_floor_sequence: "1"}}
 
+    def append(identity, input, admit_new_message) do
+      with :ok <- admit_new_message.(), do: append(identity, input)
+    end
+
     def append(_identity, %{client_message_id: client_message_id}) do
       {:ok,
        %{
@@ -525,6 +531,10 @@ defmodule ChalkSync.DiagnosticsTest do
 
   defmodule AttachmentCommittedChatRepository do
     def head(_episode), do: {:ok, %{retained_floor_sequence: "1"}}
+
+    def append(identity, input, admit_new_message) do
+      with :ok <- admit_new_message.(), do: append(identity, input)
+    end
 
     def append(
           _identity,
@@ -550,6 +560,10 @@ defmodule ChalkSync.DiagnosticsTest do
   end
 
   defmodule AttachmentFailedChatRepository do
+    def append(identity, input, admit_new_message) do
+      with :ok <- admit_new_message.(), do: append(identity, input)
+    end
+
     def append(
           _identity,
           %{attachment_commit_observer: observer}
@@ -560,6 +574,10 @@ defmodule ChalkSync.DiagnosticsTest do
   end
 
   defmodule InvalidPayloadChatRepository do
+    def append(identity, input, admit_new_message) do
+      with :ok <- admit_new_message.(), do: append(identity, input)
+    end
+
     def append(_identity, _input), do: {:error, :invalid_payload}
   end
 

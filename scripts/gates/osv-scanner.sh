@@ -4,7 +4,7 @@ set -euo pipefail
 args=(scan source --no-resolve)
 while IFS= read -r file; do
   case "${file}" in
-    go.mod | */go.mod | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock)
+    go.mod | */go.mod | mix.lock | */mix.lock | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock)
       args+=(--lockfile "$file")
       ;;
   esac

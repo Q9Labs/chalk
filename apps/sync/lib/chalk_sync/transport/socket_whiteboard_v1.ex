@@ -3,10 +3,12 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   @behaviour WebSock
 
+  alias ChalkSync.Admission
   alias ChalkSync.Auth.Claims
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Observability
+  alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.WhiteboardV1.Episode
@@ -17,14 +19,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   @hello_timeout_ms 5_000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
+  @authority_check_interval_ms 1_000
 
   @impl true
   def init(options) do
+    options = Map.new(options)
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
 
     observability =
       options
-      |> Map.new()
       |> Map.get(:observability)
       |> Observability.merge(nil)
       |> Observability.root("sync.websocket.handshake", %{
@@ -44,8 +47,17 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        snapshot: nil,
        multipart: nil,
        multipart_timer: nil,
-       cursor_window_started_at_ms: 0,
-       cursor_window_count: 0,
+       admission:
+         Map.get(options, :admission) || Application.get_env(:chalk_sync, :admission) || Admission,
+       verify_token: Map.get(options, :verify_token, &TokenVerifier.verify/1),
+       connect_episode: Map.get(options, :connect_episode, &Episode.connect/1),
+       stateholder:
+         Map.get(options, :stateholder) ||
+           Application.get_env(:chalk_sync, :stateholder) || Stateholder,
+       whiteboard_registered?: false,
+       cursor_budget: nil,
+       authority_checked_at_ms: nil,
+       authority_valid?: false,
        outbound: OutboundQueue.new(),
        observability: observability
      }}
@@ -54,7 +66,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   @impl true
   def handle_in({text, [opcode: :text]}, state) do
     case Protocol.decode(text) do
-      {:ok, frame} -> handle_frame(frame, state)
+      {:ok, frame} -> handle_authenticated_frame(frame, state)
       {:error, reason} -> {:stop, :normal, {1009, close_reason(reason)}, state}
     end
   end
@@ -101,7 +113,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       ) do
     if String.to_integer(revision) <= state.revision,
       do: {:ok, state},
-      else: deliver_frame(state, frame)
+      else: deliver_authorized_frame(state, frame)
   end
 
   def handle_info(
@@ -118,19 +130,33 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       when type in ["update", "update_part"] and is_binary(revision) do
     if String.to_integer(revision) <= state.revision,
       do: {:ok, state},
-      else: deliver_frame(state, frame)
+      else: deliver_authorized_frame(state, frame)
   end
 
   def handle_info({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
-    deliver_frame(state, frame)
+    deliver_authorized_frame(state, frame)
   end
 
   def handle_info({:whiteboard_v1_frame, _frame}, state), do: {:ok, state}
 
   def handle_info(
         {:whiteboard_v1_head, scene_id, revision},
-        %{phase: :live, identity: identity} = state
+        %{phase: :live, identity: %Identity{}} = state
       ) do
+    with_current_authority(state, "delivery", fn next ->
+      handle_whiteboard_head(next, scene_id, revision)
+    end)
+  end
+
+  def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
+
+  def handle_info(:whiteboard_drain, %{identity: %Identity{}} = state) do
+    with_current_authority(state, "delivery", &push_next/1)
+  end
+
+  def handle_info(:whiteboard_drain, state), do: push_next(state)
+
+  defp handle_whiteboard_head(state, scene_id, revision) do
     cond do
       scene_id != state.scene_id ->
         enqueue_and_push(
@@ -148,13 +174,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:ok, state}
 
       true ->
-        replay_or_reset(state, identity, scene_id, revision)
+        replay_or_reset(state, state.identity, scene_id, revision)
     end
   end
-
-  def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
-
-  def handle_info(:whiteboard_drain, state), do: push_next(state)
 
   defp replay_or_reset(state, identity, scene_id, revision) do
     case Episode.read_after(
@@ -176,6 +198,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   @impl true
   def terminate(_reason, %{identity: %Identity{episode: episode}} = state) do
     Fanout.unsubscribe(episode)
+
+    if state.whiteboard_registered?,
+      do: Admission.close_whiteboard(state.admission, state.identity)
+
     observe_terminal(state)
     :ok
   end
@@ -192,9 +218,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     presentation_negotiated =
       Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
 
-    with {:ok, claims} <- TokenVerifier.verify(token),
+    with {:ok, claims} <- state.verify_token.(token),
          {:ok, identity} <- identity(claims),
-         {:ok, welcome} <- Episode.connect(identity) do
+         {:ok, welcome} <- state.connect_episode.(identity),
+         {:ok, cursor_budget} <- Admission.open_whiteboard(state.admission, identity) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
       welcome = if presentation_negotiated, do: welcome, else: Map.delete(welcome, "presenting")
@@ -208,14 +235,27 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
            display_name: claims.display_name,
            presentation_negotiated: presentation_negotiated,
            scene_id: welcome["scene_id"],
-           revision: String.to_integer(welcome["revision"])
+           revision: String.to_integer(welcome["revision"]),
+           whiteboard_registered?: true,
+           cursor_budget: cursor_budget
        }
        |> observe_operation("connect", "accepted")}
     else
-      {:error, :invalid_token} -> {:stop, :normal, {1008, "invalid token"}, state}
-      {:error, :invalid_identity} -> {:stop, :normal, {1008, "invalid token"}, state}
-      {:error, :permission_denied} -> {:stop, :normal, {1008, "policy violation"}, state}
-      _unavailable -> {:stop, :normal, {1012, "dependency unavailable"}, state}
+      {:error, :invalid_token} ->
+        {:stop, :normal, {1008, "invalid token"}, state}
+
+      {:error, :invalid_identity} ->
+        {:stop, :normal, {1008, "invalid token"}, state}
+
+      {:error, :permission_denied} ->
+        {:stop, :normal, {1008, "policy violation"}, state}
+
+      {:error, :overloaded} ->
+        {:stop, :normal, {1012, "dependency unavailable"},
+         observe_operation(state, "connect", "overloaded")}
+
+      _unavailable ->
+        {:stop, :normal, {1012, "dependency unavailable"}, state}
     end
   end
 
@@ -393,8 +433,20 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         Fanout.publish_cursor(identity.episode, frame)
         {:ok, next}
 
-      :rate_limited ->
-        {:ok, state}
+      {:error, :rate_limited} ->
+        {:ok, observe_operation(state, "cursor", "rate_limited")}
+
+      {:error, :overloaded} ->
+        {:stop, :normal, {1012, "dependency unavailable"},
+         observe_operation(state, "cursor", "overloaded")}
+
+      {:error, :authority_revoked} ->
+        {:stop, :normal, {1008, "policy violation"},
+         observe_operation(state, "cursor", "authority_revoked")}
+
+      {:error, :dependency_unavailable} ->
+        {:stop, :normal, {1012, "dependency unavailable"},
+         observe_operation(state, "cursor", "dependency_unavailable")}
     end
   end
 
@@ -403,6 +455,12 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame(_frame, state),
     do: {:stop, :normal, {1008, "operation not available in this phase"}, state}
+
+  defp handle_authenticated_frame(frame, %{identity: %Identity{}} = state) do
+    with_current_authority(state, "receive", fn next -> handle_frame(frame, next) end)
+  end
+
+  defp handle_authenticated_frame(frame, state), do: handle_frame(frame, state)
 
   defp submit_update(identity, operation, state) do
     case Episode.submit_update(identity, operation) do
@@ -450,6 +508,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp deliver_frame(state, frame) do
     next = advance_cursor(state, frame)
     enqueue_and_push(next, [frame])
+  end
+
+  defp deliver_authorized_frame(state, frame) do
+    with_current_authority(state, "delivery", fn next -> deliver_frame(next, frame) end)
   end
 
   defp push_next(state) do
@@ -548,19 +610,80 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp close_reason(_reason), do: "invalid whiteboard frame"
 
   defp admit_cursor(state) do
+    with {:ok, state} <- refresh_authority(state),
+         :ok <- Admission.admit_cursor(state.cursor_budget, state.identity) do
+      {:ok, state}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp with_current_authority(state, operation, action) do
+    case refresh_authority(state) do
+      {:ok, next} ->
+        action.(next)
+
+      {:error, :authority_revoked} ->
+        {:stop, :normal, {1008, "policy violation"},
+         observe_operation(state, operation, "authority_revoked")}
+
+      {:error, :dependency_unavailable} ->
+        {:stop, :normal, {1012, "dependency unavailable"},
+         observe_operation(state, operation, "dependency_unavailable")}
+    end
+  end
+
+  defp refresh_authority(state) do
     now_ms = System.monotonic_time(:millisecond)
 
-    if now_ms - state.cursor_window_started_at_ms >= 1_000 do
-      {:ok,
-       %{
-         state
-         | cursor_window_started_at_ms: now_ms,
-           cursor_window_count: 1
-       }}
+    if is_integer(state.authority_checked_at_ms) and
+         now_ms - state.authority_checked_at_ms < @authority_check_interval_ms and
+         state.authority_valid? do
+      {:ok, state}
     else
-      if state.cursor_window_count < 60,
-        do: {:ok, %{state | cursor_window_count: state.cursor_window_count + 1}},
-        else: :rate_limited
+      authority_check(state, now_ms)
+    end
+  end
+
+  defp authority_check(state, now_ms) do
+    result =
+      try do
+        state.stateholder.participant_authority(
+          state.identity.episode,
+          state.identity.participant_id,
+          state.identity.participant_generation
+        )
+      rescue
+        _exception -> {:retryable, :dependency_unavailable}
+      catch
+        :exit, _reason -> {:retryable, :dependency_unavailable}
+      end
+
+    case result do
+      {:ok, _authority} ->
+        {:ok, %{state | authority_checked_at_ms: now_ms, authority_valid?: true}}
+
+      {:error, reason}
+      when reason in [
+             :episode_ended,
+             :participant_inactive,
+             :stale_participant_generation,
+             :participant_stale,
+             :episode_not_found
+           ] ->
+        {:error, :authority_revoked}
+
+      {:error, reason} when reason in [:dependency_unavailable, :storage_unavailable] ->
+        {:error, :dependency_unavailable}
+
+      {:error, _reason} ->
+        {:error, :authority_revoked}
+
+      {:retryable, _reason} ->
+        {:error, :dependency_unavailable}
+
+      _other ->
+        {:error, :dependency_unavailable}
     end
   end
 

@@ -19,6 +19,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
   @transaction_timeout_ms 3_000
   @capabilities ["sendReaction", "sendChat"]
+  @participant_message_limit 10_000
+  @participant_message_bytes_limit 64 * 1_024 * 1_024
 
   @impl true
   def authorize(%Identity{} = identity, capability)
@@ -52,19 +54,24 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   @impl true
+  def append(%Identity{} = identity, input), do: append(identity, input, fn -> :ok end)
+
+  @impl true
   def append(
         %Identity{} = identity,
         %{
           client_message_id: client_message_id,
           text: text,
           attachment_ids: attachment_ids
-        } = input
+        } = input,
+        admit_new_message
       )
-      when is_binary(client_message_id) and is_binary(text) and is_list(attachment_ids) do
+      when is_binary(client_message_id) and is_binary(text) and is_list(attachment_ids) and
+             is_function(admit_new_message, 0) do
     with :ok <- validate_input(input) do
       fingerprint = request_fingerprint(text, attachment_ids)
 
-      case append_transaction(identity, input, fingerprint) do
+      case append_transaction(identity, input, fingerprint, admit_new_message) do
         {:ok, result} ->
           {:ok, result}
 
@@ -91,7 +98,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
       )
   end
 
-  def append(%Identity{}, _input), do: {:error, :invalid_payload}
+  def append(%Identity{}, _input, admit_new_message) when is_function(admit_new_message, 0),
+    do: {:error, :invalid_payload}
 
   @impl true
   def head(%EpisodeKey{} = episode) do
@@ -243,28 +251,42 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     }
   end
 
-  defp append_transaction(identity, input, fingerprint) do
+  defp append_transaction(identity, input, fingerprint, admit_new_message) do
     Postgrex.transaction(
       Database.connection(identity.episode),
-      fn connection -> append_in_transaction(connection, identity, input, fingerprint) end,
+      fn connection ->
+        append_in_transaction(connection, identity, input, fingerprint, admit_new_message)
+      end,
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync chat append"
     )
   end
 
-  defp append_in_transaction(connection, identity, input, fingerprint) do
+  defp append_in_transaction(connection, identity, input, fingerprint, admit_new_message) do
     configure_transaction(connection)
 
     case select_idempotent(connection, identity, input.client_message_id) do
       nil ->
-        append_after_authorization(connection, identity, input, fingerprint)
+        append_after_authorization(
+          connection,
+          identity,
+          input,
+          fingerprint,
+          admit_new_message
+        )
 
       existing ->
         idempotent_result(connection, existing, fingerprint)
     end
   end
 
-  defp append_after_authorization(connection, identity, input, fingerprint) do
+  defp append_after_authorization(
+         connection,
+         identity,
+         input,
+         fingerprint,
+         admit_new_message
+       ) do
     with {:ok, profile} <- lock_authority(connection, identity),
          :ok <- require_capability(profile, "sendChat") do
       params = space_params(identity.episode)
@@ -279,7 +301,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
         profile.display_name,
         input,
         fingerprint,
-        head_sequence
+        head_sequence,
+        admit_new_message
       )
     else
       {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
@@ -292,30 +315,80 @@ defmodule ChalkSync.Chat.Repository.Postgres do
          display_name,
          input,
          fingerprint,
-         head_sequence
+         head_sequence,
+         admit_new_message
        ) do
     case select_idempotent(connection, identity, input.client_message_id) do
       nil ->
-        notify_attachment_commit_attempt(input)
-
-        case lock_attachments(connection, identity, input.attachment_ids) do
-          {:ok, attachments} ->
-            append_new_message(
-              connection,
-              identity,
-              display_name,
-              input,
-              attachments,
-              fingerprint,
-              head_sequence + 1
-            )
-
-          {:error, reason} ->
-            Postgrex.rollback(connection, {:error, reason})
-        end
+        append_after_admission(
+          connection,
+          identity,
+          display_name,
+          input,
+          fingerprint,
+          head_sequence,
+          admit_new_message
+        )
 
       existing ->
         idempotent_result(connection, existing, fingerprint)
+    end
+  end
+
+  defp append_after_admission(
+         connection,
+         identity,
+         display_name,
+         input,
+         fingerprint,
+         head_sequence,
+         admit_new_message
+       ) do
+    case admit_new_message.() do
+      :ok ->
+        append_with_attachments(
+          connection,
+          identity,
+          display_name,
+          input,
+          fingerprint,
+          head_sequence
+        )
+
+      {:error, reason} when reason in [:rate_limited, :overloaded] ->
+        Postgrex.rollback(connection, {:error, reason})
+
+      _invalid_admission_result ->
+        Postgrex.rollback(connection, {:error, :overloaded})
+    end
+  end
+
+  defp append_with_attachments(
+         connection,
+         identity,
+         display_name,
+         input,
+         fingerprint,
+         head_sequence
+       ) do
+    usage = participant_usage(connection, identity)
+    notify_attachment_commit_attempt(input)
+
+    case lock_attachments(connection, identity, input.attachment_ids) do
+      {:ok, attachments} ->
+        append_new_message(
+          connection,
+          identity,
+          display_name,
+          input,
+          attachments,
+          fingerprint,
+          head_sequence + 1,
+          usage
+        )
+
+      {:error, reason} ->
+        Postgrex.rollback(connection, {:error, reason})
     end
   end
 
@@ -334,7 +407,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
          input,
          attachments,
          fingerprint,
-         sequence
+         sequence,
+         usage
        ) do
     message = %{
       message_id: UUID.generate(),
@@ -350,19 +424,43 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     encoded_bytes = Message.encoded_bytes(message)
     params = space_params(identity.episode)
 
-    case Postgrex.query!(
-           connection,
-           SQL.reserve_message(),
-           params ++ [sequence, encoded_bytes]
-         ).rows do
-      [[^sequence]] ->
-        insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
-        attach_files(connection, identity, message, sequence)
-        %{outcome: :committed, message: message}
+    case participant_capacity(usage, encoded_bytes) do
+      :ok ->
+        case Postgrex.query!(
+               connection,
+               SQL.reserve_message(),
+               params ++ [sequence, encoded_bytes]
+             ).rows do
+          [[^sequence]] ->
+            insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
+            attach_files(connection, identity, message, sequence)
+            %{outcome: :committed, message: message}
 
-      [] ->
-        Postgrex.rollback(connection, {:error, :overloaded})
+          [] ->
+            Postgrex.rollback(connection, {:error, :overloaded})
+        end
+
+      :rate_limited ->
+        Postgrex.rollback(connection, {:error, :rate_limited})
     end
+  end
+
+  defp participant_usage(connection, identity) do
+    [[count, bytes]] =
+      Postgrex.query!(
+        connection,
+        SQL.participant_usage(),
+        space_params(identity.episode) ++ [uuid(identity.participant_id)]
+      ).rows
+
+    %{count: count, bytes: bytes}
+  end
+
+  defp participant_capacity(%{count: count, bytes: bytes}, encoded_bytes) do
+    if count < @participant_message_limit and
+         bytes + encoded_bytes <= @participant_message_bytes_limit,
+       do: :ok,
+       else: :rate_limited
   end
 
   defp insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence) do

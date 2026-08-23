@@ -1,6 +1,7 @@
 defmodule ChalkSync.Chat do
   @moduledoc "Durable Space chat commands and collaboration_v1 negotiation."
 
+  alias ChalkSync.Admission
   alias ChalkSync.Chat.Repository.Message
   alias ChalkSync.Chat.Repository.Postgres, as: PostgresRepository
   alias ChalkSync.Diagnostics
@@ -10,7 +11,12 @@ defmodule ChalkSync.Chat do
 
   @extension "collaboration_v1"
 
-  @type options :: [repository: module(), fanout: GenServer.server(), observability: term()]
+  @type options :: [
+          repository: module(),
+          fanout: GenServer.server(),
+          admission: GenServer.server() | nil,
+          observability: term()
+        ]
 
   @spec negotiate(Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
   def negotiate(%Identity{} = identity, chat_cursor, socket) when is_pid(socket),
@@ -57,6 +63,15 @@ defmodule ChalkSync.Chat do
         options
       )
       when is_binary(client_message_id) and is_binary(text) and is_list(options) do
+    send_chat_command(identity, input, client_message_id, text, options)
+  end
+
+  def send_chat(%Identity{}, input, _options) do
+    client_message_id = if is_map(input), do: Map.get(input, :client_message_id, ""), else: ""
+    {:ok, rejected_chat(client_message_id, :invalid_payload)}
+  end
+
+  defp send_chat_command(identity, input, client_message_id, text, options) do
     repository = repository(options)
     attachment_ids = Map.get(input, :attachment_ids, [])
 
@@ -69,7 +84,8 @@ defmodule ChalkSync.Chat do
         append_input
         |> Map.put(:client_message_id, client_message_id)
         |> Map.put(:text, text)
-        |> Map.put(:attachment_ids, attachment_ids)
+        |> Map.put(:attachment_ids, attachment_ids),
+        fn -> admit_chat(admission(options), identity) end
       )
 
     attachment_attempted? = attachment_attempted?(attachment_marker)
@@ -119,11 +135,6 @@ defmodule ChalkSync.Chat do
 
         {:ok, rejected_chat(client_message_id, reason)}
     end
-  end
-
-  def send_chat(%Identity{}, input, _options) do
-    client_message_id = if is_map(input), do: Map.get(input, :client_message_id, ""), else: ""
-    {:ok, rejected_chat(client_message_id, :invalid_payload)}
   end
 
   @spec read_chat_page(Identity.t(), map()) :: {:ok, map()} | {:error, atom()}
@@ -445,6 +456,7 @@ defmodule ChalkSync.Chat do
               :capability_denied,
               :episode_ended,
               :dependency_unavailable,
+              :rate_limited,
               :overloaded,
               :command_id_conflict
             ],
@@ -453,6 +465,11 @@ defmodule ChalkSync.Chat do
   defp diagnostic_reason(:client_message_id_conflict), do: :command_id_conflict
   defp diagnostic_reason(_reason), do: :invalid_contract
   defp child_operation_ref(operation_ref, kind), do: operation_ref <> "." <> kind
+
+  defp admit_chat(nil, _identity), do: :ok
+
+  defp admit_chat(admission, identity),
+    do: Admission.admit_chat(admission, identity)
 
   defp repository(options),
     do:
@@ -469,4 +486,10 @@ defmodule ChalkSync.Chat do
         :fanout,
         Application.get_env(:chalk_sync, :collaboration_fanout, Collaboration)
       )
+
+  defp admission(options) do
+    Keyword.get_lazy(options, :admission, fn ->
+      Application.get_env(:chalk_sync, :admission) || Admission
+    end)
+  end
 end

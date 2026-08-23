@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+timeout_seconds="${SEMGREP_TIMEOUT_SECONDS:-30}"
+
 if command -v semgrep >/dev/null 2>&1; then
-  exec semgrep scan --config .semgrep --error "$@"
+  exec semgrep scan --config .semgrep --error --strict --timeout "${timeout_seconds}" "$@"
 fi
 
 if command -v uvx >/dev/null 2>&1; then
-  exec uvx semgrep scan --config .semgrep --error "$@"
+  exec uvx semgrep scan --config .semgrep --error --strict --timeout "${timeout_seconds}" "$@"
 fi
 
 echo "Semgrep is required. Install semgrep or uv, then rerun pnpm run static:semgrep." >&2

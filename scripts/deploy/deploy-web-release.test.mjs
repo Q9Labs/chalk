@@ -1,14 +1,25 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { buildReleasePlan, parseArguments, parseDeploymentURL, recoverStaleReleaseLock, resolveTurboCacheDirectory, runLocalWebRelease, runWebRelease, withReleaseLock } from "./deploy-web-release.mjs";
 
 const fullSHA = "040a7c52698f8cf9b87b0ef48f918b681de9bc35";
 const temporaryDirectories = [];
 const installCommand = "pnpm\0install\0--frozen-lockfile\0--prefer-offline";
 const wranglerVersionCommand = "pnpm\0exec\0wrangler\0--version";
+
+test("prints help and exits successfully", () => {
+  const script = fileURLToPath(new URL("./deploy-web-release.mjs", import.meta.url));
+  const result = spawnSync(process.execPath, [script, "--help"], { encoding: "utf8" });
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /^Usage: pnpm run release:web/);
+  assert.equal(result.stderr, "");
+});
 
 function serializeReleaseCommand({ command, args }) {
   return [command, ...args].join("\0");
@@ -207,6 +218,8 @@ test("runs one build, both uploads, and both verifiers through structured comman
   assert.equal(uploads.length, 2);
   assert.equal(verifications.length, 2);
   assert.ok(uploads.every(({ cwd }) => cwd === "/repo/apps/web"));
+  assert.ok(uploads.every(({ env }) => env.CLOUDFLARE_API_TOKEN === "injected-by-test"));
+  assert.ok(calls.filter(({ args }) => !args.includes("pages") || !args.includes("deploy")).every(({ env }) => env.CLOUDFLARE_API_TOKEN === undefined));
   assert.equal(verifications[0].args.at(-1), fullSHA);
   assert.equal(verifications[1].args.at(-1), "--production");
 });

@@ -73,6 +73,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteUserListSystem(ctx)
 	case RouteUserGetScenario:
 		return runRouteUserGet(ctx)
+	case EdgeUserGetForbiddenScenario:
+		return runRouteUserGetForbidden(ctx)
 	case RouteMembershipCreateOwnerScenario:
 		return runRouteMembershipCreateOwner(ctx)
 	case RouteMembershipListViewerScenario:

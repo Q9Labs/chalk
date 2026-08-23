@@ -114,6 +114,7 @@ Registered scenarios:
 - `route:user-create`
 - `route:user-list-system`
 - `route:user-get`
+- `edge:user-get-forbidden`
 - `route:membership-create-owner`
 - `route:membership-list-viewer`
 - `route:membership-update-owner`

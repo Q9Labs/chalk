@@ -80,6 +80,7 @@ const (
 	EdgeForbiddenTenantRouteScenario  = "edge:forbidden-tenant-route"
 	EdgeInvalidRouteIDScenario        = "edge:invalid-route-id"
 	EdgeTenantOnboardConflictScenario = "edge:tenant-onboard-idempotency-conflict"
+	EdgeUserGetForbiddenScenario      = "edge:user-get-forbidden"
 )
 
 // ScenarioNames returns every scenario accepted by Run, in review order.
@@ -103,6 +104,7 @@ func ScenarioNames() []string {
 		RouteUserCreateScenario,
 		RouteUserListSystemScenario,
 		RouteUserGetScenario,
+		EdgeUserGetForbiddenScenario,
 		RouteMembershipCreateOwnerScenario,
 		RouteMembershipListViewerScenario,
 		RouteMembershipUpdateOwnerScenario,
@@ -408,19 +410,27 @@ func runRouteUserListSystem(ctx context.Context) (ScenarioResult, error) {
 }
 
 func runRouteUserGet(ctx context.Context) (ScenarioResult, error) {
+	return runRouteUserGetWithPrincipal(ctx, RouteUserGetScenario, systemPrincipal(), "Bearer trace-system-token", http.StatusOK)
+}
+
+func runRouteUserGetForbidden(ctx context.Context) (ScenarioResult, error) {
+	return runRouteUserGetWithPrincipal(ctx, EdgeUserGetForbiddenScenario, userPrincipal(), "Bearer trace-session-token", http.StatusForbidden)
+}
+
+func runRouteUserGetWithPrincipal(ctx context.Context, name string, principal authentication.Principal, authorization string, expectedStatus int) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
 
 	return runRouteTrace(ctx, routeTraceConfig{
-		Name:     RouteUserGetScenario,
+		Name:     name,
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
-			Principal: userPrincipal(),
+			Principal: principal,
 		}),
 		Method:         http.MethodGet,
 		Path:           "/v1/users/" + userID().String(),
-		Authorization:  "Bearer trace-session-token",
-		ExpectedStatus: http.StatusOK,
+		Authorization:  authorization,
+		ExpectedStatus: expectedStatus,
 	})
 }
 

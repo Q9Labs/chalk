@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Required system authority for global user lookups and synchronized the generated API and TypeScript SDK contracts with the forbidden response.
+- Bound participant chat and cursor traffic, concurrent whiteboard sockets, and retained chat volume; whiteboard sockets now recheck authority before accepting or delivering collaboration data.
+- Upgraded Bandit to 1.12.5 and extended dependency scanning to Elixir lockfiles.
+- Restricted release inputs to commits on the live master history, scoped publish and deploy credentials to the commands that need them, pinned external GitHub Actions, and made security scanners and interrupted service gates fail closed.
 - Fixed Sync retention cleanup so expired Episode collaboration data no longer removes shared Space state that newer Episodes still use, and cleanup failures now report safe diagnostic classes.
 - Kept Sync retention cleanup on the current Space chat prefix and allowed expired screen-share leases to be removed, so cleanup cannot create an interior message-sequence gap or remain blocked by stale leases.
 - Kept public Space lifecycles active while an Episode still has a joining, active, or leaving Participant, so the creator leaving no longer ends the Episode for everyone else.

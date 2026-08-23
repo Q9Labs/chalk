@@ -52,6 +52,11 @@ defmodule ChalkSync.ChatReactionsTest do
     end
 
     @impl true
+    def append(identity, input, admit_new_message) do
+      with :ok <- admit_new_message.(), do: append(identity, input)
+    end
+
+    @impl true
     def append(_identity, %{
           client_message_id: "chat-message-0001",
           text: "Hello from Chalk",
@@ -117,6 +122,20 @@ defmodule ChalkSync.ChatReactionsTest do
     end
 
     def read_page(_episode, _request), do: {:error, :invalid_payload}
+  end
+
+  defmodule DuplicateRepository do
+    alias ChalkSync.ChatReactionsTest.Repository
+
+    def append(identity, input, _admit_new_message) do
+      with {:ok, %{message: message}} <- Repository.append(identity, input) do
+        {:ok, %{outcome: :duplicate, message: message}}
+      end
+    end
+  end
+
+  defmodule DeniedRepository do
+    def append(_identity, _input, _admit_new_message), do: {:error, :capability_denied}
   end
 
   setup do
@@ -247,6 +266,87 @@ defmodule ChalkSync.ChatReactionsTest do
                       "head_sequence" => "42",
                       "retained_floor_sequence" => "7"
                     }}
+  end
+
+  test "rejects new chat sends at the shared participant rate after durable checks", %{
+    options: options
+  } do
+    {:ok, admission} = Admission.start_link(name: nil, chat_rate_max: 1)
+    on_exit(fn -> if Process.alive?(admission), do: GenServer.stop(admission) end)
+
+    options = Keyword.put(options, :admission, admission)
+    identity = identity()
+
+    assert {:ok, %{"outcome" => "accepted"}} =
+             Chat.send_chat(
+               identity,
+               %{client_message_id: "chat-message-0001", text: "Hello from Chalk"},
+               options
+             )
+
+    assert {:ok, %{"outcome" => "rejected", "error_code" => "rate_limited"}} =
+             Chat.send_chat(
+               identity,
+               %{client_message_id: "chat-message-0002", text: "Second message"},
+               options
+             )
+  end
+
+  test "returns a durable duplicate without charging the local chat budget", %{options: options} do
+    {:ok, admission} = Admission.start_link(name: nil, chat_rate_max: 1)
+    on_exit(fn -> if Process.alive?(admission), do: GenServer.stop(admission) end)
+    identity = identity()
+    assert :ok = Admission.admit_chat(admission, identity)
+
+    options =
+      options
+      |> Keyword.put(:admission, admission)
+      |> Keyword.put(:repository, DuplicateRepository)
+
+    assert {:ok, %{"outcome" => "accepted", "message" => %{"sequence" => "42"}}} =
+             Chat.send_chat(
+               identity,
+               %{client_message_id: "chat-message-0001", text: "Hello from Chalk"},
+               options
+             )
+  end
+
+  test "does not charge the local chat budget for a durable authority denial", %{
+    options: options
+  } do
+    {:ok, admission} = Admission.start_link(name: nil, chat_rate_max: 1)
+    on_exit(fn -> if Process.alive?(admission), do: GenServer.stop(admission) end)
+    identity = identity()
+
+    denied_options =
+      options
+      |> Keyword.put(:admission, admission)
+      |> Keyword.put(:repository, DeniedRepository)
+
+    assert {:ok, %{"outcome" => "rejected", "error_code" => "capability_denied"}} =
+             Chat.send_chat(
+               identity,
+               %{client_message_id: "chat-message-denied", text: "Denied"},
+               denied_options
+             )
+
+    assert {:ok, %{"outcome" => "accepted"}} =
+             Chat.send_chat(
+               identity,
+               %{client_message_id: "chat-message-0001", text: "Hello from Chalk"},
+               Keyword.put(options, :admission, admission)
+             )
+  end
+
+  test "fails chat closed when shared admission is unavailable", %{options: options} do
+    options = Keyword.put(options, :admission, :missing_chat_admission)
+
+    assert {:ok, %{"outcome" => "rejected", "error_code" => "overloaded"}} =
+             Chat.send_chat(
+               identity(),
+               %{client_message_id: "chat-message-0001", text: "Hello from Chalk"},
+               options
+             )
   end
 
   test "returns attachment-only v2 chat and advances read receipt", %{

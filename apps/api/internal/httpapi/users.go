@@ -119,6 +119,9 @@ func getUserEndpoint(service UserService) Endpoint[getUserRequest, userResponse]
 		if service == nil {
 			return userResponse{}, apiErrorServiceUnavailable
 		}
+		if err := authorizeGlobalRead(ctx); err != nil {
+			return userResponse{}, err
+		}
 
 		user, err := service.GetUser(ctx, request.UserID)
 		if err != nil {
@@ -131,12 +134,13 @@ func getUserEndpoint(service UserService) Endpoint[getUserRequest, userResponse]
 		Responds(http.StatusOK, "User", userResponse{}).
 		Errors(
 			apiErrorUnauthenticated,
+			apiErrorForbidden,
 			apiErrorServiceUnavailable,
 			apiErrorInvalidUserID,
 			apiErrorUserNotFound,
 			apiErrorInternal,
 		).
-		MapErrors(userServiceAPIError)
+		MapErrors(userEndpointAPIError)
 }
 
 func decodeListUsersRequest(r *http.Request) (listUsersRequest, error) {

@@ -1,6 +1,7 @@
 defmodule ChalkSync.WhiteboardV1.SocketTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Auth.Claims
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
@@ -21,6 +22,15 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
          }
        ]}
     end
+  end
+
+  defmodule RevokedStateholder do
+    def participant_authority(_episode, _participant_id, _generation),
+      do: {:error, :participant_inactive}
+  end
+
+  defmodule AuthorizedStateholder do
+    def participant_authority(_episode, _participant_id, _generation), do: {:ok, %{}}
   end
 
   setup do
@@ -48,6 +58,58 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                {~s({"type":"ping"}), [opcode: :text]},
                state
              )
+  end
+
+  test "keeps temporary socket admission overloads retryable" do
+    verify_token = fn "participant-token" ->
+      {:ok,
+       %Claims{
+         tenant_id: "30000000-0000-4000-8000-000000000003",
+         space_id: "40000000-0000-4000-8000-000000000004",
+         episode_id: "50000000-0000-4000-8000-000000000005",
+         participant_id: @participant_id,
+         participant_generation: 1,
+         display_name: "Ada",
+         role: "participant",
+         capabilities: ["drawWhiteboard"]
+       }}
+    end
+
+    connect_episode = fn _identity ->
+      {:ok,
+       %{
+         "type" => "welcome",
+         "protocol" => "whiteboard-v1",
+         "participant_id" => @participant_id,
+         "participant_generation" => 1,
+         "capabilities" => ["drawWhiteboard"],
+         "participant_capabilities" => ["drawWhiteboard"],
+         "scene_id" => @scene_id,
+         "revision" => "0",
+         "can_draw" => true
+       }}
+    end
+
+    assert {:ok, state} =
+             SocketWhiteboardV1.init(%{
+               admission: :missing_whiteboard_admission,
+               verify_token: verify_token,
+               connect_episode: connect_episode
+             })
+
+    hello =
+      JSON.encode!(%{
+        "type" => "hello",
+        "protocol" => "whiteboard-v1",
+        "token" => "participant-token",
+        "cursor" => nil
+      })
+
+    assert {:stop, :normal, {1012, "dependency unavailable"}, stopped} =
+             SocketWhiteboardV1.handle_in({hello, [opcode: :text]}, state)
+
+    Process.cancel_timer(stopped.hello_timer)
+    assert stopped.observability
   end
 
   test "does not echo a participant cursor or replay an applied update" do
@@ -108,7 +170,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: false
+        presentation_negotiated: false,
+        stateholder: AuthorizedStateholder
     }
 
     frame = %{
@@ -139,7 +202,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: true
+        presentation_negotiated: true,
+        stateholder: AuthorizedStateholder
     }
 
     assert {:push, {:text, encoded}, repaired} =
@@ -181,7 +245,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         display_name: "Ada",
         scene_id: @scene_id,
-        revision: 4
+        revision: 4,
+        stateholder: AuthorizedStateholder
     }
 
     frame =
@@ -230,6 +295,58 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              "recoverable" => true,
              "message" => "Whiteboard temporarily overloaded"
            }
+  end
+
+  test "closes a cursor socket when participant authority is revoked" do
+    admission = start_supervised!({ChalkSync.Admission, name: nil})
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{admission: admission})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        display_name: "Ada",
+        scene_id: @scene_id,
+        revision: 4,
+        stateholder: RevokedStateholder
+    }
+
+    assert {:stop, :normal, {1008, "policy violation"}, stopped} =
+             SocketWhiteboardV1.handle_in(
+               {JSON.encode!(%{"type" => "cursor", "x" => 1, "y" => 2}), [opcode: :text]},
+               state
+             )
+
+    assert stopped.observability
+  end
+
+  test "closes a revoked socket before delivering a whiteboard broadcast" do
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        display_name: "Ada",
+        scene_id: @scene_id,
+        revision: 4,
+        stateholder: RevokedStateholder
+    }
+
+    assert {:stop, :normal, {1008, "policy violation"}, stopped} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_v1_frame,
+                %{
+                  "type" => "cursor",
+                  "participant_id" => "60000000-0000-4000-8000-000000000006",
+                  "display_name" => "Grace",
+                  "x" => 5,
+                  "y" => 8
+                }},
+               state
+             )
+
+    assert stopped.observability
   end
 
   defp identity do

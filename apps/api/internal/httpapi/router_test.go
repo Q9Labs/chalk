@@ -3330,6 +3330,60 @@ func TestGetUserRejectsInvalidID(t *testing.T) {
 	assertErrorCode(t, res, "user.invalid_id")
 }
 
+func TestGetUserRejectsUserPrincipal(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/users/22222222-2222-2222-2222-222222222222", httpapi.Options{
+		Users: userService{
+			getUser: func(context.Context, utilities.ID) (users.User, error) {
+				called = true
+				return users.User{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+	if called {
+		t.Fatal("user service was called")
+	}
+	assertErrorCode(t, res, "access.forbidden")
+}
+
+func TestGetUserSystemPrincipal(t *testing.T) {
+	const userID = "22222222-2222-2222-2222-222222222222"
+
+	res := systemRequestWithOptions(t, http.MethodGet, "/v1/users/"+userID, httpapi.Options{
+		Users: userService{
+			getUser: func(ctx context.Context, id utilities.ID) (users.User, error) {
+				if id.String() != userID {
+					t.Fatalf("user id = %q, want %q", id, userID)
+				}
+				return users.User{
+					ID:    id,
+					Name:  "Hasan",
+					Email: "hasan@example.com",
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.ID != userID || body.Name != "Hasan" || body.Email != "hasan@example.com" {
+		t.Fatalf("user response = %#v", body)
+	}
+}
+
 func TestListUsers(t *testing.T) {
 	createdAt := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
 

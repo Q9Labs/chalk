@@ -9,6 +9,8 @@ const packageJsonPaths = execFileSync("git", ["ls-files", "*package.json"], { cw
 
 const weakScriptPattern = /^(echo\b.*|true|exit\s+0)$/;
 const placeholderPattern = /No (?:linter|tests?) configured yet|TODO: document/i;
+const workflowActionPattern = /(?:^|\n)\s*(?:-\s*)?uses:\s*([^\s#]+)/g;
+const fullCommitSHA = /^[0-9a-f]{40}$/i;
 
 function readJson(relativePath) {
   return JSON.parse(readFileSync(path.join(repoRoot, relativePath), "utf8"));
@@ -30,6 +32,18 @@ for (const relativePath of packageJsonPaths) {
     if (trimmed.includes("--passWithNoTests")) {
       errors.push(`${relativePath}: script "${name}" uses --passWithNoTests`);
     }
+  }
+}
+
+const workflowPaths = execFileSync("git", ["ls-files", ".github/workflows/*.yml", ".github/workflows/*.yaml"], { cwd: repoRoot, encoding: "utf8" }).trim().split(/\r?\n/).filter(Boolean);
+for (const relativePath of workflowPaths) {
+  const workflow = readFileSync(path.join(repoRoot, relativePath), "utf8");
+  for (const match of workflow.matchAll(workflowActionPattern)) {
+    const actionReference = match[1];
+    if (actionReference.startsWith("./")) continue;
+    const separator = actionReference.lastIndexOf("@");
+    if (separator <= 0 || fullCommitSHA.test(actionReference.slice(separator + 1))) continue;
+    errors.push(`${relativePath}: external action ${actionReference} must use a full 40-character commit SHA`);
   }
 }
 

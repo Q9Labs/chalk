@@ -2008,6 +2008,7 @@ const usersGroup = HttpApiGroup.make("users")
       error: [
         S.UserInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.UserNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),

@@ -32,6 +32,86 @@ defmodule ChalkSync.AdmissionTest do
     assert %{actors: 1, reservations: 1} = Admission.stats(admission)
   end
 
+  test "shares cursor and chat budgets across calls for one participant generation" do
+    admission =
+      start_supervised!(
+        {Admission,
+         name: nil,
+         cursor_rate_max: 2,
+         cursor_window_ms: 100,
+         chat_rate_max: 2,
+         chat_window_ms: 100}
+      )
+
+    identity = identity()
+    assert {:ok, cursor_budget} = Admission.open_whiteboard(admission, identity)
+
+    assert :ok = Admission.admit_cursor(cursor_budget, identity, 1_000)
+    assert :ok = Admission.admit_cursor(cursor_budget, identity, 1_001)
+    assert {:error, :rate_limited} = Admission.admit_cursor(cursor_budget, identity, 1_002)
+    assert :ok = Admission.admit_cursor(cursor_budget, identity, 1_100)
+
+    assert :ok = Admission.admit_chat(admission, identity, 2_000)
+    assert :ok = Admission.admit_chat(admission, identity, 2_001)
+    assert {:error, :rate_limited} = Admission.admit_chat(admission, identity, 2_002)
+    assert :ok = Admission.admit_chat(admission, identity, 2_100)
+  end
+
+  test "reclaims whiteboard socket slots when owners crash" do
+    admission = start_supervised!({Admission, name: nil, whiteboard_socket_limit: 2})
+    identity = identity()
+    first_owner = spawn(fn -> Process.sleep(:infinity) end)
+    second_owner = spawn(fn -> Process.sleep(:infinity) end)
+    third_owner = spawn(fn -> Process.sleep(:infinity) end)
+
+    assert {:ok, first_budget} = Admission.open_whiteboard(admission, identity, first_owner)
+    assert {:ok, second_budget} = Admission.open_whiteboard(admission, identity, second_owner)
+    assert first_budget == second_budget
+    assert {:error, :overloaded} = Admission.open_whiteboard(admission, identity, third_owner)
+
+    Process.exit(first_owner, :kill)
+
+    assert eventually(fn ->
+             match?({:ok, _budget}, Admission.open_whiteboard(admission, identity, third_owner))
+           end)
+
+    assert :ok = Admission.close_whiteboard(admission, identity, second_owner)
+    Process.exit(second_owner, :kill)
+    Process.exit(third_owner, :kill)
+  end
+
+  test "admits cursor traffic without entering the global admission mailbox" do
+    admission =
+      start_supervised!({Admission, name: nil, cursor_rate_max: 2, cursor_window_ms: 100})
+
+    identity = identity()
+    assert {:ok, cursor_budget} = Admission.open_whiteboard(admission, identity)
+    :sys.suspend(admission)
+
+    try do
+      assert :ok = Admission.admit_cursor(cursor_budget, identity, 1_000)
+      assert :ok = Admission.admit_cursor(cursor_budget, identity, 1_001)
+
+      assert {:error, :rate_limited} =
+               Admission.admit_cursor(cursor_budget, identity, 1_002)
+    after
+      :sys.resume(admission)
+    end
+  end
+
+  defp eventually(assertion, attempts \\ 20)
+
+  defp eventually(assertion, attempts) when attempts > 0 do
+    if assertion.() do
+      true
+    else
+      Process.sleep(10)
+      eventually(assertion, attempts - 1)
+    end
+  end
+
+  defp eventually(_assertion, 0), do: false
+
   defp identity do
     %Identity{
       episode: %EpisodeKey{

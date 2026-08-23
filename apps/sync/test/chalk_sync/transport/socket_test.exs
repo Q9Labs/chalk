@@ -92,6 +92,11 @@ defmodule ChalkSync.Transport.SocketV1Test do
     end
 
     @impl true
+    def append(identity, input, admit_new_message) do
+      with :ok <- admit_new_message.(), do: append(identity, input)
+    end
+
+    @impl true
     def append(identity, input) do
       attachments =
         if Map.get(input, :attachment_ids, []) == [] do

@@ -6037,7 +6037,7 @@ export type GetTenantError = typeof GetTenantErrorSchema.Type;
 export const GetTranscriptErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TranscriptInvalidIdErrorSchema, TranscriptNotFoundErrorSchema]);
 export type GetTranscriptError = typeof GetTranscriptErrorSchema.Type;
 
-export const GetUserErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, UserInvalidIdErrorSchema, UserNotFoundErrorSchema]);
+export const GetUserErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, UserInvalidIdErrorSchema, UserNotFoundErrorSchema]);
 export type GetUserError = typeof GetUserErrorSchema.Type;
 
 export const GetWebhookDeliveryErrorSchema = Schema.Union([

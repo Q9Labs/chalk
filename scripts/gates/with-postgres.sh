@@ -93,7 +93,9 @@ cleanup() {
     fi
   fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 postgres_ready() {
   # The container shell expands /proc state.

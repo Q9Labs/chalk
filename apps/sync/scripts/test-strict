@@ -7,7 +7,9 @@ output="$(mktemp "${TMPDIR:-/tmp}/chalk-sync-test-output.XXXXXX")"
 cleanup() {
   rm -f "${output}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 arguments=("$@")
 if [[ "${CHALK_PROVIDER_BRIDGE_E2E:-0}" == "1" ]]; then

@@ -22,6 +22,7 @@ export const DEFAULT_RELEASE_LOCK_PATH = join(tmpdir(), "chalk-web-release.lock"
 export const TURBO_CACHE_DIRECTORY_ENV = "CHALK_WEB_TURBO_CACHE_DIR";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
+const RELEASE_USAGE = "Usage: pnpm run release:web [--sha <40-char-sha>] [--skip-staging] [--recover-stale-lock] [--dry-run]";
 
 export function normalizeSHA(rawSHA) {
   const sha = rawSHA?.trim();
@@ -126,11 +127,12 @@ export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEF
 
 export async function runWebRelease({ arguments_ = process.argv.slice(2), environment = process.env, commandRunner = runCommand, rootDirectory = repositoryRoot, webPath = webDirectory, productionURL = resolveProductionURL(environment), build = true, turboCacheDirectory } = {}) {
   const executionEnvironment = { ...process.env, ...environment };
+  const credentialFreeEnvironment = createCredentialFreeEnvironment(executionEnvironment);
   const options = parseArguments(arguments_, { isCI: isCIEnvironment(executionEnvironment) });
-  const currentSHA = await readGitSHA(commandRunner, rootDirectory, executionEnvironment);
+  const currentSHA = await readGitSHA(commandRunner, rootDirectory, credentialFreeEnvironment);
   const expectedSHA = options.sha ?? currentSHA;
   assertExactHEAD(currentSHA, expectedSHA);
-  await assertCleanTree(commandRunner, rootDirectory, executionEnvironment);
+  await assertCleanTree(commandRunner, rootDirectory, credentialFreeEnvironment);
 
   const resolvedTurboCacheDirectory = turboCacheDirectory ?? resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
   const releasePlan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL, rootDirectory, webPath, turboCacheDirectory: resolvedTurboCacheDirectory });
@@ -139,17 +141,17 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
     return { sha: expectedSHA, dryRun: true, plan: releasePlan };
   }
 
-  await checkRuntimeTools(commandRunner, rootDirectory, executionEnvironment);
+  await checkRuntimeTools(commandRunner, rootDirectory, credentialFreeEnvironment);
   requireCloudflareToken(executionEnvironment);
 
-  await commandRunner(commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory, { env: executionEnvironment }));
-  await checkPinnedWrangler(commandRunner, webPath, executionEnvironment);
+  await commandRunner(commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory, { env: credentialFreeEnvironment }));
+  await checkPinnedWrangler(commandRunner, webPath, credentialFreeEnvironment);
 
-  await buildWebArtifact({ build, commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, turboCacheDirectory: resolvedTurboCacheDirectory });
-  const stagingURL = await deployStagingArtifact({ commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, skipStaging: options.skipStaging, webPath });
+  await buildWebArtifact({ build, commandRunner, environment: credentialFreeEnvironment, expectedSHA, rootDirectory, turboCacheDirectory: resolvedTurboCacheDirectory });
+  const stagingURL = await deployStagingArtifact({ commandRunner, credentialFreeEnvironment, environment: executionEnvironment, expectedSHA, rootDirectory, skipStaging: options.skipStaging, webPath });
 
   await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", PRODUCTION_PROJECT, "--branch", "master", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { env: executionEnvironment }));
-  await runVerifier(commandRunner, productionURL, expectedSHA, executionEnvironment, rootDirectory, true);
+  await runVerifier(commandRunner, productionURL, expectedSHA, credentialFreeEnvironment, rootDirectory, true);
 
   return { sha: expectedSHA, stagingURL, productionURL, dryRun: false, plan: releasePlan };
 }
@@ -180,6 +182,12 @@ function isCIEnvironment(environment) {
   return environment.CI === "true" || environment.GITHUB_ACTIONS === "true";
 }
 
+function createCredentialFreeEnvironment(environment) {
+  const credentialFreeEnvironment = { ...environment };
+  delete credentialFreeEnvironment.CLOUDFLARE_API_TOKEN;
+  return credentialFreeEnvironment;
+}
+
 function requireCloudflareToken(environment) {
   if (!environment.CLOUDFLARE_API_TOKEN?.trim()) {
     throw new Error("CLOUDFLARE_API_TOKEN is required for a web release; inject it with op run locally or the CI secret");
@@ -201,18 +209,19 @@ async function buildWebArtifact({ build, commandRunner, environment, expectedSHA
   await commandRunner(commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", turboCacheDirectory], rootDirectory, { env: buildEnvironment }));
 }
 
-async function deployStagingArtifact({ commandRunner, environment, expectedSHA, rootDirectory, skipStaging, webPath }) {
+async function deployStagingArtifact({ commandRunner, credentialFreeEnvironment, environment, expectedSHA, rootDirectory, skipStaging, webPath }) {
   if (skipStaging) return undefined;
   const stagingDeployment = await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", STAGING_PROJECT, "--branch", "staging", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { capture: true, env: environment }));
   const stagingURL = parseDeploymentURL(combinedOutput(stagingDeployment), STAGING_PROJECT);
-  await runVerifier(commandRunner, stagingURL, expectedSHA, environment, rootDirectory);
+  await runVerifier(commandRunner, stagingURL, expectedSHA, credentialFreeEnvironment, rootDirectory);
   return stagingURL;
 }
 
 export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), environment = process.env, commandRunner = runCommand, rootDirectory = repositoryRoot, lockPath = resolveReleaseLockPath(environment) } = {}) {
   const executionEnvironment = { ...process.env, ...environment };
+  const credentialFreeEnvironment = createCredentialFreeEnvironment(executionEnvironment);
   const options = parseArguments(arguments_);
-  const expectedSHA = options.sha ?? (await readGitSHA(commandRunner, rootDirectory, executionEnvironment));
+  const expectedSHA = options.sha ?? (await readGitSHA(commandRunner, rootDirectory, credentialFreeEnvironment));
   const turboCacheDirectory = resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
 
   if (options.dryRun) {
@@ -231,7 +240,7 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
     const worktreePath = join(workspaceRoot, "checkout");
     let worktreeAdded = false;
     try {
-      await commandRunner(commandSpec("git", ["worktree", "add", "--detach", worktreePath, expectedSHA], rootDirectory, { env: executionEnvironment }));
+      await commandRunner(commandSpec("git", ["worktree", "add", "--detach", worktreePath, expectedSHA], rootDirectory, { env: credentialFreeEnvironment }));
       worktreeAdded = true;
       const nestedArguments = ["--sha", expectedSHA, ...(options.skipStaging ? ["--skip-staging"] : [])];
       return await runWebRelease({
@@ -245,7 +254,7 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
     } finally {
       try {
         if (worktreeAdded) {
-          await commandRunner(commandSpec("git", ["worktree", "remove", "--force", worktreePath], rootDirectory, { env: executionEnvironment }));
+          await commandRunner(commandSpec("git", ["worktree", "remove", "--force", worktreePath], rootDirectory, { env: credentialFreeEnvironment }));
         }
       } finally {
         await rm(workspaceRoot, { recursive: true, force: true });
@@ -381,7 +390,7 @@ function printDryRun(expectedSHA, releasePlan) {
 }
 
 function usageError() {
-  return new Error("Usage: pnpm run release:web [--sha <40-char-sha>] [--skip-staging] [--recover-stale-lock] [--dry-run]");
+  return new Error(RELEASE_USAGE);
 }
 
 function escapeRegExp(value) {
@@ -424,6 +433,12 @@ if (invokedPath === import.meta.url) {
 
 async function runReleaseCLI() {
   const arguments_ = process.argv.slice(2);
+  const helpArguments = arguments_[0] === "--" ? arguments_.slice(1) : arguments_;
+  if (helpArguments.length === 1 && ["--help", "-h"].includes(helpArguments[0])) {
+    console.log(RELEASE_USAGE);
+    return;
+  }
+
   const environment = process.env;
   const isCI = environment.CI === "true" || environment.GITHUB_ACTIONS === "true";
   const options = parseArguments(arguments_, { isCI });

@@ -54,6 +54,7 @@ defmodule ChalkSync.Chat.Repository do
   @type error_code ::
           :capability_denied
           | :invalid_payload
+          | :rate_limited
           | :overloaded
           | :episode_ended
           | :participant_stale
@@ -80,6 +81,18 @@ defmodule ChalkSync.Chat.Repository do
               text: String.t(),
               attachment_ids: [String.t()]
             }) ::
+              {:ok, %{outcome: :committed | :duplicate, message: message()}}
+              | {:error, error_code()}
+
+  @callback append(
+              Identity.t(),
+              %{
+                client_message_id: String.t(),
+                text: String.t(),
+                attachment_ids: [String.t()]
+              },
+              (-> :ok | {:error, :rate_limited | :overloaded})
+            ) ::
               {:ok, %{outcome: :committed | :duplicate, message: message()}}
               | {:error, error_code()}
 

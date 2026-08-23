@@ -246,7 +246,9 @@ cleanup() {
 
   rm -rf "${topology_root}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 cd "${repository_root}"
 if pg_bin="$(native_pg18_bin)"; then

@@ -49,6 +49,18 @@ defmodule ChalkSync.Chat.Repository.SQL do
     """
   end
 
+  def participant_usage do
+    """
+    select
+      count(*)::bigint,
+      coalesce(sum(encoded_bytes), 0)::bigint
+    from sync_chat_messages
+    where tenant_id = $1
+      and space_id = $2
+      and participant_id = $3
+    """
+  end
+
   def lock_stream_for_read do
     """
     select head_sequence, retained_floor_sequence
