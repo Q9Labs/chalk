@@ -44,6 +44,10 @@ export async function launchParticipant(browser, options, index) {
   page.setDefaultTimeout(15_000);
   const errors = [];
   page.on("pageerror", (error) => errors.push({ type: "pageerror", fatal: true, message: error.message }));
+  page.on("console", (message) => {
+    if (message.type() !== "error" && message.type() !== "warning") return;
+    errors.push({ type: `console-${message.type()}`, fatal: false, message: message.text() });
+  });
   page.on("requestfailed", (request) => {
     const message = request.failure()?.errorText ?? "unknown";
     errors.push({
@@ -53,6 +57,10 @@ export async function launchParticipant(browser, options, index) {
       url: request.url(),
       message,
     });
+  });
+  page.on("websocket", (socket) => {
+    socket.on("close", () => errors.push({ type: "websocket-close", fatal: false, url: socket.url(), message: "WebSocket closed" }));
+    socket.on("socketerror", (message) => errors.push({ type: "websocket-error", fatal: false, url: socket.url(), message }));
   });
   // Playwright's external method uses legacy product language, so assemble it only at this boundary.
   const cdp = await context[["newCDP", "S", "ession"].join("")](page);
@@ -145,6 +153,12 @@ export async function joinParticipant(person, inviteUrl = null) {
     if (!current) await nameInput.first().fill(person.name);
   }
   await clickVisibleControl(person.page, /^Enter Space$/i, "Entrance join control");
+  await person.page.locator(READY_SELECTOR).first().waitFor({ state: "visible", timeout: 90_000 });
+  return new URL(person.page.url());
+}
+
+export async function reenterParticipant(person) {
+  await clickVisibleControl(person.page, /^Try again$/i, "re-enter Space control");
   await person.page.locator(READY_SELECTOR).first().waitFor({ state: "visible", timeout: 90_000 });
   return new URL(person.page.url());
 }

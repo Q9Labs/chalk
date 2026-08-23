@@ -5,7 +5,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cpuProfileFilePath, startParticipantCpuProfiles, stopParticipantCpuProfiles, validateGpuSystemInfo } from "../cli.mjs";
+import { cpuProfileFilePath, startParticipantCpuProfiles, stopParticipantCpuProfiles, summarizeParticipantCpuProfileCoverage, validateGpuSystemInfo } from "../cli.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
 import { createTraceRecorder, summarizeTrace, traceFeature } from "../tracing.mjs";
 
@@ -437,4 +437,32 @@ test("profiles every Participant and cleans up only started profiles after parti
   assert.equal(result.summaries[0].participant, "Participant-1");
   assert.equal(stopped[0].filePath, cpuProfileFilePath("/tmp/chalk-trace-profile-test", people[0]));
   assert.notEqual(cpuProfileFilePath("/tmp/chalk-trace-profile-test", people[0]), cpuProfileFilePath("/tmp/chalk-trace-profile-test", people[1]));
+});
+
+test("rejects CPU profile sets with a truncated Participant profile", () => {
+  const people = [
+    { name: "Avery", index: 0 },
+    { name: "Blake", index: 1 },
+    { name: "Casey", index: 2 },
+  ];
+  const complete = summarizeParticipantCpuProfileCoverage(
+    [
+      { participant: "Avery", participantIndex: 0, durationUs: 100_000_000 },
+      { participant: "Blake", participantIndex: 1, durationUs: 99_000_000 },
+      { participant: "Casey", participantIndex: 2, durationUs: 98_000_000 },
+    ],
+    people,
+  );
+  assert.equal(complete.valid, true);
+
+  const truncated = summarizeParticipantCpuProfileCoverage(
+    [
+      { participant: "Avery", participantIndex: 0, durationUs: 100_000_000 },
+      { participant: "Blake", participantIndex: 1, durationUs: 15_000_000 },
+    ],
+    people,
+  );
+  assert.equal(truncated.valid, false);
+  assert.deepEqual(truncated.missing, [{ participant: "Casey", participantIndex: 2 }]);
+  assert.equal(truncated.durationRatio, 0.15);
 });

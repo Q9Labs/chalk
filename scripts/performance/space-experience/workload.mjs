@@ -1,7 +1,7 @@
 import { appendFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { assertRoster, joinParticipant } from "./browser.mjs";
+import { assertRoster, joinParticipant, reenterParticipant } from "./browser.mjs";
 import { aggregateFailures, StepFailure, TraceLifecycleError, isFeatureDispositionError } from "./errors.mjs";
 import * as scenario from "./scenario.mjs";
 
@@ -126,6 +126,7 @@ async function runMediaAndLayout(state, cycle) {
     { feature: "microphone" },
   );
   if (mediaSettled) {
+    await recorder.step(`microphone command quiet window ${cycle}`, () => wait(5_000, state.signal));
     const cameraReady = await recorder.step(
       `camera initial playback ${cycle}`,
       async () => {
@@ -214,6 +215,7 @@ async function runReactionAndHand(state, cycle) {
 async function runScreenShare(state, cycle) {
   const { people, anchor, recorder, trace } = state;
   const remote = people[1];
+  await recorder.step(`screen share command quiet window ${cycle}`, () => wait(5_000, state.signal));
   await recorder.step(
     `screen share video trace ${cycle}`,
     () =>
@@ -331,22 +333,23 @@ async function runChat(state, cycle) {
 }
 
 async function runLeaveRejoin(state, cycle) {
-  const { people, anchor, recorder, snapshot, inviteUrl } = state;
+  const { people, anchor, recorder, snapshot } = state;
   if (cycle === 1) await snapshot(`anchor-before-remote-leave-${cycle}`, anchor);
   const remote = people[1];
   await recorder.step(`remote leave ${cycle}`, () => scenario.leaveSpace(remote.page), { feature: "leave-rejoin" });
   await recorder.step(`roster after remote leave ${cycle}`, () => assertRoster(anchor.page, people.length - 1), { feature: "roster" });
   if (cycle === 1) await snapshot(`anchor-after-remote-leave-${cycle}`, anchor);
-  const rejoined = await recorder.step(`remote rejoin ${cycle}`, () => joinParticipant(remote, inviteUrl), { feature: "leave-rejoin" });
+  const rejoined = await recorder.step(`remote rejoin ${cycle}`, () => reenterParticipant(remote), { feature: "leave-rejoin" });
   if (!rejoined) throw new Error(`${remote.name} could not rejoin the Space`);
   await recorder.step(`roster after remote rejoin ${cycle}`, () => assertRoster(anchor.page, people.length), { feature: "roster" });
   if (cycle === 1) await snapshot(`anchor-after-remote-rejoin-${cycle}`, anchor);
 }
 
 export async function runWorkload(state) {
+  await runJoinPhase(state);
+  await state.startCpuProfiles();
   const startedAt = Date.now();
   const deadline = startedAt + state.options.durationMs;
-  await runJoinPhase(state);
   const idleMs = state.options.mode === "profile" ? 15_000 : 5_000;
   await state.recorder.step("explicit idle trace", () => state.trace("idle", 0, () => wait(idleMs, state.signal)), { feature: "idle" });
   let cycle = 1;

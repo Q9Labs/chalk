@@ -10,7 +10,7 @@ const PANEL_DEFINITIONS = Object.freeze({
   settings: { control: /^Settings$/i, surface: '[role="dialog"][aria-label="Settings"], [data-tour="settings-panel"]' },
   info: { control: /^Space information$/i, surface: '[role="dialog"][aria-label="Space details"], [role="dialog"][aria-labelledby]' },
   reactions: { control: /^(Reactions|React)$/i, surface: '[role="toolbar"][aria-label="Reactions"], [aria-label="Reaction picker"]' },
-  whiteboard: { control: /^(Whiteboard|Board)$/i, surface: '[aria-label="Shared whiteboard"], .excalidraw' },
+  whiteboard: { control: /^(Whiteboard|Board)$/i, surface: '[aria-label="Shared whiteboard"]:visible, .excalidraw:visible' },
   transcript: { control: /transcript|caption/i, surface: '[aria-label*="transcription" i], [aria-label*="caption" i]' },
 });
 
@@ -124,6 +124,17 @@ async function dismissOverlays(page) {
   }
 }
 
+async function whiteboardFailureDetail(page) {
+  const control = (await toolbarLabels(page)).find((entry) => PANEL_DEFINITIONS.whiteboard.control.test(entry.label ?? "")) ?? null;
+  const loading = await page
+    .getByText("Loading whiteboard...", { exact: true })
+    .isVisible()
+    .catch(() => false);
+  const alerts = await page.locator('[role="alert"]:visible').allTextContents();
+  const canvases = await page.locator(".excalidraw").count();
+  return JSON.stringify({ control, loading, alerts, canvases });
+}
+
 export async function openPanel(page, kind) {
   const definition = PANEL_DEFINITIONS[kind];
   if (!definition) throw new Error(`unknown panel ${kind}`);
@@ -131,7 +142,12 @@ export async function openPanel(page, kind) {
     const click = kind === "settings" || kind === "info" ? clickVisibleControl : clickFloatingControl;
     await click(page, definition.control, `${kind} panel`);
     const surface = await panelSurface(page, kind);
-    await surface.waitFor({ state: "visible", timeout: kind === "whiteboard" ? 30_000 : 10_000 });
+    try {
+      await surface.waitFor({ state: "visible", timeout: kind === "whiteboard" ? 120_000 : 10_000 });
+    } catch (error) {
+      if (kind !== "whiteboard") throw error;
+      throw new Error(`whiteboard did not become visible after activation: ${await whiteboardFailureDetail(page)}`, { cause: error });
+    }
     return surface;
   } catch (error) {
     await dismissOverlays(page);
@@ -280,7 +296,17 @@ export async function uploadChatFile(page, filePath) {
   const fileName = basename(filePath);
   await chooser.setFiles({ name: fileName, mimeType: "text/plain", buffer: await readFile(filePath) });
   const attachments = panel.locator('[aria-label="Attachments"]');
-  await attachments.waitFor({ state: "visible", timeout: 10_000 });
+  try {
+    await attachments.waitFor({ state: "visible", timeout: 10_000 });
+  } catch (error) {
+    const composerError = await panel
+      .locator('[role="alert"]:visible')
+      .last()
+      .textContent()
+      .catch(() => null);
+    if (composerError) throw new Error(`chat file staging failed: ${composerError.trim()}`, { cause: error });
+    throw error;
+  }
   await attachments.getByText(fileName, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   const composer = panel.locator('[aria-label="Message"]').first();
   await clickVisibleControl(page, /^Send message$/i, "send chat attachment", panel);

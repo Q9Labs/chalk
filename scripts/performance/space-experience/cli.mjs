@@ -52,6 +52,27 @@ export async function stopParticipantCpuProfiles(states, outDir, { stop = stopCp
   return { summaries, errors };
 }
 
+export function summarizeParticipantCpuProfileCoverage(summaries, people, minimumRatio = 0.95) {
+  const expected = people.map((person) => ({ participant: person.name, participantIndex: person.index }));
+  const missing = expected.filter((person) => !summaries.some((summary) => summary.participantIndex === person.participantIndex));
+  const invalid = summaries.filter((summary) => !Number.isFinite(summary.durationUs) || summary.durationUs <= 0).map((summary) => summary.participant);
+  const durations = summaries.map((summary) => summary.durationUs).filter((duration) => Number.isFinite(duration) && duration > 0);
+  const minimumDurationUs = durations.length > 0 ? Math.min(...durations) : 0;
+  const maximumDurationUs = durations.length > 0 ? Math.max(...durations) : 0;
+  const durationRatio = maximumDurationUs > 0 ? minimumDurationUs / maximumDurationUs : 0;
+  return {
+    valid: missing.length === 0 && invalid.length === 0 && durationRatio >= minimumRatio,
+    expectedParticipants: expected.length,
+    capturedParticipants: summaries.length,
+    missing,
+    invalid,
+    minimumDurationUs,
+    maximumDurationUs,
+    durationRatio,
+    requiredDurationRatio: minimumRatio,
+  };
+}
+
 function formatError(error, indent = "") {
   if (!(error instanceof Error)) return `${indent}${String(error)}`;
   const lines = [`${indent}${error.name}: ${error.message}`];
@@ -175,7 +196,6 @@ export async function execute(options) {
     }
     sampler = createMetricsSampler({ participants: people, browserCdp, metricsPath: join(outDir, "metrics.ndjson") });
     sampler.start();
-    cpuProfileStates = await startParticipantCpuProfiles(people);
     await writeFile(join(outDir, "fixture-chat-upload.txt"), `Space profiler upload fixture for ${manifest.runId}\n`);
     const state = {
       options,
@@ -184,6 +204,9 @@ export async function execute(options) {
       anchor: people[0],
       recorder,
       signal: shutdown.signal,
+      startCpuProfiles: async () => {
+        cpuProfileStates = await startParticipantCpuProfiles(people);
+      },
       snapshot,
       fixturePath: join(outDir, "fixture-chat-upload.txt"),
       trace: (feature, cycle, action) =>
@@ -214,6 +237,8 @@ export async function execute(options) {
     primaryError = error;
     if (error?.profileStates) cpuProfileStates = error.profileStates;
   } finally {
+    const browserDiagnostics = people.flatMap((person) => person.errors.map((entry) => ({ participant: person.name, ...entry })));
+    if (browserDiagnostics.length > 0) manifest.browserDiagnostics = browserDiagnostics;
     if (primaryError) {
       const failureScreenshots = [];
       for (const person of people) {
@@ -236,6 +261,10 @@ export async function execute(options) {
     }
     const cpuResult = await stopParticipantCpuProfiles(cpuProfileStates, outDir);
     manifest.cpuProfiles = cpuResult.summaries;
+    manifest.cpuProfileCoverage = summarizeParticipantCpuProfileCoverage(cpuResult.summaries, people);
+    if (!manifest.cpuProfileCoverage.valid) {
+      cleanupErrors.push(new Error(`CPU profile coverage is incomplete: captured ${manifest.cpuProfileCoverage.capturedParticipants}/${manifest.cpuProfileCoverage.expectedParticipants} Participants at ${(manifest.cpuProfileCoverage.durationRatio * 100).toFixed(1)}% minimum duration coverage`));
+    }
     if (cpuResult.summaries.length > 0) {
       const anchorSummary = cpuResult.summaries.find((summary) => summary.participantIndex === people[0]?.index);
       if (anchorSummary) manifest.cpu = anchorSummary;
