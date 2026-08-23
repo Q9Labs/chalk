@@ -3,6 +3,13 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 
 const PAGE_METRIC_FIELDS = ["Nodes", "JSEventListeners", "Documents", "JSHeapUsedSize", "JSHeapTotalSize", "ScriptDuration", "TaskDuration", "LayoutCount", "RecalcStyleCount", "LayoutDuration", "RecalcStyleDuration"];
 
+export function sanitizePageUrl(value) {
+  const url = new URL(value);
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
 export async function enableCdpDomains(cdp) {
   await cdp.send("Performance.enable");
   await cdp.send("HeapProfiler.enable");
@@ -29,7 +36,7 @@ async function samplePage(cdp, page) {
   const byName = Object.fromEntries(metrics.map((entry) => [entry.name, entry.value]));
   return {
     sampledAt: Date.now(),
-    url: page.url(),
+    url: sanitizePageUrl(page.url()),
     nodes: byName.Nodes ?? null,
     listeners: byName.JSEventListeners ?? null,
     documents: byName.Documents ?? null,

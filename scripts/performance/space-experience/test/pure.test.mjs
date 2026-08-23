@@ -8,7 +8,7 @@ import { createRunId, measurementPlan, parseCli } from "../config.mjs";
 import { createDiagnosticRecorder } from "../browser.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
 import { aggregateTraceSummaries, analyzeRun, compareReports, summarizeCpuProfile, summarizeMetrics, summarizeProcesses, summarizeSteps } from "../analysis.mjs";
-import { deltaSample, diffHeapSummaries } from "../metrics.mjs";
+import { deltaSample, diffHeapSummaries, sanitizePageUrl } from "../metrics.mjs";
 import { summarizeTrace } from "../tracing.mjs";
 import { createRecorder, shouldContinueCycles, supportFailed } from "../workload.mjs";
 
@@ -82,6 +82,10 @@ test("browser diagnostics coalesce repeats and remove URL query data", () => {
       lastAt: "tick-2",
     },
   ]);
+});
+
+test("metric page URLs omit invite tokens", () => {
+  assert.equal(sanitizePageUrl("http://127.0.0.1:13070/space/public-id?name=Avery#spaceInviteToken=secret"), "http://127.0.0.1:13070/space/public-id");
 });
 
 test("trace lifecycle failures abort the workload after recording evidence", async () => {
