@@ -128,6 +128,8 @@ defmodule ChalkSync.ChatReactionsTest do
     alias ChalkSync.ChatReactionsTest.Repository
 
     def append(identity, input, _admit_new_message) do
+      send(self(), :duplicate_repository_called)
+
       with {:ok, %{message: message}} <- Repository.append(identity, input) do
         {:ok, %{outcome: :duplicate, message: message}}
       end
@@ -292,8 +294,10 @@ defmodule ChalkSync.ChatReactionsTest do
              )
   end
 
-  test "returns a durable duplicate without charging the local chat budget", %{options: options} do
-    {:ok, admission} = Admission.start_link(name: nil, chat_rate_max: 1)
+  test "bounds duplicate attempts without charging the new-message budget", %{options: options} do
+    {:ok, admission} =
+      Admission.start_link(name: nil, chat_attempt_rate_max: 1, chat_rate_max: 1)
+
     on_exit(fn -> if Process.alive?(admission), do: GenServer.stop(admission) end)
     identity = identity()
     assert :ok = Admission.admit_chat(admission, identity)
@@ -309,6 +313,17 @@ defmodule ChalkSync.ChatReactionsTest do
                %{client_message_id: "chat-message-0001", text: "Hello from Chalk"},
                options
              )
+
+    assert_receive :duplicate_repository_called
+
+    assert {:ok, %{"outcome" => "rejected", "error_code" => "rate_limited"}} =
+             Chat.send_chat(
+               identity,
+               %{client_message_id: "chat-message-0001", text: "conflicting retry"},
+               options
+             )
+
+    refute_receive :duplicate_repository_called
   end
 
   test "does not charge the local chat budget for a durable authority denial", %{

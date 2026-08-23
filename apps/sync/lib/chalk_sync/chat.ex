@@ -72,6 +72,17 @@ defmodule ChalkSync.Chat do
   end
 
   defp send_chat_command(identity, input, client_message_id, text, options) do
+    case admit_chat_attempt(admission(options), identity) do
+      :ok ->
+        send_admitted_chat_command(identity, input, client_message_id, text, options)
+
+      {:error, reason} ->
+        diagnose_chat_rejection(identity, client_message_id, reason, options)
+        {:ok, rejected_chat(client_message_id, reason)}
+    end
+  end
+
+  defp send_admitted_chat_command(identity, input, client_message_id, text, options) do
     repository = repository(options)
     attachment_ids = Map.get(input, :attachment_ids, [])
 
@@ -470,6 +481,11 @@ defmodule ChalkSync.Chat do
 
   defp admit_chat(admission, identity),
     do: Admission.admit_chat(admission, identity)
+
+  defp admit_chat_attempt(nil, _identity), do: :ok
+
+  defp admit_chat_attempt(admission, identity),
+    do: Admission.admit_chat_attempt(admission, identity)
 
   defp repository(options),
     do:

@@ -39,6 +39,8 @@ defmodule ChalkSync.AdmissionTest do
          name: nil,
          cursor_rate_max: 2,
          cursor_window_ms: 100,
+         chat_attempt_rate_max: 2,
+         chat_attempt_window_ms: 100,
          chat_rate_max: 2,
          chat_window_ms: 100}
       )
@@ -50,6 +52,11 @@ defmodule ChalkSync.AdmissionTest do
     assert :ok = Admission.admit_cursor(cursor_budget, identity, 1_001)
     assert {:error, :rate_limited} = Admission.admit_cursor(cursor_budget, identity, 1_002)
     assert :ok = Admission.admit_cursor(cursor_budget, identity, 1_100)
+
+    assert :ok = Admission.admit_chat_attempt(admission, identity, 1_500)
+    assert :ok = Admission.admit_chat_attempt(admission, identity, 1_501)
+    assert {:error, :rate_limited} = Admission.admit_chat_attempt(admission, identity, 1_502)
+    assert :ok = Admission.admit_chat_attempt(admission, identity, 1_600)
 
     assert :ok = Admission.admit_chat(admission, identity, 2_000)
     assert :ok = Admission.admit_chat(admission, identity, 2_001)

@@ -3,9 +3,10 @@ defmodule ChalkSync.Admission do
   Bounded node-local collaboration admission.
 
   Collaboration delivery is transient, so this state is deliberately
-  disposable. Durable membership and capability checks happen before a caller
-  reserves a rate slot. Whiteboard socket ownership is monitored so a crashed
-  socket cannot hold a connection slot indefinitely.
+  disposable. A chat-attempt budget protects database access before durable
+  checks, while new-message and reaction slots are reserved only after durable
+  membership and capability checks. Whiteboard socket ownership is monitored
+  so a crashed socket cannot hold a connection slot indefinitely.
   """
 
   use GenServer
@@ -19,6 +20,8 @@ defmodule ChalkSync.Admission do
   @actor_limit 4_096
   @cursor_window_ms 1_000
   @cursor_rate_max 60
+  @chat_attempt_window_ms 10_000
+  @chat_attempt_rate_max 60
   @chat_window_ms 10_000
   @chat_rate_max 30
   @whiteboard_socket_limit 2
@@ -47,6 +50,18 @@ defmodule ChalkSync.Admission do
         now_ms \\ System.monotonic_time(:millisecond)
       ) do
     CursorBudget.admit(budget, now_ms)
+  end
+
+  @spec admit_chat_attempt(GenServer.server(), Identity.t(), integer()) ::
+          :ok | {:error, :rate_limited | :overloaded}
+  def admit_chat_attempt(
+        server \\ __MODULE__,
+        %Identity{} = identity,
+        now_ms \\ System.monotonic_time(:millisecond)
+      ) do
+    GenServer.call(server, {:admit, :chat_attempt, actor_key(identity), now_ms}, 1_000)
+  catch
+    :exit, _reason -> {:error, :overloaded}
   end
 
   @spec admit_chat(GenServer.server(), Identity.t(), integer()) ::
@@ -86,6 +101,7 @@ defmodule ChalkSync.Admission do
     {:ok,
      %{
        actors: %{},
+       chat_attempt_actors: %{},
        chat_actors: %{},
        whiteboard_sockets: %{},
        cursor_budgets: %{},
@@ -96,6 +112,11 @@ defmodule ChalkSync.Admission do
        cursor_window_ms: Keyword.get(options, :cursor_window_ms, @cursor_window_ms),
        cursor_rate_max: Keyword.get(options, :cursor_rate_max, @cursor_rate_max),
        cursor_actor_limit: Keyword.get(options, :cursor_actor_limit, @actor_limit),
+       chat_attempt_window_ms:
+         Keyword.get(options, :chat_attempt_window_ms, @chat_attempt_window_ms),
+       chat_attempt_rate_max:
+         Keyword.get(options, :chat_attempt_rate_max, @chat_attempt_rate_max),
+       chat_attempt_actor_limit: Keyword.get(options, :chat_attempt_actor_limit, @actor_limit),
        chat_window_ms: Keyword.get(options, :chat_window_ms, @chat_window_ms),
        chat_rate_max: Keyword.get(options, :chat_rate_max, @chat_rate_max),
        chat_actor_limit: Keyword.get(options, :chat_actor_limit, @actor_limit),
@@ -126,6 +147,17 @@ defmodule ChalkSync.Admission do
       })
 
     {:reply, reply, %{state | chat_actors: actors}}
+  end
+
+  def handle_call({:admit, :chat_attempt, key, now_ms}, _from, state) do
+    {reply, actors} =
+      admit_policy(state.chat_attempt_actors, key, now_ms, %{
+        window_ms: state.chat_attempt_window_ms,
+        rate_max: state.chat_attempt_rate_max,
+        actor_limit: state.chat_attempt_actor_limit
+      })
+
+    {:reply, reply, %{state | chat_attempt_actors: actors}}
   end
 
   def handle_call(:stats, _from, state) do
@@ -203,6 +235,11 @@ defmodule ChalkSync.Admission do
     %{
       state
       | actors: prune_actors(state.actors, now_ms - state.window_ms),
+        chat_attempt_actors:
+          prune_actors(
+            state.chat_attempt_actors,
+            now_ms - state.chat_attempt_window_ms
+          ),
         chat_actors: prune_actors(state.chat_actors, now_ms - state.chat_window_ms)
     }
   end
