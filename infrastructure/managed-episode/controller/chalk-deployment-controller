@@ -253,7 +253,7 @@ validate_request() {
     type == "object" and (keys | sort) == $expected_keys and
     .schema_version == 2 and .controller_version == 2 and
     (.adopt_existing_release | type == "boolean") and
-    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$")) and
+    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.environment | type == "string" and (. == "staging" or . == "production")) and
     (.aws_region | type == "string" and test("^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$")) and
@@ -304,7 +304,7 @@ validate_manifest() {
     else
       (keys | sort) == ["affected_components","architectures","component_releases","database_compatibility","generated_at","images","protocol_compatibility","release_id","runtime_artifacts","schema_version","source_revision","source_tree_state"]
     end) and
-    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$")) and
+    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.source_tree_state == "clean") and
     (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64","linux/arm64"]) and
@@ -312,14 +312,14 @@ validate_manifest() {
     (.protocol_compatibility == {sync:1}) and
     (if .schema_version == 2 then
       ((.affected_components == ["api"] or .affected_components == ["sync"] or .affected_components == ["api","sync"]) and
-       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$")))) and
+       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$")))) and
        (. as $manifest | all(.affected_components[]; . as $component | $manifest.component_releases[$component] == {release_id:$manifest.release_id,source_revision:$manifest.source_revision})))
     else true end) and
     (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
     (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
     (if .schema_version == 2 then
       ((.affected_components | type == "array" and (length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
-       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
+       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
     else true end)
   ' "$manifest_path" >/dev/null || fail "release manifest is invalid"
   [[ "$(jq -er '.release_id' "$manifest_path")" == "$request_release_id" ]] || fail "request release_id does not match manifest"
@@ -442,8 +442,8 @@ inject_runtime_identity() {
   api_release_id="$(manifest_component_value api release_id)" || fail "release manifest API identity is invalid"
   sync_release_id="$(manifest_component_value sync release_id)" || fail "release manifest Sync identity is invalid"
   sync_source_revision="$(manifest_component_value sync source_revision)" || fail "release manifest Sync source revision is invalid"
-  [[ "$api_release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "release manifest API identity is unsafe"
-  [[ "$sync_release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "release manifest Sync identity is unsafe"
+  [[ "$api_release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || fail "release manifest API identity is unsafe"
+  [[ "$sync_release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || fail "release manifest Sync identity is unsafe"
   [[ "$sync_source_revision" =~ ^[0-9a-f]{40}$ ]] || fail "release manifest Sync source revision is unsafe"
 
   if [[ -f "${stage_root}/env/api.env" ]]; then
@@ -929,7 +929,7 @@ validate_live_release_manifest() {
   jq -e --arg architecture "linux/${host_architecture}" '
     type == "object" and
     (.schema_version == 1 or .schema_version == 2) and
-    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$")) and
+    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     .source_tree_state == "clean" and
     (.architectures | type == "array" and index($architecture) != null) and
@@ -939,7 +939,7 @@ validate_live_release_manifest() {
     (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
     (if .schema_version == 2 then
       ((.affected_components | type == "array" and (length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
-       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
+       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
     else true end)
   ' "$live_manifest" >/dev/null || fail "live release manifest is invalid"
   [[ "$(jq -er '.release_id' "$live_manifest")" != "$request_release_id" ]] || fail "live release cannot adopt the candidate identity"

@@ -227,7 +227,7 @@ if [[ ! "${sync_generation}" =~ ^[1-9][0-9]*$ ]] || (( sync_generation > 2147483
   fail "CHALK_SYNC_GENERATION must be an integer between 1 and 2147483648"
 fi
 sync_release_id="$(env_value "${sync_env}" CHALK_SYNC_RELEASE_ID)"
-[[ "${sync_release_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_RELEASE_ID must be a safe bounded identifier"
+[[ "${sync_release_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || fail "CHALK_SYNC_RELEASE_ID must be a safe bounded identifier"
 sync_source_commit="$(env_value "${sync_env}" CHALK_SYNC_SOURCE_COMMIT)"
 [[ "${sync_source_commit}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_SOURCE_COMMIT must be a safe bounded identifier"
 sync_instance_id="$(env_value "${sync_env}" CHALK_SYNC_INSTANCE_ID)"
@@ -323,7 +323,7 @@ case "${manifest_schema_version}" in
       .schema_version == 2 and
       (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
       (.affected_components | type == "array" and length >= 1 and length <= 2 and unique == . and (length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
-      (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$")) and (.source_revision | test("^[0-9a-f]{40}$")))) and
+      (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | test("^[0-9a-f]{40}$")))) and
       (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
       .protocol_compatibility.sync == 1
     ' "${manifest}" >/dev/null || fail "release manifest v2 component compatibility contract is invalid"
@@ -335,8 +335,8 @@ esac
 manifest_api_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "${manifest}")" || fail "release manifest API identity is invalid"
 manifest_sync_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "${manifest}")" || fail "release manifest Sync identity is invalid"
 manifest_sync_source_revision="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "${manifest}")" || fail "release manifest Sync source revision is invalid"
-[[ "${manifest_api_release_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "release manifest API identity is unsafe"
-[[ "${manifest_sync_release_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "release manifest Sync identity is unsafe"
+[[ "${manifest_api_release_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || fail "release manifest API identity is unsafe"
+[[ "${manifest_sync_release_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || fail "release manifest Sync identity is unsafe"
 [[ "${manifest_sync_source_revision}" =~ ^[0-9a-f]{40}$ ]] || fail "release manifest Sync source revision is unsafe"
 if [[ "${api_available}" == true ]]; then
   [[ "$(env_value "${api_env}" CHALK_API_VERSION)" == "${manifest_api_release_id}" ]] || fail "API telemetry release identifier does not match the release manifest"

@@ -350,6 +350,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
   end
 
   defp delete_collaboration_data(transaction, candidate) do
+    Postgrex.query!(transaction, SQL.lock_chat_stream(), space_scope(candidate))
+
     _measurement =
       delete_measurement(transaction, SQL.delete_chat_read_receipts(), candidate)
 

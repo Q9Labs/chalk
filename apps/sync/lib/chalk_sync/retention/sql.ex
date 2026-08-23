@@ -186,6 +186,15 @@ defmodule ChalkSync.Retention.SQL do
   def delete_chat_messages, do: delete_rows("sync_chat_messages")
   def delete_chat_read_receipts, do: delete_rows("sync_chat_read_receipts")
 
+  def lock_chat_stream do
+    """
+    select head_sequence
+    from sync_chat_streams
+    where tenant_id = $1 and space_id = $2
+    for update
+    """
+  end
+
   def reconcile_chat_stream do
     """
     update sync_chat_streams stream

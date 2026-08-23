@@ -383,6 +383,17 @@ FAKE_EMPTY_SUFFIX=api.env run_controller "$empty_state" "${fixture_root}/empty-r
 jq -e '.inputs[] | select(.id == "api-env" and .missing == true and .version == 1)' "${empty_state}/active-release.json" >/dev/null || fail "excluded empty input was not recorded as missing"
 [[ ! -e "${fixture_root}/run/env/api.env" ]] || fail "excluded empty input was published to /run"
 
+unsafe_release_state="${fixture_root}/unsafe-release-state"
+mkdir -p "$unsafe_release_state"
+make_request 'unsafe/release' "${fixture_root}/unsafe-release-request.json"
+jq '.request_id = "test-unsafe-release"' "${fixture_root}/unsafe-release-request.json" >"${fixture_root}/unsafe-release-request.tmp"
+mv "${fixture_root}/unsafe-release-request.tmp" "${fixture_root}/unsafe-release-request.json"
+chmod 0600 "${fixture_root}/unsafe-release-request.json"
+make_manifest 'unsafe/release' >"${fixture_root}/unsafe-release-manifest.json"
+if run_controller "$unsafe_release_state" "${fixture_root}/unsafe-release-request.json" "${fixture_root}/unsafe-release-manifest.json" ok >/dev/null 2>&1; then
+  fail "path-separating release identifier was accepted"
+fi
+
 staging_state="${fixture_root}/staging-state"
 mkdir -p "$staging_state"
 make_request staging "${fixture_root}/staging-request.json" '[]' staging
