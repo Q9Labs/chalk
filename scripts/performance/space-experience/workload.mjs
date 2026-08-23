@@ -348,11 +348,12 @@ async function runLeaveRejoin(state, cycle) {
   const { people, anchor, recorder, snapshot } = state;
   if (cycle === 1) await snapshot(`anchor-before-remote-leave-${cycle}`, anchor);
   const remote = people[1];
-  await recorder.step(`remote leave ${cycle}`, () => scenario.leaveSpace(remote.page), { feature: "leave-rejoin" });
+  const left = await recorder.step(`remote leave ${cycle}`, () => scenario.leaveSpace(remote.page), { feature: "leave-rejoin" });
+  if (!left) return;
   await recorder.step(`roster after remote leave ${cycle}`, () => assertRoster(anchor.page, people.length - 1), { feature: "roster" });
   if (cycle === 1) await snapshot(`anchor-after-remote-leave-${cycle}`, anchor);
   const rejoined = await recorder.step(`remote rejoin ${cycle}`, () => reenterParticipant(remote), { feature: "leave-rejoin" });
-  if (!rejoined) throw new Error(`${remote.name} could not rejoin the Space`);
+  if (!rejoined) return;
   await recorder.step(`roster after remote rejoin ${cycle}`, () => assertRoster(anchor.page, people.length), { feature: "roster" });
   if (cycle === 1) await snapshot(`anchor-after-remote-rejoin-${cycle}`, anchor);
 }
@@ -379,8 +380,8 @@ export async function runWorkload(state) {
     assertActive(state);
     await runPanels(state, cycle);
     await state.recorder.step(`idle window ${cycle}`, () => wait(state.options.mode === "profile" ? 20_000 : 5_000, state.signal), { feature: "idle" });
-    if (cycle === 1 || (state.options.mode === "profile" && cycle === 2)) await runLeaveRejoin(state, cycle);
     cycle += 1;
   } while (shouldContinueCycles(measurement, Date.now(), deadline));
+  await runLeaveRejoin(state, cycle - 1);
   return { cycles: cycle - 1, startedAt, finishedAt: Date.now(), actualDurationMs: Date.now() - startedAt };
 }

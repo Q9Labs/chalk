@@ -257,15 +257,20 @@ export async function execute(options) {
     manifest.workload = result;
     const browserDiagnostics = people.flatMap((person) => person.errors.map((entry) => ({ participant: person.name, ...entry })));
     if (browserDiagnostics.length > 0) manifest.browserDiagnostics = browserDiagnostics;
+    const failures = [];
     const fatalBrowserErrors = browserDiagnostics.filter((entry) => entry.fatal);
     if (fatalBrowserErrors.length > 0) {
-      throw aggregateFailures(
-        "browser errors",
-        fatalBrowserErrors.map((entry) => new Error(`${entry.participant}: ${entry.type}: ${entry.message}`)),
+      failures.push(
+        aggregateFailures(
+          "browser errors",
+          fatalBrowserErrors.map((entry) => new Error(`${entry.participant}: ${entry.type}: ${entry.message}`)),
+        ),
       );
     }
     const workloadFailure = recorder.failure();
-    if (workloadFailure) throw workloadFailure;
+    if (workloadFailure) failures.push(workloadFailure);
+    const validationFailure = aggregateFailures("profile validation", failures);
+    if (validationFailure) throw validationFailure;
   } catch (error) {
     primaryError = error;
     if (error?.profileStates) cpuProfileStates = error.profileStates;
