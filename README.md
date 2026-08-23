@@ -89,10 +89,6 @@ normal command again to restore the stack.
 Run `pnpm run gate` for the canonical repository quality gate;
 `pnpm run gate:explain` describes its checks.
 
-## Cost model
-
-[`scratchpad/chalk-infra-cost-model-2026-07-12.md`](./scratchpad/chalk-infra-cost-model-2026-07-12.md) contains dated planning assumptions and formulas. It is a model, not a current hosting-price guarantee.
-
 ## License
 
 MIT. See [LICENSE](./LICENSE).

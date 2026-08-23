@@ -16,7 +16,11 @@ git log --diff-filter=D --name-only -- 'scratchpad/*session-log*.md'
 git show <commit>^:scratchpad/<name>.md
 ```
 
-Coverage: 2026-W20, W26–W34 (303 logs, 2026-05-13 – 2026-08-21).
+Coverage: 2026-W20, W26–W34 (304 logs, 2026-05-13 – 2026-08-21).
+
+`removed-documents.md` indexes the planning documents and binary artifacts
+removed alongside the logs, each with its subject line, so a document can be
+found by topic rather than by filename.
 
 New session logs are still written to `scratchpad/` under the convention in
 `scratchpad/README.md`. Fold them into a digest here once the week is closed.

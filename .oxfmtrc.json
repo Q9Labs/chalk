@@ -21,9 +21,6 @@
     "contract/generated/frontend-proof.ir.json",
     "contract/generated/frontend-proof.report.md",
     "contract/schema/proof/invalid/**",
-    "scratchpad/api-performance-*.html",
-    "scratchpad/api-performance-*.md",
-    "scratchpad/live-episode-debugger-spec-2026-08-03.html",
     "scratchpad/sync-codewalk.html"
   ]
 }
