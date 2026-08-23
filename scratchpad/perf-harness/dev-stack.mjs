@@ -22,12 +22,13 @@ const repoRoot = join(fileURLToPath(import.meta.url), "..", "..", "..");
 const runtimeRoot = join(repoRoot, ".private", "chalk-perf");
 
 const PORTS = { api: 18080, sync: 4100, web: 13070, postgres: 5432, redis: 6380 };
+const DATABASE_NAME = "chalk_perf_profile";
 const URLS = {
   api: `http://127.0.0.1:${PORTS.api}`,
   sync: `ws://127.0.0.1:${PORTS.sync}/v1/sync`,
   web: `http://127.0.0.1:${PORTS.web}`,
 };
-const DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${PORTS.postgres}/chalk_dev?sslmode=disable`;
+const DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${PORTS.postgres}/${DATABASE_NAME}?sslmode=disable`;
 
 const children = new Map();
 let stopping = false;
@@ -42,8 +43,12 @@ async function run(command, args, options = {}) {
     const child = spawn(command, args, { cwd: options.cwd ?? repoRoot, env: { ...process.env, ...options.env }, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     let err = "";
-    child.stdout.on("data", (chunk) => { out += chunk; });
-    child.stderr.on("data", (chunk) => { err += chunk; });
+    child.stdout.on("data", (chunk) => {
+      out += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      err += chunk;
+    });
     child.on("exit", (code) => resolve({ code, out, err }));
     child.on("error", (error) => resolve({ code: -1, out, err: String(error) }));
   });
@@ -82,8 +87,13 @@ async function waitFor(url, label, timeoutMs = 240_000) {
   while (Date.now() < deadline) {
     try {
       const response = await fetch(url);
-      if (response.ok) { log(`ready: ${label}`); return; }
-    } catch { /* not up yet */ }
+      if (response.ok) {
+        log(`ready: ${label}`);
+        return;
+      }
+    } catch {
+      /* not up yet */
+    }
     await sleep(1000);
   }
   throw new Error(`timeout waiting for ${label} at ${url}`);
@@ -95,9 +105,7 @@ async function up() {
   await mkdir(runtimeRoot, { recursive: true });
 
   // 1. Backing resources (idempotent scripts own container lifecycle).
-  // The existing chalk-postgres volume predates the script's default "chalk"
-  // database, so start the container directly and ensure chalk_dev exists
-  // (same as the supervisor's ensureDatabase()).
+  // Keep profiler state isolated from the shared development database.
   await run("docker", ["start", "chalk-postgres"], { tolerateFailure: true });
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const ready = await run("docker", ["exec", "chalk-postgres", "pg_isready", "-U", "postgres", "-d", "postgres"], { tolerateFailure: true });
@@ -105,11 +113,11 @@ async function up() {
     await sleep(500);
     if (attempt === 59) throw new Error("postgres container did not become ready");
   }
-  const hasDb = await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-tAc", "SELECT 1 FROM pg_database WHERE datname = 'chalk_dev'"]);
+  const hasDb = await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-tAc", `SELECT 1 FROM pg_database WHERE datname = '${DATABASE_NAME}'`]);
   if (!hasDb.out.trim()) {
-    await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "chalk_dev"`]);
+    await run("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${DATABASE_NAME}"`]);
   }
-  log("postgres ready (chalk_dev present)");
+  log(`postgres ready (${DATABASE_NAME} present)`);
   await run("bash", ["apps/api/scripts/dev-redis.sh", "start"]);
 
   // 2. Migrations.
@@ -231,8 +239,14 @@ async function down() {
 const command = process.argv[2] ?? "--up";
 if (command === "--up") {
   await up();
-  process.on("SIGINT", async () => { await down(); process.exit(0); });
-  process.on("SIGTERM", async () => { await down(); process.exit(0); });
+  process.on("SIGINT", async () => {
+    await down();
+    process.exit(0);
+  });
+  process.on("SIGTERM", async () => {
+    await down();
+    process.exit(0);
+  });
   setInterval(() => {}, 60_000); // keep the supervisor alive
 } else if (command === "--down") {
   // Kill leftovers from a previous run by port owner name is handled manually;
