@@ -23,6 +23,8 @@ const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEPENDENCY_UNAVAILABLE_CLOSE_CODE = 1012;
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const MAX_MISSED_HEARTBEATS = 2;
+const DEFAULT_RECONNECT_DELAY_MS = 250;
+const MAX_RECONNECT_DELAY_MS = 5_000;
 const encoder = new TextEncoder();
 
 type Deferred<T> = {
@@ -83,6 +85,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #stopPromise: Promise<void> | null = null;
   #waitingForOperations = false;
   #reconnectTimer: unknown;
+  #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
   #lastCursorAt = Number.NEGATIVE_INFINITY;
@@ -308,7 +311,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       const cursor = this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null;
       this.#send(this.#useLegacyHello ? { type: "hello", protocol: "whiteboard-v1", token, cursor } : { type: "hello", protocol: "whiteboard-v1", token, cursor, extensions: [{ name: "presentation_v1" }] });
     } catch {
-      socket.close(1008, "whiteboard authentication failed");
+      socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard authentication failed");
     }
   }
 
@@ -427,6 +430,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
+    this.#reconnectAttempt = 0;
     this.#participantId = frame.participant_id;
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
@@ -654,10 +658,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #scheduleReconnect(): void {
     this.#clearReconnect();
+    const configuredDelay = this.#options.reconnectDelayMs;
+    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
       this.#connect();
-    }, this.#options.reconnectDelayMs ?? 250);
+    }, delay);
   }
 
   #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {

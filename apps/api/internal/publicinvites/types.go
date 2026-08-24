@@ -39,6 +39,8 @@ var (
 	ErrSpaceUnavailable         = errors.New("public Space port unavailable")
 	ErrLinksUnavailable         = errors.New("public invite links port unavailable")
 	ErrAccessUnavailable        = errors.New("public access port unavailable")
+	ErrMediaProofExpired        = errors.New("public media proof expired")
+	ErrMediaProofRejected       = errors.New("public media proof rejected")
 	ErrAccountsUnavailable      = errors.New("public account port unavailable")
 )
 
@@ -233,15 +235,18 @@ type CreateArrivalResult struct {
 }
 
 type UpdateArrivalStateInput struct {
-	TenantID              utilities.ID
-	ArrivalHandle         utilities.ID
-	State                 ArrivalState
-	Reason                string
-	EpisodeID             utilities.ID
-	ParticipantID         utilities.ID
-	ParticipantGeneration int64
-	Provider              string
-	ProviderSubject       string
+	TenantID                utilities.ID
+	ArrivalHandle           utilities.ID
+	State                   ArrivalState
+	Reason                  string
+	EpisodeID               utilities.ID
+	ParticipantID           utilities.ID
+	ParticipantGeneration   int64
+	Provider                string
+	ProviderSubject         string
+	MatchProviderBinding    bool
+	ExpectedProvider        string
+	ExpectedProviderSubject string
 }
 
 type CreateAdmissionRequestInput struct {
@@ -294,6 +299,7 @@ type Access interface {
 	GrantPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error)
 	RefreshPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error)
 	RevokePublicAccess(context.Context, PublicAccessInput) error
+	DiscardPublicAccess(context.Context, PublicAccessGrant) error
 }
 
 // Accounts authorizes a presented account capability for a tenant after the
@@ -356,6 +362,14 @@ type PublicAccessGrant struct {
 	Provider              string
 	ProviderSubject       string
 	ClientPayload         PublicAccessClientPayload
+	Diagnostics           *PublicAccessDiagnostics
+}
+
+type PublicAccessDiagnostics struct {
+	Token      string
+	ExpiresAt  time.Time
+	Generation int64
+	IntakePath string
 }
 
 // PublicAccessClientPayload is returned to the client but is never part of an

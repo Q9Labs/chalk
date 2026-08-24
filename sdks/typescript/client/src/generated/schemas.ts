@@ -3098,6 +3098,44 @@ export const AccessInvalidPasswordErrorSchema = AccessInvalidPasswordErrorWireSc
   }),
 );
 
+export class AccessMediaProofExpiredError extends Schema.TaggedErrorClass<AccessMediaProofExpiredError>()("AccessMediaProofExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessMediaProofExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_expired"),
+    message: Schema.String,
+  }),
+});
+export const AccessMediaProofExpiredErrorSchema = AccessMediaProofExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(AccessMediaProofExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessMediaProofExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AccessMediaProofRejectedError extends Schema.TaggedErrorClass<AccessMediaProofRejectedError>()("AccessMediaProofRejectedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_rejected"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessMediaProofRejectedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_rejected"),
+    message: Schema.String,
+  }),
+});
+export const AccessMediaProofRejectedErrorSchema = AccessMediaProofRejectedErrorWireSchema.pipe(
+  Schema.decodeTo(AccessMediaProofRejectedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessMediaProofRejectedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class AccessRecentAuthRequiredError extends Schema.TaggedErrorClass<AccessRecentAuthRequiredError>()("AccessRecentAuthRequiredError", {
   error: Schema.Struct({
     code: Schema.Literal("access.recent_auth_required"),
@@ -6476,6 +6514,8 @@ export const RefreshIntegrationConnectionErrorSchema = Schema.Union([
 export type RefreshIntegrationConnectionError = typeof RefreshIntegrationConnectionErrorSchema.Type;
 
 export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
+  AccessMediaProofExpiredErrorSchema,
+  AccessMediaProofRejectedErrorSchema,
   ArrivalInvalidHandleErrorSchema,
   ArrivalUnavailableErrorSchema,
   EpisodeCapacityExceededErrorSchema,

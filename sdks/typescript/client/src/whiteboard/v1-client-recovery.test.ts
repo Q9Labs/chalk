@@ -14,6 +14,60 @@ const files: ChalkWhiteboardV1FileTransport = {
 };
 
 describe("ChalkWhiteboardV1Client recovery summaries", () => {
+  it("uses the application close code when token authentication fails", async () => {
+    const socket = new TestSocket();
+    const client = new ChalkWhiteboardV1Client({
+      url: "ws://sync.test/v1/whiteboard",
+      token: async () => Promise.reject(new Error("token unavailable")),
+      files,
+      webSocket: { connect: () => socket },
+    });
+
+    const startup = client.startSceneSubscription();
+    void startup.catch(() => undefined);
+    await settle();
+    socket.open();
+    await settle();
+
+    expect(socket.closeCalls).toEqual([{ code: 4000, reason: "whiteboard authentication failed" }]);
+    await client.stopSceneSubscription();
+  });
+
+  it("uses capped exponential reconnect backoff until a welcome is live", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new ChalkWhiteboardV1Client({
+      url: "ws://sync.test/v1/whiteboard",
+      token: async () => "token",
+      files,
+      clock,
+      reconnectDelayMs: 100,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+
+    const startup = client.startSceneSubscription();
+    void startup.catch(() => undefined);
+    await settle();
+    sockets[0]?.close(1012);
+    clock.advance(99);
+    expect(sockets).toHaveLength(1);
+    clock.advance(1);
+    expect(sockets).toHaveLength(2);
+    sockets[1]?.close(1012);
+    clock.advance(199);
+    expect(sockets).toHaveLength(2);
+    clock.advance(1);
+    expect(sockets).toHaveLength(3);
+
+    await client.stopSceneSubscription();
+  });
+
   it("publishes terminal failure after ready and can be started again without duplicate sockets", async () => {
     const sockets: TestSocket[] = [];
     const client = new ChalkWhiteboardV1Client({
@@ -99,12 +153,14 @@ class TestSocket implements SyncSocket {
   onclose: ((event: { readonly code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   readonly sent: string[] = [];
+  readonly closeCalls: { readonly code: number; readonly reason?: string }[] = [];
 
   send(data: string): void {
     this.sent.push(data);
   }
 
-  close(code = 1000): void {
+  close(code = 1000, reason?: string): void {
+    this.closeCalls.push({ code, reason });
     this.onclose?.({ code });
   }
 
@@ -119,5 +175,38 @@ class TestSocket implements SyncSocket {
   requestId(): string | undefined {
     const frame = this.sent.map((value) => Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema)(JSON.parse(value))).find((value) => value.type === "request_snapshot");
     return frame?.request_id;
+  }
+}
+
+class TestClock {
+  #now = 0;
+  #nextHandle = 0;
+  readonly #timers = new Map<number, { readonly at: number; readonly callback: () => void }>();
+
+  now(): number {
+    return this.#now;
+  }
+
+  setTimeout(callback: () => void, milliseconds: number): number {
+    const handle = this.#nextHandle++;
+    this.#timers.set(handle, { at: this.#now + milliseconds, callback });
+    return handle;
+  }
+
+  clearTimeout(handle: unknown): void {
+    if (typeof handle === "number") this.#timers.delete(handle);
+  }
+
+  advance(milliseconds: number): void {
+    const target = this.#now + milliseconds;
+    while (true) {
+      const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= target).sort(([leftHandle, left], [rightHandle, right]) => left.at - right.at || leftHandle - rightHandle)[0];
+      if (!due) break;
+      const [handle, timer] = due;
+      this.#timers.delete(handle);
+      this.#now = timer.at;
+      timer.callback();
+    }
+    this.#now = target;
   }
 }

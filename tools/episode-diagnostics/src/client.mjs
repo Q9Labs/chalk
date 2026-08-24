@@ -177,6 +177,7 @@ function projectionValue(body, kind) {
 }
 
 function parseParticipantProjections(value) {
+  if (value === null) return [];
   if (!Array.isArray(value)) throw new TypeError("Expected a participants array");
   return value.map(parseParticipantProjection);
 }

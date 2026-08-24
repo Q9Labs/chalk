@@ -111,6 +111,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteChatAttachmentUpload(ctx)
 	case RoutePublicInviteObservabilityScenario:
 		return runRoutePublicInviteObservability(ctx)
+	case RoutePublicInviteAccessRecoveryScenario:
+		return runRoutePublicInviteAccessRecovery(ctx)
 	case RouteAPIKeyCustomerFlowScenario:
 		return runRouteAPIKeyCustomerFlow(ctx)
 	case EdgeAPIKeyRejectedScopeScenario:

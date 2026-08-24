@@ -16,7 +16,7 @@ const BASE_URL_ENV = "CHALK_DIAGNOSTICS_URL";
 const ENVIRONMENT_ENV = "CHALK_DIAGNOSTICS_ENV";
 
 /**
- * @typedef {{ baseUrl: string; environment: "localhost"|"development"|"staging"; credential?: string; fetchImpl: typeof fetch }} DiagnosticOperatorConfig
+ * @typedef {{ baseUrl: string; environment: "localhost"|"development"|"staging"|"production"; credential?: string; fetchImpl: typeof fetch }} DiagnosticOperatorConfig
  */
 
 /**
@@ -248,7 +248,7 @@ function resolveCredentialPath(filePath) {
  * @param {string} value
  */
 function isEnvironment(value) {
-  return value === "localhost" || value === "development" || value === "staging";
+  return value === "localhost" || value === "development" || value === "staging" || value === "production";
 }
 
 function isLoopbackHostname(hostname) {

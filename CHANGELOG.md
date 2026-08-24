@@ -12,6 +12,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.1.14] - 2026-08-24
+
+### Fixed
+
+- Recovered public Space media connections after stale access grants while bounding Sync and Whiteboard reconnect backoff.
+- Made production diagnostics references inspectable from the CLI when participant projections are empty.
+
 ## [4.1.13] - 2026-08-23
 
 ### Added

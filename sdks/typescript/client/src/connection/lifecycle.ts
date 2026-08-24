@@ -560,6 +560,19 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* publish();
         });
       const handleMediaFailure = (): Effect.Effect<void> => (model.media ? handleMediaSnapshot(model.media, model.media.getSnapshot()) : Effect.void);
+      const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          const media = model.media;
+          if (!media || !active(model)) return;
+          const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
+          const restarted = yield* Effect.exit(foreign(() => media.restart(restartInput), "media_start_failed", "The media client could not apply a replacement access grant"));
+          if (restarted._tag === "Failure") {
+            yield* recover("media");
+            return;
+          }
+          model.mediaSnapshot = media.getSnapshot();
+          yield* publish();
+        });
       const notifyScreenEnded = (): Effect.Effect<void> =>
         Effect.sync(() => {
           if (!active(model)) return;
@@ -583,10 +596,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             })
           : Deferred.complete(work.deferred, work.effect).pipe(Effect.asVoid);
       yield* Effect.forkScoped(Queue.take(queue).pipe(Effect.flatMap(process), Effect.forever));
+      const accessReplacementUnsubscribe = yield* access.subscribeAutomaticMediaReplacement((grant) => enqueueBackground(applyAutomaticMediaReplacement(grant)));
       const foregroundUnsubscribe = platform.subscribeForeground?.(() => enqueueBackground(refreshAccess())) ?? null;
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           model.closed = true;
+          accessReplacementUnsubscribe();
           foregroundUnsubscribe?.();
           if (activeJoin) yield* Fiber.interrupt(activeJoin);
           yield* performLeave().pipe(Effect.ignore);

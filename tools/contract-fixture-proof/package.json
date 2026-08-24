@@ -13,7 +13,6 @@
   },
   "devDependencies": {
     "@typespec/compiler": "1.13.0",
-    "@typespec/http": "1.13.0",
-    "effect": "4.0.0-beta.102"
+    "@typespec/http": "1.13.0"
   }
 }

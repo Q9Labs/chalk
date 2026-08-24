@@ -180,6 +180,42 @@ describe("V1SyncClient", () => {
     expect(lifecycleSocket.closeCalls).toContainEqual({ code: 4000, reason: "lifecycle unavailable" });
   });
 
+  it("uses capped exponential reconnect backoff until a connection becomes live", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+      clock,
+      reconnectDelayMs: 100,
+    });
+
+    await client.start();
+    sockets[0]?.close(1012);
+    clock.advance(0);
+    await settle();
+    clock.advance(99);
+    expect(sockets).toHaveLength(1);
+    clock.advance(1);
+    expect(sockets).toHaveLength(2);
+    sockets[1]?.close(1012);
+    clock.advance(0);
+    await settle();
+    clock.advance(199);
+    expect(sockets).toHaveLength(2);
+    clock.advance(1);
+    expect(sockets).toHaveLength(3);
+
+    client.stop();
+  });
+
   it("gates live traffic on control, media, and presence recovery and declares all four streams", async () => {
     const { socket } = await liveClient();
     const hello = socket.frames()[0];

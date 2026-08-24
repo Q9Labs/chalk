@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -111,6 +112,7 @@ values ($1, $2, '{publishAudio,publishVideo,subscribe}'::text[], $3, $4, $5, 1, 
 	}
 
 	repository := NewPublicInviteRepositoryWithPool(pool)
+	provePublicArrivalBindingCompareAndSwap(t, ctx, pool, repository, tenantID, spaceID, episodeID, otherParticipantID, inviteHandle, deadline)
 	if _, err := repository.CreateAutoLifecycle(ctx, publicinvites.AutoLifecycle{
 		TenantID: tenantID, SpaceID: spaceID, DeadlineAt: deadline, CreatorArrivalHandle: creatorArrivalID, State: publicinvites.AutoLifecycleActive,
 	}); err != nil {
@@ -145,6 +147,44 @@ values ($1, $2, '{publishAudio,publishVideo,subscribe}'::text[], $3, $4, $5, 1, 
 	}
 	if len(due) != 1 || due[0].TenantID != tenantID || due[0].SpaceID != spaceID {
 		t.Fatalf("lifecycle after final participant left = %+v", due)
+	}
+}
+
+func provePublicArrivalBindingCompareAndSwap(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	repository PublicInviteRepository,
+	tenantID, spaceID, episodeID, participantID utilities.ID,
+	inviteHandle []byte,
+	expiresAt time.Time,
+) {
+	t.Helper()
+	arrivalID, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `insert into space_public_arrivals (
+	arrival_handle, tenant_id, space_id, invite_handle, invite_generation, invite_state_epoch,
+	identity_mode, display_name, guest_credential_hash, idempotency_key, idempotency_fingerprint,
+	state, episode_id, participant_id, participant_generation, provider, provider_subject, expires_at
+) values ($1, $2, $3, $4, 1, 1, 'guest', 'Replacement', $5, 'replacement-binding-cas', $6,
+	'admitted', $7, $8, 1, 'cloudflare_rtk', 'provider-1', $9)`,
+		uuid(arrivalID), uuid(tenantID), uuid(spaceID), inviteHandle, repeatedBytes(0xb1, 32), repeatedBytes(0xc1, 32), uuid(episodeID), uuid(participantID), expiresAt); err != nil {
+		t.Fatal(err)
+	}
+	update := publicinvites.UpdateArrivalStateInput{
+		TenantID: tenantID, ArrivalHandle: arrivalID, State: publicinvites.ArrivalAdmitted,
+		EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1,
+		Provider: publicinvites.PublicProviderCloudflareRTK, ProviderSubject: "provider-2",
+		MatchProviderBinding: true, ExpectedProvider: publicinvites.PublicProviderCloudflareRTK, ExpectedProviderSubject: "provider-1",
+	}
+	if _, err := repository.UpdateArrivalState(ctx, update); err != nil {
+		t.Fatalf("first provider binding replacement: %v", err)
+	}
+	update.ProviderSubject = "provider-3"
+	if _, err := repository.UpdateArrivalState(ctx, update); !errors.Is(err, publicinvites.ErrMediaProofRejected) {
+		t.Fatalf("stale provider binding replacement error = %v, want %v", err, publicinvites.ErrMediaProofRejected)
 	}
 }
 
