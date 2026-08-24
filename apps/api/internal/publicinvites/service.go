@@ -1146,19 +1146,34 @@ func (r Runtime) RefreshAccess(ctx context.Context, input PublicInviteRefreshInp
 	}
 	if input.ReplaceMediaConnection {
 		if _, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
-			TenantID:              arrival.TenantID,
-			ArrivalHandle:         arrival.ArrivalHandle,
-			State:                 ArrivalAdmitted,
-			EpisodeID:             grant.EpisodeID,
-			ParticipantID:         grant.ParticipantID,
-			ParticipantGeneration: grant.ParticipantGeneration,
-			Provider:              grant.Provider,
-			ProviderSubject:       grant.ProviderSubject,
+			TenantID:                arrival.TenantID,
+			ArrivalHandle:           arrival.ArrivalHandle,
+			State:                   ArrivalAdmitted,
+			EpisodeID:               grant.EpisodeID,
+			ParticipantID:           grant.ParticipantID,
+			ParticipantGeneration:   grant.ParticipantGeneration,
+			Provider:                grant.Provider,
+			ProviderSubject:         grant.ProviderSubject,
+			MatchProviderBinding:    true,
+			ExpectedProvider:        arrival.Provider,
+			ExpectedProviderSubject: arrival.ProviderSubject,
 		}); err != nil {
+			_ = r.access.DiscardPublicAccess(ctx, grant)
 			return PublicAccessGrant{}, err
 		}
+		r.discardSupersededPublicAccess(ctx, arrival, grant)
 	}
 	return grant, nil
+}
+
+func (r Runtime) discardSupersededPublicAccess(ctx context.Context, arrival Arrival, grant PublicAccessGrant) {
+	if arrival.Provider == grant.Provider && arrival.ProviderSubject == grant.ProviderSubject {
+		return
+	}
+	previous := grant
+	previous.Provider = arrival.Provider
+	previous.ProviderSubject = arrival.ProviderSubject
+	_ = r.access.DiscardPublicAccess(ctx, previous)
 }
 
 func (r Runtime) Refresh(ctx context.Context, input PublicInviteRefreshInput) (PublicAccessGrant, error) {

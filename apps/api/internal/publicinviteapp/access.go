@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	ErrAccessUnavailable = errors.New("public access adapter unavailable")
+	ErrAccessUnavailable = publicinvites.ErrAccessUnavailable
 	ErrInvalidAccess     = errors.New("invalid public access adapter configuration")
 )
 
@@ -54,33 +54,50 @@ type MediaProofVerifier interface {
 	Verify(context.Context, string) (accessgrants.Subject, error)
 }
 
+type MediaProofRecoveryVerifier interface {
+	VerifyForRecovery(context.Context, string) (accessgrants.Subject, error)
+}
+
+type DiagnosticsIssuer interface {
+	Issue(context.Context, accessgrants.DiagnosticsSubject) (accessgrants.DiagnosticsCredential, error)
+}
+
 type AccessConfig struct {
-	Episodes      PublicJoinService
-	Spaces        SpaceLookup
-	Tenants       TenantLookup
-	MediaResolver MediaResolver
-	SyncTokens    SyncIssuer
-	MediaTokens   MediaIssuer
-	MediaProof    MediaProofVerifier
-	ReadyTimeout  time.Duration
-	PollInterval  time.Duration
+	Episodes           PublicJoinService
+	Spaces             SpaceLookup
+	Tenants            TenantLookup
+	MediaResolver      MediaResolver
+	SyncTokens         SyncIssuer
+	MediaTokens        MediaIssuer
+	MediaProof         MediaProofVerifier
+	MediaProofRecovery MediaProofRecoveryVerifier
+	Diagnostics        DiagnosticsIssuer
+	ReadyTimeout       time.Duration
+	PollInterval       time.Duration
 }
 
 type accessPort struct {
-	episodes      PublicJoinService
-	spaces        SpaceLookup
-	tenants       TenantLookup
-	mediaResolver MediaResolver
-	syncTokens    SyncIssuer
-	mediaTokens   MediaIssuer
-	mediaProof    MediaProofVerifier
-	readyTimeout  time.Duration
-	pollInterval  time.Duration
+	episodes           PublicJoinService
+	spaces             SpaceLookup
+	tenants            TenantLookup
+	mediaResolver      MediaResolver
+	syncTokens         SyncIssuer
+	mediaTokens        MediaIssuer
+	mediaProof         MediaProofVerifier
+	mediaProofRecovery MediaProofRecoveryVerifier
+	diagnostics        DiagnosticsIssuer
+	readyTimeout       time.Duration
+	pollInterval       time.Duration
 }
 
 func NewAccessPort(config AccessConfig) (publicinvites.Access, error) {
 	if config.Episodes == nil || config.Spaces == nil || config.Tenants == nil || config.MediaResolver == nil || config.SyncTokens == nil || config.MediaTokens == nil {
 		return nil, ErrInvalidAccess
+	}
+	if config.MediaProofRecovery == nil {
+		if recovery, ok := config.MediaProof.(MediaProofRecoveryVerifier); ok {
+			config.MediaProofRecovery = recovery
+		}
 	}
 	if config.ReadyTimeout <= 0 {
 		config.ReadyTimeout = 2 * time.Second
@@ -94,6 +111,7 @@ func NewAccessPort(config AccessConfig) (publicinvites.Access, error) {
 	return accessPort{
 		episodes: config.Episodes, spaces: config.Spaces, tenants: config.Tenants, mediaResolver: config.MediaResolver,
 		syncTokens: config.SyncTokens, mediaTokens: config.MediaTokens, mediaProof: config.MediaProof,
+		mediaProofRecovery: config.MediaProofRecovery, diagnostics: config.Diagnostics,
 		readyTimeout: config.ReadyTimeout, pollInterval: config.PollInterval,
 	}, nil
 }
@@ -121,13 +139,39 @@ func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites
 	if arrival.Provider == "" || arrival.ProviderSubject == "" {
 		return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
 	}
-	if input.MediaProof != "" {
+	if strings.TrimSpace(input.MediaProof) == "" {
+		return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
+	}
+	if input.ReplaceMediaConnection {
+		if arrival.State != publicinvites.ArrivalAdmitted {
+			return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
+		}
+		if a.mediaProofRecovery == nil {
+			return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
+		}
+		proof, err := a.mediaProofRecovery.VerifyForRecovery(ctx, input.MediaProof)
+		if err != nil {
+			if errors.Is(err, accessgrants.ErrExpired) {
+				return publicinvites.PublicAccessGrant{}, fmt.Errorf("%w: %v", publicinvites.ErrMediaProofExpired, err)
+			}
+			return publicinvites.PublicAccessGrant{}, fmt.Errorf("%w: %v", publicinvites.ErrMediaProofRejected, err)
+		}
+		if !sameMediaSubject(proof, arrival) {
+			return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
+		}
+	} else {
 		if a.mediaProof == nil {
 			return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
 		}
 		proof, err := a.mediaProof.Verify(ctx, input.MediaProof)
-		if err != nil || !sameMediaSubject(proof, arrival) {
-			return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
+		if err != nil {
+			if errors.Is(err, accessgrants.ErrExpired) {
+				return publicinvites.PublicAccessGrant{}, fmt.Errorf("%w: %v", publicinvites.ErrMediaProofExpired, err)
+			}
+			return publicinvites.PublicAccessGrant{}, fmt.Errorf("%w: %v", publicinvites.ErrMediaProofRejected, err)
+		}
+		if !sameMediaSubject(proof, arrival) {
+			return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
 		}
 	}
 	result, err := a.episodes.FindPublic(ctx, episodes.PublicAccessInput{
@@ -141,6 +185,9 @@ func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites
 	ready, err := a.waitReady(ctx, result)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
+	}
+	if result.Participant.TenantID != arrival.TenantID || result.Participant.SpaceID != arrival.SpaceID || result.Participant.EpisodeID != arrival.EpisodeID || result.Participant.ID != arrival.ParticipantID || result.Participant.Generation != arrival.ParticipantGeneration {
+		return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
 	}
 	return a.issue(ctx, arrival, ready, true, input.ReplaceMediaConnection)
 }
@@ -170,6 +217,16 @@ func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.
 		Provider: service.Provider(), EpisodeRef: episode.Ref, ParticipantRef: arrival.ProviderSubject,
 	})
 	return nil
+}
+
+func (a accessPort) DiscardPublicAccess(ctx context.Context, grant publicinvites.PublicAccessGrant) error {
+	service, episode, err := a.resolveMedia(ctx, grant.TenantID, grant.SpaceID, grant.EpisodeID, grant.Provider)
+	if err != nil {
+		return err
+	}
+	return service.RemoveParticipant(ctx, mediaplane.RemoveParticipantInput{
+		Provider: service.Provider(), EpisodeRef: episode.Ref, ParticipantRef: grant.ProviderSubject,
+	})
 }
 
 func (a accessPort) waitReady(ctx context.Context, result episodes.PublicJoinResult) (episodes.PublicJoinResult, error) {
@@ -250,11 +307,25 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	if !mediaToken.ExpiresAt.IsZero() && mediaToken.ExpiresAt.Before(expiresAt) {
 		expiresAt = mediaToken.ExpiresAt
 	}
+	var diagnostics *publicinvites.PublicAccessDiagnostics
+	if a.diagnostics != nil {
+		credential, err := a.diagnostics.Issue(ctx, accessgrants.DiagnosticsSubject{
+			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID,
+			ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
+			Capability: accessgrants.DiagnosticsCapability,
+		})
+		if err != nil {
+			return publicinvites.PublicAccessGrant{}, fmt.Errorf("%w: issue participant diagnostics credential: %v", ErrAccessUnavailable, err)
+		}
+		diagnostics = &publicinvites.PublicAccessDiagnostics{
+			Token: credential.Token, ExpiresAt: credential.ExpiresAt, Generation: credential.Generation, IntakePath: credential.IntakePath,
+		}
+	}
 	return publicinvites.PublicAccessGrant{
 		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, ExpiresAt: expiresAt,
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID,
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
-		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload,
+		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload, Diagnostics: diagnostics,
 	}, nil
 }
 
@@ -323,7 +394,10 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 	if arrival.Provider == publicinvites.PublicProviderCloudflareSFU {
 		return subject.CloudflareConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
 	}
-	return subject.ProviderSubject == arrival.ProviderSubject
+	if arrival.Provider == publicinvites.PublicProviderCloudflareRTK {
+		return subject.ProviderSubject == arrival.ProviderSubject && subject.CloudflareConnectionID == ""
+	}
+	return false
 }
 
 var _ publicinvites.Access = accessPort{}

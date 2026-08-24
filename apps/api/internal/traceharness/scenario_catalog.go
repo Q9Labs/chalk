@@ -120,6 +120,7 @@ func ScenarioNames() []string {
 		ServicePublicInviteLifecycleScenario,
 		RouteChatAttachmentUploadScenario,
 		RoutePublicInviteObservabilityScenario,
+		RoutePublicInviteAccessRecoveryScenario,
 		RouteWhiteboardFileUploadScenario,
 		RouteAPIKeyCustomerFlowScenario,
 		EdgeAPIKeyRejectedScopeScenario,

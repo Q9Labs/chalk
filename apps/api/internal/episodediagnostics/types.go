@@ -515,7 +515,7 @@ type DiagnosticSnapshotV1 struct {
 	Operations      []DiagnosticOperationDetail `json:"operations"`
 	Issues          []DiagnosticIssueDetail     `json:"issues"`
 	Branches        []DiagnosticBranchDetail    `json:"branches"`
-	Participants    []ParticipantProjectionV1   `json:"participants,omitempty"`
+	Participants    []ParticipantProjectionV1   `json:"participants"`
 	Run             *RunProjectionV1            `json:"run,omitempty"`
 	Graph           *GraphProjectionV1          `json:"graph,omitempty"`
 	Flame           *FlameProjectionV1          `json:"flame,omitempty"`

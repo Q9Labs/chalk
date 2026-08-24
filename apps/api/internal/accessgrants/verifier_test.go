@@ -143,6 +143,50 @@ func TestVerifierEnforcesTimeClaimsAndSkew(t *testing.T) {
 	}
 }
 
+func TestVerifierForRecoveryAllowsOnlyRecentlyExpiredCredentials(t *testing.T) {
+	fixture := newCredentialFixture(t)
+	now := testNow.Unix()
+	withinGrace := rewriteClaims(t, fixture.token, fixture.privateKey, func(claims map[string]any) {
+		claims["iat"], claims["nbf"], claims["exp"] = now-360, now-360, now-60
+	})
+	if _, err := fixture.verifier.VerifyForRecovery(context.Background(), withinGrace); err != nil {
+		t.Fatalf("recovery verification rejected recently expired credential: %v", err)
+	}
+	if _, err := fixture.verifier.Verify(context.Background(), withinGrace); !errors.Is(err, accessgrants.ErrExpired) {
+		t.Fatalf("strict verification error = %v, want %v", err, accessgrants.ErrExpired)
+	}
+
+	outsideGrace := rewriteClaims(t, fixture.token, fixture.privateKey, func(claims map[string]any) {
+		claims["iat"], claims["nbf"], claims["exp"] = now-421, now-421, now-121
+	})
+	if _, err := fixture.verifier.VerifyForRecovery(context.Background(), outsideGrace); !errors.Is(err, accessgrants.ErrExpired) {
+		t.Fatalf("outside-grace recovery error = %v, want %v", err, accessgrants.ErrExpired)
+	}
+}
+
+func TestVerifierForRecoveryPreservesCredentialValidation(t *testing.T) {
+	fixture := newCredentialFixture(t)
+	now := testNow.Unix()
+	tests := []struct {
+		name   string
+		change func(map[string]any)
+		want   error
+	}{
+		{name: "wrong issuer", change: func(claims map[string]any) { claims["iss"] = "https://attacker.test" }, want: accessgrants.ErrInvalidIssuer},
+		{name: "wrong subject", change: func(claims map[string]any) { claims["sub"] = "55555555-5555-4555-8555-555555555555" }, want: accessgrants.ErrInvalidSubject},
+		{name: "future nbf", change: func(claims map[string]any) { claims["iat"], claims["nbf"], claims["exp"] = now+31, now+31, now+331 }, want: accessgrants.ErrNotYetValid},
+		{name: "overlong lifetime", change: func(claims map[string]any) { claims["iat"], claims["nbf"], claims["exp"] = now-60, now-60, now+301 }, want: accessgrants.ErrLifetimeExceeded},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			token := rewriteClaims(t, fixture.token, fixture.privateKey, test.change)
+			if _, err := fixture.verifier.VerifyForRecovery(context.Background(), token); !errors.Is(err, test.want) {
+				t.Fatalf("error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
 func TestVerifierRejectsIssuerAndSubjectClaims(t *testing.T) {
 	fixture := newCredentialFixture(t)
 	tests := []struct {

@@ -73,6 +73,17 @@ func NewVerifier(config VerifierConfig) (Verifier, error) {
 }
 
 func (v Verifier) Verify(_ context.Context, credential string) (Subject, error) {
+	return v.verify(credential, false)
+}
+
+// VerifyForRecovery verifies a participant media credential for a replacement
+// connection. It keeps all credential checks intact and only permits an
+// otherwise-valid credential to be past expiry within RecoveryGrace.
+func (v Verifier) VerifyForRecovery(_ context.Context, credential string) (Subject, error) {
+	return v.verify(credential, true)
+}
+
+func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
 	parts := strings.Split(credential, ".")
 	if len(credential) == 0 || len(credential) > maxCredentialLength || len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		return Subject{}, ErrMalformedCredential
@@ -104,7 +115,7 @@ func (v Verifier) Verify(_ context.Context, credential string) (Subject, error) 
 	if !hasExactAudience(claims.Audience) {
 		return Subject{}, ErrInvalidAudience
 	}
-	if err := v.verifyTimeClaims(claims); err != nil {
+	if err := v.verifyTimeClaims(claims, recovery); err != nil {
 		return Subject{}, err
 	}
 	return subjectFromClaims(claims)
@@ -115,7 +126,7 @@ func hasExactAudience(encoded json.RawMessage) bool {
 	return json.Unmarshal(encoded, &audience) == nil && audience == Audience
 }
 
-func (v Verifier) verifyTimeClaims(claims jwtClaims) error {
+func (v Verifier) verifyTimeClaims(claims jwtClaims, recovery bool) error {
 	if claims.IssuedAt <= 0 || claims.NotBefore < claims.IssuedAt || claims.ExpiresAt <= claims.NotBefore {
 		return ErrInvalidTimeClaims
 	}
@@ -128,6 +139,9 @@ func (v Verifier) verifyTimeClaims(claims jwtClaims) error {
 		return ErrNotYetValid
 	}
 	if claims.ExpiresAt <= now-skew {
+		if recovery && claims.ExpiresAt > now-int64(RecoveryGrace/time.Second) {
+			return nil
+		}
 		return ErrExpired
 	}
 	return nil

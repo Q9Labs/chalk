@@ -28,6 +28,10 @@ type participantMediaVerifier interface {
 	Verify(context.Context, string) (accessgrants.Subject, error)
 }
 
+type participantMediaRecoveryVerifier interface {
+	VerifyForRecovery(context.Context, string) (accessgrants.Subject, error)
+}
+
 // LaunchTelemetry owns bounded signals for API-key and participant-media authentication.
 // It deliberately has no methods that accept credentials, identity fields, scopes, or IP addresses.
 type LaunchTelemetry struct {
@@ -157,11 +161,13 @@ func (i AccessGrantIssuer) Issue(ctx context.Context, subject accessgrants.Subje
 
 type ParticipantMediaVerifier struct {
 	next      participantMediaVerifier
+	recovery  participantMediaRecoveryVerifier
 	telemetry *LaunchTelemetry
 }
 
 func InstrumentParticipantMediaVerifier(next participantMediaVerifier, telemetry *LaunchTelemetry) ParticipantMediaVerifier {
-	return ParticipantMediaVerifier{next: next, telemetry: telemetry}
+	recovery, _ := next.(participantMediaRecoveryVerifier)
+	return ParticipantMediaVerifier{next: next, recovery: recovery, telemetry: telemetry}
 }
 
 func (v ParticipantMediaVerifier) Verify(ctx context.Context, credential string) (accessgrants.Subject, error) {
@@ -174,6 +180,22 @@ func (v ParticipantMediaVerifier) Verify(ctx context.Context, credential string)
 	startedAt := v.telemetry.now()
 	ctx, span := launchTracer.Start(ctx, "participant_media.authenticate")
 	subject, err := v.next.Verify(ctx, credential)
+	outcome, reason := participantAuthenticationResult(err)
+	v.telemetry.recordParticipantAuthentication(ctx, outcome, reason, v.telemetry.now().Sub(startedAt))
+	finishLaunchSpan(span, outcome, reason, err)
+	return subject, err
+}
+
+func (v ParticipantMediaVerifier) VerifyForRecovery(ctx context.Context, credential string) (accessgrants.Subject, error) {
+	if v.recovery == nil {
+		return accessgrants.Subject{}, accessgrants.ErrInvalidConfig
+	}
+	if v.telemetry == nil {
+		return v.recovery.VerifyForRecovery(ctx, credential)
+	}
+	startedAt := v.telemetry.now()
+	ctx, span := launchTracer.Start(ctx, "participant_media.authenticate.recovery")
+	subject, err := v.recovery.VerifyForRecovery(ctx, credential)
 	outcome, reason := participantAuthenticationResult(err)
 	v.telemetry.recordParticipantAuthentication(ctx, outcome, reason, v.telemetry.now().Sub(startedAt))
 	finishLaunchSpan(span, outcome, reason, err)

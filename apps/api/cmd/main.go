@@ -187,6 +187,7 @@ func run() error {
 	var participantMediaIssuer httpapi.ParticipantMediaIssuer
 	var participantDiagnosticsIssuer httpapi.ParticipantDiagnosticsIssuer
 	var participantMediaVerifier httpapi.ParticipantMediaVerifier
+	var participantMediaRecoveryVerifier publicinviteapp.MediaProofRecoveryVerifier
 	var syncParticipantVerifier synctokens.Verifier
 	var syncParticipantVerifierConfigured bool
 	participantActiveAuthorizer := accessgrants.NewActiveAuthorizer(episodeRepository)
@@ -222,7 +223,9 @@ func run() error {
 			return fmt.Errorf("configure participant media verifier: %w", err)
 		}
 		participantMediaIssuer = observability.InstrumentAccessGrantIssuer(mediaIssuer, launchTelemetry)
-		participantMediaVerifier = observability.InstrumentParticipantMediaVerifier(mediaVerifier, launchTelemetry)
+		instrumentedMediaVerifier := observability.InstrumentParticipantMediaVerifier(mediaVerifier, launchTelemetry)
+		participantMediaVerifier = instrumentedMediaVerifier
+		participantMediaRecoveryVerifier = instrumentedMediaVerifier
 	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
@@ -423,13 +426,15 @@ func run() error {
 			return fmt.Errorf("configure public invite Space port: %w", err)
 		}
 		accessPort, err := publicinviteapp.NewAccessPort(publicinviteapp.AccessConfig{
-			Episodes:      episodeService,
-			Spaces:        spaceService,
-			Tenants:       tenantService,
-			MediaResolver: mediaPlaneRegistry,
-			SyncTokens:    syncTokenRefresh,
-			MediaTokens:   participantMediaIssuer,
-			MediaProof:    participantMediaVerifier,
+			Episodes:           episodeService,
+			Spaces:             spaceService,
+			Tenants:            tenantService,
+			MediaResolver:      mediaPlaneRegistry,
+			SyncTokens:         syncTokenRefresh,
+			MediaTokens:        participantMediaIssuer,
+			MediaProof:         participantMediaVerifier,
+			MediaProofRecovery: participantMediaRecoveryVerifier,
+			Diagnostics:        participantDiagnosticsIssuer,
 		})
 		if err != nil {
 			return fmt.Errorf("configure public invite access port: %w", err)
