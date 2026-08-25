@@ -3,7 +3,7 @@
 import type { ChatUploadFile, Reaction } from "@q9labsai/chalk-client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useCan, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useAdmissionControl, useCan, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundCues } from "../../internal/useSoundCues";
@@ -143,6 +143,7 @@ function ChalkSpaceView({
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
+  const admissionControl = useAdmissionControl();
   const media = useMedia();
   const canPublishScreen = useCan("publishScreen");
   const canSendChat = useCan("sendChat");
@@ -167,8 +168,8 @@ function ChalkSpaceView({
   useEffect(() => setActivePanel(initialPanel), [initialPanel]);
 
   useEffect(() => {
-    if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
-  }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
+    if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length + (admissionControl?.requests.length ?? 0) > 0) setActivePanel("participants");
+  }, [admissionControl?.requests.length, canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
   const buttons: ControlBarButtonName[] = [
     "mic",
     "video",

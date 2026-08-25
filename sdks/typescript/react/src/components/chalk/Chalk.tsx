@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
 import { ChalkProvider } from "../../bindings/context";
+import type { ChalkAdmissionControl } from "../../bindings/admission-control";
 import { useCan, useConnection, useMedia, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
@@ -64,6 +65,7 @@ export type ChalkProps = SpaceIntegration &
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
     readonly onOpenDiagnostics?: () => void;
+    readonly admissionControl?: ChalkAdmissionControl;
   };
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
@@ -97,7 +99,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   return (
     <SkinProvider skin={skin}>
       <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} data-chalk-skin={skin} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
-        <ChalkProvider client={client}>
+        <ChalkProvider client={client} admissionControl={props.admissionControl}>
           <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
         </ChalkProvider>
       </div>
