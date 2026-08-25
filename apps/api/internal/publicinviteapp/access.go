@@ -134,6 +134,25 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 	return a.issue(ctx, arrival, ready, false, false)
 }
 
+// RestorePublicAccess returns the initial access bundle for an arrival whose
+// Participant and provider binding were already persisted. The arrival
+// credential authenticates this recovery path; scheduled refreshes remain
+// proof-gated through RefreshPublicAccess.
+func (a accessPort) RestorePublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
+	arrival := input.Arrival
+	if arrival.State != publicinvites.ArrivalAdmitted || arrival.Provider == "" || arrival.ProviderSubject == "" {
+		return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
+	}
+	result, err := a.findPublicAccess(ctx, arrival)
+	if err != nil {
+		return publicinvites.PublicAccessGrant{}, err
+	}
+	if !samePublicParticipant(result, arrival) {
+		return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
+	}
+	return a.issue(ctx, arrival, result, true, false)
+}
+
 func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
 	arrival := input.Arrival
 	if arrival.Provider == "" || arrival.ProviderSubject == "" {
@@ -174,22 +193,31 @@ func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites
 			return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
 		}
 	}
+	ready, err := a.findPublicAccess(ctx, arrival)
+	if err != nil {
+		return publicinvites.PublicAccessGrant{}, err
+	}
+	if !samePublicParticipant(ready, arrival) {
+		return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
+	}
+	return a.issue(ctx, arrival, ready, true, input.ReplaceMediaConnection)
+}
+
+func (a accessPort) findPublicAccess(ctx context.Context, arrival publicinvites.Arrival) (episodes.PublicJoinResult, error) {
 	result, err := a.episodes.FindPublic(ctx, episodes.PublicAccessInput{
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: arrival.EpisodeID,
 		ParticipantID: arrival.ParticipantID, ParticipantGeneration: arrival.ParticipantGeneration,
 		AccountID: arrival.AccountID, IdentityMode: string(arrival.IdentityMode),
 	})
 	if err != nil {
-		return publicinvites.PublicAccessGrant{}, err
+		return episodes.PublicJoinResult{}, err
 	}
-	ready, err := a.waitReady(ctx, result)
-	if err != nil {
-		return publicinvites.PublicAccessGrant{}, err
-	}
-	if result.Participant.TenantID != arrival.TenantID || result.Participant.SpaceID != arrival.SpaceID || result.Participant.EpisodeID != arrival.EpisodeID || result.Participant.ID != arrival.ParticipantID || result.Participant.Generation != arrival.ParticipantGeneration {
-		return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
-	}
-	return a.issue(ctx, arrival, ready, true, input.ReplaceMediaConnection)
+	return a.waitReady(ctx, result)
+}
+
+func samePublicParticipant(result episodes.PublicJoinResult, arrival publicinvites.Arrival) bool {
+	participant := result.Participant
+	return participant.TenantID == arrival.TenantID && participant.SpaceID == arrival.SpaceID && participant.EpisodeID == arrival.EpisodeID && participant.ID == arrival.ParticipantID && participant.Generation == arrival.ParticipantGeneration
 }
 
 func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) error {

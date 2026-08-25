@@ -7,6 +7,7 @@ import { listAllAccountTenants, listSpaces } from "../../lib/dashboard-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";
+import { useAccountAdmissionControl } from "./useAccountAdmissionControl";
 
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 
@@ -346,6 +347,7 @@ function LocalSpace({
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const episodeID = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection.episode?.id;
   const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
+  const admissionControl = useAccountAdmissionControl(credential, journey);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const openDiagnostics = useCallback(() => {
     if (diagnostics.path) globalThis.open(diagnostics.path, "_blank", "noopener");
@@ -387,6 +389,7 @@ function LocalSpace({
         spaceDescription={spaceDescription}
         inviteLink={inviteLink}
         diagnosticReference={diagnostics.reference}
+        admissionControl={admissionControl}
         onEpisodeEnded={releaseFromLifecycle}
         onLeft={releaseFromLifecycle}
         onOpenDiagnostics={diagnostics.path ? openDiagnostics : undefined}

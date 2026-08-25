@@ -118,12 +118,9 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
     const mode = readAdmissionMode(space.admission_policy);
     setPublicInvite(null);
     setPublicInviteError(null);
-    setAdmissionRequestsError(null);
-    setPendingRequests([]);
 
     if (space.archived) {
       setPublicInviteState("archived");
-      setAdmissionRequestsState("archived");
       return () => {
         active = false;
       };
@@ -131,7 +128,6 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
 
     if (mode === "members_only") {
       setPublicInviteState("members-only");
-      setAdmissionRequestsState("members-only");
       return () => {
         active = false;
       };
@@ -201,9 +197,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
 
     setAdmissionRequestsState("loading");
 
-    async function pollAdmissionRequests() {
-      const listAdmissionRequests = client.listSpacePublicAdmissionRequests;
-      if (!listAdmissionRequests) return;
+    const pollAdmissionRequests = async (): Promise<void> => {
       try {
         const page = await listAdmissionRequests({ tenantID, spaceID: currentSpace.id });
         if (!active) return;
@@ -217,7 +211,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
       }
 
       if (active) pollTimeout = setTimeout(() => void pollAdmissionRequests(), PUBLIC_ADMISSION_REQUEST_POLL_MS);
-    }
+    };
 
     void pollAdmissionRequests();
 
@@ -225,7 +219,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
       active = false;
       if (pollTimeout !== undefined) clearTimeout(pollTimeout);
     };
-  }, [client, publicInviteReloadGeneration, space, spaceID, state, tenantID]);
+  }, [client, space, state, tenantID]);
 
   function replaceSpace(nextSpace: Space) {
     setSpace(nextSpace);

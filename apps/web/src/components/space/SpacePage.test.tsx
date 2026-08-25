@@ -39,6 +39,29 @@ describe("public Space entry", () => {
   });
 });
 
+describe("account Space admission", () => {
+  it("shows and approves public arrivals inside the Space", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    mocks.joinDashboardSpace.mockResolvedValue({
+      credential: { apiBaseURL: "https://api.chalk.test", tenantID: "tenant-1", space: "space-1", access: {}, participantGeneration: 1 },
+      getAccess: vi.fn(),
+      leave: vi.fn(async () => undefined),
+    });
+    mocks.listSpacePublicAdmissionRequests.mockResolvedValueOnce({ requests: [] }).mockResolvedValue({ requests: [{ request_handle: "arrival-1", display_name: "Ada", requested_at: "2026-08-25T10:00:00Z", expires_at: "2026-08-25T10:05:00Z", state: "pending" }] });
+
+    render(<SpacePage slug="design-lab" />);
+    enterName("Owner");
+
+    await waitFor(() => expect(mocks.listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(2), { timeout: 2_500 });
+    const admissionControl = mocks.holder.chalkProps?.admissionControl;
+    if (!admissionControl || typeof admissionControl !== "object" || !("requests" in admissionControl) || !Array.isArray(admissionControl.requests) || admissionControl.requests.length !== 1 || !("admit" in admissionControl) || typeof admissionControl.admit !== "function")
+      throw new Error("missing admission request");
+    await admissionControl.admit("arrival-1");
+
+    expect(mocks.approveSpacePublicAdmissionRequest).toHaveBeenCalledWith({ tenantID: "tenant-1", spaceID: "space-1", requestHandle: "arrival-1" });
+  });
+});
+
 function enterName(displayName: string): void {
   fireEvent.change(screen.getByLabelText("Your name"), { target: { value: displayName } });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));

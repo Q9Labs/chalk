@@ -297,6 +297,7 @@ type Links interface {
 // port rather than in the public-invites domain.
 type Access interface {
 	GrantPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error)
+	RestorePublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error)
 	RefreshPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error)
 	RevokePublicAccess(context.Context, PublicAccessInput) error
 	DiscardPublicAccess(context.Context, PublicAccessGrant) error

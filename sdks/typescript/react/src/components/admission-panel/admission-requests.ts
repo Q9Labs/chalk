@@ -27,17 +27,17 @@ export function useCombinedAdmissionRequests(): {
   const requests = useMemo<readonly CombinedAdmissionRequest[]>(() => {
     if (!canManageAdmission) return [];
 
-    const syncRequests = participantsSlice.admissionQueue.map((request) => ({
+    const syncRequests: CombinedAdmissionRequest[] = participantsSlice.admissionQueue.map((request) => ({
       id: `${SYNC_REQUEST_PREFIX}${request.requestId}`,
       displayName: request.displayName,
-      source: "sync" as const,
+      source: "sync",
       sourceId: request.requestId,
     }));
-    const controlledRequests = (admissionControl?.requests ?? []).map((request) => ({
+    const controlledRequests: CombinedAdmissionRequest[] = (admissionControl?.requests ?? []).map((request) => ({
       id: `${CONTROL_REQUEST_PREFIX}${request.id}`,
       displayName: request.displayName,
       joinedAt: request.requestedAt,
-      source: "control" as const,
+      source: "control",
       sourceId: request.id,
     }));
 

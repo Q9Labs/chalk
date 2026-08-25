@@ -35,6 +35,40 @@ func TestRefreshReplacementIssuesDiagnostics(t *testing.T) {
 	}
 }
 
+func TestRestoreUsesPersistedParticipantWithoutMediaProof(t *testing.T) {
+	fixture := newAccessFixture(t)
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := access.RestorePublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grant.ProviderSubject != fixture.arrival.ProviderSubject {
+		t.Fatalf("provider subject = %q, want %q", grant.ProviderSubject, fixture.arrival.ProviderSubject)
+	}
+	if fixture.plane.resumeCalls != 1 || fixture.plane.createCalls != 0 {
+		t.Fatalf("resume calls = %d, create calls = %d; want one resume and no replacement", fixture.plane.resumeCalls, fixture.plane.createCalls)
+	}
+}
+
+func TestRestoreRejectsChangedPersistedParticipant(t *testing.T) {
+	fixture := newAccessFixture(t)
+	fixture.result.Participant.Generation++
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = access.RestorePublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if !errors.Is(err, publicinviteapp.ErrAccessUnavailable) {
+		t.Fatalf("restore error = %v, want %v", err, publicinviteapp.ErrAccessUnavailable)
+	}
+	if fixture.plane.resumeCalls != 0 {
+		t.Fatalf("resume calls = %d, want none", fixture.plane.resumeCalls)
+	}
+}
+
 func TestRefreshReplacementRejectsMissingOrStaleProof(t *testing.T) {
 	fixture := newAccessFixture(t)
 	access, err := publicinviteapp.NewAccessPort(fixture.config())
@@ -192,6 +226,7 @@ func (failingDiagnosticsIssuer) Issue(context.Context, accessgrants.DiagnosticsS
 
 type mediaPlaneStub struct {
 	createCalls           int
+	resumeCalls           int
 	removeCalls           int
 	removedParticipantRef string
 }
@@ -202,6 +237,10 @@ func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.Ensur
 func (p *mediaPlaneStub) CreateJoin(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	p.createCalls++
 	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareRTK, ParticipantRef: "new-provider", ClientPayload: map[string]any{"token": "provider-token"}}, nil
+}
+func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	p.resumeCalls++
+	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"token": "provider-token"}}, nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {

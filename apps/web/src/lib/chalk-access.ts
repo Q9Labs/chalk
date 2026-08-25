@@ -10,6 +10,7 @@ export type PublicSpaceCredential = {
 
 export type AccountSpaceCredential = {
   readonly apiBaseURL: string;
+  readonly tenantID: string;
   readonly space: string;
   readonly access: AccessGrantSource;
   readonly participantGeneration: number;
@@ -105,7 +106,7 @@ export async function joinDashboardSpace(tenantID: string, spaceSlug: string, di
   };
 
   return {
-    credential: { apiBaseURL: publicAPIBaseURL(), space: active.spaceID, access: active.access, participantGeneration: active.participantGeneration },
+    credential: { apiBaseURL: publicAPIBaseURL(), tenantID: active.tenantID, space: active.spaceID, access: active.access, participantGeneration: active.participantGeneration },
     getAccess,
     leave,
     inviteLink,

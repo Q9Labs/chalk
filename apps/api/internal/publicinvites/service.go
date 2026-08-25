@@ -818,7 +818,7 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 	var grant PublicAccessGrant
 	switch arrival.State {
 	case ArrivalAdmitted:
-		grant, err = r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+		grant, err = r.restoreAdmittedAccess(ctx, arrival)
 	case ArrivalPending:
 		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
 		if err == nil {
@@ -919,12 +919,9 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		}
 		result := r.arrivalResult(space, arrival)
 		if arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
-			if refreshErr != nil {
-				return PublicSpaceArrival{}, refreshErr
-			}
-			if err := validateAccessGrant(grant, arrival); err != nil {
-				return PublicSpaceArrival{}, err
+			grant, restoreErr := r.restoreAdmittedAccess(ctx, arrival)
+			if restoreErr != nil {
+				return PublicSpaceArrival{}, restoreErr
 			}
 			result.Access = &grant
 		} else if (arrival.IdentityMode == IdentityAccount || space.AdmissionMode == AdmissionOpen) && arrival.State == ArrivalPending {
@@ -1014,12 +1011,9 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 	}
 	if accountAuthorized || space.AdmissionMode == AdmissionOpen {
 		if arrivalResult.Arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival})
-			if refreshErr != nil {
-				return PublicSpaceArrival{}, refreshErr
-			}
-			if err := validateAccessGrant(grant, arrivalResult.Arrival); err != nil {
-				return PublicSpaceArrival{}, err
+			grant, restoreErr := r.restoreAdmittedAccess(ctx, arrivalResult.Arrival)
+			if restoreErr != nil {
+				return PublicSpaceArrival{}, restoreErr
 			}
 			result := r.arrivalResult(space, arrivalResult.Arrival)
 			result.Access = &grant
@@ -1162,6 +1156,17 @@ func (r Runtime) RefreshAccess(ctx context.Context, input PublicInviteRefreshInp
 			return PublicAccessGrant{}, err
 		}
 		r.discardSupersededPublicAccess(ctx, arrival, grant)
+	}
+	return grant, nil
+}
+
+func (r Runtime) restoreAdmittedAccess(ctx context.Context, arrival Arrival) (PublicAccessGrant, error) {
+	grant, err := r.access.RestorePublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+	if err != nil {
+		return PublicAccessGrant{}, err
+	}
+	if err := validateAccessGrant(grant, arrival); err != nil {
+		return PublicAccessGrant{}, err
 	}
 	return grant, nil
 }

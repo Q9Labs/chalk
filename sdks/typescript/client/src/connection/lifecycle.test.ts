@@ -8,11 +8,12 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer } from "./life
 describe("ConnectionLifecycle Episode snapshot", () => {
   it("carries the server Episode start time into the live snapshot", async () => {
     const platform = createCoreTestPlatform();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1_000).toISOString();
     const access = parseParsedAccessGrant({
       subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
       episode_started_at: "2026-08-25T10:00:00.000Z",
-      sync: { token: credential("chalk-sync"), expires_at: "2026-08-25T10:05:00.000Z" },
-      media: { token: credential("chalk-media"), expires_at: "2026-08-25T10:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
+      sync: { token: credential("chalk-sync"), expires_at: expiresAt },
+      media: { token: credential("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
     });
     const layer = makeConnectionLifecycleLayer({
       access: async () => access,
