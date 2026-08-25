@@ -3,7 +3,8 @@
 import type { Capability, ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useCallback, useContext, useSyncExternalStore } from "react";
 
-import { SpaceClientContext } from "./context";
+import { AdmissionControlContext, SpaceClientContext } from "./context";
+import type { ChalkAdmissionControl } from "./admission-control";
 
 function useSnapshotSlice<T>(select: (snapshot: SpaceSnapshot) => T): T {
   const client = useSpaceClient();
@@ -29,6 +30,10 @@ export function useSpaceClient(): SpaceClient {
   }
 
   return client;
+}
+
+export function useAdmissionControl(): ChalkAdmissionControl | undefined {
+  return useContext(AdmissionControlContext) ?? undefined;
 }
 
 export function useConnection(): ConnectionSlice {

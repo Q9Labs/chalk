@@ -1,6 +1,7 @@
 import type { ChatUploadFile, ClientEventMap } from "@q9labsai/chalk-client";
 
 import type { ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
+import type { ChalkAdmissionControl, ChalkAdmissionRequest } from "./bindings/admission-control";
 import type { ThemeAppearance, ThemeSkin } from "./components/theme";
 import type { ChalkThemeTokens } from "./theme";
 import * as bindings from "./index";
@@ -40,7 +41,16 @@ type ExpectedChalkProps =
   | "onParticipantLeft"
   | "onScreenShareStarted"
   | "onScreenShareStopped"
-  | "onError";
+  | "onError"
+  | "admissionControl";
+
+type ExpectedAdmissionRequest = { readonly id: string; readonly displayName: string; readonly requestedAt?: Date };
+type ExpectedAdmissionControl = {
+  readonly requests: readonly ExpectedAdmissionRequest[];
+  readonly loading?: boolean;
+  readonly admit: (id: string) => Promise<void>;
+  readonly deny: (id: string) => Promise<void>;
+};
 
 type HooksAreClosed = Assert<Equal<PublicHooks, ExpectedHooks>>;
 type LayoutIsCanonical = Assert<Equal<SpaceLayout, ExpectedLayout>>;
@@ -49,9 +59,11 @@ type AppearanceIsClosed = Assert<Equal<keyof ThemeAppearance, ExpectedAppearance
 type TokensAreClosed = Assert<Equal<keyof ChalkThemeTokens, ExpectedTokenKeys>>;
 type ErrorMirrorsClientEvent = Assert<Equal<NonNullable<ChalkProps["onError"]>, (event: ClientEventMap["error"]) => void>>;
 type ChatFilePickerMirrorsClientType = Assert<Equal<NonNullable<ChalkProps["pickChatFiles"]>, () => Promise<readonly ChatUploadFile[]>>>;
+type AdmissionRequestIsCanonical = Assert<Equal<ChalkAdmissionRequest, ExpectedAdmissionRequest>>;
+type AdmissionControlIsCanonical = Assert<Equal<ChalkAdmissionControl, ExpectedAdmissionControl>>;
 type NoLegacyStylingProp = Assert<Equal<Extract<keyof ChalkProps, "className" | "containerClassName">, never>>;
 type ChalkPropsAreClosed = Assert<Equal<keyof ChalkProps, ExpectedChalkProps>>;
 
-export type PublicSurfaceContract = [HooksAreClosed, LayoutIsCanonical, SkinIsCanonical, AppearanceIsClosed, TokensAreClosed, ErrorMirrorsClientEvent, ChatFilePickerMirrorsClientType, NoLegacyStylingProp, ChalkPropsAreClosed];
+export type PublicSurfaceContract = [HooksAreClosed, LayoutIsCanonical, SkinIsCanonical, AppearanceIsClosed, TokensAreClosed, ErrorMirrorsClientEvent, ChatFilePickerMirrorsClientType, AdmissionRequestIsCanonical, AdmissionControlIsCanonical, NoLegacyStylingProp, ChalkPropsAreClosed];
 
 export {};
