@@ -1,4 +1,5 @@
 import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react-native";
+import { hasNativeWebRtcSupport } from "@q9labsai/chalk-react-native/runtime";
 import type { ConnectionSlice } from "@q9labsai/chalk-client";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -6,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cleanupParticipantCredential, createAccessGrantGetter, prepareParticipantCredential, spaceInviteLink, type ParticipantCredential, type SpaceRoute } from "../lib/spaces";
 import { createMobileTelemetry, flushAndDisposeTelemetry } from "../lib/telemetry";
 import { pickMobileChatFiles } from "../lib/chat-files";
+import { ExpoGoSpaceScreen } from "./ExpoGoSpaceScreen";
 import { MOBILE_SPACE_FEATURES } from "./mobile-space-features";
 import { createMobileSpaceClient, createMobileSpaceRelease, ownMobileSpaceClient } from "./mobile-space-client";
 import { recordMobileSpaceJoined, terminalizeMobileSpaceJourney } from "./mobile-space-telemetry-lifecycle";
@@ -28,6 +30,12 @@ type Arrival = {
 };
 
 export function MobileSpaceScreen({ brokerUrl, defaultDisplayName, onClose, onDiagnosticsConnection, onDiagnosticsFailure, route, telemetryEnabled }: MobileSpaceScreenProps): React.JSX.Element {
+  if (!hasNativeWebRtcSupport()) return <ExpoGoSpaceScreen defaultDisplayName={defaultDisplayName} onClose={onClose} route={route} />;
+
+  return <MobileSpaceContent brokerUrl={brokerUrl} defaultDisplayName={defaultDisplayName} onClose={onClose} onDiagnosticsConnection={onDiagnosticsConnection} onDiagnosticsFailure={onDiagnosticsFailure} route={route} telemetryEnabled={telemetryEnabled} />;
+}
+
+function MobileSpaceContent({ brokerUrl, defaultDisplayName, onClose, onDiagnosticsConnection, onDiagnosticsFailure, route, telemetryEnabled }: MobileSpaceScreenProps): React.JSX.Element {
   const telemetryApiBaseURLRef = useRef<string | undefined>(undefined);
   const authenticatedTelemetryHeadersRef = useRef<Readonly<Record<string, string>> | undefined>(undefined);
   const telemetry = useMemo(

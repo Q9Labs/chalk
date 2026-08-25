@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { canUseLocalHostBootstrap, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl, shouldAutoReadClipboard } from "./runtime";
+import { canUseLocalHostBootstrap, getMetroHostFromScriptUrl, hasNativeWebRtcSupport, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl, shouldAutoReadClipboard } from "./runtime";
+
+const nativeModules = vi.hoisted(() => ({ SourceCode: { scriptURL: null }, WebRTCModule: undefined as Record<string, unknown> | undefined }));
 
 vi.mock("react-native", () => ({
-  NativeModules: { SourceCode: { scriptURL: null } },
+  NativeModules: nativeModules,
   Platform: {
     OS: "ios",
     Version: "17.0",
@@ -11,6 +13,13 @@ vi.mock("react-native", () => ({
 }));
 
 describe("mobile runtime helpers", () => {
+  it("detects whether the host includes native WebRTC", () => {
+    expect(hasNativeWebRtcSupport()).toBe(false);
+    nativeModules.WebRTCModule = {};
+    expect(hasNativeWebRtcSupport()).toBe(true);
+    nativeModules.WebRTCModule = undefined;
+  });
+
   it("extracts the Metro host from a device script URL", () => {
     expect(getMetroHostFromScriptUrl("http://192.168.18.245:8081/index.bundle?platform=android")).toBe("192.168.18.245");
     expect(getMetroHostFromScriptUrl(null)).toBeNull();

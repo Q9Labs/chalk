@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     credential,
     flushAndDisposeTelemetry: vi.fn(async () => undefined),
     getAccess,
+    hasNativeWebRtcSupport: vi.fn(() => true),
     journey,
     ownMobileSpaceClient: vi.fn(() => ({ release: vi.fn(async () => undefined) })),
     prepareParticipantCredential: vi.fn(async () => credential),
@@ -55,6 +56,7 @@ vi.mock("react", () => ({
   },
 }));
 vi.mock("@q9labsai/chalk-react-native", () => ({ Chalk: mocks.Chalk, Entrance: mocks.Entrance }));
+vi.mock("@q9labsai/chalk-react-native/runtime", () => ({ hasNativeWebRtcSupport: mocks.hasNativeWebRtcSupport }));
 vi.mock("@q9labsai/chalk-client", () => ({}));
 vi.mock("../lib/chat-files", () => ({ pickMobileChatFiles: vi.fn() }));
 vi.mock("../lib/spaces", () => ({
@@ -67,8 +69,15 @@ vi.mock("../lib/telemetry", () => ({ createMobileTelemetry: mocks.createMobileTe
 vi.mock("./mobile-space-features", () => ({ MOBILE_SPACE_FEATURES: mocks.MOBILE_SPACE_FEATURES }));
 vi.mock("./mobile-space-client", () => ({ createMobileSpaceClient: mocks.createMobileSpaceClient, createMobileSpaceRelease: mocks.createMobileSpaceRelease, ownMobileSpaceClient: mocks.ownMobileSpaceClient }));
 vi.mock("./mobile-space-telemetry-lifecycle", () => ({ recordMobileSpaceJoined: mocks.recordMobileSpaceJoined, terminalizeMobileSpaceJourney: mocks.terminalizeMobileSpaceJourney }));
+vi.mock("./ExpoGoSpaceScreen", () => ({ ExpoGoSpaceScreen: "ExpoGoSpaceScreen" }));
 
 import { MobileSpaceScreen } from "./MobileSpaceScreen";
+
+function renderAvailableMobileSpace(props: Parameters<typeof MobileSpaceScreen>[0]): ElementLike {
+  const wrapper = MobileSpaceScreen(props) as unknown as ElementLike;
+  const content = wrapper.type as (contentProps: Record<string, unknown>) => ElementLike;
+  return content(wrapper.props);
+}
 
 const route = {
   kind: "space" as const,
@@ -83,6 +92,7 @@ beforeEach(() => {
   hooks.setters.length = 0;
   hooks.stateValues.length = 0;
   mocks.createMobileTelemetry.mockClear();
+  mocks.hasNativeWebRtcSupport.mockClear().mockReturnValue(true);
   mocks.telemetry.flush.mockClear();
   mocks.telemetry.startJourney.mockClear();
   mocks.journey.phase.mockClear();
@@ -100,8 +110,21 @@ beforeEach(() => {
 });
 
 describe("MobileSpaceScreen", () => {
+  it("uses the browser WebRTC Space without mounting native media when WebRTC is unavailable", () => {
+    mocks.hasNativeWebRtcSupport.mockReturnValue(false);
+    const onClose = vi.fn(async () => undefined);
+
+    const rendered = MobileSpaceScreen({ brokerUrl: "https://broker.chalk.test", onClose, route, telemetryEnabled: false }) as unknown as ElementLike;
+
+    expect(rendered.type).toBe("ExpoGoSpaceScreen");
+    expect(rendered.props.onClose).toBe(onClose);
+    expect(rendered.props.route).toBe(route);
+    expect(mocks.Entrance).not.toHaveBeenCalled();
+    expect(mocks.createMobileTelemetry).not.toHaveBeenCalled();
+  });
+
   it("prepares a Participant credential from Entrance settings before creating the SpaceClient", async () => {
-    const rendered = MobileSpaceScreen({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), onDiagnosticsFailure: vi.fn(), route, telemetryEnabled: true }) as unknown as ElementLike;
+    const rendered = renderAvailableMobileSpace({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), onDiagnosticsFailure: vi.fn(), route, telemetryEnabled: true });
 
     expect(rendered.type).toBe(mocks.Entrance);
     expect(rendered.props).toMatchObject({ defaults: { camera: true, microphone: true }, joining: false, spaceName: route.spaceName });
@@ -123,7 +146,7 @@ describe("MobileSpaceScreen", () => {
     const arrival = { credential: mocks.credential, defaults: { camera: false, microphone: true }, displayName: "Ada", journey: mocks.journey };
     hooks.stateValues.push(arrival, undefined, false);
 
-    const rendered = MobileSpaceScreen({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), route, telemetryEnabled: false }) as unknown as ElementLike;
+    const rendered = renderAvailableMobileSpace({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), route, telemetryEnabled: false });
 
     expect(rendered.type).toBe(mocks.Chalk);
     expect(rendered.props).toMatchObject({
@@ -150,7 +173,7 @@ describe("MobileSpaceScreen", () => {
   it("exports only SDK-provided authenticated headers and clears them", () => {
     const arrival = { credential: mocks.credential, defaults: { camera: false, microphone: true }, displayName: "Ada", journey: mocks.journey };
     hooks.stateValues.push(arrival, undefined, false);
-    MobileSpaceScreen({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), route, telemetryEnabled: true });
+    renderAvailableMobileSpace({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), route, telemetryEnabled: true });
 
     const telemetryOptions = (mocks.createMobileTelemetry.mock.calls as unknown as Array<[{ readonly getAuthenticatedTelemetryHeaders: () => Readonly<Record<string, string>> | undefined }]>)[0]?.[0];
     if (!telemetryOptions) throw new Error("Mobile telemetry options missing");
@@ -168,7 +191,7 @@ describe("MobileSpaceScreen", () => {
     const arrival = { credential: mocks.credential, defaults: { camera: false, microphone: true }, displayName: "Ada", journey: mocks.journey };
     hooks.stateValues.push(arrival, undefined, false);
     const onDiagnosticsConnection = vi.fn();
-    MobileSpaceScreen({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), onDiagnosticsConnection, route, telemetryEnabled: false });
+    renderAvailableMobileSpace({ brokerUrl: "https://broker.chalk.test", onClose: vi.fn(async () => undefined), onDiagnosticsConnection, route, telemetryEnabled: false });
 
     expect(onDiagnosticsConnection).toHaveBeenCalledWith({ status: "idle", lastError: null });
     const publish = (mocks.client.subscribe.mock.calls as unknown as Array<[() => void]>)[0]?.[0];

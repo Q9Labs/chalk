@@ -20,6 +20,11 @@ export function shouldAutoReadClipboard({ platform, isSimulator }: { platform: s
   return !(platform === "ios" && isSimulator);
 }
 
+/** Native Space media is unavailable in generic hosts such as Expo Go. */
+export function hasNativeWebRtcSupport(): boolean {
+  return NativeModules.WebRTCModule != null;
+}
+
 export function getReactNativeScriptUrl(): string | null {
   return NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL ?? null;
 }
