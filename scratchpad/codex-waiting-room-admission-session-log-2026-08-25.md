@@ -30,3 +30,8 @@
 
 - The full gate exposed an existing client lifecycle test whose fixed access expiration had passed earlier in the day. The fixture now derives an expiration one hour from test execution while keeping the Episode start time fixed, so the test checks the intended projection instead of the wall clock.
 - The focused Go, web, React, client, trace, and language checks passed. The API gate and canonical `pnpm run gate` also passed on the remote M4 Mac mini.
+
+## 2026-08-25: Review fix
+
+- The bounded branch review found that a failed dashboard admission decision reached the Waiting UI as an unhandled promise rejection. Both skins now show a retryable error supplied by the account admission control, keep the arrival visible, and record one structured decision-failure diagnostic.
+- Focused Space tests plus web and React type checks pass after the fix. The canonical remote gate also passes with the review fix included.

@@ -9,6 +9,7 @@ import type { AdmissionPanelProps, AdmissionParticipant } from "./AdmissionPanel
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly participants: readonly AdmissionParticipant[];
+  readonly error?: string;
   readonly onAdmit: (id: string) => void;
   readonly onDeny: (id: string) => void;
   readonly onAdmitAll?: () => void;
@@ -33,7 +34,7 @@ function getWaitingLabel(joinedAt?: Date): string {
  * Flat list of people waiting at the door. Rendered inline inside the Participants panel
  * (no surrounding card), or as a standalone floating panel when a host mounts it directly.
  */
-const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
+const AdmissionPanelSurface = React.memo(({ participants, error, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -64,6 +65,12 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="py-2 text-sm text-[var(--chalk-app-danger)]">
+          {error}
+        </p>
       ) : null}
 
       <ul aria-label="Waiting to join" className="m-0 list-none divide-y divide-[var(--chalk-app-line)] p-0">
@@ -116,13 +123,14 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
 AdmissionPanelSurface.displayName = "AdmissionPanelSurface";
 
 export function ClassicAdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
-  const { requests, loading, admit, deny } = useCombinedAdmissionRequests();
+  const { requests, loading, error, admit, deny } = useCombinedAdmissionRequests();
 
   return (
     <AdmissionPanelSurface
       {...props}
       participants={requests}
       loading={Boolean(props.loading) || loading}
+      error={error}
       onAdmit={(requestId) => void admit(requestId)}
       onDeny={(requestId) => void deny(requestId)}
       onAdmitAll={() => {

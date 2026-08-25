@@ -16,6 +16,7 @@ export type CombinedAdmissionRequest = {
 export function useCombinedAdmissionRequests(): {
   readonly requests: readonly CombinedAdmissionRequest[];
   readonly loading: boolean;
+  readonly error?: string;
   readonly admit: (id: string) => Promise<void>;
   readonly deny: (id: string) => Promise<void>;
 } {
@@ -64,5 +65,5 @@ export function useCombinedAdmissionRequests(): {
     [admissionControl, client, requestById],
   );
 
-  return { requests, loading: admissionControl?.loading ?? false, admit, deny };
+  return { requests, loading: admissionControl?.loading ?? false, error: admissionControl?.error, admit, deny };
 }

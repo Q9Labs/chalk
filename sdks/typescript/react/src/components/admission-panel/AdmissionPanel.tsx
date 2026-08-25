@@ -24,6 +24,7 @@ export interface AdmissionPanelProps {
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly participants: readonly AdmissionParticipant[];
+  readonly error?: string;
   readonly onAdmit: (id: string) => void;
   readonly onDeny: (id: string) => void;
   readonly onAdmitAll?: () => void;
@@ -45,7 +46,7 @@ function getWaitingLabel(date?: Date): string {
  * one 56px row per waiting person with a decisive Admit and a quiet Deny, and bulk actions only
  * once there is more than one request. Standalone use wraps the same section in a panel.
  */
-const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
+const AdmissionPanelSurface = React.memo(({ participants, error, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -82,6 +83,12 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           ) : null}
         </div>
       </header>
+
+      {error ? (
+        <p role="alert" className="px-1 py-2 text-[13px] text-[var(--chalk-app-danger)]">
+          {error}
+        </p>
+      ) : null}
 
       {pending === 0 ? (
         <p role="status" className="flex min-h-11 items-center gap-2.5 px-1 text-[13px] text-[var(--chalk-app-text-muted)]">
@@ -132,13 +139,14 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
 AdmissionPanelSurface.displayName = "AdmissionPanelSurface";
 
 function ChalkAdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
-  const { requests, loading, admit, deny } = useCombinedAdmissionRequests();
+  const { requests, loading, error, admit, deny } = useCombinedAdmissionRequests();
 
   return (
     <AdmissionPanelSurface
       {...props}
       participants={requests}
       loading={Boolean(props.loading) || loading}
+      error={error}
       onAdmit={(requestId) => void admit(requestId)}
       onDeny={(requestId) => void deny(requestId)}
       onAdmitAll={() => {

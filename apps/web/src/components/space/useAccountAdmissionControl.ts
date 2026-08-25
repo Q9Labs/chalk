@@ -6,16 +6,19 @@ import { approveSpacePublicAdmissionRequest, denySpacePublicAdmissionRequest, li
 import type { useWebTelemetry } from "../../lib/web-telemetry-context";
 
 const publicAdmissionPollIntervalMS = 1_000;
+const publicAdmissionDecisionError = "Could not update this admission request. Try again.";
 
 export function useAccountAdmissionControl(credential: AccountSpaceCredential | PublicSpaceCredential, journey: ReturnType<typeof useWebTelemetry>["journey"]): ChalkAdmissionControl | undefined {
   const tenantID = "tenantID" in credential ? credential.tenantID : undefined;
   const spaceID = tenantID ? credential.space : undefined;
   const [requests, setRequests] = useState<readonly ChalkAdmissionRequest[]>([]);
   const [loading, setLoading] = useState(Boolean(tenantID));
+  const [decisionError, setDecisionError] = useState<string>();
   const decidedHandles = useRef(new Set<string>());
 
   useEffect(() => {
     decidedHandles.current.clear();
+    setDecisionError(undefined);
     if (!tenantID || !spaceID) {
       setRequests([]);
       setLoading(false);
@@ -55,15 +58,22 @@ export function useAccountAdmissionControl(credential: AccountSpaceCredential | 
   const decide = useCallback(
     async (requestHandle: string, decision: "admit" | "deny"): Promise<void> => {
       if (!tenantID || !spaceID) throw new Error("Public admission is unavailable for this Space.");
-      if (decision === "admit") {
-        await approveSpacePublicAdmissionRequest({ tenantID, spaceID, requestHandle });
-      } else {
-        await denySpacePublicAdmissionRequest({ tenantID, spaceID, requestHandle });
+      setDecisionError(undefined);
+      try {
+        if (decision === "admit") {
+          await approveSpacePublicAdmissionRequest({ tenantID, spaceID, requestHandle });
+        } else {
+          await denySpacePublicAdmissionRequest({ tenantID, spaceID, requestHandle });
+        }
+      } catch {
+        journey.recordDiagnostic({ category: "network", code: "space.public_admission_decision_failed", phase: "signaling", state: "failed" });
+        setDecisionError(publicAdmissionDecisionError);
+        return;
       }
       decidedHandles.current.add(requestHandle);
       setRequests((current) => current.filter((request) => request.id !== requestHandle));
     },
-    [spaceID, tenantID],
+    [journey, spaceID, tenantID],
   );
 
   return useMemo(
@@ -72,10 +82,11 @@ export function useAccountAdmissionControl(credential: AccountSpaceCredential | 
         ? {
             requests,
             loading,
+            error: decisionError,
             admit: (requestHandle: string) => decide(requestHandle, "admit"),
             deny: (requestHandle: string) => decide(requestHandle, "deny"),
           }
         : undefined,
-    [decide, loading, requests, tenantID],
+    [decide, decisionError, loading, requests, tenantID],
   );
 }
