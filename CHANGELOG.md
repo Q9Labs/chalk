@@ -12,6 +12,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.1.15] - 2026-08-25
+
+### Fixed
+
+- Bounded Cloudflare SFU recovery when a persisted remote publication no longer resolves to a provider track, while allowing a newer publication cursor to recover normally.
+- Propagated the authoritative Episode start time to connected SDK surfaces so live duration displays advance correctly.
+- Restored durable Episode diagnostic acknowledgements and production CLI inspection without weakening operator credential or HTTPS requirements.
+
 ## [4.1.14] - 2026-08-24
 
 ### Fixed
