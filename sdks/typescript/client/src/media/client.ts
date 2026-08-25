@@ -39,6 +39,10 @@ type PendingLocalPublication = {
   readonly reusedTransceiver: boolean;
 };
 
+type MediaConnectionRecoveryOptions = {
+  readonly preserveRemoteTracks?: boolean;
+};
+
 const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const CONNECTION_TIMEOUT_MS = 8_000;
@@ -416,7 +420,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
     const desired = desiredRemotePublications(authoritative.publications, this.#participantId);
     const toPull = [...desired].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId).map(([, publication]) => publication);
-    const pulled = await this.#pull(toPull, generation);
+    const pulled = await this.#pullWithRecovery(toPull, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
     const next = reconcileRemoteTracks(desired, pulled, this.#remoteTracks);
@@ -427,6 +431,28 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const publication of pulled) this.#invokeListener(() => this.#onRemoteTrack?.(publication));
     this.#publishSnapshot();
     this.#emitRemote();
+  }
+
+  async #pullWithRecovery(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+    try {
+      return await this.#pull(publications, generation);
+    } catch (error) {
+      if (generation !== this.#generation || this.#stopped) throw error;
+      if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
+        this.#observeRemotePublicationCursor(cursor);
+        throw error;
+      }
+
+      try {
+        await this.#replaceMediaConnectionForRecovery(generation, { preserveRemoteTracks: true });
+        await this.#republishPreparedTracksAfterRecovery(generation);
+        return await this.#pull(publications, generation);
+      } catch (recoveryError) {
+        if (generation !== this.#generation || this.#stopped) throw recoveryError;
+        this.#observeRemotePublicationCursor(cursor);
+        throw recoveryError;
+      }
+    }
   }
 
   async #pull(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
@@ -544,7 +570,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await this.#replaceMediaConnectionForRecovery(generation);
   }
 
-  async #replaceMediaConnectionForRecovery(generation: number): Promise<void> {
+  async #replaceMediaConnectionForRecovery(generation: number, options: MediaConnectionRecoveryOptions = {}): Promise<void> {
     this.#requireGeneration(generation);
     if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
       throw new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed");
@@ -559,8 +585,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const connectionEpoch = ++this.#connectionEpoch;
     this.#disposeConnection(false);
     this.#reusableLocalTransceivers.clear();
-    this.#clearRemoteTracks();
-    this.#cursor = null;
+    if (!options.preserveRemoteTracks) {
+      this.#clearRemoteTracks();
+      this.#cursor = null;
+    }
     this.#bootstrap = bootstrap;
     this.#connection = this.#createPeerConnection(bootstrap);
     this.#negotiatedGeneration = null;
@@ -571,6 +599,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       state.providerPublicationId = null;
     }
     this.#setPhase("recovering", null);
+  }
+
+  async #republishPreparedTracksAfterRecovery(generation: number): Promise<void> {
+    const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
+    await this.#publishPreparedTracks(enabled, generation);
+  }
+
+  #observeRemotePublicationCursor(cursor: PublicationCursor): void {
+    this.#cursor = cursor;
+    this.#publishSnapshot();
   }
 
   #isRetryableConnectionFailure(error: unknown): boolean {

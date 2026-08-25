@@ -274,15 +274,83 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("does not advance the authoritative cursor when a remote pull fails", async () => {
+  it("recovers a failed remote pull on one fresh media connection", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+    const onError = vi.fn();
+    const harness = createHarness({ onError, replaceMediaConnection });
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    harness.transport.failNextRemotePull = true;
+
+    await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+    expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
+    harness.client.stop();
+  });
+
+  it("quarantines a failed remote pull at its publication cursor", async () => {
     const harness = await startedRemoteHarness("remote-connection|camera-a");
     harness.transport.failNextRemotePull = true;
     await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
     expect(harness.client.getSnapshot().remoteTracks).toEqual([]);
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 1 });
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
 
+    const remotePullsAfterFailure = harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
     await harness.client.refreshRemotePublications();
-    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
+    expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"))).toHaveLength(remotePullsAfterFailure);
+
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    await harness.client.refreshRemotePublications();
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-b");
+    harness.client.stop();
+  });
+
+  it("replaces a remote-pull connection once and preserves healthy remote tracks when retry fails", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+    const onError = vi.fn();
+    const harness = createHarness({ onError, replaceMediaConnection });
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    await harness.client.refreshRemotePublications();
+    const healthy = harness.client.getSnapshot().remoteTracks[0];
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    harness.transport.failRemotePullCount = 2;
+
+    await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(healthy?.track.readyState).toBe("live");
+    expect(harness.client.getSnapshot().remoteTracks).toEqual([healthy]);
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 2 });
+
+    const remotePullsAfterFailure = harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
+    await harness.client.refreshRemotePublications();
+    expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"))).toHaveLength(remotePullsAfterFailure);
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    harness.client.stop();
+  });
+
+  it("pulls a newer publication cursor after quarantining a failed cursor", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceMediaConnection });
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    await harness.client.refreshRemotePublications();
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    harness.transport.failRemotePullCount = 2;
+    await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
+
+    harness.transport.snapshot = publicationSnapshot(1, 3, "remote-connection|camera-c");
+    await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 3 });
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-c");
     harness.client.stop();
   });
 
@@ -533,6 +601,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   failNextLocalPublish = false;
   failNextStaleLocalPublish = false;
   failNextRemotePull = false;
+  failRemotePullCount = 0;
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
@@ -552,6 +621,10 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     const unblock = this.#blockedConnections.get(input.connectionId);
     if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
     if (input.tracks.some((track) => track.location === "remote")) {
+      if (this.failRemotePullCount > 0) {
+        this.failRemotePullCount--;
+        throw new CloudflareSFUError("remote pull failed", "signaling_failed");
+      }
       if (this.failNextRemotePull) {
         this.failNextRemotePull = false;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
