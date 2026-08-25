@@ -98,6 +98,7 @@ export const AccessGrantSchema = Schema.Struct({
       }),
     ),
   ),
+  episode_started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   media: Schema.Struct({
     client_payload: Schema.Record(Schema.String, Schema.Unknown),
     expires_at: DateTimeStringSchema,

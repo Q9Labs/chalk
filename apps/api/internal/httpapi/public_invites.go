@@ -1039,6 +1039,7 @@ func newPublicSpaceArrivalResponse(arrival publicinvites.PublicSpaceArrival) pub
 func newPublicAccessGrantResponse(grant publicinvites.PublicAccessGrant) publicAccessGrantResponse {
 	expiresAt := grant.ExpiresAt.UTC().Format(time.RFC3339)
 	response := publicAccessGrantResponse{
+		EpisodeStartedAt: episodeStartedAt(grant.StartedAt),
 		Subject: accessGrantSubjectResponse{
 			TenantID: grant.TenantID.String(), SpaceID: grant.SpaceID.String(), EpisodeID: grant.EpisodeID.String(),
 			ParticipantID: grant.ParticipantID.String(), ParticipantGeneration: grant.ParticipantGeneration,

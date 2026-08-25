@@ -1460,6 +1460,7 @@ export interface components {
         intake_path: string;
         token: string;
       } | null;
+      episode_started_at?: components["schemas"]["DateTimeString"] | null;
       media: {
         client_payload: {
           [key: string]:

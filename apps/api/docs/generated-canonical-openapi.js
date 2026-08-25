@@ -15228,6 +15228,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             required: ["expires_at", "generation", "intake_path", "token"],
             type: ["object", "null"],
           },
+          episode_started_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
           media: {
             additionalProperties: false,
             properties: {

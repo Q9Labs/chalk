@@ -862,6 +862,7 @@ select
     participants.tenant_id,
     participants.space_id,
     participants.episode_id,
+    episodes.started_at,
     participants.id as participant_id,
     participants.generation,
     participants.name,
@@ -910,15 +911,16 @@ type GetSyncTokenSubjectParams struct {
 }
 
 type GetSyncTokenSubjectRow struct {
-	TenantID                   pgtype.UUID `json:"tenant_id"`
-	SpaceID                    pgtype.UUID `json:"space_id"`
-	EpisodeID                  pgtype.UUID `json:"episode_id"`
-	ParticipantID              pgtype.UUID `json:"participant_id"`
-	Generation                 int64       `json:"generation"`
-	Name                       pgtype.Text `json:"name"`
-	Role                       string      `json:"role"`
-	Capabilities               []string    `json:"capabilities"`
-	AdmissionLifecycleIntentID pgtype.UUID `json:"admission_lifecycle_intent_id"`
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	SpaceID                    pgtype.UUID        `json:"space_id"`
+	EpisodeID                  pgtype.UUID        `json:"episode_id"`
+	StartedAt                  pgtype.Timestamptz `json:"started_at"`
+	ParticipantID              pgtype.UUID        `json:"participant_id"`
+	Generation                 int64              `json:"generation"`
+	Name                       pgtype.Text        `json:"name"`
+	Role                       string             `json:"role"`
+	Capabilities               []string           `json:"capabilities"`
+	AdmissionLifecycleIntentID pgtype.UUID        `json:"admission_lifecycle_intent_id"`
 }
 
 func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubjectParams) (GetSyncTokenSubjectRow, error) {
@@ -933,6 +935,7 @@ func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubje
 		&i.TenantID,
 		&i.SpaceID,
 		&i.EpisodeID,
+		&i.StartedAt,
 		&i.ParticipantID,
 		&i.Generation,
 		&i.Name,

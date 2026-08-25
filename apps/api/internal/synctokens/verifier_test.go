@@ -33,9 +33,14 @@ func TestVerifierUsesAnAdversarialSignedTokenTable(t *testing.T) {
 		ParticipantGeneration: 3, AdmissionLifecycleIntentID: id(t),
 		DisplayName: "Ada", Role: "participant", Capabilities: []string{"subscribe"},
 	}
+	startedAt := time.Date(2026, 7, 29, 13, 59, 58, 123_000_000, time.UTC)
+	input.StartedAt = &startedAt
 	token, err := signer.Issue(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if token.StartedAt == nil || !token.StartedAt.Equal(startedAt) {
+		t.Fatalf("started at = %v, want %v", token.StartedAt, startedAt)
 	}
 	verifier, err := synctokens.NewVerifier(synctokens.VerifierConfig{
 		Issuer: "https://api.chalk.test", Audience: "chalk-sync",

@@ -17,6 +17,7 @@ const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5_000;
 
 type RecoveryKind = "sync" | "media";
+type EpisodeControl = NonNullable<V1EpisodeSnapshot["control"]>;
 type RecoveryPlan = {
   readonly kind: RecoveryKind;
   readonly deadline: number;
@@ -166,7 +167,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Effect.tryPromise({ try: operation, catch: (cause) => lifecycleFailure(code, true, message, cause) });
       const toPromise = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect);
       const publish = (): Effect.Effect<void> =>
-        Effect.sync(() => snapshotFor(model, access.currentUnsafe()?.subject ?? null)).pipe(
+        Effect.sync(() => snapshotFor(model, access.currentUnsafe())).pipe(
           Effect.tap((snapshot) => SubscriptionRef.set(snapshotRef, snapshot)),
           Effect.asVoid,
           Effect.tap(() =>
@@ -682,14 +683,28 @@ function idleSnapshot(): ConnectionLifecycleSnapshot {
   return Object.freeze({ state: "idle", subject: null, episode: null, connection: Object.freeze({ sync: "idle", media: "idle" }), failure: null });
 }
 
-function snapshotFor(model: Model, subject: ParsedAccessGrant["subject"] | null): ConnectionLifecycleSnapshot {
+function snapshotFor(model: Model, access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot {
   const control = model.syncSnapshot?.optimisticControl ?? model.syncSnapshot?.control;
   return Object.freeze({
     state: model.state,
-    subject: subject ? Object.freeze({ ...subject }) : null,
-    episode: subject ? Object.freeze({ id: subject.episodeId, startedAt: null, deadline: control ? new Date(control.deadlineAtMs).toISOString() : null }) : null,
+    subject: subjectFor(access),
+    episode: episodeFor(access, control),
     connection: Object.freeze({ sync: syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
+  });
+}
+
+function subjectFor(access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot["subject"] {
+  if (!access) return null;
+  return Object.freeze({ ...access.subject });
+}
+
+function episodeFor(access: ParsedAccessGrant | null, control: EpisodeControl | null | undefined): ConnectionLifecycleSnapshot["episode"] {
+  if (!access) return null;
+  return Object.freeze({
+    id: access.subject.episodeId,
+    startedAt: access.episodeStartedAt ?? null,
+    deadline: control ? new Date(control.deadlineAtMs).toISOString() : null,
   });
 }
 

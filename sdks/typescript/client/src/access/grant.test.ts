@@ -19,6 +19,14 @@ describe("access grant parsing", () => {
     expect(() => parseParsedAccessGrant({ ...wire, sync: { ...wire.sync, expires_at: "not-a-date" } })).toThrowError(expect.objectContaining({ code: "access.invalid" }));
   });
 
+  it("preserves a valid Episode start time and ignores missing or malformed legacy values", () => {
+    const wire = accessWire();
+
+    expect(parseParsedAccessGrant({ ...wire, episode_started_at: "2026-08-25T10:00:00.000Z" }).episodeStartedAt).toBe("2026-08-25T10:00:00.000Z");
+    expect(parseParsedAccessGrant(wire).episodeStartedAt).toBeNull();
+    expect(parseParsedAccessGrant({ ...wire, episode_started_at: "not-a-date" }).episodeStartedAt).toBeNull();
+  });
+
   it("rejects legacy subject aliases instead of widening the current wire contract", () => {
     const wire = accessWire();
     expect(() =>

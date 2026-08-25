@@ -357,6 +357,7 @@ type PublicAccessGrant struct {
 	TenantID              utilities.ID
 	SpaceID               utilities.ID
 	EpisodeID             utilities.ID
+	StartedAt             *time.Time
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	Provider              string

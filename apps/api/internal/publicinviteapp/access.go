@@ -323,7 +323,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	}
 	return publicinvites.PublicAccessGrant{
 		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, ExpiresAt: expiresAt,
-		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID,
+		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID, StartedAt: syncToken.StartedAt,
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
 		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload, Diagnostics: diagnostics,
 	}, nil
