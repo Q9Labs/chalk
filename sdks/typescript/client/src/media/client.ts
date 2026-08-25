@@ -464,7 +464,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
-    return error instanceof CloudflareSFUError && error.code === "signaling_failed" && this.#remoteTracks.size === 0 && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
+    return error instanceof CloudflareSFUError && error.code === "signaling_failed" && !this.#hasLiveRemoteTracks() && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
+  }
+
+  #hasLiveRemoteTracks(): boolean {
+    return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
   }
 
   async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {

@@ -325,6 +325,21 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("replaces the media connection when cached remote tracks have ended", async () => {
+    const { harness, replaceMediaConnection } = await startedReplaceableHarness();
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    await harness.client.refreshRemotePublications();
+    harness.client.getSnapshot().remoteTracks[0]?.track.stop();
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    harness.transport.failNextRemotePull = true;
+
+    await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(harness.client.getSnapshot().remoteTracks[0]).toMatchObject({ publicationId: "remote-connection|camera-b", track: { readyState: "live" } });
+    harness.client.stop();
+  });
+
   it("quarantines an invalid publication without replacing the media connection", async () => {
     const { harness, replaceMediaConnection } = await startedReplaceableHarness();
     harness.transport.snapshot = publicationSnapshot(1, 1, "invalid-publication");
