@@ -230,7 +230,7 @@ export async function denySpacePublicAdmissionRequest(input: { tenantID: string;
 }
 
 async function decideSpacePublicAdmissionRequest(action: "approve" | "deny", input: { tenantID: string; spaceID: string; requestHandle: string }): Promise<DashboardPublicAdmissionRequest> {
-  const request = mutationRequestKey(`space-public-admission-${action}`, JSON.stringify(input));
+  const request = mutationRequestKey(publicAdmissionDecisionRequestScope(action, input.requestHandle), JSON.stringify(input));
   const params = { tenant_id: input.tenantID as GeneratedTenant["id"], space_id: input.spaceID as GeneratedSpace["id"], request_handle: input.requestHandle };
   const result =
     action === "approve"
@@ -238,6 +238,10 @@ async function decideSpacePublicAdmissionRequest(action: "approve" | "deny", inp
       : await generatedRequest((client) => client.spaces.denySpacePublicAdmissionRequest({ params, headers: { "Idempotency-Key": request.key } }));
   clearMutationRequestKey(request.storageKey);
   return result;
+}
+
+export function publicAdmissionDecisionRequestScope(action: "approve" | "deny", requestHandle: string): string {
+  return `space-public-admission-${action}-${requestHandle}`;
 }
 
 export async function listEpisodes(input: { tenantID: string; spaceID?: string; cursor?: string; pageSize?: number }): Promise<DashboardEpisodePage> {

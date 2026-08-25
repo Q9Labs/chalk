@@ -3,6 +3,11 @@ import { vi } from "vitest";
 
 import type { DashboardPublicAdmissionRequestPage } from "../lib/dashboard-api";
 
+type SpaceListingPage = {
+  readonly spaces: Array<{ readonly slug: string; readonly admission_policy: unknown; readonly metadata: unknown }>;
+  readonly pagination: { readonly page_size: number; readonly next_cursor: string | null; readonly has_more: boolean };
+};
+
 function MockEntrance({
   defaultDisplayName = "",
   joining = false,
@@ -71,7 +76,7 @@ const spacePageTestMocks = vi.hoisted(() => {
       return null;
     }),
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
-    listSpaces: vi.fn(async () => ({ spaces: [], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
+    listSpaces: vi.fn(async (): Promise<SpaceListingPage> => knockSpaceListing()),
     listSpacePublicAdmissionRequests: vi.fn(async (): Promise<DashboardPublicAdmissionRequestPage> => ({ requests: [] })),
     approveSpacePublicAdmissionRequest: vi.fn(async () => undefined),
     denySpacePublicAdmissionRequest: vi.fn(async () => undefined),
@@ -137,9 +142,14 @@ export function resetSpacePageTestMocks(): void {
   });
   spacePageTestMocks.Chalk.mockClear();
   spacePageTestMocks.joinDashboardSpace.mockReset();
+  spacePageTestMocks.listSpaces.mockReset().mockResolvedValue(knockSpaceListing());
   spacePageTestMocks.listSpacePublicAdmissionRequests.mockReset().mockResolvedValue({ requests: [] });
   spacePageTestMocks.approveSpacePublicAdmissionRequest.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.denySpacePublicAdmissionRequest.mockReset().mockResolvedValue(undefined);
+}
+
+function knockSpaceListing(): SpaceListingPage {
+  return { spaces: [{ slug: "design-lab", admission_policy: { mode: "knock" }, metadata: null }], pagination: { page_size: 100, next_cursor: null, has_more: false } };
 }
 
 function makeRelease(cleanup: () => Promise<void>): ReturnType<typeof vi.fn> {

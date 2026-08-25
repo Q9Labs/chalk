@@ -79,6 +79,23 @@ describe("account Space admission", () => {
     await waitFor(() => expect(mocks.holder.chalkProps?.admissionControl).toMatchObject({ error: "Could not update this admission request. Try again.", requests: [{ id: "arrival-1" }] }));
     expect(mocks.journey.recordDiagnostic).toHaveBeenCalledWith({ category: "network", code: "space.public_admission_decision_failed", phase: "signaling", state: "failed" });
   });
+
+  it("does not poll public admission requests for an open Space", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    mocks.joinDashboardSpace.mockResolvedValue({
+      credential: { apiBaseURL: "https://api.chalk.test", tenantID: "tenant-1", space: "space-1", access: {}, participantGeneration: 1 },
+      getAccess: vi.fn(),
+      leave: vi.fn(async () => undefined),
+    });
+    mocks.listSpaces.mockResolvedValue({ spaces: [{ slug: "design-lab", admission_policy: { mode: "open" }, metadata: null }], pagination: { page_size: 100, next_cursor: null, has_more: false } });
+
+    render(<SpacePage slug="design-lab" />);
+    enterName("Owner");
+
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    expect(mocks.listSpacePublicAdmissionRequests).not.toHaveBeenCalled();
+    expect(mocks.holder.chalkProps?.admissionControl).toBeUndefined();
+  });
 });
 
 function enterName(displayName: string): void {

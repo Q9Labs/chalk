@@ -180,6 +180,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
         deviceSelection={settings}
         getAccess={spaceAccess.prepared.getAccess}
         connectionAccess={spaceAccess.prepared.connectionAccess}
+        admissionMode={spaceAccess.prepared.admissionMode}
         inviteLink={spaceAccess.inviteLink}
         journey={journey}
         onFinish={finish}
@@ -205,6 +206,7 @@ type JoinedSpaceAccess = {
 
 type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
+  readonly admissionMode?: "open" | "knock" | "members_only";
   readonly spaceDescription?: string;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
@@ -256,20 +258,26 @@ async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: str
 async function prepareDashboardSpace(slug: string, displayName: string, journey: ReturnType<typeof useWebTelemetry>["journey"]): Promise<DashboardPreparation> {
   const tenantID = await resolveTenantID();
   if (!tenantID) throw new Error(neutralSpaceError);
-  const [access, spaceDescription] = await Promise.all([joinDashboardSpace(tenantID, slug, displayName, journey), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
+  const [access, presentation] = await Promise.all([joinDashboardSpace(tenantID, slug, displayName, journey), findSpacePresentation(tenantID, slug).catch(() => undefined)]);
   clearDashboardSpaceEntry();
-  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, spaceDescription, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
+  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, admissionMode: presentation?.admissionMode, spaceDescription: presentation?.description, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
 }
 
-async function findSpaceDescription(tenantID: string, slug: string): Promise<string | undefined> {
+async function findSpacePresentation(tenantID: string, slug: string): Promise<{ readonly admissionMode?: "open" | "knock" | "members_only"; readonly description?: string } | undefined> {
   let cursor: string | undefined;
   do {
     const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
     const space = page.spaces.find((candidate) => candidate.slug === slug);
-    if (space) return descriptionFromMetadata(space.metadata);
+    if (space) return { admissionMode: admissionModeFromPolicy(space.admission_policy), description: descriptionFromMetadata(space.metadata) };
     cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
   } while (cursor);
   return undefined;
+}
+
+function admissionModeFromPolicy(value: unknown): "open" | "knock" | "members_only" | undefined {
+  if (!value || typeof value !== "object" || !("mode" in value)) return undefined;
+  const mode = value.mode;
+  return mode === "open" || mode === "knock" || mode === "members_only" ? mode : undefined;
 }
 
 function descriptionFromMetadata(metadata: unknown): string | undefined {
@@ -321,6 +329,7 @@ function LocalSpace({
   deviceSelection,
   getAccess,
   connectionAccess,
+  admissionMode,
   inviteLink,
   journey,
   onFinish,
@@ -333,6 +342,7 @@ function LocalSpace({
   readonly deviceSelection?: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId">;
   readonly getAccess: PreparedPublicSpace["getAccess"];
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
+  readonly admissionMode?: "open" | "knock" | "members_only";
   readonly inviteLink?: string;
   readonly journey: ReturnType<typeof useWebTelemetry>["journey"];
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
@@ -347,7 +357,7 @@ function LocalSpace({
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const episodeID = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection.episode?.id;
   const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
-  const admissionControl = useAccountAdmissionControl(credential, journey);
+  const admissionControl = useAccountAdmissionControl(credential, admissionMode, journey);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const openDiagnostics = useCallback(() => {
     if (diagnostics.path) globalThis.open(diagnostics.path, "_blank", "noopener");

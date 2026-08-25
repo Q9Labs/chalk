@@ -35,3 +35,10 @@
 
 - The bounded branch review found that a failed dashboard admission decision reached the Waiting UI as an unhandled promise rejection. Both skins now show a retryable error supplied by the account admission control, keep the arrival visible, and record one structured decision-failure diagnostic.
 - Focused Space tests plus web and React type checks pass after the fix. The canonical remote gate also passes with the review fix included.
+
+## 2026-08-25: Re-review fixes
+
+- The bounded re-review found that account admission polling still ran for open Spaces, where no owner decision can be required. The account admission control now activates only when the Space admission mode is `knock`.
+- Bulk admit and deny actions shared an action-wide browser retry key, so concurrent decisions could overwrite each other's retry identity. Each key is now scoped by action and request handle, which keeps retries stable and independent.
+- Focused Space and dashboard API tests plus web, React, and language checks pass after both fixes.
+- The final clean remote smart gate passed after running the mobile app's documented diagnostics-contract prebuild. The initial clean run exposed that missing build artifact rather than a source failure.
