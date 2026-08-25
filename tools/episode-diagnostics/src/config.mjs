@@ -35,9 +35,19 @@ export async function resolveOperatorConfig(options = {}) {
   const parsedBase = parseBaseUrl(resolveBaseUrl(options, env, fileCredential));
   validateServiceOrigin(parsedBase, environment);
   const credential = resolveCredential(options, env, fileCredential);
+  validateOperatorCredential(environment, credential);
   const fetchImpl = resolveFetch(options);
   assertFetchImplementation(fetchImpl);
   return operatorConfig(parsedBase, environment, credential, fetchImpl);
+}
+
+/** @param {DiagnosticOperatorConfig} config */
+export function validateOperatorConfig(config) {
+  assertEnvironment(config.environment);
+  const parsedBase = parseBaseUrl(config.baseUrl);
+  validateServiceOrigin(parsedBase, config.environment);
+  validateOperatorCredential(config.environment, config.credential);
+  assertFetchImplementation(config.fetchImpl);
 }
 
 /** @param {{ env?: NodeJS.ProcessEnv }} options */
@@ -127,6 +137,12 @@ function validateLocalOrigin(parsedBase, environment) {
 /** @param {URL} parsedBase @param {string} environment */
 function validateHostedOrigin(parsedBase, environment) {
   if (environment !== "localhost" && parsedBase.protocol !== "https:") throw new DiagnosticInspectError("invalid_config", "Hosted diagnostics must use HTTPS");
+}
+
+/** @param {string} environment @param {string | undefined} credential */
+function validateOperatorCredential(environment, credential) {
+  if (environment !== "production" || credential) return;
+  throw new DiagnosticInspectError("invalid_config", "Production diagnostics require an operator credential");
 }
 
 /** @param {unknown} fetchImpl */

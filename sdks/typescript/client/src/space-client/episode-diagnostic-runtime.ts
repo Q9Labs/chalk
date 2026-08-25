@@ -644,8 +644,17 @@ function stripTrailingUrlSlash(value: string): string {
 
 function intakeResponse(value: unknown): IntakeResponse | null {
   if (!isRecord(value) || typeof value.diagnosticReference !== "string" || !Number.isSafeInteger(value.committedCursor)) return null;
-  if (!Array.isArray(value.accepted) || !Array.isArray(value.duplicates) || !Array.isArray(value.conflicts)) return null;
-  return { accepted: value.accepted, duplicates: value.duplicates, conflicts: value.conflicts };
+  const accepted = legacyEmptyAcknowledgement(value.accepted);
+  const duplicates = legacyEmptyAcknowledgement(value.duplicates);
+  const conflicts = legacyEmptyAcknowledgement(value.conflicts);
+  if (accepted === null || duplicates === null || conflicts === null) return null;
+  return { accepted, duplicates, conflicts };
+}
+
+/** @param {unknown} value */
+function legacyEmptyAcknowledgement(value: unknown): readonly unknown[] | null {
+  if (value === null) return [];
+  return Array.isArray(value) ? value : null;
 }
 
 function completeDelivery(delivery: Readonly<{ accepted: readonly string[]; duplicates: readonly string[]; conflicts: readonly string[] }>, expected: ReadonlySet<string>): EpisodeDiagnosticDeliveryResult | null {

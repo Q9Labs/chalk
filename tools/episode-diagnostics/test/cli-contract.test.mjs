@@ -10,9 +10,22 @@ test("accepts canonical production references and rejects the prod alias", () =>
 });
 
 test("resolves production diagnostics only through an HTTPS service origin", async () => {
-  const config = await resolveOperatorConfig({ environment: "production", baseUrl: "https://diagnostics.example", fetchImpl: async () => new Response() });
+  const config = await resolveOperatorConfig({ environment: "production", baseUrl: "https://diagnostics.example", credential: "operator-token", fetchImpl: async () => new Response() });
   assert.equal(config.environment, "production");
   assert.equal(config.baseUrl, "https://diagnostics.example");
+});
+
+test("requires an operator credential for production diagnostics", async () => {
+  await assert.rejects(resolveOperatorConfig({ environment: "production", baseUrl: "https://diagnostics.example", fetchImpl: async () => new Response() }), { code: "invalid_config" });
+});
+
+test("keeps localhost diagnostics restricted to loopback origins", async () => {
+  await assert.rejects(resolveOperatorConfig({ environment: "localhost", baseUrl: "https://diagnostics.example", fetchImpl: async () => new Response() }), { code: "invalid_config" });
+});
+
+test("validates pre-resolved production client configuration", async () => {
+  await assert.rejects(createDiagnosticClient({ config: { environment: "production", baseUrl: "https://diagnostics.example", fetchImpl: async () => new Response() } }), { code: "invalid_config" });
+  await assert.rejects(createDiagnosticClient({ config: { environment: "production", baseUrl: "http://diagnostics.example", credential: "operator-token", fetchImpl: async () => new Response() } }), { code: "invalid_config" });
 });
 
 test("normalizes a null participant projection to an empty array", async () => {

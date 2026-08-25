@@ -1,6 +1,9 @@
 package episodediagnostics
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Contract values are intentionally closed. Keep additions in lockstep with
 // packages/diagnostics-contracts/src/allowlists.ts.
@@ -169,6 +172,22 @@ type AppendDiagnosticEventsResult struct {
 	Accepted            []AppendEventReceipt `json:"accepted"`
 	Duplicates          []AppendEventReceipt `json:"duplicates"`
 	Conflicts           []AppendConflict     `json:"conflicts"`
+}
+
+// MarshalJSON keeps empty acknowledgement collections stable for clients that
+// distinguish an empty collection from a missing value.
+func (result AppendDiagnosticEventsResult) MarshalJSON() ([]byte, error) {
+	type appendResult AppendDiagnosticEventsResult
+	if result.Accepted == nil {
+		result.Accepted = []AppendEventReceipt{}
+	}
+	if result.Duplicates == nil {
+		result.Duplicates = []AppendEventReceipt{}
+	}
+	if result.Conflicts == nil {
+		result.Conflicts = []AppendConflict{}
+	}
+	return json.Marshal(appendResult(result))
 }
 
 type DiagnosticAppendResult = AppendDiagnosticEventsResult

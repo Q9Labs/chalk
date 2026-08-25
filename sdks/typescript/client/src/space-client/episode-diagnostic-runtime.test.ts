@@ -175,6 +175,43 @@ describe("EpisodeDiagnosticRuntime", () => {
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(`Bearer ${credential(1).token}`);
   });
 
+  it("accepts legacy null for empty intake acknowledgement collections", async () => {
+    const fetch = intakeFetch((body) => ({
+      diagnosticReference: "chalkdiag:v1:localhost:diagnostic",
+      committedCursor: 1,
+      accepted: body.events.map((event) => ({ eventId: event.eventId, cursor: 1 })),
+      duplicates: null,
+      conflicts: null,
+    }));
+    const { runtime, timers } = makeRuntime({ exporter: undefined, fetch });
+    runtime.rotateCredential(credential(1));
+    runtime.observe({ name: "chat.page", phase: "paged", state: "observed", attributes: { count: 1 } });
+
+    timers.shift()?.();
+    await vi.waitFor(() => expect(runtime.inspect().queue).toHaveLength(0));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a batch pending when legacy null omits its acknowledgements", async () => {
+    const fetch = intakeFetch(() => ({
+      diagnosticReference: "chalkdiag:v1:localhost:diagnostic",
+      committedCursor: 0,
+      accepted: null,
+      duplicates: null,
+      conflicts: null,
+    }));
+    const { runtime, timers } = makeRuntime({ exporter: undefined, fetch, maxRetryAttempts: 2, retryDelayMs: 1 });
+    runtime.rotateCredential(credential(1));
+    runtime.observe({ name: "chat.page", phase: "paged", state: "observed" });
+
+    timers.shift()?.();
+    await vi.waitFor(() => expect(timers.length).toBeGreaterThan(0));
+
+    expect(runtime.inspect().queue).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("accepts mixed intake outcomes and quarantines only fingerprint conflicts", async () => {
     const fetch = intakeFetch((body) => ({
       diagnosticReference: "chalkdiag:v1:localhost:diagnostic",

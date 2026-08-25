@@ -1,7 +1,7 @@
 // @ts-check
 
 import { asDiagnosticInspectError, DiagnosticInspectError } from "./errors.mjs";
-import { resolveOperatorConfig } from "./config.mjs";
+import { resolveOperatorConfig, validateOperatorConfig } from "./config.mjs";
 import { sanitizeDiagnosticData } from "./safety.mjs";
 import { parseAgentBrief, parseDiagnosticEventPage, parseDiagnosticOperationPage, parseDiagnosticResolverResponse, parseDiagnosticSnapshot, parseEpilogueProjection, parseFlameProjection, parseGraphProjection, parseParticipantProjection, parseRunProjection } from "@q9labsai/diagnostics-contracts";
 
@@ -62,7 +62,10 @@ export async function createDiagnosticClient(options = {}) {
  * @param {DiagnosticClientOptions} options
  */
 async function resolveClientConfig(options) {
-  if (options.config) return options.config;
+  if (options.config) {
+    validateOperatorConfig(options.config);
+    return options.config;
+  }
   return resolveOperatorConfig({ ...options, fetchImpl: options.fetchImpl ?? options.fetch });
 }
 
