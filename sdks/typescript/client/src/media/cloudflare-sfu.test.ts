@@ -275,10 +275,7 @@ describe("Cloudflare SFU client", () => {
   });
 
   it("recovers a failed remote pull on one fresh media connection", async () => {
-    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
-    const onError = vi.fn();
-    const harness = createHarness({ onError, replaceMediaConnection });
-    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    const { harness, onError, replaceMediaConnection } = await startedReplaceableHarness();
     harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
     harness.transport.failNextRemotePull = true;
 
@@ -299,9 +296,7 @@ describe("Cloudflare SFU client", () => {
     expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 1 });
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
 
-    const remotePullsAfterFailure = harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
-    await harness.client.refreshRemotePublications();
-    expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"))).toHaveLength(remotePullsAfterFailure);
+    await expectNoAdditionalRemotePull(harness);
 
     harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
     await harness.client.refreshRemotePublications();
@@ -309,46 +304,51 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("replaces a remote-pull connection once and preserves healthy remote tracks when retry fails", async () => {
-    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
-    const onError = vi.fn();
-    const harness = createHarness({ onError, replaceMediaConnection });
-    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+  it("quarantines a failed remote pull without replacing healthy remote tracks", async () => {
+    const { harness, onError, replaceMediaConnection } = await startedReplaceableHarness();
     harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
     await harness.client.refreshRemotePublications();
     const healthy = harness.client.getSnapshot().remoteTracks[0];
     harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
-    harness.transport.failRemotePullCount = 2;
+    harness.transport.failRemotePullCount = 1;
 
     await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
 
-    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledOnce();
     expect(healthy?.track.readyState).toBe("live");
     expect(harness.client.getSnapshot().remoteTracks).toEqual([healthy]);
     expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 2 });
 
-    const remotePullsAfterFailure = harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
-    await harness.client.refreshRemotePublications();
-    expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"))).toHaveLength(remotePullsAfterFailure);
-    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    await expectNoAdditionalRemotePull(harness);
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    harness.client.stop();
+  });
+
+  it("quarantines an invalid publication without replacing the media connection", async () => {
+    const { harness, replaceMediaConnection } = await startedReplaceableHarness();
+    harness.transport.snapshot = publicationSnapshot(1, 1, "invalid-publication");
+
+    await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "invalid_publication" });
+
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 1 });
+    await expectNoAdditionalRemotePull(harness);
     harness.client.stop();
   });
 
   it("pulls a newer publication cursor after quarantining a failed cursor", async () => {
-    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
-    const harness = createHarness({ replaceMediaConnection });
-    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    const { harness, replaceMediaConnection } = await startedReplaceableHarness();
     harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
     await harness.client.refreshRemotePublications();
     harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
-    harness.transport.failRemotePullCount = 2;
+    harness.transport.failRemotePullCount = 1;
     await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
 
     harness.transport.snapshot = publicationSnapshot(1, 3, "remote-connection|camera-c");
     await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
 
-    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
     expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 3 });
     expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-c");
     harness.client.stop();
@@ -539,6 +539,24 @@ async function startedRemoteHarness(publicationId: string): Promise<ReturnType<t
   await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
   harness.transport.snapshot = publicationSnapshot(1, 1, publicationId);
   return harness;
+}
+
+async function startedReplaceableHarness() {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const onError = vi.fn();
+  const harness = createHarness({ onError, replaceMediaConnection });
+  await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+  return { harness, onError, replaceMediaConnection };
+}
+
+async function expectNoAdditionalRemotePull(harness: ReturnType<typeof createHarness>): Promise<void> {
+  const count = remotePullCount(harness);
+  await harness.client.refreshRemotePublications();
+  expect(remotePullCount(harness)).toBe(count);
+}
+
+function remotePullCount(harness: ReturnType<typeof createHarness>): number {
+  return harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
 }
 
 function bootstrap(connectionId: string): CloudflareSFUBootstrap {

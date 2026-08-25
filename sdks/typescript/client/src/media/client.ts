@@ -39,12 +39,9 @@ type PendingLocalPublication = {
   readonly reusedTransceiver: boolean;
 };
 
-type MediaConnectionRecoveryOptions = {
-  readonly preserveRemoteTracks?: boolean;
-};
-
 const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
+const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8_000;
 
 export class CloudflareSFUClient implements ClientMediaPlane {
@@ -414,11 +411,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   async #reconcileRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
-    const cursor = validatePublicationSnapshot(authoritative);
+    const cursor = this.#validatedRemotePublicationCursor(authoritative);
+    if (cursor === null) return;
     const ordering = comparePublicationCursor(this.#cursor, cursor);
     if (ordering !== "newer") return;
 
-    const desired = desiredRemotePublications(authoritative.publications, this.#participantId);
+    const desired = this.#desiredRemotePublications(authoritative, cursor);
     const toPull = [...desired].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId).map(([, publication]) => publication);
     const pulled = await this.#pullWithRecovery(toPull, cursor, generation);
     if (pulled === null) return;
@@ -433,25 +431,51 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#emitRemote();
   }
 
+  #validatedRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
+    if (this.#cursor?.signature === INVALID_PUBLICATION_SIGNATURE && this.#cursor.incarnation === authoritative.incarnation && this.#cursor.sequence === authoritative.sequence) return null;
+    try {
+      return validatePublicationSnapshot(authoritative);
+    } catch (error) {
+      this.#quarantineInvalidRemotePublicationCursor(authoritative);
+      throw error;
+    }
+  }
+
+  #desiredRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, cursor: PublicationCursor): ReturnType<typeof desiredRemotePublications> {
+    try {
+      return desiredRemotePublications(authoritative.publications, this.#participantId);
+    } catch (error) {
+      this.#observeRemotePublicationCursor(cursor);
+      throw error;
+    }
+  }
+
   async #pullWithRecovery(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     try {
       return await this.#pull(publications, generation);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
-      if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
+      if (!this.#canReplaceConnectionAfterRemotePull(error, generation)) {
         this.#observeRemotePublicationCursor(cursor);
         throw error;
       }
+      return this.#retryRemotePullOnReplacement(publications, cursor, generation);
+    }
+  }
 
-      try {
-        await this.#replaceMediaConnectionForRecovery(generation, { preserveRemoteTracks: true });
-        await this.#republishPreparedTracksAfterRecovery(generation);
-        return await this.#pull(publications, generation);
-      } catch (recoveryError) {
-        if (generation !== this.#generation || this.#stopped) throw recoveryError;
-        this.#observeRemotePublicationCursor(cursor);
-        throw recoveryError;
-      }
+  #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
+    return error instanceof CloudflareSFUError && error.code === "signaling_failed" && this.#remoteTracks.size === 0 && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
+  }
+
+  async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+    try {
+      await this.#replaceMediaConnectionForRecovery(generation);
+      await this.#republishPreparedTracksAfterRecovery(generation);
+      return await this.#pull(publications, generation);
+    } catch (error) {
+      if (generation !== this.#generation || this.#stopped) throw error;
+      this.#observeRemotePublicationCursor(cursor);
+      throw error;
     }
   }
 
@@ -570,7 +594,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await this.#replaceMediaConnectionForRecovery(generation);
   }
 
-  async #replaceMediaConnectionForRecovery(generation: number, options: MediaConnectionRecoveryOptions = {}): Promise<void> {
+  async #replaceMediaConnectionForRecovery(generation: number): Promise<void> {
     this.#requireGeneration(generation);
     if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
       throw new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed");
@@ -585,10 +609,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const connectionEpoch = ++this.#connectionEpoch;
     this.#disposeConnection(false);
     this.#reusableLocalTransceivers.clear();
-    if (!options.preserveRemoteTracks) {
-      this.#clearRemoteTracks();
-      this.#cursor = null;
-    }
+    this.#clearRemoteTracks();
+    this.#cursor = null;
     this.#bootstrap = bootstrap;
     this.#connection = this.#createPeerConnection(bootstrap);
     this.#negotiatedGeneration = null;
@@ -609,6 +631,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #observeRemotePublicationCursor(cursor: PublicationCursor): void {
     this.#cursor = cursor;
     this.#publishSnapshot();
+  }
+
+  #quarantineInvalidRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): void {
+    if (!Number.isSafeInteger(authoritative.incarnation) || authoritative.incarnation < 0 || !Number.isSafeInteger(authoritative.sequence) || authoritative.sequence < 0) return;
+    this.#observeRemotePublicationCursor({ incarnation: authoritative.incarnation, sequence: authoritative.sequence, signature: INVALID_PUBLICATION_SIGNATURE });
   }
 
   #isRetryableConnectionFailure(error: unknown): boolean {
