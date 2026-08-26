@@ -27,6 +27,28 @@ func TestAddTracksPreservesSDPTermination(t *testing.T) {
 	}
 }
 
+func TestUpdateTracksValidatesAndDelegates(t *testing.T) {
+	plane := &signalingPlaneStub{}
+	service := NewServiceForProvider(ProviderCloudflareSFU, plane)
+	input := TracksRequest{
+		ConnectionID:       " reused_connection ",
+		SessionDescription: &SessionDescription{Type: "offer", SDP: "v=0\r\n"},
+		Tracks:             []Track{{Location: "local", Mid: " 1 ", TrackName: " camera-republished ", Source: " camera "}},
+	}
+
+	if _, err := service.UpdateTracks(context.Background(), input); err != nil {
+		t.Fatalf("update tracks: %v", err)
+	}
+	if plane.updateRequest.ConnectionID != "reused_connection" || plane.updateRequest.Tracks[0].Mid != "1" || plane.updateRequest.Tracks[0].TrackName != "camera-republished" {
+		t.Fatalf("update request = %#v, want normalized reused transceiver", plane.updateRequest)
+	}
+
+	unsupported := NewServiceForProvider(ProviderCloudflareSFU, &planeStub{})
+	if _, err := unsupported.UpdateTracks(context.Background(), input); !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("unsupported update error = %v, want %v", err, ErrUnsupportedOperation)
+	}
+}
+
 func TestCloseTracksValidatesAndDelegates(t *testing.T) {
 	plane := &signalingPlaneStub{
 		closeResponse: CloseTracksResponse{
@@ -148,6 +170,7 @@ func TestCloseTracksReturnsUnsupportedForNonSignalingPlane(t *testing.T) {
 
 type signalingPlaneStub struct {
 	tracksRequest TracksRequest
+	updateRequest TracksRequest
 	closeRequest  CloseTracksRequest
 	closeResponse CloseTracksResponse
 }
@@ -174,6 +197,11 @@ func (s *signalingPlaneStub) EpisodeUsage(context.Context, EpisodeUsageInput) (U
 
 func (s *signalingPlaneStub) AddTracks(_ context.Context, input TracksRequest) (TracksResponse, error) {
 	s.tracksRequest = input
+	return TracksResponse{}, nil
+}
+
+func (s *signalingPlaneStub) UpdateTracks(_ context.Context, input TracksRequest) (TracksResponse, error) {
+	s.updateRequest = input
 	return TracksResponse{}, nil
 }
 

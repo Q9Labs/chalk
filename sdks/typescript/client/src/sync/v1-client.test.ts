@@ -560,15 +560,52 @@ describe("V1SyncClient", () => {
     expect(socket.sent.length).toBe(sentBefore);
   });
 
-  it("retries the local MediaPlane with one operation ID and bounds retry exhaustion", async () => {
+  it("retries local connection replacement with exponential backoff before the live-target deadline", async () => {
+    const clock = new TestClock();
     const mediaPlane = new TestMediaPlane();
-    mediaPlane.results.push({ outcome: "retryable_failure", errorCode: "device_busy" }, { outcome: "retryable_failure", errorCode: "device_busy" }, { outcome: "retryable_failure", errorCode: "device_busy" }, { outcome: "retryable_failure", errorCode: "device_busy" });
-    const { client, socket } = await liveClient({ mediaPlane, retryDelayMs: 0 });
+    mediaPlane.results.push(
+      { outcome: "retryable_failure", errorCode: "connection_retired" },
+      { outcome: "retryable_failure", errorCode: "connection_retired" },
+      { outcome: "retryable_failure", errorCode: "connection_retired" },
+      { outcome: "retryable_failure", errorCode: "connection_retired" },
+      { outcome: "retryable_failure", errorCode: "connection_retired" },
+      { outcome: "confirmed", errorCode: null },
+    );
+    const { client, socket } = await liveClient({ clock, mediaPlane });
     const result = client.setCameraEnabled(true, { requestId: commandIds[0] });
     socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
-    await expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
-    expect(mediaPlane.targets).toHaveLength(4);
+    await settle();
+
+    for (const delay of [100, 200, 400, 800, 1_000]) {
+      clock.advance(delay);
+      await settle();
+    }
+
+    await expect(result).resolves.toMatchObject({ serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" });
+    expect(mediaPlane.targets).toHaveLength(6);
     expect(new Set(mediaPlane.targets.map((target) => target.operationId))).toEqual(new Set([commandIds[0]]));
+    client.stop();
+  });
+
+  it("rejects local retries only after the live-target budget is exhausted", async () => {
+    const clock = new TestClock();
+    const mediaPlane = new TestMediaPlane();
+    mediaPlane.results.push(...Array.from<V1MediaPlaneResult>({ length: 19 }, () => ({ outcome: "retryable_failure", errorCode: "connection_retired" })));
+    const { client, socket } = await liveClient({ clock, mediaPlane });
+    const result = client.setCameraEnabled(true, { requestId: commandIds[0] });
+    socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
+    await settle();
+
+    const rejected = expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
+    for (const delay of [100, 200, 400, 800, ...Array.from({ length: 13 }, () => 1_000)]) {
+      clock.advance(delay);
+      await settle();
+    }
+    expect(mediaPlane.targets).toHaveLength(18);
+    clock.advance(500);
+    await rejected;
+    expect(mediaPlane.targets).toHaveLength(18);
+    client.stop();
   });
 
   it("fails ambiguous local outcomes and does not execute twice for duplicate server results", async () => {
@@ -643,6 +680,45 @@ describe("V1SyncClient", () => {
     mediaPlane.complete({ outcome: "confirmed", errorCode: null });
 
     await expect(result).resolves.toMatchObject({ serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" });
+  });
+
+  it("starts the local MediaPlane retry budget when late server authorization begins", async () => {
+    const clock = new TestClock();
+    const mediaPlane = new TestMediaPlane();
+    mediaPlane.results.push({ outcome: "retryable_failure", errorCode: "device_busy" }, { outcome: "confirmed", errorCode: null });
+    const { client, socket } = await liveClient({ clock, mediaPlane });
+    const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
+
+    clock.advance(14_999);
+    socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
+    await settle();
+    clock.advance(100);
+    await settle();
+
+    await expect(result).resolves.toMatchObject({ serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" });
+    expect(mediaPlane.targets).toHaveLength(2);
+    client.stop();
+  });
+
+  it("rejects a hung authorized local MediaPlane operation and ignores its late result", async () => {
+    const clock = new TestClock();
+    const mediaPlane = new BlockingMediaPlane();
+    const { client, socket } = await liveClient({ clock, mediaPlane });
+    const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
+
+    clock.advance(14_999);
+    socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
+    await settle();
+    const rejected = expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
+
+    clock.advance(15_000);
+    await rejected;
+    expect(client.getSnapshot().localMedia.camera).toBe("failed");
+
+    mediaPlane.complete({ outcome: "confirmed", errorCode: null });
+    await settle();
+    expect(client.getSnapshot().localMedia.camera).toBe("failed");
+    client.stop();
   });
 
   it("projects bounded local and remote MediaPlane observations without a remote control surface", async () => {
@@ -996,6 +1072,66 @@ describe("V1SyncClient", () => {
     client.stop();
   });
 
+  it("reconnects and replays a durable command when send races a deferred close callback", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 0,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    await client.start();
+    sockets[0]!.open();
+    await settle();
+    await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+
+    sockets[0]!.deferClose = true;
+    sockets[0]!.writable = false;
+    const operation = client.setHandRaised(true, { commandId: commandIds[0] });
+    await settle();
+
+    expect(client.getSnapshot().connection.phase).toBe("connecting");
+    expect(sockets[0]!.closeCalls).toContainEqual({ code: 4000, reason: "transport_send_failed" });
+    clock.advance(0);
+    await settle();
+    expect(sockets).toHaveLength(2);
+    sockets[1]!.open();
+    await settle();
+    await recoverSocket(client, sockets[1]!, state, snapshot, "up_to_date");
+    expect(operationFrames(sockets[1]!, commandIds[0])).toHaveLength(1);
+
+    sockets[1]!.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "satisfied", revision: state.revision, state_digest: state.stateDigest });
+    await expect(operation).resolves.toMatchObject({ outcome: "satisfied" });
+    sockets[0]!.flushClose();
+    await settle();
+    expect(client.getSnapshot().connection.phase).toBe("live");
+    client.stop();
+  });
+
+  it("rejects an ephemeral request normally when send races a deferred close callback", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock, reconnectDelayMs: 0 });
+    socket.deferClose = true;
+    socket.writable = false;
+
+    const request = client.requestStartCamera(peerId, { requestId: commandIds[0] });
+    await expect(request).rejects.toMatchObject({ code: "disconnected_before_delivery" });
+    expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "transport_send_failed" });
+    expect(client.getSnapshot().connection.phase).toBe("connecting");
+    socket.flushClose();
+    client.stop();
+  });
+
   it("persists v1 targets in an isolated React Native namespace and fails closed without IndexedDB", async () => {
     const storage = new TestAsyncStorage();
     const store = new AsyncStorageV1PendingTargetStore({ scope: "space/episode", storage });
@@ -1331,14 +1467,29 @@ class TestSocket implements SyncSocket {
   onerror: (() => void) | null = null;
   readonly closeCalls: { readonly code: number; readonly reason: string | undefined }[] = [];
   readonly sent: string[] = [];
+  writable = true;
+  deferClose = false;
+  #deferredCloseCode: number | undefined;
 
   send(data: string): void {
+    if (!this.writable) throw new Error("WebSocket is not open.");
     this.sent.push(data);
   }
 
   close(code = 1000, reason?: string): void {
     this.closeCalls.push({ code, reason });
+    if (this.deferClose) {
+      this.writable = false;
+      this.#deferredCloseCode = code;
+      return;
+    }
     this.onclose?.({ code });
+  }
+
+  flushClose(): void {
+    const code = this.#deferredCloseCode;
+    this.#deferredCloseCode = undefined;
+    if (code !== undefined) this.onclose?.({ code });
   }
 
   error(): void {

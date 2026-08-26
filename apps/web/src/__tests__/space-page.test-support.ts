@@ -83,7 +83,7 @@ const spacePageTestMocks = vi.hoisted(() => {
         },
     ),
     createPublicInviteClient: vi.fn(() => publicClient),
-    createPreparedPublicSpace: vi.fn(() => prepared),
+    createPreparedPublicSpace: vi.fn((_client: unknown, _arrival: unknown, _options?: { readonly reenter?: () => Promise<unknown> }) => prepared),
     joinDashboardSpace: vi.fn(() => dashboardAccess),
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
     listSpaces: vi.fn(async () => ({ spaces: [{ slug: "design-lab", metadata: { description: "A calm design review Space." } }], pagination: { page_size: 100, next_cursor: null, has_more: false } })),

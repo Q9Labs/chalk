@@ -86,8 +86,15 @@ test("maps requested surfaces and excludes migration metadata and generated outp
   assert.equal(surfaceFor("README.md"), "root");
   assert.equal(exclusionReason("GLOSSARY.md"), "migration reference or checklist");
   assert.equal(exclusionReason("apps/api/db/migrations/20260701000000_legacy_resource.sql"), "immutable migration history");
-  assert.equal(exclusionReason("sdks/typescript/client/src/media/rtk.ts"), "provider SDK vocabulary adapter");
-  assert.equal(exclusionReason("sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts"), "provider SDK vocabulary adapter");
+  assert.equal(exclusionReason("apps/api/internal/adapters/cloudflare/sfu/adapter.go"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("apps/api/internal/adapters/cloudflare/sfu/adapter_test.go"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("apps/api/internal/httpapi/sfu_signaling_observation_test.go"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("sdks/typescript/client/src/media/client.ts"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("sdks/typescript/client/src/media/cloudflare-sfu.test.ts"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("sdks/typescript/client/src/media/rtk.ts"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("sdks/typescript/client/src/media/transport.ts"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("sdks/typescript/client/src/media/types.ts"), "provider vocabulary adapter");
+  assert.equal(exclusionReason("sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts"), "provider vocabulary adapter");
   assert.equal(exclusionReason("apps/api/internal/adapters/postgres/sqlc/models.go"), "generated or vendored directory");
   assert.equal(exclusionReason("sdks/typescript/client/src/generated/http-api.ts"), "generated file or directory");
   assert.equal(exclusionReason("pnpm-lock.yaml"), "lockfile or dependency checksum");

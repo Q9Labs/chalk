@@ -21,7 +21,14 @@ import { randomBytes } from "node:crypto";
 const repoRoot = join(fileURLToPath(import.meta.url), "..", "..", "..");
 const runtimeRoot = join(repoRoot, ".private", "chalk-perf");
 
-const PORTS = { api: 18080, sync: 4100, web: 13070, postgres: 5432, redis: 6380, objectStorage: 19000 };
+const PORTS = {
+  api: 18080,
+  sync: 4100,
+  web: 13070,
+  postgres: validatedPort(process.env.CHALK_PERF_POSTGRES_PORT, 5432, "CHALK_PERF_POSTGRES_PORT"),
+  redis: 6380,
+  objectStorage: 19000,
+};
 const DATABASE_NAME = validatedDatabaseName(process.env.CHALK_PERF_DATABASE_NAME ?? "chalk_perf_profile");
 const POSTGRES_CONTAINER = process.env.CHALK_POSTGRES_CONTAINER ?? "chalk-postgres";
 const POSTGRES_VOLUME = process.env.CHALK_POSTGRES_VOLUME ?? "chalk-postgres";
@@ -47,6 +54,15 @@ function validatedDatabaseName(candidate) {
     throw new Error(`CHALK_PERF_DATABASE_NAME must be a PostgreSQL identifier, received ${JSON.stringify(candidate)}`);
   }
   return candidate;
+}
+
+function validatedPort(candidate, fallback, name) {
+  if (candidate === undefined || candidate === "") return fallback;
+  const port = Number(candidate);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${name} must be an integer from 1 through 65535, received ${JSON.stringify(candidate)}`);
+  }
+  return port;
 }
 
 function log(message) {

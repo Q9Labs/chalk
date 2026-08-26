@@ -28,7 +28,7 @@ defmodule ChalkSync.Live.EpisodeTest do
   end
 
   defmodule UnavailableMediaPlane do
-    def observe_episode_publications(_adapter, _episode), do: raise("observation failed")
+    def observe_episode_publications(_adapter, _episode, _cursor), do: raise("observation failed")
 
     def grant_publication(_adapter, _operation_id, _episode, _participant_id, _source),
       do: Process.sleep(:infinity)
@@ -110,6 +110,63 @@ defmodule ChalkSync.Live.EpisodeTest do
       end)
 
     assert length(grants) == 2
+  end
+
+  test "ambiguous revoke converges to confirmed with the same operation id", %{
+    adapter: adapter
+  } do
+    operation_id = "camera-ambiguous-revoke-01"
+    MediaPlaneTestAdapter.put_outcome(adapter, :revoke_publication, :ambiguous)
+    identity = identity()
+    state = Episode.new(identity.episode)
+    disabled = %{target(operation_id) | enabled: false}
+
+    assert {state,
+            %{
+              "outcome" => "retryable_failure",
+              "error_code" => "dependency_unavailable"
+            }} = Episode.live_target(state, identity, disabled)
+
+    MediaPlaneTestAdapter.put_outcome(adapter, :revoke_publication, :confirmed)
+
+    assert {_state, %{"outcome" => "confirmed"}} =
+             Episode.live_target(state, identity, disabled)
+
+    revokes =
+      Enum.filter(MediaPlaneTestAdapter.calls(adapter), fn {operation, id, _arguments} ->
+        operation == :revoke_publication and id == operation_id
+      end)
+
+    assert length(revokes) == 2
+  end
+
+  test "reconciliation forwards the previous media observation cursor", %{adapter: adapter} do
+    identity = identity()
+    episode = identity.episode
+
+    MediaPlaneTestAdapter.put_outcome(
+      adapter,
+      :observe_episode_publications,
+      {:ok, %{incarnation: 4, sequence: 8, publications: []}}
+    )
+
+    assert {:ok, state, _frames} = Episode.reconcile(Episode.new(episode))
+
+    MediaPlaneTestAdapter.put_outcome(
+      adapter,
+      :observe_episode_publications,
+      {:ok, %{incarnation: 4, sequence: 9, publications: []}}
+    )
+
+    assert {:ok, _state, _frames} = Episode.reconcile(state)
+
+    assert [
+             {:observe_episode_publications, nil, [^episode, nil]},
+             {:observe_episode_publications, nil, [^episode, {4, 8}]}
+           ] =
+             Enum.filter(MediaPlaneTestAdapter.calls(adapter), fn {operation, _, _arguments} ->
+               operation == :observe_episode_publications
+             end)
   end
 
   test "provider bridge disable and enable requests include the live authority generation" do

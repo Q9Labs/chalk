@@ -231,7 +231,11 @@ defmodule ChalkSync.Live.Episode do
 
   defp observe_media(module, adapter, state) do
     MediaPlaneCall.invoke(fn ->
-      module.observe_episode_publications(adapter, state.episode)
+      module.observe_episode_publications(
+        adapter,
+        state.episode,
+        state.media_observation_cursor
+      )
     end)
     |> observed_media_result()
   end
@@ -304,6 +308,7 @@ defmodule ChalkSync.Live.Episode do
             )
           end)
           |> provider_outcome()
+          |> retryable_provider_outcome()
 
         state = maybe_release_screen_lease(state, authority, source, false, outcome)
         {state, live_result(target, outcome)}

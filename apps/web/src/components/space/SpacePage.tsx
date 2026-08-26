@@ -91,7 +91,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
             return;
           }
           if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
-          const prepared = result.prepared ?? createPreparedPublicSpace(client, arrival);
+          const prepared = preparePublicSpace(client, arrival, normalizedDisplayName);
           complete(prepared, inviteLink, spaceName);
         })
         .catch((cause: unknown) => {
@@ -119,7 +119,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
         }
         if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
         const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName);
-        const prepared = createPreparedPublicSpace(client, resumed);
+        const prepared = preparePublicSpace(client, resumed, displayName);
         if (cancelled || !active.current) {
           await prepared.finish().catch(() => undefined);
           return;
@@ -220,7 +220,6 @@ type PublicPreparation = {
   readonly canonicalSlug: string;
   readonly inviteLink: string;
   readonly spaceName: string;
-  readonly prepared?: SpaceEntryAccess;
 };
 type DashboardPreparation = { readonly kind: "dashboard"; readonly access: SpaceEntryAccess; readonly inviteLink?: string; readonly spaceName: string };
 
@@ -234,18 +233,32 @@ async function arrive(client: PublicInviteClient, displayName: string, slug: str
   }
 
   const created = await client.createPublicSpace(displayName);
-  const prepared = createPreparedPublicSpace(client, created.arrival);
   const inviteLink = verifiedSpaceInviteLink(created.space.slug, created.invite_link);
-  return { kind: "public", arrival: created.arrival, canonicalSlug: created.space.slug, inviteLink, spaceName: created.space.name, prepared };
+  return { kind: "public", arrival: created.arrival, canonicalSlug: created.space.slug, inviteLink, spaceName: created.space.name };
 }
 
 async function releasePublicPreparation(client: PublicInviteClient, preparation: PublicPreparation): Promise<void> {
-  if (preparation.prepared) {
-    await preparation.prepared.finish();
-    return;
-  }
   const arrivalHandle = preparation.arrival.arrival_handle;
   if (arrivalHandle) await client.leaveSpacePublicInviteArrival(arrivalHandle);
+}
+
+function preparePublicSpace(client: PublicInviteClient, arrival: PublicPreparation["arrival"], displayName: string): PreparedPublicSpace {
+  return createPreparedPublicSpace(client, arrival, { reenter: () => reenterPublicSpace(client, displayName) });
+}
+
+async function reenterPublicSpace(client: PublicInviteClient, displayName: string): Promise<PublicPreparation["arrival"]> {
+  const inviteToken = spaceInviteToken();
+  if (!inviteToken) throw new Error(neutralSpaceError);
+  let arrival = await client.arriveBySpacePublicInvite(inviteToken, displayName.trim());
+  while (arrival.state === "pending") {
+    const arrivalHandle = arrival.arrival_handle;
+    if (!arrivalHandle) throw new Error(neutralSpaceError);
+    await new Promise((resolve) => globalThis.setTimeout(resolve, retryDelay(arrival.retry_after)));
+    arrival = await client.getSpacePublicInviteArrival(arrivalHandle);
+  }
+  if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
+  if (arrival.access) return arrival;
+  return resumePendingArrival(client, { arrival, inviteLink: "", spaceName: arrival.space?.name ?? "Space" }, displayName);
 }
 
 async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: string): Promise<void> {
@@ -388,7 +401,6 @@ function LocalSpace({
         inviteLink={inviteLink}
         diagnosticReference={diagnostics.reference}
         onEpisodeEnded={releaseFromLifecycle}
-        onLeft={releaseFromLifecycle}
         onOpenDiagnostics={diagnostics.path ? openDiagnostics : undefined}
       />
     </main>

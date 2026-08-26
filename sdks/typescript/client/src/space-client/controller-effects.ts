@@ -58,7 +58,7 @@ export function uploadFileEffect(file: ChatUploadFile, input: { readonly connect
       return input.connection.runPortCommand(() =>
         foreign(() => input.chatFiles!.initiateUpload({ clientAttachmentId, fileName, mimeType: mimeType as ChatAttachment["mimeType"], byteLength: bytes.byteLength, sha256: digest })).pipe(
           Effect.flatMap((upload) =>
-            foreign(() => input.fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
+            foreign(() => invokeFetch(input.fetch, upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
               Effect.flatMap((response) => (response.ok ? foreign(() => input.chatFiles!.finalizeUpload(upload.uploadId)) : Effect.fail(new SpaceClientError({ code: "command.rejected", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}` })))),
             ),
           ),
@@ -72,8 +72,11 @@ export function uploadFileEffect(file: ChatUploadFile, input: { readonly connect
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
+function invokeFetch(fetchImplementation: typeof globalThis.fetch, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return fetchImplementation(input, init);
+}
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
-  return "bytes" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
+  return "arrayBuffer" in file ? foreign(() => file.arrayBuffer()) : Effect.succeed(file.bytes);
 }
 
 export type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, MediaRequestKind, Reaction };

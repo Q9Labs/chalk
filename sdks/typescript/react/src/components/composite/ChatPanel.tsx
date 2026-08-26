@@ -9,8 +9,10 @@ import { ChalkAlert, ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEm
 import { useSkin } from "../skin-context";
 import { ClassicChatPanel } from "./ClassicChatPanel";
 import { MessageBubble } from "./MessageBubble";
-import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
+import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
+import { describeChatUploadFile } from "./chat-upload-file";
+import { useChatScrollReader } from "./use-chat-scroll-reader";
 
 export type { ChatMessage } from "./chat-types";
 
@@ -191,18 +193,7 @@ const ChatPanelSurface = React.memo(
       }
     };
 
-    const handleScroll = () => {
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const atBottom = isChatScrollAtBottom(scroller);
-      isAtBottomRef.current = atBottom;
-      if (atBottom) {
-        if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
-        return;
-      }
-      const visibleSequence = latestVisibleChatSequence(scroller);
-      if (visibleSequence) markChatSequenceRead(visibleSequence, lastMarkedSequenceRef, onMarkRead);
-    };
+    const handleScroll = useChatScrollReader({ scrollRef, isAtBottomRef, lastMarkedSequenceRef, latestSequence, onMarkRead });
 
     return (
       <ChalkPanel className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent p-0 text-[var(--chalk-app-text)]", className)} contentClassName="flex h-full min-h-0 flex-col" role="complementary" aria-label="Chat panel">
@@ -401,8 +392,3 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
 });
 
 ChatPanel.displayName = "ChatPanel";
-
-function describeChatUploadFile(file: ChatUploadFile): { readonly fileName: string; readonly mimeType: string; readonly byteLength: number } {
-  if ("bytes" in file) return { fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };
-  return { fileName: file.name, mimeType: file.type, byteLength: file.size };
-}

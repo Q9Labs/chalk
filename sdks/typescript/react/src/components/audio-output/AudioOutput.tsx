@@ -45,7 +45,8 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   const contextParticipants = useMemo(() => toAudioParticipants(media.remote), [media.remote]);
   const effectiveParticipants = participants ?? contextParticipants;
   const effectiveAudioOutputDeviceId = audioOutputDeviceId ?? media.selection.speaker ?? undefined;
-  const effectiveGetParticipantVolume = getParticipantVolume ?? ((participantId: string) => (volumeContext?.volumes.get(participantId) ?? 100) / 100);
+  const contextParticipantVolume = useCallback((participantId: string) => (volumeContext?.volumes.get(participantId) ?? 100) / 100, [volumeContext]);
+  const effectiveGetParticipantVolume = getParticipantVolume ?? contextParticipantVolume;
   // Map of participant ID -> audio element (mic audio)
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   // Map of participant ID -> audio element (screen share audio)
@@ -81,27 +82,35 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   );
 
   // Filter to remote participants with valid audio tracks
-  const remoteWithAudio = effectiveParticipants.filter((p) => {
-    if (p.isLocal) return false;
-    if (!p.audioTrack) return false;
-    try {
-      return p.audioTrack.readyState === "live";
-    } catch {
-      // Track may have been disposed
-      return false;
-    }
-  });
+  const remoteWithAudio = useMemo(
+    () =>
+      effectiveParticipants.filter((p) => {
+        if (p.isLocal) return false;
+        if (!p.audioTrack) return false;
+        try {
+          return p.audioTrack.readyState === "live";
+        } catch {
+          // Track may have been disposed
+          return false;
+        }
+      }),
+    [effectiveParticipants],
+  );
 
   // Filter to remote participants with valid screen share audio tracks
-  const remoteWithScreenShareAudio = effectiveParticipants.filter((p) => {
-    if (p.isLocal) return false;
-    if (!p.screenShareAudioTrack) return false;
-    try {
-      return p.screenShareAudioTrack.readyState === "live";
-    } catch {
-      return false;
-    }
-  });
+  const remoteWithScreenShareAudio = useMemo(
+    () =>
+      effectiveParticipants.filter((p) => {
+        if (p.isLocal) return false;
+        if (!p.screenShareAudioTrack) return false;
+        try {
+          return p.screenShareAudioTrack.readyState === "live";
+        } catch {
+          return false;
+        }
+      }),
+    [effectiveParticipants],
+  );
 
   const unlockEvents = useMemo(() => ["pointerdown", "touchend", "click", "keydown"] as const, []);
 

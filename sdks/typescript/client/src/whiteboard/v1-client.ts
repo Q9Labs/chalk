@@ -40,6 +40,7 @@ type OperationEntry = {
 type SnapshotAssembly = {
   readonly requestId: string;
   readonly deferred: Deferred<void>;
+  readonly promise: Promise<void>;
   sceneId?: string;
   revision?: string;
   pageCount?: number;
@@ -60,6 +61,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #pendingStoreWrites = new Set<Promise<void>>();
   readonly #operationRetryTimers = new Map<string, unknown>();
   readonly #snapshots = new Map<string, SnapshotAssembly>();
+  readonly #snapshotBlockedOperationIds = new Set<string>();
   readonly #updateAssembler = new WhiteboardV1UpdateAssembler();
   readonly #updateAssemblyTimers = new Map<string, unknown>();
   #socket: SyncSocket | null = null;
@@ -182,6 +184,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   sendCursor(input: { readonly x: number; readonly y: number }): void {
     if (this.#phase !== "live" || !this.#canDraw) return;
+    if (this.#snapshots.size > 0) return;
     const now = this.#now();
     if (now - this.#lastCursorAt < 1000 / WhiteboardV1ProtocolLimits.cursorRatePerSecond) return;
     const frame = { type: "cursor", x: input.x, y: input.y } as const;
@@ -220,11 +223,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   async setPresentation(presenting: boolean): Promise<void> {
-    this.#assertLive("set_presentation");
+    if (!this.#started || this.#phase === "idle" || this.#phase === "stopped") {
+      throw error(failure("set_presentation", "unavailable", true, "Whiteboard is not connected."));
+    }
     if (!this.#presentationSupported) {
       throw error(failure("set_presentation", "unavailable", true, "Whiteboard presentation is unavailable on this Sync server."));
     }
-    if (!this.#canDraw || !this.#capabilities.includes("drawWhiteboard")) {
+    if (this.#phase === "live" && (!this.#canDraw || !this.#capabilities.includes("drawWhiteboard"))) {
       throw error(failure("set_presentation", "permission_denied", false, "Whiteboard draw permission is required."));
     }
     const frame = {
@@ -297,7 +302,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = "authenticating";
-      this.#presentationSupported = false;
       const cursor = this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null;
       this.#send(this.#useLegacyHello ? { type: "hello", protocol: "whiteboard-v1", token, cursor } : { type: "hello", protocol: "whiteboard-v1", token, cursor, extensions: [{ name: "presentation_v1" }] });
     } catch {
@@ -447,6 +451,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #requestSnapshot(): Promise<void> {
+    for (const snapshot of this.#snapshots.values()) return snapshot.promise;
     const requestId = this.#nextId();
     const frame = { type: "request_snapshot", request_id: requestId } as const;
     encodeWhiteboardV1ClientFrame(frame);
@@ -454,7 +459,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const promise = new Promise<void>((resolve, reject) => {
       deferred = { resolve, reject, settled: false };
     });
-    this.#snapshots.set(requestId, { requestId, deferred, pages: new Map() });
+    this.#snapshots.set(requestId, { requestId, deferred, promise, pages: new Map() });
     this.#send(frame);
     return promise;
   }
@@ -501,11 +506,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       resolveDeferred(this.#initialSnapshot, undefined);
       this.#initialSnapshot = null;
     }
+    this.#flushSnapshotBlockedOperations();
   }
 
   async #queueOperation(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_presentation" }>): Promise<ChalkWhiteboardV1Commit> {
     this.#assertOperationCapacity();
     whiteboardV1OperationFrames(frame);
+    const snapshotInFlight = this.#snapshots.size > 0;
     const pending = {
       operationId: frame.operation_id,
       frame,
@@ -537,7 +544,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       deferred = { resolve, reject, settled: false };
     });
     this.#operations.set(frame.operation_id, { pending, deferred, retries: 0 });
-    this.#sendOperation(frame);
+    if (this.#phase === "live") {
+      if (snapshotInFlight || this.#snapshots.size > 0) {
+        this.#snapshotBlockedOperationIds.add(frame.operation_id);
+        this.#flushSnapshotBlockedOperations();
+      } else this.#sendOperation(frame);
+    }
     return promise;
   }
 
@@ -545,6 +557,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#requireLive();
     const entry = this.#operations.get(frame.operation_id);
     if (!entry) return;
+    this.#snapshotBlockedOperationIds.delete(frame.operation_id);
     this.#operations.delete(frame.operation_id);
     this.#clearOperationRetryTimer(frame.operation_id);
     this.#sceneId = frame.scene_id;
@@ -570,6 +583,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         return;
       }
       this.#operations.delete(frame.correlation_id);
+      this.#snapshotBlockedOperationIds.delete(frame.correlation_id);
       this.#clearOperationRetryTimer(frame.correlation_id);
       this.#awaitingOperationIds.delete(frame.correlation_id);
       entry.deferred && rejectDeferred(entry.deferred, error(failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message)));
@@ -588,6 +602,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       rejectDeferred(this.#initialSnapshot, snapshotError);
       this.#initialSnapshot = null;
     }
+    this.#flushSnapshotBlockedOperations();
   }
 
   #scheduleOperationRetry(operationId: string, entry: OperationEntry): void {
@@ -684,7 +699,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #send(frame: WhiteboardV1ClientFrame): void {
-    this.#socket?.send(encodeWhiteboardV1ClientFrame(frame));
+    const socket = this.#socket;
+    if (!socket) return;
+    try {
+      socket.send(encodeWhiteboardV1ClientFrame(frame));
+    } catch {
+      try {
+        socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard send recovery required");
+      } finally {
+        this.#disconnected(socket, CLIENT_RESTART_CLOSE_CODE);
+      }
+    }
   }
 
   #sendOperation(frame: ChalkWhiteboardV1PendingOperation["frame"]): void {
@@ -734,6 +759,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #rejectSnapshots(value: ChalkWhiteboardV1Failure): void {
     for (const assembly of this.#snapshots.values()) rejectDeferred(assembly.deferred, error(value));
     this.#snapshots.clear();
+    this.#snapshotBlockedOperationIds.clear();
+  }
+
+  #flushSnapshotBlockedOperations(): void {
+    if (this.#snapshots.size > 0 || this.#phase !== "live" || this.#snapshotBlockedOperationIds.size === 0) return;
+    const blockedOperationIds = [...this.#snapshotBlockedOperationIds];
+    this.#snapshotBlockedOperationIds.clear();
+    for (const operationId of blockedOperationIds) {
+      const entry = this.#operations.get(operationId);
+      if (entry) this.#sendOperation(entry.pending.frame);
+    }
   }
 
   #rejectOperationCallers(value: ChalkWhiteboardV1Failure): void {

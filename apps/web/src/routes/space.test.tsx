@@ -33,13 +33,13 @@ describe("public Space route entry", () => {
     expect(mocks.holder.chalkProps).toMatchObject({ inviteLink: window.location.href, spaceName: "Design Lab" });
   });
 
-  it("leaves a public arrival when Chalk reports that the Participant left", async () => {
+  it("leaves a public arrival when Chalk reports that the Episode ended", async () => {
     window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     render(<SpacePage slug="design-lab" />);
     continueWithName("Ada");
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
 
-    (mocks.holder.chalkProps?.onLeft as () => void)();
+    (mocks.holder.chalkProps?.onEpisodeEnded as () => void)();
     await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalled());
     expect(spacePageTestArrival.arrival_handle).toBe("arrival-11111111");
   });

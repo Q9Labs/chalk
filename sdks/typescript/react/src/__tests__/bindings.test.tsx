@@ -156,6 +156,20 @@ describe("React bindings", () => {
     await waitFor(() => expect(client.join).toHaveBeenLastCalledWith({ microphone: true, camera: true }));
   });
 
+  it("rejoins the supplied client after an ordinary leave", async () => {
+    const client = createTestClient();
+    const view = render(<Chalk client={client} entrance={false} />);
+    await waitFor(() => expect(client.join).toHaveBeenCalledOnce());
+    client.join.mockClear();
+
+    act(() => client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "live" } }));
+    act(() => client.setSnapshot({ ...client.getSnapshot(), connection: { ...client.getSnapshot().connection, status: "left" } }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(client.join).toHaveBeenCalledWith({ microphone: true, camera: true }));
+    expect(client.dispose).not.toHaveBeenCalled();
+  });
+
   it("shows a retry status when walk-straight-in join rejects before the client reports failure", async () => {
     const client = createTestClient();
     client.join = vi.fn(async () => {

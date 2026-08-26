@@ -99,6 +99,53 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              )
   end
 
+  test "publishes cursors during snapshot recovery and completes the snapshot" do
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :recovering,
+        identity: identity(),
+        display_name: "Ada",
+        scene_id: @scene_id,
+        revision: 4,
+        snapshot: %{
+          request_id: "snapshot-0000000001",
+          scene_id: @scene_id,
+          revision: "5",
+          acknowledged_page: -1,
+          remaining: []
+        }
+    }
+
+    assert {:ok, recovering} =
+             SocketWhiteboardV1.handle_in(
+               {JSON.encode!(%{"type" => "cursor", "x" => 1, "y" => 2}), [opcode: :text]},
+               state
+             )
+
+    assert recovering.phase == :recovering
+    assert recovering.snapshot == state.snapshot
+    assert recovering.cursor_window_count == 1
+
+    assert {:ok, completed} =
+             SocketWhiteboardV1.handle_in(
+               {JSON.encode!(%{
+                  "type" => "snapshot_ack",
+                  "request_id" => "snapshot-0000000001",
+                  "scene_id" => @scene_id,
+                  "revision" => "5",
+                  "page" => 0
+                }), [opcode: :text]},
+               recovering
+             )
+
+    assert completed.phase == :live
+    assert completed.snapshot == nil
+    assert completed.scene_id == @scene_id
+    assert completed.revision == 5
+  end
+
   test "delivers presentation frames only to negotiated sockets" do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 

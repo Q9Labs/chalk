@@ -81,10 +81,13 @@ describe("ChatController", () => {
       finalizeUpload: vi.fn(async () => ({ attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain" as const, byteLength: 5 })),
       getDownloadUrl: vi.fn(),
     };
-    const fetch = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetch = vi.fn(function (this: unknown) {
+      expect(this).toBeUndefined();
+      return Promise.resolve(new Response(null, { status: 200 }));
+    });
     const harness = createHarness(upload, fetch);
 
-    await expect(harness.runtime.runPromise(harness.controller.upload({ fileName: "note.txt", mimeType: "text/plain", bytes: new TextEncoder().encode("hello").buffer }))).resolves.toMatchObject({ attachmentId: "attachment-1" });
+    await expect(harness.runtime.runPromise(harness.controller.upload(new BrowserFileWithBytes()))).resolves.toMatchObject({ attachmentId: "attachment-1" });
     expect(upload.initiateUpload).toHaveBeenCalledWith(expect.objectContaining({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }));
     expect(fetch).toHaveBeenCalledWith("https://upload.test/object", expect.objectContaining({ headers: { "content-type": "text/plain" } }));
     expect(upload.finalizeUpload).toHaveBeenCalledWith("upload-1");
@@ -107,6 +110,20 @@ describe("ChatController", () => {
     diagnostics.dispose();
   });
 });
+
+class BrowserFileWithBytes {
+  readonly name = "note.txt";
+  readonly type = "text/plain";
+  readonly size = 5;
+
+  arrayBuffer(): Promise<ArrayBuffer> {
+    return Promise.resolve(new TextEncoder().encode("hello").buffer);
+  }
+
+  bytes(): Promise<Uint8Array> {
+    return Promise.resolve(new TextEncoder().encode("hello"));
+  }
+}
 
 function createHarness(transport: ChalkChatFileTransport | null = null, fetch?: typeof globalThis.fetch, episodeDiagnostics?: EpisodeDiagnosticRuntime) {
   const store = new SpaceStore();

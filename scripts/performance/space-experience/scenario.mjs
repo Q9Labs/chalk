@@ -10,7 +10,7 @@ const PANEL_DEFINITIONS = Object.freeze({
   settings: { control: /^Settings$/i, surface: '[role="dialog"][aria-label="Settings"], [data-tour="settings-panel"]' },
   info: { control: /^Space information$/i, surface: '[role="dialog"][aria-label="Space details"], [role="dialog"][aria-labelledby]' },
   reactions: { control: /^(Reactions|React)$/i, surface: '[role="toolbar"][aria-label="Reactions"], [aria-label="Reaction picker"]' },
-  whiteboard: { control: /^(Whiteboard|Board)$/i, surface: '[aria-label="Shared whiteboard"]:visible, .excalidraw:visible' },
+  whiteboard: { control: /^(Whiteboard|Board)$/i, surface: '[data-chalk-whiteboard-surface="true"]:visible' },
   transcript: { control: /transcript|caption/i, surface: '[aria-label*="transcription" i], [aria-label*="caption" i]' },
 });
 
@@ -25,7 +25,6 @@ const CAMERA_CONTROL = /^(Turn on camera|Turn off camera|Start Video|Stop Video|
 const SCREEN_SHARE_CONTROL = /^(Share Screen|Stop Share|Share screen|Stop share|Share)$/i;
 const HAND_CONTROL = /^(Raise hand|Lower hand|Raise|Lower)$/i;
 const MEDIA_STATE_TIMEOUT_MS = 20_000;
-const DECODED_FRAME_TIMEOUT_MS = 5_000;
 
 async function toolbarLabels(page) {
   await revealFloatingControls(page);
@@ -34,17 +33,23 @@ async function toolbarLabels(page) {
 }
 
 async function waitForControlChange(page, before, beforePressed, matcher, description) {
+  const expectedPressed = beforePressed === "true" ? "false" : beforePressed === "false" ? "true" : null;
   await page
     .waitForFunction(
-      ({ previous, previousPressed, expected }) => {
-        const controls = [...document.querySelectorAll('[role="toolbar"][aria-label="Space controls"] button')];
-        return controls.some((button) => {
+      ({ previous, expected, pressedTarget }) => {
+        const toolbars = [...document.querySelectorAll('[role="toolbar"][aria-label="Space controls"]')].filter((toolbar) => {
+          const bounds = toolbar.getBoundingClientRect();
+          return bounds.width > 0 && bounds.height > 0;
+        });
+        const toolbar = toolbars.at(-1);
+        if (!toolbar) return false;
+        return [...toolbar.querySelectorAll("button")].some((button) => {
           const label = button.getAttribute("aria-label") ?? "";
           const pressed = button.getAttribute("aria-pressed");
-          return new RegExp(expected, "i").test(label) && (label !== previous || (previousPressed !== null && pressed !== previousPressed));
+          return new RegExp(expected, "i").test(label) && (pressedTarget === null ? label !== previous : pressed === pressedTarget);
         });
       },
-      { previous: before, previousPressed: beforePressed, expected: matcher.source },
+      { previous: before, expected: matcher.source, pressedTarget: expectedPressed },
       { timeout: 15_000 },
     )
     .catch(() => {
@@ -73,6 +78,26 @@ export async function toggleCamera(page) {
 
 export async function toggleScreenShare(page) {
   return toggleControl(page, SCREEN_SHARE_CONTROL, "screen-share", "screen-share");
+}
+
+export async function screenShareFailureDetail(page) {
+  const controls = await toolbarLabels(page);
+  const control = controls.find((entry) => SCREEN_SHARE_CONTROL.test(entry.label ?? "")) ?? null;
+  const feedback = page.locator('[role="alert"]:visible, [data-sonner-toast]:visible');
+  await feedback
+    .first()
+    .waitFor({ state: "visible", timeout: 1_000 })
+    .catch(() => undefined);
+  const alerts = await feedback.allTextContents();
+  return JSON.stringify({ control, alerts: alerts.map((entry) => entry.trim()).filter(Boolean) });
+}
+
+export async function summarizePeerConnections(page) {
+  const summary = await page.evaluate(() => {
+    const collect = globalThis.__chalkPerfWebRtcDiagnostics;
+    return typeof collect === "function" ? collect() : { maxPeerConnections: 0, peerConnections: [], unavailable: true };
+  });
+  return summary && typeof summary === "object" ? summary : { maxPeerConnections: 0, peerConnections: [], unavailable: true };
 }
 
 export async function toggleHandRaise(page) {
@@ -131,8 +156,9 @@ async function whiteboardFailureDetail(page) {
     .isVisible()
     .catch(() => false);
   const alerts = await page.locator('[role="alert"]:visible').allTextContents();
-  const canvases = await page.locator(".excalidraw").count();
-  return JSON.stringify({ control, loading, alerts, canvases });
+  const surfaces = await page.locator('[data-chalk-whiteboard-surface="true"]:visible').count();
+  const sharedWhiteboards = await page.getByLabel("Shared whiteboard", { exact: true }).count();
+  return JSON.stringify({ control, loading, alerts, surfaces, sharedWhiteboards });
 }
 
 export async function openPanel(page, kind) {
@@ -173,9 +199,20 @@ export async function closePanel(page, kind) {
   } else {
     await page.keyboard.press("Escape");
   }
-  await surface.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {
-    throw new Error(`${kind} panel did not close`);
-  });
+  try {
+    await surface.waitFor({ state: "hidden", timeout: 10_000 });
+  } catch (error) {
+    if (kind !== "whiteboard") throw new Error(`${kind} panel did not close`, { cause: error });
+    throw new Error(`whiteboard panel did not close: ${await whiteboardFailureDetail(page)}`, { cause: error });
+  }
+}
+
+export async function waitForPanelState(page, kind, visible) {
+  const definition = PANEL_DEFINITIONS[kind];
+  if (!definition) throw new Error(`unknown panel ${kind}`);
+  const surface = await panelSurface(page, kind);
+  await surface.waitFor({ state: visible ? "visible" : "hidden", timeout: kind === "whiteboard" ? 30_000 : 10_000 });
+  return surface;
 }
 
 export async function exerciseWaitingParticipantsTab(page) {
@@ -310,70 +347,83 @@ export async function uploadChatFile(page, filePath) {
   await attachments.getByText(fileName, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   const composer = panel.locator('[aria-label="Message"]').first();
   await clickVisibleControl(page, /^Send message$/i, "send chat attachment", panel);
-  await panel.locator('[aria-label="Attachments"]').waitFor({ state: "hidden", timeout: 15_000 });
+  const composerAlert = panel.locator('[role="alert"]:visible').last();
+  await waitForChatUploadCompletion(attachments, composerAlert);
   await waitForComposerEnabled(page, composer);
   return fileName;
 }
 
-async function whiteboardCanvas(page) {
-  const canvases = page.locator(".excalidraw canvas:visible");
-  await canvases.first().waitFor({ state: "visible", timeout: 30_000 });
-  const count = await canvases.count();
-  let selected = null;
-  let selectedArea = 0;
-  for (let index = 0; index < count; index += 1) {
-    const candidate = canvases.nth(index);
-    const box = await candidate.boundingBox();
-    const area = box ? box.width * box.height : 0;
-    if (area > selectedArea) {
-      selected = candidate;
-      selectedArea = area;
-    }
-  }
-  if (!selected) throw new Error("whiteboard has no canvas with visible bounds");
-  return selected;
+export async function waitForChatUploadCompletion(attachments, composerAlert, timeout = 15_000) {
+  const completion = await Promise.race([
+    attachments.waitFor({ state: "hidden", timeout }).then(() => ({ status: "sent" })),
+    composerAlert.waitFor({ state: "visible", timeout }).then(async () => ({ status: "failed", message: (await composerAlert.textContent())?.trim() || "Message could not be sent." })),
+  ]);
+  if (completion.status === "failed") throw new Error(`chat file upload failed: ${completion.message}`);
 }
 
-async function canvasSignature(canvas) {
-  return canvas.evaluate((node) => {
-    const data = node.toDataURL();
-    let hash = 2_166_136_261;
-    for (let index = 0; index < data.length; index += 97) hash = Math.imul(hash ^ data.charCodeAt(index), 16_777_619);
-    return `${data.length}:${hash >>> 0}`;
-  });
+async function whiteboardCanvasBounds(page) {
+  const surface = page.locator('[data-chalk-whiteboard-surface="true"][data-chalk-whiteboard-ready="true"]:visible').first();
+  await surface.waitFor({ state: "visible", timeout: 30_000 });
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const box = await surface.evaluate((node) => {
+      const interactive = node.querySelector("canvas.excalidraw__canvas.interactive");
+      if (interactive) {
+        const bounds = interactive.getBoundingClientRect();
+        if (bounds.width > 0 && bounds.height > 0) return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+      }
+      let selected = null;
+      let selectedArea = 0;
+      for (const candidate of node.querySelectorAll("canvas")) {
+        const bounds = candidate.getBoundingClientRect();
+        const area = bounds.width * bounds.height;
+        if (area > selectedArea) {
+          selected = bounds;
+          selectedArea = area;
+        }
+      }
+      return selected ? { x: selected.x, y: selected.y, width: selected.width, height: selected.height } : null;
+    });
+    if (box) return box;
+    await page.waitForTimeout(100);
+  }
+  throw new Error("whiteboard has no canvas with visible bounds");
+}
+
+async function whiteboardVisualSignature(page) {
+  const surface = page.locator('[data-chalk-whiteboard-surface="true"][data-chalk-whiteboard-ready="true"]:visible').first();
+  await surface.waitFor({ state: "visible", timeout: 30_000 });
+  const image = await surface.screenshot({ animations: "disabled" });
+  let hash = 2_166_136_261;
+  for (const byte of image) hash = Math.imul(hash ^ byte, 16_777_619);
+  return `${image.length}:${hash >>> 0}`;
 }
 
 export async function drawWhiteboard(page) {
-  const canvas = await whiteboardCanvas(page);
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error("whiteboard canvas has no visible bounds");
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  try {
-    await clickVisibleControl(page, /^(Draw|Free draw)$/i, "whiteboard draw tool");
-  } catch (error) {
-    if (!(error instanceof FeatureUnreachableError)) throw error;
-    await page.keyboard.press("p");
-  }
-  const before = await canvasSignature(canvas);
-  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.35);
+  const surface = page.locator('[data-chalk-whiteboard-surface="true"][data-chalk-whiteboard-ready="true"]:visible').first();
+  await surface.waitFor({ state: "visible", timeout: 30_000 });
+  const initialBox = await whiteboardCanvasBounds(page);
+  await page.mouse.click(initialBox.x + initialBox.width / 2, initialBox.y + initialBox.height / 2);
+  await page.keyboard.press("p");
+  const box = await whiteboardCanvasBounds(page);
+  const before = await whiteboardVisualSignature(page);
+  await page.mouse.move(box.x + box.width * 0.42, box.y + box.height * 0.55);
   try {
     await page.mouse.down();
     for (let index = 0; index <= 24; index += 1) {
-      await page.mouse.move(box.x + box.width * (0.25 + index / 180), box.y + box.height * (0.35 + Math.sin(index / 3) * 0.04));
+      await page.mouse.move(box.x + box.width * (0.42 + index / 160), box.y + box.height * (0.55 + Math.sin(index / 3) * 0.04));
     }
   } finally {
     await page.mouse.up();
   }
   await page.waitForTimeout(250);
-  const after = await canvasSignature(canvas);
-  if (before === after) throw new Error("whiteboard draw did not change the canvas");
+  const after = await whiteboardVisualSignature(page);
+  if (before === after) throw new Error("whiteboard draw did not change the visible surface");
 }
 
 export async function panZoomWhiteboard(page) {
-  const canvas = await whiteboardCanvas(page);
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error("whiteboard canvas has no visible bounds");
-  const before = await canvasSignature(canvas);
+  const box = await whiteboardCanvasBounds(page);
+  const before = await whiteboardVisualSignature(page);
   try {
     await page.keyboard.down("Control");
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -382,42 +432,42 @@ export async function panZoomWhiteboard(page) {
     await page.keyboard.up("Control");
   }
   await page.waitForTimeout(200);
-  const zoomed = await canvasSignature(canvas);
-  if (before === zoomed) throw new Error("whiteboard zoom did not redraw the canvas");
+  const zoomed = await whiteboardVisualSignature(page);
+  if (before === zoomed) throw new Error("whiteboard zoom did not change the visible surface");
+  const panningBox = await whiteboardCanvasBounds(page);
+  await page.mouse.move(panningBox.x + panningBox.width / 2, panningBox.y + panningBox.height / 2);
+  await page.mouse.wheel(180, 120);
+  await page.waitForTimeout(200);
+  const panned = await whiteboardVisualSignature(page);
+  if (zoomed === panned) throw new Error("whiteboard pan did not change the visible surface");
+  await page.mouse.wheel(-180, -120);
   try {
-    await page.keyboard.down(" ");
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 12 });
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, 240);
   } finally {
-    await page.mouse.up();
-    await page.keyboard.up(" ");
+    await page.keyboard.up("Control");
   }
   await page.waitForTimeout(200);
-  const panned = await canvasSignature(canvas);
-  if (zoomed === panned) throw new Error("whiteboard pan did not redraw the canvas");
 }
 
 async function moveWhiteboardCursor(page, moves = 80) {
-  const canvas = await whiteboardCanvas(page);
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error("whiteboard canvas has no visible bounds");
+  const box = await whiteboardCanvasBounds(page);
   for (let index = 0; index < moves; index += 1) {
     const ratio = index / Math.max(1, moves - 1);
     await page.mouse.move(box.x + box.width * (0.15 + ratio * 0.7), box.y + box.height * (0.3 + Math.sin(index / 5) * 0.15));
+    if (index % 8 === 0) await page.waitForTimeout(20);
   }
 }
 
 export async function moveRemoteWhiteboardCursors(anchorPage, remotePages) {
-  const anchorCanvas = await whiteboardCanvas(anchorPage);
-  const before = await canvasSignature(anchorCanvas);
+  const before = await whiteboardVisualSignature(anchorPage);
   await Promise.all(remotePages.map((page) => moveWhiteboardCursor(page)));
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     await anchorPage.waitForTimeout(250);
-    if ((await canvasSignature(anchorCanvas)) !== before) return;
+    if ((await whiteboardVisualSignature(anchorPage)) !== before) return;
   }
-  throw new Error("remote whiteboard cursors did not redraw the anchor canvas");
+  throw new Error("remote whiteboard cursors did not change the anchor surface");
 }
 
 export async function assertRemoteReaction(page, displayName, emoji) {
@@ -451,6 +501,74 @@ export async function assertRemoteMicrophoneState(page, displayName, active) {
 }
 
 export async function assertRemoteCameraState(page, displayName, enabled) {
+  if (enabled) {
+    let frameProof;
+    try {
+      frameProof = await page.evaluate(
+        async ({ name, timeoutMs }) => {
+          const tileLabel = `Video tile for ${name}`;
+          const deadline = performance.now() + timeoutMs;
+          let observedVideo = null;
+          let observedTrack = null;
+          let observedStream = null;
+          let initialFrames = null;
+          let videoFrameCallbackArrived = false;
+
+          const currentVideo = () => {
+            const tile = [...document.querySelectorAll('[aria-label^="Video tile for "]')].find((node) => node.getAttribute("aria-label") === tileLabel);
+            const video = tile?.querySelector("video");
+            const stream = video?.srcObject ?? null;
+            const tracks = typeof stream?.getVideoTracks === "function" ? stream.getVideoTracks() : [];
+            const track = tracks.find((candidate) => candidate.kind === "video" && candidate.readyState === "live") ?? tracks.find((candidate) => candidate.kind === "video") ?? null;
+            return { video, stream, track };
+          };
+
+          const readDecodedFrames = (video) => {
+            if (typeof video?.getVideoPlaybackQuality === "function") {
+              const quality = video.getVideoPlaybackQuality();
+              if (Number.isFinite(quality.totalVideoFrames)) return quality.totalVideoFrames;
+            }
+            if (Number.isFinite(video?.webkitDecodedFrameCount)) return video.webkitDecodedFrameCount;
+            return null;
+          };
+
+          const hasLiveVideoTrack = (track) => track?.kind === "video" && track.readyState === "live";
+          const observe = ({ video, stream, track }) => {
+            if (video === observedVideo && stream === observedStream && track === observedTrack) return;
+            observedVideo = video ?? null;
+            observedStream = stream;
+            observedTrack = track;
+            initialFrames = readDecodedFrames(video);
+            videoFrameCallbackArrived = false;
+            if (typeof video?.requestVideoFrameCallback === "function") {
+              video.requestVideoFrameCallback(() => {
+                if (observedVideo === video && observedStream === stream && observedTrack === track) videoFrameCallbackArrived = true;
+              });
+            }
+          };
+
+          while (performance.now() < deadline) {
+            const current = currentVideo();
+            observe(current);
+            const { video, track } = current;
+            if (video && video.classList.contains("opacity-100") && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !video.paused && hasLiveVideoTrack(track) && (videoFrameCallbackArrived || (initialFrames !== null && readDecodedFrames(video) > initialFrames))) {
+              return { ok: true };
+            }
+            if (performance.now() >= deadline) break;
+            await new Promise((resolve) => window.setTimeout(resolve, Math.min(100, deadline - performance.now())));
+          }
+          return { ok: false, reason: "the current Participant video stream did not produce a decoded frame" };
+        },
+        { name: displayName, timeoutMs: MEDIA_STATE_TIMEOUT_MS },
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`remote Participant ${displayName} camera decoded-frame proof failed: ${detail}`);
+    }
+    if (!frameProof.ok) throw new Error(`remote Participant ${displayName} camera decoded-frame proof failed: ${frameProof.reason}`);
+    return;
+  }
+
   try {
     await page.waitForFunction(
       ({ name, expectedEnabled }) => {
@@ -470,61 +588,23 @@ export async function assertRemoteCameraState(page, displayName, enabled) {
     const detail = error instanceof Error ? `: ${error.message}` : "";
     throw new Error(`remote Participant ${displayName} camera did not become ${expected}${detail}`);
   }
-
-  if (!enabled) return;
-
-  let frameProof;
-  try {
-    frameProof = await page.evaluate(
-      async ({ name, timeoutMs }) => {
-        const tileLabel = `Video tile for ${name}`;
-        const tile = [...document.querySelectorAll('[aria-label^="Video tile for "]')].find((node) => node.getAttribute("aria-label") === tileLabel);
-        const video = tile?.querySelector("video");
-        if (!video) return { ok: false, reason: "the exact Participant tile or video element disappeared" };
-
-        const readDecodedFrames = () => {
-          if (typeof video.getVideoPlaybackQuality === "function") {
-            const quality = video.getVideoPlaybackQuality();
-            if (Number.isFinite(quality.totalVideoFrames)) return quality.totalVideoFrames;
-          }
-          if (Number.isFinite(video.webkitDecodedFrameCount)) return video.webkitDecodedFrameCount;
-          return null;
-        };
-        const hasLiveVideoTrack = () => {
-          const tracks = typeof video.srcObject?.getVideoTracks === "function" ? video.srcObject.getVideoTracks() : [];
-          return tracks.some((track) => track.kind === "video" && track.readyState === "live");
-        };
-
-        const initialFrames = readDecodedFrames();
-        if (initialFrames === null) return { ok: false, reason: "the browser exposed no decoded-frame counter" };
-        const deadline = performance.now() + timeoutMs;
-        while (performance.now() < deadline) {
-          if (!video.classList.contains("opacity-100") || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.paused || !hasLiveVideoTrack()) {
-            return { ok: false, reason: "camera playback stopped satisfying the enabled state while waiting for decoded frames" };
-          }
-          if (readDecodedFrames() > initialFrames) return { ok: true };
-          await new Promise((resolve) => window.setTimeout(resolve, 100));
-        }
-        return { ok: false, reason: `decoded frame count did not advance from ${initialFrames}` };
-      },
-      { name: displayName, timeoutMs: DECODED_FRAME_TIMEOUT_MS },
-    );
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`remote Participant ${displayName} camera decoded-frame proof failed: ${detail}`);
-  }
-  if (!frameProof.ok) throw new Error(`remote Participant ${displayName} camera decoded-frame proof failed: ${frameProof.reason}`);
 }
 
 export async function assertRemoteShare(page, displayName, active = true) {
-  const badge = page.getByText(`Shared by ${displayName}`, { exact: true }).first();
-  await badge.waitFor({ state: active ? "visible" : "hidden", timeout: 20_000 });
+  const tile = remoteShareTile(page, displayName);
+  const primary = remoteSharePrimary(page, displayName);
+  if (active) {
+    await Promise.any([tile.waitFor({ state: "visible", timeout: 20_000 }), primary.waitFor({ state: "visible", timeout: 20_000 })]);
+    return;
+  }
+  await Promise.all([tile.waitFor({ state: "hidden", timeout: 20_000 }), primary.waitFor({ state: "hidden", timeout: 20_000 })]);
 }
 
 export async function zoomPanScreenShare(page, displayName) {
-  const badge = page.getByText(`Shared by ${displayName}`, { exact: true }).first();
-  await badge.waitFor({ state: "visible", timeout: 20_000 });
-  const surface = badge.locator("..");
+  const tile = remoteShareTile(page, displayName);
+  if (await tile.isVisible()) await tile.click();
+  const surface = remoteSharePrimary(page, displayName);
+  await surface.waitFor({ state: "visible", timeout: 20_000 });
   await surface.hover();
   const video = surface.locator("video").first();
   const before = await video.evaluate((node) => node.parentElement?.getAttribute("style") ?? "");
@@ -545,6 +625,14 @@ export async function zoomPanScreenShare(page, displayName) {
   const panned = await video.evaluate((node) => node.parentElement?.getAttribute("style") ?? "");
   if (panned === zoomed) throw new Error("screen share pan did not change the video transform");
   await clickVisibleControl(page, /^Reset zoom$/i, "screen share reset zoom", surface);
+}
+
+function remoteShareTile(page, displayName) {
+  return page.getByRole("button", { name: `Screen share tile for ${displayName}`, exact: true }).first();
+}
+
+function remoteSharePrimary(page, displayName) {
+  return page.getByRole("region", { name: `Screen shared by ${displayName}`, exact: true }).first();
 }
 
 export async function leaveSpace(page) {

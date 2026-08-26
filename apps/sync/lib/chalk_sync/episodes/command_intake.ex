@@ -238,7 +238,7 @@ defmodule ChalkSync.Episodes.CommandIntake do
 
   defp observe_role_transition(module, adapter, identity, command) do
     MediaPlaneCall.invoke(fn ->
-      module.observe_episode_publications(adapter, identity.episode)
+      module.observe_episode_publications(adapter, identity.episode, nil)
     end)
     |> role_transition_observation(identity, command)
   end

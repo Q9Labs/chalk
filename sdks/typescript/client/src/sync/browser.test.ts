@@ -3,7 +3,7 @@ import { createBrowserSyncLifecycle, createBrowserWebSocketFactory } from "./bro
 
 describe("browser sync boundaries", () => {
   it("adapts browser socket and lifecycle events through injected browser capabilities", () => {
-    const socket = createBrowserWebSocketFactory(TestBrowserWebSocket as unknown as new (url: string) => WebSocket).connect("wss://sync.test/v1/sync");
+    const socket = createBrowserWebSocketFactory(TestBrowserWebSocket).connect("wss://sync.test/v1/sync");
     const events: string[] = [];
     socket.onopen = () => events.push("open");
     socket.onmessage = (event) => events.push(`message:${String(event.data)}`);
@@ -12,10 +12,11 @@ describe("browser sync boundaries", () => {
     const native = TestBrowserWebSocket.latest();
     native.open();
     native.message("frame");
-    native.closeEvent(1012);
-    native.error();
     socket.send("outbound");
     socket.close(1000, "done");
+    expect(() => socket.send("late outbound")).toThrow("WebSocket is not open.");
+    native.closeEvent(1012);
+    native.error();
 
     const window = new EventTarget();
     const document = new TestDocument();
@@ -38,13 +39,28 @@ describe("browser sync boundaries", () => {
   });
 });
 
-class TestBrowserWebSocket extends EventTarget {
+class TestBrowserWebSocket extends EventTarget implements WebSocket {
   static #sockets: TestBrowserWebSocket[] = [];
+  readonly CONNECTING = 0;
+  readonly OPEN = 1;
+  readonly CLOSING = 2;
+  readonly CLOSED = 3;
   readonly sent: string[] = [];
+  readonly url: string;
+  readyState = 0;
+  bufferedAmount = 0;
+  extensions = "";
+  protocol = "";
+  binaryType: BinaryType = "blob";
+  onclose: WebSocket["onclose"] = null;
+  onerror: WebSocket["onerror"] = null;
+  onmessage: WebSocket["onmessage"] = null;
+  onopen: WebSocket["onopen"] = null;
   closed: [number | undefined, string | undefined] | undefined;
 
-  constructor(_: string) {
+  constructor(url: string) {
     super();
+    this.url = url;
     TestBrowserWebSocket.#sockets.push(this);
   }
 
@@ -56,15 +72,18 @@ class TestBrowserWebSocket extends EventTarget {
     return socket;
   }
 
-  send(data: string): void {
+  send(data: Parameters<WebSocket["send"]>[0]): void {
+    if (typeof data !== "string") throw new Error("test browser socket only accepts text frames");
     this.sent.push(data);
   }
 
   close(code?: number, reason?: string): void {
+    this.readyState = 2;
     this.closed = [code, reason];
   }
 
   open(): void {
+    this.readyState = 1;
     this.dispatchEvent(new Event("open"));
   }
 
@@ -73,6 +92,7 @@ class TestBrowserWebSocket extends EventTarget {
   }
 
   closeEvent(code: number): void {
+    this.readyState = 3;
     const event = new Event("close");
     Object.defineProperty(event, "code", { value: code });
     this.dispatchEvent(event);

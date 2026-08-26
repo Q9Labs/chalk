@@ -155,6 +155,68 @@ func TestAddTracksProxiesTypedSignalingRequest(t *testing.T) {
 	}
 }
 
+func TestUpdateTracksReusesExistingTransceiver(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"sessionDescription":{"type":"answer","sdp":"updated-answer"},"tracks":[{"mid":"0","trackName":"camera-republished"}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	response, err := adapter.UpdateTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID:       "connection_123",
+		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "updated-offer"},
+		Tracks:             []mediaplane.Track{{Location: "local", Mid: "0", TrackName: "camera-republished", Source: "camera", PublicationID: "chalk-only"}},
+	})
+	if err != nil {
+		t.Fatalf("update tracks: %v", err)
+	}
+	if client.method != http.MethodPut || client.path != "/v1/apps/sfu-app-id/sessions/connection_123/tracks/update" {
+		t.Fatalf("request = %s %s, want tracks/update", client.method, client.path)
+	}
+	if !strings.Contains(client.requestBody, `"mid":"0","trackName":"camera-republished"`) || strings.Contains(client.requestBody, "publication") || strings.Contains(client.requestBody, "source") {
+		t.Fatalf("request body = %s, want provider-only reused track fields", client.requestBody)
+	}
+	if response.SessionDescription == nil || response.SessionDescription.SDP != "updated-answer" || len(response.Tracks) != 1 || response.Tracks[0].Mid != "0" {
+		t.Fatalf("response = %#v, want validated update response", response)
+	}
+}
+
+func TestUpdateTracksRejectsProviderInternalLocalResumeFailure(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"tracks":[{"location":"local","mid":"0","errorCode":"internal_error","errorDescription":"Internal server error"}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	_, err := adapter.UpdateTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection_123",
+		Tracks:       []mediaplane.Track{{Location: "local", Mid: "0", TrackName: "camera-track", Source: "camera"}},
+	})
+	if err == nil {
+		t.Fatal("provider internal local update returned no error")
+	}
+	if client.method != http.MethodPut || client.path != "/v1/apps/sfu-app-id/sessions/connection_123/tracks/update" {
+		t.Fatalf("provider request = %s %s, want local track update", client.method, client.path)
+	}
+}
+
+func TestUpdateTracksPropagatesProviderInternalFailures(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"tracks":[{"mid":"0","trackName":"camera-republished","errorCode":"internal_error","errorDescription":"Internal server error"}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	_, err := adapter.UpdateTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID:       "connection_123",
+		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "updated-offer"},
+		Tracks:             []mediaplane.Track{{Location: "local", Mid: "0", TrackName: "camera-republished", Source: "camera"}},
+	})
+	if err == nil {
+		t.Fatal("provider internal update returned no error")
+	}
+}
+
 func TestAddTracksAddsSecondLocalTrackToEstablishedSession(t *testing.T) {
 	client := &roundTripStub{
 		statusCode: http.StatusOK,
@@ -175,6 +237,247 @@ func TestAddTracksAddsSecondLocalTrackToEstablishedSession(t *testing.T) {
 	}
 	if !strings.Contains(client.requestBody, `"mid":"2","trackName":"screen-track"`) {
 		t.Fatalf("request body = %s, want new screen track", client.requestBody)
+	}
+}
+
+func TestAddTracksNormalizesMissingTrackNotFoundCodeAndExposesRemoteIdentity(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"tracks":[{"location":"remote","sessionId":"remote-session-1","trackName":"remote-track-1","errorDescription":"TrAcK NoT FoUnD: remote identity detail"}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection-123",
+		Tracks: []mediaplane.Track{{
+			Location:  "remote",
+			SessionID: "remote-session-1",
+			TrackName: "remote-track-1",
+		}},
+	})
+	if !errors.Is(err, mediaplane.ErrProviderFailed) {
+		t.Fatalf("error = %v, want %v", err, mediaplane.ErrProviderFailed)
+	}
+	var failure providerFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("error type = %T, want providerFailure", err)
+	}
+	if failure.providerCode != "track_not_found" {
+		t.Fatalf("provider code = %q, want track_not_found", failure.providerCode)
+	}
+	if got := mediaplane.MissingRemoteTracks(err); len(got) != 1 || got[0] != (mediaplane.RemoteTrackIdentity{ConnectionID: "remote-session-1", TrackName: "remote-track-1"}) {
+		t.Fatalf("missing remote tracks = %#v, want exact provider identity", got)
+	}
+	if strings.Contains(err.Error(), "remote identity detail") || strings.Contains(err.Error(), "remote-session-1") || strings.Contains(err.Error(), "remote-track-1") {
+		t.Fatalf("error exposed provider detail or identity: %v", err)
+	}
+}
+
+func TestAddTracksNormalizesUnavailableRemoteTrackDescription(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"tracks":[{"sessionId":"remote-session-1","trackName":"remote-track-1","errorDescription":"Pull track remote-track-1 from session remote-session-1 failed. Verify that the source connection is connected and sending media for this track."}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection-123",
+		Tracks:       []mediaplane.Track{{Location: "remote", SessionID: "remote-session-1", TrackName: "remote-track-1"}},
+	})
+	if !mediaplane.IsExactRemoteTrackAbsence(err) {
+		t.Fatalf("error is not exact remote-track absence: %v", err)
+	}
+	if got := mediaplane.MissingRemoteTracks(err); len(got) != 1 || got[0] != (mediaplane.RemoteTrackIdentity{ConnectionID: "remote-session-1", TrackName: "remote-track-1"}) {
+		t.Fatalf("missing remote tracks = %#v, want exact provider identity", got)
+	}
+}
+
+func TestAddTracksReturnsAllFailedRemoteIdentitiesFromPartialResponse(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body: `{"tracks":[
+			{"location":"remote","sessionId":"remote-session-1","trackName":"remote-track-1","errorCode":"track_not_found","errorDescription":"stale remote track"},
+			{"location":"remote","sessionId":"remote-session-2","trackName":"remote-track-2","errorCode":"TRACK_NOT_FOUND","errorDescription":"stale remote track"},
+			{"location":"remote","sessionId":"remote-session-3","trackName":"remote-track-3"}
+		]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection-123",
+		Tracks: []mediaplane.Track{
+			{Location: "remote", SessionID: "remote-session-1", TrackName: "remote-track-1"},
+			{Location: "remote", SessionID: "remote-session-2", TrackName: "remote-track-2"},
+			{Location: "remote", SessionID: "remote-session-3", TrackName: "remote-track-3"},
+		},
+	})
+	if err == nil {
+		t.Fatal("add tracks succeeded, want provider failure")
+	}
+	want := []mediaplane.RemoteTrackIdentity{
+		{ConnectionID: "remote-session-1", TrackName: "remote-track-1"},
+		{ConnectionID: "remote-session-2", TrackName: "remote-track-2"},
+	}
+	if got := mediaplane.MissingRemoteTracks(err); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("missing remote tracks = %#v, want %#v", got, want)
+	}
+}
+
+func TestAddTracksReturnsSuccessfulResultsWithExactRemoteAbsence(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body: `{
+			"sessionDescription":{"type":"answer","sdp":"answer-sdp"},
+			"requiresImmediateRenegotiation":true,
+			"tracks":[
+				{"sessionId":"remote-session-1","trackName":"remote-track-1"},
+				{"sessionId":"remote-session-2","trackName":"remote-track-2","errorCode":"track_not_found","errorDescription":"stale remote track"}
+			]
+		}`,
+	}
+	adapter := testAdapter(t, client)
+
+	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection-123",
+		Tracks: []mediaplane.Track{
+			{Location: "remote", SessionID: "remote-session-1", TrackName: "remote-track-1"},
+			{Location: "remote", SessionID: "remote-session-2", TrackName: "remote-track-2"},
+		},
+	})
+	if err == nil || !errors.Is(err, mediaplane.ErrProviderFailed) {
+		t.Fatalf("error = %v, want provider failure", err)
+	}
+	if !mediaplane.IsExactRemoteTrackAbsence(err) {
+		t.Fatalf("error is not exact remote-track absence: %v", err)
+	}
+	if response.SessionDescription == nil || response.SessionDescription.SDP != "answer-sdp" || !response.RequiresImmediateRenegotiation {
+		t.Fatalf("response metadata = %#v, want provider metadata", response)
+	}
+	if len(response.Tracks) != 1 || response.Tracks[0].Location != "remote" || response.Tracks[0].SessionID != "remote-session-1" || response.Tracks[0].TrackName != "remote-track-1" {
+		t.Fatalf("response tracks = %#v, want only successful remote result", response.Tracks)
+	}
+	missing := mediaplane.MissingRemoteTracks(err)
+	if len(missing) != 1 || missing[0] != (mediaplane.RemoteTrackIdentity{ConnectionID: "remote-session-2", TrackName: "remote-track-2"}) {
+		t.Fatalf("missing remote tracks = %#v, want exact failed result", missing)
+	}
+}
+
+func TestAddTracksDoesNotClassifyNonExactFailuresAsRemoteAbsence(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "top level provider error",
+			body: `{"errorCode":"provider_rejected","errorDescription":"request rejected","tracks":[{"location":"remote","sessionId":"remote-session","trackName":"remote-track","errorCode":"track_not_found"}]}`,
+		},
+		{
+			name: "unknown provider code",
+			body: `{"tracks":[{"location":"remote","sessionId":"remote-session","trackName":"remote-track","errorCode":"provider_unknown","errorDescription":"not available"}]}`,
+		},
+		{
+			name: "failed local result",
+			body: `{"tracks":[{"location":"local","mid":"0","trackName":"camera","errorCode":"track_not_found","errorDescription":"stale local track"}]}`,
+		},
+		{
+			name: "malformed remote identity",
+			body: `{"tracks":[{"location":"remote","trackName":"remote-track","errorCode":"track_not_found","errorDescription":"stale remote track"}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK, body: tt.body})
+			_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+				ConnectionID: "connection-123",
+				Tracks:       []mediaplane.Track{{Location: "remote", SessionID: "remote-session", TrackName: "remote-track"}},
+			})
+			if err == nil {
+				t.Fatal("add tracks succeeded, want provider failure")
+			}
+			if mediaplane.IsExactRemoteTrackAbsence(err) {
+				t.Fatalf("error classified as exact remote-track absence: %v", err)
+			}
+		})
+	}
+}
+
+func TestAddTracksReturnsNoMissingIdentitiesForUnrelatedProviderError(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"tracks":[{"location":"remote","sessionId":"remote-session-1","trackName":"remote-track-1","errorCode":"invalid_track","errorDescription":"provider rejected track"}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection-123",
+		Tracks:       []mediaplane.Track{{Location: "remote", SessionID: "remote-session-1", TrackName: "remote-track-1"}},
+	})
+	if err == nil {
+		t.Fatal("add tracks succeeded, want provider failure")
+	}
+	if got := mediaplane.MissingRemoteTracks(err); got != nil {
+		t.Fatalf("missing remote tracks = %#v, want nil", got)
+	}
+}
+
+func TestAddTracksPreservesMixedRemoteOfferForClientCompletion(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body: `{
+			"sessionDescription":{"type":"offer","sdp":"remote-offer-sdp"},
+			"requiresImmediateRenegotiation":true,
+			"tracks":[
+				{"sessionId":"remote-session-1","trackName":"screen","mid":"0"},
+				{"sessionId":"remote-session-2","trackName":"camera","errorDescription":"Internal error while pulling track"}
+			]
+		}`,
+	}
+	adapter := testAdapter(t, client)
+
+	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection-123",
+		Tracks: []mediaplane.Track{
+			{Location: "remote", SessionID: "remote-session-1", TrackName: "screen"},
+			{Location: "remote", SessionID: "remote-session-2", TrackName: "camera"},
+		},
+	})
+	if err == nil || !mediaplane.IsPartialRemoteTrackResponse(err) {
+		t.Fatalf("error = %v, want partial remote-track response", err)
+	}
+	if mediaplane.IsExactRemoteTrackAbsence(err) {
+		t.Fatalf("provider internal failure classified as exact absence: %v", err)
+	}
+	if response.SessionDescription == nil || response.SessionDescription.Type != "offer" || response.SessionDescription.SDP != "remote-offer-sdp" {
+		t.Fatalf("signaling description = %#v, want provider offer", response.SessionDescription)
+	}
+	if len(response.Tracks) != 1 || response.Tracks[0].Location != "remote" || response.Tracks[0].TrackName != "screen" {
+		t.Fatalf("tracks = %#v, want successful screen track", response.Tracks)
+	}
+}
+
+func TestAddTracksMarksExactTransientRemoteFailuresAsPartialWithoutAnOffer(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body: `{"tracks":[
+			{"sessionId":"remote-session-1","trackName":"camera","errorDescription":"Pull track failed. Verify source connection is connected and sending media for this track."},
+			{"sessionId":"remote-session-2","trackName":"microphone","errorDescription":"Internal error while pulling track"}
+		]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "connection-123",
+		Tracks: []mediaplane.Track{
+			{Location: "remote", SessionID: "remote-session-1", TrackName: "camera"},
+			{Location: "remote", SessionID: "remote-session-2", TrackName: "microphone"},
+		},
+	})
+	if err == nil || !mediaplane.IsPartialRemoteTrackResponse(err) {
+		t.Fatalf("error = %v, want partial remote-track response", err)
+	}
+	if response.SessionDescription != nil || len(response.Tracks) != 0 {
+		t.Fatalf("response = %#v, want an empty retryable subset", response)
 	}
 }
 

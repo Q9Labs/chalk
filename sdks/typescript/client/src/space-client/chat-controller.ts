@@ -79,7 +79,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#connection = connection;
     this.#store = store;
     this.#transport = transport;
-    this.#fetch = fetch;
+    this.#fetch = (...input) => fetch(...input);
     this.#fork = fork;
     this.#diagnostics = diagnostics;
     this.#unsubscribeConnection = connection.subscribePorts((ports) => this.#bind(ports));
@@ -444,7 +444,7 @@ function validateUpload(file: ChatUploadFile, bytes: ArrayBuffer, clientAttachme
   return upload;
 }
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
-  return "bytes" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
+  return "arrayBuffer" in file ? foreign(() => file.arrayBuffer()) : Effect.succeed(file.bytes);
 }
 function catchUpRequest(latestSequence: string | null, ports: ConnectionPorts): { readonly kind: "initial" | "newer"; readonly input: { readonly limit: number; readonly afterSequence?: string } } | null {
   const extension = ports.sync.getCollaborationExtensionState();

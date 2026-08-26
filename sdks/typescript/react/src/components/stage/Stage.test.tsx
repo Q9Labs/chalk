@@ -78,6 +78,8 @@ describe("Stage", () => {
     expect(tile("ada")).toBe(adaBefore);
     expect(size(tile("ada"))).not.toEqual(gridSize);
     expect(Number.parseFloat(tile("ada").style.width)).toBeGreaterThan(Number.parseFloat(tile("grace").style.width));
+    expect(tile("ada").style.transition).toContain("transform");
+    expect(tile("ada").style.transition).not.toMatch(/width|height/);
   });
 
   it.each(["focus", "grid", "presentation"] as const)("uses the generated avatars preference in %s layout", (layout) => {

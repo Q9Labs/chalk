@@ -53,6 +53,7 @@ class BrowserSyncSocket implements SyncSocket {
   }
 
   send(data: string): void {
+    if (this.#socket.readyState !== WebSocket.OPEN) throw new Error("WebSocket is not open.");
     this.#socket.send(data);
   }
 

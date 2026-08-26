@@ -49,6 +49,22 @@ describe("ChatPanel", () => {
     await waitFor(() => expect(send).toHaveBeenCalledWith({ text: "", attachments: [attachment] }));
   });
 
+  it("stages a browser File when its Blob prototype exposes bytes", async () => {
+    const client = createTestClient(createSnapshot(["sendChat"]));
+    const browserFile: ChatUploadFile = new BrowserFileWithBytes(["hello"], "browser-note.txt", { type: "text/plain" });
+    const pickChatFiles = vi.fn(async () => [browserFile]);
+    render(
+      <ChalkProvider client={client}>
+        <ChatPanel pickChatFiles={pickChatFiles} />
+      </ChalkProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach files" }));
+
+    expect(await screen.findByText("browser-note.txt")).toBeInTheDocument();
+    expect(screen.queryByText(/not a supported chat attachment/i)).not.toBeInTheDocument();
+  });
+
   it("marks the latest durable message read from the real viewport", async () => {
     const first = message("1");
     const second = message("2");
@@ -63,6 +79,12 @@ describe("ChatPanel", () => {
     expect(view.container.querySelector('[aria-label="Chat messages"]')).toBeInTheDocument();
   });
 });
+
+class BrowserFileWithBytes extends File {
+  bytes(): Promise<Uint8Array> {
+    return Promise.resolve(new Uint8Array());
+  }
+}
 
 function actSetSnapshot(client: ReturnType<typeof createTestClient>, snapshot: ReturnType<typeof client.getSnapshot>) {
   client.setSnapshot(snapshot);

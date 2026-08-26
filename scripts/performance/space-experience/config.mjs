@@ -54,6 +54,7 @@ export function usageText() {
     "  --output-root <p>     private directory for run artifacts",
     "  --trace-pass          shakedown-only browser trace pass",
     "  --snapshot-pass       shakedown-only heap snapshot pass",
+    "  --focus <flow>         shakedown-only correctness flow: media, leave-rejoin, or whiteboard",
     "  --help                print this text",
   ].join("\n");
 }
@@ -73,6 +74,7 @@ export function parseCli(argv, env = process.env) {
     duration: mode === "profile" ? PROFILE_MINUTES.default : SHAKEDOWN_SECONDS.default,
     tracePass: false,
     snapshotPass: false,
+    focus: undefined,
   };
   let explicitDuration = false;
 
@@ -109,6 +111,14 @@ export function parseCli(argv, env = process.env) {
       options.tracePass = true;
       continue;
     }
+    if (argument === "--focus") {
+      if (mode !== "shakedown") throw new UsageError("--focus is only valid for shakedown");
+      const focus = requireValue(argv, index, argument);
+      if (focus !== "media" && focus !== "leave-rejoin" && focus !== "whiteboard") throw new UsageError("--focus must be media, leave-rejoin, or whiteboard");
+      options.focus = focus;
+      index += 1;
+      continue;
+    }
     if (argument === "--duration" || argument === "--minutes" || argument === "--seconds") {
       const expected = mode === "profile" ? "--minutes" : "--seconds";
       if (argument !== "--duration" && argument !== expected) throw new UsageError(`${argument} is only valid for ${argument === "--minutes" ? "profile" : "shakedown"}`);
@@ -122,6 +132,7 @@ export function parseCli(argv, env = process.env) {
 
   if (options.participants < PARTICIPANT_LIMITS.min || options.participants > PARTICIPANT_LIMITS.max) throw new UsageError("--participants must be between 3 and 4");
   if (options.tracePass && options.snapshotPass) throw new UsageError("--trace-pass and --snapshot-pass are mutually exclusive");
+  if (options.focus && (options.tracePass || options.snapshotPass)) throw new UsageError("--focus cannot be combined with --trace-pass or --snapshot-pass");
   const bounds = mode === "profile" ? PROFILE_MINUTES : SHAKEDOWN_SECONDS;
   if (options.duration < bounds.min || options.duration > bounds.max) throw new UsageError(`${mode} duration must be between ${bounds.min} and ${bounds.max} ${mode === "profile" ? "minutes" : "seconds"}`);
   if (explicitDuration && mode === "shakedown" && !Number.isInteger(options.duration)) throw new UsageError("shakedown duration must be an integer number of seconds");
@@ -132,13 +143,14 @@ export function parseCli(argv, env = process.env) {
 export function measurementPlan(options) {
   const snapshotPass = options.snapshotPass === true;
   const tracePass = options.tracePass === true;
+  const focusedCorrectness = options.focus !== undefined;
   return Object.freeze({
-    kind: snapshotPass ? "snapshot-pass" : tracePass ? "trace-pass" : "runtime-profile",
+    kind: focusedCorrectness ? "focused-correctness" : snapshotPass ? "snapshot-pass" : tracePass ? "trace-pass" : "runtime-profile",
     heapSnapshots: snapshotPass,
-    metricsSampler: !snapshotPass && !tracePass,
-    cpuProfiles: !snapshotPass && !tracePass,
+    metricsSampler: !focusedCorrectness && !snapshotPass && !tracePass,
+    cpuProfiles: !focusedCorrectness && !snapshotPass && !tracePass,
     traceRecording: tracePass,
-    singleCycle: snapshotPass || tracePass,
+    singleCycle: focusedCorrectness || snapshotPass || tracePass,
   });
 }
 

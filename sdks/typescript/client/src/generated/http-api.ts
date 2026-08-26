@@ -760,6 +760,28 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.put("updateCloudflareSFUTracks", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/tracks", {
+      params: S.UpdateCloudflareSFUTracksPathParamsSchema,
+      payload: S.UpdateCloudflareSFUTracksRequestBodySchema,
+      success: S.UpdateCloudflareSFUTracksResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.patch("updateWebhookEndpoint", "/v1/tenants/:tenant_id/webhook-endpoints/:endpoint_id", {
       params: S.UpdateWebhookEndpointPathParamsSchema,
       headers: S.UpdateWebhookEndpointRequestHeadersSchema,

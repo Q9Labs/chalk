@@ -24,7 +24,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
     @behaviour ChalkSync.MediaPlane
 
     @impl true
-    def observe_episode_publications(controller, _episode) do
+    def observe_episode_publications(controller, _episode, _cursor) do
       send(controller, :blocking_media_observation_started)
       Process.sleep(:infinity)
     end

@@ -6,11 +6,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { SkinProvider } from "../skin-context";
 import { createSnapshot, createTestClient } from "../../test-support/test-client";
-import { ScreenShareView } from "./ScreenShareView";
+import { createFakeMediaStreamTrack } from "../../test-support/fake-media-track";
+import { ScreenShareView, ScreenShareViewSurface } from "./ScreenShareView";
 
 afterEach(cleanup);
 
 describe("ScreenShareView", () => {
+  it("labels the primary screen surface for assistive controls and automation", () => {
+    render(<ScreenShareViewSurface screenShareTrack={createFakeMediaStreamTrack()} sharedByName="Ada" participants={[]} />);
+
+    expect(screen.getByRole("region", { name: "Screen shared by Ada" })).toBeInTheDocument();
+  });
+
   it("uses the chalk empty state when no share is active", () => {
     const client = createTestClient(createSnapshot());
 

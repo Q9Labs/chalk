@@ -376,8 +376,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame(
          {:cursor, cursor},
-         %{phase: :live, identity: identity, display_name: display_name} = state
-       ) do
+         %{phase: phase, identity: identity, display_name: display_name} = state
+       )
+       when phase in [:live, :recovering] do
     case admit_cursor(state) do
       {:ok, next} ->
         frame = %{

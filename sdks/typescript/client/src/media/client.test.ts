@@ -15,6 +15,7 @@ describe("CloudflareSFUClient options", () => {
 function inertTransport(): CloudflareSFUSignalingTransport {
   return {
     addTracks: vi.fn(),
+    updateTracks: vi.fn(),
     closeTracks: vi.fn(),
     renegotiate: vi.fn(),
     listPublications: vi.fn(),

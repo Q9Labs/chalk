@@ -11,7 +11,7 @@ import { SpaceView } from "./SpaceView";
 
 const audioOutputSpy = vi.hoisted(() => vi.fn(() => null));
 const controlBarSpy = vi.hoisted(() =>
-  vi.fn((props: { readonly buttons?: readonly string[]; readonly onOpenDiagnostics?: () => void; readonly onOpenReactions?: () => void; readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
+  vi.fn((props: { readonly buttons?: readonly string[]; readonly isWhiteboardOpen?: boolean; readonly onOpenDiagnostics?: () => void; readonly onOpenReactions?: () => void; readonly onToggleParticipants?: () => void; readonly onLeft?: () => void }) => (
     <>
       <button type="button" onClick={props.onToggleParticipants}>
         Participants
@@ -63,6 +63,21 @@ describe("SpaceView", () => {
     renderView(createTestClient(), { generatedAvatars: false });
 
     expect(spaceStageSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ generatedAvatars: false }));
+  });
+
+  it("forwards the Board open state to both responsive controls in both skins", () => {
+    const whiteboard = { isOpen: true, props: {} };
+    renderView(createTestClient(), { skin: "classic", whiteboard });
+
+    expect(controlBarSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const [props] of controlBarSpy.mock.calls) expect(props.isWhiteboardOpen).toBe(true);
+
+    cleanup();
+    controlBarSpy.mockClear();
+    renderView(createTestClient(), { skin: "chalk", whiteboard });
+
+    expect(controlBarSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const [props] of controlBarSpy.mock.calls) expect(props.isWhiteboardOpen).toBe(true);
   });
 
   it("omits diagnostics unless an open handler is provided", () => {

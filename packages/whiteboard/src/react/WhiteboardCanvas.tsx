@@ -8,7 +8,6 @@ import { MathEditor } from "./MathEditor";
 import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements";
 import { renderLatexToSvg } from "./mathjax-renderer";
 
-const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css";
 const DEFAULT_LATEX = String.raw`E = mc^2`;
 
 type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
@@ -81,7 +80,7 @@ const defaultClassNames: WhiteboardCanvasClassNames = {
 interface WhiteboardCanvasConfiguration {
   canDraw: boolean;
   classNames: WhiteboardCanvasClassNames;
-  excalidrawCssPath: string;
+  excalidrawCssPath: string | null;
   icons: WhiteboardCanvasIcons;
   isCollaborating: boolean;
   isVisible: boolean;
@@ -107,6 +106,7 @@ interface WhiteboardCollaboration {
   handleApiReady: (api: ExcalidrawImperativeAPI) => void;
   handleChange: (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => void;
   handlePointerUpdate: (payload: { pointer: { x: number; y: number } }) => void;
+  isReady: boolean;
   syncScene: () => void;
 }
 
@@ -136,7 +136,7 @@ function useWhiteboardCanvasConfiguration(props: WhiteboardCanvasProps): Whitebo
   return {
     canDraw,
     classNames,
-    excalidrawCssPath: valueOr(props.excalidrawCssPath, DEFAULT_EXCALIDRAW_CSS),
+    excalidrawCssPath: props.excalidrawCssPath ?? null,
     icons: valueOr(props.icons, {}),
     isCollaborating: Boolean(props.collab),
     isVisible: valueOr(props.isVisible, true),
@@ -149,15 +149,24 @@ function valueOr<T>(value: T | undefined, fallback: T): T {
   return value === undefined ? fallback : value;
 }
 
-function useExternalStylesheet(id: string, href: string): ExternalStylesheetState {
-  const [loaded, setLoaded] = useState(false);
+function useExternalStylesheet(id: string, href: string | null): ExternalStylesheetState {
+  const [loaded, setLoaded] = useState(href === null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (href === null) {
+      setError(null);
+      setLoaded(true);
+      return;
+    }
+
     if (typeof document === "undefined") return;
 
-    const existing = document.getElementById(id) as HTMLLinkElement | null;
-    if (existing || document.querySelector('link[href*="excalidraw"], style[data-href*="excalidraw"]')) {
+    setError(null);
+    setLoaded(false);
+
+    const existing = document.getElementById(id);
+    if (existing instanceof HTMLLinkElement) {
       setLoaded(true);
       return;
     }
@@ -244,16 +253,18 @@ function useWhiteboardCollaboration(options: {
   setLoadError: (message: string) => void;
 }): WhiteboardCollaboration {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  const [isReady, setIsReady] = useState(false);
   const refs = useCollaborationRefs(options.collab, options.canDraw);
-  const initializeEngine = useCollaborationEngineLoader(refs, options.onLoadError, options.setLoadError);
-  const handleApiReady = useExcalidrawApiReady(apiRef, initializeEngine, options.onExcalidrawApiReady);
+  const initializeEngine = useCollaborationEngineLoader(refs, options.onLoadError, options.setLoadError, setIsReady);
+  const handleApiReady = useExcalidrawApiReady(apiRef, setApi, options.onExcalidrawApiReady);
   const handlers = useExcalidrawSceneHandlers(apiRef, refs.engineRef, options.onSelectedLatexChange);
 
   useCollaborationCanDraw(refs.engineRef, options.canDraw);
   useCollaborationDisposal(refs.engineRef, refs.isMountedRef);
-  useCollaborationInitialization(options.collab, apiRef, refs.engineRef, initializeEngine);
+  useCollaborationInitialization(options.collab, api, refs.engineRef, initializeEngine, setIsReady);
 
-  return { apiRef, handleApiReady, ...handlers };
+  return { apiRef, handleApiReady, isReady, ...handlers };
 }
 
 function useCollaborationRefs(collab: WhiteboardCollaborationOptions | undefined, canDraw: boolean): CollaborationRefs {
@@ -269,7 +280,7 @@ function useCollaborationRefs(collab: WhiteboardCollaborationOptions | undefined
   return useMemo(() => ({ canDrawRef, collabOptionsRef, enginePromiseRef, engineRef, isMountedRef }), [canDrawRef, collabOptionsRef, enginePromiseRef, engineRef, isMountedRef]);
 }
 
-function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((error: Error) => void) | undefined, setLoadError: (message: string) => void) {
+function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((error: Error) => void) | undefined, setLoadError: (message: string) => void, setIsReady: (ready: boolean) => void) {
   return useCallback(
     (api: ExcalidrawImperativeAPI) => {
       if (!refs.collabOptionsRef.current || refs.engineRef.current || refs.enginePromiseRef.current) return;
@@ -294,6 +305,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((er
             onFileSyncStateChange: collab.onFileSyncStateChange,
             onSubmissionError: collab.onSubmissionError,
           });
+          setIsReady(true);
         })
         .catch((reason: unknown) => {
           if (!refs.isMountedRef.current) return;
@@ -306,24 +318,24 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((er
           refs.enginePromiseRef.current = null;
         });
     },
-    [onLoadError, refs, setLoadError],
+    [onLoadError, refs, setIsReady, setLoadError],
   );
 }
 
-function useExcalidrawApiReady(apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, initializeEngine: (api: ExcalidrawImperativeAPI) => void, onExcalidrawApiReady: ((api: ExcalidrawImperativeAPI) => void) | undefined) {
+function useExcalidrawApiReady(apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, setApi: (api: ExcalidrawImperativeAPI) => void, onExcalidrawApiReady: ((api: ExcalidrawImperativeAPI) => void) | undefined) {
   const didReportApiRef = useRef(false);
 
   return useCallback(
     (api: ExcalidrawImperativeAPI) => {
       apiRef.current = api;
-      initializeEngine(api);
+      setApi(api);
 
       if (!didReportApiRef.current) {
         didReportApiRef.current = true;
         onExcalidrawApiReady?.(api);
       }
     },
-    [apiRef, initializeEngine, onExcalidrawApiReady],
+    [apiRef, onExcalidrawApiReady, setApi],
   );
 }
 
@@ -379,16 +391,17 @@ function useCollaborationDisposal(engineRef: MutableRefObject<ExcalidrawCollabEn
   }, [engineRef, isMountedRef]);
 }
 
-function useCollaborationInitialization(collab: WhiteboardCollaborationOptions | undefined, apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, engineRef: MutableRefObject<ExcalidrawCollabEngine | null>, initializeEngine: (api: ExcalidrawImperativeAPI) => void) {
+function useCollaborationInitialization(collab: WhiteboardCollaborationOptions | undefined, api: ExcalidrawImperativeAPI | null, engineRef: MutableRefObject<ExcalidrawCollabEngine | null>, initializeEngine: (api: ExcalidrawImperativeAPI) => void, setIsReady: (ready: boolean) => void) {
   useEffect(() => {
     if (!collab) {
       engineRef.current?.dispose();
       engineRef.current = null;
+      setIsReady(false);
       return;
     }
 
-    if (apiRef.current) initializeEngine(apiRef.current);
-  }, [apiRef, collab, engineRef, initializeEngine]);
+    if (api) initializeEngine(api);
+  }, [api, collab, engineRef, initializeEngine, setIsReady]);
 }
 
 function useWhiteboardMath({ apiRef, canDraw, excalidraw, isCollaborating, selectedLatex, setSelectedLatex, syncScene }: UseWhiteboardMathOptions): WhiteboardMath {
@@ -452,7 +465,7 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
     configuration,
     excalidraw,
     initialData,
-    isReady: Boolean(excalidraw && stylesheet.loaded && !resolvedLoadError),
+    isReady: Boolean(excalidraw && stylesheet.loaded && !resolvedLoadError && (!configuration.isCollaborating || collaboration.isReady)),
     math,
     resolvedLoadError,
     uiOptions,
@@ -463,7 +476,7 @@ function WhiteboardCanvasView({ state }: { state: ReturnType<typeof useWhiteboar
   const { collaboration, configuration, excalidraw, initialData, isReady, math, resolvedLoadError, uiOptions } = state;
 
   return (
-    <div className={configuration.rootClassName} hidden={!configuration.isVisible}>
+    <div className={configuration.rootClassName} hidden={!configuration.isVisible} aria-label="Shared whiteboard" data-chalk-whiteboard-surface="true" data-chalk-whiteboard-ready={isReady ? "true" : "false"}>
       <WhiteboardMathToolbar canDraw={configuration.canDraw} classNames={configuration.classNames} isReady={isReady} onOpenMath={math.openMath} selectedLatex={math.selectedLatex} />
       <WhiteboardCanvasStatus classNames={configuration.classNames} error={resolvedLoadError} icons={configuration.icons} isReady={isReady} />
       {excalidraw && (

@@ -87,11 +87,19 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
   end
 
   @impl true
-  def observe_episode_publications(%__MODULE__{} = adapter, %EpisodeKey{} = episode) do
-    Client.observe_episode_publications(context_client(adapter), episode)
+  def observe_episode_publications(
+        %__MODULE__{} = adapter,
+        %EpisodeKey{} = episode,
+        cursor
+      ) do
+    Client.observe_episode_publications(
+      context_client(adapter),
+      episode,
+      cursor_options(cursor)
+    )
   end
 
-  def observe_episode_publications(_adapter, _episode), do: {:error, :invalid_contract}
+  def observe_episode_publications(_adapter, _episode, _cursor), do: {:error, :invalid_contract}
 
   defp operation(%__MODULE__{} = adapter, operation_id, %EpisodeKey{} = episode, effect, fields) do
     payload =
@@ -151,6 +159,11 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
 
   defp context_client(%__MODULE__{client: client, context: context}),
     do: Client.with_context(client, context)
+
+  defp cursor_options(nil), do: []
+
+  defp cursor_options({incarnation, sequence}),
+    do: [after_incarnation: incarnation, after_sequence: sequence]
 
   defp build(%Client{} = client, options) when is_list(options) do
     with {:ok, context} <- normalize_context(Keyword.get(options, :context, %{})),

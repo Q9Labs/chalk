@@ -31,4 +31,19 @@ describe("chalk stylesheet layering", () => {
     expect(stylesheet).toContain('main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"]::before');
     expect(stylesheet).not.toContain('main[data-chalk][data-chalk-palette="cosmic-chalk"]::before');
   });
+
+  it("animates the voice halo with compositor-friendly properties", () => {
+    const keyframesStart = stylesheet.indexOf("@keyframes chalk-voice-halo-breathe");
+    const keyframesEnd = stylesheet.indexOf("/* Sound bars", keyframesStart);
+    const keyframes = stylesheet.slice(keyframesStart, keyframesEnd);
+    const haloStart = stylesheet.indexOf(".chalk-voice-halo::before");
+    const haloEnd = stylesheet.indexOf(".chalk-sound-bars", haloStart);
+    const halo = stylesheet.slice(haloStart, haloEnd);
+
+    expect(keyframesStart).toBeGreaterThan(-1);
+    expect(keyframes).toContain("opacity");
+    expect(keyframes).toContain("transform");
+    expect(keyframes).not.toContain("box-shadow");
+    expect(halo).toContain("will-change: opacity, transform");
+  });
 });

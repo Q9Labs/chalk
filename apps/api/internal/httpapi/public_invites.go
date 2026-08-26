@@ -187,11 +187,12 @@ type publicInviteStatusRequest struct {
 }
 
 type publicInviteRefreshRequest struct {
-	ArrivalHandle   string
-	GuestCredential string
-	MediaProof      string
-	AccountID       utilities.ID
-	Native          bool
+	ArrivalHandle          string
+	GuestCredential        string
+	MediaProof             string
+	ReplaceMediaConnection bool
+	AccountID              utilities.ID
+	Native                 bool
 }
 
 type publicInviteLeaveRequest struct {
@@ -445,14 +446,15 @@ func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(
 		if service == nil {
 			return publicAccessGrantResponse{}, apiErrorServiceUnavailable
 		}
-		grant, err := service.RefreshAccess(ctx, publicinvites.PublicInviteRefreshInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaProof: request.MediaProof})
+		grant, err := service.RefreshAccess(ctx, publicinvites.PublicInviteRefreshInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaProof: request.MediaProof, ReplaceMediaConnection: request.ReplaceMediaConnection})
 		if err != nil {
 			return publicAccessGrantResponse{}, err
 		}
 		return newPublicAccessGrantResponse(grant), nil
 	}).RateLimit(authenticatedWriteRateLimit).
 		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RequestBody("RefreshSpacePublicInviteAccessRequest", struct {
-		MediaProof string `json:"media_proof"`
+		MediaProof             string `json:"media_proof"`
+		ReplaceMediaConnection bool   `json:"replace_media_connection,omitempty"`
 	}{}).Responds(http.StatusCreated, "AccessGrant", publicAccessGrantResponse{}).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.refresh"))
 	if origin != nil {
@@ -606,7 +608,8 @@ func decodePublicInviteStatusRequest(r *http.Request) (publicInviteStatusRequest
 
 func decodePublicInviteRefreshRequest(r *http.Request) (publicInviteRefreshRequest, error) {
 	body, err := decodeJSONBody[struct {
-		MediaProof string `json:"media_proof"`
+		MediaProof             string `json:"media_proof"`
+		ReplaceMediaConnection bool   `json:"replace_media_connection"`
 	}](r)
 	if err != nil {
 		return publicInviteRefreshRequest{}, err
@@ -618,7 +621,7 @@ func decodePublicInviteRefreshRequest(r *http.Request) (publicInviteRefreshReque
 	if handle == "" {
 		return publicInviteRefreshRequest{}, apiErrorInvalidArrivalHandle
 	}
-	request := publicInviteRefreshRequest{ArrivalHandle: handle, MediaProof: body.MediaProof, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, handle)}
+	request := publicInviteRefreshRequest{ArrivalHandle: handle, MediaProof: body.MediaProof, ReplaceMediaConnection: body.ReplaceMediaConnection, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, handle)}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalUser {
 		request.AccountID = principal.UserID
 	}

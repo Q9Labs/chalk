@@ -12,8 +12,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Reduced sustained Space rendering work by reusing chat timestamp formatting, coalescing chat visibility reads, stabilizing remote audio inputs, and keeping Stage and speaking effects off layout and paint-heavy animation paths.
+
 ### Fixed
 
+- Packaged Board styles and fonts inside the whiteboard SDK so standard browser bundlers can consume its React entry without a CDN or Excalidraw-specific export conditions.
+- Restored reliable browser attachment uploads, public invite re-entry, and Episode-wide Board presentation changes, including replay of a persisted Board command when its Sync socket reconnects.
+- Restored media recovery after microphone and camera changes, kept healthy remote tracks when a provider response is partial, and reconciled stale publications only after repeated age-bounded provider absence.
+- Bounded Sync-authorized local media work, released replaced remote receiver transceivers, and advanced media observation cursors so repeated camera and microphone changes cannot stall later controls or retain stale receivers.
 - Fixed Sync retention cleanup so expired Episode collaboration data no longer removes shared Space state that newer Episodes still use, and cleanup failures now report safe diagnostic classes.
 - Kept Sync retention cleanup on the current Space chat prefix and allowed expired screen-share leases to be removed, so cleanup cannot create an interior message-sequence gap or remain blocked by stale leases.
 - Kept public Space lifecycles active while an Episode still has a joining, active, or leaving Participant, so the creator leaving no longer ends the Episode for everyone else.

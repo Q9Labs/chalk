@@ -119,6 +119,7 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/by-slug/{space_slug}/participants/self/access-grants"},
 		{http.MethodDelete, "/v1/tenants/{tenant_id}/spaces/by-slug/{space_slug}/participants/self"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks"},
+		{http.MethodPut, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks"},
 		{http.MethodPut, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications"},

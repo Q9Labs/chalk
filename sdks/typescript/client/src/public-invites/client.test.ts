@@ -61,6 +61,15 @@ describe("public Space invite client", () => {
     expect(new Headers(leaveRequest?.init?.headers).get("authorization")).toBe("ChalkGuest guest-token");
   });
 
+  it("serializes a requested media connection replacement", async () => {
+    const { fetch, requests } = recordedFetch(() => jsonResponse(accessGrant(), 201));
+    const client = createChalkPublicClient({ baseUrl: "https://api.chalk.test", fetch });
+
+    await expect(client.refreshSpacePublicInviteAccess({ arrivalHandle, mediaProof: "media-proof", replaceMediaConnection: true })).resolves.toMatchObject({ subject: { participant_id: participantId } });
+
+    await expect(requestBody(requests[0]?.init)).resolves.toEqual({ media_proof: "media-proof", replace_media_connection: true });
+  });
+
   it("passes keepalive to browser leave fetches", async () => {
     const { fetch, requests } = recordedFetch(() => {
       return new Response(null, { status: 204 });

@@ -1,3 +1,7 @@
+/// <reference path="../styles.d.ts" />
+
+import "./index.css";
+
 export { WhiteboardCanvas } from "./WhiteboardCanvas";
 export type { WhiteboardCanvasClassNames, WhiteboardCanvasIcons, WhiteboardCanvasProps, WhiteboardCollaborationOptions } from "./WhiteboardCanvas";
 export { appendOrReplaceMathElement, CHALK_MATH_CUSTOM_DATA_KEY, CHALK_MATH_RENDERER, createMathFileId, createMathImageAsset, getChalkMathData, getInsertionPoint, getSelectedMathElement, isChalkMathElement, svgToDataUrl } from "./math-elements";

@@ -9679,6 +9679,185 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           window_seconds: 60,
         },
       },
+      put: {
+        operationId: "updateCloudflareSFUTracks",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+          {
+            in: "path",
+            name: "episode_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/EpisodeId",
+            },
+          },
+          {
+            in: "path",
+            name: "participant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/ParticipantId",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/CloudflareSFUTracksRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CloudflareSFUTracksAPIResponse",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["episode.invalid_id", "participant.invalid_id", "request.invalid", "space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["episode.not_found"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["media.unavailable", "service.unavailable"],
+          },
+        },
+        security: [
+          {
+            participantMediaBearer: [],
+          },
+        ],
+        summary: "Update cloudflare s f u tracks",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
     },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close": {
       put: {
@@ -17578,6 +17757,9 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           media_proof: {
             minLength: 1,
             type: "string",
+          },
+          replace_media_connection: {
+            type: "boolean",
           },
         },
         required: ["media_proof"],

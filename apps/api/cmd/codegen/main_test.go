@@ -250,13 +250,15 @@ func TestParticipantMediaOperationsUseDedicatedCredentialScheme(t *testing.T) {
 		t.Fatalf("participant media security scheme = %#v", scheme)
 	}
 
-	mediaOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks"]["post"])
-	mediaSecurity, ok := mediaOperation["security"].([]map[string][]string)
-	if !ok || len(mediaSecurity) != 1 || mediaSecurity[0]["participantMediaBearer"] == nil {
-		t.Fatalf("participant media security = %#v, want dedicated media bearer", mediaOperation["security"])
-	}
-	if _, exists := mediaSecurity[0]["sessionOrBearer"]; exists {
-		t.Fatalf("participant media route must not accept general auth: %#v", mediaSecurity)
+	for _, method := range []string{"post", "put"} {
+		mediaOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks"][method])
+		mediaSecurity, ok := mediaOperation["security"].([]map[string][]string)
+		if !ok || len(mediaSecurity) != 1 || mediaSecurity[0]["participantMediaBearer"] == nil {
+			t.Fatalf("participant media %s security = %#v, want dedicated media bearer", method, mediaOperation["security"])
+		}
+		if _, exists := mediaSecurity[0]["sessionOrBearer"]; exists {
+			t.Fatalf("participant media %s route must not accept general auth: %#v", method, mediaSecurity)
+		}
 	}
 
 	accessOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant"]["post"])

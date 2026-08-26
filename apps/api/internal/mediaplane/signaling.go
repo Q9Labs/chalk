@@ -64,6 +64,10 @@ type SignalingPlane interface {
 	Renegotiate(context.Context, RenegotiateRequest) error
 }
 
+type TrackUpdatingPlane interface {
+	UpdateTracks(context.Context, TracksRequest) (TracksResponse, error)
+}
+
 type TrackClosingPlane interface {
 	CloseTracks(context.Context, CloseTracksRequest) (CloseTracksResponse, error)
 }
@@ -77,6 +81,17 @@ func (s Service) AddTracks(ctx context.Context, input TracksRequest) (TracksResp
 		return TracksResponse{}, err
 	}
 	return signaling.AddTracks(ctx, input)
+}
+
+func (s Service) UpdateTracks(ctx context.Context, input TracksRequest) (TracksResponse, error) {
+	updating, ok := s.plane.(TrackUpdatingPlane)
+	if !ok {
+		return TracksResponse{}, ErrUnsupportedOperation
+	}
+	if err := requireTracksRequest(&input); err != nil {
+		return TracksResponse{}, err
+	}
+	return updating.UpdateTracks(ctx, input)
 }
 
 func (s Service) CloseTracks(ctx context.Context, input CloseTracksRequest) (CloseTracksResponse, error) {

@@ -41,7 +41,7 @@ describe("ConnectionLifecycleService", () => {
     await harness.runtime.dispose();
   });
 
-  it("serializes commands through the Queue and rejects after scope closure", async () => {
+  it("serializes commands through the command lane and rejects after scope closure", async () => {
     const harness = makeHarness(() => Effect.succeed(accessGrant(START + 300_000, "stable")));
     const values: string[] = [];
 
@@ -52,6 +52,88 @@ describe("ConnectionLifecycleService", () => {
 
     await harness.runtime.dispose();
     await expect(Effect.runPromise(harness.lifecycle.runCommand(() => Effect.void))).rejects.toMatchObject({ _tag: "ConnectionLifecycleFailure", code: "invalid_state" });
+  });
+
+  it("does not execute a queued port command after the lifecycle closes", async () => {
+    const harness = makeHarness(() => Effect.succeed(accessGrant(START + 300_000, "close-while-queued")));
+    const commandGate = Deferred.makeUnsafe<void>();
+    let secondCommandRuns = 0;
+
+    await startHarness(harness);
+    const first = harness.runtime.runFork(harness.lifecycle.runPortCommand(() => Deferred.await(commandGate)));
+    await settle(harness);
+    const second = harness.runtime.runFork(
+      harness.lifecycle.runPortCommand(() =>
+        Effect.sync(() => {
+          secondCommandRuns += 1;
+        }),
+      ),
+    );
+    await settle(harness);
+    expect(secondCommandRuns).toBe(0);
+
+    await harness.runtime.dispose();
+    await Effect.runPromise(Deferred.succeed(commandGate, undefined));
+    await Effect.runPromise(Effect.exit(Fiber.join(first)));
+    const secondExit = await Effect.runPromise(Effect.exit(Fiber.join(second)));
+
+    expect(secondCommandRuns).toBe(0);
+    expect(secondExit._tag).toBe("Failure");
+  });
+
+  it("recovers media while a serialized command awaits its port operation", async () => {
+    const initial = accessGrant(START + 300_000, "command-initial", "connection-1");
+    const replacement = accessGrant(START + 300_000, "command-replacement", "connection-2");
+    const { harness, media } = mediaRecoveryHarness(initial, replacement);
+    const commandGate = Deferred.makeUnsafe<void>();
+    let activeCommands = 0;
+    let maxActiveCommands = 0;
+    let startedCommands = 0;
+    let firstCommandReleased = false;
+
+    await startHarness(harness);
+    const first = harness.runtime.runFork(
+      harness.lifecycle.runCommand(() =>
+        Effect.gen(function* () {
+          startedCommands += 1;
+          activeCommands += 1;
+          maxActiveCommands = Math.max(maxActiveCommands, activeCommands);
+          yield* Deferred.await(commandGate);
+          firstCommandReleased = true;
+          activeCommands -= 1;
+        }),
+      ),
+    );
+    await settle(harness);
+
+    const second = harness.runtime.runFork(
+      harness.lifecycle.runCommand(() =>
+        Effect.sync(() => {
+          startedCommands += 1;
+          activeCommands += 1;
+          maxActiveCommands = Math.max(maxActiveCommands, activeCommands);
+          activeCommands -= 1;
+        }),
+      ),
+    );
+    await settle(harness);
+    expect(startedCommands).toBe(1);
+
+    media.emit(mediaSnapshot("failed", true));
+    await settle(harness);
+
+    expect(media.restarts).toEqual([replacement.media.clientPayload]);
+    expect(harness.lifecycle.getSnapshot().state).toBe("live");
+    expect(firstCommandReleased).toBe(false);
+    expect(maxActiveCommands).toBe(1);
+
+    await harness.runtime.runPromise(Deferred.succeed(commandGate, undefined));
+    await harness.runtime.runPromise(Fiber.join(first));
+    await settle(harness);
+    expect(startedCommands).toBe(2);
+    expect(maxActiveCommands).toBe(1);
+    await harness.runtime.runPromise(Fiber.join(second));
+    await harness.runtime.dispose();
   });
 
   it("revalidates foreground work and retries one rejected command through R1", async () => {
@@ -260,6 +342,29 @@ describe("ConnectionLifecycleService", () => {
     await harness.runtime.dispose();
   });
 
+  it("keeps media recovery alive while a provider replacement takes longer than ten seconds", async () => {
+    const initial = accessGrant(START + 300_000, "media-initial", "connection-1");
+    const replacement = accessGrant(START + 300_000, "media-replacement", "connection-2");
+    let releaseRestart = () => undefined;
+    const restartBarrier = new Promise<void>((resolve) => {
+      releaseRestart = resolve;
+    });
+    const media = fakeMedia({ restart: () => restartBarrier });
+    const harness = makeHarness(() => Effect.sync(() => (harness.requests.length === 1 ? initial : replacement)), { mediaFactory: () => media });
+
+    await startHarness(harness);
+    media.emit(mediaSnapshot("failed", true));
+    await settle(harness);
+    await harness.runtime.runPromise(TestClock.adjust(10_001));
+    await settle(harness);
+
+    expect(harness.lifecycle.getSnapshot().state).toBe("reconnecting");
+    releaseRestart();
+    await settle(harness);
+    expect(harness.lifecycle.getSnapshot().state).toBe("live");
+    await harness.runtime.dispose();
+  });
+
   it("exhausts the recovery budget, tears down ports, and clears access", async () => {
     const original = fakeSync();
     const stalled = fakeSync({ startLive: false });
@@ -414,7 +519,7 @@ type FakeMedia = {
   emit: (snapshot: CloudflareSFUSnapshot) => void;
 };
 
-function fakeMedia(options: { readonly startError?: unknown } = {}): FakeMedia {
+function fakeMedia(options: { readonly startError?: unknown; readonly restart?: (bootstrap: CloudflareSFUBootstrap) => Promise<void> } = {}): FakeMedia {
   let snapshot = mediaSnapshot("idle");
   let starts = 0;
   let stops = 0;
@@ -436,6 +541,7 @@ function fakeMedia(options: { readonly startError?: unknown } = {}): FakeMedia {
     },
     restart: async (bootstrap: CloudflareSFUBootstrap) => {
       restarts.push(bootstrap);
+      await options.restart?.(bootstrap);
       emit(mediaSnapshot("live"));
     },
     prepareLocalTrack: () => undefined,

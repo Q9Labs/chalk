@@ -12,6 +12,13 @@ function staticModuleSpecifier(node) {
   return undefined;
 }
 
+function declarationOnlyStyleImport(sourceFile, node) {
+  if (!ts.isImportDeclaration(node) || node.importClause) return undefined;
+  const moduleSpecifier = node.moduleSpecifier;
+  if (!ts.isStringLiteral(moduleSpecifier) || !moduleSpecifier.text.endsWith(".css")) return undefined;
+  return { start: node.getStart(sourceFile), end: node.end, text: "" };
+}
+
 function replacementFor(sourceFile, source, node) {
   const moduleSpecifier = staticModuleSpecifier(node);
   if (!moduleSpecifier || !ts.isStringLiteral(moduleSpecifier) || !isExtensionlessRelativeSpecifier(moduleSpecifier.text)) return undefined;
@@ -25,7 +32,7 @@ export function rewriteDeclarationSpecifiers(source) {
   const sourceFile = ts.createSourceFile("declaration.d.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const replacements = [];
   const visit = (node) => {
-    const replacement = replacementFor(sourceFile, source, node);
+    const replacement = declarationOnlyStyleImport(sourceFile, node) ?? replacementFor(sourceFile, source, node);
     if (replacement) replacements.push(replacement);
     ts.forEachChild(node, visit);
   };

@@ -143,7 +143,18 @@ function isLockfile(relativePath) {
 
 const REFERENCE_FILENAMES = new Set(["CHANGELOG.md", "GLOSSARY.md", "checklist.md"]);
 const VENDORED_DIRECTORIES = new Set(["node_modules", "dist", "vendor", "sqlc"]);
-const PROVIDER_VOCABULARY_ADAPTERS = new Set(["sdks/typescript/client/src/media/rtk.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.test.ts"]);
+const PROVIDER_VOCABULARY_ADAPTERS = new Set([
+  "apps/api/internal/adapters/cloudflare/sfu/adapter.go",
+  "apps/api/internal/adapters/cloudflare/sfu/adapter_test.go",
+  "apps/api/internal/httpapi/sfu_signaling_observation_test.go",
+  "sdks/typescript/client/src/media/client.ts",
+  "sdks/typescript/client/src/media/cloudflare-sfu.test.ts",
+  "sdks/typescript/client/src/media/rtk.ts",
+  "sdks/typescript/client/src/media/transport.ts",
+  "sdks/typescript/client/src/media/types.ts",
+  "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts",
+  "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.test.ts",
+]);
 
 function exclusionContext(relativePath) {
   const parts = relativePath.split("/");
@@ -174,7 +185,7 @@ const EXCLUSION_RULES = [
   [({ relativePath }) => relativePath === "tools/language-ratchet/baseline.json", "ratchet baseline"],
   [({ parts }) => parts[0] === "scratchpad", "scratchpad"],
   [({ relativePath }) => relativePath.startsWith("apps/api/db/migrations/"), "immutable migration history"],
-  [({ relativePath }) => PROVIDER_VOCABULARY_ADAPTERS.has(relativePath), "provider SDK vocabulary adapter"],
+  [({ relativePath }) => PROVIDER_VOCABULARY_ADAPTERS.has(relativePath), "provider vocabulary adapter"],
   [isReferenceFile, "migration reference or checklist"],
   [({ relativePath }) => relativePath === "sdks/ubiquitous-language.md", "superseded vocabulary catalog"],
   [({ relativePath }) => isLockfile(relativePath), "lockfile or dependency checksum"],

@@ -84,12 +84,12 @@ describe("SpaceClientCore episode diagnostics integration", () => {
     frameCallback?.();
     expect(diagnostics?.inspect().ring).toEqual(expect.arrayContaining([expect.objectContaining({ name: "camera.publish", phase: "first_frame", state: "observed" })]));
 
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     await runtime.dispose();
     expect(episodeDiagnosticsForConnection(lifecycle)).toBeUndefined();
     expect(episodeDiagnosticsForDependencies(dependencies)).toBeUndefined();
     expect(episodeDiagnosticsForSyncClient(platform.sync)).toBeUndefined();
     expect(diagnostics?.inspect()).toMatchObject({ ring: [], queue: [], credentialGeneration: null });
-    expect(fetch).toHaveBeenCalled();
   });
 });
 

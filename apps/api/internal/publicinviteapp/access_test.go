@@ -112,6 +112,28 @@ func TestAccessRefreshRejectsChangedProviderSubject(t *testing.T) {
 	}
 }
 
+func TestAccessRefreshReplacementCreatesNewProviderJoinForSameParticipant(t *testing.T) {
+	fixture := newAccessFixture(t, mediaplane.ProviderCloudflareSFU)
+	arrival := fixture.arrival(publicinvites.IdentityGuest)
+	arrival.Provider = publicinvites.PublicProviderCloudflareSFU
+	arrival.ProviderSubject = "old-connection"
+	fixture.media.createJoin = mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": "new-connection", "stunServer": "stun.example.test"}}
+
+	grant, err := fixture.access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: arrival, ReplaceMediaConnection: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grant.ProviderSubject != "new-connection" || grant.ClientPayload.ConnectionID != "new-connection" {
+		t.Fatalf("grant provider subject = %q, payload = %#v", grant.ProviderSubject, grant.ClientPayload)
+	}
+	if fixture.media.createCalls != 1 || fixture.media.resumeCalls != 0 {
+		t.Fatalf("join calls = create %d, resume %d", fixture.media.createCalls, fixture.media.resumeCalls)
+	}
+	if fixture.media.createInput.ExternalParticipantID != arrival.ParticipantID.String() {
+		t.Fatalf("external participant ID = %q, want %q", fixture.media.createInput.ExternalParticipantID, arrival.ParticipantID)
+	}
+}
+
 func TestAccessLeavePersistsLifecycleBeforeBestEffortProviderRemoval(t *testing.T) {
 	fixture := newAccessFixture(t, mediaplane.ProviderCloudflareRTK)
 	arrival := fixture.arrival(publicinvites.IdentityGuest)
@@ -249,6 +271,7 @@ type mediaPlaneStub struct {
 	createInput mediaplane.CreateJoinInput
 	resumeInput mediaplane.ResumeJoinInput
 	createCalls int
+	resumeCalls int
 	removeCalls int
 	removeErr   error
 }
@@ -264,6 +287,7 @@ func (s *mediaPlaneStub) CreateJoin(_ context.Context, input mediaplane.CreateJo
 }
 
 func (s *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	s.resumeCalls++
 	s.resumeInput = input
 	return s.resumeJoin, nil
 }

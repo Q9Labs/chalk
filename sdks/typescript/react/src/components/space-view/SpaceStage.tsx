@@ -6,7 +6,7 @@ import { ScreenShareViewSurface } from "../composite/ScreenShareView";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { QuietSpace } from "../participant-grid/ParticipantGrid";
 import { Stage, type StageLayout } from "../stage/Stage";
-import { buildStageItems, type StageItem } from "../stage/stage-items";
+import { buildStageItems, WHITEBOARD_ITEM_ID, type StageItem } from "../stage/stage-items";
 import { WhiteboardView } from "../whiteboard-view/WhiteboardView";
 import type { SpaceViewWhiteboard } from "./SpaceView";
 
@@ -21,7 +21,8 @@ export interface SpaceStageProps {
 /** The Space's stage: participants, screen shares and the whiteboard as tiles, with the app's renderers for focused content. */
 export function SpaceStage({ tiles, layout, generatedAvatars = true, whiteboard, className }: SpaceStageProps): React.JSX.Element {
   const client = useSpaceClient();
-  const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true), [tiles, whiteboard?.isOpen]);
+  const whiteboardPresented = whiteboard?.isOpen === true;
+  const items = useMemo(() => buildStageItems(tiles, whiteboardPresented), [tiles, whiteboardPresented]);
 
   const renderPrimaryContent = useCallback(
     (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>) => {
@@ -34,7 +35,7 @@ export function SpaceStage({ tiles, layout, generatedAvatars = true, whiteboard,
     [client, whiteboard],
   );
 
-  return <Stage items={items} layout={layout} renderPrimaryContent={renderPrimaryContent} generatedAvatars={generatedAvatars} emptyState={<QuietSpace />} className={className} />;
+  return <Stage items={items} layout={whiteboardPresented ? "presentation" : layout} pinnedId={whiteboardPresented ? WHITEBOARD_ITEM_ID : undefined} renderPrimaryContent={renderPrimaryContent} generatedAvatars={generatedAvatars} emptyState={<QuietSpace />} className={className} />;
 }
 
 SpaceStage.displayName = "SpaceStage";

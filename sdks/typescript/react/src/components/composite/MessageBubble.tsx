@@ -7,6 +7,7 @@ import { getParticipantColor } from "../../utils/colorGenerator";
 import { ChalkBadge, ChalkButton, ChalkChrome, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicMessageBubble } from "./ClassicMessageBubble";
+import { formatMessageTime } from "./message-time";
 
 export interface MessageBubbleProps {
   content: string;
@@ -61,14 +62,6 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
     className,
   }) => {
     const [resolvedAttachmentUrls, setResolvedAttachmentUrls] = useState<Record<string, string>>({});
-
-    const formatTime = (value: string) => {
-      return new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true,
-      }).format(new Date(value));
-    };
 
     const senderColors = useMemo(() => getParticipantColor(senderName), [senderName]);
 
@@ -211,7 +204,7 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
           <ChalkBadge className="rounded-full px-4 py-2 text-[var(--chalk-muted-text)]">
             <span className="block text-center text-xs">{renderContent(content)}</span>
           </ChalkBadge>
-          {showTimestamp && <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatTime(timestamp)}</span>}
+          {showTimestamp && <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatMessageTime(timestamp)}</span>}
         </div>
       );
     }
@@ -228,7 +221,7 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
 
           {showTimestamp && isLastInGroup && (
             <div className={cn("flex items-center gap-1.5 mt-1 px-1", isLocal ? "flex-row-reverse" : "flex-row")}>
-              <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatTime(timestamp)}</span>
+              <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatMessageTime(timestamp)}</span>
               {renderStatus()}
             </div>
           )}

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
 
@@ -10,13 +10,6 @@ vi.mock("@excalidraw/excalidraw", () => ({
 }));
 
 describe("WhiteboardCanvas", () => {
-  beforeEach(() => {
-    const link = document.createElement("link");
-    link.id = "chalk-excalidraw-styles";
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-  });
-
   afterEach(() => {
     cleanup();
     document.getElementById("chalk-excalidraw-styles")?.remove();
@@ -24,6 +17,8 @@ describe("WhiteboardCanvas", () => {
 
   it("shows a loading state while Excalidraw initializes", () => {
     render(<WhiteboardCanvas />);
+    expect(screen.getByLabelText("Shared whiteboard").getAttribute("data-chalk-whiteboard-surface")).toBe("true");
+    expect(screen.getByLabelText("Shared whiteboard").getAttribute("data-chalk-whiteboard-ready")).toBe("false");
     expect(screen.getByText("Loading whiteboard...")).toBeTruthy();
   });
 
@@ -38,5 +33,18 @@ describe("WhiteboardCanvas", () => {
   it("keeps its layout mounted when hidden", () => {
     const { container } = render(<WhiteboardCanvas isVisible={false} />);
     expect(container.firstElementChild?.hasAttribute("hidden")).toBe(true);
+  });
+
+  it("does not fetch a runtime stylesheet by default", () => {
+    render(<WhiteboardCanvas />);
+    expect(document.getElementById("chalk-excalidraw-styles")).toBeNull();
+  });
+
+  it("loads an explicit stylesheet path for embedded renderers", () => {
+    render(<WhiteboardCanvas excalidrawCssPath="data:text/css," />);
+    const stylesheet = document.getElementById("chalk-excalidraw-styles");
+
+    expect(stylesheet).toBeInstanceOf(HTMLLinkElement);
+    expect(stylesheet?.getAttribute("href")).toBe("data:text/css,");
   });
 });

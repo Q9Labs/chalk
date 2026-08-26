@@ -102,10 +102,12 @@ describe("public Chalk access adapter", () => {
 
     await expect(adapter.getSpacePublicInviteArrival("arrival-1")).resolves.toBe(arrival);
     await expect(adapter.refreshSpacePublicInviteAccess("arrival-1", "media-proof")).resolves.toBe(refreshed);
+    await expect(adapter.refreshSpacePublicInviteAccess("arrival-1", "media-proof", true)).resolves.toBe(refreshed);
     await expect(adapter.leaveSpacePublicInviteArrival("arrival-1", { keepalive: true })).resolves.toBeUndefined();
 
     expect(client.getSpacePublicInviteArrival).toHaveBeenCalledWith({ arrivalHandle: "arrival-1" });
     expect(client.refreshSpacePublicInviteAccess).toHaveBeenCalledWith({ arrivalHandle: "arrival-1", mediaProof: "media-proof" });
+    expect(client.refreshSpacePublicInviteAccess).toHaveBeenCalledWith({ arrivalHandle: "arrival-1", mediaProof: "media-proof", replaceMediaConnection: true });
     expect(client.leaveSpacePublicInviteArrival).toHaveBeenCalledWith("arrival-1", { keepalive: true });
   });
 
@@ -142,8 +144,76 @@ describe("public Chalk access adapter", () => {
     await prepared.finish();
     await prepared.finish();
 
-    expect(client.refreshSpacePublicInviteAccess).toHaveBeenCalledWith("arrival-1", accessToken("chalk-media", "media-token"));
+    expect(client.refreshSpacePublicInviteAccess).toHaveBeenCalledWith("arrival-1", accessToken("chalk-media", "media-token"), true);
     expect(client.leaveSpacePublicInviteArrival).toHaveBeenCalledOnce();
+  });
+
+  it("releases the old public arrival and returns a fresh grant for explicit re-entry", async () => {
+    const reenteredAccess = parseAccessGrant(accessWire("media-token-2"));
+    const reenteredArrival = {
+      state: "admitted",
+      arrival_handle: "arrival-2",
+      access: reenteredAccess,
+      space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" },
+    } satisfies Awaited<ReturnType<PublicInviteClient["arriveBySpacePublicInvite"]>>;
+    const client: PublicInviteClient = {
+      createPublicSpace: vi.fn(),
+      arriveBySpacePublicInvite: vi.fn(),
+      getSpacePublicInviteArrival: vi.fn(),
+      refreshSpacePublicInviteAccess: vi.fn(),
+      leaveSpacePublicInviteArrival: vi.fn().mockResolvedValue(undefined),
+    };
+    const reenter = vi.fn().mockResolvedValue(reenteredArrival);
+    const prepared = createPreparedPublicSpace(
+      client,
+      { state: "admitted", arrival_handle: "arrival-1", access, space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" } },
+      { reenter },
+    );
+
+    await expect(prepared.connectionAccess({ reason: "join", replaceMediaConnection: false })).resolves.toBe(access);
+    await expect(prepared.connectionAccess({ reason: "join", replaceMediaConnection: false })).resolves.toBe(reenteredAccess);
+    await prepared.finish();
+
+    expect(reenter).toHaveBeenCalledOnce();
+    expect(client.leaveSpacePublicInviteArrival).toHaveBeenNthCalledWith(1, "arrival-1");
+    expect(client.leaveSpacePublicInviteArrival).toHaveBeenNthCalledWith(2, "arrival-2", {});
+    expect(prepared.arrival).toBe(reenteredArrival);
+  });
+
+  it("does not release an old arrival twice when re-entry retries after a rejection", async () => {
+    const reenteredAccess = parseAccessGrant(accessWire("media-token-2"));
+    const reenteredArrival = {
+      state: "admitted",
+      arrival_handle: "arrival-2",
+      access: reenteredAccess,
+      space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" },
+    } satisfies Awaited<ReturnType<PublicInviteClient["arriveBySpacePublicInvite"]>>;
+    const client: PublicInviteClient = {
+      createPublicSpace: vi.fn(),
+      arriveBySpacePublicInvite: vi.fn(),
+      getSpacePublicInviteArrival: vi.fn(),
+      refreshSpacePublicInviteAccess: vi.fn(),
+      leaveSpacePublicInviteArrival: vi.fn().mockResolvedValue(undefined),
+    };
+    const reenter = vi
+      .fn<() => Promise<typeof reenteredArrival>>()
+      .mockRejectedValueOnce(new Error("re-entry unavailable"))
+      .mockResolvedValueOnce(reenteredArrival);
+    const prepared = createPreparedPublicSpace(
+      client,
+      { state: "admitted", arrival_handle: "arrival-1", access, space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" } },
+      { reenter },
+    );
+
+    await expect(prepared.connectionAccess({ reason: "join", replaceMediaConnection: false })).resolves.toBe(access);
+    await expect(prepared.connectionAccess({ reason: "join", replaceMediaConnection: false })).rejects.toThrow("re-entry unavailable");
+    await expect(prepared.connectionAccess({ reason: "join", replaceMediaConnection: false })).resolves.toBe(reenteredAccess);
+    await prepared.finish();
+
+    expect(reenter).toHaveBeenCalledTimes(2);
+    expect(client.leaveSpacePublicInviteArrival).toHaveBeenCalledTimes(2);
+    expect(client.leaveSpacePublicInviteArrival).toHaveBeenNthCalledWith(1, "arrival-1");
+    expect(client.leaveSpacePublicInviteArrival).toHaveBeenNthCalledWith(2, "arrival-2", {});
   });
 
   it("derives the sync endpoint from the API origin", () => {

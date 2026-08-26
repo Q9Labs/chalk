@@ -25,7 +25,7 @@ describe("public Space entry", () => {
     expect(mocks.publicClient.leaveSpacePublicInviteArrival).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/space/created-space");
     expect(window.location.hash).toBe(`#spaceInviteToken=${spacePageTestToken}`);
-    expect(mocks.createPreparedPublicSpace).toHaveBeenCalledWith(mocks.publicClient, spacePageTestArrival);
+    expect(mocks.createPreparedPublicSpace).toHaveBeenCalledWith(mocks.publicClient, spacePageTestArrival, { reenter: expect.any(Function) });
     await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ inviteLink: window.location.href, spaceName: "Created Space" }));
     index.unmount();
     await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledOnce());
@@ -49,6 +49,21 @@ describe("public Space entry", () => {
     await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith(spacePageTestToken, "Ada"));
     expect(mocks.publicClient.createPublicSpace).not.toHaveBeenCalled();
     await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "Design Lab", inviteLink: window.location.href }));
+  });
+
+  it("mints a fresh public arrival when the supplied client explicitly re-enters", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    render(<SpacePage slug="design-lab" />);
+    enterName("Ada");
+    await waitFor(() => expect(mocks.createPreparedPublicSpace).toHaveBeenCalled());
+    const reenter = mocks.createPreparedPublicSpace.mock.calls.at(-1)?.[2]?.reenter;
+    if (typeof reenter !== "function") throw new Error("The prepared public Space did not receive a re-entry owner.");
+    const reenteredArrival = { ...spacePageTestArrival, arrival_handle: "arrival-22222222" };
+    mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValueOnce(reenteredArrival);
+
+    await expect(reenter()).resolves.toBe(reenteredArrival);
+
+    expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenLastCalledWith(spacePageTestToken, "Ada");
   });
 
   it("keeps the explicit account marker on the authenticated join path when no capability is present", async () => {
@@ -103,7 +118,7 @@ describe("public Space entry", () => {
     expect(await screen.findByText("Waiting to enter")).toBeDefined();
     await waitFor(() => expect(mocks.publicClient.getSpacePublicInviteArrival).toHaveBeenCalledWith("arrival-11111111"));
     expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenNthCalledWith(2, spacePageTestToken, "Ada", { arrivalHandle: "arrival-11111111" });
-    expect(mocks.createPreparedPublicSpace).toHaveBeenLastCalledWith(mocks.publicClient, spacePageTestArrival);
+    expect(mocks.createPreparedPublicSpace).toHaveBeenLastCalledWith(mocks.publicClient, spacePageTestArrival, { reenter: expect.any(Function) });
     expect(mocks.holder.chalkProps).toBeDefined();
   });
 
@@ -131,14 +146,22 @@ describe("public Space entry", () => {
     expect(screen.getByRole("button", { name: "Continue" })).toBeDefined();
   });
 
-  it("leaves the browser arrival when Chalk reports that the Participant left", async () => {
+  it("does not attach terminal arrival cleanup to the ordinary leave event", async () => {
     await renderAdmittedSpace();
 
     expect(mocks.holder.chalkProps).toMatchObject({ diagnosticReference: mocks.diagnosticsReference });
-    const onLeft = mocks.holder.chalkProps?.onLeft;
-    if (typeof onLeft !== "function") throw new Error("Chalk did not provide the leave callback.");
-    act(() => onLeft());
-    await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledOnce());
+    expect(mocks.holder.chalkProps).not.toHaveProperty("onLeft");
+    expect(mocks.prepared.finish).not.toHaveBeenCalled();
+  });
+
+  it("fully releases the prepared arrival when the Episode ends", async () => {
+    await renderAdmittedSpace();
+
+    const onEpisodeEnded = mocks.holder.chalkProps?.onEpisodeEnded;
+    if (typeof onEpisodeEnded !== "function") throw new Error("Chalk did not provide the Episode end callback.");
+    act(() => onEpisodeEnded());
+
+    await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalled());
   });
 
   it("keeps public arrival cleanup alive on pagehide", async () => {

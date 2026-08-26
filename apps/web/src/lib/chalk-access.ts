@@ -30,7 +30,7 @@ export type PublicInviteClient = {
   readonly createPublicSpace: (displayName: string) => Promise<PublicSpaceCreated>;
   readonly arriveBySpacePublicInvite: (spaceInviteToken: string, displayName: string, options?: Pick<PublicArrivalOptions, "arrivalHandle">) => Promise<PublicSpaceArrival>;
   readonly getSpacePublicInviteArrival: (arrivalHandle: string) => Promise<PublicSpaceArrival>;
-  readonly refreshSpacePublicInviteAccess: (arrivalHandle: string, mediaProof: string) => Promise<AccessGrant>;
+  readonly refreshSpacePublicInviteAccess: (arrivalHandle: string, mediaProof: string, replaceMediaConnection?: boolean) => Promise<AccessGrant>;
   readonly leaveSpacePublicInviteArrival: (arrivalHandle: string, options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 
@@ -40,6 +40,10 @@ export type PreparedPublicSpace = {
   readonly getAccess: GetAccess;
   readonly connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]>;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
+};
+
+type PreparedPublicSpaceOptions = {
+  readonly reenter?: () => Promise<PublicSpaceArrival>;
 };
 
 type JourneyOptions = Pick<TelemetryJourney, "headers"> & {
@@ -63,7 +67,8 @@ export function createPublicInviteClient(journey?: JourneyOptions): PublicInvite
     createPublicSpace: (displayName) => client.createPublicSpace({ displayName }, { idempotencyKey: requestKey() }),
     arriveBySpacePublicInvite: (spaceInviteToken, displayName, options) => client.arriveBySpacePublicInvite({ spaceInviteToken, displayName }, { idempotencyKey: requestKey(), ...(options?.arrivalHandle === undefined ? {} : { arrivalHandle: options.arrivalHandle }) }),
     getSpacePublicInviteArrival: (arrivalHandle) => client.getSpacePublicInviteArrival({ arrivalHandle }),
-    refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof) => client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle }),
+    refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof, replaceMediaConnection) =>
+      client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle, ...(replaceMediaConnection === undefined ? {} : { replaceMediaConnection }) }),
     leaveSpacePublicInviteArrival: (arrivalHandle, options) => client.leaveSpacePublicInviteArrival(arrivalHandle, options),
   };
 }
@@ -111,11 +116,13 @@ export async function joinDashboardSpace(tenantID: string, spaceSlug: string, di
   };
 }
 
-export function createPreparedPublicSpace(client: PublicInviteClient, arrival: PublicSpaceArrival): PreparedPublicSpace {
-  const access = requireArrivalAccess(arrival);
+export function createPreparedPublicSpace(client: PublicInviteClient, arrival: PublicSpaceArrival, options: PreparedPublicSpaceOptions = {}): PreparedPublicSpace {
+  let currentArrival = arrival;
+  const access = requireArrivalAccess(currentArrival);
   let mediaProof = accessMediaProof(access);
   let current = access;
   let left = false;
+  let currentArrivalReleased = false;
   let initial = true;
 
   const connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]> = async (request) => {
@@ -124,22 +131,36 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
       initial = false;
       return current;
     }
+    if ((!request || request.reason === "join") && options.reenter) {
+      const arrivalHandle = currentArrival.arrival_handle;
+      if (arrivalHandle && !currentArrivalReleased) {
+        await client.leaveSpacePublicInviteArrival(arrivalHandle);
+        currentArrivalReleased = true;
+      }
+      currentArrival = await options.reenter();
+      current = requireArrivalAccess(currentArrival);
+      mediaProof = accessMediaProof(current);
+      currentArrivalReleased = false;
+      return current;
+    }
     mediaProof = request?.currentMediaToken ?? mediaProof;
-    current = await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof);
+    current = await client.refreshSpacePublicInviteAccess(currentArrival.arrival_handle ?? "", mediaProof, request?.replaceMediaConnection ?? false);
     mediaProof = accessMediaProof(current);
     return current;
   };
   const getAccess: GetAccess = async ({ reason }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection: reason === "retry" });
   const finish = async (options: SpaceAccessCleanupOptions = {}): Promise<void> => {
     if (left) return;
-    const arrivalHandle = arrival.arrival_handle;
-    if (arrivalHandle) await client.leaveSpacePublicInviteArrival(arrivalHandle, options);
+    const arrivalHandle = currentArrival.arrival_handle;
+    if (arrivalHandle && !currentArrivalReleased) await client.leaveSpacePublicInviteArrival(arrivalHandle, options);
     left = true;
   };
 
   return {
-    arrival,
-    credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), space: publicSpaceSlug(arrival) },
+    get arrival() {
+      return currentArrival;
+    },
+    credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), space: publicSpaceSlug(currentArrival) },
     getAccess,
     connectionAccess,
     finish,

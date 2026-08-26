@@ -26,7 +26,7 @@ func TestEnqueueDueEpisodeDeadlinesPersistsCanonicalOperationAndClaimsOnce(t *te
 	if err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	if err := pool.Ping(ctx); err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}

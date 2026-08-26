@@ -229,7 +229,7 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
   return (
     <div className={cn("flex h-full w-full gap-2 transition-all duration-500", thumbnailPosition === "bottom" ? "flex-col" : "flex-row", className)}>
       <ChalkPanel tone="neutral" filled className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full">
-        <div ref={containerRef} className="group relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--chalk-text)]" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
+        <div ref={containerRef} role="region" aria-label={`Screen shared by ${sharedByName}`} className="group relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--chalk-text)]" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
           {/* Loading State */}
           {isLoading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[var(--chalk-canvas)] transition-opacity duration-500">

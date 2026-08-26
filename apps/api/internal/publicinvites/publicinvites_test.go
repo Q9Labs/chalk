@@ -658,6 +658,48 @@ func TestRuntimeRefreshAndLeaveUsePersistedProviderBinding(t *testing.T) {
 	}
 }
 
+func TestRuntimeRefreshReplacementPersistsNewProviderSubject(t *testing.T) {
+	fixture := newRuntimeFixture(t, AdmissionOpen)
+	fixture.accounts.authorized = true
+	oldSubject := "old-participant-subject"
+	newGrant := fixture.access.grant
+	newGrant.ProviderSubject = "new-participant-subject"
+	newGrant.ClientPayload.ProviderSubject = newGrant.ProviderSubject
+	fixture.access.refresh = newGrant
+	fixture.repo.arrival = Arrival{
+		ArrivalHandle:         mustID(t, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+		TenantID:              fixture.tenantID,
+		SpaceID:               fixture.spaceID,
+		IdentityMode:          IdentityAccount,
+		AccountID:             fixture.accountID,
+		State:                 ArrivalAdmitted,
+		EpisodeID:             fixture.access.grant.EpisodeID,
+		ParticipantID:         fixture.access.grant.ParticipantID,
+		ParticipantGeneration: fixture.access.grant.ParticipantGeneration,
+		Provider:              fixture.access.grant.Provider,
+		ProviderSubject:       oldSubject,
+	}
+	fixture.repo.arrivalNotFound = false
+
+	refreshed, err := fixture.runtime.RefreshAccess(context.Background(), PublicInviteRefreshInput{
+		ArrivalHandle:          fixture.repo.arrival.ArrivalHandle.String(),
+		AccountID:              fixture.accountID,
+		ReplaceMediaConnection: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.ProviderSubject != newGrant.ProviderSubject || fixture.repo.arrival.ProviderSubject != newGrant.ProviderSubject {
+		t.Fatalf("provider subject = grant %q, persisted %q, want %q", refreshed.ProviderSubject, fixture.repo.arrival.ProviderSubject, newGrant.ProviderSubject)
+	}
+	if fixture.repo.arrival.ParticipantID != newGrant.ParticipantID || fixture.repo.arrival.ParticipantGeneration != newGrant.ParticipantGeneration {
+		t.Fatalf("participant identity changed: %#v", fixture.repo.arrival)
+	}
+	if !fixture.access.lastInput.ReplaceMediaConnection {
+		t.Fatal("replacement flag was not passed to access port")
+	}
+}
+
 func TestRuntimeManagedInviteReturnsCurrentCanonicalURL(t *testing.T) {
 	fixture := newRuntimeFixture(t, AdmissionOpen)
 	managed, err := fixture.runtime.GetInvite(context.Background(), fixture.tenantID, fixture.spaceID)

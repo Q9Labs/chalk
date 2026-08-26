@@ -43,4 +43,15 @@ describe("ParticipantTile", () => {
     expect(screen.queryByTestId("facehash-avatar")).not.toBeInTheDocument();
     expect(screen.getAllByText("H")).toHaveLength(2);
   });
+
+  it("shows the voice halo only for an unmuted speaker with the camera off", () => {
+    const participant = { id: "hasan", displayName: "Hasan", isSpeaking: true, isMuted: false, isVideoEnabled: false };
+    const view = render(<ParticipantTile participant={participant} />);
+    const tile = screen.getByRole("region", { name: "Video tile for Hasan" });
+
+    expect(tile.querySelector(".chalk-voice-halo")).toBeInTheDocument();
+
+    view.rerender(<ParticipantTile participant={{ ...participant, isMuted: true }} />);
+    expect(tile.querySelector(".chalk-voice-halo")).not.toBeInTheDocument();
+  });
 });

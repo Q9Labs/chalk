@@ -7,10 +7,12 @@ import { cn } from "../../utils/cn";
 import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { MessageBubble } from "./MessageBubble";
-import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
+import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
+import { describeChatUploadFile } from "./chat-upload-file";
 import type { ChatMessage } from "./chat-types";
 import type { ChatPanelProps } from "./ChatPanel";
+import { useChatScrollReader } from "./use-chat-scroll-reader";
 
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
 
@@ -178,18 +180,7 @@ const ChatPanelSurface = React.memo(
       }
     };
 
-    const handleScroll = () => {
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const atBottom = isChatScrollAtBottom(scroller);
-      isAtBottomRef.current = atBottom;
-      if (atBottom) {
-        if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
-        return;
-      }
-      const visibleSequence = latestVisibleChatSequence(scroller);
-      if (visibleSequence) markChatSequenceRead(visibleSequence, lastMarkedSequenceRef, onMarkRead);
-    };
+    const handleScroll = useChatScrollReader({ scrollRef, isAtBottomRef, lastMarkedSequenceRef, latestSequence, onMarkRead });
 
     return (
       <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", className)} role="complementary" aria-label="Chat panel">
@@ -373,8 +364,3 @@ export const ClassicChatPanel = React.memo((props: ChatPanelProps): React.JSX.El
 });
 
 ClassicChatPanel.displayName = "ChatPanel";
-
-function describeChatUploadFile(file: ChatUploadFile): { readonly fileName: string; readonly mimeType: string; readonly byteLength: number } {
-  if ("bytes" in file) return { fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };
-  return { fileName: file.name, mimeType: file.type, byteLength: file.size };
-}

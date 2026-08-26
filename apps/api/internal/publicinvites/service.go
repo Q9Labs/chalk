@@ -1137,12 +1137,30 @@ func (r Runtime) RefreshAccess(ctx context.Context, input PublicInviteRefreshInp
 	if arrival.State != ArrivalAdmitted {
 		return PublicAccessGrant{}, ErrArrivalUnavailable
 	}
-	grant, err := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaProof: input.MediaProof})
+	grant, err := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaProof: input.MediaProof, ReplaceMediaConnection: input.ReplaceMediaConnection})
 	if err != nil {
 		return PublicAccessGrant{}, err
 	}
-	if err := validateAccessGrant(grant, arrival); err != nil {
+	if err := validateAccessGrantForArrival(grant, arrival, input.ReplaceMediaConnection); err != nil {
 		return PublicAccessGrant{}, err
+	}
+	if input.ReplaceMediaConnection {
+		arrival, err = r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
+			TenantID:              arrival.TenantID,
+			ArrivalHandle:         arrival.ArrivalHandle,
+			State:                 ArrivalAdmitted,
+			EpisodeID:             grant.EpisodeID,
+			ParticipantID:         grant.ParticipantID,
+			ParticipantGeneration: grant.ParticipantGeneration,
+			Provider:              grant.Provider,
+			ProviderSubject:       grant.ProviderSubject,
+		})
+		if err != nil {
+			return PublicAccessGrant{}, err
+		}
+		if err := validateAccessGrantForArrival(grant, arrival, false); err != nil {
+			return PublicAccessGrant{}, err
+		}
 	}
 	return grant, nil
 }
@@ -1260,6 +1278,19 @@ func validateAccessGrant(grant PublicAccessGrant, arrival Arrival) error {
 	}
 	if err := validateClientPayload(grant); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateAccessGrantForArrival(grant PublicAccessGrant, arrival Arrival, allowProviderSubjectChange bool) error {
+	if err := validateAccessGrant(grant, arrival); err != nil {
+		return err
+	}
+	if grant.EpisodeID != arrival.EpisodeID || grant.ParticipantID != arrival.ParticipantID || grant.ParticipantGeneration != arrival.ParticipantGeneration || grant.Provider != arrival.Provider {
+		return ErrArrivalUnavailable
+	}
+	if !allowProviderSubjectChange && grant.ProviderSubject != arrival.ProviderSubject {
+		return ErrArrivalUnavailable
 	}
 	return nil
 }

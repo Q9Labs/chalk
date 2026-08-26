@@ -1392,11 +1392,13 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
 @keyframes chalk-voice-halo-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--chalk-participant-color) 22%, transparent);
+    opacity: 0.64;
+    transform: scale(0.92);
   }
 
   50% {
-    box-shadow: 0 0 0 14px color-mix(in srgb, var(--chalk-participant-color) 12%, transparent);
+    opacity: 0.28;
+    transform: scale(1.18);
   }
 }
 
@@ -1430,7 +1432,18 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
 }
 
 .chalk-voice-halo {
-  box-shadow: 0 0 0 8px color-mix(in srgb, var(--chalk-participant-color) 18%, transparent);
+  isolation: isolate;
+}
+
+.chalk-voice-halo::before {
+  position: absolute;
+  z-index: -1;
+  inset: -10%;
+  border: 8px solid color-mix(in srgb, var(--chalk-participant-color) 18%, transparent);
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+  will-change: opacity, transform;
   animation: chalk-voice-halo-breathe 1.8s ease-in-out infinite;
 }
 
@@ -1470,8 +1483,10 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chalk-voice-halo {
+  .chalk-voice-halo::before {
     animation: none;
+    opacity: 0.5;
+    transform: none;
   }
 
   .chalk-sound-bars > i {

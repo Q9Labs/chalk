@@ -38,6 +38,7 @@ type publicInviteHTTPService struct {
 	denyErr    error
 	statusIn   publicinvites.PublicInviteArrivalStatusInput
 	arriveIn   publicinvites.PublicInviteArrivalInput
+	refreshIn  publicinvites.PublicInviteRefreshInput
 }
 
 func (s *publicInviteHTTPService) GetInvite(context.Context, utilities.ID, utilities.ID) (publicinvites.ManagedInvite, error) {
@@ -87,7 +88,8 @@ func (s *publicInviteHTTPService) Status(_ context.Context, input publicinvites.
 	return s.status, nil
 }
 
-func (s *publicInviteHTTPService) RefreshAccess(context.Context, publicinvites.PublicInviteRefreshInput) (publicinvites.PublicAccessGrant, error) {
+func (s *publicInviteHTTPService) RefreshAccess(_ context.Context, input publicinvites.PublicInviteRefreshInput) (publicinvites.PublicAccessGrant, error) {
+	s.refreshIn = input
 	return s.grant, nil
 }
 
@@ -569,6 +571,32 @@ func TestPublicInviteAccessGrantUsesCanonicalResponseShape(t *testing.T) {
 	}
 	if _, ok := body["sync_token"]; ok {
 		t.Fatalf("response used flat access grant fields: %s", response.Body.String())
+	}
+}
+
+func TestPublicInviteAccessGrantPassesMediaConnectionReplacement(t *testing.T) {
+	service := &publicInviteHTTPService{grant: publicinvites.PublicAccessGrant{
+		SyncToken:       "sync-token",
+		MediaToken:      "media-token",
+		Provider:        publicinvites.PublicProviderCloudflareRTK,
+		ProviderSubject: "participant-ref",
+		ClientPayload: publicinvites.PublicAccessClientPayload{
+			ProviderSubject: "participant-ref",
+			Token:           "rtk-client-token",
+		},
+	}}
+	options := httpapi.Options{PublicInvites: service, CORS: httpapi.CORSOptions{AllowedOrigins: []string{"https://app.example"}}}
+	request := httptest.NewRequest(http.MethodPost, "/v1/public/space-invite-arrival/access-grants", strings.NewReader(`{"media_proof":"proof","replace_media_connection":true}`))
+	request.Header.Set("Origin", "https://app.example")
+	request.Header.Set("X-Chalk-Arrival-Handle", "33333333-3333-4333-8333-333333333333")
+	request.AddCookie(&http.Cookie{Name: "__Host-chalk_space_guest_33333333-3333-4333-8333-333333333333", Value: "guest-credential-123456"})
+	response := httptest.NewRecorder()
+	httpapi.NewRouter(options).ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusCreated)
+	}
+	if !service.refreshIn.ReplaceMediaConnection {
+		t.Fatal("replacement flag was not passed to public invite service")
 	}
 }
 

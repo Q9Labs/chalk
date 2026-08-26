@@ -290,6 +290,7 @@ function ChalkSpaceView({
                       duration={episodeDuration}
                       buttons={buttons}
                       activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+                      isWhiteboardOpen={whiteboard?.isOpen === true}
                       onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                       onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                       onToggleWhiteboard={onToggleWhiteboard}
@@ -308,6 +309,7 @@ function ChalkSpaceView({
                       duration={episodeDuration}
                       buttons={buttons}
                       activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+                      isWhiteboardOpen={whiteboard?.isOpen === true}
                       onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                       onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                       onToggleWhiteboard={onToggleWhiteboard}

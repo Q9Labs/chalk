@@ -312,6 +312,10 @@ func (r *tracedMediaPublicationRegistry) RecordPublishedTracks(_ context.Context
 	return []mediapublications.PublishedReference{{Source: "camera", MID: "0", TrackName: "camera-track", PublicationID: "chalk-publication-trace"}}, nil
 }
 
+func (*tracedMediaPublicationRegistry) ObserveRemoteTracks(context.Context, mediapublications.RemoteTrackObservationInput) error {
+	return errors.New("unexpected remote publication observation")
+}
+
 func (*tracedMediaPublicationRegistry) PrepareClose(context.Context, mediapublications.CloseInput) (mediapublications.CloseDecision, error) {
 	return mediapublications.CloseDecision{}, errors.New("unexpected publication close preparation")
 }

@@ -355,6 +355,29 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              )
   end
 
+  test "provider media adapter leaves the first observation unscoped and forwards its cursor" do
+    transport = fn :get, url, _headers, <<>>, _options ->
+      send(self(), {:observation_url, url})
+
+      {:ok, 200, [],
+       JSON.encode!(%{"observations" => [], "has_more" => false, "next_cursor" => nil})}
+    end
+
+    adapter = MediaPlane.new!(Client.new!(base_url: "http://localhost", transport: transport))
+
+    assert {:ok, %{incarnation: 0, sequence: 0, publications: []}} =
+             MediaPlane.observe_episode_publications(adapter, @episode, nil)
+
+    assert_receive {:observation_url,
+                    "http://localhost/internal/v1/sync/media-observations?tenant_id=#{@tenant}&episode_id=#{@episode_id}&limit=100"}
+
+    assert {:ok, %{incarnation: 0, sequence: 0, publications: []}} =
+             MediaPlane.observe_episode_publications(adapter, @episode, {4, 8})
+
+    assert_receive {:observation_url,
+                    "http://localhost/internal/v1/sync/media-observations?tenant_id=#{@tenant}&episode_id=#{@episode_id}&after_incarnation=4&after_sequence=8&limit=100"}
+  end
+
   test "decodes ordered observations with opaque publication identifiers" do
     transport = fn method, url, _headers, _body, _options ->
       send(self(), {:get, method, url})

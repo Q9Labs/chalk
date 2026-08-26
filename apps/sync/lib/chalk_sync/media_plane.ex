@@ -27,6 +27,7 @@ defmodule ChalkSync.MediaPlane do
           enabled: boolean(),
           publication_id: String.t() | nil
         }
+  @type cursor :: {non_neg_integer(), non_neg_integer()}
   @type observation :: %{
           incarnation: non_neg_integer(),
           sequence: non_neg_integer(),
@@ -58,6 +59,10 @@ defmodule ChalkSync.MediaPlane do
               operation_id :: String.t(),
               EpisodeKey.t()
             ) :: outcome()
-  @callback observe_episode_publications(adapter :: term(), EpisodeKey.t()) ::
+  @callback observe_episode_publications(
+              adapter :: term(),
+              EpisodeKey.t(),
+              cursor :: cursor() | nil
+            ) ::
               {:ok, observation()} | {:error, atom()}
 end

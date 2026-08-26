@@ -173,6 +173,10 @@ func (*publicationRegistryStub) RecordPublishedTracks(context.Context, mediapubl
 	return nil, nil
 }
 
+func (*publicationRegistryStub) ObserveRemoteTracks(context.Context, mediapublications.RemoteTrackObservationInput) error {
+	return nil
+}
+
 func (*publicationRegistryStub) PrepareClose(context.Context, mediapublications.CloseInput) (mediapublications.CloseDecision, error) {
 	return mediapublications.CloseDecision{ProviderCloseRequired: true}, nil
 }

@@ -36,8 +36,8 @@ defmodule ChalkSync.Live.MediaPlaneTestAdapter do
   end
 
   @impl true
-  def observe_episode_publications(adapter, episode) do
-    call(adapter, :observe_episode_publications, nil, [episode])
+  def observe_episode_publications(adapter, episode, cursor) do
+    call(adapter, :observe_episode_publications, nil, [episode, cursor])
   end
 
   @spec calls(Agent.agent()) :: [tuple()]

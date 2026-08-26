@@ -1,4 +1,4 @@
-import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
+import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Semaphore, SubscriptionRef } from "effect";
 import type { ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
@@ -12,7 +12,7 @@ import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure
 
 const START_TIMEOUT_MS = 10_000;
 const LEAVE_TIMEOUT_MS = 5_000;
-const RECOVERY_BUDGET_MS = 10_000;
+const RECOVERY_BUDGET_MS = 20_000;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5_000;
 
@@ -132,6 +132,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const diagnostics = new ConnectionDiagnostics({ now: () => clock.currentTimeMillisUnsafe(), ...options.diagnostics });
       const snapshotRef = yield* SubscriptionRef.make<ConnectionLifecycleSnapshot>(idleSnapshot());
       const queue = yield* Queue.unbounded<Work>();
+      const commandLane = yield* Semaphore.make(1);
       const listeners = new Set<() => void>();
       const portListeners = new Set<(ports: ConnectionPorts | null) => void>();
       const screenEndedListeners = new Set<() => void>();
@@ -209,6 +210,16 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const enqueueBackground = (effect: Effect.Effect<unknown, unknown>) => {
         void Effect.runForkWith(context)(enqueue(effect).pipe(Effect.ignore));
       };
+      const enqueueCommand = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ConnectionLifecycleFailure | E> =>
+        Effect.gen(function* () {
+          if (model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed"));
+          return yield* commandLane.withPermit(
+            Effect.gen(function* () {
+              if (model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed"));
+              return yield* effect;
+            }),
+          );
+        });
       const stopRefresh = (): Effect.Effect<void> =>
         Effect.suspend(() => {
           const fiber = model.refreshFiber;
@@ -643,7 +654,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             return yield* enqueue(performLeave());
           }),
         runCommand: (operation) =>
-          enqueue(
+          enqueueCommand(
             Effect.gen(function* () {
               const ports = portsFor(model);
               if (model.state !== "live" || !ports) return yield* Effect.fail(lifecycleFailure("invalid_state", false, `Cannot run a command while ${model.state}`));
@@ -652,7 +663,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               return value;
             }),
           ),
-        runPortCommand: (operation) => enqueue(withFreshAccess(operation)),
+        runPortCommand: (operation) => enqueueCommand(withFreshAccess(operation)),
         nowUnsafe: () => clock.currentTimeMillisUnsafe(),
         scheduleUnsafe: (callback, milliseconds) => platform.clock.setTimeout(callback, milliseconds),
         cancelScheduleUnsafe: (handle) => platform.clock.clearTimeout(handle),

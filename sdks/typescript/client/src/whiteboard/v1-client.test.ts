@@ -66,6 +66,22 @@ describe("ChalkWhiteboardV1Client", () => {
       error: null,
     });
 
+    const refresh = socket
+      .frames()
+      .filter((frame) => frame.type === "request_snapshot")
+      .at(-1)!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: refresh.request_id,
+      scene_id: sceneId,
+      revision: "4",
+      page: 0,
+      page_count: 1,
+      elements: [wireElement("element-1")],
+      app_state: { view_background_color: "#ffffff" },
+    });
+    await settle();
+
     const presented = client.setPresentation(true);
     await settle();
     const presentation = socket.frames().at(-1)!;
@@ -314,6 +330,79 @@ describe("ChalkWhiteboardV1Client", () => {
     client.stopSceneSubscription();
   });
 
+  it("queues a presentation change during recovery and replays it after welcome", async () => {
+    const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const { client, sockets, clock } = reconnectingClient({ pendingStore: store });
+    const started = client.startSceneSubscription();
+    await settle();
+    sockets[0]!.open();
+    await settle();
+    welcome(sockets[0]!);
+    await finishInitialSnapshot(sockets[0]!, started);
+
+    sockets[0]!.close(4000);
+    clock.advance(10);
+    await settle();
+    sockets[1]!.open();
+    await settle();
+    const hidden = client.setPresentation(false);
+    await settle();
+    expect(sockets[1]!.frames().filter((frame) => frame.type === "set_presentation")).toEqual([]);
+    expect(await store.load()).toHaveLength(1);
+    sockets[1]!.receive({
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: participantId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
+      scene_id: sceneId,
+      revision: "4",
+      can_draw: true,
+      presenting: true,
+    });
+    await settle();
+    const replay = sockets[1]!.frames().find((frame) => frame.type === "set_presentation")!;
+    expect(replay).toMatchObject({ type: "set_presentation", presenting: false });
+    sockets[1]!.receive({ type: "presentation_updated", scene_id: sceneId, revision: "5", presenting: false });
+    sockets[1]!.receive({ type: "commit", operation_id: replay.operation_id, outcome: "committed", scene_id: sceneId, revision: "5" });
+
+    await expect(hidden).resolves.toBeUndefined();
+    expect(await store.load()).toEqual([]);
+    client.stopSceneSubscription();
+  });
+
+  it("restarts a closing socket and replays the persisted presentation change", async () => {
+    const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const { client, sockets, clock } = reconnectingClient({ pendingStore: store });
+    const started = client.startSceneSubscription();
+    await settle();
+    sockets[0]!.open();
+    await settle();
+    welcome(sockets[0]!);
+    await finishInitialSnapshot(sockets[0]!, started);
+
+    sockets[0]!.beginClosing();
+    const hidden = client.setPresentation(false);
+    await settle();
+    expect(await store.load()).toHaveLength(1);
+
+    clock.advance(10);
+    await settle();
+    sockets[1]!.open();
+    await settle();
+    welcome(sockets[1]!);
+    await settle();
+    const replay = sockets[1]!.frames().find((frame) => frame.type === "set_presentation")!;
+    expect(replay).toMatchObject({ type: "set_presentation", presenting: false });
+    sockets[1]!.receive({ type: "presentation_updated", scene_id: sceneId, revision: "4", presenting: false });
+    sockets[1]!.receive({ type: "commit", operation_id: replay.operation_id, outcome: "committed", scene_id: sceneId, revision: "4" });
+
+    await expect(hidden).resolves.toBeUndefined();
+    expect(await store.load()).toEqual([]);
+    client.stopSceneSubscription();
+  });
+
   it("persists updates before send and clears the retry row after a commit", async () => {
     const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
     const { client, socket, started } = await connectingClient({ pendingStore: store });
@@ -483,6 +572,85 @@ describe("ChalkWhiteboardV1Client", () => {
     client.stopSceneSubscription();
   });
 
+  it("holds updates and cursors behind an in-flight snapshot", async () => {
+    const store = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const { client, socket, started } = await connectingClient({ pendingStore: store });
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+
+    const snapshot = client.requestSnapshot();
+    await settle();
+    const request = socket
+      .frames()
+      .filter((frame) => frame.type === "request_snapshot")
+      .at(-1)!;
+    const update = client.submitUpdate({ sceneId, syncAll: false, elements: [publicElement("queued-element")] });
+    await settle();
+    client.sendCursor({ x: 1, y: 2 });
+
+    expect(await store.load()).toHaveLength(1);
+    expect(socket.frames().filter((frame) => frame.type === "submit_update")).toEqual([]);
+    expect(socket.frames().filter((frame) => frame.type === "cursor")).toEqual([]);
+
+    socket.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "3",
+      page: 0,
+      page_count: 1,
+      elements: [],
+      app_state: null,
+    });
+    await expect(snapshot).resolves.toBeUndefined();
+    await settle();
+
+    const frames = socket.frames();
+    const updateFrames = frames.filter((frame) => frame.type === "submit_update");
+    expect(updateFrames).toHaveLength(1);
+    expect(frames.findIndex((frame) => frame.type === "snapshot_ack" && frame.request_id === request.request_id)).toBeLessThan(frames.findIndex((frame) => frame.type === "submit_update"));
+
+    client.sendCursor({ x: 3, y: 4 });
+    expect(socket.frames().filter((frame) => frame.type === "cursor")).toEqual([{ type: "cursor", x: 3, y: 4 }]);
+
+    const updateFrame = updateFrames[0]!;
+    socket.receive({ type: "commit", operation_id: updateFrame.operation_id, outcome: "committed", scene_id: sceneId, revision: "4" });
+    await expect(update).resolves.toMatchObject({ operationId: updateFrame.operation_id, revision: "4" });
+    expect(socket.frames().filter((frame) => frame.type === "submit_update")).toHaveLength(1);
+    await client.stopSceneSubscription();
+  });
+
+  it("coalesces concurrent snapshot requests onto one acknowledged assembly", async () => {
+    const { client, socket, started } = await connectingClient();
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+
+    const first = client.requestSnapshot();
+    const second = client.requestSnapshot();
+    expect(second).toBe(first);
+    await settle();
+
+    const requests = socket.frames().filter((frame) => frame.type === "request_snapshot");
+    expect(requests).toHaveLength(2);
+    const request = requests.at(-1)!;
+    socket.receive({
+      type: "snapshot_page",
+      request_id: request.request_id,
+      scene_id: sceneId,
+      revision: "3",
+      page: 0,
+      page_count: 1,
+      elements: [],
+      app_state: null,
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    await settle();
+    expect(socket.frames().filter((frame) => frame.type === "request_snapshot")).toHaveLength(2);
+    expect(socket.frames().filter((frame) => frame.type === "snapshot_ack" && frame.request_id === request.request_id)).toHaveLength(1);
+    await client.stopSceneSubscription();
+  });
+
   it("retries stable operation IDs and throttles transient cursors independently", async () => {
     const clock = new TestClock();
     const { client, socket, started } = await connectingClient({ clock, retryDelayMs: 100 });
@@ -595,6 +763,23 @@ async function subscribedClient(overrides: Partial<ConstructorParameters<typeof 
   await finishInitialSnapshot(socket, started);
   const events: unknown[] = [];
   client.subscribe((event) => events.push(event));
+  const refresh = socket
+    .frames()
+    .filter((frame) => frame.type === "request_snapshot")
+    .at(-1);
+  if (refresh) {
+    socket.receive({
+      type: "snapshot_page",
+      request_id: refresh.request_id,
+      scene_id: sceneId,
+      revision: "3",
+      page: 0,
+      page_count: 1,
+      elements: [],
+      app_state: null,
+    });
+    await settle();
+  }
   events.length = 0;
   return { client, socket, events };
 }
@@ -763,16 +948,24 @@ class TestSocket implements SyncSocket {
   onclose: ((event: { readonly code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   readonly sent: string[] = [];
+  #closing = false;
 
   readonly send = (data: string): void => {
+    if (this.#closing) throw new Error("WebSocket is not open.");
     this.sent.push(data);
   };
 
   readonly close = (code = 1000): void => {
+    this.#closing = true;
     this.onclose?.({ code });
   };
 
+  readonly beginClosing = (): void => {
+    this.#closing = true;
+  };
+
   readonly open = (): void => {
+    this.#closing = false;
     this.onopen?.();
   };
 

@@ -45,6 +45,7 @@ export type CloudflareSFUPublicationSnapshot = {
 
 export type CloudflareSFUSignalingTransport = {
   readonly addTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
+  readonly updateTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
@@ -58,7 +59,7 @@ export type CloudflareSFULocalTrack = Pick<MediaPublication, "source" | "enabled
   readonly track: MediaStreamTrack;
 };
 
-export type CloudflareSFUErrorCode = "invalid_bootstrap" | "invalid_publication" | "invalid_target" | "signaling_failed" | "media_failed" | "peer_connection_failed" | "ice_connection_failed" | "stale_generation";
+export type CloudflareSFUErrorCode = "invalid_bootstrap" | "invalid_publication" | "invalid_target" | "signaling_failed" | "media_failed" | "peer_connection_failed" | "ice_connection_failed" | "connection_retired" | "stale_generation";
 
 export type CloudflareSFUFailureCode = CloudflareSFUErrorCode;
 

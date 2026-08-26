@@ -7,11 +7,15 @@
     "url": "https://github.com/Q9Labs/chalk.git",
     "directory": "packages/whiteboard"
   },
+  "style": "./dist/react/index.css",
   "files": [
-    "dist"
+    "dist",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/react/index.css"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -44,6 +48,7 @@
       "import": "./dist/react/index.js",
       "default": "./dist/react/index.js"
     },
+    "./styles.css": "./dist/react/index.css",
     "./collab": {
       "types": "./dist/collab/index.d.ts",
       "react-native": "./dist/collab/index.js",
@@ -62,14 +67,16 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types && pnpm run build:renderer",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:css && pnpm run build:types && pnpm run build:renderer",
+    "build:css": "node ./scripts/build-css.mjs",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "build:embedded": "pnpm run build:embedded-module && pnpm run build:renderer",
     "build:embedded-module": "tsup ./src/embedded/index.ts --format esm --out-dir ./dist/embedded --platform browser && tsc --project tsconfig.embedded.json --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "build:renderer": "node ./scripts/build-embedded.mjs",
     "dev": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
-    "test": "pnpm exec vitest run && pnpm run test:declarations",
+    "test": "pnpm exec vitest run && pnpm run test:declarations && pnpm run test:css",
     "test:declarations": "node --test scripts/rewrite-declaration-specifiers-proof.mjs",
+    "test:css": "node --test scripts/build-css-proof.mjs",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"

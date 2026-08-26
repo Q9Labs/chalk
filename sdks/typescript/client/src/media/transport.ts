@@ -32,6 +32,20 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })),
       };
     },
+    updateTracks: async (input) => {
+      const response = await request<{
+        readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
+        readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & { readonly publication_id?: string })[];
+        readonly requiresImmediateRenegotiation?: boolean;
+      }>("tracks", {
+        method: "PUT",
+        body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription, tracks: input.tracks }),
+      });
+      return {
+        ...response,
+        tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })),
+      };
+    },
     closeTracks: async (input) =>
       request<CloudflareSFUTracksResponse>("tracks/close", {
         method: "PUT",

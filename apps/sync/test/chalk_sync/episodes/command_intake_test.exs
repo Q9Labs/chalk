@@ -9,11 +9,11 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
   alias ChalkSync.Stateholder.Identity
 
   defmodule BlockingObservation do
-    def observe_episode_publications(_adapter, _episode), do: Process.sleep(:infinity)
+    def observe_episode_publications(_adapter, _episode, _cursor), do: Process.sleep(:infinity)
   end
 
   defmodule RaisingObservation do
-    def observe_episode_publications(_adapter, _episode), do: raise("provider exploded")
+    def observe_episode_publications(_adapter, _episode, _cursor), do: raise("provider exploded")
   end
 
   test "admits at most eight database tasks for one Episode and releases every lease" do
@@ -237,7 +237,7 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
     assert_receive {:sync_command_result, ^lease, "role-observation-001",
                     {:retryable, :dependency_unavailable}}
 
-    assert [{:observe_episode_publications, nil, [identity.episode]}] ==
+    assert [{:observe_episode_publications, nil, [identity.episode, nil]}] ==
              MediaPlaneTestAdapter.calls(adapter)
   end
 

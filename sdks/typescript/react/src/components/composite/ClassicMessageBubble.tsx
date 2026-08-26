@@ -5,6 +5,7 @@ import { Avatar } from "../atomic/Avatar";
 import { Tick01Icon, TickDouble01Icon, FileTextIcon, Download01Icon } from "../../utils/icons";
 import { getParticipantColor } from "../../utils/colorGenerator";
 import type { MessageBubbleProps } from "./MessageBubble";
+import { formatMessageTime } from "./message-time";
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
@@ -38,14 +39,6 @@ export const ClassicMessageBubble = React.memo<MessageBubbleProps>(
     className,
   }) => {
     const [resolvedAttachmentUrls, setResolvedAttachmentUrls] = useState<Record<string, string>>({});
-
-    const formatTime = (value: string) => {
-      return new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true,
-      }).format(new Date(value));
-    };
 
     const senderColors = useMemo(() => getParticipantColor(senderName), [senderName]);
 
@@ -181,7 +174,7 @@ export const ClassicMessageBubble = React.memo<MessageBubbleProps>(
           <div className="px-4 py-2 rounded-full bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)]">
             <p className="text-xs text-center">{renderContent(content)}</p>
           </div>
-          {showTimestamp && <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatTime(timestamp)}</span>}
+          {showTimestamp && <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatMessageTime(timestamp)}</span>}
         </div>
       );
     }
@@ -198,7 +191,7 @@ export const ClassicMessageBubble = React.memo<MessageBubbleProps>(
 
           {showTimestamp && isLastInGroup && (
             <div className={cn("flex items-center gap-1.5 mt-1 px-1", isLocal ? "flex-row-reverse" : "flex-row")}>
-              <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatTime(timestamp)}</span>
+              <span className="text-[11px] text-[var(--chalk-muted-text)]">{formatMessageTime(timestamp)}</span>
               {renderStatus()}
             </div>
           )}

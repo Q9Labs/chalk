@@ -25,11 +25,12 @@ describe("chat.files.upload", () => {
       }),
       getDownloadUrl: vi.fn(),
     };
-    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const fetch = vi.fn(function (this: unknown, _input: RequestInfo | URL, init?: RequestInit) {
+      expect(this).toBeUndefined();
       calls.push("put");
       expect(init?.headers).toEqual({ "content-type": "text/plain", "x-amz-meta-sha256": "signed-value" });
       expect(new Headers(init?.headers).has("authorization")).toBe(false);
-      return new Response(null, { status: 200 });
+      return Promise.resolve(new Response(null, { status: 200 }));
     });
     const runPortCommand = vi.fn(<T>(operation: () => Effect.Effect<T, unknown>) => operation());
     const connection = {
@@ -37,7 +38,7 @@ describe("chat.files.upload", () => {
       runPortCommand,
     } as unknown as ConnectionLifecycleCapability;
 
-    await expect(Effect.runPromise(uploadFileEffect({ fileName: "note.txt", mimeType: "text/plain", bytes: new TextEncoder().encode("hello").buffer }, { connection, chatFiles: transport, fetch }))).resolves.toEqual({
+    await expect(Effect.runPromise(uploadFileEffect(new BrowserFileWithBytes(), { connection, chatFiles: transport, fetch }))).resolves.toEqual({
       attachmentId: "attachment-1",
       fileName: "note.txt",
       mimeType: "text/plain",
@@ -49,3 +50,17 @@ describe("chat.files.upload", () => {
     expect(calls).toEqual(["initiate", "put", "finalize"]);
   });
 });
+
+class BrowserFileWithBytes {
+  readonly name = "note.txt";
+  readonly type = "text/plain";
+  readonly size = 5;
+
+  arrayBuffer(): Promise<ArrayBuffer> {
+    return Promise.resolve(new TextEncoder().encode("hello").buffer);
+  }
+
+  bytes(): Promise<Uint8Array> {
+    return Promise.resolve(new TextEncoder().encode("hello"));
+  }
+}

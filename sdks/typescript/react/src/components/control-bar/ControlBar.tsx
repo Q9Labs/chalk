@@ -123,6 +123,7 @@ export interface ControlBarProps {
   readonly showLabels?: boolean;
   readonly buttons?: ControlBarButtonName[];
   readonly activePanel?: "chat" | "participants" | null;
+  readonly isWhiteboardOpen?: boolean;
   readonly onToggleChat?: () => void;
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;

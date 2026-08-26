@@ -11,7 +11,7 @@ defmodule ChalkSync.MediaPlaneTest do
     assert {:revoke_publication, 5} in callbacks
     assert {:remove_participant, 4} in callbacks
     assert {:end_episode, 3} in callbacks
-    assert {:observe_episode_publications, 2} in callbacks
+    assert {:observe_episode_publications, 3} in callbacks
 
     refute Enum.any?(callbacks, fn {name, _arity} ->
              name in [:enable_capture, :force_publication]

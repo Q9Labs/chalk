@@ -68,8 +68,8 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlane do
     do: execute(adapter, :end_episode, operation_id, [episode])
 
   @impl true
-  def observe_episode_publications(adapter, episode),
-    do: execute(adapter, :observe_episode_publications, nil, [episode])
+  def observe_episode_publications(adapter, episode, cursor),
+    do: execute(adapter, :observe_episode_publications, nil, [episode, cursor])
 
   @impl true
   def start_recording(adapter, operation_id, episode, recording_id),

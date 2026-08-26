@@ -41,7 +41,7 @@ const PAGER_BAND = 22;
 const STAGE_INSET_CLASS = "p-1";
 
 const FALLBACK_BOX: StageBox = { width: 960, height: 540 };
-const TRANSITION = "transform 300ms cubic-bezier(0.2, 0, 0, 1), width 300ms cubic-bezier(0.2, 0, 0, 1), height 300ms cubic-bezier(0.2, 0, 0, 1)";
+const TRANSITION = "transform 300ms cubic-bezier(0.2, 0, 0, 1)";
 
 function frameStyle(frame: StageFrame, currentPage: number, stride: number, animate: boolean): CSSProperties {
   const offset = frame.role === "primary" ? 0 : currentPage * stride;

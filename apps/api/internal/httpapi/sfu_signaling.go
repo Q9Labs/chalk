@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -99,6 +102,7 @@ func mountParticipantMediaRoutes(r chi.Router, spaces SpaceService, episodeLooku
 func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) []RouteEndpoint {
 	return []RouteEndpoint{
 		sfuAddTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
+		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
 		sfuCloseTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
 		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
 		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
@@ -112,44 +116,7 @@ func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tena
 		"addCloudflareSFUTracks",
 		decodeSFUTracksRequest,
 		func(ctx context.Context, request sfuTracksEndpointRequest) (mediaplane.TracksResponse, error) {
-			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
-				return mediaplane.TracksResponse{}, err
-			}
-			subject, ok := accessgrants.SubjectFromContext(ctx)
-			if !ok {
-				return mediaplane.TracksResponse{}, apiErrorUnauthenticated
-			}
-			service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
-			if err != nil {
-				return mediaplane.TracksResponse{}, err
-			}
-			response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
-				ConnectionID:       request.Body.ConnectionID,
-				SessionDescription: request.Body.SessionDescription,
-				Tracks:             request.Body.Tracks,
-			})
-			if err != nil {
-				return mediaplane.TracksResponse{}, err
-			}
-			published := make([]mediapublications.PublishedTrack, 0, len(request.Body.Tracks))
-			for _, track := range request.Body.Tracks {
-				if track.Location == "local" {
-					published = append(published, mediapublications.PublishedTrack{Source: track.Source, MID: track.Mid, TrackName: track.TrackName})
-				}
-			}
-			if len(published) > 0 {
-				if publications == nil {
-					return mediaplane.TracksResponse{}, mediapublications.ErrUnavailable
-				}
-				references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Tracks: published})
-				if err != nil {
-					return mediaplane.TracksResponse{}, err
-				}
-				if err := attachPublishedReferences(&response, references); err != nil {
-					return mediaplane.TracksResponse{}, err
-				}
-			}
-			return response, nil
+			return signalSFUTracks(ctx, request, spaces, episodeLookup, tenants, media, publications, false)
 		},
 	).
 		Auth(APIAuthParticipantMedia).
@@ -159,6 +126,165 @@ func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tena
 		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
 		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
+func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuTracksEndpointRequest, mediaplane.TracksResponse] {
+	return Put(
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
+		"updateCloudflareSFUTracks",
+		decodeSFUTracksRequest,
+		func(ctx context.Context, request sfuTracksEndpointRequest) (mediaplane.TracksResponse, error) {
+			return signalSFUTracks(ctx, request, spaces, episodeLookup, tenants, media, publications, true)
+		},
+	).
+		Auth(APIAuthParticipantMedia).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
+		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
+		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
+func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry, update bool) (mediaplane.TracksResponse, error) {
+	if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	subject, ok := accessgrants.SubjectFromContext(ctx)
+	if !ok {
+		return mediaplane.TracksResponse{}, apiErrorUnauthenticated
+	}
+	service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
+	if err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	input := mediaplane.TracksRequest{ConnectionID: request.Body.ConnectionID, SessionDescription: request.Body.SessionDescription, Tracks: request.Body.Tracks}
+	var response mediaplane.TracksResponse
+	if update {
+		response, err = service.UpdateTracks(ctx, input)
+	} else {
+		response, err = service.AddTracks(ctx, input)
+	}
+	if err != nil {
+		observation, observed := remoteTrackObservationForFailure(request, err)
+		if observed && publications != nil {
+			if observationErr := publications.ObserveRemoteTracks(ctx, observation); observationErr != nil {
+				return mediaplane.TracksResponse{}, errors.Join(err, observationErr)
+			}
+			logRemoteTrackResponse(ctx, response, observation, true)
+			return response, nil
+		}
+		if mediaplane.IsPartialRemoteTrackResponse(err) {
+			observation, observed := remoteTrackPartialObservation(request, response)
+			if observed {
+				logRemoteTrackResponse(ctx, response, observation, true)
+			}
+			return response, nil
+		}
+		return mediaplane.TracksResponse{}, err
+	}
+	if observation, observed := remoteTrackObservation(request, nil); observed && publications != nil {
+		if err := publications.ObserveRemoteTracks(ctx, observation); err != nil {
+			return mediaplane.TracksResponse{}, err
+		}
+		logRemoteTrackResponse(ctx, response, observation, false)
+	}
+	published := make([]mediapublications.PublishedTrack, 0, len(request.Body.Tracks))
+	for _, track := range request.Body.Tracks {
+		if track.Location == "local" {
+			published = append(published, mediapublications.PublishedTrack{Source: track.Source, MID: track.Mid, TrackName: track.TrackName})
+		}
+	}
+	if len(published) > 0 {
+		if publications == nil {
+			return mediaplane.TracksResponse{}, mediapublications.ErrUnavailable
+		}
+		references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Tracks: published})
+		if err != nil {
+			return mediaplane.TracksResponse{}, err
+		}
+		if err := attachPublishedReferences(&response, references); err != nil {
+			return mediaplane.TracksResponse{}, err
+		}
+	}
+	return response, nil
+}
+
+func remoteTrackPartialObservation(request sfuTracksEndpointRequest, response mediaplane.TracksResponse) (mediapublications.RemoteTrackObservationInput, bool) {
+	returned := make(map[mediaplane.RemoteTrackIdentity]struct{}, len(response.Tracks))
+	for _, track := range response.Tracks {
+		if track.Location == "remote" {
+			returned[mediaplane.RemoteTrackIdentity{ConnectionID: track.SessionID, TrackName: track.TrackName}] = struct{}{}
+		}
+	}
+	missing := make([]mediaplane.RemoteTrackIdentity, 0, len(request.Body.Tracks))
+	for _, track := range request.Body.Tracks {
+		if track.Location != "remote" {
+			continue
+		}
+		identity := mediaplane.RemoteTrackIdentity{ConnectionID: track.SessionID, TrackName: track.TrackName}
+		if _, present := returned[identity]; !present {
+			missing = append(missing, identity)
+		}
+	}
+	return remoteTrackObservation(request, missing)
+}
+
+func logRemoteTrackResponse(ctx context.Context, response mediaplane.TracksResponse, observation mediapublications.RemoteTrackObservationInput, partial bool) {
+	descriptionType := "none"
+	if response.SessionDescription != nil {
+		descriptionType = strings.ToLower(strings.TrimSpace(response.SessionDescription.Type))
+		if descriptionType != "offer" && descriptionType != "answer" {
+			descriptionType = "unknown"
+		}
+	}
+	slog.InfoContext(ctx, "Cloudflare SFU remote track response",
+		"event", "cloudflare_sfu.remote_track_response",
+		"partial", partial,
+		"requested_track_count", len(observation.Requested),
+		"missing_track_count", len(observation.Missing),
+		"response_track_count", len(response.Tracks),
+		"sdp_type", descriptionType,
+		"requires_immediate_renegotiation", response.RequiresImmediateRenegotiation,
+	)
+}
+
+func remoteTrackObservationForFailure(request sfuTracksEndpointRequest, err error) (mediapublications.RemoteTrackObservationInput, bool) {
+	if !mediaplane.IsExactRemoteTrackAbsence(err) {
+		return mediapublications.RemoteTrackObservationInput{}, false
+	}
+	return remoteTrackObservation(request, mediaplane.MissingRemoteTracks(err))
+}
+
+func remoteTrackObservation(request sfuTracksEndpointRequest, missing []mediaplane.RemoteTrackIdentity) (mediapublications.RemoteTrackObservationInput, bool) {
+	requested := make([]mediapublications.RemoteTrackIdentity, 0, len(request.Body.Tracks))
+	requestedSet := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(request.Body.Tracks))
+	for _, track := range request.Body.Tracks {
+		if track.Location != "remote" {
+			continue
+		}
+		identity := mediapublications.RemoteTrackIdentity{ConnectionID: track.SessionID, TrackName: track.TrackName}
+		requested = append(requested, identity)
+		requestedSet[identity] = struct{}{}
+	}
+	if len(requested) == 0 {
+		return mediapublications.RemoteTrackObservationInput{}, false
+	}
+	missingPublications := make([]mediapublications.RemoteTrackIdentity, 0, len(missing))
+	for _, track := range missing {
+		identity := mediapublications.RemoteTrackIdentity{ConnectionID: track.ConnectionID, TrackName: track.TrackName}
+		if _, requestedHere := requestedSet[identity]; requestedHere {
+			missingPublications = append(missingPublications, identity)
+		}
+	}
+	if len(missing) > 0 && len(missingPublications) == 0 {
+		return mediapublications.RemoteTrackObservationInput{}, false
+	}
+	return mediapublications.RemoteTrackObservationInput{
+		TenantID: request.TenantID, EpisodeID: request.EpisodeID,
+		Requested: requested, Missing: missingPublications,
+	}, true
 }
 
 func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuCloseTracksEndpointRequest, mediaplane.CloseTracksResponse] {

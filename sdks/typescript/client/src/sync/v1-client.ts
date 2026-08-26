@@ -45,6 +45,7 @@ const MAX_LIVE_TARGET_RETRY_DELAY_MS = 1_000;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const OPERATION_PENDING_POLL_INTERVAL_MS = 1_000;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
+const TRANSPORT_SEND_FAILURE_REASON = "transport_send_failed";
 const MAX_COLLABORATION_REQUESTS_IN_FLIGHT = 64;
 
 type CommandDeferred = Deferred<V1CommandResult> & { readonly frame: SyncV1ClientFrame; retries: number; readonly durableTarget: boolean; readonly createdAt: number };
@@ -53,6 +54,7 @@ type SuccessfulLiveTargetResult = Omit<V1LiveTargetResult, "outcome"> & { readon
 type LiveDeferred = Deferred<V1SelfMediaTargetResult> & {
   readonly frame: LiveTargetClientFrame;
   readonly createdAt: number;
+  localStartedAt?: number;
   serverRetries: number;
   localRetries: number;
   localInFlight: boolean;
@@ -450,11 +452,7 @@ export class V1SyncClient implements V1CollaborationClient {
       };
       this.#liveTargets.set(operationId, deferred);
     });
-    const deadlineTimer = this.#clock().setTimeout(() => {
-      this.#liveDeadlineTimers.delete(operationId);
-      if (this.#liveTargets.get(operationId) === deferred) this.#failLiveTarget(operationId, deferred, new V1SyncError("self-media target confirmation timed out", "retry_exhausted"));
-    }, LIVE_TARGET_RETRY_BUDGET_MS);
-    this.#liveDeadlineTimers.set(operationId, deadlineTimer);
+    this.#scheduleLiveDeadline(operationId, deferred, "self-media target confirmation timed out");
     this.#localMedia[source] = "requesting";
     this.#sendIfLive(frame);
     this.#emit();
@@ -893,6 +891,15 @@ export class V1SyncClient implements V1CollaborationClient {
     const mediaPlane = this.#options.mediaPlane;
     const participantId = this.#participantId;
     if (!mediaPlane || !participantId || deferred.localInFlight || this.#liveTargets.get(operationId) !== deferred) return;
+    const localStartedAt = deferred.localStartedAt ?? this.#now();
+    if (deferred.localStartedAt === undefined) {
+      deferred.localStartedAt = localStartedAt;
+      this.#scheduleLiveDeadline(operationId, deferred, "live-target retry budget exhausted");
+    }
+    if (LIVE_TARGET_RETRY_BUDGET_MS - (this.#now() - localStartedAt) <= 0) {
+      this.#failLiveTarget(operationId, deferred, new V1SyncError("live-target retry budget exhausted", "retry_exhausted"));
+      return;
+    }
     deferred.localInFlight = true;
     let result: Promise<MediaPlaneResult>;
     try {
@@ -910,12 +917,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#liveTargets.get(operationId) !== deferred) return;
     deferred.localInFlight = false;
     if (result.outcome === "retryable_failure") {
-      if (deferred.localRetries >= MAX_RETRIES) {
-        this.#failLiveTarget(operationId, deferred, new V1SyncError(result.errorCode ?? result.outcome, "retry_exhausted"));
-        return;
-      }
-      deferred.localRetries += 1;
-      this.#scheduleLiveRetry(operationId, () => this.#executeLocalMediaTarget(operationId, deferred));
+      this.#retryLiveLocal(operationId, deferred, result.errorCode ?? result.outcome);
       return;
     }
     if (result.outcome !== "confirmed" && result.outcome !== "satisfied") {
@@ -932,12 +934,32 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
   }
 
+  #retryLiveLocal(operationId: string, deferred: LiveDeferred, errorCode: string): void {
+    const remainingBudget = deferred.localStartedAt === undefined ? 0 : LIVE_TARGET_RETRY_BUDGET_MS - (this.#now() - deferred.localStartedAt);
+    if (remainingBudget <= 0) {
+      this.#failLiveTarget(operationId, deferred, new V1SyncError(errorCode, "retry_exhausted"));
+      return;
+    }
+    deferred.localRetries += 1;
+    const baseDelay = this.#options.retryDelayMs ?? 100;
+    const delay = Math.min(remainingBudget, MAX_LIVE_TARGET_RETRY_DELAY_MS, baseDelay * 2 ** Math.min(deferred.localRetries - 1, 4));
+    this.#scheduleLiveRetry(operationId, () => this.#executeLocalMediaTarget(operationId, deferred), delay);
+  }
+
   #scheduleLiveRetry(operationId: string, retry: () => void, delay = this.#options.retryDelayMs ?? 100): void {
     const timer = this.#clock().setTimeout(() => {
       this.#liveRetryTimers.delete(operationId);
       retry();
     }, delay);
     this.#liveRetryTimers.set(operationId, timer);
+  }
+
+  #scheduleLiveDeadline(operationId: string, deferred: LiveDeferred, message: string): void {
+    const timer = this.#clock().setTimeout(() => {
+      this.#liveDeadlineTimers.delete(operationId);
+      if (this.#liveTargets.get(operationId) === deferred) this.#failLiveTarget(operationId, deferred, new V1SyncError(message, "retry_exhausted"));
+    }, LIVE_TARGET_RETRY_BUDGET_MS);
+    this.#liveDeadlineTimers.set(operationId, timer);
   }
 
   #failLiveTarget(operationId: string, deferred: LiveDeferred, error: V1SyncError): void {
@@ -1224,7 +1246,12 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   #send(frame: SyncV1ClientFrame): void {
-    this.#socket?.send(encodeV1ClientFrame(frame));
+    const encoded = encodeV1ClientFrame(frame);
+    try {
+      this.#socket?.send(encoded);
+    } catch {
+      this.#recover(TRANSPORT_SEND_FAILURE_REASON);
+    }
   }
 
   #requireLive(): void {

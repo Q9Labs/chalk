@@ -938,6 +938,7 @@ export type RecordingReservation = typeof RecordingReservationSchema.Type;
 
 export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
   media_proof: Schema.String.check(Schema.isMinLength(1)),
+  replace_media_connection: Schema.optional(Schema.Boolean),
 });
 export type RefreshSpacePublicInviteAccessRequest = typeof RefreshSpacePublicInviteAccessRequestSchema.Type;
 
@@ -2920,6 +2921,27 @@ export const TestWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type TestWebhookEndpoint429ResponseHeaders = typeof TestWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const UpdateCloudflareSFUTracksPathParamsSchema = Schema.Struct({
+  episode_id: EpisodeIdSchema,
+  participant_id: ParticipantIdSchema,
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type UpdateCloudflareSFUTracksPathParams = typeof UpdateCloudflareSFUTracksPathParamsSchema.Type;
+
+export const UpdateCloudflareSFUTracksRequestBodySchema = CloudflareSFUTracksRequestSchema;
+export type UpdateCloudflareSFUTracksRequestBody = typeof UpdateCloudflareSFUTracksRequestBodySchema.Type;
+
+export const UpdateCloudflareSFUTracksResponseSchema = CloudflareSFUTracksAPIResponseSchema;
+export type UpdateCloudflareSFUTracksResponse = typeof UpdateCloudflareSFUTracksResponseSchema.Type;
+
+export const UpdateCloudflareSFUTracks429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type UpdateCloudflareSFUTracks429ResponseHeaders = typeof UpdateCloudflareSFUTracks429ResponseHeadersSchema.Type;
 
 export const UpdateMembershipPathParamsSchema = Schema.Struct({
   membership_id: MembershipIdSchema,
@@ -6724,6 +6746,23 @@ export const TestWebhookEndpointErrorSchema = Schema.Union([
 ]);
 export type TestWebhookEndpointError = typeof TestWebhookEndpointErrorSchema.Type;
 
+export const UpdateCloudflareSFUTracksErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type UpdateCloudflareSFUTracksError = typeof UpdateCloudflareSFUTracksErrorSchema.Type;
+
 export const UpdateMembershipErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6907,6 +6946,7 @@ export const ChalkOperationPolicies = {
   startIntegrationConnection: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startRecentAuthGoogle: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  updateCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

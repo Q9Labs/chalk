@@ -113,7 +113,7 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
-	return a.issue(ctx, arrival, ready, false)
+	return a.issue(ctx, arrival, ready, false, false)
 }
 
 func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
@@ -142,7 +142,7 @@ func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
-	return a.issue(ctx, arrival, ready, true)
+	return a.issue(ctx, arrival, ready, true, input.ReplaceMediaConnection)
 }
 
 func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) error {
@@ -200,13 +200,13 @@ func (a accessPort) waitReady(ctx context.Context, result episodes.PublicJoinRes
 	}
 }
 
-func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, result episodes.PublicJoinResult, refresh bool) (publicinvites.PublicAccessGrant, error) {
+func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, result episodes.PublicJoinResult, refresh, replaceMediaConnection bool) (publicinvites.PublicAccessGrant, error) {
 	service, episode, err := a.resolveMedia(ctx, arrival.TenantID, arrival.SpaceID, result.Episode.ID, arrival.Provider)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
 	var join mediaplane.Join
-	if refresh {
+	if refresh && !replaceMediaConnection {
 		join, err = service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
 			Provider: service.Provider(), Episode: episode, ExternalParticipantID: result.Participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
 		})
@@ -224,7 +224,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
-	if refresh && providerSubject != arrival.ProviderSubject {
+	if refresh && !replaceMediaConnection && providerSubject != arrival.ProviderSubject {
 		return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
 	}
 	syncToken, err := a.syncTokens.IssueForParticipant(ctx, synctokens.SubjectKey{TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID, ParticipantID: result.Participant.ID})

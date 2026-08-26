@@ -122,6 +122,7 @@ export async function execute(options) {
     base: options.base,
     measurementKind: measurement.kind,
     measurement,
+    focus: options.focus,
     heapSnapshots: [],
     startedAt: new Date().toISOString(),
     outputDir: outDir,
