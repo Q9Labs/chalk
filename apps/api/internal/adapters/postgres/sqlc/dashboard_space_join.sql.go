@@ -390,7 +390,7 @@ func (q *Queries) LockLiveEpisodeForUpdate(ctx context.Context, arg LockLiveEpis
 
 const lockTenantSpaceBySlugForUpdate = `-- name: LockTenantSpaceBySlugForUpdate :one
 
-select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 from spaces
 where tenant_id = $1
   and slug = $2
@@ -417,6 +417,8 @@ func (q *Queries) LockTenantSpaceBySlugForUpdate(ctx context.Context, arg LockTe
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

@@ -18,6 +18,7 @@ type transcriptQuerier interface {
 	CreateTranscription(context.Context, sqlc.CreateTranscriptionParams) (sqlc.Transcription, error)
 	GetTenantTranscription(context.Context, sqlc.GetTenantTranscriptionParams) (sqlc.Transcription, error)
 	GetTenantTranscriptionByRecording(context.Context, sqlc.GetTenantTranscriptionByRecordingParams) (sqlc.Transcription, error)
+	GetCompletedRecordingTranscriptionMode(context.Context, sqlc.GetCompletedRecordingTranscriptionModeParams) (string, error)
 	GetTranscriptionChunkJob(context.Context, pgtype.UUID) (sqlc.ArtifactJob, error)
 	ListTenantTranscriptions(context.Context, sqlc.ListTenantTranscriptionsParams) ([]sqlc.Transcription, error)
 	UpdateTenantTranscription(context.Context, sqlc.UpdateTenantTranscriptionParams) (sqlc.Transcription, error)
@@ -177,6 +178,16 @@ func (r TranscriptRepository) Request(ctx context.Context, input transcripts.Req
 		// A completed or tombstoned transcription remains the singular child
 		// for this recording. Do not create new work against consumed sources.
 		return mapTranscript(existing), transcripts.Job{}, nil
+	}
+	mode, err := r.queries.GetCompletedRecordingTranscriptionMode(ctx, sqlc.GetCompletedRecordingTranscriptionModeParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrRecordingNotFound
+	}
+	if err != nil {
+		return transcripts.Transcript{}, transcripts.Job{}, fmt.Errorf("get recording transcription policy: %w", err)
+	}
+	if mode != "on_demand" && mode != "automatic" {
+		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrTranscriptionDisabled
 	}
 	tx, err := r.transactor.Begin(ctx)
 	if err != nil {

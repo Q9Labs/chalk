@@ -11,25 +11,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 var (
-	ErrInvalidSpaceID         = errors.New("invalid space id")
-	ErrInvalidTenantID        = errors.New("invalid tenant id")
-	ErrInvalidSpaceName       = errors.New("invalid space name")
-	ErrInvalidSpaceSlug       = errors.New("invalid space slug")
-	ErrInvalidMediaPlane      = errors.New("invalid media plane")
-	ErrInvalidAdmissionPolicy = errors.New("invalid admission policy")
-	ErrInvalidEpisodeDuration = errors.New("invalid episode duration")
-	ErrInvalidEpisodeCeiling  = errors.New("invalid episode duration ceiling")
-	ErrInvalidLingerWindow    = errors.New("invalid linger window")
-	ErrInvalidSpaceField      = errors.New("invalid space field")
-	ErrSpaceNotFound          = errors.New("space not found")
-	ErrSpaceSlugAlreadyUsed   = errors.New("space slug already used")
-	ErrInvalidRequestKey      = errors.New("invalid space request key")
-	ErrIdempotencyConflict    = errors.New("space request key conflicts with original request")
+	ErrInvalidSpaceID             = errors.New("invalid space id")
+	ErrInvalidTenantID            = errors.New("invalid tenant id")
+	ErrInvalidSpaceName           = errors.New("invalid space name")
+	ErrInvalidSpaceSlug           = errors.New("invalid space slug")
+	ErrInvalidMediaPlane          = errors.New("invalid media plane")
+	ErrInvalidAdmissionPolicy     = errors.New("invalid admission policy")
+	ErrInvalidEpisodeDuration     = errors.New("invalid episode duration")
+	ErrInvalidEpisodeCeiling      = errors.New("invalid episode duration ceiling")
+	ErrInvalidLingerWindow        = errors.New("invalid linger window")
+	ErrInvalidSpaceField          = errors.New("invalid space field")
+	ErrInvalidRecordingPolicy     = errors.New("invalid Recording policy")
+	ErrInvalidTranscriptionPolicy = errors.New("invalid Transcription policy")
+	ErrSpaceNotFound              = errors.New("space not found")
+	ErrSpaceSlugAlreadyUsed       = errors.New("space slug already used")
+	ErrInvalidRequestKey          = errors.New("invalid space request key")
+	ErrIdempotencyConflict        = errors.New("space request key conflicts with original request")
 )
 
 const (
@@ -88,6 +91,8 @@ type Space struct {
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
+	RecordingPolicy               artifactpolicy.RecordingMode
+	TranscriptionPolicy           artifactpolicy.TranscriptionMode
 	DefaultEpisodeDurationSeconds int32
 	MaximumEpisodeDurationSeconds int32
 	LingerWindowSeconds           int32
@@ -147,6 +152,10 @@ type CreateSpaceInput struct {
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
+	RecordingPolicy               artifactpolicy.RecordingMode
+	RecordingPolicySet            bool
+	TranscriptionPolicy           artifactpolicy.TranscriptionMode
+	TranscriptionPolicySet        bool
 	DefaultEpisodeDurationSeconds int32
 	MaximumEpisodeDurationSeconds int32
 	LingerWindowSeconds           int32
@@ -162,6 +171,8 @@ type UpdateSpaceInput struct {
 	Metadata                      utilities.OptionalJSON
 	RecurringPolicy               utilities.OptionalJSON
 	AdmissionPolicy               utilities.OptionalJSON
+	RecordingPolicy               OptionalRecordingPolicy
+	TranscriptionPolicy           OptionalTranscriptionPolicy
 	DefaultEpisodeDurationSeconds OptionalInt32
 	MaximumEpisodeDurationSeconds OptionalInt32
 	LingerWindowSeconds           OptionalInt32
@@ -173,6 +184,16 @@ type UpdateSpaceInput struct {
 type OptionalInt32 struct {
 	Set   bool
 	Value *int32
+}
+
+type OptionalRecordingPolicy struct {
+	Set   bool
+	Value *artifactpolicy.RecordingMode
+}
+
+type OptionalTranscriptionPolicy struct {
+	Set   bool
+	Value *artifactpolicy.TranscriptionMode
 }
 
 func (value *OptionalInt32) UnmarshalJSON(data []byte) error {
@@ -340,6 +361,18 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 	if err != nil {
 		return err
 	}
+	if !input.RecordingPolicySet {
+		input.RecordingPolicy = artifactpolicy.RecordingDisabled
+	}
+	if !input.TranscriptionPolicySet {
+		input.TranscriptionPolicy = artifactpolicy.TranscriptionDisabled
+	}
+	if err := input.RecordingPolicy.Validate(); err != nil {
+		return ErrInvalidRecordingPolicy
+	}
+	if err := input.TranscriptionPolicy.Validate(); err != nil {
+		return ErrInvalidTranscriptionPolicy
+	}
 	applySpaceDefaults(input)
 	if err := validateEpisodeDurations(input.DefaultEpisodeDurationSeconds, input.MaximumEpisodeDurationSeconds); err != nil {
 		return err
@@ -388,6 +421,22 @@ func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 		input.AdmissionPolicy.Value, err = prepareAdmissionPolicy(input.AdmissionPolicy.Value)
 		if err != nil {
 			return err
+		}
+	}
+	if input.RecordingPolicy.Set {
+		if input.RecordingPolicy.Value == nil {
+			return ErrInvalidRecordingPolicy
+		}
+		if err := input.RecordingPolicy.Value.Validate(); err != nil {
+			return ErrInvalidRecordingPolicy
+		}
+	}
+	if input.TranscriptionPolicy.Set {
+		if input.TranscriptionPolicy.Value == nil {
+			return ErrInvalidTranscriptionPolicy
+		}
+		if err := input.TranscriptionPolicy.Value.Validate(); err != nil {
+			return ErrInvalidTranscriptionPolicy
 		}
 	}
 	if err := validateOptionalDuration(input.DefaultEpisodeDurationSeconds, ErrInvalidEpisodeDuration); err != nil {
@@ -530,21 +579,27 @@ func requiredOptionalString(value utilities.OptionalString, invalid error) (util
 }
 
 type createFingerprintInput struct {
-	Name                          string          `json:"name"`
-	Slug                          string          `json:"slug"`
-	MediaPlane                    string          `json:"media_plane"`
-	Metadata                      json.RawMessage `json:"metadata"`
-	RecurringPolicy               json.RawMessage `json:"recurring_policy"`
-	AdmissionPolicy               json.RawMessage `json:"admission_policy"`
-	DefaultEpisodeDurationSeconds int32           `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds int32           `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           int32           `json:"linger_window_seconds"`
+	Name                          string                           `json:"name"`
+	Slug                          string                           `json:"slug"`
+	MediaPlane                    string                           `json:"media_plane"`
+	Metadata                      json.RawMessage                  `json:"metadata"`
+	RecurringPolicy               json.RawMessage                  `json:"recurring_policy"`
+	AdmissionPolicy               json.RawMessage                  `json:"admission_policy"`
+	RecordingPolicy               artifactpolicy.RecordingMode     `json:"recording_policy"`
+	RecordingPolicySet            bool                             `json:"recording_policy_set"`
+	TranscriptionPolicy           artifactpolicy.TranscriptionMode `json:"transcription_policy"`
+	TranscriptionPolicySet        bool                             `json:"transcription_policy_set"`
+	DefaultEpisodeDurationSeconds int32                            `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32                            `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32                            `json:"linger_window_seconds"`
 }
 
 func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
 	payload, err := json.Marshal(createFingerprintInput{
 		Name: input.Name, Slug: input.Slug, MediaPlane: input.MediaPlane,
 		Metadata: input.Metadata, RecurringPolicy: input.RecurringPolicy, AdmissionPolicy: input.AdmissionPolicy,
+		RecordingPolicy: input.RecordingPolicy, RecordingPolicySet: input.RecordingPolicySet,
+		TranscriptionPolicy: input.TranscriptionPolicy, TranscriptionPolicySet: input.TranscriptionPolicySet,
 		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds, MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds: input.LingerWindowSeconds,
 	})

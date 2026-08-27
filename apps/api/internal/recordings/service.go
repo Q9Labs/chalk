@@ -23,6 +23,7 @@ var (
 	ErrInvalidRecordingField  = errors.New("invalid recording field")
 	ErrEpisodeNotFound        = errors.New("episode not found")
 	ErrRecordingNotFound      = errors.New("recording not found")
+	ErrRecordingConflict      = errors.New("recording aggregate identity conflict")
 )
 
 const (
@@ -35,20 +36,26 @@ const (
 )
 
 type Recording struct {
-	ID              utilities.ID
-	TenantID        utilities.ID
-	SpaceID         utilities.ID
-	EpisodeID       utilities.ID
-	Status          string
-	StorageProvider string
-	StorageKey      *string
-	Metadata        json.RawMessage
-	UpdatedAt       time.Time
-	CreatedAt       time.Time
+	ID                 utilities.ID
+	TenantID           utilities.ID
+	SpaceID            utilities.ID
+	EpisodeID          utilities.ID
+	Status             string
+	StorageProvider    string
+	StorageKey         *string
+	StorageContentType *string
+	StorageSize        *int64
+	StorageChecksum    []byte
+	Duration           time.Duration
+	CompletedAt        *time.Time
+	Metadata           json.RawMessage
+	UpdatedAt          time.Time
+	CreatedAt          time.Time
 }
 
 type Repository interface {
 	Create(ctx context.Context, input CreateInput) (Recording, error)
+	Materialize(ctx context.Context, input CreateInput) (Recording, error)
 	Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (Recording, error)
 	List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (RecordingList, error)
 	Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input UpdateInput) (Recording, error)
@@ -96,6 +103,23 @@ func (s Service) Create(ctx context.Context, input CreateInput) (Recording, erro
 	}
 
 	return s.repository.Create(ctx, input)
+}
+
+// Materialize records the identity assigned by the durable Episode command.
+// It is idempotent for the same aggregate coordinates and never allocates a
+// replacement Recording ID.
+func (s Service) Materialize(ctx context.Context, input CreateInput) (Recording, error) {
+	if input.ID.IsZero() {
+		return Recording{}, ErrInvalidRecordingID
+	}
+	input.Status = StatusPending
+	input.StorageProvider = StorageProviderR2
+	input.StorageKey = nil
+	if err := prepareCreateRecordingInput(&input); err != nil {
+		return Recording{}, err
+	}
+
+	return s.repository.Materialize(ctx, input)
 }
 
 func (s Service) Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (Recording, error) {

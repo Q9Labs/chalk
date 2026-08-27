@@ -24,6 +24,7 @@ func ReservationFingerprint(input ReservationInput) [32]byte {
 	h.Write(number[:])
 	binary.BigEndian.PutUint64(number[:], uint64(input.InputBitrateBPS))
 	h.Write(number[:])
+	h.Write([]byte(input.PolicySnapshotVersion))
 	if input.StartsAt != nil {
 		h.Write([]byte(input.StartsAt.UTC().Format(time.RFC3339Nano)))
 	}
@@ -44,6 +45,9 @@ func ValidateReservationInput(input ReservationInput) error {
 	}
 	if strings.TrimSpace(input.IdempotencyKey) == "" || len(input.IdempotencyKey) > 128 {
 		return ErrInvalidIdempotencyKey
+	}
+	if input.PolicySnapshotVersion != SupportedPolicySnapshotVersion {
+		return ErrInvalidPolicySnapshotVersion
 	}
 	if input.ParticipantCount < MinimumEpisodeParticipants || input.ParticipantCount > MaximumEpisodeParticipants {
 		return ErrInvalidParticipantCount
@@ -70,7 +74,7 @@ func ValidateLeaseInput(input LeaseInput) error {
 	if strings.TrimSpace(input.LeaseOwner) == "" {
 		return ErrInvalidOwner
 	}
-	if input.LeaseFor <= 0 {
+	if input.LeaseFor <= 0 || input.CaptureEpoch <= 0 || len(input.EnvelopeDigest) != sha256.Size {
 		return ErrInvalidLease
 	}
 	return nil
@@ -95,7 +99,7 @@ func ValidateBundleInput(input BundleInput) error {
 	if input.ID.IsZero() || input.SequenceNumber < 0 || input.FencingGeneration <= 0 {
 		return ErrInvalidAttempt
 	}
-	if input.AttemptCount <= 0 || input.LeaseToken == "" || input.LeaseOwner == "" {
+	if input.AttemptCount <= 0 || input.LeaseToken == "" || input.LeaseOwner == "" || input.CaptureEpoch <= 0 || len(input.EnvelopeDigest) != sha256.Size {
 		return ErrInvalidLease
 	}
 	if strings.TrimSpace(input.ObjectKey) == "" || strings.TrimSpace(input.ContentType) == "" || strings.TrimSpace(input.Codec) == "" {
@@ -120,7 +124,7 @@ func ValidateArtifactInput(input ArtifactInput) error {
 	if input.ByteSize < 0 || input.Duration < 0 || len(input.Checksum) < 16 {
 		return ErrInvalidLease
 	}
-	if input.AttemptCount <= 0 || input.FencingGeneration <= 0 || input.LeaseToken == "" || input.LeaseOwner == "" {
+	if input.AttemptCount <= 0 || input.FencingGeneration <= 0 || input.LeaseToken == "" || input.LeaseOwner == "" || input.CaptureEpoch <= 0 || len(input.EnvelopeDigest) != sha256.Size {
 		return ErrInvalidLease
 	}
 	return nil

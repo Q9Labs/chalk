@@ -99,8 +99,11 @@ data "aws_iam_policy_document" "recording_kms" {
         "chalk.environment",
         "chalk.tenant",
         "chalk.episode",
+        "chalk.recording",
         "chalk.recording_job",
         "chalk.bundle_schema",
+        "chalk.capture_epoch",
+        "chalk.envelope_digest",
       ]
     }
 
@@ -124,6 +127,12 @@ data "aws_iam_policy_document" "recording_kms" {
 
     condition {
       test     = "Null"
+      variable = "kms:EncryptionContext:chalk.recording"
+      values   = ["false"]
+    }
+
+    condition {
+      test     = "Null"
       variable = "kms:EncryptionContext:chalk.recording_job"
       values   = ["false"]
     }
@@ -131,6 +140,18 @@ data "aws_iam_policy_document" "recording_kms" {
     condition {
       test     = "Null"
       variable = "kms:EncryptionContext:chalk.bundle_schema"
+      values   = ["false"]
+    }
+
+    condition {
+      test     = "Null"
+      variable = "kms:EncryptionContext:chalk.capture_epoch"
+      values   = ["false"]
+    }
+
+    condition {
+      test     = "Null"
+      variable = "kms:EncryptionContext:chalk.envelope_digest"
       values   = ["false"]
     }
   }

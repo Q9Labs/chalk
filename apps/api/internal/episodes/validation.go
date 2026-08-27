@@ -267,6 +267,11 @@ func validateConfigSnapshot(raw json.RawMessage) (json.RawMessage, EpisodeConfig
 	if snapshot.LingerWindowSeconds < 0 || snapshot.LingerWindowSeconds > snapshot.MaximumEpisodeDurationSeconds {
 		return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
 	}
+	if snapshot.ArtifactPolicy != nil {
+		if err := snapshot.ArtifactPolicy.Validate(); err != nil {
+			return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
+		}
+	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot

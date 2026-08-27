@@ -211,25 +211,27 @@ func (e WorkerEvent) Validate(now time.Time) error {
 // CaptureProvider is the narrow provider boundary. Real Cloudflare/Pion
 // integration is intentionally absent until its authentication contract lands.
 type CaptureProvider interface {
-	Capture(Job) (CaptureSession, error)
+	Capture(Job) (CaptureConnection, error)
 }
 
 type RenderProvider interface {
 	Render(Job) (RenderSession, error)
 }
 
-type CaptureSession interface{ Close() error }
+type CaptureConnection interface{ Close() error }
 type RenderSession interface{ Close() error }
 
 type CloudflareCaptureProvider struct{}
 
-func (CloudflareCaptureProvider) Capture(Job) (CaptureSession, error) {
+func (CloudflareCaptureProvider) Capture(Job) (CaptureConnection, error) {
 	return nil, ErrProviderUnimplemented
 }
 
 type PionCaptureProvider struct{}
 
-func (PionCaptureProvider) Capture(Job) (CaptureSession, error) { return nil, ErrProviderUnimplemented }
+func (PionCaptureProvider) Capture(Job) (CaptureConnection, error) {
+	return nil, ErrProviderUnimplemented
+}
 
 type GPURenderProvider struct{}
 

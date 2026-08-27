@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,6 +20,7 @@ type RecordingRepository struct {
 
 type recordingQuerier interface {
 	CreateRecording(ctx context.Context, arg sqlc.CreateRecordingParams) (sqlc.Recording, error)
+	MaterializeRecording(ctx context.Context, arg sqlc.MaterializeRecordingParams) (sqlc.Recording, error)
 	GetTenantRecording(ctx context.Context, arg sqlc.GetTenantRecordingParams) (sqlc.Recording, error)
 	ListTenantRecordings(ctx context.Context, arg sqlc.ListTenantRecordingsParams) ([]sqlc.Recording, error)
 	UpdateTenantRecording(ctx context.Context, arg sqlc.UpdateTenantRecordingParams) (sqlc.Recording, error)
@@ -44,6 +46,27 @@ func (r RecordingRepository) Create(ctx context.Context, input recordings.Create
 	}
 	if err != nil {
 		return recordings.Recording{}, fmt.Errorf("create recording: %w", err)
+	}
+
+	return mapRecording(recording), nil
+}
+
+func (r RecordingRepository) Materialize(ctx context.Context, input recordings.CreateInput) (recordings.Recording, error) {
+	recording, err := r.queries.MaterializeRecording(ctx, sqlc.MaterializeRecordingParams{
+		ID:        uuid(input.ID),
+		TenantID:  uuid(input.TenantID),
+		SpaceID:   uuid(input.SpaceID),
+		EpisodeID: uuid(input.EpisodeID),
+		Metadata:  jsonBytes(input.Metadata),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordings.Recording{}, recordings.ErrRecordingConflict
+	}
+	if uniqueViolation(err) {
+		return recordings.Recording{}, recordings.ErrRecordingConflict
+	}
+	if err != nil {
+		return recordings.Recording{}, fmt.Errorf("materialize recording: %w", err)
 	}
 
 	return mapRecording(recording), nil
@@ -133,16 +156,21 @@ func listTenantRecordingsParams(tenantID utilities.ID, episodeID utilities.ID, p
 
 func mapRecording(recording sqlc.Recording) recordings.Recording {
 	return recordings.Recording{
-		ID:              utilities.IDFromBytes(recording.ID.Bytes),
-		TenantID:        utilities.IDFromBytes(recording.TenantID.Bytes),
-		SpaceID:         utilities.IDFromBytes(recording.SpaceID.Bytes),
-		EpisodeID:       utilities.IDFromBytes(recording.EpisodeID.Bytes),
-		Status:          recording.Status,
-		StorageProvider: recording.StorageProvider,
-		StorageKey:      nullableText(recording.StorageKey),
-		Metadata:        jsonRaw(recording.Metadata),
-		UpdatedAt:       timestamp(recording.UpdatedAt),
-		CreatedAt:       timestamp(recording.CreatedAt),
+		ID:                 utilities.IDFromBytes(recording.ID.Bytes),
+		TenantID:           utilities.IDFromBytes(recording.TenantID.Bytes),
+		SpaceID:            utilities.IDFromBytes(recording.SpaceID.Bytes),
+		EpisodeID:          utilities.IDFromBytes(recording.EpisodeID.Bytes),
+		Status:             recording.Status,
+		StorageProvider:    recording.StorageProvider,
+		StorageKey:         nullableText(recording.StorageKey),
+		StorageContentType: nullableText(recording.StorageContentType),
+		StorageSize:        nullableInt64Ptr(recording.StorageSize),
+		StorageChecksum:    append([]byte(nil), recording.StorageChecksum...),
+		Duration:           time.Duration(nullableInt64(recording.DurationMillis)) * time.Millisecond,
+		CompletedAt:        nullableTimestamp(recording.CompletedAt),
+		Metadata:           jsonRaw(recording.Metadata),
+		UpdatedAt:          timestamp(recording.UpdatedAt),
+		CreatedAt:          timestamp(recording.CreatedAt),
 	}
 }
 

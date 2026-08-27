@@ -149,8 +149,11 @@ variable "legacy_kms_context_key" {
         "chalk.environment",
         "chalk.tenant",
         "chalk.episode",
+        "chalk.recording",
         "chalk.recording_job",
         "chalk.bundle_schema",
+        "chalk.capture_epoch",
+        "chalk.envelope_digest",
       ], var.legacy_kms_context_key)
     )
     error_message = "legacy_kms_context_key must be a distinct non-canonical chalk.<identifier> context key."

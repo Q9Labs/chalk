@@ -8,19 +8,33 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
 type TrackCloser interface {
 	CloseTracks(context.Context, mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error)
 }
 
+// RecordingController owns the Chalk Recording aggregate. The SFU executor
+// only dispatches the durable effect; it does not allocate a competing
+// Recording identity or perform media capture.
+type RecordingController interface {
+	Start(context.Context, provideroperations.OperationInput) error
+	Stop(context.Context, provideroperations.OperationInput) error
+}
+
 type SFUExecutor struct {
 	publications mediapublications.Registry
 	tracks       TrackCloser
+	recording    RecordingController
 }
 
-func NewSFUExecutor(publications mediapublications.Registry, tracks TrackCloser) SFUExecutor {
-	return SFUExecutor{publications: publications, tracks: tracks}
+func NewSFUExecutor(publications mediapublications.Registry, tracks TrackCloser, recording ...RecordingController) SFUExecutor {
+	var controller RecordingController
+	if len(recording) > 0 {
+		controller = recording[0]
+	}
+	return SFUExecutor{publications: publications, tracks: tracks, recording: controller}
 }
 
 func (e SFUExecutor) Dispatch(ctx context.Context, input provideroperations.OperationInput) ExecutionResult {
@@ -43,8 +57,28 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 			return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "participant_generation_required"}
 		}
 	case provideroperations.EffectEndEpisode:
-	case provideroperations.EffectStartRecording, provideroperations.EffectStopRecording:
-		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_effect"}
+	case provideroperations.EffectStartRecording:
+		if input.RecordingID.IsZero() {
+			return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_id_required"}
+		}
+		if e.recording == nil {
+			return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "recording_controller_unavailable"}
+		}
+		if err := e.recording.Start(ctx, input); err != nil {
+			return recordingExecutionFailure(err)
+		}
+		return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
+	case provideroperations.EffectStopRecording:
+		if input.RecordingID.IsZero() {
+			return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_id_required"}
+		}
+		if e.recording == nil {
+			return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "recording_controller_unavailable"}
+		}
+		if err := e.recording.Stop(ctx, input); err != nil {
+			return recordingExecutionFailure(err)
+		}
+		return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 	default:
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_effect"}
 	}
@@ -154,5 +188,24 @@ func providerExecutionFailure(err error) ExecutionResult {
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "provider_rate_limited"}
 	default:
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "provider_unavailable"}
+	}
+}
+
+func recordingExecutionFailure(err error) ExecutionResult {
+	switch {
+	case errors.Is(err, provideroperations.ErrInvalidRecordingReservation),
+		errors.Is(err, provideroperations.ErrInvalidOperationID):
+		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_invalid_envelope"}
+	case errors.Is(err, recordingpipeline.ErrRecordingCapacityUnavailable),
+		errors.Is(err, recordingpipeline.ErrCapacityExceeded):
+		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_capacity_unavailable"}
+	case errors.Is(err, recordingpipeline.ErrReservationConflict),
+		errors.Is(err, recordingpipeline.ErrStopConflict),
+		errors.Is(err, recordingpipeline.ErrInvalidStateTransition),
+		errors.Is(err, recordingpipeline.ErrPipelineNotFound),
+		errors.Is(err, recordingpipeline.ErrInvalidRecordingID):
+		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_terminal_state"}
+	default:
+		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "recording_unavailable"}
 	}
 }

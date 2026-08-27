@@ -18,6 +18,8 @@ defmodule ChalkSync.Stateholder.ExternalOperation do
     :payload,
     :status,
     :attempt_count,
+    :actor_kind,
+    :actor_id,
     :actor_participant_id,
     :actor_generation,
     :target_participant_id,

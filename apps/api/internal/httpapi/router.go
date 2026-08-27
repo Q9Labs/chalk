@@ -38,69 +38,75 @@ type CapabilityStatus struct {
 }
 
 type Options struct {
-	Capabilities           CapabilityStatus
-	CORS                   CORSOptions
-	LocalSystemToken       string
-	OpsIngestToken         string
-	Middleware             []func(http.Handler) http.Handler
-	Profiler               http.Handler
-	RateLimit              RateLimitOptions
-	Readiness              ReadinessChecker
-	RecorderHealth         RecorderHealthChecker
-	Authentication         AuthenticationService
-	RecentAuth             RecentAuthProvider
-	AccountTenants         AccountTenantService
-	APIKeys                APIKeyService
-	APIKeyAuthentication   APIKeyAuthenticator
-	APIKeyAudits           APIKeyAuditWriter
-	Integrations           IntegrationService
-	Journeys               JourneyService
-	JourneyMetrics         JourneyMetricRecorder
-	LocalTelemetry         bool
-	EpisodeCredentials     EpisodeCredentialVerifier
-	MediaPlane             MediaPlaneResolver
-	MediaPublications      mediapublications.Registry
-	ParticipantMediaIssuer ParticipantMediaIssuer
-	ParticipantDiagnostics ParticipantDiagnosticsIssuer
-	ParticipantMediaVerify ParticipantMediaVerifier
-	ParticipantMediaActive ActiveParticipantAuthorizer
-	ParticipantGeneration  ParticipantGenerationAuthorizer
-	Memberships            MembershipService
-	AuditLogs              AuditLogService
-	RecordingDownloads     RecordingDownloadService
-	RecordingObjects       RecordingObjectService
-	Recordings             RecordingService
-	RecordingPipeline      RecordingPipelineService
-	StatusIngestion        StatusIngestionService
-	StatusSnapshot         StatusSnapshotService
-	RecorderMetrics        RecordingPipelineMetricRecorder
-	Spaces                 SpaceService
-	Episodes               EpisodeLifecycleService
-	SyncTokens             SyncTokenIssuer
-	SyncTokenRefresh       SyncTokenRefreshIssuer
-	SessionCookie          SessionCookieOptions
-	TenantAuthz            TenantAuthorizer
-	Tenants                TenantService
-	AITranscriptions       AITranscriptionService
-	Transcripts            TranscriptService
-	TranscriptArtifacts    TranscriptArtifactService
-	TranscriptWorker       TranscriptWorkerService
-	WorkloadAuthorizer     WorkloadAuthorizer
-	ChunkAuthority         ChunkAuthority
-	ManifestAuthority      ManifestAuthority
-	ResultAuthority        ResultAuthority
-	CleanupWorker          CleanupWorkerService
-	CleanupDeleteAuthority CleanupDeleteAuthority
-	FinalizerWorker        TranscriptFinalizerWorkerService
-	FinalizerAuthority     FinalizerAuthority
-	Users                  UserService
-	Webhooks               WebhookService
-	ChatAttachments        ChatAttachmentService
-	ChatParticipants       ChatParticipantVerifier
-	WhiteboardFiles        WhiteboardFileService
-	WhiteboardParticipants WhiteboardParticipantVerifier
-	PublicInvites          PublicInviteService
-	PublicInviteAudits     PublicInviteAuditWriter
+	Capabilities               CapabilityStatus
+	CORS                       CORSOptions
+	LocalSystemToken           string
+	OpsIngestToken             string
+	Middleware                 []func(http.Handler) http.Handler
+	Profiler                   http.Handler
+	RateLimit                  RateLimitOptions
+	Readiness                  ReadinessChecker
+	RecorderHealth             RecorderHealthChecker
+	RecorderWorker             RecorderWorkerService
+	RecorderCapturePlans       RecorderCapturePlanService
+	RecorderCaptureSignaling   RecorderCaptureSignalingService
+	RecorderRecordingKeys      RecorderRecordingKeyService
+	RecorderRecordingObjects   RecorderRecordingObjectService
+	RecorderRecordingLifecycle RecorderRecordingLifecycleService
+	RecorderWorkerVerifier     RecorderWorkerVerifier
+	RecorderWorkerReadiness    ReadinessChecker
+	Authentication             AuthenticationService
+	RecentAuth                 RecentAuthProvider
+	AccountTenants             AccountTenantService
+	APIKeys                    APIKeyService
+	APIKeyAuthentication       APIKeyAuthenticator
+	APIKeyAudits               APIKeyAuditWriter
+	Integrations               IntegrationService
+	Journeys                   JourneyService
+	JourneyMetrics             JourneyMetricRecorder
+	LocalTelemetry             bool
+	EpisodeCredentials         EpisodeCredentialVerifier
+	MediaPlane                 MediaPlaneResolver
+	MediaPublications          mediapublications.Registry
+	ParticipantMediaIssuer     ParticipantMediaIssuer
+	ParticipantDiagnostics     ParticipantDiagnosticsIssuer
+	ParticipantMediaVerify     ParticipantMediaVerifier
+	ParticipantMediaActive     ActiveParticipantAuthorizer
+	ParticipantGeneration      ParticipantGenerationAuthorizer
+	Memberships                MembershipService
+	AuditLogs                  AuditLogService
+	RecordingDownloads         RecordingDownloadService
+	RecordingObjects           RecordingObjectService
+	Recordings                 RecordingService
+	StatusIngestion            StatusIngestionService
+	StatusSnapshot             StatusSnapshotService
+	Spaces                     SpaceService
+	Episodes                   EpisodeLifecycleService
+	SyncTokens                 SyncTokenIssuer
+	SyncTokenRefresh           SyncTokenRefreshIssuer
+	SessionCookie              SessionCookieOptions
+	TenantAuthz                TenantAuthorizer
+	Tenants                    TenantService
+	AITranscriptions           AITranscriptionService
+	Transcripts                TranscriptService
+	TranscriptArtifacts        TranscriptArtifactService
+	TranscriptWorker           TranscriptWorkerService
+	WorkloadAuthorizer         WorkloadAuthorizer
+	ChunkAuthority             ChunkAuthority
+	ManifestAuthority          ManifestAuthority
+	ResultAuthority            ResultAuthority
+	CleanupWorker              CleanupWorkerService
+	CleanupDeleteAuthority     CleanupDeleteAuthority
+	FinalizerWorker            TranscriptFinalizerWorkerService
+	FinalizerAuthority         FinalizerAuthority
+	Users                      UserService
+	Webhooks                   WebhookService
+	ChatAttachments            ChatAttachmentService
+	ChatParticipants           ChatParticipantVerifier
+	WhiteboardFiles            WhiteboardFileService
+	WhiteboardParticipants     WhiteboardParticipantVerifier
+	PublicInvites              PublicInviteService
+	PublicInviteAudits         PublicInviteAuditWriter
 	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
 	// value is disabled and therefore does not mount any /_internal route.
 	EpisodeDiagnostics EpisodeDiagnosticsHTTPOptions
@@ -129,7 +135,7 @@ func NewRouter(options Options) http.Handler {
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
-	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities))
+	r.Get("/readyz", handleReady(options.Readiness, options.RecorderWorkerReadiness, options.Capabilities))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}
@@ -161,7 +167,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReady(checker ReadinessChecker, capabilities CapabilityStatus) http.HandlerFunc {
+func handleReady(checker ReadinessChecker, recorderWorkerReadiness ReadinessChecker, capabilities CapabilityStatus) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if checker == nil {
 			writeReadinessError(w, capabilities)
@@ -172,6 +178,10 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus) http.H
 		defer cancel()
 
 		if err := checker.Check(ctx); err != nil {
+			writeReadinessError(w, capabilities)
+			return
+		}
+		if capabilities.Recording && (recorderWorkerReadiness == nil || recorderWorkerReadiness.Check(ctx) != nil) {
 			writeReadinessError(w, capabilities)
 			return
 		}

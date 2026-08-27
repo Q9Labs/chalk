@@ -66,21 +66,15 @@ var (
 	apiErrorEpisodeCapacityExceeded       = APIError{Status: http.StatusConflict, Code: "episode.capacity_exceeded", Message: "Episode capacity is exhausted"}
 	apiErrorMediaPlaneUnavailable         = APIError{Status: http.StatusServiceUnavailable, Code: "media.unavailable", Message: "Media plane is unavailable"}
 
-	apiErrorInvalidRecordingID               = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_id", Message: "Invalid recording id"}
-	apiErrorInvalidRecordingStatus           = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_status", Message: "Invalid recording status"}
-	apiErrorInvalidStorageProvider           = APIError{Status: http.StatusBadRequest, Code: "storage.invalid_provider", Message: "Invalid storage provider"}
-	apiErrorInvalidStorageKey                = APIError{Status: http.StatusBadRequest, Code: "storage.invalid_key", Message: "Invalid storage key"}
-	apiErrorInvalidRecordingField            = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_field", Message: "Invalid recording field"}
-	apiErrorInvalidURLExpiration             = APIError{Status: http.StatusBadRequest, Code: "url.invalid_expiration", Message: "Invalid url expiration"}
-	apiErrorRecordingNotReady                = APIError{Status: http.StatusBadRequest, Code: "recording.not_ready", Message: "Recording is not ready"}
-	apiErrorInvalidRecordingReservationID    = APIError{Status: http.StatusBadRequest, Code: "recording_reservation.invalid_id", Message: "Invalid recording reservation id"}
-	apiErrorInvalidRecordingParticipantCount = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_participant_count", Message: "Recording participant count must be between one and ten"}
-	apiErrorInvalidRecordingDuration         = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_duration", Message: "Recording duration must be between one and 120 minutes"}
-	apiErrorInvalidRecordingBitrate          = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_bitrate", Message: "Recording bitrate exceeds the qualified limit"}
-	apiErrorRecordingCapacityUnavailable     = APIError{Status: http.StatusServiceUnavailable, Code: "recording.capacity_unavailable", Message: "Recording capacity is unavailable"}
-	apiErrorRecordingReservationNotFound     = APIError{Status: http.StatusNotFound, Code: "recording_reservation.not_found", Message: "Recording reservation not found"}
-	apiErrorRecordingNotFound                = APIError{Status: http.StatusNotFound, Code: "recording.not_found", Message: "Recording not found"}
-	apiErrorRecordingArtifactNotFound        = APIError{Status: http.StatusNotFound, Code: "recording_artifact.not_found", Message: "Recording artifact not found"}
+	apiErrorInvalidRecordingID        = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_id", Message: "Invalid recording id"}
+	apiErrorInvalidRecordingStatus    = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_status", Message: "Invalid recording status"}
+	apiErrorInvalidStorageProvider    = APIError{Status: http.StatusBadRequest, Code: "storage.invalid_provider", Message: "Invalid storage provider"}
+	apiErrorInvalidStorageKey         = APIError{Status: http.StatusBadRequest, Code: "storage.invalid_key", Message: "Invalid storage key"}
+	apiErrorInvalidRecordingField     = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_field", Message: "Invalid recording field"}
+	apiErrorInvalidURLExpiration      = APIError{Status: http.StatusBadRequest, Code: "url.invalid_expiration", Message: "Invalid url expiration"}
+	apiErrorRecordingNotReady         = APIError{Status: http.StatusBadRequest, Code: "recording.not_ready", Message: "Recording is not ready"}
+	apiErrorRecordingNotFound         = APIError{Status: http.StatusNotFound, Code: "recording.not_found", Message: "Recording not found"}
+	apiErrorRecordingArtifactNotFound = APIError{Status: http.StatusNotFound, Code: "recording_artifact.not_found", Message: "Recording artifact not found"}
 
 	apiErrorInvalidTranscriptID        = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_id", Message: "Invalid transcript id"}
 	apiErrorInvalidTranscriptStatus    = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_status", Message: "Invalid transcript status"}
@@ -88,6 +82,7 @@ var (
 	apiErrorInvalidTranscriptModel     = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_model", Message: "Invalid transcript model"}
 	apiErrorInvalidTranscriptLanguages = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_languages", Message: "Invalid transcript languages"}
 	apiErrorInvalidTranscriptField     = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_field", Message: "Invalid transcript field"}
+	apiErrorTranscriptionDisabled      = APIError{Status: http.StatusConflict, Code: "transcript.disabled", Message: "Transcription is disabled for this Episode"}
 	apiErrorTranscriptNotFound         = APIError{Status: http.StatusNotFound, Code: "transcript.not_found", Message: "Transcript not found"}
 	apiErrorTranscriptNotReady         = APIError{Status: http.StatusConflict, Code: "transcript.not_ready", Message: "Transcript artifact is not ready"}
 

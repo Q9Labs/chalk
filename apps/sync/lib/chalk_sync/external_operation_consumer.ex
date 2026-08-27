@@ -30,7 +30,9 @@ defmodule ChalkSync.ExternalOperationConsumer do
     :admit_participant,
     :deny_admission,
     :admission_request_expired,
-    :tenant_set_deadline
+    :tenant_set_deadline,
+    :recording_capture_ready,
+    :recording_capture_stopped
   ]
   @end_episode_operations [
     :end_episode,
@@ -309,6 +311,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp invoke_recording_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_recording_plane({module, adapter}, episode, operation, timeout_ms) do
+    adapter =
+      if module == ProviderBridgeRecordingPlane and is_map(operation.payload),
+        do: ProviderBridgeRecordingPlane.with_operation_payload(adapter, operation.payload),
+        else: adapter
+
     arguments =
       {operation.name,
        [adapter, operation.external_operation_id, episode, operation.recording_id]}

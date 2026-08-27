@@ -795,6 +795,25 @@ defmodule ChalkSync.SyncPostgres do
     defaults = Reducer.new(episode_id).role_capabilities
     roles = Map.get(policy, :role_capabilities, Map.get(policy, "role_capabilities", defaults))
 
+    artifact_policy =
+      Map.get(
+        policy,
+        :artifact_policy,
+        Map.get(policy, "artifact_policy", %{
+          "schema_version" => "episode_config.v2",
+          "recording" => %{
+            "mode" => "automatic",
+            "profile" => "composite_720p_v1",
+            "retention_seconds" => 2_592_000
+          },
+          "transcription" => %{
+            "mode" => "disabled",
+            "retention_seconds" => 0,
+            "source_window_seconds" => 0
+          }
+        })
+      )
+
     admission_policy =
       Map.get(policy, :admission_policy, Map.get(policy, "admission_policy", "open"))
 
@@ -809,7 +828,8 @@ defmodule ChalkSync.SyncPostgres do
       "default_episode_duration_seconds" =>
         Map.get(policy, :default_episode_duration_seconds, 86_400),
       "maximum_episode_duration_seconds" =>
-        Map.get(policy, :maximum_episode_duration_seconds, 86_400)
+        Map.get(policy, :maximum_episode_duration_seconds, 86_400),
+      "artifact_policy" => artifact_policy
     }
   end
 

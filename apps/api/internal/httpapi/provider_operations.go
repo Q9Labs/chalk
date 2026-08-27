@@ -30,13 +30,22 @@ type SyncPeerVerifier interface {
 }
 
 type providerOperationRequest struct {
-	Effect                provideroperations.Effect `json:"effect"`
-	TenantID              string                    `json:"tenant_id"`
-	EpisodeID             string                    `json:"episode_id"`
-	ParticipantID         *string                   `json:"participant_id,omitempty"`
-	ParticipantGeneration *int64                    `json:"participant_generation,omitempty"`
-	PublicationSource     *string                   `json:"publication_source,omitempty"`
-	RecordingID           *string                   `json:"recording_id,omitempty"`
+	Effect                provideroperations.Effect            `json:"effect"`
+	TenantID              string                               `json:"tenant_id"`
+	EpisodeID             string                               `json:"episode_id"`
+	ParticipantID         *string                              `json:"participant_id,omitempty"`
+	ParticipantGeneration *int64                               `json:"participant_generation,omitempty"`
+	PublicationSource     *string                              `json:"publication_source,omitempty"`
+	RecordingID           *string                              `json:"recording_id,omitempty"`
+	RecordingReservation  *providerRecordingReservationRequest `json:"recording_reservation,omitempty"`
+}
+
+type providerRecordingReservationRequest struct {
+	SpaceID               string `json:"space_id"`
+	ParticipantCount      int    `json:"participant_count"`
+	MaxDurationSeconds    int    `json:"max_duration_seconds"`
+	InputBitrateBPS       int64  `json:"input_bitrate_bps"`
+	PolicySnapshotVersion string `json:"policy_snapshot_version"`
 }
 
 type providerOperationResponse struct {
@@ -211,6 +220,19 @@ func providerOperationInput(operationID string, body providerOperationRequest) (
 		}
 		input.RecordingID = recordingID
 	}
+	if body.RecordingReservation != nil {
+		spaceID, parseErr := utilities.ParseID(body.RecordingReservation.SpaceID)
+		if parseErr != nil {
+			return provideroperations.OperationInput{}, provideroperations.ErrInvalidRecordingReservation
+		}
+		input.RecordingReservation = &provideroperations.RecordingReservation{
+			SpaceID:               spaceID,
+			ParticipantCount:      body.RecordingReservation.ParticipantCount,
+			MaxDurationSeconds:    body.RecordingReservation.MaxDurationSeconds,
+			InputBitrateBPS:       body.RecordingReservation.InputBitrateBPS,
+			PolicySnapshotVersion: body.RecordingReservation.PolicySnapshotVersion,
+		}
+	}
 	_, err = input.Canonicalize()
 	return input, err
 }
@@ -314,6 +336,7 @@ func writeProviderBridgeError(w http.ResponseWriter, err error) {
 		errors.Is(err, provideroperations.ErrInvalidParticipantGeneration),
 		errors.Is(err, provideroperations.ErrInvalidPublicationSource),
 		errors.Is(err, provideroperations.ErrInvalidRecordingID),
+		errors.Is(err, provideroperations.ErrInvalidRecordingReservation),
 		errors.Is(err, provideroperations.ErrInvalidObservationCursor):
 		writeError(w, http.StatusBadRequest, "provider.invalid_contract", "Invalid provider bridge request")
 	default:

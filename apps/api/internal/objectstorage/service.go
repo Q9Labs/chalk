@@ -80,10 +80,12 @@ type CreateDeleteURLInput struct {
 }
 
 type Object struct {
-	Key         string
-	ETag        string
-	ContentType string
-	Size        int64
+	Key            string
+	ETag           string
+	VersionID      string
+	ChecksumSHA256 string
+	ContentType    string
+	Size           int64
 }
 
 type ObjectReader struct {

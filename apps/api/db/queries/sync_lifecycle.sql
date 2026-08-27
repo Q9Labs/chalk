@@ -52,7 +52,8 @@ insert into episodes (
         'admission_policy', spaces.admission_policy,
         'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
-        'linger_window_seconds', spaces.linger_window_seconds
+        'linger_window_seconds', spaces.linger_window_seconds,
+        'artifact_policy', sqlc.arg(artifact_policy)::jsonb
     )
 from spaces
 where

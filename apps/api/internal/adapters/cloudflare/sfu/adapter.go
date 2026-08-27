@@ -112,10 +112,11 @@ type providerErrorEnvelope struct {
 }
 
 type Adapter struct {
-	appID     string
-	appSecret string
-	endpoint  string
-	client    httpClient
+	appID         string
+	appSecret     string
+	endpoint      string
+	client        httpClient
+	captureReplay *captureReplayRegistry
 }
 
 type ConnectionMetadata struct {
@@ -200,10 +201,11 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 	}
 
 	return Adapter{
-		appID:     appID,
-		appSecret: appSecret,
-		endpoint:  endpoint,
-		client:    &http.Client{Timeout: cfg.RequestTimeout},
+		appID:         appID,
+		appSecret:     appSecret,
+		endpoint:      endpoint,
+		client:        &http.Client{Timeout: cfg.RequestTimeout},
+		captureReplay: newCaptureReplayRegistry(),
 	}, nil
 }
 

@@ -25,7 +25,8 @@ Capture bundles are private temporary R2 objects and expire after 24 hours;
 incomplete multipart uploads expire after seven days. The AWS KMS key is in
 Singapore, rotates automatically, and permits data-key generation/decryption
 only to the control-plane role when the authenticated context contains the
-fixed environment plus tenant, Episode, recording-job, and bundle-schema keys.
+fixed environment, tenant, Episode, recording, recording-job, bundle-schema,
+capture-epoch, and recorder-envelope-digest keys.
 Workers receive neither KMS credentials nor reusable R2 or DigitalOcean
 credentials.
 

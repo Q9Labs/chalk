@@ -129,7 +129,11 @@ func (s Service) resume(ctx context.Context, receipt provideroperations.Receipt)
 		return storedResult(receipt)
 
 	case provideroperations.ReceiptDispatching:
-		return s.apply(ctx, receipt, s.executor.Reconcile(ctx, receiptInput(receipt)))
+		input, err := provideroperations.OperationFromReceipt(receipt)
+		if err != nil {
+			return Result{}, fmt.Errorf("decode provider operation receipt payload: %w", err)
+		}
+		return s.apply(ctx, receipt, s.executor.Reconcile(ctx, input))
 
 	case provideroperations.ReceiptPrepared:
 		dispatching, err := s.repository.MarkDispatching(ctx, receipt.OperationID, receipt.Effect)
@@ -143,7 +147,11 @@ func (s Service) resume(ctx context.Context, receipt provideroperations.Receipt)
 		if err != nil {
 			return Result{}, fmt.Errorf("mark provider operation dispatching: %w", err)
 		}
-		return s.apply(ctx, dispatching, s.executor.Dispatch(ctx, receiptInput(dispatching)))
+		input, err := provideroperations.OperationFromReceipt(dispatching)
+		if err != nil {
+			return Result{}, fmt.Errorf("decode provider operation receipt payload: %w", err)
+		}
+		return s.apply(ctx, dispatching, s.executor.Dispatch(ctx, input))
 
 	default:
 		return Result{}, provideroperations.ErrInvalidReceiptState
@@ -224,19 +232,6 @@ func ambiguousResult(receipt provideroperations.Receipt, reason string) Result {
 		Effect:      receipt.Effect,
 		Outcome:     provideroperations.OutcomeAmbiguous,
 		Reason:      reason,
-	}
-}
-
-func receiptInput(receipt provideroperations.Receipt) provideroperations.OperationInput {
-	return provideroperations.OperationInput{
-		OperationID:           receipt.OperationID,
-		Effect:                receipt.Effect,
-		TenantID:              receipt.TenantID,
-		EpisodeID:             receipt.EpisodeID,
-		ParticipantID:         receipt.ParticipantID,
-		ParticipantGeneration: receipt.ParticipantGeneration,
-		PublicationSource:     receipt.PublicationSource,
-		RecordingID:           receipt.RecordingID,
 	}
 }
 

@@ -17,6 +17,17 @@ func NewService(repository Repository) Service {
 }
 
 func (s Service) Reserve(ctx context.Context, input ReservationInput) (Reservation, error) {
+	return s.reserve(ctx, input, false)
+}
+
+// Materialize admits a Recording whose identity was assigned by the durable
+// Episode command. The identity is part of the aggregate and is never
+// generated at this boundary.
+func (s Service) Materialize(ctx context.Context, input ReservationInput) (Reservation, error) {
+	return s.reserve(ctx, input, true)
+}
+
+func (s Service) reserve(ctx context.Context, input ReservationInput, requireRecordingID bool) (Reservation, error) {
 	input, _, err := BuildReservation(input, s.now().UTC())
 	if err != nil {
 		return Reservation{}, err
@@ -29,7 +40,10 @@ func (s Service) Reserve(ctx context.Context, input ReservationInput) (Reservati
 		}
 	}
 	input.ID = reservationID
-	if input.RecordingID.IsZero() {
+	if requireRecordingID && input.RecordingID.IsZero() {
+		return Reservation{}, ErrInvalidRecordingID
+	}
+	if !requireRecordingID && input.RecordingID.IsZero() {
 		input.RecordingID, err = utilities.NewID()
 		if err != nil {
 			return Reservation{}, err
@@ -85,6 +99,19 @@ func (s Service) GetPipeline(ctx context.Context, tenantID, recordingID utilitie
 	return s.repository.GetPipeline(ctx, tenantID, recordingID)
 }
 
+func (s Service) RequestStop(ctx context.Context, tenantID, episodeID, recordingID, operationID utilities.ID) (Pipeline, error) {
+	if tenantID.IsZero() {
+		return Pipeline{}, ErrInvalidTenantID
+	}
+	if episodeID.IsZero() {
+		return Pipeline{}, ErrInvalidEpisodeID
+	}
+	if recordingID.IsZero() || operationID.IsZero() {
+		return Pipeline{}, ErrInvalidRecordingID
+	}
+	return s.repository.RequestStop(ctx, tenantID, episodeID, recordingID, operationID)
+}
+
 func (s Service) RecoverExpired(ctx context.Context) ([]Job, error) {
 	return s.repository.RecoverExpired(ctx)
 }
@@ -130,6 +157,9 @@ func (s Service) GetPoolHealth(ctx context.Context, role PoolRole) (PoolHealth, 
 func (s Service) Claim(ctx context.Context, input ClaimInput) (Job, error) {
 	if input.Kind != JobKindCapture && input.Kind != JobKindRender {
 		return Job{}, ErrInvalidJobID
+	}
+	if input.ClaimRequestID.IsZero() {
+		return Job{}, ErrInvalidLease
 	}
 	if input.LeaseFor <= 0 || input.LeaseToken == "" || input.Owner == "" {
 		return Job{}, ErrInvalidLease

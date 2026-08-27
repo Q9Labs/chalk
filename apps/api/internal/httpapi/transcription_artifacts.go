@@ -99,7 +99,7 @@ func requestTranscriptEndpoint(service TranscriptArtifactService, authorizer Ten
 			status = transcript.Status
 		}
 		return requestTranscriptResponse{Transcript: newTranscriptArtifactResponse(transcript), JobID: job.ID.String(), Status: status}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestTranscriptRequest", requestTranscriptBody{}).Responds(http.StatusAccepted, "TranscriptRequestAcceptedResponse", requestTranscriptResponse{}).Errors(transcriptArtifactErrors(apiErrorInvalidRequest, apiErrorInvalidTranscriptID, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRateLimited)...).MapErrors(transcriptArtifactAPIError)
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestTranscriptRequest", requestTranscriptBody{}).Responds(http.StatusAccepted, "TranscriptRequestAcceptedResponse", requestTranscriptResponse{}).Errors(transcriptArtifactErrors(apiErrorInvalidRequest, apiErrorInvalidTranscriptID, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorTranscriptionDisabled, apiErrorRateLimited)...).MapErrors(transcriptArtifactAPIError)
 }
 
 type requestTranscriptEndpointRequest struct {
@@ -275,6 +275,8 @@ func transcriptArtifactAPIError(err error) (APIError, bool) {
 		return apiErrorRecordingNotFound, true
 	case errors.Is(err, transcripts.ErrSourceNotReady):
 		return apiErrorRecordingNotReady, true
+	case errors.Is(err, transcripts.ErrTranscriptionDisabled):
+		return apiErrorTranscriptionDisabled, true
 	case errors.Is(err, transcripts.ErrTranscriptNotFound):
 		return apiErrorTranscriptNotFound, true
 	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):

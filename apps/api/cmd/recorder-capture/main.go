@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -15,10 +16,27 @@ import (
 func main() {
 	dir := flag.String("dir", "", "directory for a deterministic local fixture")
 	fixture := flag.Bool("fixture", false, "write a synthetic capture fixture")
+	runMode := flag.Bool("run", false, "run the server-authorized Cloudflare SFU capture worker")
+	environment := flag.String("environment", os.Getenv("CHALK_RECORDER_ENVIRONMENT"), "recording KMS environment name")
+	controlPlaneURL := flag.String("control-plane-url", os.Getenv("CHALK_RECORDER_CONTROL_PLANE_URL"), "private recorder control-plane URL")
+	workerCertificate := flag.String("worker-cert", os.Getenv("CHALK_RECORDER_WORKER_CERT"), "worker mTLS certificate")
+	workerKey := flag.String("worker-key", os.Getenv("CHALK_RECORDER_WORKER_KEY"), "worker mTLS private key")
+	serverCA := flag.String("server-ca", os.Getenv("CHALK_RECORDER_SERVER_CA"), "control-plane server CA")
+	serverName := flag.String("server-name", os.Getenv("CHALK_RECORDER_SERVER_NAME"), "control-plane TLS server name")
 	flag.Parse()
-	if !*fixture {
-		fmt.Fprintln(os.Stderr, "recorder-capture: only --fixture is available; provider capture is intentionally unimplemented")
+	if *fixture && *runMode {
+		fmt.Fprintln(os.Stderr, "recorder-capture: --fixture and --run cannot be combined")
 		os.Exit(2)
+	}
+	if !*fixture {
+		if err := runWorker(*environment, *controlPlaneURL, *workerCertificate, *workerKey, *serverCA, *serverName); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return
+			}
+			fmt.Fprintln(os.Stderr, "recorder-capture:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if *dir == "" {
 		fmt.Fprintln(os.Stderr, "recorder-capture: --dir is required")

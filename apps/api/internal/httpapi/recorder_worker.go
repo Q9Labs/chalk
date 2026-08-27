@@ -2,12 +2,15 @@ package httpapi
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/captureplan"
+	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -32,21 +35,76 @@ type RecorderWorkerService interface {
 	UpsertPoolHealth(context.Context, recordingpipeline.PoolHealth) (recordingpipeline.PoolHealth, error)
 }
 
+type RecorderCapturePlanService interface {
+	Wait(context.Context, captureplan.WaitInput) (captureplan.Plan, error)
+}
+
+// Claims return one immutable recorder_job.v1 authority. Every job mutation
+// repeats its capture epoch and digest in addition to the existing lease fence.
+
 var _ RecorderWorkerService = recordingpipeline.Service{}
+
+type recorderWorkerReadiness struct {
+	checker RecorderHealthChecker
+}
+
+// NewRecorderWorkerReadiness turns the role-specific pool health checks into
+// the dependency used by /readyz. Both pools must be admitting work before the
+// Recording capability is advertised as ready.
+func NewRecorderWorkerReadiness(checker RecorderHealthChecker) ReadinessChecker {
+	return recorderWorkerReadiness{checker: checker}
+}
+
+func (r recorderWorkerReadiness) Check(ctx context.Context) error {
+	if r.checker == nil {
+		return errors.New("recorder worker health is unavailable")
+	}
+	if err := r.checker.CheckRecorderPool(ctx, workeridentity.RoleCapture); err != nil {
+		return err
+	}
+	return r.checker.CheckRecorderPool(ctx, workeridentity.RoleRender)
+}
 
 // NewRecorderWorkerRouter creates the private router used by recorder worker
 // traffic. It intentionally does not install the public CORS, system-token,
 // or user-authentication middleware from NewRouter.
-func NewRecorderWorkerRouter(service RecorderWorkerService, verifier RecorderWorkerVerifier) http.Handler {
+func NewRecorderWorkerRouter(service RecorderWorkerService, verifier RecorderWorkerVerifier, plans ...RecorderCapturePlanService) http.Handler {
+	controls := RecorderWorkerControlServices{}
+	if len(plans) > 0 {
+		controls.CapturePlans = plans[0]
+	}
+	return NewRecorderWorkerRouterWithControls(service, verifier, controls)
+}
+
+type RecorderWorkerControlServices struct {
+	CapturePlans       RecorderCapturePlanService
+	CaptureSignaling   RecorderCaptureSignalingService
+	RecordingKeys      RecorderRecordingKeyService
+	RecordingObjects   RecorderRecordingObjectService
+	RecordingLifecycle RecorderRecordingLifecycleService
+}
+
+func NewRecorderWorkerRouterWithControls(service RecorderWorkerService, verifier RecorderWorkerVerifier, controls RecorderWorkerControlServices) http.Handler {
 	r := chi.NewRouter()
-	mountRecorderWorkerRoutes(r, service, verifier)
+	mountRecorderWorkerRoutesWithControls(r, service, verifier, controls)
 	return r
 }
 
 // mountRecorderWorkerRoutes mounts internal recorder control endpoints under
 // /internal/v1/recorder. The parent router owns composition and supplies the
 // verifier; every route is protected by requireRecorderWorker.
-func mountRecorderWorkerRoutes(r chi.Router, service RecorderWorkerService, verifier RecorderWorkerVerifier) {
+func mountRecorderWorkerRoutes(r chi.Router, service RecorderWorkerService, verifier RecorderWorkerVerifier, plans ...RecorderCapturePlanService) {
+	controls := RecorderWorkerControlServices{}
+	if len(plans) > 0 {
+		controls.CapturePlans = plans[0]
+	}
+	mountRecorderWorkerRoutesWithControls(r, service, verifier, controls)
+}
+
+func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerService, verifier RecorderWorkerVerifier, controls RecorderWorkerControlServices) {
+	if service == nil || verifier == nil {
+		return
+	}
 	r.Route("/internal/v1/recorder", func(r chi.Router) {
 		r.Use(func(next http.Handler) http.Handler { return requireRecorderWorker(verifier, next) })
 		r.Post("/jobs/claim", recorderWorkerClaimHandler(service))
@@ -54,14 +112,37 @@ func mountRecorderWorkerRoutes(r chi.Router, service RecorderWorkerService, veri
 		r.Post("/jobs/progress", recorderWorkerProgressHandler(service))
 		r.Post("/jobs/fail", recorderWorkerFailHandler(service))
 		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service))
-		r.Post("/bundles", recorderWorkerBundleHandler(service))
 		r.Post("/artifacts", recorderWorkerArtifactHandler(service))
 		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service))
+		if controls.CapturePlans != nil {
+			r.Post("/plans/wait", recorderWorkerCapturePlanWaitHandler(controls.CapturePlans))
+		}
+		mountRecorderCaptureSignalingRoutes(r, controls.CaptureSignaling)
+		mountRecorderRecordingAuthorityRoutes(r, controls.RecordingKeys, controls.RecordingObjects)
+		mountRecorderRecordingLifecycleRoutes(r, controls.RecordingLifecycle)
 	})
 }
 
 type recorderWorkerClaimBody struct {
-	LeaseForSeconds int `json:"lease_for_seconds"`
+	ClaimRequestID  string `json:"claim_request_id"`
+	LeaseForSeconds int    `json:"lease_for_seconds"`
+}
+
+type recorderWorkerCapturePlanWaitBody struct {
+	PlanHandle        string `json:"plan_handle"`
+	TenantID          string `json:"tenant_id"`
+	SpaceID           string `json:"space_id"`
+	EpisodeID         string `json:"episode_id"`
+	RecordingID       string `json:"recording_id"`
+	JobID             string `json:"job_id"`
+	AttemptCount      int    `json:"attempt_count"`
+	FencingGeneration int64  `json:"fencing_generation"`
+	CaptureEpoch      int64  `json:"capture_epoch"`
+	EnvelopeDigest    string `json:"envelope_digest"`
+	LeaseToken        string `json:"lease_token"`
+	LeaseExpiresAt    string `json:"lease_expires_at"`
+	AfterRevision     int64  `json:"after_revision"`
+	WaitMilliseconds  int64  `json:"wait_milliseconds"`
 }
 
 type recorderWorkerLeaseBody struct {
@@ -70,6 +151,8 @@ type recorderWorkerLeaseBody struct {
 	FencingGeneration int64  `json:"fencing_generation"`
 	LeaseToken        string `json:"lease_token"`
 	LeaseForSeconds   int    `json:"lease_for_seconds"`
+	CaptureEpoch      int64  `json:"capture_epoch"`
+	EnvelopeDigest    string `json:"envelope_digest"`
 }
 
 type recorderWorkerProgressBody struct {
@@ -92,26 +175,6 @@ type recorderWorkerCompleteBody struct {
 	recorderWorkerLeaseBody
 }
 
-type recorderWorkerBundleBody struct {
-	TenantID             string  `json:"tenant_id"`
-	RecordingID          string  `json:"recording_id"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	SequenceNumber       int64   `json:"sequence_number"`
-	FencingGeneration    int64   `json:"fencing_generation"`
-	AttemptCount         int     `json:"attempt_count"`
-	LeaseToken           string  `json:"lease_token"`
-	ObjectKey            string  `json:"object_key"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer"`
-	ByteSize             int64   `json:"byte_size"`
-	Checksum             string  `json:"checksum"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-}
-
 type recorderWorkerArtifactBody struct {
 	TenantID          string `json:"tenant_id"`
 	RecordingID       string `json:"recording_id"`
@@ -124,6 +187,8 @@ type recorderWorkerArtifactBody struct {
 	AttemptCount      int    `json:"attempt_count"`
 	FencingGeneration int64  `json:"fencing_generation"`
 	LeaseToken        string `json:"lease_token"`
+	CaptureEpoch      int64  `json:"capture_epoch"`
+	EnvelopeDigest    string `json:"envelope_digest"`
 }
 
 type recorderWorkerPoolHealthBody struct {
@@ -146,6 +211,8 @@ type recorderWorkerJobResponse struct {
 	LeaseOwner        string  `json:"lease_owner,omitempty"`
 	LeaseExpiresAt    *string `json:"lease_expires_at,omitempty"`
 	FencingGeneration int64   `json:"fencing_generation"`
+	CaptureEpoch      int64   `json:"capture_epoch"`
+	EnvelopeDigest    string  `json:"envelope_digest"`
 	AvailableAt       string  `json:"available_at"`
 	ErrorCode         string  `json:"error_code,omitempty"`
 	ErrorDetail       string  `json:"error_detail,omitempty"`
@@ -155,8 +222,17 @@ type recorderWorkerJobResponse struct {
 }
 
 type recorderWorkerClaimResponse struct {
-	recorderWorkerJobResponse
-	LeaseToken string `json:"lease_token"`
+	ClaimRequestID string                                `json:"claim_request_id"`
+	Envelope       recordingpipeline.RecorderJobEnvelope `json:"envelope"`
+	EnvelopeDigest string                                `json:"envelope_digest"`
+	LeaseToken     string                                `json:"lease_token"`
+	LeaseOwner     string                                `json:"lease_owner"`
+	LeaseExpiresAt string                                `json:"lease_expires_at"`
+}
+
+type recorderWorkerCapturePlanResponse struct {
+	Plan        captureplan.Plan `json:"plan"`
+	Fingerprint string           `json:"fingerprint"`
 }
 
 type recorderWorkerProgressResponse struct {
@@ -166,26 +242,6 @@ type recorderWorkerProgressResponse struct {
 	Total     int64                     `json:"total"`
 	Bytes     int64                     `json:"bytes"`
 	ObjectKey string                    `json:"object_key,omitempty"`
-}
-
-type recorderWorkerBundleResponse struct {
-	ID                   string  `json:"id"`
-	TenantID             string  `json:"tenant_id"`
-	RecordingID          string  `json:"recording_id"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	SequenceNumber       int64   `json:"sequence_number"`
-	FencingGeneration    int64   `json:"fencing_generation"`
-	ObjectKey            string  `json:"object_key"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer,omitempty"`
-	ByteSize             int64   `json:"byte_size"`
-	Checksum             string  `json:"checksum"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-	CreatedAt            string  `json:"created_at"`
 }
 
 type recorderWorkerArtifactResponse struct {
@@ -225,6 +281,11 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid lease duration")
 			return
 		}
+		claimRequestID, err := utilities.ParseID(body.ClaimRequestID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid claim request id")
+			return
+		}
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
@@ -235,10 +296,11 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			return
 		}
 		job, err := service.Claim(request.Context(), recordingpipeline.ClaimInput{
-			Kind:       recorderWorkerJobKind(identity.Role),
-			Owner:      recorderWorkerLeaseOwner(identity),
-			LeaseToken: leaseToken.String(),
-			LeaseFor:   leaseFor,
+			ClaimRequestID: claimRequestID,
+			Kind:           recorderWorkerJobKind(identity.Role),
+			Owner:          recorderWorkerLeaseOwner(identity),
+			LeaseToken:     leaseToken.String(),
+			LeaseFor:       leaseFor,
 		})
 		if err != nil {
 			if errors.Is(err, recordingpipeline.ErrJobNotFound) {
@@ -248,9 +310,52 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			writeRecorderWorkerError(w, err)
 			return
 		}
-		response := recorderWorkerJobResponseValue(job)
-		response.LeaseToken = leaseToken.String()
-		writeJSON(w, http.StatusOK, recorderWorkerClaimResponse{recorderWorkerJobResponse: response, LeaseToken: leaseToken.String()})
+		if job.Authority == nil {
+			writeError(w, http.StatusInternalServerError, "internal.error", "Recorder claim authority is unavailable")
+			return
+		}
+		leaseExpiresAt := utilities.FormatTimestamp(job.Authority.LeaseExpiresAt)
+		writeJSON(w, http.StatusOK, recorderWorkerClaimResponse{
+			ClaimRequestID: claimRequestID.String(), Envelope: job.Authority.Envelope,
+			EnvelopeDigest: recordingpipeline.EnvelopeDigestHex(job.Authority.EnvelopeDigest),
+			LeaseToken:     job.Authority.LeaseToken, LeaseOwner: job.Authority.LeaseOwner,
+			LeaseExpiresAt: leaseExpiresAt,
+		})
+	}
+}
+
+func recorderWorkerCapturePlanWaitHandler(service RecorderCapturePlanService) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		identity, ok := recorderWorkerRequestIdentity(w, request)
+		if !ok {
+			return
+		}
+		if identity.Role != workeridentity.RoleCapture {
+			writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers may wait for capture plans")
+			return
+		}
+		body, ok := decodeRecorderWorkerBody[recorderWorkerCapturePlanWaitBody](w, request)
+		if !ok {
+			return
+		}
+		input, ok := recorderWorkerCapturePlanWaitInput(identity, body)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid capture plan wait")
+			return
+		}
+		plan, err := service.Wait(request.Context(), input)
+		if errors.Is(err, captureplan.ErrWaitTimeout) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		if err != nil {
+			writeRecorderCapturePlanError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, recorderWorkerCapturePlanResponse{Plan: plan, Fingerprint: plan.FingerprintHex()})
 	}
 }
 
@@ -391,38 +496,6 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFu
 	}
 }
 
-func recorderWorkerBundleHandler(service RecorderWorkerService) http.HandlerFunc {
-	return func(w http.ResponseWriter, request *http.Request) {
-		identity, ok := recorderWorkerRequestIdentity(w, request)
-		if !ok {
-			return
-		}
-		if identity.Role != workeridentity.RoleCapture {
-			writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers may report bundles")
-			return
-		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerBundleBody](w, request)
-		if !ok {
-			return
-		}
-		input, ok := recorderWorkerBundleInput(identity, body)
-		if !ok {
-			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording bundle")
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
-		}
-		bundle, err := service.InsertBundle(request.Context(), input)
-		if err != nil {
-			writeRecorderWorkerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, recorderWorkerBundleResponseValue(bundle))
-	}
-}
-
 func recorderWorkerArtifactHandler(service RecorderWorkerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderWorkerRequestIdentity(w, request)
@@ -531,41 +604,46 @@ func recorderWorkerLeaseDuration(seconds int) (time.Duration, bool) {
 
 func recorderWorkerLeaseInput(identity workeridentity.Identity, body recorderWorkerLeaseBody) (recordingpipeline.LeaseInput, bool) {
 	jobID, err := utilities.ParseID(body.JobID)
-	if err != nil || body.AttemptCount < 1 || body.FencingGeneration < 1 || strings.TrimSpace(body.LeaseToken) == "" {
+	digest, digestErr := decodeEnvelopeDigest(body.EnvelopeDigest)
+	if err != nil || digestErr != nil || body.AttemptCount < 1 || body.FencingGeneration < 1 || body.CaptureEpoch < 1 || strings.TrimSpace(body.LeaseToken) == "" {
 		return recordingpipeline.LeaseInput{}, false
 	}
 	leaseFor, valid := recorderWorkerLeaseDuration(body.LeaseForSeconds)
 	if !valid {
 		return recordingpipeline.LeaseInput{}, false
 	}
-	return recordingpipeline.LeaseInput{JobID: jobID, AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration, LeaseToken: body.LeaseToken, LeaseOwner: recorderWorkerLeaseOwner(identity), LeaseFor: leaseFor}, true
+	return recordingpipeline.LeaseInput{JobID: jobID, AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration, LeaseToken: body.LeaseToken, LeaseOwner: recorderWorkerLeaseOwner(identity), LeaseFor: leaseFor, CaptureEpoch: body.CaptureEpoch, EnvelopeDigest: digest}, true
 }
 
-func recorderWorkerBundleInput(identity workeridentity.Identity, body recorderWorkerBundleBody) (recordingpipeline.BundleInput, bool) {
-	tenantID, err := utilities.ParseID(body.TenantID)
-	if err != nil {
-		return recordingpipeline.BundleInput{}, false
+func recorderWorkerCapturePlanWaitInput(identity workeridentity.Identity, body recorderWorkerCapturePlanWaitBody) (captureplan.WaitInput, bool) {
+	planHandle, planErr := utilities.ParseID(body.PlanHandle)
+	tenantID, tenantErr := utilities.ParseID(body.TenantID)
+	spaceID, spaceErr := utilities.ParseID(body.SpaceID)
+	episodeID, episodeErr := utilities.ParseID(body.EpisodeID)
+	recordingID, recordingErr := utilities.ParseID(body.RecordingID)
+	jobID, jobErr := utilities.ParseID(body.JobID)
+	digest, digestErr := decodeEnvelopeDigest(body.EnvelopeDigest)
+	leaseExpiresAt, expiryErr := time.Parse(time.RFC3339Nano, body.LeaseExpiresAt)
+	if planErr != nil || tenantErr != nil || spaceErr != nil || episodeErr != nil || recordingErr != nil ||
+		jobErr != nil || digestErr != nil || expiryErr != nil || body.AttemptCount <= 0 ||
+		body.FencingGeneration <= 0 || body.CaptureEpoch <= 0 || body.AfterRevision < 0 ||
+		body.WaitMilliseconds < captureplan.MinimumWait.Milliseconds() || body.WaitMilliseconds > captureplan.MaximumWait.Milliseconds() ||
+		strings.TrimSpace(body.LeaseToken) == "" {
+		return captureplan.WaitInput{}, false
 	}
-	recordingID, err := utilities.ParseID(body.RecordingID)
-	if err != nil {
-		return recordingpipeline.BundleInput{}, false
+	authority := captureplan.PlanAuthority{
+		PlanHandle: captureplan.PlanHandle(planHandle.String()), TenantID: tenantID, SpaceID: spaceID,
+		EpisodeID: episodeID, RecordingID: recordingID, JobID: jobID,
+		AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration,
+		CaptureEpoch: captureplane.CaptureEpoch(body.CaptureEpoch), EnvelopeDigest: digest,
 	}
-	captureJobID, err := utilities.ParseID(body.CaptureJobID)
-	if err != nil {
-		return recordingpipeline.BundleInput{}, false
-	}
-	bundleID, err := utilities.NewID()
-	if err != nil {
-		return recordingpipeline.BundleInput{}, false
-	}
-	checksum, err := decodeChecksum(body.Checksum)
-	if err != nil {
-		return recordingpipeline.BundleInput{}, false
-	}
-	if body.FencingGeneration < 1 || body.AttemptCount < 1 || body.SequenceNumber < 0 || strings.TrimSpace(body.LeaseToken) == "" {
-		return recordingpipeline.BundleInput{}, false
-	}
-	return recordingpipeline.BundleInput{ID: bundleID, TenantID: tenantID, RecordingID: recordingID, CaptureJobID: captureJobID, SequenceNumber: body.SequenceNumber, FencingGeneration: body.FencingGeneration, AttemptCount: body.AttemptCount, LeaseToken: body.LeaseToken, LeaseOwner: recorderWorkerLeaseOwner(identity), ObjectKey: strings.TrimSpace(body.ObjectKey), ContentType: strings.TrimSpace(body.ContentType), Codec: strings.TrimSpace(body.Codec), Layer: body.Layer, ByteSize: body.ByteSize, Checksum: checksum, MonotonicStartMillis: body.MonotonicStartMillis, MonotonicEndMillis: body.MonotonicEndMillis, MediaStartMillis: body.MediaStartMillis, MediaEndMillis: body.MediaEndMillis}, true
+	input := captureplan.NewWaitInput(
+		authority,
+		captureplan.WorkerLease{Owner: recorderWorkerLeaseOwner(identity), Token: body.LeaseToken, ExpiresAt: leaseExpiresAt.UTC()},
+		captureplane.PlanRevision(body.AfterRevision),
+		time.Duration(body.WaitMilliseconds)*time.Millisecond,
+	)
+	return input, input.Validate(time.Now().UTC()) == nil
 }
 
 func recorderWorkerArtifactInput(identity workeridentity.Identity, body recorderWorkerArtifactBody) (recordingpipeline.ArtifactInput, bool) {
@@ -582,10 +660,19 @@ func recorderWorkerArtifactInput(identity workeridentity.Identity, body recorder
 		return recordingpipeline.ArtifactInput{}, false
 	}
 	checksum, err := decodeChecksum(body.Checksum)
-	if err != nil || body.DurationMillis < 0 || body.AttemptCount < 1 || body.FencingGeneration < 1 || strings.TrimSpace(body.LeaseToken) == "" {
+	digest, digestErr := decodeEnvelopeDigest(body.EnvelopeDigest)
+	if err != nil || digestErr != nil || body.DurationMillis < 0 || body.AttemptCount < 1 || body.FencingGeneration < 1 || body.CaptureEpoch < 1 || strings.TrimSpace(body.LeaseToken) == "" {
 		return recordingpipeline.ArtifactInput{}, false
 	}
-	return recordingpipeline.ArtifactInput{TenantID: tenantID, RecordingID: recordingID, RenderJobID: renderJobID, ObjectKey: strings.TrimSpace(body.ObjectKey), ContentType: strings.TrimSpace(body.ContentType), ByteSize: body.ByteSize, Checksum: checksum, Duration: time.Duration(body.DurationMillis) * time.Millisecond, AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration, LeaseToken: body.LeaseToken, LeaseOwner: recorderWorkerLeaseOwner(identity)}, true
+	return recordingpipeline.ArtifactInput{TenantID: tenantID, RecordingID: recordingID, RenderJobID: renderJobID, ObjectKey: strings.TrimSpace(body.ObjectKey), ContentType: strings.TrimSpace(body.ContentType), ByteSize: body.ByteSize, Checksum: checksum, Duration: time.Duration(body.DurationMillis) * time.Millisecond, AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration, LeaseToken: body.LeaseToken, LeaseOwner: recorderWorkerLeaseOwner(identity), CaptureEpoch: body.CaptureEpoch, EnvelopeDigest: digest}, true
+}
+
+func decodeEnvelopeDigest(value string) ([]byte, error) {
+	digest, err := hex.DecodeString(strings.TrimSpace(value))
+	if err != nil || len(digest) != 32 {
+		return nil, errors.New("invalid envelope digest")
+	}
+	return digest, nil
 }
 
 func decodeRecorderWorkerBody[T any](w http.ResponseWriter, request *http.Request) (T, bool) {
@@ -603,7 +690,10 @@ func decodeRecorderWorkerBody[T any](w http.ResponseWriter, request *http.Reques
 }
 
 func recorderWorkerJobResponseValue(job recordingpipeline.Job) recorderWorkerJobResponse {
-	response := recorderWorkerJobResponse{JobID: job.ID.String(), TenantID: job.TenantID.String(), EpisodeID: job.EpisodeID.String(), RecordingID: job.RecordingID.String(), Kind: string(job.Kind), State: string(job.State), AttemptCount: job.AttemptCount, AttemptLimit: job.AttemptLimit, FencingGeneration: job.FencingGeneration, AvailableAt: utilities.FormatTimestamp(job.AvailableAt), UpdatedAt: utilities.FormatTimestamp(job.UpdatedAt), CreatedAt: utilities.FormatTimestamp(job.CreatedAt)}
+	response := recorderWorkerJobResponse{JobID: job.ID.String(), TenantID: job.TenantID.String(), EpisodeID: job.EpisodeID.String(), RecordingID: job.RecordingID.String(), Kind: string(job.Kind), State: string(job.State), AttemptCount: job.AttemptCount, AttemptLimit: job.AttemptLimit, FencingGeneration: job.FencingGeneration, CaptureEpoch: job.CaptureEpoch, AvailableAt: utilities.FormatTimestamp(job.AvailableAt), UpdatedAt: utilities.FormatTimestamp(job.UpdatedAt), CreatedAt: utilities.FormatTimestamp(job.CreatedAt)}
+	if job.Authority != nil {
+		response.EnvelopeDigest = recordingpipeline.EnvelopeDigestHex(job.Authority.EnvelopeDigest)
+	}
 	if job.LeaseToken != nil {
 		response.LeaseToken = *job.LeaseToken
 	}
@@ -627,10 +717,6 @@ func recorderWorkerJobResponseValue(job recordingpipeline.Job) recorderWorkerJob
 	return response
 }
 
-func recorderWorkerBundleResponseValue(bundle recordingpipeline.Bundle) recorderWorkerBundleResponse {
-	return recorderWorkerBundleResponse{ID: bundle.ID.String(), TenantID: bundle.TenantID.String(), RecordingID: bundle.RecordingID.String(), CaptureJobID: bundle.CaptureJobID.String(), SequenceNumber: bundle.SequenceNumber, FencingGeneration: bundle.FencingGeneration, ObjectKey: bundle.ObjectKey, ContentType: bundle.ContentType, Codec: bundle.Codec, Layer: bundle.Layer, ByteSize: bundle.ByteSize, Checksum: checksumString(bundle.Checksum), MonotonicStartMillis: bundle.MonotonicStartMillis, MonotonicEndMillis: bundle.MonotonicEndMillis, MediaStartMillis: bundle.MediaStartMillis, MediaEndMillis: bundle.MediaEndMillis, CreatedAt: utilities.FormatTimestamp(bundle.CreatedAt)}
-}
-
 func recorderWorkerArtifactResponseValue(artifact recordingpipeline.Artifact) recorderWorkerArtifactResponse {
 	return recorderWorkerArtifactResponse{RecordingID: artifact.RecordingID.String(), TenantID: artifact.TenantID.String(), RenderJobID: artifact.RenderJobID.String(), ObjectKey: artifact.ObjectKey, ContentType: artifact.ContentType, ByteSize: artifact.ByteSize, Checksum: checksumString(artifact.Checksum), DurationMillis: artifact.Duration.Milliseconds(), CommittedAt: utilities.FormatTimestamp(artifact.CommittedAt), CreatedAt: utilities.FormatTimestamp(artifact.CreatedAt)}
 }
@@ -651,8 +737,10 @@ func checksumString(value []byte) string {
 
 func writeRecorderWorkerError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, recordingpipeline.ErrInvalidJobID), errors.Is(err, recordingpipeline.ErrInvalidAttempt), errors.Is(err, recordingpipeline.ErrInvalidLease), errors.Is(err, recordingpipeline.ErrInvalidOwner), errors.Is(err, recordingpipeline.ErrInvalidRecordingID), errors.Is(err, recordingpipeline.ErrCapacityExceeded):
+	case errors.Is(err, recordingpipeline.ErrInvalidJobID), errors.Is(err, recordingpipeline.ErrInvalidAttempt), errors.Is(err, recordingpipeline.ErrInvalidLease), errors.Is(err, recordingpipeline.ErrInvalidOwner), errors.Is(err, recordingpipeline.ErrInvalidRecordingID), errors.Is(err, recordingpipeline.ErrInvalidEnvelope), errors.Is(err, recordingpipeline.ErrCapacityExceeded):
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder worker request")
+	case errors.Is(err, recordingpipeline.ErrClaimConflict):
+		writeError(w, http.StatusConflict, "claim.conflict", "Claim request conflicts with an existing worker claim")
 	case errors.Is(err, recordingpipeline.ErrJobNotFound):
 		writeError(w, http.StatusConflict, "lease.stale", "Worker lease is stale or unavailable")
 	case errors.Is(err, recordingpipeline.ErrArtifactConflict):
@@ -661,5 +749,18 @@ func writeRecorderWorkerError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "worker.not_found", "Recorder resource was not found")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal.error", "Recorder worker operation failed")
+	}
+}
+
+func writeRecorderCapturePlanError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, captureplan.ErrInvalidWaitInput):
+		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid capture plan wait")
+	case errors.Is(err, captureplan.ErrPlanAuthorityMismatch), errors.Is(err, captureplan.ErrStalePlan), errors.Is(err, captureplan.ErrLeaseExpired):
+		writeError(w, http.StatusConflict, "lease.stale", "Capture plan authority is stale or unavailable")
+	case errors.Is(err, captureplan.ErrRepositoryUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Capture plan service is unavailable")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal.error", "Capture plan operation failed")
 	}
 }

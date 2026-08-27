@@ -543,16 +543,21 @@ type ProviderOperationReceipt struct {
 }
 
 type Recording struct {
-	ID              pgtype.UUID        `json:"id"`
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	SpaceID         pgtype.UUID        `json:"space_id"`
-	EpisodeID       pgtype.UUID        `json:"episode_id"`
-	Status          string             `json:"status"`
-	StorageProvider string             `json:"storage_provider"`
-	StorageKey      pgtype.Text        `json:"storage_key"`
-	Metadata        []byte             `json:"metadata"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
+	Status             string             `json:"status"`
+	StorageProvider    string             `json:"storage_provider"`
+	StorageKey         pgtype.Text        `json:"storage_key"`
+	StorageContentType pgtype.Text        `json:"storage_content_type"`
+	StorageSize        pgtype.Int8        `json:"storage_size"`
+	StorageChecksum    []byte             `json:"storage_checksum"`
+	DurationMillis     pgtype.Int8        `json:"duration_millis"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	Metadata           []byte             `json:"metadata"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecordingArtifact struct {
@@ -569,23 +574,66 @@ type RecordingArtifact struct {
 }
 
 type RecordingBundle struct {
-	ID                   pgtype.UUID        `json:"id"`
-	TenantID             pgtype.UUID        `json:"tenant_id"`
-	RecordingID          pgtype.UUID        `json:"recording_id"`
-	CaptureJobID         pgtype.UUID        `json:"capture_job_id"`
-	SequenceNumber       int64              `json:"sequence_number"`
-	FencingGeneration    int64              `json:"fencing_generation"`
-	ObjectKey            string             `json:"object_key"`
-	ContentType          string             `json:"content_type"`
-	Codec                string             `json:"codec"`
-	Layer                pgtype.Text        `json:"layer"`
-	ByteSize             int64              `json:"byte_size"`
-	Checksum             []byte             `json:"checksum"`
-	MonotonicStartMillis int64              `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64              `json:"monotonic_end_millis"`
-	MediaStartMillis     int64              `json:"media_start_millis"`
-	MediaEndMillis       int64              `json:"media_end_millis"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	RecordingID             pgtype.UUID        `json:"recording_id"`
+	CaptureJobID            pgtype.UUID        `json:"capture_job_id"`
+	SequenceNumber          int64              `json:"sequence_number"`
+	FencingGeneration       int64              `json:"fencing_generation"`
+	ObjectKey               string             `json:"object_key"`
+	ContentType             string             `json:"content_type"`
+	Codec                   string             `json:"codec"`
+	Layer                   pgtype.Text        `json:"layer"`
+	ByteSize                int64              `json:"byte_size"`
+	Checksum                []byte             `json:"checksum"`
+	MonotonicStartMillis    int64              `json:"monotonic_start_millis"`
+	MonotonicEndMillis      int64              `json:"monotonic_end_millis"`
+	MediaStartMillis        int64              `json:"media_start_millis"`
+	MediaEndMillis          int64              `json:"media_end_millis"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	AllocationID            pgtype.UUID        `json:"allocation_id"`
+	ObjectVersion           pgtype.Text        `json:"object_version"`
+	ObjectEtag              pgtype.Text        `json:"object_etag"`
+	CaptureEpoch            pgtype.Int8        `json:"capture_epoch"`
+	EnvelopeDigest          []byte             `json:"envelope_digest"`
+	EncryptionContextDigest []byte             `json:"encryption_context_digest"`
+	ManifestDigest          []byte             `json:"manifest_digest"`
+}
+
+type RecordingBundleAllocation struct {
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	EpisodeID               pgtype.UUID        `json:"episode_id"`
+	RecordingID             pgtype.UUID        `json:"recording_id"`
+	JobID                   pgtype.UUID        `json:"job_id"`
+	ObjectHandle            pgtype.UUID        `json:"object_handle"`
+	ReservationRequestID    pgtype.UUID        `json:"reservation_request_id"`
+	AllocationVersion       int64              `json:"allocation_version"`
+	AttemptCount            int32              `json:"attempt_count"`
+	FencingGeneration       int64              `json:"fencing_generation"`
+	CaptureEpoch            int64              `json:"capture_epoch"`
+	EnvelopeDigest          []byte             `json:"envelope_digest"`
+	SequenceNumber          int64              `json:"sequence_number"`
+	Codec                   string             `json:"codec"`
+	Layer                   pgtype.Text        `json:"layer"`
+	MonotonicStartMillis    int64              `json:"monotonic_start_millis"`
+	MonotonicEndMillis      int64              `json:"monotonic_end_millis"`
+	MediaStartMillis        int64              `json:"media_start_millis"`
+	MediaEndMillis          int64              `json:"media_end_millis"`
+	ObjectKey               string             `json:"object_key"`
+	UploadTokenHash         []byte             `json:"upload_token_hash"`
+	ExpectedByteSize        int64              `json:"expected_byte_size"`
+	ExpectedChecksum        []byte             `json:"expected_checksum"`
+	ContentType             string             `json:"content_type"`
+	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
+	EncryptionContextDigest []byte             `json:"encryption_context_digest"`
+	State                   string             `json:"state"`
+	ObjectVersion           pgtype.Text        `json:"object_version"`
+	ObjectEtag              pgtype.Text        `json:"object_etag"`
+	ObjectChecksum          []byte             `json:"object_checksum"`
+	ManifestDigest          []byte             `json:"manifest_digest"`
+	CommittedAt             pgtype.Timestamptz `json:"committed_at"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecordingCapacity struct {
@@ -594,6 +642,102 @@ type RecordingCapacity struct {
 	ReservedParticipants    int32              `json:"reserved_participants"`
 	ReservedInputBitrateBps int64              `json:"reserved_input_bitrate_bps"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RecordingCaptureCommand struct {
+	ID                       int64              `json:"id"`
+	SignalingHandle          pgtype.UUID        `json:"signaling_handle"`
+	CaptureEpoch             int64              `json:"capture_epoch"`
+	Sequence                 int64              `json:"sequence"`
+	RecordingID              pgtype.UUID        `json:"recording_id"`
+	PlanRevision             int64              `json:"plan_revision"`
+	OperationKind            string             `json:"operation_kind"`
+	IdempotencyKey           string             `json:"idempotency_key"`
+	RequestBytes             []byte             `json:"request_bytes"`
+	RequestFingerprint       []byte             `json:"request_fingerprint"`
+	State                    string             `json:"state"`
+	ExecutionAttempt         int32              `json:"execution_attempt"`
+	ExecutionToken           pgtype.UUID        `json:"execution_token"`
+	ExecutionExpiresAt       pgtype.Timestamptz `json:"execution_expires_at"`
+	NotBefore                pgtype.Timestamptz `json:"not_before"`
+	ResultBytes              []byte             `json:"result_bytes"`
+	ResultFingerprint        []byte             `json:"result_fingerprint"`
+	ProviderFailureClass     pgtype.Text        `json:"provider_failure_class"`
+	ProviderFailureCode      pgtype.Text        `json:"provider_failure_code"`
+	ProviderFailureRetryable pgtype.Bool        `json:"provider_failure_retryable"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	LeasedAt                 pgtype.Timestamptz `json:"leased_at"`
+	CompletedAt              pgtype.Timestamptz `json:"completed_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RecordingCaptureConnection struct {
+	SignalingHandle             pgtype.UUID        `json:"signaling_handle"`
+	CaptureEpoch                int64              `json:"capture_epoch"`
+	TenantID                    pgtype.UUID        `json:"tenant_id"`
+	SpaceID                     pgtype.UUID        `json:"space_id"`
+	EpisodeID                   pgtype.UUID        `json:"episode_id"`
+	RecordingID                 pgtype.UUID        `json:"recording_id"`
+	JobID                       pgtype.UUID        `json:"job_id"`
+	AttemptCount                int32              `json:"attempt_count"`
+	FencingGeneration           int64              `json:"fencing_generation"`
+	EnvelopeDigest              []byte             `json:"envelope_digest"`
+	ProviderConnectionReference pgtype.Text        `json:"provider_connection_reference"`
+	State                       string             `json:"state"`
+	LatestPlanRevision          int64              `json:"latest_plan_revision"`
+	NegotiationID               pgtype.Text        `json:"negotiation_id"`
+	NegotiationRequirement      string             `json:"negotiation_requirement"`
+	NegotiationPlanRevision     pgtype.Int8        `json:"negotiation_plan_revision"`
+	NextSequence                int64              `json:"next_sequence"`
+	ActiveCommandID             pgtype.Int8        `json:"active_command_id"`
+	ActiveExecutionToken        pgtype.UUID        `json:"active_execution_token"`
+	ActiveExecutionExpiresAt    pgtype.Timestamptz `json:"active_execution_expires_at"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RecordingCapturePlan struct {
+	PlanHandle             pgtype.UUID        `json:"plan_handle"`
+	Revision               int64              `json:"revision"`
+	JobID                  pgtype.UUID        `json:"job_id"`
+	AttemptCount           int32              `json:"attempt_count"`
+	FencingGeneration      int64              `json:"fencing_generation"`
+	CaptureEpoch           int64              `json:"capture_epoch"`
+	EnvelopeDigest         []byte             `json:"envelope_digest"`
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	SpaceID                pgtype.UUID        `json:"space_id"`
+	EpisodeID              pgtype.UUID        `json:"episode_id"`
+	RecordingID            pgtype.UUID        `json:"recording_id"`
+	EpisodeControlRevision int64              `json:"episode_control_revision"`
+	ProviderIncarnation    int64              `json:"provider_incarnation"`
+	ProviderSequence       int64              `json:"provider_sequence"`
+	PlanSchemaVersion      string             `json:"plan_schema_version"`
+	PlanBytes              []byte             `json:"plan_bytes"`
+	PlanFingerprint        []byte             `json:"plan_fingerprint"`
+	EffectiveDeadlineAt    pgtype.Timestamptz `json:"effective_deadline_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingCaptureProviderRateBudget struct {
+	ID         int16              `json:"id"`
+	NextCallAt pgtype.Timestamptz `json:"next_call_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RecordingDataKey struct {
+	RecordingID             pgtype.UUID        `json:"recording_id"`
+	CaptureEpoch            int64              `json:"capture_epoch"`
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	EpisodeID               pgtype.UUID        `json:"episode_id"`
+	JobID                   pgtype.UUID        `json:"job_id"`
+	AttemptCount            int32              `json:"attempt_count"`
+	FencingGeneration       int64              `json:"fencing_generation"`
+	KeyHandle               pgtype.UUID        `json:"key_handle"`
+	Environment             string             `json:"environment"`
+	EnvelopeDigest          []byte             `json:"envelope_digest"`
+	EncryptionContextDigest []byte             `json:"encryption_context_digest"`
+	CiphertextBlob          []byte             `json:"ciphertext_blob"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecordingJob struct {
@@ -620,11 +764,29 @@ type RecordingJob struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecordingJobAttemptAuthority struct {
+	JobID             pgtype.UUID        `json:"job_id"`
+	AttemptCount      int32              `json:"attempt_count"`
+	FencingGeneration int64              `json:"fencing_generation"`
+	CaptureEpoch      int64              `json:"capture_epoch"`
+	ClaimRequestID    pgtype.UUID        `json:"claim_request_id"`
+	Kind              string             `json:"kind"`
+	LeaseOwner        string             `json:"lease_owner"`
+	LeaseToken        string             `json:"lease_token"`
+	LeaseExpiresAt    pgtype.Timestamptz `json:"lease_expires_at"`
+	EnvelopeBytes     []byte             `json:"envelope_bytes"`
+	EnvelopeDigest    []byte             `json:"envelope_digest"`
+	IssuedAt          pgtype.Timestamptz `json:"issued_at"`
+}
+
 type RecordingPipeline struct {
 	RecordingID        pgtype.UUID        `json:"recording_id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
 	ReservationID      pgtype.UUID        `json:"reservation_id"`
+	CaptureEpoch       int64              `json:"capture_epoch"`
 	State              string             `json:"state"`
+	StopOperationID    pgtype.UUID        `json:"stop_operation_id"`
+	StopRequestedAt    pgtype.Timestamptz `json:"stop_requested_at"`
 	CaptureCompletedAt pgtype.Timestamptz `json:"capture_completed_at"`
 	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
@@ -641,21 +803,22 @@ type RecordingPoolHealth struct {
 }
 
 type RecordingReservation struct {
-	ID                 pgtype.UUID        `json:"id"`
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	SpaceID            pgtype.UUID        `json:"space_id"`
-	EpisodeID          pgtype.UUID        `json:"episode_id"`
-	RecordingID        pgtype.UUID        `json:"recording_id"`
-	IdempotencyKey     string             `json:"idempotency_key"`
-	RequestFingerprint []byte             `json:"request_fingerprint"`
-	ParticipantCount   int32              `json:"participant_count"`
-	MaxDurationSeconds int32              `json:"max_duration_seconds"`
-	InputBitrateBps    int64              `json:"input_bitrate_bps"`
-	State              string             `json:"state"`
-	StartsAt           pgtype.Timestamptz `json:"starts_at"`
-	EndsAt             pgtype.Timestamptz `json:"ends_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	IdempotencyKey        string             `json:"idempotency_key"`
+	RequestFingerprint    []byte             `json:"request_fingerprint"`
+	PolicySnapshotVersion string             `json:"policy_snapshot_version"`
+	ParticipantCount      int32              `json:"participant_count"`
+	MaxDurationSeconds    int32              `json:"max_duration_seconds"`
+	InputBitrateBps       int64              `json:"input_bitrate_bps"`
+	State                 string             `json:"state"`
+	StartsAt              pgtype.Timestamptz `json:"starts_at"`
+	EndsAt                pgtype.Timestamptz `json:"ends_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecordingTranscriptionSource struct {
@@ -696,6 +859,8 @@ type Space struct {
 	Metadata                      []byte             `json:"metadata"`
 	RecurringPolicy               []byte             `json:"recurring_policy"`
 	AdmissionPolicy               []byte             `json:"admission_policy"`
+	RecordingPolicy               string             `json:"recording_policy"`
+	TranscriptionPolicy           string             `json:"transcription_policy"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
@@ -1210,6 +1375,18 @@ type Tenant struct {
 	Website                  pgtype.Text        `json:"website"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+}
+
+type TenantArtifactPolicy struct {
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	TranscriptionCeiling       string             `json:"transcription_ceiling"`
+	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
+	ProviderPolicyVersion      string             `json:"provider_policy_version"`
+	RecordingRetentionSeconds  int64              `json:"recording_retention_seconds"`
+	TranscriptRetentionSeconds int64              `json:"transcript_retention_seconds"`
+	SourceWindowSeconds        int64              `json:"source_window_seconds"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
 }
 
 type TenantOnboardingRequest struct {

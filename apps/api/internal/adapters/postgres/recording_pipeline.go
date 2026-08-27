@@ -17,6 +17,10 @@ import (
 
 type recordingPipelineQuerier interface {
 	ClaimRecordingJob(context.Context, sqlc.ClaimRecordingJobParams) (sqlc.ClaimRecordingJobRow, error)
+	LockRecordingJobClaimRequest(context.Context, string) error
+	GetRecordingJobAttemptAuthorityByClaimRequest(context.Context, pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
+	InsertRecordingJobAttemptAuthority(context.Context, sqlc.InsertRecordingJobAttemptAuthorityParams) (sqlc.RecordingJobAttemptAuthority, error)
+	AuthorizeRecordingArtifactReplay(context.Context, sqlc.AuthorizeRecordingArtifactReplayParams) (bool, error)
 	CommitRecordingArtifact(context.Context, sqlc.CommitRecordingArtifactParams) (sqlc.CommitRecordingArtifactRow, error)
 	CompleteCaptureRecordingJob(context.Context, sqlc.CompleteCaptureRecordingJobParams) (sqlc.RecordingJob, error)
 	CompleteRecordingJob(context.Context, sqlc.CompleteRecordingJobParams) (sqlc.RecordingJob, error)
@@ -27,9 +31,11 @@ type recordingPipelineQuerier interface {
 	ExtendRecordingReservation(context.Context, sqlc.ExtendRecordingReservationParams) (sqlc.ExtendRecordingReservationRow, error)
 	FailRecordingJob(context.Context, sqlc.FailRecordingJobParams) (sqlc.FailRecordingJobRow, error)
 	GetRecordingPipeline(context.Context, sqlc.GetRecordingPipelineParams) (sqlc.RecordingPipeline, error)
+	GetRecordingPipelineStopAuthority(context.Context, sqlc.GetRecordingPipelineStopAuthorityParams) (sqlc.RecordingPipeline, error)
+	RequestRecordingStop(context.Context, sqlc.RequestRecordingStopParams) (sqlc.RecordingPipeline, error)
 	GetRecordingReservation(context.Context, sqlc.GetRecordingReservationParams) (sqlc.GetRecordingReservationRow, error)
 	HeartbeatRecordingJob(context.Context, sqlc.HeartbeatRecordingJobParams) (sqlc.RecordingJob, error)
-	InsertRecordingBundle(context.Context, sqlc.InsertRecordingBundleParams) (sqlc.RecordingBundle, error)
+	InsertRecordingBundle(context.Context, sqlc.InsertRecordingBundleParams) (sqlc.InsertRecordingBundleRow, error)
 	ListRecordingDeadLetters(context.Context, sqlc.ListRecordingDeadLettersParams) ([]sqlc.RecordingJob, error)
 	ListRecordingJobsForReconciliation(context.Context, sqlc.ListRecordingJobsForReconciliationParams) ([]sqlc.RecordingJob, error)
 	ExpireRecordingReservations(context.Context, pgtype.Timestamptz) ([]sqlc.ExpireRecordingReservationsRow, error)
@@ -122,24 +128,25 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 		availableAt = time.Unix(0, 0).UTC()
 	}
 	params := sqlc.CreateRecordingReservationParams{
-		EpisodeCount:         1,
-		ParticipantCount:     int32(input.ParticipantCount),
-		InputBitrateBps:      input.InputBitrateBPS,
-		ID:                   uuid(input.ID),
-		TenantID:             uuid(input.TenantID),
-		SpaceID:              uuid(input.SpaceID),
-		EpisodeID:            uuid(input.EpisodeID),
-		RecordingID:          uuid(input.RecordingID),
-		IdempotencyKey:       input.IdempotencyKey,
-		RequestFingerprint:   fingerprint[:],
-		MaxDurationSeconds:   int32(input.MaxDuration / time.Second),
-		StartsAt:             timestamptz(input.StartsAt),
-		EndsAt:               timestamptzValue(start.Add(input.MaxDuration)),
-		CaptureJobID:         uuid(captureJobID),
-		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
-		Priority:             0,
-		AvailableAt:          timestamptzValue(availableAt),
-		AttemptLimit:         recordingpipeline.DefaultCaptureAttemptLimit,
+		EpisodeCount:          1,
+		ParticipantCount:      int32(input.ParticipantCount),
+		InputBitrateBps:       input.InputBitrateBPS,
+		ID:                    uuid(input.ID),
+		TenantID:              uuid(input.TenantID),
+		SpaceID:               uuid(input.SpaceID),
+		EpisodeID:             uuid(input.EpisodeID),
+		RecordingID:           uuid(input.RecordingID),
+		IdempotencyKey:        input.IdempotencyKey,
+		RequestFingerprint:    fingerprint[:],
+		PolicySnapshotVersion: input.PolicySnapshotVersion,
+		MaxDurationSeconds:    int32(input.MaxDuration / time.Second),
+		StartsAt:              timestamptz(input.StartsAt),
+		EndsAt:                timestamptzValue(start.Add(input.MaxDuration)),
+		CaptureJobID:          uuid(captureJobID),
+		PayloadSchemaVersion:  recordingpipeline.DefaultPayloadSchemaVersion,
+		Priority:              0,
+		AvailableAt:           timestamptzValue(availableAt),
+		AttemptLimit:          recordingpipeline.DefaultCaptureAttemptLimit,
 	}
 	var row sqlc.CreateRecordingReservationRow
 	var err error
@@ -257,23 +264,125 @@ func (r RecordingPipelineRepository) GetPipeline(ctx context.Context, tenantID, 
 	return mapPipeline(row), nil
 }
 
+func (r RecordingPipelineRepository) RequestStop(ctx context.Context, tenantID, episodeID, recordingID, operationID utilities.ID) (recordingpipeline.Pipeline, error) {
+	row, err := r.queries.RequestRecordingStop(ctx, sqlc.RequestRecordingStopParams{
+		TenantID: uuid(tenantID), EpisodeID: uuid(episodeID), RecordingID: uuid(recordingID), StopOperationID: uuid(operationID),
+	})
+	if err == nil {
+		return mapPipeline(row), nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return recordingpipeline.Pipeline{}, fmt.Errorf("request recording stop: %w", err)
+	}
+
+	existing, getErr := r.queries.GetRecordingPipelineStopAuthority(ctx, sqlc.GetRecordingPipelineStopAuthorityParams{
+		TenantID: uuid(tenantID), EpisodeID: uuid(episodeID), RecordingID: uuid(recordingID),
+	})
+	if errors.Is(getErr, pgx.ErrNoRows) {
+		return recordingpipeline.Pipeline{}, recordingpipeline.ErrPipelineNotFound
+	}
+	if getErr != nil {
+		return recordingpipeline.Pipeline{}, fmt.Errorf("resolve recording stop: %w", getErr)
+	}
+	if existing.StopOperationID.Valid && existing.StopOperationID.Bytes != operationID.Bytes() {
+		return recordingpipeline.Pipeline{}, recordingpipeline.ErrStopConflict
+	}
+	return recordingpipeline.Pipeline{}, recordingpipeline.ErrInvalidStateTransition
+}
+
 func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingpipeline.ClaimInput) (recordingpipeline.Job, error) {
-	if input.LeaseFor <= 0 || input.LeaseToken == "" || input.Owner == "" {
+	if input.ClaimRequestID.IsZero() || input.LeaseFor <= 0 || input.LeaseToken == "" || input.Owner == "" {
 		return recordingpipeline.Job{}, recordingpipeline.ErrInvalidLease
 	}
-	row, err := r.queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
-		LeaseToken:     requiredTextValue(input.LeaseToken),
-		LeaseOwner:     requiredTextValue(input.Owner),
-		LeaseExpiresAt: timestamptzValue(r.now().UTC().Add(input.LeaseFor)),
-		Kind:           string(input.Kind),
+	if r.queries != nil {
+		if replay, err := getClaimReplay(ctx, r.queries, input); err == nil {
+			return replay, nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return recordingpipeline.Job{}, err
+		}
+	}
+	if r.transactor == nil {
+		return recordingpipeline.Job{}, errors.New("recording claim transaction is unavailable")
+	}
+	var claimed recordingpipeline.Job
+	issuedAt := r.now().UTC()
+	leaseExpiresAt := issuedAt.Add(input.LeaseFor)
+	err := r.transaction(ctx, func(queries recordingPipelineQuerier) error {
+		if err := queries.LockRecordingJobClaimRequest(ctx, input.ClaimRequestID.String()); err != nil {
+			return fmt.Errorf("lock recording claim request: %w", err)
+		}
+		if replay, err := getClaimReplay(ctx, queries, input); err == nil {
+			claimed = replay
+			return nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		row, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
+			LeaseToken:     requiredTextValue(input.LeaseToken),
+			LeaseOwner:     requiredTextValue(input.Owner),
+			LeaseExpiresAt: timestamptzValue(leaseExpiresAt),
+			Kind:           string(input.Kind),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return recordingpipeline.ErrJobNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("claim recording job: %w", err)
+		}
+		claimed = mapClaimJob(row)
+		claimed.CaptureEpoch = row.CaptureEpoch
+		hardDeadline := timestamp(row.EndsAt)
+		if claimed.Kind == recordingpipeline.JobKindRender {
+			if !row.CaptureCompletedAt.Valid {
+				return recordingpipeline.ErrInvalidEnvelope
+			}
+			hardDeadline = timestamp(row.CaptureCompletedAt).Add(recordingpipeline.MaximumRenderDuration)
+		}
+		authority, err := recordingpipeline.NewRecorderJobAuthority(claimed, recordingpipeline.ClaimFacts{
+			SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), PolicySnapshotVersion: row.PolicySnapshotVersion,
+			HardDeadline: hardDeadline, CaptureEpoch: row.CaptureEpoch,
+		}, input.ClaimRequestID, issuedAt)
+		if err != nil {
+			return err
+		}
+		authority.LeaseOwner = input.Owner
+		authority.LeaseToken = input.LeaseToken
+		authority.LeaseExpiresAt = leaseExpiresAt
+		if _, err := queries.InsertRecordingJobAttemptAuthority(ctx, sqlc.InsertRecordingJobAttemptAuthorityParams{
+			JobID: uuid(claimed.ID), AttemptCount: int32(claimed.AttemptCount),
+			FencingGeneration: claimed.FencingGeneration, CaptureEpoch: row.CaptureEpoch,
+			ClaimRequestID: uuid(input.ClaimRequestID), Kind: string(input.Kind),
+			LeaseOwner: input.Owner, LeaseToken: input.LeaseToken,
+			LeaseExpiresAt: timestamptzValue(leaseExpiresAt), EnvelopeBytes: authority.EnvelopeBytes,
+			EnvelopeDigest: authority.EnvelopeDigest, IssuedAt: timestamptzValue(issuedAt),
+		}); err != nil {
+			return err
+		}
+		claimed.Authority = &authority
+		return nil
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
+	if err == nil {
+		return claimed, nil
 	}
+	if r.queries != nil && (uniqueConstraintViolation(err, "recording_job_attempt_authorities_claim_request_id_key") || errors.Is(err, recordingpipeline.ErrJobNotFound)) {
+		if replay, replayErr := getClaimReplay(ctx, r.queries, input); replayErr == nil {
+			return replay, nil
+		} else if !errors.Is(replayErr, pgx.ErrNoRows) {
+			return recordingpipeline.Job{}, replayErr
+		}
+	}
+	return recordingpipeline.Job{}, err
+}
+
+func getClaimReplay(ctx context.Context, queries recordingPipelineQuerier, input recordingpipeline.ClaimInput) (recordingpipeline.Job, error) {
+	row, err := queries.GetRecordingJobAttemptAuthorityByClaimRequest(ctx, uuid(input.ClaimRequestID))
 	if err != nil {
-		return recordingpipeline.Job{}, fmt.Errorf("claim recording job: %w", err)
+		return recordingpipeline.Job{}, err
 	}
-	return mapClaimJob(row), nil
+	if row.Kind != string(input.Kind) || row.LeaseOwner != input.Owner {
+		return recordingpipeline.Job{}, recordingpipeline.ErrClaimConflict
+	}
+	return mapAuthorityJob(row)
 }
 
 func (r RecordingPipelineRepository) Heartbeat(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
@@ -284,6 +393,8 @@ func (r RecordingPipelineRepository) Heartbeat(ctx context.Context, input record
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken),
 		LeaseOwner:        requiredTextValue(input.LeaseOwner),
+		CaptureEpoch:      input.CaptureEpoch,
+		EnvelopeDigest:    input.EnvelopeDigest,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
@@ -301,6 +412,8 @@ func (r RecordingPipelineRepository) Complete(ctx context.Context, input recordi
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken),
 		LeaseOwner:        requiredTextValue(input.LeaseOwner),
+		CaptureEpoch:      input.CaptureEpoch,
+		EnvelopeDigest:    input.EnvelopeDigest,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
@@ -318,6 +431,8 @@ func (r RecordingPipelineRepository) CompleteCapture(ctx context.Context, input 
 		FencingGeneration:    input.FencingGeneration,
 		LeaseToken:           requiredTextValue(input.LeaseToken),
 		LeaseOwner:           requiredTextValue(input.LeaseOwner),
+		CaptureEpoch:         input.CaptureEpoch,
+		EnvelopeDigest:       input.EnvelopeDigest,
 		RenderJobID:          uuid(renderJobID),
 		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
 		Priority:             0,
@@ -342,6 +457,8 @@ func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpi
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken),
 		LeaseOwner:        requiredTextValue(input.LeaseOwner),
+		CaptureEpoch:      input.CaptureEpoch,
+		EnvelopeDigest:    input.EnvelopeDigest,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
@@ -412,7 +529,12 @@ func (r RecordingPipelineRepository) InsertBundle(ctx context.Context, input rec
 		AttemptCount:         int32(input.AttemptCount),
 		LeaseToken:           requiredTextValue(input.LeaseToken),
 		LeaseOwner:           requiredTextValue(input.LeaseOwner),
+		CaptureEpoch:         input.CaptureEpoch,
+		EnvelopeDigest:       input.EnvelopeDigest,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingpipeline.Bundle{}, recordingpipeline.ErrJobNotFound
+	}
 	if err != nil {
 		return recordingpipeline.Bundle{}, fmt.Errorf("insert recording bundle: %w", err)
 	}
@@ -423,6 +545,9 @@ func (r RecordingPipelineRepository) CommitArtifact(ctx context.Context, input r
 	if existing, err := r.queries.GetRecordingArtifact(ctx, sqlc.GetRecordingArtifactParams{
 		TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID),
 	}); err == nil {
+		if err := r.authorizeArtifactReplay(ctx, input); err != nil {
+			return recordingpipeline.Artifact{}, err
+		}
 		return compareArtifactReplay(existing, input)
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Artifact{}, fmt.Errorf("check recording artifact replay: %w", err)
@@ -435,6 +560,8 @@ func (r RecordingPipelineRepository) CommitArtifact(ctx context.Context, input r
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken),
 		LeaseOwner:        requiredTextValue(input.LeaseOwner),
+		CaptureEpoch:      input.CaptureEpoch,
+		EnvelopeDigest:    input.EnvelopeDigest,
 		ObjectKey:         input.ObjectKey,
 		ContentType:       input.ContentType,
 		ByteSize:          input.ByteSize,
@@ -442,18 +569,47 @@ func (r RecordingPipelineRepository) CommitArtifact(ctx context.Context, input r
 		DurationMillis:    input.Duration.Milliseconds(),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return recordingpipeline.Artifact{}, recordingpipeline.ErrArtifactNotFound
+		return r.replayArtifactAfterAmbiguousCommit(ctx, input)
 	}
 	if err != nil {
 		if uniqueConstraintViolation(err, "recording_artifacts_pkey") {
-			existing, getErr := r.queries.GetRecordingArtifact(ctx, sqlc.GetRecordingArtifactParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)})
-			if getErr == nil {
-				return compareArtifactReplay(existing, input)
-			}
+			return r.replayArtifactAfterAmbiguousCommit(ctx, input)
 		}
 		return recordingpipeline.Artifact{}, fmt.Errorf("commit recording artifact: %w", err)
 	}
 	return mapArtifact(row), nil
+}
+
+func (r RecordingPipelineRepository) replayArtifactAfterAmbiguousCommit(ctx context.Context, input recordingpipeline.ArtifactInput) (recordingpipeline.Artifact, error) {
+	if err := r.authorizeArtifactReplay(ctx, input); err != nil {
+		return recordingpipeline.Artifact{}, err
+	}
+	existing, err := r.queries.GetRecordingArtifact(ctx, sqlc.GetRecordingArtifactParams{
+		TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID),
+	})
+	if err == nil {
+		return compareArtifactReplay(existing, input)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingpipeline.Artifact{}, recordingpipeline.ErrArtifactNotFound
+	}
+	return recordingpipeline.Artifact{}, fmt.Errorf("check recording artifact replay: %w", err)
+}
+
+func (r RecordingPipelineRepository) authorizeArtifactReplay(ctx context.Context, input recordingpipeline.ArtifactInput) error {
+	_, err := r.queries.AuthorizeRecordingArtifactReplay(ctx, sqlc.AuthorizeRecordingArtifactReplayParams{
+		RenderJobID: uuid(input.RenderJobID), TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID),
+		AttemptCount: int32(input.AttemptCount), FencingGeneration: input.FencingGeneration,
+		CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: input.EnvelopeDigest,
+		LeaseToken: input.LeaseToken, LeaseOwner: input.LeaseOwner,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingpipeline.ErrJobNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("authorize recording artifact replay: %w", err)
+	}
+	return nil
 }
 
 func compareArtifactReplay(row sqlc.RecordingArtifact, input recordingpipeline.ArtifactInput) (recordingpipeline.Artifact, error) {
@@ -486,105 +642,118 @@ func (r RecordingPipelineRepository) transaction(ctx context.Context, work func(
 
 func mapReservation(row sqlc.CreateRecordingReservationRow) recordingpipeline.Reservation {
 	return recordingpipeline.Reservation{
-		ID:               utilities.IDFromBytes(row.ID.Bytes),
-		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
-		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
-		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
-		IdempotencyKey:   row.IdempotencyKey,
-		ParticipantCount: int(row.ParticipantCount),
-		MaxDuration:      time.Duration(row.MaxDurationSeconds) * time.Second,
-		InputBitrateBPS:  row.InputBitrateBps,
-		State:            recordingpipeline.ReservationState(row.State),
-		StartsAt:         nullableTimestamp(row.StartsAt),
-		EndsAt:           timestamp(row.EndsAt),
-		UpdatedAt:        timestamp(row.UpdatedAt),
-		CreatedAt:        timestamp(row.CreatedAt),
+		ID:                    utilities.IDFromBytes(row.ID.Bytes),
+		TenantID:              utilities.IDFromBytes(row.TenantID.Bytes),
+		SpaceID:               utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:             utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:           utilities.IDFromBytes(row.RecordingID.Bytes),
+		IdempotencyKey:        row.IdempotencyKey,
+		PolicySnapshotVersion: row.PolicySnapshotVersion,
+		ParticipantCount:      int(row.ParticipantCount),
+		MaxDuration:           time.Duration(row.MaxDurationSeconds) * time.Second,
+		InputBitrateBPS:       row.InputBitrateBps,
+		State:                 recordingpipeline.ReservationState(row.State),
+		StartsAt:              nullableTimestamp(row.StartsAt),
+		EndsAt:                timestamp(row.EndsAt),
+		UpdatedAt:             timestamp(row.UpdatedAt),
+		CreatedAt:             timestamp(row.CreatedAt),
 	}
 }
 
 func mapReleasedReservation(row sqlc.ReleaseRecordingReservationRow) recordingpipeline.Reservation {
 	return recordingpipeline.Reservation{
-		ID:               utilities.IDFromBytes(row.ID.Bytes),
-		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
-		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
-		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
-		IdempotencyKey:   row.IdempotencyKey,
-		ParticipantCount: int(row.ParticipantCount),
-		MaxDuration:      time.Duration(row.MaxDurationSeconds) * time.Second,
-		InputBitrateBPS:  row.InputBitrateBps,
-		State:            recordingpipeline.ReservationState(row.State),
-		StartsAt:         nullableTimestamp(row.StartsAt),
-		EndsAt:           timestamp(row.EndsAt),
-		UpdatedAt:        timestamp(row.UpdatedAt),
-		CreatedAt:        timestamp(row.CreatedAt),
+		ID:                    utilities.IDFromBytes(row.ID.Bytes),
+		TenantID:              utilities.IDFromBytes(row.TenantID.Bytes),
+		SpaceID:               utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:             utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:           utilities.IDFromBytes(row.RecordingID.Bytes),
+		IdempotencyKey:        row.IdempotencyKey,
+		PolicySnapshotVersion: row.PolicySnapshotVersion,
+		ParticipantCount:      int(row.ParticipantCount),
+		MaxDuration:           time.Duration(row.MaxDurationSeconds) * time.Second,
+		InputBitrateBPS:       row.InputBitrateBps,
+		State:                 recordingpipeline.ReservationState(row.State),
+		StartsAt:              nullableTimestamp(row.StartsAt),
+		EndsAt:                timestamp(row.EndsAt),
+		UpdatedAt:             timestamp(row.UpdatedAt),
+		CreatedAt:             timestamp(row.CreatedAt),
 	}
 }
 
 func mapExpiredReservation(row sqlc.ExpireRecordingReservationsRow) recordingpipeline.Reservation {
 	return recordingpipeline.Reservation{
-		ID:               utilities.IDFromBytes(row.ID.Bytes),
-		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
-		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
-		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
-		IdempotencyKey:   row.IdempotencyKey,
-		ParticipantCount: int(row.ParticipantCount),
-		MaxDuration:      time.Duration(row.MaxDurationSeconds) * time.Second,
-		InputBitrateBPS:  row.InputBitrateBps,
-		State:            recordingpipeline.ReservationState(row.State),
-		StartsAt:         nullableTimestamp(row.StartsAt),
-		EndsAt:           timestamp(row.EndsAt),
-		UpdatedAt:        timestamp(row.UpdatedAt),
-		CreatedAt:        timestamp(row.CreatedAt),
+		ID:                    utilities.IDFromBytes(row.ID.Bytes),
+		TenantID:              utilities.IDFromBytes(row.TenantID.Bytes),
+		SpaceID:               utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:             utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:           utilities.IDFromBytes(row.RecordingID.Bytes),
+		IdempotencyKey:        row.IdempotencyKey,
+		PolicySnapshotVersion: row.PolicySnapshotVersion,
+		ParticipantCount:      int(row.ParticipantCount),
+		MaxDuration:           time.Duration(row.MaxDurationSeconds) * time.Second,
+		InputBitrateBPS:       row.InputBitrateBps,
+		State:                 recordingpipeline.ReservationState(row.State),
+		StartsAt:              nullableTimestamp(row.StartsAt),
+		EndsAt:                timestamp(row.EndsAt),
+		UpdatedAt:             timestamp(row.UpdatedAt),
+		CreatedAt:             timestamp(row.CreatedAt),
 	}
 }
 
 func mapGetReservation(row sqlc.GetRecordingReservationRow) recordingpipeline.Reservation {
 	return recordingpipeline.Reservation{
-		ID:               utilities.IDFromBytes(row.ID.Bytes),
-		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
-		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
-		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
-		IdempotencyKey:   row.IdempotencyKey,
-		ParticipantCount: int(row.ParticipantCount),
-		MaxDuration:      time.Duration(row.MaxDurationSeconds) * time.Second,
-		InputBitrateBPS:  row.InputBitrateBps,
-		State:            recordingpipeline.ReservationState(row.State),
-		StartsAt:         nullableTimestamp(row.StartsAt),
-		EndsAt:           timestamp(row.EndsAt),
-		UpdatedAt:        timestamp(row.UpdatedAt),
-		CreatedAt:        timestamp(row.CreatedAt),
+		ID:                    utilities.IDFromBytes(row.ID.Bytes),
+		TenantID:              utilities.IDFromBytes(row.TenantID.Bytes),
+		SpaceID:               utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:             utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:           utilities.IDFromBytes(row.RecordingID.Bytes),
+		IdempotencyKey:        row.IdempotencyKey,
+		PolicySnapshotVersion: row.PolicySnapshotVersion,
+		ParticipantCount:      int(row.ParticipantCount),
+		MaxDuration:           time.Duration(row.MaxDurationSeconds) * time.Second,
+		InputBitrateBPS:       row.InputBitrateBps,
+		State:                 recordingpipeline.ReservationState(row.State),
+		StartsAt:              nullableTimestamp(row.StartsAt),
+		EndsAt:                timestamp(row.EndsAt),
+		UpdatedAt:             timestamp(row.UpdatedAt),
+		CreatedAt:             timestamp(row.CreatedAt),
 	}
 }
 
 func mapReservationByKey(row sqlc.GetRecordingReservationByKeyRow) recordingpipeline.Reservation {
 	return recordingpipeline.Reservation{
-		ID:               utilities.IDFromBytes(row.ID.Bytes),
-		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
-		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
-		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
-		IdempotencyKey:   row.IdempotencyKey,
-		ParticipantCount: int(row.ParticipantCount),
-		MaxDuration:      time.Duration(row.MaxDurationSeconds) * time.Second,
-		InputBitrateBPS:  row.InputBitrateBps,
-		State:            recordingpipeline.ReservationState(row.State),
-		StartsAt:         nullableTimestamp(row.StartsAt),
-		EndsAt:           timestamp(row.EndsAt),
-		UpdatedAt:        timestamp(row.UpdatedAt),
-		CreatedAt:        timestamp(row.CreatedAt),
+		ID:                    utilities.IDFromBytes(row.ID.Bytes),
+		TenantID:              utilities.IDFromBytes(row.TenantID.Bytes),
+		SpaceID:               utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:             utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:           utilities.IDFromBytes(row.RecordingID.Bytes),
+		IdempotencyKey:        row.IdempotencyKey,
+		PolicySnapshotVersion: row.PolicySnapshotVersion,
+		ParticipantCount:      int(row.ParticipantCount),
+		MaxDuration:           time.Duration(row.MaxDurationSeconds) * time.Second,
+		InputBitrateBPS:       row.InputBitrateBps,
+		State:                 recordingpipeline.ReservationState(row.State),
+		StartsAt:              nullableTimestamp(row.StartsAt),
+		EndsAt:                timestamp(row.EndsAt),
+		UpdatedAt:             timestamp(row.UpdatedAt),
+		CreatedAt:             timestamp(row.CreatedAt),
 	}
 }
 
 func mapPipeline(row sqlc.RecordingPipeline) recordingpipeline.Pipeline {
+	var stopOperationID *utilities.ID
+	if row.StopOperationID.Valid {
+		id := utilities.IDFromBytes(row.StopOperationID.Bytes)
+		stopOperationID = &id
+	}
 	return recordingpipeline.Pipeline{
 		RecordingID:        utilities.IDFromBytes(row.RecordingID.Bytes),
 		TenantID:           utilities.IDFromBytes(row.TenantID.Bytes),
 		ReservationID:      utilities.IDFromBytes(row.ReservationID.Bytes),
 		State:              recordingpipeline.State(row.State),
+		CaptureEpoch:       row.CaptureEpoch,
+		StopOperationID:    stopOperationID,
+		StopRequestedAt:    nullableTimestamp(row.StopRequestedAt),
 		CaptureCompletedAt: nullableTimestamp(row.CaptureCompletedAt),
 		CommittedAt:        nullableTimestamp(row.CommittedAt),
 		UpdatedAt:          timestamp(row.UpdatedAt),
@@ -636,12 +805,61 @@ func mapClaimJob(row sqlc.ClaimRecordingJobRow) recordingpipeline.Job {
 		LeaseOwner:           nullableTextPointer(row.LeaseOwner),
 		LeaseExpiresAt:       nullableTimestamp(row.LeaseExpiresAt),
 		FencingGeneration:    row.FencingGeneration,
+		CaptureEpoch:         row.CaptureEpoch,
 		ErrorCode:            nullableTextPointer(row.ErrorCode),
 		ErrorDetail:          nullableTextPointer(row.ErrorDetail),
 		TerminalAt:           nullableTimestamp(row.TerminalAt),
 		UpdatedAt:            timestamp(row.UpdatedAt),
 		CreatedAt:            timestamp(row.CreatedAt),
 	}
+}
+
+func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) (recordingpipeline.Job, error) {
+	job := recordingpipeline.Job{
+		ID:                   utilities.IDFromBytes(row.JobID.Bytes),
+		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),
+		EpisodeID:            utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:          utilities.IDFromBytes(row.RecordingID.Bytes),
+		Kind:                 recordingpipeline.JobKind(row.Kind),
+		IdempotencyKey:       row.IdempotencyKey,
+		PayloadSchemaVersion: int(row.PayloadSchemaVersion),
+		State:                recordingpipeline.JobState(row.State),
+		Priority:             int(row.Priority),
+		AvailableAt:          timestamp(row.AvailableAt),
+		AttemptCount:         int(row.AttemptCount),
+		AttemptLimit:         int(row.AttemptLimit),
+		FencingGeneration:    row.FencingGeneration,
+		CaptureEpoch:         row.CaptureEpoch,
+		ErrorCode:            nullableTextPointer(row.ErrorCode),
+		ErrorDetail:          nullableTextPointer(row.ErrorDetail),
+		TerminalAt:           nullableTimestamp(row.TerminalAt),
+		UpdatedAt:            timestamp(row.UpdatedAt),
+		CreatedAt:            timestamp(row.CreatedAt),
+	}
+	leaseToken := row.LeaseToken
+	leaseOwner := row.LeaseOwner
+	leaseExpiresAt := timestamp(row.LeaseExpiresAt)
+	job.LeaseToken = &leaseToken
+	job.LeaseOwner = &leaseOwner
+	job.LeaseExpiresAt = &leaseExpiresAt
+	envelope, err := recordingpipeline.DecodeRecorderJobEnvelope(row.EnvelopeBytes, row.EnvelopeDigest)
+	if err != nil {
+		return recordingpipeline.Job{}, err
+	}
+	if envelope.JobID != job.ID.String() || envelope.TenantID != job.TenantID.String() || envelope.EpisodeID != job.EpisodeID.String() || envelope.RecordingID != job.RecordingID.String() || envelope.Kind != job.Kind || envelope.AttemptCount != job.AttemptCount || envelope.FencingGeneration != job.FencingGeneration || envelope.CaptureEpoch != job.CaptureEpoch || envelope.SpaceID != utilities.IDFromBytes(row.SpaceID.Bytes).String() || envelope.PolicySnapshotVersion != row.PolicySnapshotVersion || envelope.HardDeadline != timestamp(row.EndsAt).UTC().Format(time.RFC3339Nano) {
+		return recordingpipeline.Job{}, recordingpipeline.ErrInvalidEnvelope
+	}
+	job.Authority = &recordingpipeline.JobAuthority{
+		ClaimRequestID: utilities.IDFromBytes(row.ClaimRequestID.Bytes),
+		Envelope:       envelope,
+		EnvelopeBytes:  append([]byte(nil), row.EnvelopeBytes...),
+		EnvelopeDigest: append([]byte(nil), row.EnvelopeDigest...),
+		LeaseOwner:     row.LeaseOwner,
+		LeaseToken:     row.LeaseToken,
+		LeaseExpiresAt: leaseExpiresAt,
+		IssuedAt:       timestamp(row.IssuedAt),
+	}
+	return job, nil
 }
 
 func mapFailJob(row sqlc.FailRecordingJobRow) recordingpipeline.Job {
@@ -704,7 +922,7 @@ func mapJobs(rows []sqlc.RecordingJob) []recordingpipeline.Job {
 	return jobs
 }
 
-func mapBundle(row sqlc.RecordingBundle) recordingpipeline.Bundle {
+func mapBundle(row sqlc.InsertRecordingBundleRow) recordingpipeline.Bundle {
 	return recordingpipeline.Bundle{
 		ID:                   utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),

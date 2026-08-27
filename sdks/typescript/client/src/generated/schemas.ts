@@ -152,7 +152,13 @@ export const TenantSchema = Schema.Struct({
   logo_key: Schema.NullOr(Schema.String),
   media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
   name: Schema.String,
+  provider_policy_version: Schema.String,
+  recording_retention_seconds: Schema.Number,
   storage_provider_config: Schema.NullOr(StorageProviderConfigSchema),
+  transcript_retention_seconds: Schema.Number,
+  transcription_ceiling: Schema.String,
+  transcription_default_mode: Schema.String,
+  transcription_source_window_seconds: Schema.Number,
   updated_at: DateTimeStringSchema,
   website: Schema.NullOr(URLStringSchema),
 });
@@ -417,22 +423,6 @@ export const CreateRecordingDownloadURLRequestSchema = Schema.Struct({
 });
 export type CreateRecordingDownloadURLRequest = typeof CreateRecordingDownloadURLRequestSchema.Type;
 
-export const CreateRecordingRequestSchema = Schema.Struct({
-  metadata: Schema.optional(Schema.Unknown),
-  status: Schema.Literals(["pending", "processing", "completed", "failed"]),
-  storage_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  storage_provider: Schema.Literal("r2"),
-});
-export type CreateRecordingRequest = typeof CreateRecordingRequestSchema.Type;
-
-export const CreateRecordingReservationRequestSchema = Schema.Struct({
-  input_bitrate_bps: Schema.Number,
-  max_duration_minutes: Schema.Number,
-  participant_count: Schema.Number,
-  scheduled_start: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-});
-export type CreateRecordingReservationRequest = typeof CreateRecordingReservationRequestSchema.Type;
-
 export const CreateSpaceRequestSchema = Schema.Struct({
   admission_policy: Schema.optional(Schema.Unknown),
   default_episode_duration_seconds: Schema.Number,
@@ -441,8 +431,10 @@ export const CreateSpaceRequestSchema = Schema.Struct({
   media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.String.check(Schema.isMinLength(1)),
+  recording_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   recurring_policy: Schema.optional(Schema.Unknown),
   slug: Schema.String.check(Schema.isMinLength(1)),
+  transcription_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
 });
 export type CreateSpaceRequest = typeof CreateSpaceRequestSchema.Type;
 
@@ -539,11 +531,6 @@ export const ExecuteIntegrationActionRequestSchema = Schema.Struct({
   text: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
 });
 export type ExecuteIntegrationActionRequest = typeof ExecuteIntegrationActionRequestSchema.Type;
-
-export const ExtendRecordingReservationRequestSchema = Schema.Struct({
-  max_duration_minutes: Schema.Number,
-});
-export type ExtendRecordingReservationRequest = typeof ExtendRecordingReservationRequestSchema.Type;
 
 export const InitiateChatAttachmentUploadRequestSchema = Schema.Struct({
   byteLength: Schema.Number,
@@ -908,35 +895,6 @@ export const RecordingListSchema = Schema.Struct({
 });
 export type RecordingList = typeof RecordingListSchema.Type;
 
-export const RecordingPipelineSchema = Schema.Struct({
-  capture_completed_at: Schema.NullOr(DateTimeStringSchema),
-  committed_at: Schema.NullOr(DateTimeStringSchema),
-  created_at: DateTimeStringSchema,
-  recording_id: RecordingIdSchema,
-  reservation_id: UUIDSchema,
-  state: Schema.String,
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-});
-export type RecordingPipeline = typeof RecordingPipelineSchema.Type;
-
-export const RecordingReservationSchema = Schema.Struct({
-  created_at: DateTimeStringSchema,
-  ends_at: DateTimeStringSchema,
-  episode_id: EpisodeIdSchema,
-  id: UUIDSchema,
-  input_bitrate_bps: Schema.Number,
-  max_duration_minutes: Schema.Number,
-  participant_count: Schema.Number,
-  recording_id: RecordingIdSchema,
-  scheduled_start: Schema.NullOr(Schema.String),
-  space_id: SpaceIdSchema,
-  state: Schema.String,
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-});
-export type RecordingReservation = typeof RecordingReservationSchema.Type;
-
 export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
   media_proof: Schema.String.check(Schema.isMinLength(1)),
   replace_media_connection: Schema.Boolean,
@@ -1006,6 +964,7 @@ export const SpaceSchema = Schema.Struct({
   media_plane: Schema.String,
   metadata: Schema.Unknown,
   name: Schema.String,
+  recording_policy: Schema.String,
   recurring_policy: Schema.Unknown,
   roles: Schema.Array(
     Schema.Struct({
@@ -1016,6 +975,7 @@ export const SpaceSchema = Schema.Struct({
   ),
   slug: Schema.String,
   tenant_id: TenantIdSchema,
+  transcription_policy: Schema.String,
   updated_at: DateTimeStringSchema,
 });
 export type Space = typeof SpaceSchema.Type;
@@ -1151,14 +1111,6 @@ export const UpdateMembershipRequestSchema = Schema.Struct({
 });
 export type UpdateMembershipRequest = typeof UpdateMembershipRequestSchema.Type;
 
-export const UpdateRecordingRequestSchema = Schema.Struct({
-  metadata: Schema.optional(Schema.Unknown),
-  status: Schema.optional(Schema.Literals(["pending", "processing", "completed", "failed"])),
-  storage_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  storage_provider: Schema.optional(Schema.Literal("r2")),
-});
-export type UpdateRecordingRequest = typeof UpdateRecordingRequestSchema.Type;
-
 export const UpdateSpacePublicInviteRequestSchema = Schema.Struct({
   enabled: Schema.Boolean,
 });
@@ -1181,8 +1133,10 @@ export const UpdateSpaceRequestSchema = Schema.Struct({
   media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  recording_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   recurring_policy: Schema.optional(Schema.Unknown),
   slug: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  transcription_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
 });
 export type UpdateSpaceRequest = typeof UpdateSpaceRequestSchema.Type;
 
@@ -1193,7 +1147,13 @@ export const UpdateTenantRequestSchema = Schema.Struct({
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
   name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  provider_policy_version: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  recording_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
   storage_provider_config: Schema.optional(Schema.NullOr(StorageProviderConfigSchema)),
+  transcript_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
+  transcription_ceiling: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  transcription_default_mode: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  transcription_source_window_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
   website: Schema.optional(Schema.NullOr(URLStringSchema)),
 });
 export type UpdateTenantRequest = typeof UpdateTenantRequestSchema.Type;
@@ -1585,26 +1545,6 @@ export const CreatePublicSpace429ResponseHeadersSchema = Schema.Struct({
 });
 export type CreatePublicSpace429ResponseHeaders = typeof CreatePublicSpace429ResponseHeadersSchema.Type;
 
-export const CreateRecordingPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type CreateRecordingPathParams = typeof CreateRecordingPathParamsSchema.Type;
-
-export const CreateRecordingRequestBodySchema = CreateRecordingRequestSchema;
-export type CreateRecordingRequestBody = typeof CreateRecordingRequestBodySchema.Type;
-
-export const CreateRecordingResponseSchema = RecordingSchema;
-export type CreateRecordingResponse = typeof CreateRecordingResponseSchema.Type;
-
-export const CreateRecording429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateRecording429ResponseHeaders = typeof CreateRecording429ResponseHeadersSchema.Type;
-
 export const CreateRecordingDownloadURLPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
   tenant_id: TenantIdSchema,
@@ -1623,31 +1563,6 @@ export const CreateRecordingDownloadURL429ResponseHeadersSchema = Schema.Struct(
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type CreateRecordingDownloadURL429ResponseHeaders = typeof CreateRecordingDownloadURL429ResponseHeadersSchema.Type;
-
-export const CreateRecordingReservationPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type CreateRecordingReservationPathParams = typeof CreateRecordingReservationPathParamsSchema.Type;
-
-export const CreateRecordingReservationRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type CreateRecordingReservationRequestHeaders = typeof CreateRecordingReservationRequestHeadersSchema.Type;
-
-export const CreateRecordingReservationRequestBodySchema = CreateRecordingReservationRequestSchema;
-export type CreateRecordingReservationRequestBody = typeof CreateRecordingReservationRequestBodySchema.Type;
-
-export const CreateRecordingReservationResponseSchema = RecordingReservationSchema;
-export type CreateRecordingReservationResponse = typeof CreateRecordingReservationResponseSchema.Type;
-
-export const CreateRecordingReservation429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateRecordingReservation429ResponseHeaders = typeof CreateRecordingReservation429ResponseHeadersSchema.Type;
 
 export const CreateSpacePathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -1849,25 +1764,6 @@ export const ExecuteIntegrationAction429ResponseHeadersSchema = Schema.Struct({
 });
 export type ExecuteIntegrationAction429ResponseHeaders = typeof ExecuteIntegrationAction429ResponseHeadersSchema.Type;
 
-export const ExtendRecordingReservationPathParamsSchema = Schema.Struct({
-  recording_reservation_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ExtendRecordingReservationPathParams = typeof ExtendRecordingReservationPathParamsSchema.Type;
-
-export const ExtendRecordingReservationRequestBodySchema = ExtendRecordingReservationRequestSchema;
-export type ExtendRecordingReservationRequestBody = typeof ExtendRecordingReservationRequestBodySchema.Type;
-
-export const ExtendRecordingReservationResponseSchema = RecordingReservationSchema;
-export type ExtendRecordingReservationResponse = typeof ExtendRecordingReservationResponseSchema.Type;
-
-export const ExtendRecordingReservation429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ExtendRecordingReservation429ResponseHeaders = typeof ExtendRecordingReservation429ResponseHeadersSchema.Type;
-
 export const FinalizeChatAttachmentUploadPathParamsSchema = Schema.Struct({
   uploadId: Schema.String,
 });
@@ -1964,24 +1860,6 @@ export type GetRecordingPathParams = typeof GetRecordingPathParamsSchema.Type;
 
 export const GetRecordingResponseSchema = RecordingSchema;
 export type GetRecordingResponse = typeof GetRecordingResponseSchema.Type;
-
-export const GetRecordingPipelinePathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetRecordingPipelinePathParams = typeof GetRecordingPipelinePathParamsSchema.Type;
-
-export const GetRecordingPipelineResponseSchema = RecordingPipelineSchema;
-export type GetRecordingPipelineResponse = typeof GetRecordingPipelineResponseSchema.Type;
-
-export const GetRecordingReservationPathParamsSchema = Schema.Struct({
-  recording_reservation_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetRecordingReservationPathParams = typeof GetRecordingReservationPathParamsSchema.Type;
-
-export const GetRecordingReservationResponseSchema = RecordingReservationSchema;
-export type GetRecordingReservationResponse = typeof GetRecordingReservationResponseSchema.Type;
 
 export const GetSpacePathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
@@ -2645,22 +2523,6 @@ export const Register429ResponseHeadersSchema = Schema.Struct({
 });
 export type Register429ResponseHeaders = typeof Register429ResponseHeadersSchema.Type;
 
-export const ReleaseRecordingReservationPathParamsSchema = Schema.Struct({
-  recording_reservation_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ReleaseRecordingReservationPathParams = typeof ReleaseRecordingReservationPathParamsSchema.Type;
-
-export const ReleaseRecordingReservationResponseSchema = RecordingReservationSchema;
-export type ReleaseRecordingReservationResponse = typeof ReleaseRecordingReservationResponseSchema.Type;
-
-export const ReleaseRecordingReservation429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ReleaseRecordingReservation429ResponseHeaders = typeof ReleaseRecordingReservation429ResponseHeadersSchema.Type;
-
 export const RemoveEpisodeParticipantPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
   participant_id: ParticipantIdSchema,
@@ -2941,25 +2803,6 @@ export const UpdateMembership429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type UpdateMembership429ResponseHeaders = typeof UpdateMembership429ResponseHeadersSchema.Type;
-
-export const UpdateRecordingPathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type UpdateRecordingPathParams = typeof UpdateRecordingPathParamsSchema.Type;
-
-export const UpdateRecordingRequestBodySchema = UpdateRecordingRequestSchema;
-export type UpdateRecordingRequestBody = typeof UpdateRecordingRequestBodySchema.Type;
-
-export const UpdateRecordingResponseSchema = RecordingSchema;
-export type UpdateRecordingResponse = typeof UpdateRecordingResponseSchema.Type;
-
-export const UpdateRecording429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type UpdateRecording429ResponseHeaders = typeof UpdateRecording429ResponseHeadersSchema.Type;
 
 export const UpdateSpacePathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
@@ -4258,82 +4101,6 @@ export const RecordingArtifactNotFoundErrorSchema = RecordingArtifactNotFoundErr
   }),
 );
 
-export class RecordingCapacityUnavailableError extends Schema.TaggedErrorClass<RecordingCapacityUnavailableError>()("RecordingCapacityUnavailableError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording.capacity_unavailable"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingCapacityUnavailableErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording.capacity_unavailable"),
-    message: Schema.String,
-  }),
-});
-export const RecordingCapacityUnavailableErrorSchema = RecordingCapacityUnavailableErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingCapacityUnavailableError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingCapacityUnavailableError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class RecordingInvalidBitrateError extends Schema.TaggedErrorClass<RecordingInvalidBitrateError>()("RecordingInvalidBitrateError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_bitrate"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingInvalidBitrateErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_bitrate"),
-    message: Schema.String,
-  }),
-});
-export const RecordingInvalidBitrateErrorSchema = RecordingInvalidBitrateErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingInvalidBitrateError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingInvalidBitrateError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class RecordingInvalidDurationError extends Schema.TaggedErrorClass<RecordingInvalidDurationError>()("RecordingInvalidDurationError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_duration"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingInvalidDurationErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_duration"),
-    message: Schema.String,
-  }),
-});
-export const RecordingInvalidDurationErrorSchema = RecordingInvalidDurationErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingInvalidDurationError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingInvalidDurationError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class RecordingInvalidFieldError extends Schema.TaggedErrorClass<RecordingInvalidFieldError>()("RecordingInvalidFieldError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_field"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingInvalidFieldErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_field"),
-    message: Schema.String,
-  }),
-});
-export const RecordingInvalidFieldErrorSchema = RecordingInvalidFieldErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingInvalidFieldError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingInvalidFieldError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class RecordingInvalidIdError extends Schema.TaggedErrorClass<RecordingInvalidIdError>()("RecordingInvalidIdError", {
   error: Schema.Struct({
     code: Schema.Literal("recording.invalid_id"),
@@ -4349,44 +4116,6 @@ export const RecordingInvalidIdErrorWireSchema = Schema.Struct({
 export const RecordingInvalidIdErrorSchema = RecordingInvalidIdErrorWireSchema.pipe(
   Schema.decodeTo(RecordingInvalidIdError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingInvalidIdError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class RecordingInvalidParticipantCountError extends Schema.TaggedErrorClass<RecordingInvalidParticipantCountError>()("RecordingInvalidParticipantCountError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_participant_count"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingInvalidParticipantCountErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_participant_count"),
-    message: Schema.String,
-  }),
-});
-export const RecordingInvalidParticipantCountErrorSchema = RecordingInvalidParticipantCountErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingInvalidParticipantCountError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingInvalidParticipantCountError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class RecordingInvalidStatusError extends Schema.TaggedErrorClass<RecordingInvalidStatusError>()("RecordingInvalidStatusError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_status"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingInvalidStatusErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording.invalid_status"),
-    message: Schema.String,
-  }),
-});
-export const RecordingInvalidStatusErrorSchema = RecordingInvalidStatusErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingInvalidStatusError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingInvalidStatusError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4425,44 +4154,6 @@ export const RecordingNotReadyErrorWireSchema = Schema.Struct({
 export const RecordingNotReadyErrorSchema = RecordingNotReadyErrorWireSchema.pipe(
   Schema.decodeTo(RecordingNotReadyError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingNotReadyError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class RecordingReservationInvalidIdError extends Schema.TaggedErrorClass<RecordingReservationInvalidIdError>()("RecordingReservationInvalidIdError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording_reservation.invalid_id"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingReservationInvalidIdErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording_reservation.invalid_id"),
-    message: Schema.String,
-  }),
-});
-export const RecordingReservationInvalidIdErrorSchema = RecordingReservationInvalidIdErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingReservationInvalidIdError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingReservationInvalidIdError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class RecordingReservationNotFoundError extends Schema.TaggedErrorClass<RecordingReservationNotFoundError>()("RecordingReservationNotFoundError", {
-  error: Schema.Struct({
-    code: Schema.Literal("recording_reservation.not_found"),
-    message: Schema.String,
-  }),
-}) {}
-export const RecordingReservationNotFoundErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("recording_reservation.not_found"),
-    message: Schema.String,
-  }),
-});
-export const RecordingReservationNotFoundErrorSchema = RecordingReservationNotFoundErrorWireSchema.pipe(
-  Schema.decodeTo(RecordingReservationNotFoundError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingReservationNotFoundError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4615,6 +4306,25 @@ export const SpaceInvalidArchiveFilterErrorWireSchema = Schema.Struct({
 export const SpaceInvalidArchiveFilterErrorSchema = SpaceInvalidArchiveFilterErrorWireSchema.pipe(
   Schema.decodeTo(SpaceInvalidArchiveFilterError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidArchiveFilterError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class SpaceInvalidArtifactPolicyError extends Schema.TaggedErrorClass<SpaceInvalidArtifactPolicyError>()("SpaceInvalidArtifactPolicyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_artifact_policy"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceInvalidArtifactPolicyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_artifact_policy"),
+    message: Schema.String,
+  }),
+});
+export const SpaceInvalidArtifactPolicyErrorSchema = SpaceInvalidArtifactPolicyErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceInvalidArtifactPolicyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidArtifactPolicyError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4809,6 +4519,44 @@ export const StorageInvalidProviderErrorSchema = StorageInvalidProviderErrorWire
   }),
 );
 
+export class TenantArtifactPolicyConflictError extends Schema.TaggedErrorClass<TenantArtifactPolicyConflictError>()("TenantArtifactPolicyConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.artifact_policy_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantArtifactPolicyConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.artifact_policy_conflict"),
+    message: Schema.String,
+  }),
+});
+export const TenantArtifactPolicyConflictErrorSchema = TenantArtifactPolicyConflictErrorWireSchema.pipe(
+  Schema.decodeTo(TenantArtifactPolicyConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantArtifactPolicyConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantInvalidArtifactPolicyError extends Schema.TaggedErrorClass<TenantInvalidArtifactPolicyError>()("TenantInvalidArtifactPolicyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.invalid_artifact_policy"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantInvalidArtifactPolicyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.invalid_artifact_policy"),
+    message: Schema.String,
+  }),
+});
+export const TenantInvalidArtifactPolicyErrorSchema = TenantInvalidArtifactPolicyErrorWireSchema.pipe(
+  Schema.decodeTo(TenantInvalidArtifactPolicyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantInvalidArtifactPolicyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class TenantInvalidFieldError extends Schema.TaggedErrorClass<TenantInvalidFieldError>()("TenantInvalidFieldError", {
   error: Schema.Struct({
     code: Schema.Literal("tenant.invalid_field"),
@@ -4900,6 +4648,25 @@ export const TenantNotFoundErrorWireSchema = Schema.Struct({
 export const TenantNotFoundErrorSchema = TenantNotFoundErrorWireSchema.pipe(
   Schema.decodeTo(TenantNotFoundError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "TenantNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TranscriptDisabledError extends Schema.TaggedErrorClass<TranscriptDisabledError>()("TranscriptDisabledError", {
+  error: Schema.Struct({
+    code: Schema.Literal("transcript.disabled"),
+    message: Schema.String,
+  }),
+}) {}
+export const TranscriptDisabledErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("transcript.disabled"),
+    message: Schema.String,
+  }),
+});
+export const TranscriptDisabledErrorSchema = TranscriptDisabledErrorWireSchema.pipe(
+  Schema.decodeTo(TranscriptDisabledError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TranscriptDisabledError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -5710,46 +5477,6 @@ export const CreateRecordingDownloadURLErrorSchema = Schema.Union([
 ]);
 export type CreateRecordingDownloadURLError = typeof CreateRecordingDownloadURLErrorSchema.Type;
 
-export const CreateRecordingErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  RecordingInvalidFieldErrorSchema,
-  RecordingInvalidStatusErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  StorageInvalidKeyErrorSchema,
-  StorageInvalidProviderErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type CreateRecordingError = typeof CreateRecordingErrorSchema.Type;
-
-export const CreateRecordingReservationErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  RecordingCapacityUnavailableErrorSchema,
-  RecordingInvalidBitrateErrorSchema,
-  RecordingInvalidDurationErrorSchema,
-  RecordingInvalidParticipantCountErrorSchema,
-  RequestIdempotencyConflictErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestInvalidIdempotencyKeyErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type CreateRecordingReservationError = typeof CreateRecordingReservationErrorSchema.Type;
-
 export const CreateSpaceErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5760,6 +5487,7 @@ export const CreateSpaceErrorSchema = Schema.Union([
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
+  SpaceInvalidArtifactPolicyErrorSchema,
   SpaceInvalidMediaPlaneErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,
@@ -5937,22 +5665,6 @@ export const ExecuteIntegrationActionErrorSchema = Schema.Union([
 ]);
 export type ExecuteIntegrationActionError = typeof ExecuteIntegrationActionErrorSchema.Type;
 
-export const ExtendRecordingReservationErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  RecordingCapacityUnavailableErrorSchema,
-  RecordingInvalidDurationErrorSchema,
-  RecordingReservationInvalidIdErrorSchema,
-  RecordingReservationNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ExtendRecordingReservationError = typeof ExtendRecordingReservationErrorSchema.Type;
-
 export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6031,12 +5743,6 @@ export type GetPublicStatusError = typeof GetPublicStatusErrorSchema.Type;
 
 export const GetRecordingErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingInvalidIdErrorSchema, RecordingNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetRecordingError = typeof GetRecordingErrorSchema.Type;
-
-export const GetRecordingPipelineErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingInvalidIdErrorSchema, RecordingNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
-export type GetRecordingPipelineError = typeof GetRecordingPipelineErrorSchema.Type;
-
-export const GetRecordingReservationErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingReservationInvalidIdErrorSchema, RecordingReservationNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
-export type GetRecordingReservationError = typeof GetRecordingReservationErrorSchema.Type;
 
 export const GetSpaceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetSpaceError = typeof GetSpaceErrorSchema.Type;
@@ -6545,18 +6251,6 @@ export const RegisterErrorSchema = Schema.Union([
 ]);
 export type RegisterError = typeof RegisterErrorSchema.Type;
 
-export const ReleaseRecordingReservationErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  RecordingReservationInvalidIdErrorSchema,
-  RecordingReservationNotFoundErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ReleaseRecordingReservationError = typeof ReleaseRecordingReservationErrorSchema.Type;
-
 export const RemoveEpisodeParticipantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6608,6 +6302,7 @@ export const RequestTranscriptErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   TenantInvalidIdErrorSchema,
+  TranscriptDisabledErrorSchema,
   TranscriptInvalidIdErrorSchema,
 ]);
 export type RequestTranscriptError = typeof RequestTranscriptErrorSchema.Type;
@@ -6781,24 +6476,6 @@ export const UpdateMembershipErrorSchema = Schema.Union([
 ]);
 export type UpdateMembershipError = typeof UpdateMembershipErrorSchema.Type;
 
-export const UpdateRecordingErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  RecordingInvalidFieldErrorSchema,
-  RecordingInvalidIdErrorSchema,
-  RecordingInvalidStatusErrorSchema,
-  RecordingNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  StorageInvalidKeyErrorSchema,
-  StorageInvalidProviderErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type UpdateRecordingError = typeof UpdateRecordingErrorSchema.Type;
-
 export const UpdateSpaceErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6807,6 +6484,7 @@ export const UpdateSpaceErrorSchema = Schema.Union([
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
+  SpaceInvalidArtifactPolicyErrorSchema,
   SpaceInvalidIdErrorSchema,
   SpaceInvalidMediaPlaneErrorSchema,
   SpaceNotFoundErrorSchema,
@@ -6840,6 +6518,8 @@ export const UpdateTenantErrorSchema = Schema.Union([
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
+  TenantArtifactPolicyConflictErrorSchema,
+  TenantInvalidArtifactPolicyErrorSchema,
   TenantInvalidFieldErrorSchema,
   TenantInvalidIdErrorSchema,
   TenantInvalidNameErrorSchema,
@@ -6891,9 +6571,7 @@ export const ChalkOperationPolicies = {
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createPublicSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  createRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecordingDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  createRecordingReservation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTranscriptDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6905,7 +6583,6 @@ export const ChalkOperationPolicies = {
   disableIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  extendRecordingReservation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeWhiteboardFileUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6935,7 +6612,6 @@ export const ChalkOperationPolicies = {
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
-  releaseRecordingReservation: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6950,7 +6626,6 @@ export const ChalkOperationPolicies = {
   startRecentAuthGoogle: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  updateRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateSpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

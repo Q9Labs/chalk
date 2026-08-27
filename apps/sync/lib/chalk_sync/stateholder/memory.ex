@@ -11,6 +11,15 @@ defmodule ChalkSync.Stateholder.Memory do
   use GenServer
 
   @episodes __MODULE__.Episodes
+  @internal_operations [
+    :admission_request_expired,
+    :tenant_set_deadline,
+    :tenant_end_episode,
+    :maximum_duration_expired,
+    :start_recording,
+    :recording_capture_ready,
+    :recording_capture_stopped
+  ]
 
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.ProtocolV1
@@ -269,7 +278,9 @@ defmodule ChalkSync.Stateholder.Memory do
         :participant_leave,
         :end_episode,
         :tenant_end_episode,
-        :maximum_duration_expired
+        :maximum_duration_expired,
+        :recording_capture_ready,
+        :recording_capture_stopped
       ]
     end)
   end
@@ -435,6 +446,7 @@ defmodule ChalkSync.Stateholder.Memory do
       participants: %{},
       receipts: %{},
       operations: %{},
+      recording_capture_epochs: %{},
       events: :queue.new()
     }
 
@@ -554,43 +566,18 @@ defmodule ChalkSync.Stateholder.Memory do
       existing ->
         {:ok, operation_decision(existing, :duplicate), episode}
 
-      operation.name in [
-        :admission_request_expired,
-        :tenant_set_deadline,
-        :tenant_end_episode,
-        :maximum_duration_expired
-      ] ->
-        external_operation_id = UUID.generate()
-
-        external = %ExternalOperation{
-          external_operation_id: external_operation_id,
-          request_key: operation.request_key,
-          request_fingerprint: operation.fingerprint,
-          name: operation.name,
-          payload: operation.payload,
-          status: :pending,
-          attempt_count: 0,
-          deadline_generation: operation.payload["deadlineGeneration"]
-        }
-
-        next = %{
-          episode
-          | operations: Map.put(episode.operations, external_operation_id, external)
-        }
-
-        {:ok, operation_decision(external, :original), next}
+      operation.name in @internal_operations ->
+        begin_new_memory_internal_operation(episode, operation)
 
       true ->
         {:error, :invalid_internal_operation}
     end
   end
 
-  defp begin_new_memory_operation(episode, identity, operation) do
-    with {:ok, participant} <- active_participant(episode, identity),
-         :ok <- capability(episode, identity, participant, operation.name),
-         {:ok, target} <- operation_target(episode, identity, operation) do
+  defp begin_new_memory_internal_operation(episode, operation) do
+    with :ok <- validate_memory_internal_operation(operation),
+         :ok <- prepare_memory_internal_operation(episode, operation) do
       external_operation_id = UUID.generate()
-      observed = operation.observed_context
 
       external = %ExternalOperation{
         external_operation_id: external_operation_id,
@@ -600,30 +587,251 @@ defmodule ChalkSync.Stateholder.Memory do
         payload: operation.payload,
         status: :pending,
         attempt_count: 0,
-        actor_participant_id: normalize_id(identity.participant_id),
-        actor_generation: identity.participant_generation,
-        target_participant_id: target && target.id,
-        target_participant_generation: target && target.generation,
+        actor_kind: Map.get(operation.payload, "actorKind"),
+        actor_id: Map.get(operation.payload, "actorId"),
         recording_id: operation.payload["recordingId"],
-        journey_id: observed && observed.journey_id,
-        parent_journey_event_id: observed && observed.parent_journey_event_id,
-        producing_trace_id: observed && observed.producing_trace_id,
-        producing_span_id: observed && observed.producing_span_id,
-        producing_traceparent: observed && observed.producing_traceparent,
-        producing_tracestate: observed && observed.producing_tracestate
+        deadline_generation: operation.payload["deadlineGeneration"]
       }
 
-      next = %{episode | operations: Map.put(episode.operations, external_operation_id, external)}
+      accepted = %{
+        episode
+        | operations: Map.put(episode.operations, external_operation_id, external)
+      }
+
+      next =
+        case operation.name do
+          :start_recording ->
+            {:ok, next_episode} = persist_memory_recording_acceptance(accepted, external)
+            next_episode
+
+          :recording_capture_ready ->
+            persist_memory_recording_capture_epoch(accepted, external)
+
+          _ ->
+            accepted
+        end
+
       {:ok, operation_decision(external, :original), next}
     else
-      {:error, reason} ->
-        {:ok,
-         %OperationDecision{
-           request_key: operation.request_key,
-           result: :rejected,
-           reason: normalize_reason(reason)
-         }}
+      {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp begin_new_memory_operation(episode, identity, operation) do
+    with {:ok, participant} <- active_participant(episode, identity),
+         :ok <- capability(episode, identity, participant, operation.name),
+         {:ok, target} <- operation_target(episode, identity, operation),
+         :ok <- prepare_memory_recording_start(episode, operation) do
+      persist_new_memory_operation(episode, identity, operation, target)
+    else
+      {:error, reason} ->
+        rejected_memory_operation(operation, reason)
+    end
+  end
+
+  defp persist_new_memory_operation(episode, identity, operation, target) do
+    external_operation_id = UUID.generate()
+    external = memory_external_operation(external_operation_id, identity, operation, target)
+
+    accepted = %{
+      episode
+      | operations: Map.put(episode.operations, external_operation_id, external)
+    }
+
+    case persist_memory_recording_acceptance(accepted, external) do
+      {:ok, next} ->
+        {:ok, operation_decision(external, :original), next}
+
+      {:error, reason} ->
+        rejected_memory_operation(operation, reason)
+    end
+  end
+
+  defp memory_external_operation(external_operation_id, identity, operation, target) do
+    observed = operation.observed_context
+
+    %ExternalOperation{
+      external_operation_id: external_operation_id,
+      request_key: operation.request_key,
+      request_fingerprint: operation.fingerprint,
+      name: operation.name,
+      payload: operation.payload,
+      status: :pending,
+      attempt_count: 0,
+      actor_kind: "participant",
+      actor_id: normalize_id(identity.participant_id),
+      actor_participant_id: normalize_id(identity.participant_id),
+      actor_generation: identity.participant_generation,
+      target_participant_id: target && target.id,
+      target_participant_generation: target && target.generation,
+      recording_id: operation.payload["recordingId"],
+      journey_id: observed && observed.journey_id,
+      parent_journey_event_id: observed && observed.parent_journey_event_id,
+      producing_trace_id: observed && observed.producing_trace_id,
+      producing_span_id: observed && observed.producing_span_id,
+      producing_traceparent: observed && observed.producing_traceparent,
+      producing_tracestate: observed && observed.producing_tracestate
+    }
+  end
+
+  defp rejected_memory_operation(operation, reason) do
+    {:ok,
+     %OperationDecision{
+       request_key: operation.request_key,
+       result: :rejected,
+       reason: normalize_reason(reason)
+     }}
+  end
+
+  defp validate_memory_internal_operation(%{name: :start_recording, payload: payload}) do
+    if system_recording_start?(payload), do: :ok, else: {:error, :invalid_internal_operation}
+  end
+
+  defp validate_memory_internal_operation(%{name: :recording_capture_ready}), do: :ok
+
+  defp validate_memory_internal_operation(%{name: :recording_capture_stopped}), do: :ok
+
+  defp validate_memory_internal_operation(%{name: name})
+       when name in [
+              :admission_request_expired,
+              :tenant_set_deadline,
+              :tenant_end_episode,
+              :maximum_duration_expired
+            ],
+       do: :ok
+
+  defp validate_memory_internal_operation(_operation), do: {:error, :invalid_internal_operation}
+
+  defp prepare_memory_internal_operation(episode, %{name: :start_recording} = operation),
+    do: prepare_memory_recording_start(episode, operation)
+
+  defp prepare_memory_internal_operation(episode, %{name: :recording_capture_ready} = operation) do
+    recording = episode.state.recording
+    start_operation_id = operation.payload["startOperationId"]
+    recording_id = operation.payload["recordingId"]
+
+    with %{"recording_id" => ^recording_id, "status" => "starting"} <- recording,
+         %{
+           ^start_operation_id => %{
+             name: :start_recording,
+             status: :applied,
+             recording_id: ^recording_id
+           }
+         } <-
+           episode.operations do
+      if Map.get(episode.recording_capture_epochs, recording_id, 0) <
+           operation.payload["captureEpoch"] do
+        :ok
+      else
+        {:error, :stale_recording_fence}
+      end
+    else
+      _ -> {:error, :stale_recording_fence}
+    end
+  end
+
+  defp prepare_memory_internal_operation(
+         episode,
+         %{name: :recording_capture_stopped} = operation
+       ) do
+    recording = episode.state.recording
+    stop_operation_id = operation.payload["stopOperationId"]
+    recording_id = operation.payload["recordingId"]
+    capture_epoch = operation.payload["captureEpoch"]
+
+    with %{"recording_id" => ^recording_id, "status" => "stopping"} <- recording,
+         %{
+           ^stop_operation_id => %{
+             name: :stop_recording,
+             status: :applied,
+             recording_id: ^recording_id
+           }
+         } <- episode.operations,
+         ^capture_epoch <- Map.get(episode.recording_capture_epochs, recording_id) do
+      :ok
+    else
+      _ -> {:error, :stale_recording_fence}
+    end
+  end
+
+  defp prepare_memory_internal_operation(_episode, _operation), do: :ok
+
+  defp prepare_memory_recording_start(_episode, %{name: name})
+       when name not in [:start_recording, :stop_recording],
+       do: :ok
+
+  defp prepare_memory_recording_start(episode, %{name: :start_recording}) do
+    case episode.state.recording do
+      nil -> :ok
+      %{"status" => status} when status in ["stopped", "failed"] -> :ok
+      _ -> {:error, :recording_in_progress}
+    end
+  end
+
+  defp prepare_memory_recording_start(episode, %{name: :stop_recording} = operation) do
+    recording_id = operation.payload["recordingId"]
+
+    case episode.state.recording do
+      %{
+        "recording_id" => ^recording_id,
+        "status" => "recording",
+        "failure_code" => nil
+      } ->
+        :ok
+
+      _ ->
+        {:error, :invalid_state}
+    end
+  end
+
+  defp system_recording_start?(payload) do
+    payload["actorKind"] == "system" and payload["actorId"] == "recording_policy" and
+      is_binary(payload["recordingId"])
+  end
+
+  defp persist_memory_recording_acceptance(
+         episode,
+         %{name: name} = external
+       )
+       when name in [:start_recording, :stop_recording] do
+    status = if name == :start_recording, do: "starting", else: "stopping"
+
+    payload = %{
+      "recording_id" => external.recording_id,
+      "status" => status,
+      "failure_code" => nil
+    }
+
+    case Reducer.apply_external(episode.state, :recording_status_changed, payload) do
+      {:ok, event, state} ->
+        event_id = UUID.generate()
+
+        stored_event =
+          external_memory_event(event, event_id, external.external_operation_id, state)
+
+        {:ok,
+         %{
+           episode
+           | state: state,
+             events: :queue.in(stored_event, episode.events)
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp persist_memory_recording_acceptance(episode, _external), do: {:ok, episode}
+
+  defp persist_memory_recording_capture_epoch(episode, external) do
+    recording_capture_epochs =
+      Map.put(
+        episode.recording_capture_epochs,
+        external.recording_id,
+        external.payload["captureEpoch"]
+      )
+
+    %{episode | recording_capture_epochs: recording_capture_epochs}
   end
 
   defp operation_target(episode, identity, %{name: :participant_leave}) do
@@ -647,6 +855,12 @@ defmodule ChalkSync.Stateholder.Memory do
       %{^external_operation_id => %{status: status} = operation} when status != :pending ->
         {:ok, operation_decision(operation, :duplicate), episode}
 
+      %{^external_operation_id => %{name: name} = operation}
+      when name in [:recording_capture_ready, :recording_capture_stopped] ->
+        with :ok <- validate_memory_recording_capture_epoch(episode, operation) do
+          do_finalize_memory_operation(episode, operation, outcome)
+        end
+
       %{^external_operation_id => operation} ->
         do_finalize_memory_operation(episode, operation, outcome)
 
@@ -661,13 +875,90 @@ defmodule ChalkSync.Stateholder.Memory do
          {:confirmed, :local}
        )
        when name in [
+              :recording_capture_ready,
+              :recording_capture_stopped,
               :participant_leave,
               :end_episode,
               :tenant_end_episode,
               :maximum_duration_expired
             ] do
-    {event_name, payload} = local_memory_outcome(operation, episode.state)
+    {event_name, payload} =
+      case name do
+        :recording_capture_ready ->
+          {:recording_status_changed, recording_ready_payload(operation)}
+
+        :recording_capture_stopped ->
+          {:recording_status_changed, recording_stopped_payload(operation)}
+
+        _ ->
+          local_memory_outcome(operation, episode.state)
+      end
+
     do_finalize_memory_operation(episode, operation, {:applied, event_name, payload})
+  end
+
+  defp do_finalize_memory_operation(
+         episode,
+         %{name: name} = operation,
+         {:confirmed, :recording}
+       )
+       when name in [:start_recording, :stop_recording] do
+    applied = %{operation | status: :applied}
+
+    next = %{
+      episode
+      | operations: Map.put(episode.operations, operation.external_operation_id, applied)
+    }
+
+    {:ok, operation_decision(applied, :original, episode.state), next}
+  end
+
+  defp do_finalize_memory_operation(
+         episode,
+         %{name: name} = operation,
+         {:failed, reason}
+       )
+       when name in [
+              :start_recording,
+              :stop_recording,
+              :recording_capture_ready,
+              :recording_capture_stopped
+            ] and
+              is_atom(reason) do
+    failure_payload = %{
+      "recording_id" => operation.recording_id,
+      "status" => "failed",
+      "failure_code" => Atom.to_string(reason)
+    }
+
+    case Reducer.apply_external(episode.state, :recording_status_changed, failure_payload) do
+      {:ok, event, state} ->
+        event_id = UUID.generate()
+
+        stored_event =
+          external_memory_event(event, event_id, operation.external_operation_id, state)
+
+        failed = %{operation | status: :failed, last_error_code: reason}
+
+        next = %{
+          episode
+          | state: state,
+            events: :queue.in(stored_event, episode.events),
+            operations: Map.put(episode.operations, operation.external_operation_id, failed)
+        }
+
+        {:ok, operation_decision(failed, :original, state), next}
+
+      {:error, _reason} ->
+        failed = %{operation | status: :failed, last_error_code: reason}
+
+        next = %{
+          episode
+          | operations: Map.put(episode.operations, operation.external_operation_id, failed)
+        }
+
+        {:ok, operation_decision(failed, :original), next}
+    end
   end
 
   defp do_finalize_memory_operation(episode, operation, {:failed, reason}) when is_atom(reason) do
@@ -714,6 +1005,15 @@ defmodule ChalkSync.Stateholder.Memory do
   defp do_finalize_memory_operation(_episode, _operation, _outcome),
     do: {:error, :invalid_operation_outcome}
 
+  defp validate_memory_recording_capture_epoch(episode, operation) do
+    if episode.recording_capture_epochs[operation.recording_id] ==
+         operation.payload["captureEpoch"] do
+      :ok
+    else
+      {:error, :stale_recording_fence}
+    end
+  end
+
   defp local_memory_outcome(%{name: :participant_leave} = operation, state) do
     {:change, event, _next_state} =
       Reducer.decide_external(
@@ -733,6 +1033,22 @@ defmodule ChalkSync.Stateholder.Memory do
 
   defp local_memory_outcome(%{name: :maximum_duration_expired}, _state),
     do: {:episode_ended, %{"reason" => "maximum_duration"}}
+
+  defp recording_ready_payload(operation) do
+    %{
+      "recording_id" => operation.recording_id,
+      "status" => "recording",
+      "failure_code" => nil
+    }
+  end
+
+  defp recording_stopped_payload(operation) do
+    %{
+      "recording_id" => operation.recording_id,
+      "status" => "stopped",
+      "failure_code" => nil
+    }
+  end
 
   defp apply_operation_fact(state, operation, :participant_left, payload),
     do: external_leave(state, operation, payload)
@@ -772,7 +1088,12 @@ defmodule ChalkSync.Stateholder.Memory do
        do: :ok
 
   defp valid_operation_fact(name, :recording_status_changed)
-       when name in [:start_recording, :stop_recording],
+       when name in [
+              :start_recording,
+              :stop_recording,
+              :recording_capture_ready,
+              :recording_capture_stopped
+            ],
        do: :ok
 
   defp valid_operation_fact(_operation, _event), do: {:error, :invalid_operation_outcome}

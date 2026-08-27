@@ -99,6 +99,8 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
         recording
       )
 
+    recording_capture_ready!(fixture.episode, recording_id, recording_start.id)
+
     {:ok, concurrent} =
       recording_operation(host, :start_recording, UUID.generate(), "breaker_record_start2")
 
@@ -111,6 +113,8 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
         media,
         recording
       )
+
+    recording_capture_stopped!(fixture.episode, recording_id, recording_stop.id)
 
     role_race = role_moderation_barrier(host, contender, media, recording)
     screen = screen_race(fixture, host, contender, controller, adapter)
@@ -221,6 +225,38 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
   defp recording_operation(actor, name, recording_id, key) do
     {:ok, operation} = Operation.new(key, name, %{"recordingId" => recording_id})
     Postgres.begin_operation(actor, operation)
+  end
+
+  defp recording_capture_ready!(episode, recording_id, start_operation_id) do
+    {:ok, operation} =
+      Operation.recording_capture_ready(
+        "breaker_record_ready1",
+        recording_id,
+        start_operation_id,
+        1
+      )
+
+    {:ok, %{external_operation_id: operation_id}} =
+      Postgres.begin_internal_operation(episode, operation)
+
+    {:ok, %{result: :applied}} =
+      Postgres.finalize_operation(episode, operation_id, {:confirmed, :local})
+  end
+
+  defp recording_capture_stopped!(episode, recording_id, stop_operation_id) do
+    {:ok, operation} =
+      Operation.recording_capture_stopped(
+        "breaker_record_stopped1",
+        recording_id,
+        stop_operation_id,
+        1
+      )
+
+    {:ok, %{external_operation_id: operation_id}} =
+      Postgres.begin_internal_operation(episode, operation)
+
+    {:ok, %{result: :applied}} =
+      Postgres.finalize_operation(episode, operation_id, {:confirmed, :local})
   end
 
   defp role_moderation_barrier(host, target, media, recording) do

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -25,6 +26,7 @@ var (
 		Scope:       authentication.ScopeSpacesWrite,
 		MinimumRole: memberships.RoleCollaborator,
 	}
+	apiErrorInvalidSpaceArtifactPolicy = APIError{Status: http.StatusBadRequest, Code: "space.invalid_artifact_policy", Message: "Invalid Space Artifact policy"}
 )
 
 type SpaceService interface {
@@ -50,23 +52,25 @@ type spaceRoleResponse struct {
 }
 
 type spaceResponse struct {
-	ID                            string              `json:"id"`
-	Name                          string              `json:"name"`
-	TenantID                      string              `json:"tenant_id"`
-	Slug                          string              `json:"slug"`
-	MediaPlane                    string              `json:"media_plane"`
-	Metadata                      any                 `json:"metadata"`
-	RecurringPolicy               any                 `json:"recurring_policy"`
-	AdmissionPolicy               any                 `json:"admission_policy"`
-	DefaultEpisodeDurationSeconds int32               `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds int32               `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           int32               `json:"linger_window_seconds"`
-	ArchivedAt                    *string             `json:"archived_at,omitempty"`
-	Archived                      bool                `json:"archived"`
-	Roles                         []spaceRoleResponse `json:"roles"`
-	CreatedByUserID               *string             `json:"created_by_user_id"`
-	UpdatedAt                     string              `json:"updated_at"`
-	CreatedAt                     string              `json:"created_at"`
+	ID                            string                           `json:"id"`
+	Name                          string                           `json:"name"`
+	TenantID                      string                           `json:"tenant_id"`
+	Slug                          string                           `json:"slug"`
+	MediaPlane                    string                           `json:"media_plane"`
+	RecordingPolicy               artifactpolicy.RecordingMode     `json:"recording_policy"`
+	TranscriptionPolicy           artifactpolicy.TranscriptionMode `json:"transcription_policy"`
+	Metadata                      any                              `json:"metadata"`
+	RecurringPolicy               any                              `json:"recurring_policy"`
+	AdmissionPolicy               any                              `json:"admission_policy"`
+	DefaultEpisodeDurationSeconds int32                            `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32                            `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32                            `json:"linger_window_seconds"`
+	ArchivedAt                    *string                          `json:"archived_at,omitempty"`
+	Archived                      bool                             `json:"archived"`
+	Roles                         []spaceRoleResponse              `json:"roles"`
+	CreatedByUserID               *string                          `json:"created_by_user_id"`
+	UpdatedAt                     string                           `json:"updated_at"`
+	CreatedAt                     string                           `json:"created_at"`
 }
 
 type spaceListResponse struct {
@@ -84,6 +88,8 @@ type createSpaceRequest struct {
 	DefaultEpisodeDurationSeconds int32                    `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32                    `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32                    `json:"linger_window_seconds"`
+	RecordingPolicy               utilities.OptionalString `json:"recording_policy"`
+	TranscriptionPolicy           utilities.OptionalString `json:"transcription_policy"`
 }
 
 type updateSpaceRequest struct {
@@ -96,6 +102,8 @@ type updateSpaceRequest struct {
 	DefaultEpisodeDurationSeconds spaces.OptionalInt32     `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds spaces.OptionalInt32     `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           spaces.OptionalInt32     `json:"linger_window_seconds"`
+	RecordingPolicy               utilities.OptionalString `json:"recording_policy"`
+	TranscriptionPolicy           utilities.OptionalString `json:"transcription_policy"`
 }
 
 type createSpaceEndpointRequest struct {
@@ -147,7 +155,11 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 			return spaceResponse{}, err
 		}
 
-		space, err := service.CreateSpace(ctx, request.Body.toCreateInput(request.TenantID, createdByUserID(ctx), request.RequestKey))
+		input, err := request.Body.toCreateInput(request.TenantID, createdByUserID(ctx), request.RequestKey)
+		if err != nil {
+			return spaceResponse{}, err
+		}
+		space, err := service.CreateSpace(ctx, input)
 		if err != nil {
 			return spaceResponse{}, err
 		}
@@ -158,7 +170,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -225,7 +237,11 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 			return spaceResponse{}, err
 		}
 
-		space, err := service.UpdateSpace(ctx, request.TenantID, request.SpaceID, request.Body.toUpdateInput())
+		input, err := request.Body.toUpdateInput()
+		if err != nil {
+			return spaceResponse{}, err
+		}
+		space, err := service.UpdateSpace(ctx, request.TenantID, request.SpaceID, input)
 		if err != nil {
 			return spaceResponse{}, err
 		}
@@ -236,7 +252,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceID, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -401,6 +417,9 @@ func spaceServiceAPIError(err error) (APIError, bool) {
 		errors.Is(err, spaces.ErrInvalidLingerWindow),
 		errors.Is(err, spaces.ErrInvalidSpaceField):
 		return apiErrorInvalidSpaceField, true
+	case errors.Is(err, spaces.ErrInvalidRecordingPolicy),
+		errors.Is(err, spaces.ErrInvalidTranscriptionPolicy):
+		return apiErrorInvalidSpaceArtifactPolicy, true
 	case errors.Is(err, spaces.ErrSpaceNotFound):
 		return apiErrorSpaceNotFound, true
 	case errors.Is(err, spaces.ErrSpaceSlugAlreadyUsed):
@@ -438,6 +457,8 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		TenantID:                      space.TenantID.String(),
 		Slug:                          space.Slug,
 		MediaPlane:                    space.MediaPlane,
+		RecordingPolicy:               space.RecordingPolicy,
+		TranscriptionPolicy:           space.TranscriptionPolicy,
 		Metadata:                      rawJSONValue(space.Metadata),
 		RecurringPolicy:               rawJSONValue(space.RecurringPolicy),
 		AdmissionPolicy:               rawJSONValue(space.AdmissionPolicy),
@@ -453,10 +474,26 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 	}
 }
 
-func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID utilities.ID, requestKey string) spaces.CreateSpaceInput {
+func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID utilities.ID, requestKey string) (spaces.CreateSpaceInput, error) {
 	mediaPlane := ""
 	if request.MediaPlane.Value != nil {
 		mediaPlane = *request.MediaPlane.Value
+	}
+	recordingPolicy, recordingPolicySet, err := parseRecordingPolicy(request.RecordingPolicy)
+	if err != nil {
+		return spaces.CreateSpaceInput{}, err
+	}
+	transcriptionPolicy, transcriptionPolicySet, err := parseTranscriptionPolicy(request.TranscriptionPolicy)
+	if err != nil {
+		return spaces.CreateSpaceInput{}, err
+	}
+	var recordingPolicyValue artifactpolicy.RecordingMode
+	if recordingPolicy != nil {
+		recordingPolicyValue = *recordingPolicy
+	}
+	var transcriptionPolicyValue artifactpolicy.TranscriptionMode
+	if transcriptionPolicy != nil {
+		transcriptionPolicyValue = *transcriptionPolicy
 	}
 	return spaces.CreateSpaceInput{
 		Name:                          request.Name,
@@ -470,12 +507,24 @@ func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID ut
 		DefaultEpisodeDurationSeconds: request.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: request.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           request.LingerWindowSeconds,
+		RecordingPolicy:               recordingPolicyValue,
+		RecordingPolicySet:            recordingPolicySet,
+		TranscriptionPolicy:           transcriptionPolicyValue,
+		TranscriptionPolicySet:        transcriptionPolicySet,
 		CreatedByUserID:               userID,
 		RequestKey:                    requestKey,
-	}
+	}, nil
 }
 
-func (request updateSpaceRequest) toUpdateInput() spaces.UpdateSpaceInput {
+func (request updateSpaceRequest) toUpdateInput() (spaces.UpdateSpaceInput, error) {
+	recordingPolicy, recordingPolicySet, err := parseRecordingPolicy(request.RecordingPolicy)
+	if err != nil {
+		return spaces.UpdateSpaceInput{}, err
+	}
+	transcriptionPolicy, transcriptionPolicySet, err := parseTranscriptionPolicy(request.TranscriptionPolicy)
+	if err != nil {
+		return spaces.UpdateSpaceInput{}, err
+	}
 	return spaces.UpdateSpaceInput{
 		Name:                          request.Name,
 		Slug:                          request.Slug,
@@ -486,7 +535,37 @@ func (request updateSpaceRequest) toUpdateInput() spaces.UpdateSpaceInput {
 		DefaultEpisodeDurationSeconds: request.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: request.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           request.LingerWindowSeconds,
+		RecordingPolicy:               spaces.OptionalRecordingPolicy{Set: recordingPolicySet, Value: recordingPolicy},
+		TranscriptionPolicy:           spaces.OptionalTranscriptionPolicy{Set: transcriptionPolicySet, Value: transcriptionPolicy},
+	}, nil
+}
+
+func parseRecordingPolicy(value utilities.OptionalString) (*artifactpolicy.RecordingMode, bool, error) {
+	if !value.Set {
+		return nil, false, nil
 	}
+	if value.Value == nil {
+		return nil, true, spaces.ErrInvalidRecordingPolicy
+	}
+	mode := artifactpolicy.RecordingMode(strings.TrimSpace(*value.Value))
+	if err := mode.Validate(); err != nil {
+		return nil, true, spaces.ErrInvalidRecordingPolicy
+	}
+	return &mode, true, nil
+}
+
+func parseTranscriptionPolicy(value utilities.OptionalString) (*artifactpolicy.TranscriptionMode, bool, error) {
+	if !value.Set {
+		return nil, false, nil
+	}
+	if value.Value == nil {
+		return nil, true, spaces.ErrInvalidTranscriptionPolicy
+	}
+	mode := artifactpolicy.TranscriptionMode(strings.TrimSpace(*value.Value))
+	if err := mode.Validate(); err != nil {
+		return nil, true, spaces.ErrInvalidTranscriptionPolicy
+	}
+	return &mode, true, nil
 }
 
 func createdByUserID(ctx context.Context) utilities.ID {

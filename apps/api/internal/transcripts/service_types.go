@@ -22,6 +22,7 @@ var (
 	ErrInvalidLanguages        = errors.New("invalid transcript languages")
 	ErrInvalidTranscriptField  = errors.New("invalid transcript field")
 	ErrRecordingNotFound       = errors.New("recording not found")
+	ErrTranscriptionDisabled   = errors.New("transcription is disabled")
 	ErrSourceNotReady          = errors.New("transcription source not ready")
 	ErrTranscriptNotFound      = errors.New("transcript not found")
 	ErrArtifactRepository      = errors.New("transcription artifact repository unavailable")

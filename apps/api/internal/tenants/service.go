@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
@@ -21,14 +23,15 @@ import (
 )
 
 var (
-	ErrInvalidTenantID     = errors.New("invalid tenant id")
-	ErrInvalidTenantName   = errors.New("invalid tenant name")
-	ErrInvalidTenantRegion = errors.New("invalid tenant region")
-	ErrInvalidTenantField  = errors.New("invalid tenant field")
-	ErrTenantNotFound      = errors.New("tenant not found")
-	ErrInvalidAccountID    = errors.New("invalid dashboard account id")
-	ErrInvalidRequestKey   = errors.New("invalid tenant onboarding request key")
-	ErrIdempotencyConflict = errors.New("tenant onboarding idempotency conflict")
+	ErrInvalidTenantID       = errors.New("invalid tenant id")
+	ErrInvalidTenantName     = errors.New("invalid tenant name")
+	ErrInvalidTenantRegion   = errors.New("invalid tenant region")
+	ErrInvalidTenantField    = errors.New("invalid tenant field")
+	ErrTenantNotFound        = errors.New("tenant not found")
+	ErrInvalidAccountID      = errors.New("invalid dashboard account id")
+	ErrInvalidRequestKey     = errors.New("invalid tenant onboarding request key")
+	ErrIdempotencyConflict   = errors.New("tenant onboarding idempotency conflict")
+	ErrInvalidArtifactPolicy = errors.New("invalid Tenant Artifact policy")
 )
 
 const accountTenantInstrumentationScope = "github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -54,6 +57,7 @@ type Tenant struct {
 	StorageProviderConfig    json.RawMessage
 	LogoKey                  *string
 	Website                  *string
+	ArtifactPolicy           artifactpolicy.TenantPolicy
 	UpdatedAt                time.Time
 	CreatedAt                time.Time
 }
@@ -90,6 +94,36 @@ type UpdateTenantInput struct {
 	StorageProviderConfig    utilities.OptionalJSON
 	LogoKey                  utilities.OptionalString
 	Website                  utilities.OptionalString
+	ArtifactPolicy           ArtifactPolicyUpdate
+}
+
+type ArtifactPolicyUpdate struct {
+	TranscriptionCeiling             utilities.OptionalString
+	TranscriptionDefaultMode         utilities.OptionalString
+	ProviderPolicyVersion            utilities.OptionalString
+	RecordingRetentionSeconds        OptionalInt64
+	TranscriptRetentionSeconds       OptionalInt64
+	TranscriptionSourceWindowSeconds OptionalInt64
+}
+
+type OptionalInt64 struct {
+	Set   bool
+	Value *int64
+}
+
+func (value *OptionalInt64) UnmarshalJSON(data []byte) error {
+	value.Set = true
+	if strings.TrimSpace(string(data)) == "null" {
+		value.Value = nil
+		return nil
+	}
+
+	var number int64
+	if err := json.Unmarshal(data, &number); err != nil {
+		return err
+	}
+	value.Value = &number
+	return nil
 }
 
 type TenantList struct {
@@ -353,7 +387,68 @@ func prepareUpdateTenantInput(input *UpdateTenantInput) error {
 	if err := prepareUpdateNullableFields(input); err != nil {
 		return err
 	}
+	if err := prepareArtifactPolicyUpdate(&input.ArtifactPolicy); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+func prepareArtifactPolicyUpdate(input *ArtifactPolicyUpdate) error {
+	if input.TranscriptionCeiling.Set {
+		if input.TranscriptionCeiling.Value == nil {
+			return ErrInvalidArtifactPolicy
+		}
+		mode := artifactpolicy.TranscriptionMode(strings.TrimSpace(*input.TranscriptionCeiling.Value))
+		if err := mode.Validate(); err != nil {
+			return err
+		}
+		value := string(mode)
+		input.TranscriptionCeiling.Value = &value
+	}
+	if input.TranscriptionDefaultMode.Set {
+		if input.TranscriptionDefaultMode.Value == nil {
+			return ErrInvalidArtifactPolicy
+		}
+		mode := artifactpolicy.TranscriptionMode(strings.TrimSpace(*input.TranscriptionDefaultMode.Value))
+		if err := mode.Validate(); err != nil {
+			return err
+		}
+		value := string(mode)
+		input.TranscriptionDefaultMode.Value = &value
+	}
+	if input.ProviderPolicyVersion.Set {
+		if input.ProviderPolicyVersion.Value == nil {
+			return artifactpolicy.ErrMissingProviderPolicy
+		}
+		value, err := utilities.RequiredString(*input.ProviderPolicyVersion.Value)
+		if err != nil {
+			return artifactpolicy.ErrMissingProviderPolicy
+		}
+		input.ProviderPolicyVersion.Value = &value
+	}
+	if err := validateOptionalSeconds(input.RecordingRetentionSeconds); err != nil {
+		return artifactpolicy.ErrInvalidRetention
+	}
+	if err := validateOptionalSeconds(input.TranscriptRetentionSeconds); err != nil {
+		return artifactpolicy.ErrInvalidRetention
+	}
+	if !input.TranscriptionSourceWindowSeconds.Set || input.TranscriptionSourceWindowSeconds.Value == nil {
+		if input.TranscriptionSourceWindowSeconds.Set {
+			return artifactpolicy.ErrInvalidSourceWindow
+		}
+	} else if *input.TranscriptionSourceWindowSeconds.Value < 0 || *input.TranscriptionSourceWindowSeconds.Value > int64(artifactpolicy.MaximumSourceWindow/time.Second) {
+		return artifactpolicy.ErrInvalidSourceWindow
+	}
+	return nil
+}
+
+func validateOptionalSeconds(value OptionalInt64) error {
+	if value.Set && (value.Value == nil ||
+		*value.Value < 0 ||
+		*value.Value > artifactpolicy.MaximumRetentionSeconds) {
+		return artifactpolicy.ErrInvalidRetention
+	}
 	return nil
 }
 

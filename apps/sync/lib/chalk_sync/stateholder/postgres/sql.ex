@@ -866,7 +866,9 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     operation_name in (
       'deny_admission',
       'admission_request_expired',
-      'tenant_set_deadline'
+      'tenant_set_deadline',
+      'recording_capture_ready',
+      'recording_capture_stopped'
     )
     """)
   end
@@ -1284,9 +1286,53 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def lock_recording do
     """
-    select status, generation, start_external_operation_id, stop_external_operation_id
+    select
+      status,
+      generation,
+      adapter_metadata,
+      start_external_operation_id,
+      stop_external_operation_id
     from sync_recordings
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and recording_id = $4
+    for update
+    """
+  end
+
+  def advance_recording_capture_epoch do
+    """
+    update sync_recordings
+    set adapter_metadata = jsonb_set(
+          case
+            when jsonb_typeof(adapter_metadata) = 'object' then adapter_metadata
+            else '{}'::jsonb
+          end,
+          '{capture_epoch}',
+          to_jsonb($5::bigint),
+          true
+        ),
+        updated_at = now()
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and recording_id = $4
+      and status = 'starting'
+      and start_external_operation_id = $6
+      and case
+            when jsonb_typeof(adapter_metadata -> 'capture_epoch') = 'number'
+              and adapter_metadata ->> 'capture_epoch' ~ '^[0-9]+$'
+            then (adapter_metadata ->> 'capture_epoch')::bigint
+            else 0
+          end < $5
+    returning recording_id
+    """
+  end
+
+  def lock_recording_acceptance_event do
+    """
+    select event_id, revision
+    from sync_control_events
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and external_operation_id = $4
+      and event_name = 'recording_status_changed'
+    order by revision asc
+    limit 1
     for update
     """
   end

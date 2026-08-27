@@ -43,6 +43,19 @@ where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id);
 select * from transcriptions
 where tenant_id = sqlc.arg(tenant_id) and recording_id = sqlc.arg(recording_id);
 
+-- name: GetCompletedRecordingTranscriptionMode :one
+select case
+    when episodes.config_snapshot #>> '{artifact_policy,transcription,mode}' in ('on_demand', 'automatic')
+        then episodes.config_snapshot #>> '{artifact_policy,transcription,mode}'
+    else 'disabled'
+end::text as transcription_mode
+from recordings
+join episodes on episodes.tenant_id = recordings.tenant_id
+    and episodes.id = recordings.episode_id
+where recordings.tenant_id = sqlc.arg(tenant_id)
+  and recordings.id = sqlc.arg(recording_id)
+  and recordings.status = 'completed';
+
 -- name: LockTenantTranscriptionForUpdate :one
 select * from transcriptions
 where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id)

@@ -30,6 +30,56 @@ returning
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
+    metadata,
+    updated_at,
+    created_at;
+
+-- name: MaterializeRecording :one
+insert into recordings (
+    id,
+    tenant_id,
+    space_id,
+    episode_id,
+    status,
+    storage_provider,
+    metadata
+) select
+    sqlc.arg(id),
+    episodes.tenant_id,
+    episodes.space_id,
+    episodes.id,
+    'pending',
+    'r2',
+    sqlc.narg(metadata)
+from episodes
+where
+    episodes.tenant_id = sqlc.arg(tenant_id)
+    and episodes.space_id = sqlc.arg(space_id)
+    and episodes.id = sqlc.arg(episode_id)
+on conflict (id) do update
+set updated_at = recordings.updated_at
+where recordings.tenant_id = excluded.tenant_id
+  and recordings.space_id = excluded.space_id
+  and recordings.episode_id = excluded.episode_id
+  and recordings.status in ('pending', 'processing')
+returning
+    id,
+    tenant_id,
+    space_id,
+    episode_id,
+    status,
+    storage_provider,
+    storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at;
@@ -43,6 +93,11 @@ select
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at
@@ -60,6 +115,11 @@ select
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at
@@ -111,6 +171,11 @@ returning
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at;

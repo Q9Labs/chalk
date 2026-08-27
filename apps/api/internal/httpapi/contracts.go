@@ -75,7 +75,6 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil)...)
-	endpoints = append(endpoints, recordingPipelineEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
 	endpoints = append(endpoints, integrationEndpoints(nil, nil, integrationRouteOptions{})...)

@@ -17,6 +17,8 @@ defmodule ChalkSync.Stateholder.Operation do
     "remove_participant" => :remove_participant,
     "start_recording" => :start_recording,
     "stop_recording" => :stop_recording,
+    "recording_capture_ready" => :recording_capture_ready,
+    "recording_capture_stopped" => :recording_capture_stopped,
     "participant_leave" => :participant_leave,
     "start_episode" => :start_episode,
     "extend_episode" => :extend_episode,
@@ -40,6 +42,8 @@ defmodule ChalkSync.Stateholder.Operation do
           | :remove_participant
           | :start_recording
           | :stop_recording
+          | :recording_capture_ready
+          | :recording_capture_stopped
           | :participant_leave
           | :start_episode
           | :extend_episode
@@ -91,6 +95,52 @@ defmodule ChalkSync.Stateholder.Operation do
 
   def new(_request_key, _name, _payload), do: {:error, :invalid_operation}
 
+  @spec system_recording_start(String.t(), String.t(), pos_integer()) ::
+          {:ok, t()} | {:error, atom()}
+  def system_recording_start(request_key, recording_id, policy_snapshot_version)
+      when is_binary(recording_id) and is_integer(policy_snapshot_version) and
+             policy_snapshot_version > 0 do
+    new(request_key, :start_recording, %{
+      "recordingId" => recording_id,
+      "actorKind" => "system",
+      "actorId" => "recording_policy",
+      "policySnapshotVersion" => policy_snapshot_version
+    })
+  end
+
+  def system_recording_start(_request_key, _recording_id, _policy_snapshot_version),
+    do: {:error, :invalid_payload}
+
+  @spec recording_capture_ready(String.t(), String.t(), String.t(), pos_integer()) ::
+          {:ok, t()} | {:error, atom()}
+  def recording_capture_ready(request_key, recording_id, start_operation_id, capture_epoch)
+      when is_binary(recording_id) and is_binary(start_operation_id) and
+             is_integer(capture_epoch) and capture_epoch > 0 do
+    new(request_key, :recording_capture_ready, %{
+      "recordingId" => recording_id,
+      "startOperationId" => start_operation_id,
+      "captureEpoch" => capture_epoch
+    })
+  end
+
+  def recording_capture_ready(_request_key, _recording_id, _start_operation_id, _capture_epoch),
+    do: {:error, :invalid_payload}
+
+  @spec recording_capture_stopped(String.t(), String.t(), String.t(), pos_integer()) ::
+          {:ok, t()} | {:error, atom()}
+  def recording_capture_stopped(request_key, recording_id, stop_operation_id, capture_epoch)
+      when is_binary(recording_id) and is_binary(stop_operation_id) and
+             is_integer(capture_epoch) and capture_epoch > 0 do
+    new(request_key, :recording_capture_stopped, %{
+      "recordingId" => recording_id,
+      "stopOperationId" => stop_operation_id,
+      "captureEpoch" => capture_epoch
+    })
+  end
+
+  def recording_capture_stopped(_request_key, _recording_id, _stop_operation_id, _capture_epoch),
+    do: {:error, :invalid_payload}
+
   defp normalize_name(name) when is_atom(name) do
     if name in Map.values(@names), do: {:ok, name}, else: {:error, :unknown_operation}
   end
@@ -134,9 +184,42 @@ defmodule ChalkSync.Stateholder.Operation do
             ] and map_size(payload) == 1,
        do: validate_uuid(id)
 
-  defp validate_payload(name, %{"recordingId" => id} = payload)
-       when name in [:start_recording, :stop_recording] and map_size(payload) == 1,
+  defp validate_payload(:start_recording, %{"recordingId" => id} = payload),
+    do: validate_recording_start_payload(id, payload)
+
+  defp validate_payload(:stop_recording, %{"recordingId" => id} = payload)
+       when map_size(payload) == 1,
        do: validate_uuid(id)
+
+  defp validate_payload(
+         :recording_capture_ready,
+         %{
+           "recordingId" => recording_id,
+           "startOperationId" => start_operation_id,
+           "captureEpoch" => capture_epoch
+         } = payload
+       )
+       when map_size(payload) == 3 and is_integer(capture_epoch) and capture_epoch > 0 do
+    case validate_uuid(recording_id) do
+      :ok -> validate_uuid(start_operation_id)
+      error -> error
+    end
+  end
+
+  defp validate_payload(
+         :recording_capture_stopped,
+         %{
+           "recordingId" => recording_id,
+           "stopOperationId" => stop_operation_id,
+           "captureEpoch" => capture_epoch
+         } = payload
+       )
+       when map_size(payload) == 3 and is_integer(capture_epoch) and capture_epoch > 0 do
+    case validate_uuid(recording_id) do
+      :ok -> validate_uuid(stop_operation_id)
+      error -> error
+    end
+  end
 
   defp validate_payload(
          :tenant_set_deadline,
@@ -147,6 +230,38 @@ defmodule ChalkSync.Stateholder.Operation do
        do: :ok
 
   defp validate_payload(_name, _payload), do: {:error, :invalid_payload}
+
+  defp validate_recording_start_payload(recording_id, payload) do
+    case validate_uuid(recording_id) do
+      :ok -> validate_system_recording_start_payload(payload)
+      error -> error
+    end
+  end
+
+  defp validate_system_recording_start_payload(%{"recordingId" => _recording_id} = payload) do
+    authority = Map.drop(payload, ["recordingId"])
+
+    case authority do
+      authority when map_size(authority) == 0 ->
+        :ok
+
+      %{
+        "actorKind" => "system",
+        "actorId" => "recording_policy",
+        "policySnapshotVersion" => version
+      }
+      when is_integer(version) and version > 0 ->
+        :ok
+
+      %{"actorKind" => "system", "actorId" => "recording_policy"} ->
+        :ok
+
+      _ ->
+        {:error, :invalid_payload}
+    end
+  end
+
+  defp validate_system_recording_start_payload(_payload), do: {:error, :invalid_payload}
 
   defp validate_uuid(value) do
     case UUID.dump(value) do

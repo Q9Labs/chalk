@@ -1,7 +1,7 @@
 -- name: CreateRecordingReservation :one
 with existing as (
     select id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-        participant_count, max_duration_seconds, input_bitrate_bps, state,
+        policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at, request_fingerprint
     from recording_reservations
     where recording_reservations.tenant_id = sqlc.arg(tenant_id)
@@ -35,8 +35,22 @@ with existing as (
             and episodes.space_id = sqlc.arg(space_id)
             and episodes.id = sqlc.arg(episode_id)
       )
+      and (
+          not exists (
+              select 1 from recordings
+              where recordings.id = sqlc.arg(recording_id)
+          )
+          or exists (
+              select 1 from recordings
+              where recordings.id = sqlc.arg(recording_id)
+                and recordings.tenant_id = sqlc.arg(tenant_id)
+                and recordings.space_id = sqlc.arg(space_id)
+                and recordings.episode_id = sqlc.arg(episode_id)
+                and recordings.status in ('pending', 'processing')
+          )
+      )
     returning recording_capacity.id
-), legacy_recording as (
+), materialized_recording as (
     insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
     select sqlc.arg(recording_id), sqlc.arg(tenant_id), sqlc.arg(space_id), sqlc.arg(episode_id), 'pending', 'r2'
     from capacity_update
@@ -44,22 +58,40 @@ with existing as (
         and episodes.space_id = sqlc.arg(space_id)
         and episodes.id = sqlc.arg(episode_id)
     where not exists (select 1 from existing)
-    on conflict (id) do nothing
-    returning id
+    on conflict (id) do update
+    set updated_at = recordings.updated_at
+    where recordings.tenant_id = excluded.tenant_id
+      and recordings.space_id = excluded.space_id
+      and recordings.episode_id = excluded.episode_id
+      and recordings.status in ('pending', 'processing')
+    returning id, tenant_id, space_id, episode_id
+), recording as (
+    select id, tenant_id, space_id, episode_id
+    from materialized_recording
+    union all
+    select recordings.id, recordings.tenant_id, recordings.space_id, recordings.episode_id
+    from recordings
+    where recordings.id = sqlc.arg(recording_id)
+      and recordings.tenant_id = sqlc.arg(tenant_id)
+      and recordings.space_id = sqlc.arg(space_id)
+      and recordings.episode_id = sqlc.arg(episode_id)
+      and recordings.status in ('pending', 'processing')
+      and not exists (select 1 from existing)
+      and not exists (select 1 from materialized_recording)
 ), reservation as (
     insert into recording_reservations (
         id, tenant_id, space_id, episode_id, recording_id, idempotency_key, request_fingerprint,
-        participant_count, max_duration_seconds, input_bitrate_bps, state,
+        policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at
     )
     select
-        sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(space_id), sqlc.arg(episode_id), sqlc.arg(recording_id),
-        sqlc.arg(idempotency_key), sqlc.arg(request_fingerprint), sqlc.arg(participant_count), sqlc.arg(max_duration_seconds),
+        sqlc.arg(id), recording.tenant_id, recording.space_id, recording.episode_id, recording.id,
+        sqlc.arg(idempotency_key), sqlc.arg(request_fingerprint), sqlc.arg(policy_snapshot_version), sqlc.arg(participant_count), sqlc.arg(max_duration_seconds),
         sqlc.arg(input_bitrate_bps), 'reserved', sqlc.narg(starts_at), sqlc.arg(ends_at)
-    from capacity_update join legacy_recording on true
+    from capacity_update join recording on true
     where not exists (select 1 from existing)
     returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-        participant_count, max_duration_seconds, input_bitrate_bps, state,
+        policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
 ), pipeline as (
     insert into recording_pipelines (recording_id, tenant_id, reservation_id, state)
@@ -77,19 +109,19 @@ with existing as (
     from reservation
 ), replay as (
     select id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-        participant_count, max_duration_seconds, input_bitrate_bps, state,
+        policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
     from existing
     where request_fingerprint = sqlc.arg(request_fingerprint)
 )
 select reservation.id, reservation.tenant_id, reservation.space_id, reservation.episode_id,
-    reservation.recording_id, reservation.idempotency_key, reservation.participant_count,
+    reservation.recording_id, reservation.idempotency_key, reservation.policy_snapshot_version, reservation.participant_count,
     reservation.max_duration_seconds, reservation.input_bitrate_bps, reservation.state,
     reservation.starts_at, reservation.ends_at, reservation.updated_at, reservation.created_at
 from reservation
 union all
 select replay.id, replay.tenant_id, replay.space_id, replay.episode_id,
-    replay.recording_id, replay.idempotency_key, replay.participant_count,
+    replay.recording_id, replay.idempotency_key, replay.policy_snapshot_version, replay.participant_count,
     replay.max_duration_seconds, replay.input_bitrate_bps, replay.state,
     replay.starts_at, replay.ends_at, replay.updated_at, replay.created_at
 from replay;
@@ -97,7 +129,7 @@ from replay;
 -- name: GetRecordingReservation :one
 select
     id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-    participant_count, max_duration_seconds, input_bitrate_bps, state,
+    policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
     starts_at, ends_at, updated_at, created_at
 from recording_reservations
 where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id);
@@ -105,7 +137,7 @@ where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id);
 -- name: GetRecordingReservationByKey :one
 select
     id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-    participant_count, max_duration_seconds, input_bitrate_bps, state,
+    policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
     starts_at, ends_at, updated_at, created_at
 from recording_reservations
 where tenant_id = sqlc.arg(tenant_id) and idempotency_key = sqlc.arg(idempotency_key)
@@ -142,7 +174,7 @@ with locked as (
     set state = sqlc.arg(state), updated_at = now()
     where id = (select id from locked)
     returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-        participant_count, max_duration_seconds, input_bitrate_bps, state,
+        policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
 ), cancelled_job as (
     update recording_jobs
@@ -158,7 +190,7 @@ with locked as (
     returning recording_id
 )
 select released.id, released.tenant_id, released.space_id, released.episode_id,
-    released.recording_id, released.idempotency_key, released.participant_count,
+    released.recording_id, released.idempotency_key, released.policy_snapshot_version, released.participant_count,
     released.max_duration_seconds, released.input_bitrate_bps, released.state,
     released.starts_at, released.ends_at, released.updated_at, released.created_at
 from released join deleted_pipeline on deleted_pipeline.recording_id = released.recording_id;
@@ -173,27 +205,72 @@ where tenant_id = sqlc.arg(tenant_id)
   and state = 'reserved'
   and sqlc.arg(max_duration_seconds)::integer between max_duration_seconds and 7200
 returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-    participant_count, max_duration_seconds, input_bitrate_bps, state,
+    policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
     starts_at, ends_at, updated_at, created_at;
 
 -- name: GetRecordingPipeline :one
-select recording_id, tenant_id, reservation_id, state, capture_completed_at, committed_at, updated_at, created_at
+select recording_id, tenant_id, reservation_id, capture_epoch, state, stop_operation_id, stop_requested_at,
+    capture_completed_at, committed_at, updated_at, created_at
 from recording_pipelines
 where tenant_id = sqlc.arg(tenant_id) and recording_id = sqlc.arg(recording_id);
+
+-- name: GetRecordingPipelineStopAuthority :one
+select recording_pipelines.recording_id, recording_pipelines.tenant_id,
+    recording_pipelines.reservation_id, recording_pipelines.capture_epoch, recording_pipelines.state,
+    recording_pipelines.stop_operation_id, recording_pipelines.stop_requested_at,
+    recording_pipelines.capture_completed_at, recording_pipelines.committed_at,
+    recording_pipelines.updated_at, recording_pipelines.created_at
+from recording_pipelines
+join recordings on recordings.id = recording_pipelines.recording_id
+where recording_pipelines.tenant_id = sqlc.arg(tenant_id)
+  and recording_pipelines.recording_id = sqlc.arg(recording_id)
+  and recordings.episode_id = sqlc.arg(episode_id);
+
+-- name: RequestRecordingStop :one
+update recording_pipelines
+set stop_operation_id = coalesce(recording_pipelines.stop_operation_id, sqlc.arg(stop_operation_id)),
+    stop_requested_at = coalesce(recording_pipelines.stop_requested_at, now()),
+    updated_at = now()
+where recording_pipelines.tenant_id = sqlc.arg(tenant_id)
+  and recording_pipelines.recording_id = sqlc.arg(recording_id)
+  and exists (
+      select 1 from recordings
+      where recordings.id = recording_pipelines.recording_id
+        and recordings.tenant_id = sqlc.arg(tenant_id)
+        and recordings.episode_id = sqlc.arg(episode_id)
+  )
+  and (
+      recording_pipelines.stop_operation_id = sqlc.arg(stop_operation_id)
+      or (
+          recording_pipelines.stop_operation_id is null
+          and recording_pipelines.state in ('reserved', 'capture_leased', 'capturing_segmented', 'capture_complete', 'render_queued', 'rendering', 'verifying', 'retryable_failure')
+      )
+  )
+returning recording_id, tenant_id, reservation_id, capture_epoch, state, stop_operation_id, stop_requested_at,
+    capture_completed_at, committed_at, updated_at, created_at;
+
+-- name: LockRecordingJobClaimRequest :exec
+select pg_advisory_xact_lock(hashtextextended(sqlc.arg(claim_request_id)::text, 0));
 
 -- name: ClaimRecordingJob :one
 with candidate as (
     select recording_jobs.id
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
+    join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
     where recording_jobs.kind = sqlc.arg(kind)
       and recording_jobs.state = 'pending'
       and recording_jobs.available_at <= now()
       and recording_jobs.attempt_count < recording_jobs.attempt_limit
+      and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_operation_id is null)
+      and (recording_jobs.kind <> 'capture' or (
+          recording_reservations.state = 'reserved'
+          and recording_reservations.ends_at > now()
+      ))
       and ((recording_jobs.kind = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
         or (recording_jobs.kind = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
     order by recording_jobs.priority desc, recording_jobs.available_at, recording_jobs.id
-    for update of recording_jobs skip locked
+    for update of recording_jobs, recording_pipelines skip locked
     limit 1
 ), leased as (
     update recording_jobs
@@ -216,29 +293,82 @@ with candidate as (
 ), pipeline as (
     update recording_pipelines
     set state = case when sqlc.arg(kind) = 'capture' then 'capture_leased' else 'rendering' end,
+        capture_epoch = case when sqlc.arg(kind) = 'capture' then capture_epoch + 1 else capture_epoch end,
         updated_at = now()
     from leased
     where recording_pipelines.recording_id = leased.recording_id
+      and (sqlc.arg(kind) <> 'capture' or recording_pipelines.stop_operation_id is null)
       and ((sqlc.arg(kind) = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
         or (sqlc.arg(kind) = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
-    returning recording_pipelines.recording_id
+    returning recording_pipelines.recording_id, recording_pipelines.capture_epoch
 )
 select leased.id, leased.tenant_id, leased.episode_id, leased.recording_id, leased.kind,
     leased.idempotency_key, leased.payload_schema_version, leased.state, leased.priority,
     leased.available_at, leased.attempt_count, leased.attempt_limit, leased.lease_token,
     leased.lease_owner, leased.lease_expires_at, leased.fencing_generation, leased.error_code,
-    leased.error_detail, leased.terminal_at, leased.updated_at, leased.created_at
-from leased join pipeline on pipeline.recording_id = leased.recording_id;
+    leased.error_detail, leased.terminal_at, leased.updated_at, leased.created_at,
+    pipeline.capture_epoch, recording_reservations.space_id,
+    recording_reservations.policy_snapshot_version, recording_reservations.ends_at,
+    recording_pipelines.capture_completed_at
+from leased
+join pipeline on pipeline.recording_id = leased.recording_id
+join recording_pipelines on recording_pipelines.recording_id = leased.recording_id
+join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id;
+
+-- name: GetRecordingJobAttemptAuthorityByClaimRequest :one
+select authority.job_id, authority.attempt_count, authority.fencing_generation,
+    authority.capture_epoch, authority.claim_request_id, authority.kind,
+    authority.lease_owner, authority.lease_token, authority.lease_expires_at,
+    authority.envelope_bytes, authority.envelope_digest, authority.issued_at,
+    jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.idempotency_key,
+    jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at,
+    jobs.attempt_limit, jobs.error_code, jobs.error_detail, jobs.terminal_at,
+    jobs.updated_at, jobs.created_at, reservations.space_id,
+    reservations.policy_snapshot_version, reservations.ends_at
+from recording_job_attempt_authorities authority
+join recording_jobs jobs on jobs.id = authority.job_id
+join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
+join recording_reservations reservations on reservations.id = pipelines.reservation_id
+where authority.claim_request_id = sqlc.arg(claim_request_id)
+  and authority.kind = jobs.kind;
+
+-- name: InsertRecordingJobAttemptAuthority :one
+insert into recording_job_attempt_authorities (
+    job_id, attempt_count, fencing_generation, capture_epoch, claim_request_id,
+    kind, lease_owner, lease_token, lease_expires_at, envelope_bytes,
+    envelope_digest, issued_at
+)
+values (
+    sqlc.arg(job_id), sqlc.arg(attempt_count), sqlc.arg(fencing_generation),
+    sqlc.arg(capture_epoch), sqlc.arg(claim_request_id), sqlc.arg(kind),
+    sqlc.arg(lease_owner), sqlc.arg(lease_token), sqlc.arg(lease_expires_at),
+    sqlc.arg(envelope_bytes), sqlc.arg(envelope_digest), sqlc.arg(issued_at)
+)
+returning job_id, attempt_count, fencing_generation, capture_epoch,
+    claim_request_id, kind, lease_owner, lease_token, lease_expires_at,
+    envelope_bytes, envelope_digest, issued_at;
 
 -- name: HeartbeatRecordingJob :one
 update recording_jobs
 set lease_expires_at = sqlc.arg(lease_expires_at), updated_at = now()
 where id = sqlc.arg(id)
   and state = 'leased'
-  and attempt_count = sqlc.arg(attempt_count)
-  and fencing_generation = sqlc.arg(fencing_generation)
-  and lease_token = sqlc.arg(lease_token)
-  and lease_owner = sqlc.arg(lease_owner)
+  and recording_jobs.attempt_count = sqlc.arg(attempt_count)
+  and recording_jobs.fencing_generation = sqlc.arg(fencing_generation)
+  and recording_jobs.lease_token = sqlc.arg(lease_token)
+  and recording_jobs.lease_owner = sqlc.arg(lease_owner)
+  and recording_jobs.lease_expires_at > now()
+  and exists (
+      select 1 from recording_job_attempt_authorities authority
+      where authority.job_id = recording_jobs.id
+        and authority.kind = recording_jobs.kind
+        and authority.attempt_count = sqlc.arg(attempt_count)
+        and authority.fencing_generation = sqlc.arg(fencing_generation)
+        and authority.capture_epoch = sqlc.arg(capture_epoch)
+        and authority.envelope_digest = sqlc.arg(envelope_digest)
+        and authority.lease_token = sqlc.arg(lease_token)
+        and authority.lease_owner = sqlc.arg(lease_owner)
+  )
 returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
@@ -250,10 +380,22 @@ set state = 'succeeded', lease_token = null, lease_owner = null, lease_expires_a
     terminal_at = now(), updated_at = now()
 where id = sqlc.arg(id)
   and state = 'leased'
-  and attempt_count = sqlc.arg(attempt_count)
-  and fencing_generation = sqlc.arg(fencing_generation)
-  and lease_token = sqlc.arg(lease_token)
-  and lease_owner = sqlc.arg(lease_owner)
+  and recording_jobs.attempt_count = sqlc.arg(attempt_count)
+  and recording_jobs.fencing_generation = sqlc.arg(fencing_generation)
+  and recording_jobs.lease_token = sqlc.arg(lease_token)
+  and recording_jobs.lease_owner = sqlc.arg(lease_owner)
+  and recording_jobs.lease_expires_at > now()
+  and exists (
+      select 1 from recording_job_attempt_authorities authority
+      where authority.job_id = recording_jobs.id
+        and authority.kind = recording_jobs.kind
+        and authority.attempt_count = sqlc.arg(attempt_count)
+        and authority.fencing_generation = sqlc.arg(fencing_generation)
+        and authority.capture_epoch = sqlc.arg(capture_epoch)
+        and authority.envelope_digest = sqlc.arg(envelope_digest)
+        and authority.lease_token = sqlc.arg(lease_token)
+        and authority.lease_owner = sqlc.arg(lease_owner)
+  )
 returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
@@ -271,6 +413,18 @@ with completed as (
       and recording_jobs.fencing_generation = sqlc.arg(fencing_generation)
       and recording_jobs.lease_token = sqlc.arg(lease_token)
       and recording_jobs.lease_owner = sqlc.arg(lease_owner)
+      and recording_jobs.lease_expires_at > now()
+      and exists (
+          select 1 from recording_job_attempt_authorities authority
+          where authority.job_id = recording_jobs.id
+            and authority.kind = recording_jobs.kind
+            and authority.attempt_count = sqlc.arg(attempt_count)
+            and authority.fencing_generation = sqlc.arg(fencing_generation)
+            and authority.capture_epoch = sqlc.arg(capture_epoch)
+            and authority.envelope_digest = sqlc.arg(envelope_digest)
+            and authority.lease_token = sqlc.arg(lease_token)
+            and authority.lease_owner = sqlc.arg(lease_owner)
+      )
     returning id, tenant_id, episode_id, recording_id, attempt_count, fencing_generation
 ), pipeline as (
     update recording_pipelines
@@ -331,10 +485,22 @@ with failed as (
         updated_at = now()
     where recording_jobs.id = sqlc.arg(id)
       and state = 'leased'
-      and attempt_count = sqlc.arg(attempt_count)
-      and fencing_generation = sqlc.arg(fencing_generation)
-      and lease_token = sqlc.arg(lease_token)
-      and lease_owner = sqlc.arg(lease_owner)
+      and recording_jobs.attempt_count = sqlc.arg(attempt_count)
+      and recording_jobs.fencing_generation = sqlc.arg(fencing_generation)
+      and recording_jobs.lease_token = sqlc.arg(lease_token)
+      and recording_jobs.lease_owner = sqlc.arg(lease_owner)
+      and recording_jobs.lease_expires_at > now()
+      and exists (
+          select 1 from recording_job_attempt_authorities authority
+          where authority.job_id = recording_jobs.id
+            and authority.kind = recording_jobs.kind
+            and authority.attempt_count = sqlc.arg(attempt_count)
+            and authority.fencing_generation = sqlc.arg(fencing_generation)
+            and authority.capture_epoch = sqlc.arg(capture_epoch)
+            and authority.envelope_digest = sqlc.arg(envelope_digest)
+            and authority.lease_token = sqlc.arg(lease_token)
+            and authority.lease_owner = sqlc.arg(lease_owner)
+      )
     returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
@@ -459,7 +625,7 @@ with expired as (
     set state = 'expired', updated_at = now()
     where id in (select id from expired)
     returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-        participant_count, max_duration_seconds, input_bitrate_bps, state,
+        policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
 ), pipelines as (
     update recording_pipelines
@@ -470,7 +636,7 @@ with expired as (
     returning recording_pipelines.recording_id
 )
 select reservations.id, reservations.tenant_id, reservations.space_id, reservations.episode_id,
-    reservations.recording_id, reservations.idempotency_key, reservations.participant_count,
+    reservations.recording_id, reservations.idempotency_key, reservations.policy_snapshot_version, reservations.participant_count,
     reservations.max_duration_seconds, reservations.input_bitrate_bps, reservations.state,
     reservations.starts_at, reservations.ends_at, reservations.updated_at, reservations.created_at
 from reservations join pipelines on pipelines.recording_id = reservations.recording_id;
@@ -480,6 +646,22 @@ select recording_id, tenant_id, render_job_id, object_key, content_type,
     byte_size, checksum, duration_millis, committed_at, created_at
 from recording_artifacts
 where tenant_id = sqlc.arg(tenant_id) and recording_id = sqlc.arg(recording_id);
+
+-- name: AuthorizeRecordingArtifactReplay :one
+select true
+from recording_job_attempt_authorities authority
+join recording_jobs on recording_jobs.id = authority.job_id
+where recording_jobs.id = sqlc.arg(render_job_id)
+  and recording_jobs.tenant_id = sqlc.arg(tenant_id)
+  and recording_jobs.recording_id = sqlc.arg(recording_id)
+  and recording_jobs.kind = 'render'
+  and authority.kind = recording_jobs.kind
+  and authority.attempt_count = sqlc.arg(attempt_count)
+  and authority.fencing_generation = sqlc.arg(fencing_generation)
+  and authority.capture_epoch = sqlc.arg(capture_epoch)
+  and authority.envelope_digest = sqlc.arg(envelope_digest)
+  and authority.lease_token = sqlc.arg(lease_token)
+  and authority.lease_owner = sqlc.arg(lease_owner);
 
 -- name: UpsertRecordingPoolHealth :one
 insert into recording_pool_health (role, admission_open, ready_capacity, reason, observed_at)
@@ -506,10 +688,22 @@ with authorized as (
       and recording_id = sqlc.arg(recording_id)
       and kind = 'capture'
       and state = 'leased'
-      and attempt_count = sqlc.arg(attempt_count)
-      and fencing_generation = sqlc.arg(fencing_generation)
-      and lease_token = sqlc.arg(lease_token)
-      and lease_owner = sqlc.arg(lease_owner)
+      and recording_jobs.attempt_count = sqlc.arg(attempt_count)
+      and recording_jobs.fencing_generation = sqlc.arg(fencing_generation)
+      and recording_jobs.lease_token = sqlc.arg(lease_token)
+      and recording_jobs.lease_owner = sqlc.arg(lease_owner)
+      and recording_jobs.lease_expires_at > now()
+      and exists (
+          select 1 from recording_job_attempt_authorities authority
+          where authority.job_id = recording_jobs.id
+            and authority.kind = recording_jobs.kind
+            and authority.attempt_count = sqlc.arg(attempt_count)
+            and authority.fencing_generation = sqlc.arg(fencing_generation)
+            and authority.capture_epoch = sqlc.arg(capture_epoch)
+            and authority.envelope_digest = sqlc.arg(envelope_digest)
+            and authority.lease_token = sqlc.arg(lease_token)
+            and authority.lease_owner = sqlc.arg(lease_owner)
+      )
 )
 insert into recording_bundles (
     id, tenant_id, recording_id, capture_job_id, sequence_number, fencing_generation,
@@ -531,6 +725,13 @@ with authorized as (
     select recording_jobs.id, recording_jobs.recording_id, recording_jobs.tenant_id
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
+    join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
+        and recording_reservations.recording_id = recording_jobs.recording_id
+        and recording_reservations.tenant_id = recording_jobs.tenant_id
+    join recordings on recordings.id = recording_jobs.recording_id
+        and recordings.tenant_id = recording_jobs.tenant_id
+        and recordings.space_id = recording_reservations.space_id
+        and recordings.episode_id = recording_reservations.episode_id
     where recording_jobs.id = sqlc.arg(render_job_id)
       and recording_jobs.tenant_id = sqlc.arg(tenant_id)
       and recording_jobs.recording_id = sqlc.arg(recording_id)
@@ -540,7 +741,21 @@ with authorized as (
       and recording_jobs.fencing_generation = sqlc.arg(fencing_generation)
       and recording_jobs.lease_token = sqlc.arg(lease_token)
       and recording_jobs.lease_owner = sqlc.arg(lease_owner)
+      and recording_jobs.lease_expires_at > now()
+      and exists (
+          select 1 from recording_job_attempt_authorities authority
+          where authority.job_id = recording_jobs.id
+            and authority.kind = recording_jobs.kind
+            and authority.attempt_count = sqlc.arg(attempt_count)
+            and authority.fencing_generation = sqlc.arg(fencing_generation)
+            and authority.capture_epoch = sqlc.arg(capture_epoch)
+            and authority.envelope_digest = sqlc.arg(envelope_digest)
+            and authority.lease_token = sqlc.arg(lease_token)
+            and authority.lease_owner = sqlc.arg(lease_owner)
+      )
       and recording_pipelines.state = 'rendering'
+      and recordings.status in ('pending', 'processing')
+    for update of recordings
 ), artifact as (
     insert into recording_artifacts (
         recording_id, tenant_id, render_job_id, object_key, content_type,
@@ -560,11 +775,27 @@ with authorized as (
     from artifact
     where recording_jobs.id = artifact.render_job_id
     returning recording_jobs.recording_id
+), public_recording as (
+    update recordings
+    set status = 'completed',
+        storage_provider = 'r2',
+        storage_key = artifact.object_key,
+        storage_content_type = artifact.content_type,
+        storage_size = artifact.byte_size,
+        storage_checksum = artifact.checksum,
+        duration_millis = artifact.duration_millis,
+        completed_at = artifact.committed_at,
+        updated_at = now()
+    from artifact
+    join completed on completed.recording_id = artifact.recording_id
+    where recordings.id = artifact.recording_id
+      and recordings.tenant_id = artifact.tenant_id
+    returning recordings.id
 ), pipeline as (
     update recording_pipelines
     set state = 'committed', committed_at = now(), updated_at = now()
-    from completed
-    where recording_pipelines.recording_id = completed.recording_id
+    from public_recording
+    where recording_pipelines.recording_id = public_recording.id
     returning recording_pipelines.recording_id
 )
 select artifact.recording_id, artifact.tenant_id, artifact.render_job_id,

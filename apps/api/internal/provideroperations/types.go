@@ -1,16 +1,19 @@
 package provideroperations
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -53,6 +56,8 @@ var (
 	ErrInvalidPublicationSource     = errors.New("invalid provider publication source")
 	ErrInvalidPublicationID         = errors.New("invalid provider publication id")
 	ErrInvalidRecordingID           = errors.New("invalid provider operation recording id")
+	ErrInvalidRecordingReservation  = errors.New("invalid provider recording reservation")
+	ErrReceiptPayloadCorrupt        = errors.New("provider operation receipt payload is corrupt")
 	ErrInvalidOutcome               = errors.New("invalid provider operation outcome")
 	ErrNonTerminalOutcome           = errors.New("provider operation outcome is not terminal")
 	ErrInvalidReason                = errors.New("invalid provider operation reason")
@@ -83,6 +88,17 @@ type OperationInput struct {
 	ParticipantGeneration int64
 	PublicationSource     string
 	RecordingID           utilities.ID
+	RecordingReservation  *RecordingReservation
+}
+
+// RecordingReservation is the immutable, server-derived admission envelope
+// for a recording.start provider operation.
+type RecordingReservation struct {
+	SpaceID               utilities.ID
+	ParticipantCount      int
+	MaxDurationSeconds    int
+	InputBitrateBPS       int64
+	PolicySnapshotVersion string
 }
 
 type CanonicalOperation struct {
@@ -166,13 +182,22 @@ type Repository interface {
 }
 
 type canonicalPayload struct {
-	Effect                Effect  `json:"effect"`
-	TenantID              string  `json:"tenant_id"`
-	EpisodeID             string  `json:"episode_id"`
-	ParticipantID         *string `json:"participant_id,omitempty"`
-	ParticipantGeneration *int64  `json:"participant_generation,omitempty"`
-	PublicationSource     *string `json:"publication_source,omitempty"`
-	RecordingID           *string `json:"recording_id,omitempty"`
+	Effect                Effect                         `json:"effect"`
+	TenantID              string                         `json:"tenant_id"`
+	EpisodeID             string                         `json:"episode_id"`
+	ParticipantID         *string                        `json:"participant_id,omitempty"`
+	ParticipantGeneration *int64                         `json:"participant_generation,omitempty"`
+	PublicationSource     *string                        `json:"publication_source,omitempty"`
+	RecordingID           *string                        `json:"recording_id,omitempty"`
+	RecordingReservation  *canonicalRecordingReservation `json:"recording_reservation,omitempty"`
+}
+
+type canonicalRecordingReservation struct {
+	SpaceID               string `json:"space_id"`
+	ParticipantCount      int    `json:"participant_count"`
+	MaxDurationSeconds    int    `json:"max_duration_seconds"`
+	InputBitrateBPS       int64  `json:"input_bitrate_bps"`
+	PolicySnapshotVersion string `json:"policy_snapshot_version"`
 }
 
 type canonicalPublication struct {
@@ -210,6 +235,11 @@ func Canonicalize(input OperationInput) (CanonicalOperation, error) {
 	if err := validateEffectFields(input); err != nil {
 		return CanonicalOperation{}, err
 	}
+	if input.RecordingReservation != nil {
+		if err := input.RecordingReservation.Validate(); err != nil {
+			return CanonicalOperation{}, err
+		}
+	}
 
 	payload := canonicalPayload{Effect: input.Effect, TenantID: input.TenantID.String(), EpisodeID: input.EpisodeID.String()}
 	if participantPresent {
@@ -226,6 +256,16 @@ func Canonicalize(input OperationInput) (CanonicalOperation, error) {
 	if !input.RecordingID.IsZero() {
 		id := input.RecordingID.String()
 		payload.RecordingID = &id
+	}
+	if input.RecordingReservation != nil {
+		reservation := input.RecordingReservation
+		payload.RecordingReservation = &canonicalRecordingReservation{
+			SpaceID:               reservation.SpaceID.String(),
+			ParticipantCount:      reservation.ParticipantCount,
+			MaxDurationSeconds:    reservation.MaxDurationSeconds,
+			InputBitrateBPS:       reservation.InputBitrateBPS,
+			PolicySnapshotVersion: reservation.PolicySnapshotVersion,
+		}
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -249,6 +289,82 @@ func ValidateIdentity(operationID string, effect Effect) error {
 
 func (input OperationInput) Canonicalize() (CanonicalOperation, error) {
 	return Canonicalize(input)
+}
+
+func (reservation RecordingReservation) Validate() error {
+	if reservation.SpaceID.IsZero() || reservation.ParticipantCount < 1 || reservation.ParticipantCount > 10 ||
+		reservation.MaxDurationSeconds < 1 || reservation.MaxDurationSeconds > 7200 ||
+		reservation.InputBitrateBPS < 1 || reservation.InputBitrateBPS > 4_000_000 ||
+		reservation.PolicySnapshotVersion != artifactpolicy.SnapshotSchemaVersion {
+		return ErrInvalidRecordingReservation
+	}
+	return nil
+}
+
+// OperationFromReceipt reconstructs the dispatch input from the canonical
+// payload persisted with a provider receipt. Scalar receipt columns are
+// checked as a second integrity boundary so a corrupt row cannot dispatch.
+func OperationFromReceipt(receipt Receipt) (OperationInput, error) {
+	var payload canonicalPayload
+	decoder := json.NewDecoder(bytes.NewReader(receipt.Payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		return OperationInput{}, errors.Join(ErrReceiptPayloadCorrupt, err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return OperationInput{}, ErrReceiptPayloadCorrupt
+	}
+
+	input := OperationInput{OperationID: receipt.OperationID, Effect: payload.Effect, TenantID: utilities.ID{}, EpisodeID: utilities.ID{}}
+	var err error
+	if input.TenantID, err = utilities.ParseID(payload.TenantID); err != nil {
+		return OperationInput{}, errors.Join(ErrReceiptPayloadCorrupt, ErrInvalidTenantID)
+	}
+	if input.EpisodeID, err = utilities.ParseID(payload.EpisodeID); err != nil {
+		return OperationInput{}, errors.Join(ErrReceiptPayloadCorrupt, ErrInvalidEpisodeID)
+	}
+	if payload.ParticipantID != nil {
+		if input.ParticipantID, err = utilities.ParseID(*payload.ParticipantID); err != nil {
+			return OperationInput{}, errors.Join(ErrReceiptPayloadCorrupt, ErrInvalidParticipantID)
+		}
+	}
+	if payload.ParticipantGeneration != nil {
+		input.ParticipantGeneration = *payload.ParticipantGeneration
+	}
+	if payload.PublicationSource != nil {
+		input.PublicationSource = *payload.PublicationSource
+	}
+	if payload.RecordingID != nil {
+		if input.RecordingID, err = utilities.ParseID(*payload.RecordingID); err != nil {
+			return OperationInput{}, errors.Join(ErrReceiptPayloadCorrupt, ErrInvalidRecordingID)
+		}
+	}
+	if payload.RecordingReservation != nil {
+		spaceID, parseErr := utilities.ParseID(payload.RecordingReservation.SpaceID)
+		if parseErr != nil {
+			return OperationInput{}, errors.Join(ErrReceiptPayloadCorrupt, ErrInvalidRecordingReservation)
+		}
+		input.RecordingReservation = &RecordingReservation{
+			SpaceID:               spaceID,
+			ParticipantCount:      payload.RecordingReservation.ParticipantCount,
+			MaxDurationSeconds:    payload.RecordingReservation.MaxDurationSeconds,
+			InputBitrateBPS:       payload.RecordingReservation.InputBitrateBPS,
+			PolicySnapshotVersion: payload.RecordingReservation.PolicySnapshotVersion,
+		}
+	}
+
+	canonical, err := Canonicalize(input)
+	if err != nil || canonical.Fingerprint != receipt.Fingerprint ||
+		receipt.Effect != input.Effect || receipt.TenantID != input.TenantID || receipt.EpisodeID != input.EpisodeID ||
+		receipt.ParticipantID != input.ParticipantID || receipt.ParticipantGeneration != input.ParticipantGeneration ||
+		receipt.PublicationSource != input.PublicationSource || receipt.RecordingID != input.RecordingID {
+		if err != nil {
+			return OperationInput{}, errors.Join(ErrReceiptPayloadCorrupt, err)
+		}
+		return OperationInput{}, ErrReceiptPayloadCorrupt
+	}
+	return canonical.Input, nil
 }
 
 func Fingerprint(input OperationInput) ([32]byte, error) {
@@ -367,6 +483,12 @@ func validateEffectFields(input OperationInput) error {
 	}
 	if !participantRequired && !input.ParticipantID.IsZero() {
 		return ErrInvalidParticipantID
+	}
+	if input.Effect == EffectStartRecording && input.RecordingReservation == nil {
+		return ErrInvalidRecordingReservation
+	}
+	if input.Effect != EffectStartRecording && input.RecordingReservation != nil {
+		return ErrInvalidRecordingReservation
 	}
 	return nil
 }

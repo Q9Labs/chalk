@@ -12,6 +12,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added the managed Cloudflare SFU recording capture runtime with fenced worker leases, Pion RTP capture, KMS envelope encryption, server-owned R2 bundle allocation and verification, durable Sync ready/stopped callbacks, and inspectable journey and trace signals.
+
 ## [4.1.15] - 2026-08-25
 
 ### Fixed

@@ -95,6 +95,7 @@ func ScenarioNames() []string {
 		RouteMeScenario,
 		RouteTenantOnboardScenario,
 		ServiceMediaPlaneDefaultResolutionScenario,
+		ServiceRecordingCaptureLifecycleScenario,
 		RouteTenantCreateScenario,
 		RouteTenantListSystemScenario,
 		RouteTenantGetAuthorizedScenario,

@@ -7,9 +7,9 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
   alias ChalkSync.Stateholder.EpisodeKey
 
   @enforce_keys [:client]
-  defstruct [:client, context: %{}]
+  defstruct [:client, context: %{}, operation_payload: %{}]
 
-  @type t :: %__MODULE__{client: Client.t(), context: map()}
+  @type t :: %__MODULE__{client: Client.t(), context: map(), operation_payload: map()}
 
   @spec new(Client.t() | keyword() | map(), keyword()) :: {:ok, t()} | {:error, atom()}
   def new(client_or_options, options \\ [])
@@ -37,6 +37,10 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
   def with_context(%__MODULE__{} = adapter, context) when is_map(context),
     do: %{adapter | context: Map.merge(adapter.context, context)}
 
+  @spec with_operation_payload(t(), map()) :: t()
+  def with_operation_payload(%__MODULE__{} = adapter, payload) when is_map(payload),
+    do: %{adapter | operation_payload: payload}
+
   @impl true
   def start_recording(
         %__MODULE__{} = adapter,
@@ -59,12 +63,7 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
     do: {:terminal_failure, :invalid_contract}
 
   defp operation(adapter, operation_id, episode, effect, recording_id) do
-    payload = %{
-      "effect" => effect,
-      "tenant_id" => episode.tenant_id,
-      "episode_id" => episode.episode_id,
-      "recording_id" => recording_id
-    }
+    payload = operation_payload(adapter, episode, effect, recording_id)
 
     case Client.post_operation(context_client(adapter), operation_id, payload) do
       {:ok, outcome} ->
@@ -86,6 +85,28 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
         {:retryable_failure, :transport_error}
     end
   end
+
+  defp operation_payload(adapter, episode, effect, recording_id) do
+    %{
+      "effect" => effect,
+      "tenant_id" => episode.tenant_id,
+      "episode_id" => episode.episode_id,
+      "recording_id" => recording_id
+    }
+    |> maybe_add_recording_reservation(adapter, effect)
+  end
+
+  defp maybe_add_recording_reservation(payload, %__MODULE__{} = adapter, "recording.start") do
+    case Map.get(adapter.operation_payload, "recording_reservation") do
+      reservation when is_map(reservation) ->
+        Map.put(payload, "recording_reservation", reservation)
+
+      _ ->
+        payload
+    end
+  end
+
+  defp maybe_add_recording_reservation(payload, _adapter, _effect), do: payload
 
   defp context_client(%__MODULE__{client: client, context: context}),
     do: Client.with_context(client, context)

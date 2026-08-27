@@ -279,12 +279,13 @@ insert into episodes (
         'admission_policy', spaces.admission_policy,
         'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
-        'linger_window_seconds', spaces.linger_window_seconds
+        'linger_window_seconds', spaces.linger_window_seconds,
+        'artifact_policy', $6::jsonb
     )
 from spaces
 where
-    spaces.tenant_id = $6
-    and spaces.id = $7
+    spaces.tenant_id = $7
+    and spaces.id = $8
     and spaces.archived_at is null
 for update
 returning id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
@@ -296,6 +297,7 @@ type CreateLifecycleEpisodeParams struct {
 	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
 	StartedAt       pgtype.Timestamptz `json:"started_at"`
 	DeadlineAt      pgtype.Timestamptz `json:"deadline_at"`
+	ArtifactPolicy  []byte             `json:"artifact_policy"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	SpaceID         pgtype.UUID        `json:"space_id"`
 }
@@ -307,6 +309,7 @@ func (q *Queries) CreateLifecycleEpisode(ctx context.Context, arg CreateLifecycl
 		arg.CreatedByUserID,
 		arg.StartedAt,
 		arg.DeadlineAt,
+		arg.ArtifactPolicy,
 		arg.TenantID,
 		arg.SpaceID,
 	)
@@ -1540,7 +1543,7 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 }
 
 const lockTenantSpaceForUpdate = `-- name: LockTenantSpaceForUpdate :one
-select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 from spaces
 where
     tenant_id = $1
@@ -1565,6 +1568,8 @@ func (q *Queries) LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSp
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

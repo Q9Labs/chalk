@@ -16,22 +16,18 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+const maximumRecordingDownloadURLLifetime = 5 * time.Minute
+
 var (
 	readRecordingsPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeRecordingsRead,
 		MinimumRole: memberships.RoleObserver,
 	}
-	writeRecordingsPermission = authorization.TenantPermission{
-		Scope:       authentication.ScopeRecordingsWrite,
-		MinimumRole: memberships.RoleCollaborator,
-	}
 )
 
 type RecordingService interface {
-	Create(ctx context.Context, input recordings.CreateInput) (recordings.Recording, error)
 	Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (recordings.Recording, error)
 	List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error)
-	Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input recordings.UpdateInput) (recordings.Recording, error)
 }
 
 type RecordingDownloadService interface {
@@ -64,29 +60,8 @@ type recordingDownloadURLResponse struct {
 	SignedHeader map[string][]string `json:"signed_headers"`
 }
 
-type createRecordingRequest struct {
-	Status          string                 `json:"status"`
-	StorageProvider string                 `json:"storage_provider"`
-	StorageKey      *string                `json:"storage_key"`
-	Metadata        utilities.OptionalJSON `json:"metadata"`
-}
-
-type updateRecordingRequest struct {
-	Status          utilities.OptionalString `json:"status"`
-	StorageProvider utilities.OptionalString `json:"storage_provider"`
-	StorageKey      utilities.OptionalString `json:"storage_key"`
-	Metadata        utilities.OptionalJSON   `json:"metadata"`
-}
-
 type createRecordingDownloadURLRequest struct {
 	ExpiresInSeconds int `json:"expires_in_seconds"`
-}
-
-type createRecordingEndpointRequest struct {
-	TenantID  utilities.ID
-	SpaceID   utilities.ID
-	EpisodeID utilities.ID
-	Body      createRecordingRequest
 }
 
 type listRecordingsRequest struct {
@@ -98,12 +73,6 @@ type listRecordingsRequest struct {
 type getRecordingRequest struct {
 	TenantID    utilities.ID
 	RecordingID utilities.ID
-}
-
-type updateRecordingEndpointRequest struct {
-	TenantID    utilities.ID
-	RecordingID utilities.ID
-	Body        updateRecordingRequest
 }
 
 type createRecordingDownloadURLEndpointRequest struct {
@@ -120,44 +89,10 @@ func mountRecordingRoutes(r chi.Router, service RecordingService, downloads Reco
 
 func recordingEndpoints(service RecordingService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
-		createRecordingEndpoint(service, authorizer),
 		listRecordingsEndpoint(service, authorizer),
 		getRecordingEndpoint(service, authorizer),
-		updateRecordingEndpoint(service, authorizer),
 		createRecordingDownloadURLEndpoint(service, downloads, authorizer),
 	}
-}
-
-func createRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[createRecordingEndpointRequest, recordingResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recordings", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recordings", "createRecording", decodeCreateRecordingRequest, func(ctx context.Context, request createRecordingEndpointRequest) (recordingResponse, error) {
-		if service == nil {
-			return recordingResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeRecordingsPermission); err != nil {
-			return recordingResponse{}, err
-		}
-
-		recording, err := service.Create(ctx, recordings.CreateInput{
-			TenantID:        request.TenantID,
-			SpaceID:         request.SpaceID,
-			EpisodeID:       request.EpisodeID,
-			Status:          request.Body.Status,
-			StorageProvider: request.Body.StorageProvider,
-			StorageKey:      request.Body.StorageKey,
-			Metadata:        request.Body.Metadata.Value,
-		})
-		if err != nil {
-			return recordingResponse{}, err
-		}
-		return newRecordingResponse(recording), nil
-	}).
-		Auth(APIAuthSessionOrBearer).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).
-		RequestBody("CreateRecordingRequest", createRecordingRequest{}).
-		Responds(http.StatusCreated, "Recording", recordingResponse{}).
-		Errors(recordingWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRecordingStatus, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidRecordingField, apiErrorEpisodeNotFound, apiErrorRateLimited)...).
-		MapErrors(recordingEndpointAPIError)
 }
 
 func listRecordingsEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[listRecordingsRequest, recordingListResponse] {
@@ -204,35 +139,6 @@ func getRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer)
 		MapErrors(recordingEndpointAPIError)
 }
 
-func updateRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[updateRecordingEndpointRequest, recordingResponse] {
-	return Patch("/v1/tenants/{tenant_id}/recordings/{recording_id}", "/tenants/{tenant_id}/recordings/{recording_id}", "updateRecording", decodeUpdateRecordingRequest, func(ctx context.Context, request updateRecordingEndpointRequest) (recordingResponse, error) {
-		if service == nil {
-			return recordingResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeRecordingsPermission); err != nil {
-			return recordingResponse{}, err
-		}
-
-		recording, err := service.Update(ctx, request.TenantID, request.RecordingID, recordings.UpdateInput{
-			Status:          request.Body.Status,
-			StorageProvider: request.Body.StorageProvider,
-			StorageKey:      request.Body.StorageKey,
-			Metadata:        request.Body.Metadata,
-		})
-		if err != nil {
-			return recordingResponse{}, err
-		}
-		return newRecordingResponse(recording), nil
-	}).
-		Auth(APIAuthSessionOrBearer).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), recordingIDParameter()).
-		RequestBody("UpdateRecordingRequest", updateRecordingRequest{}).
-		Responds(http.StatusOK, "Recording", recordingResponse{}).
-		Errors(recordingWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorInvalidRecordingStatus, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidRecordingField, apiErrorRecordingNotFound, apiErrorRateLimited)...).
-		MapErrors(recordingEndpointAPIError)
-}
-
 func createRecordingDownloadURLEndpoint(service RecordingService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createRecordingDownloadURLEndpointRequest, recordingDownloadURLResponse] {
 	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url", "/tenants/{tenant_id}/recordings/{recording_id}/download-url", "createRecordingDownloadURL", decodeCreateRecordingDownloadURLRequest, func(ctx context.Context, request createRecordingDownloadURLEndpointRequest) (recordingDownloadURLResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
@@ -240,6 +146,9 @@ func createRecordingDownloadURLEndpoint(service RecordingService, downloads Reco
 		}
 		if service == nil || downloads == nil {
 			return recordingDownloadURLResponse{}, apiErrorServiceUnavailable
+		}
+		if request.Body.ExpiresInSeconds <= 0 || request.Body.ExpiresInSeconds > int(maximumRecordingDownloadURLLifetime/time.Second) {
+			return recordingDownloadURLResponse{}, apiErrorInvalidURLExpiration
 		}
 
 		recording, err := service.Get(ctx, request.TenantID, request.RecordingID)
@@ -279,18 +188,6 @@ func createRecordingDownloadURLEndpoint(service RecordingService, downloads Reco
 		MapErrors(recordingDownloadEndpointAPIError)
 }
 
-func decodeCreateRecordingRequest(r *http.Request) (createRecordingEndpointRequest, error) {
-	tenantID, spaceID, episodeID, err := tenantSpaceEpisodeIDsRequest(r)
-	if err != nil {
-		return createRecordingEndpointRequest{}, err
-	}
-	body, err := decodeJSONBody[createRecordingRequest](r)
-	if err != nil {
-		return createRecordingEndpointRequest{}, err
-	}
-	return createRecordingEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Body: body}, nil
-}
-
 func decodeListRecordingsRequest(r *http.Request) (listRecordingsRequest, error) {
 	tenantID, err := tenantIDRequest(r)
 	if err != nil {
@@ -313,18 +210,6 @@ func decodeGetRecordingRequest(r *http.Request) (getRecordingRequest, error) {
 		return getRecordingRequest{}, err
 	}
 	return getRecordingRequest{TenantID: tenantID, RecordingID: recordingID}, nil
-}
-
-func decodeUpdateRecordingRequest(r *http.Request) (updateRecordingEndpointRequest, error) {
-	tenantID, recordingID, err := tenantRecordingIDsRequest(r)
-	if err != nil {
-		return updateRecordingEndpointRequest{}, err
-	}
-	body, err := decodeJSONBody[updateRecordingRequest](r)
-	if err != nil {
-		return updateRecordingEndpointRequest{}, err
-	}
-	return updateRecordingEndpointRequest{TenantID: tenantID, RecordingID: recordingID, Body: body}, nil
 }
 
 func decodeCreateRecordingDownloadURLRequest(r *http.Request) (createRecordingDownloadURLEndpointRequest, error) {
@@ -352,16 +237,6 @@ func tenantRecordingIDsRequest(r *http.Request) (utilities.ID, utilities.ID, err
 }
 
 func recordingReadErrors(extra ...APIError) []APIError {
-	return append([]APIError{
-		apiErrorUnauthenticated,
-		apiErrorForbidden,
-		apiErrorServiceUnavailable,
-		apiErrorInvalidTenantID,
-		apiErrorInternal,
-	}, extra...)
-}
-
-func recordingWriteErrors(extra ...APIError) []APIError {
 	return append([]APIError{
 		apiErrorUnauthenticated,
 		apiErrorForbidden,

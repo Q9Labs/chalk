@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -95,28 +98,43 @@ func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageR
 
 func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
 	tenant, err := s.queries.UpdateTenant(ctx, sqlc.UpdateTenantParams{
-		ID:                          pgtype.UUID{Bytes: id.Bytes(), Valid: true},
-		NameSet:                     input.Name.Set,
-		Name:                        requiredText(input.Name),
-		DefaultRegionSet:            input.DefaultRegion.Set,
-		DefaultRegion:               text(input.DefaultRegion.Value),
-		DefaultMediaPlaneSet:        input.DefaultMediaPlane.Set,
-		DefaultMediaPlane:           text(input.DefaultMediaPlane.Value),
-		MediaPlaneProviderConfigSet: input.MediaPlaneProviderConfig.Set,
-		MediaPlaneProviderConfig:    jsonBytes(input.MediaPlaneProviderConfig.Value),
-		AiProviderConfigSet:         input.AIProviderConfig.Set,
-		AiProviderConfig:            jsonBytes(input.AIProviderConfig.Value),
-		StorageProviderConfigSet:    input.StorageProviderConfig.Set,
-		StorageProviderConfig:       jsonBytes(input.StorageProviderConfig.Value),
-		LogoKeySet:                  input.LogoKey.Set,
-		LogoKey:                     text(input.LogoKey.Value),
-		WebsiteSet:                  input.Website.Set,
-		Website:                     text(input.Website.Value),
+		ID:                            pgtype.UUID{Bytes: id.Bytes(), Valid: true},
+		NameSet:                       input.Name.Set,
+		Name:                          requiredText(input.Name),
+		DefaultRegionSet:              input.DefaultRegion.Set,
+		DefaultRegion:                 text(input.DefaultRegion.Value),
+		DefaultMediaPlaneSet:          input.DefaultMediaPlane.Set,
+		DefaultMediaPlane:             text(input.DefaultMediaPlane.Value),
+		MediaPlaneProviderConfigSet:   input.MediaPlaneProviderConfig.Set,
+		MediaPlaneProviderConfig:      jsonBytes(input.MediaPlaneProviderConfig.Value),
+		AiProviderConfigSet:           input.AIProviderConfig.Set,
+		AiProviderConfig:              jsonBytes(input.AIProviderConfig.Value),
+		StorageProviderConfigSet:      input.StorageProviderConfig.Set,
+		StorageProviderConfig:         jsonBytes(input.StorageProviderConfig.Value),
+		LogoKeySet:                    input.LogoKey.Set,
+		LogoKey:                       text(input.LogoKey.Value),
+		WebsiteSet:                    input.Website.Set,
+		Website:                       text(input.Website.Value),
+		TranscriptionCeilingSet:       input.ArtifactPolicy.TranscriptionCeiling.Set,
+		TranscriptionCeiling:          requiredText(input.ArtifactPolicy.TranscriptionCeiling),
+		TranscriptionDefaultModeSet:   input.ArtifactPolicy.TranscriptionDefaultMode.Set,
+		TranscriptionDefaultMode:      requiredText(input.ArtifactPolicy.TranscriptionDefaultMode),
+		ProviderPolicyVersionSet:      input.ArtifactPolicy.ProviderPolicyVersion.Set,
+		ProviderPolicyVersion:         text(input.ArtifactPolicy.ProviderPolicyVersion.Value),
+		RecordingRetentionSecondsSet:  input.ArtifactPolicy.RecordingRetentionSeconds.Set,
+		RecordingRetentionSeconds:     optionalTenantInt8(input.ArtifactPolicy.RecordingRetentionSeconds),
+		TranscriptRetentionSecondsSet: input.ArtifactPolicy.TranscriptRetentionSeconds.Set,
+		TranscriptRetentionSeconds:    optionalTenantInt8(input.ArtifactPolicy.TranscriptRetentionSeconds),
+		SourceWindowSecondsSet:        input.ArtifactPolicy.TranscriptionSourceWindowSeconds.Set,
+		SourceWindowSeconds:           optionalTenantInt8(input.ArtifactPolicy.TranscriptionSourceWindowSeconds),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tenants.Tenant{}, tenants.ErrTenantNotFound
 	}
 	if err != nil {
+		if policyErr := artifactPolicyMutationError(err); policyErr != nil {
+			return tenants.Tenant{}, policyErr
+		}
 		return tenants.Tenant{}, fmt.Errorf("update tenant: %w", err)
 	}
 
@@ -139,6 +157,7 @@ func listTenantsParams(page pagination.PageRequest) sqlc.ListTenantsParams {
 }
 
 func mapTenant(tenant tenantRecord) tenants.Tenant {
+	policy := tenantArtifactPolicy(tenant)
 	return tenants.Tenant{
 		ID:                       utilities.IDFromBytes(tenant.ID.Bytes),
 		Name:                     tenant.Name,
@@ -149,86 +168,164 @@ func mapTenant(tenant tenantRecord) tenants.Tenant {
 		StorageProviderConfig:    jsonRaw(tenant.StorageProviderConfig),
 		LogoKey:                  nullableText(tenant.LogoKey),
 		Website:                  nullableText(tenant.Website),
+		ArtifactPolicy:           policy,
 		UpdatedAt:                timestamp(tenant.UpdatedAt),
 		CreatedAt:                timestamp(tenant.CreatedAt),
 	}
 }
 
 type tenantRecord struct {
-	ID                       pgtype.UUID
-	Name                     string
-	DefaultRegion            pgtype.Text
-	DefaultMediaPlane        pgtype.Text
-	MediaPlaneProviderConfig []byte
-	AiProviderConfig         []byte
-	StorageProviderConfig    []byte
-	LogoKey                  pgtype.Text
-	Website                  pgtype.Text
-	UpdatedAt                pgtype.Timestamptz
-	CreatedAt                pgtype.Timestamptz
+	ID                         pgtype.UUID
+	Name                       string
+	DefaultRegion              pgtype.Text
+	DefaultMediaPlane          pgtype.Text
+	MediaPlaneProviderConfig   []byte
+	AiProviderConfig           []byte
+	StorageProviderConfig      []byte
+	LogoKey                    pgtype.Text
+	Website                    pgtype.Text
+	UpdatedAt                  pgtype.Timestamptz
+	CreatedAt                  pgtype.Timestamptz
+	TranscriptionCeiling       string
+	TranscriptionDefaultMode   string
+	ProviderPolicyVersion      string
+	RecordingRetentionSeconds  int64
+	TranscriptRetentionSeconds int64
+	SourceWindowSeconds        int64
+}
+
+func tenantArtifactPolicy(tenant tenantRecord) artifactpolicy.TenantPolicy {
+	ceiling := artifactpolicy.TranscriptionMode(tenant.TranscriptionCeiling)
+	if ceiling == "" {
+		ceiling = artifactpolicy.TranscriptionDisabled
+	}
+	defaultMode := artifactpolicy.TranscriptionMode(tenant.TranscriptionDefaultMode)
+	if defaultMode == "" {
+		defaultMode = artifactpolicy.TranscriptionDisabled
+	}
+	return artifactpolicy.TenantPolicy{
+		TranscriptionCeiling:      ceiling,
+		TranscriptionDefault:      defaultMode,
+		ProviderPolicyVersion:     tenant.ProviderPolicyVersion,
+		RecordingRetention:        time.Duration(tenant.RecordingRetentionSeconds) * time.Second,
+		TranscriptRetention:       time.Duration(tenant.TranscriptRetentionSeconds) * time.Second,
+		TranscriptionSourceWindow: time.Duration(tenant.SourceWindowSeconds) * time.Second,
+	}
 }
 
 func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:                       row.ID,
-		Name:                     row.Name,
-		DefaultRegion:            row.DefaultRegion,
-		DefaultMediaPlane:        row.DefaultMediaPlane,
-		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
-		AiProviderConfig:         row.AiProviderConfig,
-		StorageProviderConfig:    row.StorageProviderConfig,
-		LogoKey:                  row.LogoKey,
-		Website:                  row.Website,
-		UpdatedAt:                row.UpdatedAt,
-		CreatedAt:                row.CreatedAt,
+		ID:                         row.ID,
+		Name:                       row.Name,
+		DefaultRegion:              row.DefaultRegion,
+		DefaultMediaPlane:          row.DefaultMediaPlane,
+		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
+		AiProviderConfig:           row.AiProviderConfig,
+		StorageProviderConfig:      row.StorageProviderConfig,
+		LogoKey:                    row.LogoKey,
+		Website:                    row.Website,
+		TranscriptionCeiling:       row.TranscriptionCeiling,
+		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		ProviderPolicyVersion:      row.ProviderPolicyVersion,
+		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
+		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,
+		SourceWindowSeconds:        row.SourceWindowSeconds,
+		UpdatedAt:                  row.UpdatedAt,
+		CreatedAt:                  row.CreatedAt,
 	}
 }
 
 func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:                       row.ID,
-		Name:                     row.Name,
-		DefaultRegion:            row.DefaultRegion,
-		DefaultMediaPlane:        row.DefaultMediaPlane,
-		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
-		AiProviderConfig:         row.AiProviderConfig,
-		StorageProviderConfig:    row.StorageProviderConfig,
-		LogoKey:                  row.LogoKey,
-		Website:                  row.Website,
-		UpdatedAt:                row.UpdatedAt,
-		CreatedAt:                row.CreatedAt,
+		ID:                         row.ID,
+		Name:                       row.Name,
+		DefaultRegion:              row.DefaultRegion,
+		DefaultMediaPlane:          row.DefaultMediaPlane,
+		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
+		AiProviderConfig:           row.AiProviderConfig,
+		StorageProviderConfig:      row.StorageProviderConfig,
+		LogoKey:                    row.LogoKey,
+		Website:                    row.Website,
+		TranscriptionCeiling:       row.TranscriptionCeiling,
+		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		ProviderPolicyVersion:      row.ProviderPolicyVersion,
+		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
+		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,
+		SourceWindowSeconds:        row.SourceWindowSeconds,
+		UpdatedAt:                  row.UpdatedAt,
+		CreatedAt:                  row.CreatedAt,
 	}
 }
 
 func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 	return tenantRecord{
-		ID:                       row.ID,
-		Name:                     row.Name,
-		DefaultRegion:            row.DefaultRegion,
-		DefaultMediaPlane:        row.DefaultMediaPlane,
-		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
-		AiProviderConfig:         row.AiProviderConfig,
-		StorageProviderConfig:    row.StorageProviderConfig,
-		LogoKey:                  row.LogoKey,
-		Website:                  row.Website,
-		UpdatedAt:                row.UpdatedAt,
-		CreatedAt:                row.CreatedAt,
+		ID:                         row.ID,
+		Name:                       row.Name,
+		DefaultRegion:              row.DefaultRegion,
+		DefaultMediaPlane:          row.DefaultMediaPlane,
+		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
+		AiProviderConfig:           row.AiProviderConfig,
+		StorageProviderConfig:      row.StorageProviderConfig,
+		LogoKey:                    row.LogoKey,
+		Website:                    row.Website,
+		TranscriptionCeiling:       row.TranscriptionCeiling,
+		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		ProviderPolicyVersion:      row.ProviderPolicyVersion,
+		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
+		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,
+		SourceWindowSeconds:        row.SourceWindowSeconds,
+		UpdatedAt:                  row.UpdatedAt,
+		CreatedAt:                  row.CreatedAt,
 	}
 }
 
 func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:                       row.ID,
-		Name:                     row.Name,
-		DefaultRegion:            row.DefaultRegion,
-		DefaultMediaPlane:        row.DefaultMediaPlane,
-		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
-		AiProviderConfig:         row.AiProviderConfig,
-		StorageProviderConfig:    row.StorageProviderConfig,
-		LogoKey:                  row.LogoKey,
-		Website:                  row.Website,
-		UpdatedAt:                row.UpdatedAt,
-		CreatedAt:                row.CreatedAt,
+		ID:                         row.ID,
+		Name:                       row.Name,
+		DefaultRegion:              row.DefaultRegion,
+		DefaultMediaPlane:          row.DefaultMediaPlane,
+		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
+		AiProviderConfig:           row.AiProviderConfig,
+		StorageProviderConfig:      row.StorageProviderConfig,
+		LogoKey:                    row.LogoKey,
+		Website:                    row.Website,
+		TranscriptionCeiling:       row.TranscriptionCeiling,
+		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		ProviderPolicyVersion:      row.ProviderPolicyVersion,
+		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
+		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,
+		SourceWindowSeconds:        row.SourceWindowSeconds,
+		UpdatedAt:                  row.UpdatedAt,
+		CreatedAt:                  row.CreatedAt,
+	}
+}
+
+func optionalTenantInt8(value tenants.OptionalInt64) pgtype.Int8 {
+	if !value.Set || value.Value == nil {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: *value.Value, Valid: true}
+}
+
+func artifactPolicyMutationError(err error) error {
+	var postgresError *pgconn.PgError
+	if !errors.As(err, &postgresError) {
+		return nil
+	}
+	switch postgresError.ConstraintName {
+	case "tenant_artifact_policies_default_ceiling_check":
+		return artifactpolicy.ErrDefaultExceedsCeiling
+	case "tenant_artifact_policies_ceiling_check", "tenant_artifact_policies_default_check":
+		return artifactpolicy.ErrInvalidTranscriptionMode
+	case "tenant_artifact_policies_recording_retention_check", "tenant_artifact_policies_transcript_retention_check":
+		return artifactpolicy.ErrInvalidRetention
+	case "tenant_artifact_policies_source_window_check":
+		return artifactpolicy.ErrInvalidSourceWindow
+	case "tenant_artifact_policies_provider_policy_check":
+		return artifactpolicy.ErrMissingProviderPolicy
+	default:
+		return nil
 	}
 }
 

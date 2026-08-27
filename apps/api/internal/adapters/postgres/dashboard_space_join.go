@@ -40,10 +40,14 @@ func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes
 			if idErr != nil {
 				return idErr
 			}
+			artifactPolicy, policyErr := resolveArtifactPolicyDocument(ctx, queries, input.TenantID, space)
+			if policyErr != nil {
+				return fmt.Errorf("resolve dashboard Episode Artifact policy: %w", policyErr)
+			}
 			deadline := time.Now().UTC().Truncate(time.Millisecond).Add(time.Duration(space.DefaultEpisodeDurationSeconds) * time.Second)
 			episode, err = queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{
 				ID: uuid(id), TenantID: uuid(input.TenantID), SpaceID: space.ID,
-				CreatedByUserID: uuid(input.AccountID), DeadlineAt: timestamptz(&deadline),
+				CreatedByUserID: uuid(input.AccountID), DeadlineAt: timestamptz(&deadline), ArtifactPolicy: artifactPolicy,
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
 				return episodes.ErrSpaceNotFound

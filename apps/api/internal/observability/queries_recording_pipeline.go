@@ -8,6 +8,13 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 )
 
+func (q operationQuerier) AuthorizeRecordingArtifactReplay(ctx context.Context, arg sqlc.AuthorizeRecordingArtifactReplayParams) (bool, error) {
+	startedAt := time.Now()
+	authorized, err := q.next.AuthorizeRecordingArtifactReplay(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "AuthorizeRecordingArtifactReplay", startedAt, err)
+	return authorized, err
+}
+
 func (q operationQuerier) ClaimRecordingJob(ctx context.Context, arg sqlc.ClaimRecordingJobParams) (sqlc.ClaimRecordingJobRow, error) {
 	startedAt := time.Now()
 	job, err := q.next.ClaimRecordingJob(ctx, arg)
@@ -71,6 +78,27 @@ func (q operationQuerier) GetRecordingArtifact(ctx context.Context, arg sqlc.Get
 	return artifact, err
 }
 
+func (q operationQuerier) GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (sqlc.RecordingCapturePlan, error) {
+	startedAt := time.Now()
+	plan, err := q.next.GetLatestRecordingCapturePlan(ctx, planHandle)
+	LogOperation(ctx, q.logger, "db.query", "GetLatestRecordingCapturePlan", startedAt, err)
+	return plan, err
+}
+
+func (q operationQuerier) GetRecordingCapturePlanSource(ctx context.Context, arg sqlc.GetRecordingCapturePlanSourceParams) (sqlc.GetRecordingCapturePlanSourceRow, error) {
+	startedAt := time.Now()
+	source, err := q.next.GetRecordingCapturePlanSource(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetRecordingCapturePlanSource", startedAt, err)
+	return source, err
+}
+
+func (q operationQuerier) GetRecordingJobAttemptAuthorityByClaimRequest(ctx context.Context, claimRequestID pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error) {
+	startedAt := time.Now()
+	authority, err := q.next.GetRecordingJobAttemptAuthorityByClaimRequest(ctx, claimRequestID)
+	LogOperation(ctx, q.logger, "db.query", "GetRecordingJobAttemptAuthorityByClaimRequest", startedAt, err)
+	return authority, err
+}
+
 func (q operationQuerier) GetRecordingPipeline(ctx context.Context, arg sqlc.GetRecordingPipelineParams) (sqlc.RecordingPipeline, error) {
 	startedAt := time.Now()
 	pipeline, err := q.next.GetRecordingPipeline(ctx, arg)
@@ -113,11 +141,25 @@ func (q operationQuerier) HeartbeatRecordingJob(ctx context.Context, arg sqlc.He
 	return job, err
 }
 
-func (q operationQuerier) InsertRecordingBundle(ctx context.Context, arg sqlc.InsertRecordingBundleParams) (sqlc.RecordingBundle, error) {
+func (q operationQuerier) InsertRecordingBundle(ctx context.Context, arg sqlc.InsertRecordingBundleParams) (sqlc.InsertRecordingBundleRow, error) {
 	startedAt := time.Now()
 	bundle, err := q.next.InsertRecordingBundle(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "InsertRecordingBundle", startedAt, err)
 	return bundle, err
+}
+
+func (q operationQuerier) InsertRecordingCapturePlan(ctx context.Context, arg sqlc.InsertRecordingCapturePlanParams) (sqlc.RecordingCapturePlan, error) {
+	startedAt := time.Now()
+	plan, err := q.next.InsertRecordingCapturePlan(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "InsertRecordingCapturePlan", startedAt, err)
+	return plan, err
+}
+
+func (q operationQuerier) InsertRecordingJobAttemptAuthority(ctx context.Context, arg sqlc.InsertRecordingJobAttemptAuthorityParams) (sqlc.RecordingJobAttemptAuthority, error) {
+	startedAt := time.Now()
+	authority, err := q.next.InsertRecordingJobAttemptAuthority(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "InsertRecordingJobAttemptAuthority", startedAt, err)
+	return authority, err
 }
 
 func (q operationQuerier) ListRecordingDeadLetters(ctx context.Context, arg sqlc.ListRecordingDeadLettersParams) ([]sqlc.RecordingJob, error) {
@@ -132,6 +174,20 @@ func (q operationQuerier) ListRecordingJobsForReconciliation(ctx context.Context
 	jobs, err := q.next.ListRecordingJobsForReconciliation(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "ListRecordingJobsForReconciliation", startedAt, err)
 	return jobs, err
+}
+
+func (q operationQuerier) LockRecordingJobClaimRequest(ctx context.Context, claimRequestID string) error {
+	startedAt := time.Now()
+	err := q.next.LockRecordingJobClaimRequest(ctx, claimRequestID)
+	LogOperation(ctx, q.logger, "db.query", "LockRecordingJobClaimRequest", startedAt, err)
+	return err
+}
+
+func (q operationQuerier) LockRecordingCapturePlanHandle(ctx context.Context, planHandle string) error {
+	startedAt := time.Now()
+	err := q.next.LockRecordingCapturePlanHandle(ctx, planHandle)
+	LogOperation(ctx, q.logger, "db.query", "LockRecordingCapturePlanHandle", startedAt, err)
+	return err
 }
 
 func (q operationQuerier) RecoverExpiredRecordingJobs(ctx context.Context) ([]sqlc.RecoverExpiredRecordingJobsRow, error) {
@@ -153,4 +209,130 @@ func (q operationQuerier) UpsertRecordingPoolHealth(ctx context.Context, arg sql
 	health, err := q.next.UpsertRecordingPoolHealth(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "UpsertRecordingPoolHealth", startedAt, err)
 	return health, err
+}
+
+func (q operationQuerier) AdvanceRecordingCaptureCommandSequence(ctx context.Context, arg sqlc.AdvanceRecordingCaptureCommandSequenceParams) (int64, error) {
+	startedAt := time.Now()
+	sequence, err := q.next.AdvanceRecordingCaptureCommandSequence(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "AdvanceRecordingCaptureCommandSequence", startedAt, err)
+	return sequence, err
+}
+
+func (q operationQuerier) ApplyRecordingCaptureConnectionProjection(ctx context.Context, arg sqlc.ApplyRecordingCaptureConnectionProjectionParams) (sqlc.RecordingCaptureConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.ApplyRecordingCaptureConnectionProjection(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ApplyRecordingCaptureConnectionProjection", startedAt, err)
+	return connection, err
+}
+
+func (q operationQuerier) ClaimRecordingCaptureCommand(ctx context.Context, arg sqlc.ClaimRecordingCaptureCommandParams) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.ClaimRecordingCaptureCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ClaimRecordingCaptureCommand", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) ClearRecordingCaptureConnectionActiveCommand(ctx context.Context, arg sqlc.ClearRecordingCaptureConnectionActiveCommandParams) (int64, error) {
+	startedAt := time.Now()
+	rows, err := q.next.ClearRecordingCaptureConnectionActiveCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ClearRecordingCaptureConnectionActiveCommand", startedAt, err)
+	return rows, err
+}
+
+func (q operationQuerier) CompleteRecordingCaptureCommand(ctx context.Context, arg sqlc.CompleteRecordingCaptureCommandParams) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.CompleteRecordingCaptureCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CompleteRecordingCaptureCommand", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) FailRecordingCaptureCommand(ctx context.Context, arg sqlc.FailRecordingCaptureCommandParams) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.FailRecordingCaptureCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "FailRecordingCaptureCommand", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg sqlc.GetFirstOpenRecordingCaptureCommandParams) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.GetFirstOpenRecordingCaptureCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetFirstOpenRecordingCaptureCommand", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) GetRecordingCaptureCommand(ctx context.Context, arg sqlc.GetRecordingCaptureCommandParams) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.GetRecordingCaptureCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetRecordingCaptureCommand", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) GetRecordingCaptureConnection(ctx context.Context, arg sqlc.GetRecordingCaptureConnectionParams) (sqlc.RecordingCaptureConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.GetRecordingCaptureConnection(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetRecordingCaptureConnection", startedAt, err)
+	return connection, err
+}
+
+func (q operationQuerier) GetRecordingCaptureSignalingAuthority(ctx context.Context, arg sqlc.GetRecordingCaptureSignalingAuthorityParams) (sqlc.GetRecordingCaptureSignalingAuthorityRow, error) {
+	startedAt := time.Now()
+	authority, err := q.next.GetRecordingCaptureSignalingAuthority(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetRecordingCaptureSignalingAuthority", startedAt, err)
+	return authority, err
+}
+
+func (q operationQuerier) LockRecordingCaptureSignalingAuthority(ctx context.Context, arg sqlc.LockRecordingCaptureSignalingAuthorityParams) (sqlc.LockRecordingCaptureSignalingAuthorityRow, error) {
+	startedAt := time.Now()
+	authority, err := q.next.LockRecordingCaptureSignalingAuthority(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "LockRecordingCaptureSignalingAuthority", startedAt, err)
+	return authority, err
+}
+
+func (q operationQuerier) InsertRecordingCaptureCommand(ctx context.Context, arg sqlc.InsertRecordingCaptureCommandParams) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.InsertRecordingCaptureCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "InsertRecordingCaptureCommand", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) InsertRecordingCaptureConnection(ctx context.Context, arg sqlc.InsertRecordingCaptureConnectionParams) (sqlc.RecordingCaptureConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.InsertRecordingCaptureConnection(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "InsertRecordingCaptureConnection", startedAt, err)
+	return connection, err
+}
+
+func (q operationQuerier) LockRecordingCaptureConnection(ctx context.Context, arg sqlc.LockRecordingCaptureConnectionParams) (sqlc.RecordingCaptureConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.LockRecordingCaptureConnection(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "LockRecordingCaptureConnection", startedAt, err)
+	return connection, err
+}
+
+func (q operationQuerier) MarkRecordingCaptureCommandAmbiguous(ctx context.Context, commandID int64) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.MarkRecordingCaptureCommandAmbiguous(ctx, commandID)
+	LogOperation(ctx, q.logger, "db.query", "MarkRecordingCaptureCommandAmbiguous", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) ReleaseRecordingCaptureCommand(ctx context.Context, arg sqlc.ReleaseRecordingCaptureCommandParams) (sqlc.RecordingCaptureCommand, error) {
+	startedAt := time.Now()
+	command, err := q.next.ReleaseRecordingCaptureCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ReleaseRecordingCaptureCommand", startedAt, err)
+	return command, err
+}
+
+func (q operationQuerier) ReserveRecordingCaptureProviderCall(ctx context.Context) (pgtype.Timestamptz, error) {
+	startedAt := time.Now()
+	notBefore, err := q.next.ReserveRecordingCaptureProviderCall(ctx)
+	LogOperation(ctx, q.logger, "db.query", "ReserveRecordingCaptureProviderCall", startedAt, err)
+	return notBefore, err
+}
+
+func (q operationQuerier) SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg sqlc.SetRecordingCaptureConnectionActiveCommandParams) (int64, error) {
+	startedAt := time.Now()
+	rows, err := q.next.SetRecordingCaptureConnectionActiveCommand(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "SetRecordingCaptureConnectionActiveCommand", startedAt, err)
+	return rows, err
 }

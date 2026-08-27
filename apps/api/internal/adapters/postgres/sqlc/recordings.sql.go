@@ -43,6 +43,11 @@ returning
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at
@@ -79,6 +84,11 @@ func (q *Queries) CreateRecording(ctx context.Context, arg CreateRecordingParams
 		&i.Status,
 		&i.StorageProvider,
 		&i.StorageKey,
+		&i.StorageContentType,
+		&i.StorageSize,
+		&i.StorageChecksum,
+		&i.DurationMillis,
+		&i.CompletedAt,
 		&i.Metadata,
 		&i.UpdatedAt,
 		&i.CreatedAt,
@@ -95,6 +105,11 @@ select
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at
@@ -120,6 +135,11 @@ func (q *Queries) GetTenantRecording(ctx context.Context, arg GetTenantRecording
 		&i.Status,
 		&i.StorageProvider,
 		&i.StorageKey,
+		&i.StorageContentType,
+		&i.StorageSize,
+		&i.StorageChecksum,
+		&i.DurationMillis,
+		&i.CompletedAt,
 		&i.Metadata,
 		&i.UpdatedAt,
 		&i.CreatedAt,
@@ -136,6 +156,11 @@ select
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at
@@ -190,6 +215,11 @@ func (q *Queries) ListTenantRecordings(ctx context.Context, arg ListTenantRecord
 			&i.Status,
 			&i.StorageProvider,
 			&i.StorageKey,
+			&i.StorageContentType,
+			&i.StorageSize,
+			&i.StorageChecksum,
+			&i.DurationMillis,
+			&i.CompletedAt,
 			&i.Metadata,
 			&i.UpdatedAt,
 			&i.CreatedAt,
@@ -202,6 +232,89 @@ func (q *Queries) ListTenantRecordings(ctx context.Context, arg ListTenantRecord
 		return nil, err
 	}
 	return items, nil
+}
+
+const materializeRecording = `-- name: MaterializeRecording :one
+insert into recordings (
+    id,
+    tenant_id,
+    space_id,
+    episode_id,
+    status,
+    storage_provider,
+    metadata
+) select
+    $1,
+    episodes.tenant_id,
+    episodes.space_id,
+    episodes.id,
+    'pending',
+    'r2',
+    $2
+from episodes
+where
+    episodes.tenant_id = $3
+    and episodes.space_id = $4
+    and episodes.id = $5
+on conflict (id) do update
+set updated_at = recordings.updated_at
+where recordings.tenant_id = excluded.tenant_id
+  and recordings.space_id = excluded.space_id
+  and recordings.episode_id = excluded.episode_id
+  and recordings.status in ('pending', 'processing')
+returning
+    id,
+    tenant_id,
+    space_id,
+    episode_id,
+    status,
+    storage_provider,
+    storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
+    metadata,
+    updated_at,
+    created_at
+`
+
+type MaterializeRecordingParams struct {
+	ID        pgtype.UUID `json:"id"`
+	Metadata  []byte      `json:"metadata"`
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+}
+
+func (q *Queries) MaterializeRecording(ctx context.Context, arg MaterializeRecordingParams) (Recording, error) {
+	row := q.db.QueryRow(ctx, materializeRecording,
+		arg.ID,
+		arg.Metadata,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+	)
+	var i Recording
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.Status,
+		&i.StorageProvider,
+		&i.StorageKey,
+		&i.StorageContentType,
+		&i.StorageSize,
+		&i.StorageChecksum,
+		&i.DurationMillis,
+		&i.CompletedAt,
+		&i.Metadata,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateTenantRecording = `-- name: UpdateTenantRecording :one
@@ -235,6 +348,11 @@ returning
     status,
     storage_provider,
     storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
     metadata,
     updated_at,
     created_at
@@ -275,6 +393,11 @@ func (q *Queries) UpdateTenantRecording(ctx context.Context, arg UpdateTenantRec
 		&i.Status,
 		&i.StorageProvider,
 		&i.StorageKey,
+		&i.StorageContentType,
+		&i.StorageSize,
+		&i.StorageChecksum,
+		&i.DurationMillis,
+		&i.CompletedAt,
 		&i.Metadata,
 		&i.UpdatedAt,
 		&i.CreatedAt,

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -140,6 +141,10 @@ func (r SpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID,
 		MaximumEpisodeDurationSeconds:    optionalInt32(input.MaximumEpisodeDurationSeconds),
 		LingerWindowSecondsSet:           input.LingerWindowSeconds.Set,
 		LingerWindowSeconds:              optionalInt32(input.LingerWindowSeconds),
+		RecordingPolicySet:               input.RecordingPolicy.Set,
+		RecordingPolicy:                  optionalRecordingPolicy(input.RecordingPolicy),
+		TranscriptionPolicySet:           input.TranscriptionPolicy.Set,
+		TranscriptionPolicy:              optionalTranscriptionPolicy(input.TranscriptionPolicy),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return spaces.Space{}, spaces.ErrSpaceNotFound
@@ -205,6 +210,8 @@ func createSpaceParams(input spaces.CreateSpaceInput) sqlc.CreateSpaceParams {
 		Metadata:                      jsonBytes(input.Metadata),
 		RecurringPolicy:               jsonBytes(input.RecurringPolicy),
 		AdmissionPolicy:               jsonBytes(input.AdmissionPolicy),
+		RecordingPolicy:               policyText(string(input.RecordingPolicy), input.RecordingPolicySet),
+		TranscriptionPolicy:           policyText(string(input.TranscriptionPolicy), input.TranscriptionPolicySet),
 		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           input.LingerWindowSeconds,
@@ -239,6 +246,27 @@ func optionalInt32(value spaces.OptionalInt32) int32 {
 	return *value.Value
 }
 
+func optionalRecordingPolicy(value spaces.OptionalRecordingPolicy) string {
+	if !value.Set || value.Value == nil {
+		return ""
+	}
+	return string(*value.Value)
+}
+
+func optionalTranscriptionPolicy(value spaces.OptionalTranscriptionPolicy) string {
+	if !value.Set || value.Value == nil {
+		return ""
+	}
+	return string(*value.Value)
+}
+
+func policyText(value string, set bool) pgtype.Text {
+	if !set {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: value, Valid: true}
+}
+
 func mapSpace(space sqlc.Space) spaces.Space {
 	return spaces.Space{
 		ID:                            utilities.IDFromBytes(space.ID.Bytes),
@@ -246,6 +274,8 @@ func mapSpace(space sqlc.Space) spaces.Space {
 		TenantID:                      utilities.IDFromBytes(space.TenantID.Bytes),
 		Slug:                          space.Slug,
 		MediaPlane:                    space.MediaPlane,
+		RecordingPolicy:               artifactpolicy.RecordingMode(space.RecordingPolicy),
+		TranscriptionPolicy:           artifactpolicy.TranscriptionMode(space.TranscriptionPolicy),
 		Metadata:                      jsonRaw(space.Metadata),
 		RecurringPolicy:               jsonRaw(space.RecurringPolicy),
 		AdmissionPolicy:               jsonRaw(space.AdmissionPolicy),
@@ -266,6 +296,8 @@ func mapCreatedSpace(space sqlc.CreateSpaceRow) spaces.Space {
 		TenantID:                      utilities.IDFromBytes(space.TenantID.Bytes),
 		Slug:                          space.Slug,
 		MediaPlane:                    space.MediaPlane,
+		RecordingPolicy:               artifactpolicy.RecordingMode(space.RecordingPolicy),
+		TranscriptionPolicy:           artifactpolicy.TranscriptionMode(space.TranscriptionPolicy),
 		Metadata:                      jsonRaw(space.Metadata),
 		RecurringPolicy:               jsonRaw(space.RecurringPolicy),
 		AdmissionPolicy:               jsonRaw(space.AdmissionPolicy),

@@ -11,9 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -378,6 +380,9 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 			"items": map[string]any{"type": "string"},
 		}
 	}
+	if isOptionalInt64(t) {
+		return map[string]any{"type": []string{"integer", "null"}}
+	}
 	if isOptionalTimeRequest(t) {
 		return nullableSchema(timestampSchema())
 	}
@@ -552,6 +557,16 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 	if schemaName == "JourneyEventBatch" && fieldName == "events" {
 		schema["maxItems"] = journeys.MaxEventsPerBatch
 	}
+	if schemaName == "UpdateTenantRequest" {
+		switch fieldName {
+		case "recording_retention_seconds", "transcript_retention_seconds":
+			schema["minimum"] = 0
+			schema["maximum"] = artifactpolicy.MaximumRetentionSeconds
+		case "transcription_source_window_seconds":
+			schema["minimum"] = 0
+			schema["maximum"] = int64(artifactpolicy.MaximumSourceWindow / time.Second)
+		}
+	}
 	return schema
 }
 
@@ -630,6 +645,7 @@ func isOptionalRequestField(t reflect.Type) bool {
 		isOptionalString(t) ||
 		isOptionalJSON(t) ||
 		isOptionalStrings(t) ||
+		isOptionalInt64(t) ||
 		isOptionalTimeRequest(t)
 }
 
@@ -642,6 +658,9 @@ func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bo
 	}
 	if isOptionalStrings(t) {
 		return false
+	}
+	if isOptionalInt64(t) {
+		return true
 	}
 	return isOptionalJSON(t) || isOptionalTimeRequest(t)
 }
@@ -668,6 +687,10 @@ func isOptionalJSON(t reflect.Type) bool {
 
 func isOptionalStrings(t reflect.Type) bool {
 	return dereference(t) == reflect.TypeOf(transcripts.OptionalStrings{})
+}
+
+func isOptionalInt64(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(tenants.OptionalInt64{})
 }
 
 func isRawJSON(t reflect.Type) bool {

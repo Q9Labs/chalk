@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -46,14 +47,18 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 			return fmt.Errorf("reserve episode create request: %w", err)
 		}
 
+		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return episodes.ErrSpaceNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock episode space policy: %w", err)
+		}
+		artifactPolicy, err := resolveArtifactPolicyDocument(ctx, queries, input.TenantID, space)
+		if err != nil {
+			return fmt.Errorf("resolve episode Artifact policy: %w", err)
+		}
 		if input.DeadlineAt.IsZero() {
-			space, err := queries.GetTenantSpace(ctx, sqlc.GetTenantSpaceParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return episodes.ErrSpaceNotFound
-			}
-			if err != nil {
-				return fmt.Errorf("read episode space policy: %w", err)
-			}
 			input.DeadlineAt = timestamp(request.CreatedAt).UTC().Truncate(time.Millisecond).Add(time.Duration(space.DefaultEpisodeDurationSeconds) * time.Second)
 		} else {
 			input.DeadlineAt = input.DeadlineAt.UTC().Truncate(time.Millisecond)
@@ -62,7 +67,8 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 		episode, err := queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{
 			ID: uuid(input.ID), Metadata: jsonBytes(input.Metadata), CreatedByUserID: uuid(input.CreatedByUserID),
 			StartedAt: timestamptz(input.StartedAt), DeadlineAt: timestamptz(&input.DeadlineAt),
-			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID),
+			ArtifactPolicy: artifactPolicy,
+			TenantID:       uuid(input.TenantID), SpaceID: uuid(input.SpaceID),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return episodes.ErrSpaceNotFound
@@ -118,6 +124,37 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 	}
 	commitMetric.Record(ctx)
 	return result, nil
+}
+
+func resolveArtifactPolicyDocument(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, space sqlc.Space) ([]byte, error) {
+	policy, err := queries.LockTenantArtifactPolicyForUpdate(ctx, uuid(tenantID))
+	if err != nil {
+		return nil, err
+	}
+	tenantPolicy := artifactpolicy.TenantPolicy{
+		TranscriptionCeiling:      artifactpolicy.TranscriptionMode(policy.TranscriptionCeiling),
+		TranscriptionDefault:      artifactpolicy.TranscriptionMode(policy.TranscriptionDefaultMode),
+		ProviderPolicyVersion:     policy.ProviderPolicyVersion,
+		RecordingRetention:        time.Duration(policy.RecordingRetentionSeconds) * time.Second,
+		TranscriptRetention:       time.Duration(policy.TranscriptRetentionSeconds) * time.Second,
+		TranscriptionSourceWindow: time.Duration(policy.SourceWindowSeconds) * time.Second,
+	}
+	return artifactPolicyDocument(tenantPolicy, artifactpolicy.SpacePolicy{
+		Recording:     artifactpolicy.RecordingMode(space.RecordingPolicy),
+		Transcription: artifactpolicy.TranscriptionMode(space.TranscriptionPolicy),
+	})
+}
+
+func artifactPolicyDocument(tenantPolicy artifactpolicy.TenantPolicy, spacePolicy artifactpolicy.SpacePolicy) ([]byte, error) {
+	snapshot, err := artifactpolicy.Resolve(tenantPolicy, spacePolicy)
+	if err != nil {
+		return nil, err
+	}
+	document, err := snapshot.Document()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(document)
 }
 
 func episodeAlreadyExists(err error) bool {

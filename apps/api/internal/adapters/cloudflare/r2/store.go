@@ -97,10 +97,12 @@ func (s Store) PutObject(ctx context.Context, input objectstorage.PutObjectInput
 	}
 
 	return objectstorage.Object{
-		Key:         input.Key,
-		ETag:        stringValue(output.ETag),
-		ContentType: input.ContentType,
-		Size:        input.ContentLength,
+		Key:            input.Key,
+		ETag:           stringValue(output.ETag),
+		VersionID:      stringValue(output.VersionId),
+		ChecksumSHA256: stringValue(output.ChecksumSHA256),
+		ContentType:    input.ContentType,
+		Size:           input.ContentLength,
 	}, nil
 }
 
@@ -122,10 +124,12 @@ func (s Store) GetObject(ctx context.Context, key string) (objectstorage.ObjectR
 
 	return objectstorage.ObjectReader{
 		Object: objectstorage.Object{
-			Key:         key,
-			ETag:        stringValue(output.ETag),
-			ContentType: stringValue(output.ContentType),
-			Size:        int64Value(output.ContentLength),
+			Key:            key,
+			ETag:           stringValue(output.ETag),
+			VersionID:      stringValue(output.VersionId),
+			ChecksumSHA256: stringValue(output.ChecksumSHA256),
+			ContentType:    stringValue(output.ContentType),
+			Size:           int64Value(output.ContentLength),
 		},
 		Body:         output.Body,
 		LastModified: timeValue(output.LastModified),
@@ -148,10 +152,12 @@ func (s Store) InspectObject(ctx context.Context, key string) (objectstorage.Obj
 
 	return objectstorage.ObjectFacts{
 		Object: objectstorage.Object{
-			Key:         key,
-			ETag:        stringValue(output.ETag),
-			ContentType: stringValue(output.ContentType),
-			Size:        int64Value(output.ContentLength),
+			Key:            key,
+			ETag:           stringValue(output.ETag),
+			VersionID:      stringValue(output.VersionId),
+			ChecksumSHA256: stringValue(output.ChecksumSHA256),
+			ContentType:    stringValue(output.ContentType),
+			Size:           int64Value(output.ContentLength),
 		},
 		LastModified: timeValue(output.LastModified),
 		Metadata:     output.Metadata,

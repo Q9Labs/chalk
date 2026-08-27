@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -25,6 +27,8 @@ var (
 		Scope:       authentication.ScopeTenantsWrite,
 		MinimumRole: memberships.RoleCollaborator,
 	}
+	apiErrorInvalidTenantArtifactPolicy  = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_artifact_policy", Message: "Invalid Tenant Artifact policy"}
+	apiErrorTenantArtifactPolicyConflict = APIError{Status: http.StatusConflict, Code: "tenant.artifact_policy_conflict", Message: "Tenant Artifact policy conflicts with its ceiling"}
 )
 
 type TenantService interface {
@@ -36,17 +40,23 @@ type TenantService interface {
 }
 
 type tenantResponse struct {
-	ID                       string  `json:"id"`
-	Name                     string  `json:"name"`
-	DefaultRegion            *string `json:"default_region"`
-	DefaultMediaPlane        *string `json:"default_media_plane"`
-	MediaPlaneProviderConfig any     `json:"media_plane_provider_config"`
-	AIProviderConfig         any     `json:"ai_provider_config"`
-	StorageProviderConfig    any     `json:"storage_provider_config"`
-	LogoKey                  *string `json:"logo_key"`
-	Website                  *string `json:"website"`
-	UpdatedAt                string  `json:"updated_at"`
-	CreatedAt                string  `json:"created_at"`
+	ID                               string                           `json:"id"`
+	Name                             string                           `json:"name"`
+	DefaultRegion                    *string                          `json:"default_region"`
+	DefaultMediaPlane                *string                          `json:"default_media_plane"`
+	MediaPlaneProviderConfig         any                              `json:"media_plane_provider_config"`
+	AIProviderConfig                 any                              `json:"ai_provider_config"`
+	StorageProviderConfig            any                              `json:"storage_provider_config"`
+	LogoKey                          *string                          `json:"logo_key"`
+	Website                          *string                          `json:"website"`
+	TranscriptionCeiling             artifactpolicy.TranscriptionMode `json:"transcription_ceiling"`
+	TranscriptionDefaultMode         artifactpolicy.TranscriptionMode `json:"transcription_default_mode"`
+	ProviderPolicyVersion            string                           `json:"provider_policy_version"`
+	RecordingRetentionSeconds        int64                            `json:"recording_retention_seconds"`
+	TranscriptRetentionSeconds       int64                            `json:"transcript_retention_seconds"`
+	TranscriptionSourceWindowSeconds int64                            `json:"transcription_source_window_seconds"`
+	UpdatedAt                        string                           `json:"updated_at"`
+	CreatedAt                        string                           `json:"created_at"`
 }
 
 type regionResponse struct {
@@ -75,14 +85,20 @@ type createTenantRequest struct {
 }
 
 type updateTenantRequest struct {
-	Name                     utilities.OptionalString `json:"name"`
-	DefaultRegion            utilities.OptionalString `json:"default_region"`
-	DefaultMediaPlane        utilities.OptionalString `json:"default_media_plane"`
-	MediaPlaneProviderConfig utilities.OptionalJSON   `json:"media_plane_provider_config"`
-	AIProviderConfig         utilities.OptionalJSON   `json:"ai_provider_config"`
-	StorageProviderConfig    utilities.OptionalJSON   `json:"storage_provider_config"`
-	LogoKey                  utilities.OptionalString `json:"logo_key"`
-	Website                  utilities.OptionalString `json:"website"`
+	Name                             utilities.OptionalString `json:"name"`
+	DefaultRegion                    utilities.OptionalString `json:"default_region"`
+	DefaultMediaPlane                utilities.OptionalString `json:"default_media_plane"`
+	MediaPlaneProviderConfig         utilities.OptionalJSON   `json:"media_plane_provider_config"`
+	AIProviderConfig                 utilities.OptionalJSON   `json:"ai_provider_config"`
+	StorageProviderConfig            utilities.OptionalJSON   `json:"storage_provider_config"`
+	LogoKey                          utilities.OptionalString `json:"logo_key"`
+	Website                          utilities.OptionalString `json:"website"`
+	TranscriptionCeiling             utilities.OptionalString `json:"transcription_ceiling"`
+	TranscriptionDefaultMode         utilities.OptionalString `json:"transcription_default_mode"`
+	ProviderPolicyVersion            utilities.OptionalString `json:"provider_policy_version"`
+	RecordingRetentionSeconds        tenants.OptionalInt64    `json:"recording_retention_seconds"`
+	TranscriptRetentionSeconds       tenants.OptionalInt64    `json:"transcript_retention_seconds"`
+	TranscriptionSourceWindowSeconds tenants.OptionalInt64    `json:"transcription_source_window_seconds"`
 }
 
 type listTenantsRequest struct {
@@ -246,6 +262,8 @@ func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) En
 			apiErrorInvalidTenantRegion,
 			apiErrorInvalidTenantField,
 			apiErrorTenantNotFound,
+			apiErrorInvalidTenantArtifactPolicy,
+			apiErrorTenantArtifactPolicyConflict,
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
@@ -343,6 +361,15 @@ func tenantServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantRegion, true
 	case errors.Is(err, tenants.ErrInvalidTenantField):
 		return apiErrorInvalidTenantField, true
+	case errors.Is(err, artifactpolicy.ErrDefaultExceedsCeiling):
+		return apiErrorTenantArtifactPolicyConflict, true
+	case errors.Is(err, artifactpolicy.ErrInvalidRecordingMode),
+		errors.Is(err, artifactpolicy.ErrInvalidTranscriptionMode),
+		errors.Is(err, artifactpolicy.ErrInvalidRetention),
+		errors.Is(err, artifactpolicy.ErrInvalidSourceWindow),
+		errors.Is(err, artifactpolicy.ErrMissingProviderPolicy),
+		errors.Is(err, tenants.ErrInvalidArtifactPolicy):
+		return apiErrorInvalidTenantArtifactPolicy, true
 	case errors.Is(err, tenants.ErrTenantNotFound):
 		return apiErrorTenantNotFound, true
 	default:
@@ -369,17 +396,23 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 
 func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 	return tenantResponse{
-		ID:                       tenant.ID.String(),
-		Name:                     tenant.Name,
-		DefaultRegion:            tenant.DefaultRegion,
-		DefaultMediaPlane:        tenant.DefaultMediaPlane,
-		MediaPlaneProviderConfig: utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
-		AIProviderConfig:         utilities.RedactJSONSecrets(tenant.AIProviderConfig),
-		StorageProviderConfig:    utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
-		LogoKey:                  tenant.LogoKey,
-		Website:                  tenant.Website,
-		UpdatedAt:                utilities.FormatTimestamp(tenant.UpdatedAt),
-		CreatedAt:                utilities.FormatTimestamp(tenant.CreatedAt),
+		ID:                               tenant.ID.String(),
+		Name:                             tenant.Name,
+		DefaultRegion:                    tenant.DefaultRegion,
+		DefaultMediaPlane:                tenant.DefaultMediaPlane,
+		MediaPlaneProviderConfig:         utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
+		AIProviderConfig:                 utilities.RedactJSONSecrets(tenant.AIProviderConfig),
+		StorageProviderConfig:            utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
+		LogoKey:                          tenant.LogoKey,
+		Website:                          tenant.Website,
+		TranscriptionCeiling:             tenant.ArtifactPolicy.TranscriptionCeiling,
+		TranscriptionDefaultMode:         tenant.ArtifactPolicy.TranscriptionDefault,
+		ProviderPolicyVersion:            tenant.ArtifactPolicy.ProviderPolicyVersion,
+		RecordingRetentionSeconds:        int64(tenant.ArtifactPolicy.RecordingRetention / time.Second),
+		TranscriptRetentionSeconds:       int64(tenant.ArtifactPolicy.TranscriptRetention / time.Second),
+		TranscriptionSourceWindowSeconds: int64(tenant.ArtifactPolicy.TranscriptionSourceWindow / time.Second),
+		UpdatedAt:                        utilities.FormatTimestamp(tenant.UpdatedAt),
+		CreatedAt:                        utilities.FormatTimestamp(tenant.CreatedAt),
 	}
 }
 
@@ -406,5 +439,13 @@ func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 		StorageProviderConfig:    r.StorageProviderConfig,
 		LogoKey:                  r.LogoKey,
 		Website:                  r.Website,
+		ArtifactPolicy: tenants.ArtifactPolicyUpdate{
+			TranscriptionCeiling:             r.TranscriptionCeiling,
+			TranscriptionDefaultMode:         r.TranscriptionDefaultMode,
+			ProviderPolicyVersion:            r.ProviderPolicyVersion,
+			RecordingRetentionSeconds:        r.RecordingRetentionSeconds,
+			TranscriptRetentionSeconds:       r.TranscriptRetentionSeconds,
+			TranscriptionSourceWindowSeconds: r.TranscriptionSourceWindowSeconds,
+		},
 	}
 }

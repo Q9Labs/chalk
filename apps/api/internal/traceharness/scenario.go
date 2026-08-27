@@ -105,6 +105,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runServicePublicInviteLifecycle(ctx)
 	case ServiceMediaPlaneDefaultResolutionScenario:
 		return runServiceMediaPlaneDefaultResolution(ctx)
+	case ServiceRecordingCaptureLifecycleScenario:
+		return runServiceRecordingCaptureLifecycle(ctx)
 	case RouteWhiteboardFileUploadScenario:
 		return runRouteWhiteboardFileUpload(ctx)
 	case RouteChatAttachmentUploadScenario:

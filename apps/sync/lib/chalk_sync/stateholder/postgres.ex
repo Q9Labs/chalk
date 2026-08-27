@@ -1112,8 +1112,18 @@ defmodule ChalkSync.Stateholder.Postgres do
             context
           )
         else
-          {:error, :overloaded} -> Postgrex.rollback(connection, {:retryable, :overloaded})
-          {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+          {:error, :overloaded} ->
+            Postgrex.rollback(connection, {:retryable, :overloaded})
+
+          {:error, :recording_policy_disabled} ->
+            %OperationDecision{
+              request_key: operation.request_key,
+              result: :terminal,
+              reason: :recording_policy_disabled
+            }
+
+          {:error, reason} ->
+            Postgrex.rollback(connection, {:error, reason})
         end
     end
   end
@@ -1144,6 +1154,7 @@ defmodule ChalkSync.Stateholder.Postgres do
         %{
           status: status,
           role_capabilities: role_capabilities,
+          artifact_policy: Map.get(snapshot, "artifact_policy"),
           deadline_at: deadline_at,
           deadline_generation: deadline_generation,
           maximum_duration_ceiling_seconds:
@@ -1221,18 +1232,24 @@ defmodule ChalkSync.Stateholder.Postgres do
     if required in allowed, do: :ok, else: {:error, :capability_denied}
   end
 
+  defp validate_internal_operation(%{name: :start_recording, payload: payload}) do
+    if system_recording_start?(payload), do: :ok, else: {:error, :invalid_internal_operation}
+  end
+
   defp validate_internal_operation(%{name: name})
        when name in [
               :admission_request_expired,
               :tenant_set_deadline,
               :tenant_end_episode,
-              :maximum_duration_expired
+              :maximum_duration_expired,
+              :recording_capture_ready,
+              :recording_capture_stopped
             ],
        do: :ok
 
   defp validate_internal_operation(_operation), do: {:error, :invalid_internal_operation}
 
-  defp prepare_operation(connection, identity, operation, _policy, state) do
+  defp prepare_operation(connection, identity, operation, policy, state) do
     case operation.name do
       name when name in [:admit_participant, :deny_admission] ->
         with {:ok, admission} <- lock_pending_admission(connection, identity.episode, operation) do
@@ -1259,7 +1276,7 @@ defmodule ChalkSync.Stateholder.Postgres do
         validate_leave_acceptance(state, target)
 
       name when name in [:start_recording, :stop_recording] ->
-        prepare_recording(connection, identity.episode, operation, state)
+        prepare_recording(connection, identity.episode, operation, policy, state)
 
       :end_episode ->
         prepare_end_operation(connection, identity.episode, nil)
@@ -1268,6 +1285,33 @@ defmodule ChalkSync.Stateholder.Postgres do
         {:error, :invalid_state}
     end
   end
+
+  defp prepare_internal_operation(
+         connection,
+         episode,
+         %{name: :start_recording} = operation,
+         policy,
+         state
+       ),
+       do: prepare_recording(connection, episode, operation, policy, state)
+
+  defp prepare_internal_operation(
+         connection,
+         episode,
+         %{name: :recording_capture_ready} = operation,
+         _policy,
+         _state
+       ),
+       do: prepare_recording_capture_ready(connection, episode, operation)
+
+  defp prepare_internal_operation(
+         connection,
+         episode,
+         %{name: :recording_capture_stopped} = operation,
+         _policy,
+         _state
+       ),
+       do: prepare_recording_capture_stopped(connection, episode, operation)
 
   defp prepare_internal_operation(
          connection,
@@ -1414,22 +1458,44 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp validate_leave_acceptance(_state, _target), do: {:error, :participant_inactive}
 
-  defp prepare_recording(_connection, _episode, %{name: :start_recording} = operation, state) do
+  defp prepare_recording(
+         _connection,
+         episode,
+         %{name: :start_recording} = operation,
+         policy,
+         state
+       ) do
     recording_id = operation.payload["recordingId"]
 
-    if is_nil(state.recording) or state.recording["status"] in ["stopped", "failed"] do
-      {:ok, %{recording_id: recording_id, recording_action: :start, target: nil, sources: []}}
-    else
-      {:error, :recording_in_progress}
+    with :ok <- validate_recording_policy(policy, operation),
+         {:ok, recording_reservation} <- derive_recording_reservation(episode, policy) do
+      if is_nil(state.recording) or state.recording["status"] in ["stopped", "failed"] do
+        {:ok,
+         %{
+           recording_id: recording_id,
+           recording_action: :start,
+           recording_reservation: recording_reservation,
+           target: nil,
+           sources: []
+         }}
+      else
+        {:error, :recording_in_progress}
+      end
     end
   end
 
-  defp prepare_recording(connection, episode, %{name: :stop_recording} = operation, state) do
+  defp prepare_recording(
+         connection,
+         episode,
+         %{name: :stop_recording} = operation,
+         _policy,
+         state
+       ) do
     recording_id = operation.payload["recordingId"]
     params = episode_params(episode) ++ [uuid(recording_id)]
 
     case Postgrex.query!(connection, SQL.lock_recording(), params).rows do
-      [["recording", _generation, _start_id, nil]] ->
+      [["recording", _generation, _metadata, _start_id, nil]] ->
         if state.recording == %{
              "recording_id" => recording_id,
              "status" => "recording",
@@ -1443,6 +1509,174 @@ defmodule ChalkSync.Stateholder.Postgres do
       _ ->
         {:error, :invalid_target}
     end
+  end
+
+  defp validate_recording_policy(%{artifact_policy: artifact_policy}, operation)
+       when is_map(artifact_policy) do
+    with "episode_config.v2" <- artifact_policy["schema_version"],
+         %{"mode" => mode} <- artifact_policy["recording"],
+         true <- mode in ["manual", "automatic"] do
+      if system_recording_start?(operation.payload) and mode != "automatic",
+        do: {:error, :recording_policy_disabled},
+        else: :ok
+    else
+      _ -> {:error, :recording_policy_disabled}
+    end
+  end
+
+  defp validate_recording_policy(_policy, _operation), do: {:error, :recording_policy_disabled}
+
+  defp derive_recording_reservation(episode, %{
+         artifact_policy: artifact_policy,
+         deadline_at: deadline_at
+       })
+       when is_map(artifact_policy) do
+    with "episode_config.v2" <- artifact_policy["schema_version"],
+         %{"mode" => mode} <- artifact_policy["recording"],
+         true <- mode in ["manual", "automatic"],
+         true <- match?(%DateTime{}, deadline_at) do
+      max_duration_seconds = DateTime.diff(deadline_at, DateTime.utc_now(), :second)
+
+      if max_duration_seconds > 0 do
+        {:ok,
+         %{
+           "space_id" => episode.space_id,
+           "participant_count" => 10,
+           "max_duration_seconds" => min(7_200, max_duration_seconds),
+           "input_bitrate_bps" => 4_000_000,
+           "policy_snapshot_version" => artifact_policy["schema_version"]
+         }}
+      else
+        {:error, :recording_policy_disabled}
+      end
+    else
+      _ -> {:error, :recording_policy_disabled}
+    end
+  end
+
+  defp derive_recording_reservation(_episode, _policy), do: {:error, :recording_policy_disabled}
+
+  defp prepare_recording_capture_ready(connection, episode, operation) do
+    recording_id = operation.payload["recordingId"]
+    start_operation_id = operation.payload["startOperationId"]
+    capture_epoch = operation.payload["captureEpoch"]
+    start_operation_uuid = uuid(start_operation_id)
+
+    case lock_recording(connection, episode, recording_id) do
+      [["starting", _generation, _metadata, start_id, nil]]
+      when start_id == start_operation_uuid ->
+        advance_recording_capture_ready(
+          connection,
+          episode,
+          recording_id,
+          capture_epoch,
+          start_operation_id,
+          start_operation_uuid
+        )
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  defp prepare_recording_capture_stopped(connection, episode, operation) do
+    recording_id = operation.payload["recordingId"]
+    stop_operation_id = operation.payload["stopOperationId"]
+    capture_epoch = operation.payload["captureEpoch"]
+    stop_operation_uuid = uuid(stop_operation_id)
+
+    case lock_recording(connection, episode, recording_id) do
+      [["stopping", _generation, metadata, _start_id, stop_id]]
+      when stop_id == stop_operation_uuid ->
+        validate_recording_capture_stopped(
+          connection,
+          episode,
+          recording_id,
+          stop_operation_id,
+          metadata,
+          capture_epoch
+        )
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  defp lock_recording(connection, episode, recording_id) do
+    Postgrex.query!(
+      connection,
+      SQL.lock_recording(),
+      episode_params(episode) ++ [uuid(recording_id)]
+    ).rows
+  end
+
+  defp advance_recording_capture_ready(
+         connection,
+         episode,
+         recording_id,
+         capture_epoch,
+         start_operation_id,
+         start_operation_uuid
+       ) do
+    case lock_external_operation(connection, episode, start_operation_id) do
+      %{name: :start_recording, status: :applied} ->
+        params =
+          episode_params(episode) ++ [uuid(recording_id), capture_epoch, start_operation_uuid]
+
+        case Postgrex.query!(connection, SQL.advance_recording_capture_epoch(), params).rows do
+          [[_recording_id]] ->
+            {:ok, %{recording_id: recording_id, target: nil, sources: []}}
+
+          [] ->
+            {:error, :stale_recording_fence}
+        end
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  defp validate_recording_capture_stopped(
+         connection,
+         episode,
+         recording_id,
+         stop_operation_id,
+         metadata,
+         capture_epoch
+       ) do
+    case lock_external_operation(connection, episode, stop_operation_id) do
+      %{name: :stop_recording, status: :applied} ->
+        if recording_capture_epoch(metadata) == capture_epoch do
+          {:ok, %{recording_id: recording_id, target: nil, sources: []}}
+        else
+          {:error, :stale_recording_fence}
+        end
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  defp recording_capture_epoch(metadata) when is_map(metadata) do
+    case Map.get(metadata, "capture_epoch") do
+      epoch when is_integer(epoch) and epoch >= 0 -> epoch
+      epoch when is_binary(epoch) -> parse_recording_capture_epoch(epoch)
+      _ -> 0
+    end
+  end
+
+  defp recording_capture_epoch(_metadata), do: 0
+
+  defp parse_recording_capture_epoch(value) do
+    case Integer.parse(value) do
+      {epoch, ""} when epoch >= 0 -> epoch
+      _ -> 0
+    end
+  end
+
+  defp system_recording_start?(payload) do
+    payload["actorKind"] == "system" and payload["actorId"] == "recording_policy" and
+      is_binary(payload["recordingId"])
   end
 
   defp prepare_deadline(operation, policy) do
@@ -1516,9 +1750,11 @@ defmodule ChalkSync.Stateholder.Postgres do
       request_key: operation.request_key,
       request_fingerprint: operation.fingerprint,
       name: operation.name,
-      payload: operation.payload,
+      payload: persisted_operation_payload(operation, context),
       status: :pending,
       attempt_count: 0,
+      actor_kind: if(identity, do: "participant", else: operation.payload["actorKind"]),
+      actor_id: if(identity, do: identity.participant_id, else: operation.payload["actorId"]),
       actor_participant_id: identity && identity.participant_id,
       actor_generation: identity && identity.participant_generation,
       target_participant_id: optional_field(target, :id),
@@ -1536,6 +1772,16 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp optional_field(nil, _field), do: nil
   defp optional_field(value, field), do: Map.get(value, field)
+
+  defp persisted_operation_payload(operation, context) do
+    case context[:recording_reservation] do
+      reservation when is_map(reservation) ->
+        Map.put(operation.payload, "recording_reservation", reservation)
+
+      _ ->
+        operation.payload
+    end
+  end
 
   defp insert_external_operation(connection, episode, external, context, observed) do
     source = operation_source(external.name)
@@ -1698,7 +1944,7 @@ defmodule ChalkSync.Stateholder.Postgres do
       episode_params(episode) ++
         [
           uuid(external.recording_id),
-          uuid(external.actor_participant_id),
+          nullable_dump(external.actor_participant_id),
           external.actor_generation,
           uuid(external.external_operation_id)
         ]
@@ -1904,6 +2150,8 @@ defmodule ChalkSync.Stateholder.Postgres do
       payload: payload,
       status: String.to_existing_atom(status),
       attempt_count: attempt_count,
+      actor_kind: Map.get(payload, "actorKind", if(actor_id, do: "participant")),
+      actor_id: Map.get(payload, "actorId", nullable_uuid(actor_id)),
       actor_participant_id: nullable_uuid(actor_id),
       actor_generation: actor_generation,
       target_participant_id: nullable_uuid(target_id),
@@ -1949,7 +2197,8 @@ defmodule ChalkSync.Stateholder.Postgres do
 
       true ->
         with {:ok, state} <- validate_fold(episode, control, policy),
-             :ok <- validate_finalization_authority(connection, episode, external, policy) do
+             :ok <- validate_finalization_authority(connection, episode, external, policy),
+             :ok <- validate_recording_capture_epoch(connection, episode, external) do
           finalize_pending_operation(connection, episode, external, state, outcome)
         else
           {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
@@ -1994,6 +2243,60 @@ defmodule ChalkSync.Stateholder.Postgres do
       validate_finalization_deadline(external, policy)
     end
   end
+
+  defp validate_recording_capture_epoch(
+         connection,
+         episode,
+         %{name: :recording_capture_ready} = external
+       ) do
+    recording_id = external.payload["recordingId"]
+    start_operation_id = external.payload["startOperationId"]
+    capture_epoch = external.payload["captureEpoch"]
+    start_operation_uuid = uuid(start_operation_id)
+
+    case Postgrex.query!(
+           connection,
+           SQL.lock_recording(),
+           episode_params(episode) ++ [uuid(recording_id)]
+         ).rows do
+      [["starting", _generation, metadata, start_id, nil]]
+      when start_id == start_operation_uuid ->
+        if recording_capture_epoch(metadata) == capture_epoch,
+          do: :ok,
+          else: {:error, :stale_recording_fence}
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  defp validate_recording_capture_epoch(
+         connection,
+         episode,
+         %{name: :recording_capture_stopped} = external
+       ) do
+    recording_id = external.payload["recordingId"]
+    stop_operation_id = external.payload["stopOperationId"]
+    capture_epoch = external.payload["captureEpoch"]
+    stop_operation_uuid = uuid(stop_operation_id)
+
+    case Postgrex.query!(
+           connection,
+           SQL.lock_recording(),
+           episode_params(episode) ++ [uuid(recording_id)]
+         ).rows do
+      [["stopping", _generation, metadata, _start_id, stop_id]]
+      when stop_id == stop_operation_uuid ->
+        if recording_capture_epoch(metadata) == capture_epoch,
+          do: :ok,
+          else: {:error, :stale_recording_fence}
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  defp validate_recording_capture_epoch(_connection, _episode, _external), do: :ok
 
   defp validate_finalization_episode(%{name: name}, %{status: "ending"})
        when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
@@ -2097,6 +2400,26 @@ defmodule ChalkSync.Stateholder.Postgres do
          episode,
          %{name: name} = external,
          state,
+         {:confirmed, :local}
+       )
+       when name in [:recording_capture_ready, :recording_capture_stopped],
+       do: finalize_confirmed_operation(connection, episode, external, state)
+
+  defp finalize_pending_operation(
+         connection,
+         episode,
+         %{name: name} = external,
+         state,
+         {:confirmed, :recording}
+       )
+       when name in [:start_recording, :stop_recording],
+       do: finalize_recording_reservation(connection, episode, external, state)
+
+  defp finalize_pending_operation(
+         connection,
+         episode,
+         %{name: name} = external,
+         state,
          {:confirmed, :provider}
        )
        when name in [
@@ -2109,16 +2432,6 @@ defmodule ChalkSync.Stateholder.Postgres do
               :tenant_end_episode,
               :maximum_duration_expired
             ],
-       do: finalize_confirmed_operation(connection, episode, external, state)
-
-  defp finalize_pending_operation(
-         connection,
-         episode,
-         %{name: name} = external,
-         state,
-         {:confirmed, :recording}
-       )
-       when name in [:start_recording, :stop_recording],
        do: finalize_confirmed_operation(connection, episode, external, state)
 
   defp finalize_pending_operation(
@@ -2507,14 +2820,26 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp expected_fact(%{name: :stop_participant_screen_share} = external, _state),
     do: {:participant_screen_share_stopped, %{"participant_id" => external.target_participant_id}}
 
-  defp expected_fact(%{name: name} = external, _state)
-       when name in [:start_recording, :stop_recording] do
-    terminal_status = if name == :start_recording, do: "recording", else: "stopped"
+  defp expected_fact(%{name: :start_recording}, _state),
+    do: :reservation_acknowledged
 
+  defp expected_fact(%{name: :recording_capture_ready} = external, _state) do
     {:recording_status_changed,
      %{
        "recording_id" => external.recording_id,
-       "status" => terminal_status,
+       "status" => "recording",
+       "failure_code" => nil
+     }}
+  end
+
+  defp expected_fact(%{name: :stop_recording}, _state),
+    do: :reservation_acknowledged
+
+  defp expected_fact(%{name: :recording_capture_stopped} = external, _state) do
+    {:recording_status_changed,
+     %{
+       "recording_id" => external.recording_id,
+       "status" => "stopped",
        "failure_code" => nil
      }}
   end
@@ -2650,7 +2975,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   defp update_external_products(connection, episode, %{name: name} = external, event, _state)
-       when name in [:start_recording, :stop_recording],
+       when name in [:recording_capture_ready, :recording_capture_stopped],
        do: finalize_recording_product(connection, episode, external, event.payload["status"], nil)
 
   defp update_external_products(
@@ -2764,8 +3089,39 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
+  defp finalize_recording_reservation(connection, episode, external, state) do
+    case Postgrex.query!(
+           connection,
+           SQL.lock_recording_acceptance_event(),
+           episode_params(episode) ++ [uuid(external.external_operation_id)]
+         ).rows do
+      [[event_id, revision]] ->
+        event_id = UUID.load!(event_id)
+        delete_operation_fences(connection, episode, external)
+        mark_external_applied(connection, episode, external, event_id, revision)
+        commit_external_receipt(connection, episode, external, event_id, revision, state)
+
+        applied = %{
+          external
+          | status: :applied,
+            applied_event_id: event_id,
+            applied_revision: revision
+        }
+
+        operation_decision(applied, :original, state, event_id, revision)
+
+      [] ->
+        Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
+    end
+  end
+
   defp maybe_persist_recording_failure(connection, episode, external, state, failure_code)
-       when external.name in [:start_recording, :stop_recording] do
+       when external.name in [
+              :start_recording,
+              :stop_recording,
+              :recording_capture_ready,
+              :recording_capture_stopped
+            ] do
     payload = %{
       "recording_id" => external.recording_id,
       "status" => "failed",
@@ -4043,6 +4399,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp terminal_reason(:capability_denied), do: :capability_denied
   defp terminal_reason(:invalid_target), do: :invalid_target
   defp terminal_reason(:recording_in_progress), do: :recording_in_progress
+  defp terminal_reason(:recording_policy_disabled), do: :recording_policy_disabled
   defp terminal_reason(:screen_share_in_use), do: :screen_share_in_use
   defp terminal_reason(:external_operation_failed), do: :external_operation_failed
   defp terminal_reason(_reason), do: :invalid_state

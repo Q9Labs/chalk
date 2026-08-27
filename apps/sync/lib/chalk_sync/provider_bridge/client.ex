@@ -21,6 +21,7 @@ defmodule ChalkSync.ProviderBridge.Client do
   @local_hosts ["localhost", "127.0.0.1", "::1"]
   @effects ~w(media.grant_publication media.revoke_publication media.remove_participant media.end_episode recording.start recording.stop)
   @sources ~w(microphone camera screen)
+  @recording_policy_snapshot_version "episode_config.v2"
 
   @type transport_response ::
           {:ok, non_neg_integer(), [{binary(), binary()}], binary()}
@@ -256,13 +257,75 @@ defmodule ChalkSync.ProviderBridge.Client do
     with {:ok, effect} <- normalize_effect(payload["effect"] || payload[:effect]),
          {:ok, tenant_id} <- required_payload_uuid(payload, "tenant_id"),
          {:ok, episode_id} <- required_payload_uuid(payload, "episode_id"),
-         {:ok, result} <- optional_payload_fields(payload) do
-      {:ok,
-       result
-       |> Map.merge(%{"effect" => effect, "tenant_id" => tenant_id, "episode_id" => episode_id})
-       |> Map.take(
-         ~w(effect tenant_id episode_id participant_id participant_generation publication_source recording_id)
-       )}
+         {:ok, result} <- optional_payload_fields(payload),
+         {:ok, recording_reservation} <- recording_reservation(payload, effect) do
+      result =
+        result
+        |> Map.merge(%{"effect" => effect, "tenant_id" => tenant_id, "episode_id" => episode_id})
+        |> Map.take(
+          ~w(effect tenant_id episode_id participant_id participant_generation publication_source recording_id recording_reservation)
+        )
+
+      if is_nil(recording_reservation),
+        do: {:ok, Map.delete(result, "recording_reservation")},
+        else: {:ok, Map.put(result, "recording_reservation", recording_reservation)}
+    end
+  end
+
+  defp recording_reservation(payload, "recording.start") do
+    case Map.fetch(payload, "recording_reservation") do
+      {:ok, reservation} -> normalize_recording_reservation(reservation)
+      :error -> {:error, {:terminal_failure, :invalid_contract}}
+    end
+  end
+
+  defp recording_reservation(payload, "recording.stop") do
+    if Map.has_key?(payload, "recording_reservation"),
+      do: {:error, {:terminal_failure, :invalid_contract}},
+      else: {:ok, nil}
+  end
+
+  defp recording_reservation(payload, _effect) do
+    if Map.has_key?(payload, "recording_reservation"),
+      do: {:error, {:terminal_failure, :invalid_contract}},
+      else: {:ok, nil}
+  end
+
+  defp normalize_recording_reservation(reservation) when is_map(reservation) do
+    reservation =
+      Enum.reduce(reservation, %{}, fn {key, value}, acc ->
+        key = if is_atom(key), do: Atom.to_string(key), else: key
+        Map.put(acc, key, value)
+      end)
+
+    required =
+      ~w(space_id participant_count max_duration_seconds input_bitrate_bps policy_snapshot_version)
+
+    if Map.keys(reservation) |> Enum.sort() != Enum.sort(required),
+      do: {:error, {:terminal_failure, :invalid_contract}},
+      else: validate_recording_reservation(reservation)
+  end
+
+  defp normalize_recording_reservation(_reservation),
+    do: {:error, {:terminal_failure, :invalid_contract}}
+
+  defp validate_recording_reservation(reservation) do
+    with :ok <- validate_uuid(Map.fetch!(reservation, "space_id")),
+         true <-
+           is_integer(Map.fetch!(reservation, "participant_count")) and
+             Map.fetch!(reservation, "participant_count") in 1..10,
+         true <-
+           is_integer(Map.fetch!(reservation, "max_duration_seconds")) and
+             Map.fetch!(reservation, "max_duration_seconds") in 1..7200,
+         true <-
+           is_integer(Map.fetch!(reservation, "input_bitrate_bps")) and
+             Map.fetch!(reservation, "input_bitrate_bps") in 1..4_000_000,
+         true <-
+           Map.fetch!(reservation, "policy_snapshot_version") ==
+             @recording_policy_snapshot_version do
+      {:ok, reservation}
+    else
+      _ -> {:error, {:terminal_failure, :invalid_contract}}
     end
   end
 

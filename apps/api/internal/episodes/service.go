@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -182,11 +183,12 @@ type InitialControlState struct {
 // EpisodeConfigSnapshot is the immutable policy captured when an Episode
 // starts. Role names are customer-defined and each capability list is frozen.
 type EpisodeConfigSnapshot struct {
-	AdmissionPolicy               json.RawMessage     `json:"admission_policy"`
-	Roles                         map[string][]string `json:"roles"`
-	DefaultEpisodeDurationSeconds int32               `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds int32               `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           int32               `json:"linger_window_seconds"`
+	AdmissionPolicy               json.RawMessage          `json:"admission_policy"`
+	Roles                         map[string][]string      `json:"roles"`
+	DefaultEpisodeDurationSeconds int32                    `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32                    `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32                    `json:"linger_window_seconds"`
+	ArtifactPolicy                *artifactpolicy.Document `json:"artifact_policy,omitempty"`
 }
 
 type CreateEpisodeInput struct {

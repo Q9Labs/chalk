@@ -4,6 +4,38 @@ defmodule ChalkSync.ProviderBridge.Codec do
   @max_identifier_bytes 256
   @max_reason_bytes 64
   @sources ~w(microphone camera screen)
+  @reason_atoms %{
+    "conflict" => :conflict,
+    "executor_unavailable" => :executor_unavailable,
+    "fingerprint_conflict" => :fingerprint_conflict,
+    "forbidden" => :forbidden,
+    "invalid_contract" => :invalid_contract,
+    "invalid_publication_reference" => :invalid_publication_reference,
+    "invalid_token" => :invalid_token,
+    "legacy_publication_reference" => :legacy_publication_reference,
+    "malformed_response" => :malformed_response,
+    "not_found" => :not_found,
+    "observation_unavailable" => :observation_unavailable,
+    "observation_update_failed" => :observation_update_failed,
+    "participant_generation_required" => :participant_generation_required,
+    "provider_denied" => :provider_denied,
+    "provider_rate_limited" => :provider_rate_limited,
+    "provider_rejected" => :provider_rejected,
+    "provider_result_ambiguous" => :provider_result_ambiguous,
+    "provider_unauthorized" => :provider_unauthorized,
+    "provider_unavailable" => :provider_unavailable,
+    "rate_limited" => :rate_limited,
+    "recording_capacity_unavailable" => :recording_capacity_unavailable,
+    "recording_controller_unavailable" => :recording_controller_unavailable,
+    "recording_id_required" => :recording_id_required,
+    "recording_invalid_envelope" => :recording_invalid_envelope,
+    "recording_terminal_state" => :recording_terminal_state,
+    "recording_unavailable" => :recording_unavailable,
+    "response_too_large" => :response_too_large,
+    "timeout" => :timeout,
+    "unauthenticated" => :unauthenticated,
+    "unsupported_effect" => :unsupported_effect
+  }
 
   @spec normalize_response(non_neg_integer(), term(), pos_integer()) ::
           {:ok, map()} | {:error, term()}
@@ -39,6 +71,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
          true <- MapSet.subset?(MapSet.new(["operation_id", "effect", "outcome"]), keys),
          ^operation_id <- fetch_binary(payload, "operation_id"),
          ^effect <- fetch_binary(payload, "effect"),
+         :ok <- validate_reason(payload),
          {:ok, outcome} <- decode_outcome(payload) do
       {:ok, outcome}
     else
@@ -270,6 +303,14 @@ defmodule ChalkSync.ProviderBridge.Codec do
     end
   end
 
+  defp validate_reason(payload) do
+    case Map.fetch(payload, "reason") do
+      :error -> :ok
+      {:ok, value} when is_binary(value) and byte_size(value) in 1..@max_reason_bytes -> :ok
+      _ -> {:error, :invalid_reason}
+    end
+  end
+
   defp bounded_reason(payload) when is_map(payload) do
     reason = Map.get(payload, "reason")
 
@@ -280,22 +321,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
   end
 
   defp bounded_reason(_payload), do: nil
-  defp reason_atom("fingerprint_conflict"), do: :fingerprint_conflict
-  defp reason_atom("invalid_contract"), do: :invalid_contract
-  defp reason_atom("unauthenticated"), do: :unauthenticated
-  defp reason_atom("invalid_token"), do: :invalid_token
-  defp reason_atom("forbidden"), do: :forbidden
-  defp reason_atom("not_found"), do: :not_found
-  defp reason_atom("conflict"), do: :conflict
-  defp reason_atom("provider_denied"), do: :provider_denied
-  defp reason_atom("provider_rejected"), do: :provider_rejected
-  defp reason_atom("provider_unavailable"), do: :provider_unavailable
-  defp reason_atom("recording_unavailable"), do: :recording_unavailable
-  defp reason_atom("rate_limited"), do: :rate_limited
-  defp reason_atom("timeout"), do: :timeout
-  defp reason_atom("malformed_response"), do: :malformed_response
-  defp reason_atom("response_too_large"), do: :response_too_large
-  defp reason_atom(_reason), do: nil
+  defp reason_atom(reason), do: Map.get(@reason_atoms, reason)
 
   defp http_failure(429, _payload), do: {:retryable_failure, :rate_limited}
 

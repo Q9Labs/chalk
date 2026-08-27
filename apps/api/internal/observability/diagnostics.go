@@ -154,7 +154,6 @@ func (d Diagnostics) ApplyHTTP(options *httpapi.Options) {
 	}
 	options.Middleware = append(options.Middleware, OTelHTTPMiddleware(), JourneyMiddleware)
 	options.JourneyMetrics = d.journeyMetrics
-	options.RecorderMetrics = d.recorderMetrics
 	if d.config.RequestLogs != RequestLogOff {
 		options.Middleware = append(options.Middleware, RequestMiddleware(d.logger, RequestLogConfig{
 			Mode:          d.config.RequestLogs,

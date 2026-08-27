@@ -20,7 +20,15 @@ where tenant_id = sqlc.arg(tenant_id)
   and request_key = sqlc.arg(request_key);
 
 -- name: CreateSpace :one
-with inserted as (
+with tenant_facts as (
+    select
+        tenants.id,
+        tenant_artifact_policies.transcription_default_mode
+    from tenants
+    join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
+    where tenants.id = sqlc.arg(tenant_id)
+    for update of tenants, tenant_artifact_policies
+), inserted as (
 insert into spaces (
     id,
     name,
@@ -30,24 +38,29 @@ insert into spaces (
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
     created_by_user_id
-) values (
+)
+select
     sqlc.arg(id),
     sqlc.arg(name),
-    sqlc.arg(tenant_id),
+    tenant_facts.id,
     sqlc.arg(slug),
     sqlc.arg(media_plane),
     sqlc.narg(metadata),
     sqlc.narg(recurring_policy),
     sqlc.narg(admission_policy),
+    coalesce(sqlc.narg(recording_policy)::text, 'disabled'),
+    coalesce(sqlc.narg(transcription_policy)::text, tenant_facts.transcription_default_mode),
     sqlc.arg(default_episode_duration_seconds),
     sqlc.arg(maximum_episode_duration_seconds),
     sqlc.arg(linger_window_seconds),
     sqlc.narg(created_by_user_id)
-)
+from tenant_facts
 returning *
 ), seeded as (
     insert into space_roles (id, tenant_id, space_id, name, capabilities)
@@ -112,6 +125,8 @@ select
     inserted.metadata,
     inserted.recurring_policy,
     inserted.admission_policy,
+    inserted.recording_policy,
+    inserted.transcription_policy,
     inserted.default_episode_duration_seconds,
     inserted.maximum_episode_duration_seconds,
     inserted.linger_window_seconds,
@@ -183,6 +198,8 @@ select
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -205,6 +222,8 @@ select
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -257,6 +276,14 @@ set
         when sqlc.arg(admission_policy_set)::boolean then sqlc.narg(admission_policy)::jsonb
         else admission_policy
     end,
+    recording_policy = case
+        when sqlc.arg(recording_policy_set)::boolean then sqlc.arg(recording_policy)::text
+        else recording_policy
+    end,
+    transcription_policy = case
+        when sqlc.arg(transcription_policy_set)::boolean then sqlc.arg(transcription_policy)::text
+        else transcription_policy
+    end,
     default_episode_duration_seconds = case
         when sqlc.arg(default_episode_duration_seconds_set)::boolean then sqlc.arg(default_episode_duration_seconds)::integer
         else default_episode_duration_seconds
@@ -282,6 +309,8 @@ returning
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -306,6 +335,8 @@ returning
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -330,6 +361,8 @@ returning
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,

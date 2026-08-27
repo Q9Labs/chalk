@@ -27,6 +27,8 @@ returning
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -53,6 +55,8 @@ func (q *Queries) ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpace
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -212,7 +216,15 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 }
 
 const createSpace = `-- name: CreateSpace :one
-with inserted as (
+with tenant_facts as (
+    select
+        tenants.id,
+        tenant_artifact_policies.transcription_default_mode
+    from tenants
+    join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
+    where tenants.id = $1
+    for update of tenants, tenant_artifact_policies
+), inserted as (
 insert into spaces (
     id,
     name,
@@ -222,25 +234,30 @@ insert into spaces (
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
     created_by_user_id
-) values (
-    $1,
+)
+select
     $2,
     $3,
+    tenant_facts.id,
     $4,
     $5,
     $6,
     $7,
     $8,
-    $9,
-    $10,
+    coalesce($9::text, 'disabled'),
+    coalesce($10::text, tenant_facts.transcription_default_mode),
     $11,
-    $12
-)
-returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+    $12,
+    $13,
+    $14
+from tenant_facts
+returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 ), seeded as (
     insert into space_roles (id, tenant_id, space_id, name, capabilities)
     select
@@ -284,7 +301,7 @@ returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, ad
     select
         inserted.tenant_id,
         inserted.id,
-        $13,
+        $15,
         1,
         1,
         true,
@@ -304,6 +321,8 @@ select
     inserted.metadata,
     inserted.recurring_policy,
     inserted.admission_policy,
+    inserted.recording_policy,
+    inserted.transcription_policy,
     inserted.default_episode_duration_seconds,
     inserted.maximum_episode_duration_seconds,
     inserted.linger_window_seconds,
@@ -315,14 +334,16 @@ from inserted
 `
 
 type CreateSpaceParams struct {
+	TenantID                      pgtype.UUID `json:"tenant_id"`
 	ID                            pgtype.UUID `json:"id"`
 	Name                          string      `json:"name"`
-	TenantID                      pgtype.UUID `json:"tenant_id"`
 	Slug                          string      `json:"slug"`
 	MediaPlane                    string      `json:"media_plane"`
 	Metadata                      []byte      `json:"metadata"`
 	RecurringPolicy               []byte      `json:"recurring_policy"`
 	AdmissionPolicy               []byte      `json:"admission_policy"`
+	RecordingPolicy               pgtype.Text `json:"recording_policy"`
+	TranscriptionPolicy           pgtype.Text `json:"transcription_policy"`
 	DefaultEpisodeDurationSeconds int32       `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32       `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32       `json:"linger_window_seconds"`
@@ -339,6 +360,8 @@ type CreateSpaceRow struct {
 	Metadata                      []byte             `json:"metadata"`
 	RecurringPolicy               []byte             `json:"recurring_policy"`
 	AdmissionPolicy               []byte             `json:"admission_policy"`
+	RecordingPolicy               string             `json:"recording_policy"`
+	TranscriptionPolicy           string             `json:"transcription_policy"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
@@ -350,14 +373,16 @@ type CreateSpaceRow struct {
 
 func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (CreateSpaceRow, error) {
 	row := q.db.QueryRow(ctx, createSpace,
+		arg.TenantID,
 		arg.ID,
 		arg.Name,
-		arg.TenantID,
 		arg.Slug,
 		arg.MediaPlane,
 		arg.Metadata,
 		arg.RecurringPolicy,
 		arg.AdmissionPolicy,
+		arg.RecordingPolicy,
+		arg.TranscriptionPolicy,
 		arg.DefaultEpisodeDurationSeconds,
 		arg.MaximumEpisodeDurationSeconds,
 		arg.LingerWindowSeconds,
@@ -374,6 +399,8 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -638,6 +665,8 @@ select
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -668,6 +697,8 @@ func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) 
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -860,6 +891,8 @@ select
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -922,6 +955,8 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 			&i.Metadata,
 			&i.RecurringPolicy,
 			&i.AdmissionPolicy,
+			&i.RecordingPolicy,
+			&i.TranscriptionPolicy,
 			&i.DefaultEpisodeDurationSeconds,
 			&i.MaximumEpisodeDurationSeconds,
 			&i.LingerWindowSeconds,
@@ -997,6 +1032,8 @@ returning
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -1023,6 +1060,8 @@ func (q *Queries) RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpace
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -1261,22 +1300,30 @@ set
         when $11::boolean then $12::jsonb
         else admission_policy
     end,
+    recording_policy = case
+        when $13::boolean then $14::text
+        else recording_policy
+    end,
+    transcription_policy = case
+        when $15::boolean then $16::text
+        else transcription_policy
+    end,
     default_episode_duration_seconds = case
-        when $13::boolean then $14::integer
+        when $17::boolean then $18::integer
         else default_episode_duration_seconds
     end,
     maximum_episode_duration_seconds = case
-        when $15::boolean then $16::integer
+        when $19::boolean then $20::integer
         else maximum_episode_duration_seconds
     end,
     linger_window_seconds = case
-        when $17::boolean then $18::integer
+        when $21::boolean then $22::integer
         else linger_window_seconds
     end,
     updated_at = now()
 where
-    tenant_id = $19
-    and id = $20
+    tenant_id = $23
+    and id = $24
 returning
     id,
     name,
@@ -1286,6 +1333,8 @@ returning
     metadata,
     recurring_policy,
     admission_policy,
+    recording_policy,
+    transcription_policy,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -1308,6 +1357,10 @@ type UpdateTenantSpaceParams struct {
 	RecurringPolicy                  []byte      `json:"recurring_policy"`
 	AdmissionPolicySet               bool        `json:"admission_policy_set"`
 	AdmissionPolicy                  []byte      `json:"admission_policy"`
+	RecordingPolicySet               bool        `json:"recording_policy_set"`
+	RecordingPolicy                  string      `json:"recording_policy"`
+	TranscriptionPolicySet           bool        `json:"transcription_policy_set"`
+	TranscriptionPolicy              string      `json:"transcription_policy"`
 	DefaultEpisodeDurationSecondsSet bool        `json:"default_episode_duration_seconds_set"`
 	DefaultEpisodeDurationSeconds    int32       `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSecondsSet bool        `json:"maximum_episode_duration_seconds_set"`
@@ -1332,6 +1385,10 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		arg.RecurringPolicy,
 		arg.AdmissionPolicySet,
 		arg.AdmissionPolicy,
+		arg.RecordingPolicySet,
+		arg.RecordingPolicy,
+		arg.TranscriptionPolicySet,
+		arg.TranscriptionPolicy,
 		arg.DefaultEpisodeDurationSecondsSet,
 		arg.DefaultEpisodeDurationSeconds,
 		arg.MaximumEpisodeDurationSecondsSet,
@@ -1351,6 +1408,8 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

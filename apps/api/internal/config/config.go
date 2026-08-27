@@ -132,6 +132,9 @@ const (
 	TranscriptionControlAudience    = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
 	RecordingEnabled                = "CHALK_RECORDING_ENABLED"
+	RecordingKMSKeyID               = "CHALK_RECORDING_KMS_KEY_ID"
+	RecordingKMSRegion              = "CHALK_RECORDING_KMS_REGION"
+	RecordingKMSRequestTimeoutMS    = "CHALK_RECORDING_KMS_REQUEST_TIMEOUT_MS"
 	TranscriptionEnabled            = "CHALK_TRANSCRIPTION_ENABLED"
 	WhiteboardFilesEnabled          = "CHALK_WHITEBOARD_FILES_ENABLED"
 
@@ -173,6 +176,7 @@ const (
 	DefaultRequestLogs                           = "off"
 	DefaultRequestSampleRate                     = 0.01
 	DefaultR2RequestTimeoutMS                    = int64(10000)
+	DefaultRecordingKMSRequestTimeoutMS          = int64(10000)
 	DefaultTranscriptionControlAudience          = "chalk-control-api"
 	DefaultRedisURL                              = "redis://127.0.0.1:6379/0"
 	DefaultResendTimeoutMS                       = int64(10000)
@@ -186,6 +190,7 @@ const (
 	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
 	DefaultComposioTimeout           = time.Duration(DefaultComposioTimeoutMS) * time.Millisecond
 	DefaultR2Timeout                 = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
+	DefaultRecordingKMSTimeout       = time.Duration(DefaultRecordingKMSRequestTimeoutMS) * time.Millisecond
 	DefaultResendTimeout             = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
 	DefaultSessionTTL                = time.Duration(DefaultSessionTTLMS) * time.Millisecond
 )
@@ -253,6 +258,12 @@ type R2Config struct {
 	Endpoint        string
 	SecretAccessKey string
 	RequestTimeout  time.Duration
+}
+
+type RecordingKMSConfig struct {
+	KeyID          string
+	Region         string
+	RequestTimeout time.Duration
 }
 
 type TranscriptionConfig struct {
@@ -370,6 +381,7 @@ type Config struct {
 	PublicInvite       PublicInviteConfig
 	ProviderBridge     ProviderBridgeConfig
 	R2                 R2Config
+	RecordingKMS       RecordingKMSConfig
 	Redis              RedisConfig
 	Resend             ResendConfig
 	SyncToken          SyncTokenConfig
@@ -482,6 +494,13 @@ func Load() (Config, error) {
 	if r2RequestTimeout <= 0 {
 		return Config{}, fmt.Errorf("%s must be greater than zero", R2RequestTimeoutMS)
 	}
+	recordingKMSRequestTimeout, err := envMilliseconds(RecordingKMSRequestTimeoutMS, DefaultRecordingKMSRequestTimeoutMS)
+	if err != nil {
+		return Config{}, err
+	}
+	if recordingKMSRequestTimeout <= 0 {
+		return Config{}, fmt.Errorf("%s must be greater than zero", RecordingKMSRequestTimeoutMS)
+	}
 	cloudflareRealtimeRequestTimeout, err := envMilliseconds(CloudflareRealtimeRequestTimeoutMS, DefaultCloudflareRealtimeRequestTimeoutMS)
 	if err != nil {
 		return Config{}, err
@@ -566,6 +585,19 @@ func Load() (Config, error) {
 		SecretAccessKey: envOrDefault(R2SecretAccessKey, ""),
 		RequestTimeout:  r2RequestTimeout,
 	}
+	recordingKMS := RecordingKMSConfig{
+		KeyID:          strings.TrimSpace(envOrDefault(RecordingKMSKeyID, "")),
+		Region:         strings.TrimSpace(envOrDefault(RecordingKMSRegion, "")),
+		RequestTimeout: recordingKMSRequestTimeout,
+	}
+	if capabilities.Recording {
+		if err := validateR2Config(r2Config, RecordingEnabled); err != nil {
+			return Config{}, err
+		}
+		if recordingKMS.KeyID == "" || recordingKMS.Region == "" {
+			return Config{}, fmt.Errorf("%s and %s must be set when %s=true", RecordingKMSKeyID, RecordingKMSRegion, RecordingEnabled)
+		}
+	}
 	transcriptionConfig := TranscriptionConfig{
 		WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
 		ControlAudience:    envOrDefault(TranscriptionControlAudience, DefaultTranscriptionControlAudience),
@@ -638,6 +670,7 @@ func Load() (Config, error) {
 		PublicInvite:   publicInvite,
 		ProviderBridge: providerBridge,
 		R2:             r2Config,
+		RecordingKMS:   recordingKMS,
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),
 		},

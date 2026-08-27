@@ -1186,30 +1186,6 @@ const membershipsGroup = HttpApiGroup.make("memberships")
 
 const recordingsGroup = HttpApiGroup.make("recordings")
   .add(
-    HttpApiEndpoint.post("createRecording", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/recordings", {
-      params: S.CreateRecordingPathParamsSchema,
-      payload: S.CreateRecordingRequestBodySchema,
-      success: S.CreateRecordingResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingInvalidStatusErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.StorageInvalidKeyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.StorageInvalidProviderErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.post("createRecordingDownloadURL", "/v1/tenants/:tenant_id/recordings/:recording_id/download-url", {
       params: S.CreateRecordingDownloadURLPathParamsSchema,
       payload: S.CreateRecordingDownloadURLRequestBodySchema,
@@ -1234,54 +1210,6 @@ const recordingsGroup = HttpApiGroup.make("recordings")
     }),
   )
   .add(
-    HttpApiEndpoint.post("createRecordingReservation", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/recording-reservations", {
-      params: S.CreateRecordingReservationPathParamsSchema,
-      headers: S.CreateRecordingReservationRequestHeadersSchema,
-      payload: S.CreateRecordingReservationRequestBodySchema,
-      success: S.CreateRecordingReservationResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingInvalidBitrateErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingInvalidDurationErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingInvalidParticipantCountErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.RecordingCapacityUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.patch("extendRecordingReservation", "/v1/tenants/:tenant_id/recording-reservations/:recording_reservation_id", {
-      params: S.ExtendRecordingReservationPathParamsSchema,
-      payload: S.ExtendRecordingReservationRequestBodySchema,
-      success: S.ExtendRecordingReservationResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.RecordingInvalidDurationErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingReservationInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.RecordingReservationNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.RecordingCapacityUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.get("getRecording", "/v1/tenants/:tenant_id/recordings/:recording_id", {
       params: S.GetRecordingPathParamsSchema,
       success: S.GetRecordingResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -1291,36 +1219,6 @@ const recordingsGroup = HttpApiGroup.make("recordings")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("getRecordingPipeline", "/v1/tenants/:tenant_id/recordings/:recording_id/pipeline", {
-      params: S.GetRecordingPipelinePathParamsSchema,
-      success: S.GetRecordingPipelineResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.RecordingInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("getRecordingReservation", "/v1/tenants/:tenant_id/recording-reservations/:recording_reservation_id", {
-      params: S.GetRecordingReservationPathParamsSchema,
-      success: S.GetRecordingReservationResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.RecordingReservationInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.RecordingReservationNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
@@ -1338,45 +1236,6 @@ const recordingsGroup = HttpApiGroup.make("recordings")
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.delete("releaseRecordingReservation", "/v1/tenants/:tenant_id/recording-reservations/:recording_reservation_id", {
-      params: S.ReleaseRecordingReservationPathParamsSchema,
-      success: S.ReleaseRecordingReservationResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.RecordingReservationInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.RecordingReservationNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.patch("updateRecording", "/v1/tenants/:tenant_id/recordings/:recording_id", {
-      params: S.UpdateRecordingPathParamsSchema,
-      payload: S.UpdateRecordingRequestBodySchema,
-      success: S.UpdateRecordingResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.RecordingInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingInvalidStatusErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.StorageInvalidKeyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.StorageInvalidProviderErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
@@ -1477,6 +1336,7 @@ const spacesGroup = HttpApiGroup.make("spaces")
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidArtifactPolicyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.SpaceInvalidMediaPlaneErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
@@ -1760,6 +1620,7 @@ const spacesGroup = HttpApiGroup.make("spaces")
       success: S.UpdateSpaceResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidArtifactPolicyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.SpaceInvalidMediaPlaneErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
@@ -1882,6 +1743,7 @@ const tenantsGroup = HttpApiGroup.make("tenants")
       success: S.UpdateTenantResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidArtifactPolicyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
@@ -1889,6 +1751,7 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.TenantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TenantArtifactPolicyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
@@ -1978,6 +1841,7 @@ const transcriptsGroup = HttpApiGroup.make("transcripts")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TranscriptDisabledErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),

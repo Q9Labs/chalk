@@ -5,21 +5,24 @@ import (
 	"errors"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 const (
-	MaximumEpisodes             = 20
-	MaximumParticipants         = 100
-	MinimumEpisodeParticipants  = 1
-	MaximumEpisodeParticipants  = 10
-	MaximumRecordingDuration    = 2 * time.Hour
-	MaximumInputBitrateBPS      = int64(4_000_000)
-	MaximumInputBitrateTotalBPS = int64(MaximumEpisodes) * MaximumInputBitrateBPS
-	DefaultPayloadSchemaVersion = 1
-	DefaultCaptureAttemptLimit  = 5
-	DefaultRenderAttemptLimit   = 3
-	CapturePrewarm              = 5 * time.Minute
+	MaximumEpisodes                = 20
+	MaximumParticipants            = 100
+	MinimumEpisodeParticipants     = 1
+	MaximumEpisodeParticipants     = 10
+	MaximumRecordingDuration       = 2 * time.Hour
+	MaximumRenderDuration          = 30 * time.Minute
+	MaximumInputBitrateBPS         = int64(4_000_000)
+	MaximumInputBitrateTotalBPS    = int64(MaximumEpisodes) * MaximumInputBitrateBPS
+	DefaultPayloadSchemaVersion    = 1
+	DefaultCaptureAttemptLimit     = 5
+	DefaultRenderAttemptLimit      = 3
+	CapturePrewarm                 = 5 * time.Minute
+	SupportedPolicySnapshotVersion = artifactpolicy.SnapshotSchemaVersion
 )
 
 var (
@@ -48,6 +51,17 @@ var (
 	ErrArtifactNotFound             = errors.New("recording artifact not found")
 	ErrArtifactConflict             = errors.New("recording artifact metadata conflict")
 	ErrPoolHealthNotFound           = errors.New("recording pool health not found")
+	ErrStopConflict                 = errors.New("recording stop operation conflict")
+	ErrInvalidPolicySnapshotVersion = errors.New("invalid Recording policy snapshot version")
+	ErrClaimConflict                = errors.New("recording claim request conflict")
+	ErrInvalidEnvelope              = errors.New("invalid recorder job envelope")
+)
+
+const (
+	RecorderJobSchemaVersion          = "recorder_job.v1"
+	RecordingBundleSchema             = "recording_bundle.v1"
+	RecordingLayoutProfile            = "composite_720p_v1"
+	RecorderInitialPlanRevision int64 = 1
 )
 
 type State string
@@ -94,33 +108,35 @@ const (
 )
 
 type ReservationInput struct {
-	ID               utilities.ID
-	TenantID         utilities.ID
-	SpaceID          utilities.ID
-	EpisodeID        utilities.ID
-	RecordingID      utilities.ID
-	IdempotencyKey   string
-	ParticipantCount int
-	MaxDuration      time.Duration
-	InputBitrateBPS  int64
-	StartsAt         *time.Time
+	ID                    utilities.ID
+	TenantID              utilities.ID
+	SpaceID               utilities.ID
+	EpisodeID             utilities.ID
+	RecordingID           utilities.ID
+	IdempotencyKey        string
+	PolicySnapshotVersion string
+	ParticipantCount      int
+	MaxDuration           time.Duration
+	InputBitrateBPS       int64
+	StartsAt              *time.Time
 }
 
 type Reservation struct {
-	ID               utilities.ID
-	TenantID         utilities.ID
-	SpaceID          utilities.ID
-	EpisodeID        utilities.ID
-	RecordingID      utilities.ID
-	IdempotencyKey   string
-	ParticipantCount int
-	MaxDuration      time.Duration
-	InputBitrateBPS  int64
-	State            ReservationState
-	StartsAt         *time.Time
-	EndsAt           time.Time
-	UpdatedAt        time.Time
-	CreatedAt        time.Time
+	ID                    utilities.ID
+	TenantID              utilities.ID
+	SpaceID               utilities.ID
+	EpisodeID             utilities.ID
+	RecordingID           utilities.ID
+	IdempotencyKey        string
+	PolicySnapshotVersion string
+	ParticipantCount      int
+	MaxDuration           time.Duration
+	InputBitrateBPS       int64
+	State                 ReservationState
+	StartsAt              *time.Time
+	EndsAt                time.Time
+	UpdatedAt             time.Time
+	CreatedAt             time.Time
 }
 
 type Pipeline struct {
@@ -128,6 +144,9 @@ type Pipeline struct {
 	TenantID           utilities.ID
 	ReservationID      utilities.ID
 	State              State
+	CaptureEpoch       int64
+	StopOperationID    *utilities.ID
+	StopRequestedAt    *time.Time
 	CaptureCompletedAt *time.Time
 	CommittedAt        *time.Time
 	UpdatedAt          time.Time
@@ -151,11 +170,53 @@ type Job struct {
 	LeaseOwner           *string
 	LeaseExpiresAt       *time.Time
 	FencingGeneration    int64
+	CaptureEpoch         int64
 	ErrorCode            *string
 	ErrorDetail          *string
 	TerminalAt           *time.Time
 	UpdatedAt            time.Time
 	CreatedAt            time.Time
+	Authority            *JobAuthority
+}
+
+// RecorderJobEnvelope is the immutable, server-issued authority passed to a
+// recorder worker for one job attempt. Its JSON bytes are hashed and stored
+// with the attempt authority row before the claim is acknowledged.
+type RecorderJobEnvelope struct {
+	SchemaVersion         string   `json:"schema_version"`
+	TenantID              string   `json:"tenant_id"`
+	SpaceID               string   `json:"space_id"`
+	EpisodeID             string   `json:"episode_id"`
+	RecordingID           string   `json:"recording_id"`
+	JobID                 string   `json:"job_id"`
+	Kind                  JobKind  `json:"kind"`
+	AttemptCount          int      `json:"attempt_count"`
+	FencingGeneration     int64    `json:"fencing_generation"`
+	CaptureEpoch          int64    `json:"capture_epoch"`
+	PolicySnapshotVersion string   `json:"policy_snapshot_version"`
+	HardDeadline          string   `json:"hard_deadline"`
+	InitialPlanRevision   int64    `json:"initial_plan_revision"`
+	BundleSchemaVersion   string   `json:"bundle_schema_version"`
+	LayoutProfile         string   `json:"layout_profile"`
+	ParticipantLimit      int      `json:"participant_limit"`
+	InputBitrateBPS       int64    `json:"input_bitrate_bps"`
+	AudioCodec            string   `json:"audio_codec"`
+	VideoCodecs           []string `json:"video_codecs"`
+	PlanHandle            string   `json:"plan_handle"`
+	SignalingHandle       string   `json:"signaling_handle"`
+	KeyHandle             string   `json:"key_handle"`
+	ObjectHandle          string   `json:"object_handle"`
+}
+
+type JobAuthority struct {
+	ClaimRequestID utilities.ID
+	Envelope       RecorderJobEnvelope
+	EnvelopeBytes  []byte
+	EnvelopeDigest []byte
+	LeaseOwner     string
+	LeaseToken     string
+	LeaseExpiresAt time.Time
+	IssuedAt       time.Time
 }
 
 type Bundle struct {
@@ -192,10 +253,11 @@ type Artifact struct {
 }
 
 type ClaimInput struct {
-	Kind       JobKind
-	Owner      string
-	LeaseToken string
-	LeaseFor   time.Duration
+	ClaimRequestID utilities.ID
+	Kind           JobKind
+	Owner          string
+	LeaseToken     string
+	LeaseFor       time.Duration
 }
 
 type LeaseInput struct {
@@ -205,6 +267,8 @@ type LeaseInput struct {
 	LeaseToken        string
 	LeaseOwner        string
 	LeaseFor          time.Duration
+	CaptureEpoch      int64
+	EnvelopeDigest    []byte
 }
 
 type FailureInput struct {
@@ -227,6 +291,8 @@ type ArtifactInput struct {
 	FencingGeneration int64
 	LeaseToken        string
 	LeaseOwner        string
+	CaptureEpoch      int64
+	EnvelopeDigest    []byte
 }
 
 type BundleInput struct {
@@ -239,6 +305,8 @@ type BundleInput struct {
 	AttemptCount         int
 	LeaseToken           string
 	LeaseOwner           string
+	CaptureEpoch         int64
+	EnvelopeDigest       []byte
 	ObjectKey            string
 	ContentType          string
 	Codec                string
@@ -280,6 +348,7 @@ type Repository interface {
 	ExtendReservation(ctx context.Context, tenantID, reservationID utilities.ID, duration time.Duration, endsAt time.Time) (Reservation, error)
 	ExpireReservations(ctx context.Context, now time.Time) ([]Reservation, error)
 	GetPipeline(ctx context.Context, tenantID, recordingID utilities.ID) (Pipeline, error)
+	RequestStop(ctx context.Context, tenantID, episodeID, recordingID, operationID utilities.ID) (Pipeline, error)
 	Claim(ctx context.Context, input ClaimInput) (Job, error)
 	Heartbeat(ctx context.Context, input LeaseInput) (Job, error)
 	Complete(ctx context.Context, input LeaseInput) (Job, error)

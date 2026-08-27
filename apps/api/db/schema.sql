@@ -57,6 +57,39 @@ create table tenants (
 
 create index tenants_created_at_id_idx on tenants(created_at desc, id desc);
 
+create table tenant_artifact_policies (
+    tenant_id uuid primary key references tenants(id) on delete cascade,
+    transcription_ceiling text not null default 'disabled',
+    transcription_default_mode text not null default 'disabled',
+    provider_policy_version text not null default '',
+    recording_retention_seconds bigint not null default 0,
+    transcript_retention_seconds bigint not null default 0,
+    source_window_seconds bigint not null default 0,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    constraint tenant_artifact_policies_ceiling_check
+        check (transcription_ceiling in ('disabled', 'on_demand', 'automatic')),
+    constraint tenant_artifact_policies_default_check
+        check (transcription_default_mode in ('disabled', 'on_demand', 'automatic')),
+    constraint tenant_artifact_policies_default_ceiling_check
+        check (
+            (transcription_ceiling = 'disabled' and transcription_default_mode = 'disabled')
+            or (transcription_ceiling = 'on_demand' and transcription_default_mode in ('disabled', 'on_demand'))
+            or (transcription_ceiling = 'automatic')
+        ),
+    constraint tenant_artifact_policies_recording_retention_check
+        check (recording_retention_seconds between 0 and 9223372036),
+    constraint tenant_artifact_policies_transcript_retention_check
+        check (transcript_retention_seconds between 0 and 9223372036),
+    constraint tenant_artifact_policies_source_window_check
+        check (
+            (transcription_ceiling = 'disabled' and source_window_seconds = 0)
+            or (transcription_ceiling in ('on_demand', 'automatic') and source_window_seconds between 1 and 86400)
+        ),
+    constraint tenant_artifact_policies_provider_policy_check
+        check (transcription_ceiling = 'disabled' or btrim(provider_policy_version) <> '')
+);
+
 create table users (
     id uuid primary key,
     name text not null,
@@ -195,6 +228,10 @@ create table spaces (
     recurring_policy jsonb,
     admission_policy jsonb not null default '{"mode":"open"}'::jsonb
         check (jsonb_typeof(admission_policy) = 'object' and admission_policy ->> 'mode' in ('open', 'knock', 'members_only')),
+    recording_policy text not null default 'disabled'
+        check (recording_policy in ('disabled', 'manual', 'automatic')),
+    transcription_policy text not null default 'disabled'
+        check (transcription_policy in ('disabled', 'on_demand', 'automatic')),
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
     linger_window_seconds integer not null default 0,
@@ -320,6 +357,36 @@ as $$
         and (value ->> 'default_episode_duration_seconds')::integer <=
             (value ->> 'maximum_episode_duration_seconds')::integer
         and (value ->> 'linger_window_seconds')::integer >= 0
+        and (
+            not (value ? 'artifact_policy')
+            or (
+                jsonb_typeof(value -> 'artifact_policy') = 'object'
+                and value -> 'artifact_policy' ->> 'schema_version' = 'episode_config.v2'
+                and jsonb_typeof(value -> 'artifact_policy' -> 'recording') = 'object'
+                and value -> 'artifact_policy' -> 'recording' ->> 'mode' in ('disabled', 'manual', 'automatic')
+                and value -> 'artifact_policy' -> 'recording' ->> 'profile' = 'composite_720p_v1'
+                and jsonb_typeof(value -> 'artifact_policy' -> 'recording' -> 'retention_seconds') = 'number'
+                and (value -> 'artifact_policy' -> 'recording' ->> 'retention_seconds')::bigint between 0 and 9223372036
+                and jsonb_typeof(value -> 'artifact_policy' -> 'transcription') = 'object'
+                and value -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('disabled', 'on_demand', 'automatic')
+                and jsonb_typeof(value -> 'artifact_policy' -> 'transcription' -> 'retention_seconds') = 'number'
+                and (value -> 'artifact_policy' -> 'transcription' ->> 'retention_seconds')::bigint between 0 and 9223372036
+                and (
+                    (
+                        value -> 'artifact_policy' -> 'transcription' ->> 'mode' = 'disabled'
+                        and jsonb_typeof(value -> 'artifact_policy' -> 'transcription' -> 'source_window_seconds') = 'number'
+                        and (value -> 'artifact_policy' -> 'transcription' ->> 'source_window_seconds')::bigint = 0
+                    )
+                    or (
+                        value -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('on_demand', 'automatic')
+                        and jsonb_typeof(value -> 'artifact_policy' -> 'transcription' -> 'source_window_seconds') = 'number'
+                        and (value -> 'artifact_policy' -> 'transcription' ->> 'source_window_seconds')::bigint between 1 and 86400
+                        and value -> 'artifact_policy' -> 'transcription' ->> 'provider_policy_version' is not null
+                        and btrim(value -> 'artifact_policy' -> 'transcription' ->> 'provider_policy_version') <> ''
+                    )
+                )
+            )
+        )
 $$;
 
 create table episodes (
@@ -1497,7 +1564,12 @@ create table sync_command_receipts (
                         'role_assignment_required',
                         'screen_share_in_use',
                         'recording_in_progress',
+                        'recording_policy_disabled',
                         'external_operation_failed'
+                    )
+                    and (
+                        rejection_reason <> 'recording_policy_disabled'
+                        or command_name = 'start_recording'
                     )
                     and completed_at is not null
                     and (
@@ -1595,6 +1667,7 @@ create table sync_external_operations (
         'admit_participant', 'deny_admission', 'admission_request_expired', 'mute_participant',
         'stop_participant_camera', 'stop_participant_screen_share',
         'remove_participant', 'start_recording', 'stop_recording',
+        'recording_capture_ready', 'recording_capture_stopped',
         'participant_leave', 'end_episode', 'tenant_assign_roles', 'tenant_set_deadline',
         'tenant_end_episode', 'maximum_episode_duration_expired',
         'role_transition_cleanup', 'role_transition_source_stop'
@@ -1938,6 +2011,11 @@ create table recordings (
     -- s3, cf, do
     storage_provider text not null,
     storage_key text,
+    storage_content_type text,
+    storage_size bigint check (storage_size is null or storage_size >= 0),
+    storage_checksum bytea check (storage_checksum is null or octet_length(storage_checksum) between 16 and 128),
+    duration_millis bigint check (duration_millis is null or duration_millis >= 0),
+    completed_at timestamptz,
     metadata jsonb,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
@@ -2238,6 +2316,7 @@ create table recording_reservations (
     recording_id uuid not null references recordings(id),
     idempotency_key text not null,
     request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
+    policy_snapshot_version text not null check (policy_snapshot_version = 'episode_config.v2'),
     participant_count integer not null check (participant_count between 1 and 10),
     max_duration_seconds integer not null check (max_duration_seconds between 1 and 7200),
     input_bitrate_bps bigint not null check (input_bitrate_bps between 1 and 4000000),
@@ -2248,6 +2327,8 @@ create table recording_reservations (
     created_at timestamptz not null default now(),
     unique (tenant_id, idempotency_key)
 );
+create unique index recording_reservations_recording_id_idx
+    on recording_reservations(recording_id);
 create index recording_reservations_active_idx
     on recording_reservations(state, starts_at, ends_at)
     where state = 'reserved';
@@ -2258,18 +2339,25 @@ create table recording_pipelines (
     recording_id uuid primary key references recordings(id),
     tenant_id uuid not null references tenants(id),
     reservation_id uuid not null unique references recording_reservations(id),
+    capture_epoch bigint not null default 0 check (capture_epoch >= 0),
     state text not null check (state in (
         'requested', 'reserved', 'capture_leased', 'capturing_segmented',
         'capture_complete', 'render_queued', 'rendering', 'verifying',
         'committed', 'retryable_failure', 'terminal_failure', 'deleted'
     )),
+    stop_operation_id uuid,
+    stop_requested_at timestamptz,
     capture_completed_at timestamptz,
     committed_at timestamptz,
     updated_at timestamptz not null default now(),
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    constraint recording_pipelines_stop_pair_check check ((stop_operation_id is null) = (stop_requested_at is null))
 );
 create index recording_pipelines_tenant_state_idx
     on recording_pipelines(tenant_id, state, updated_at desc);
+create unique index recording_pipelines_stop_operation_id_idx
+    on recording_pipelines(stop_operation_id)
+    where stop_operation_id is not null;
 
 create table recording_jobs (
     id uuid primary key,
@@ -2308,6 +2396,330 @@ create index recording_jobs_dead_letter_idx
     where state = 'terminal_failure';
 create unique index recording_jobs_recording_kind_idx
     on recording_jobs(recording_id, kind);
+
+create table recording_job_attempt_authorities (
+    job_id uuid not null references recording_jobs(id) on delete restrict,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    capture_epoch bigint not null check (capture_epoch > 0),
+    claim_request_id uuid not null unique,
+    kind text not null check (kind in ('capture', 'render')),
+    lease_owner text not null check (octet_length(lease_owner) between 1 and 256),
+    lease_token text not null check (octet_length(lease_token) between 1 and 256),
+    lease_expires_at timestamptz not null,
+    envelope_bytes bytea not null check (octet_length(envelope_bytes) between 1 and 65536),
+    envelope_digest bytea not null check (octet_length(envelope_digest) = 32),
+    issued_at timestamptz not null default now(),
+    primary key (job_id, attempt_count, fencing_generation)
+);
+create index recording_job_attempt_authorities_job_idx
+    on recording_job_attempt_authorities(job_id, issued_at desc);
+
+create function reject_recording_job_attempt_authority_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording job attempt authorities are append-only';
+end;
+$$;
+
+create trigger recording_job_attempt_authorities_immutable
+before update or delete on recording_job_attempt_authorities
+for each row execute function reject_recording_job_attempt_authority_mutation();
+
+create trigger recording_job_attempt_authorities_no_truncate
+before truncate on recording_job_attempt_authorities
+for each statement execute function reject_recording_job_attempt_authority_mutation();
+
+create table recording_capture_plans (
+    plan_handle uuid not null,
+    revision bigint not null check (revision > 0),
+    job_id uuid not null,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    capture_epoch bigint not null check (capture_epoch > 0),
+    envelope_digest bytea not null check (octet_length(envelope_digest) = 32),
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    space_id uuid not null references spaces(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    episode_control_revision bigint not null check (episode_control_revision >= 0),
+    provider_incarnation bigint not null check (provider_incarnation >= 0),
+    provider_sequence bigint not null check (provider_sequence >= 0),
+    plan_schema_version text not null check (plan_schema_version = 'capture_plan.v1'),
+    plan_bytes bytea not null check (octet_length(plan_bytes) between 1 and 262144),
+    plan_fingerprint bytea not null check (octet_length(plan_fingerprint) = 32),
+    effective_deadline_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    primary key (plan_handle, revision),
+    unique (plan_handle, plan_fingerprint),
+    foreign key (job_id, attempt_count, fencing_generation)
+        references recording_job_attempt_authorities(job_id, attempt_count, fencing_generation)
+        on delete restrict
+);
+create index recording_capture_plans_attempt_idx
+    on recording_capture_plans(job_id, attempt_count, fencing_generation, revision desc);
+
+create function reject_recording_capture_plan_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording capture plans are append-only';
+end;
+$$;
+
+create trigger recording_capture_plans_immutable
+before update or delete on recording_capture_plans
+for each row execute function reject_recording_capture_plan_mutation();
+
+create trigger recording_capture_plans_no_truncate
+before truncate on recording_capture_plans
+for each statement execute function reject_recording_capture_plan_mutation();
+
+alter table recording_job_attempt_authorities
+    add constraint recording_job_attempt_authorities_capture_epoch_key
+        unique (job_id, attempt_count, fencing_generation, capture_epoch);
+
+create table recording_capture_connections (
+    signaling_handle uuid not null,
+    capture_epoch bigint not null check (capture_epoch > 0),
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    space_id uuid not null references spaces(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    job_id uuid not null,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    envelope_digest bytea not null check (octet_length(envelope_digest) = 32),
+    provider_connection_reference text check (
+        provider_connection_reference is null
+        or octet_length(provider_connection_reference) between 1 and 512
+    ),
+    state text not null default 'pending'
+        check (state in ('pending', 'connecting', 'connected', 'disconnected', 'closed')),
+    latest_plan_revision bigint not null default 0 check (latest_plan_revision >= 0),
+    negotiation_id text check (
+        negotiation_id is null or octet_length(negotiation_id) between 1 and 512
+    ),
+    negotiation_requirement text not null default 'not_required'
+        check (negotiation_requirement in ('not_required', 'answer_needed', 'offer_needed')),
+    negotiation_plan_revision bigint check (
+        negotiation_plan_revision is null or negotiation_plan_revision > 0
+    ),
+    next_sequence bigint not null default 1 check (next_sequence > 0),
+    active_command_id bigint,
+    active_execution_token uuid,
+    active_execution_expires_at timestamptz,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (signaling_handle, capture_epoch),
+    foreign key (job_id, attempt_count, fencing_generation, capture_epoch)
+        references recording_job_attempt_authorities (
+            job_id, attempt_count, fencing_generation, capture_epoch
+        ) on delete restrict,
+    constraint recording_capture_connections_negotiation_check check (
+        (
+            negotiation_requirement = 'not_required'
+            and negotiation_id is null
+            and negotiation_plan_revision is null
+        ) or (
+            negotiation_requirement in ('answer_needed', 'offer_needed')
+            and negotiation_id is not null
+            and negotiation_plan_revision is not null
+        )
+    ),
+    constraint recording_capture_connections_active_execution_check check (
+        (
+            active_command_id is null
+            and active_execution_token is null
+            and active_execution_expires_at is null
+        ) or (
+            active_command_id is not null
+            and active_execution_token is not null
+            and active_execution_expires_at is not null
+        )
+    )
+);
+create unique index recording_capture_connections_recording_epoch_idx
+    on recording_capture_connections(recording_id, capture_epoch);
+
+create table recording_capture_commands (
+    id bigint generated always as identity primary key,
+    signaling_handle uuid not null,
+    capture_epoch bigint not null check (capture_epoch > 0),
+    sequence bigint not null check (sequence > 0),
+    recording_id uuid not null references recordings(id) on delete restrict,
+    plan_revision bigint not null check (plan_revision > 0),
+    operation_kind text not null check (operation_kind in (
+        'create_capture_connection',
+        'pull_capture_tracks',
+        'renegotiate_capture_connection',
+        'inspect_capture_connection',
+        'close_capture_tracks',
+        'close_capture_connection'
+    )),
+    idempotency_key text not null check (octet_length(idempotency_key) between 1 and 128),
+    request_bytes bytea not null check (octet_length(request_bytes) between 1 and 2097152),
+    request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
+    state text not null default 'queued'
+        check (state in ('queued', 'leased', 'completed', 'retryable', 'terminal', 'ambiguous')),
+    execution_attempt integer not null default 0 check (execution_attempt >= 0),
+    execution_token uuid,
+    execution_expires_at timestamptz,
+    not_before timestamptz not null default now(),
+    result_bytes bytea check (result_bytes is null or octet_length(result_bytes) between 1 and 2097152),
+    result_fingerprint bytea check (result_fingerprint is null or octet_length(result_fingerprint) = 32),
+    provider_failure_class text check (
+        provider_failure_class is null or provider_failure_class in (
+            'unavailable', 'rate_limited', 'unauthorized', 'not_found', 'protocol'
+        )
+    ),
+    provider_failure_code text check (
+        provider_failure_code is null or octet_length(provider_failure_code) between 1 and 128
+    ),
+    provider_failure_retryable boolean,
+    created_at timestamptz not null default now(),
+    leased_at timestamptz,
+    completed_at timestamptz,
+    updated_at timestamptz not null default now(),
+    foreign key (signaling_handle, capture_epoch)
+        references recording_capture_connections(signaling_handle, capture_epoch) on delete restrict,
+    constraint recording_capture_commands_sequence_key
+        unique (signaling_handle, capture_epoch, sequence),
+    constraint recording_capture_commands_idempotency_key
+        unique (
+            signaling_handle, capture_epoch, plan_revision,
+            operation_kind, idempotency_key
+        ),
+    constraint recording_capture_commands_execution_check check (
+        (
+            state = 'leased'
+            and execution_token is not null
+            and execution_expires_at is not null
+        ) or (
+            state <> 'leased'
+            and execution_token is null
+            and execution_expires_at is null
+        )
+    ),
+    constraint recording_capture_commands_result_check check (
+        (
+            state = 'completed'
+            and result_bytes is not null
+            and result_fingerprint is not null
+        ) or (
+            state <> 'completed'
+            and result_bytes is null
+            and result_fingerprint is null
+        )
+    ),
+    constraint recording_capture_commands_failure_check check (
+        (
+            state in ('retryable', 'terminal')
+            and provider_failure_class is not null
+            and provider_failure_retryable is not null
+        ) or (
+            state not in ('retryable', 'terminal')
+            and provider_failure_class is null
+            and provider_failure_code is null
+            and provider_failure_retryable is null
+        )
+    )
+);
+create index recording_capture_commands_ready_idx
+    on recording_capture_commands(signaling_handle, capture_epoch, sequence, not_before)
+    where state in ('queued', 'retryable', 'leased');
+
+alter table recording_capture_connections
+    add constraint recording_capture_connections_active_command_fkey
+        foreign key (active_command_id) references recording_capture_commands(id) on delete restrict;
+
+create table recording_capture_provider_rate_budget (
+    id smallint primary key check (id = 1),
+    next_call_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+insert into recording_capture_provider_rate_budget (id) values (1);
+
+create function protect_recording_capture_connection_authority() returns trigger
+language plpgsql as $$
+begin
+    if old.signaling_handle is distinct from new.signaling_handle
+        or old.capture_epoch is distinct from new.capture_epoch
+        or old.tenant_id is distinct from new.tenant_id
+        or old.space_id is distinct from new.space_id
+        or old.episode_id is distinct from new.episode_id
+        or old.recording_id is distinct from new.recording_id
+        or old.job_id is distinct from new.job_id
+        or old.attempt_count is distinct from new.attempt_count
+        or old.fencing_generation is distinct from new.fencing_generation
+        or old.envelope_digest is distinct from new.envelope_digest then
+        raise exception 'recording capture connection authority is immutable';
+    end if;
+    new.updated_at = now();
+    return new;
+end;
+$$;
+
+create function protect_recording_capture_command() returns trigger
+language plpgsql as $$
+begin
+    if old.signaling_handle is distinct from new.signaling_handle
+        or old.capture_epoch is distinct from new.capture_epoch
+        or old.sequence is distinct from new.sequence
+        or old.recording_id is distinct from new.recording_id
+        or old.plan_revision is distinct from new.plan_revision
+        or old.operation_kind is distinct from new.operation_kind
+        or old.idempotency_key is distinct from new.idempotency_key
+        or old.request_bytes is distinct from new.request_bytes
+        or old.request_fingerprint is distinct from new.request_fingerprint
+        or old.created_at is distinct from new.created_at then
+        raise exception 'recording capture command authority is immutable';
+    end if;
+    if old.state in ('completed', 'terminal', 'ambiguous') then
+        raise exception 'terminal recording capture command is immutable';
+    end if;
+    if not (
+        (old.state = 'queued' and new.state = 'leased')
+        or (old.state = 'retryable' and new.state = 'leased')
+        or (old.state = 'leased' and new.state = 'queued')
+        or (old.state = 'leased' and new.state in ('completed', 'retryable', 'terminal', 'ambiguous'))
+    ) then
+        raise exception 'invalid recording capture command transition from % to %', old.state, new.state;
+    end if;
+    new.updated_at = now();
+    return new;
+end;
+$$;
+
+create function reject_recording_capture_queue_delete() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording capture signaling authority cannot be deleted or truncated';
+end;
+$$;
+
+create trigger recording_capture_connections_authority_immutable
+before update on recording_capture_connections
+for each row execute function protect_recording_capture_connection_authority();
+
+create trigger recording_capture_connections_no_delete
+before delete on recording_capture_connections
+for each row execute function reject_recording_capture_queue_delete();
+
+create trigger recording_capture_connections_no_truncate
+before truncate on recording_capture_connections
+for each statement execute function reject_recording_capture_queue_delete();
+
+create trigger recording_capture_commands_authority_immutable
+before update on recording_capture_commands
+for each row execute function protect_recording_capture_command();
+
+create trigger recording_capture_commands_no_delete
+before delete on recording_capture_commands
+for each row execute function reject_recording_capture_queue_delete();
+
+create trigger recording_capture_commands_no_truncate
+before truncate on recording_capture_commands
+for each statement execute function reject_recording_capture_queue_delete();
 
 create table recording_bundles (
     id uuid primary key,
@@ -2791,7 +3203,7 @@ create table provider_operation_receipts (
     participant_id uuid,
     participant_generation bigint,
     publication_source text,
-    recording_id uuid references recordings(id) on delete restrict,
+    recording_id uuid,
     request_fingerprint bytea not null,
     request_payload jsonb not null,
     state text not null default 'prepared',
@@ -3641,3 +4053,180 @@ create table diagnostic_export_artifact_chunks (
 
 create index diagnostic_export_chunks_job_idx
     on diagnostic_export_artifact_chunks(tenant_id, diagnostic_id, job_id, part_index);
+
+create table recording_data_keys (
+    recording_id uuid not null references recordings(id) on delete restrict,
+    capture_epoch bigint not null check (capture_epoch > 0),
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    job_id uuid not null references recording_jobs(id) on delete restrict,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    key_handle uuid not null,
+    environment text not null,
+    envelope_digest bytea not null check (octet_length(envelope_digest) = 32),
+    encryption_context_digest bytea not null check (octet_length(encryption_context_digest) = 32),
+    ciphertext_blob bytea not null check (octet_length(ciphertext_blob) > 0),
+    created_at timestamptz not null default now(),
+    primary key (recording_id, capture_epoch),
+    unique (key_handle)
+);
+create index recording_data_keys_authority_idx
+    on recording_data_keys(tenant_id, recording_id, capture_epoch);
+
+create table recording_bundle_allocations (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    job_id uuid not null references recording_jobs(id) on delete restrict,
+    object_handle uuid not null,
+    reservation_request_id uuid not null,
+    allocation_version bigint not null check (allocation_version > 0),
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    capture_epoch bigint not null check (capture_epoch > 0),
+    envelope_digest bytea not null check (octet_length(envelope_digest) = 32),
+    sequence_number bigint not null check (sequence_number >= 0),
+    codec text not null,
+    layer text,
+    monotonic_start_millis bigint not null check (monotonic_start_millis >= 0),
+    monotonic_end_millis bigint not null check (monotonic_end_millis >= monotonic_start_millis),
+    media_start_millis bigint not null check (media_start_millis >= 0),
+    media_end_millis bigint not null check (media_end_millis >= media_start_millis),
+    object_key text not null,
+    upload_token_hash bytea not null check (octet_length(upload_token_hash) = 32),
+    expected_byte_size bigint not null check (expected_byte_size >= 0),
+    expected_checksum bytea not null check (octet_length(expected_checksum) = 32),
+    content_type text not null,
+    expires_at timestamptz not null,
+    encryption_context_digest bytea not null check (octet_length(encryption_context_digest) = 32),
+    state text not null default 'allocated' check (state in ('reserved', 'allocated', 'committed')),
+    object_version text,
+    object_etag text,
+    object_checksum bytea,
+    manifest_digest bytea,
+    committed_at timestamptz,
+    created_at timestamptz not null default now(),
+    unique (upload_token_hash),
+    unique (object_key),
+    unique (job_id, attempt_count, reservation_request_id),
+    unique (recording_id, sequence_number),
+    constraint recording_bundle_allocations_commit_facts_check check (
+        (state in ('reserved', 'allocated') and object_version is null and object_etag is null and object_checksum is null and manifest_digest is null and committed_at is null)
+        or (state = 'committed' and object_version is not null and object_etag is not null and octet_length(object_checksum) = 32 and octet_length(manifest_digest) = 32 and committed_at is not null)
+    )
+);
+create index recording_bundle_allocations_authority_idx
+    on recording_bundle_allocations(tenant_id, recording_id, capture_epoch, sequence_number);
+
+alter table recording_bundles
+    add column allocation_id uuid unique references recording_bundle_allocations(id) on delete restrict,
+    add column object_version text,
+    add column object_etag text,
+    add column capture_epoch bigint,
+    add column envelope_digest bytea,
+    add column encryption_context_digest bytea,
+    add column manifest_digest bytea;
+
+create function protect_recording_data_key_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording data keys are append-only';
+end;
+$$;
+
+create trigger recording_data_keys_immutable
+before update or delete on recording_data_keys
+for each row execute function protect_recording_data_key_mutation();
+
+create trigger recording_data_keys_no_truncate
+before truncate on recording_data_keys
+for each statement execute function protect_recording_data_key_mutation();
+
+create function protect_recording_bundle_allocation_mutation() returns trigger
+language plpgsql as $$
+begin
+    if old.id <> new.id
+        or old.tenant_id <> new.tenant_id
+        or old.episode_id <> new.episode_id
+        or old.recording_id <> new.recording_id
+        or old.job_id <> new.job_id
+        or old.object_handle <> new.object_handle
+        or old.reservation_request_id <> new.reservation_request_id
+        or old.allocation_version <> new.allocation_version
+        or old.attempt_count <> new.attempt_count
+        or old.fencing_generation <> new.fencing_generation
+        or old.capture_epoch <> new.capture_epoch
+        or old.envelope_digest <> new.envelope_digest
+        or old.sequence_number <> new.sequence_number
+        or old.object_key <> new.object_key
+        or old.encryption_context_digest <> new.encryption_context_digest
+        or old.created_at <> new.created_at then
+        raise exception 'recording bundle allocation authority is immutable';
+    end if;
+
+    if old.state = 'reserved' and new.state = 'allocated' then
+        return new;
+    end if;
+
+    if old.state = 'allocated' and new.state = 'allocated' then
+        if old.expected_byte_size is distinct from new.expected_byte_size
+            or old.expected_checksum is distinct from new.expected_checksum
+            or old.content_type is distinct from new.content_type
+            or old.expires_at is distinct from new.expires_at
+            or old.codec is distinct from new.codec
+            or old.layer is distinct from new.layer
+            or old.monotonic_start_millis is distinct from new.monotonic_start_millis
+            or old.monotonic_end_millis is distinct from new.monotonic_end_millis
+            or old.media_start_millis is distinct from new.media_start_millis
+            or old.media_end_millis is distinct from new.media_end_millis
+            or old.object_version is not null
+            or old.object_etag is not null
+            or old.object_checksum is not null
+            or old.manifest_digest is not null
+            or old.committed_at is not null then
+            raise exception 'recording bundle allocation upload facts are immutable';
+        end if;
+        return new;
+    end if;
+
+    if old.state = 'allocated' and new.state = 'committed' then
+        if old.upload_token_hash is distinct from new.upload_token_hash
+            or old.expected_byte_size is distinct from new.expected_byte_size
+            or old.expected_checksum is distinct from new.expected_checksum
+            or old.content_type is distinct from new.content_type
+            or old.expires_at is distinct from new.expires_at
+            or old.codec is distinct from new.codec
+            or old.layer is distinct from new.layer
+            or old.monotonic_start_millis is distinct from new.monotonic_start_millis
+            or old.monotonic_end_millis is distinct from new.monotonic_end_millis
+            or old.media_start_millis is distinct from new.media_start_millis
+            or old.media_end_millis is distinct from new.media_end_millis then
+            raise exception 'recording bundle allocation upload facts are immutable';
+        end if;
+        return new;
+    end if;
+
+    raise exception 'recording bundle allocation state transition is invalid';
+end;
+$$;
+
+create trigger recording_bundle_allocations_authority_immutable
+before update on recording_bundle_allocations
+for each row execute function protect_recording_bundle_allocation_mutation();
+
+create function reject_recording_bundle_allocation_delete() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording bundle allocations are append-only';
+end;
+$$;
+
+create trigger recording_bundle_allocations_no_delete
+before delete on recording_bundle_allocations
+for each row execute function reject_recording_bundle_allocation_delete();
+
+create trigger recording_bundle_allocations_no_truncate
+before truncate on recording_bundle_allocations
+for each statement execute function reject_recording_bundle_allocation_delete();
