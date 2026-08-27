@@ -4,14 +4,14 @@ import { availableParallelism, loadavg } from "node:os";
 
 const PAGE_METRIC_FIELDS = ["Nodes", "JSEventListeners", "Documents", "JSHeapUsedSize", "JSHeapTotalSize", "ScriptDuration", "TaskDuration", "LayoutCount", "RecalcStyleCount", "LayoutDuration", "RecalcStyleDuration"];
 
-export function sanitizePageUrl(value) {
+function sanitizePageUrl(value) {
   const url = new URL(value);
   url.search = "";
   url.hash = "";
   return url.toString();
 }
 
-export function hostLoadSample(values = loadavg(), parallelism = availableParallelism()) {
+function hostLoadSample(values = loadavg(), parallelism = availableParallelism()) {
   return {
     hostLoad1m: Number(values[0] ?? 0),
     hostLoad5m: Number(values[1] ?? 0),
@@ -76,7 +76,7 @@ async function sampleProcesses(cdp) {
   };
 }
 
-export function deltaSample(previous, current) {
+function deltaSample(previous, current) {
   if (!previous || !current) return {};
   const fields = ["jsHeapUsed", "nodes", "listeners", "documents", "layoutCount", "recalcStyleCount", "scriptDuration", "taskDuration", "layoutDuration", "recalcStyleDuration"];
   return Object.fromEntries(

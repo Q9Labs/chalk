@@ -38,7 +38,7 @@ function isApplicationFrame(url) {
   return !/(?:node_modules|\.pnpm|playwright)/.test(url) && /(?:\/src\/|\/apps\/web\/|\/sdks\/typescript\/|\/packages\/)/.test(url);
 }
 
-export function summarizeMetrics(rows) {
+function summarizeMetrics(rows) {
   const samples = rows.filter((row) => row.kind === "sample");
   const liveSamples = samples.filter((row) => row.url !== "about:blank");
   const errors = rows.filter((row) => row.kind === "error");
@@ -91,7 +91,7 @@ export function summarizeMetrics(rows) {
   };
 }
 
-export function summarizeProcesses(rows) {
+function summarizeProcesses(rows) {
   const grouped = new Map();
   for (const row of rows) {
     const type = row.processType ?? "unknown";
@@ -121,7 +121,7 @@ export function summarizeProcesses(rows) {
   );
 }
 
-export function summarizeSteps(rows) {
+function summarizeSteps(rows) {
   const failures = rows.filter((row) => row.ok === false && row.allowedDisposition !== true);
   const dispositions = rows.filter((row) => row.ok === false && row.allowedDisposition === true);
   const byFeature = {};
@@ -150,7 +150,7 @@ function summarizeHeapDiffs(diffs) {
   }));
 }
 
-export function summarizeCpuProfile(profile, file) {
+function summarizeCpuProfile(profile, file) {
   if (!profile) return { file, present: false };
   const nodes = new Map((profile.nodes ?? []).map((node) => [node.id, node]));
   const totalMicros = (profile.timeDeltas ?? []).reduce((sum, value) => sum + (Number(value) || 0), 0);
@@ -359,7 +359,7 @@ export async function analyzeRun(runDir) {
   };
 }
 
-export function aggregateTraceSummaries(summaries) {
+function aggregateTraceSummaries(summaries) {
   const grouped = new Map();
   for (const summary of summaries) {
     const current = grouped.get(summary.feature) ?? { feature: summary.feature, occurrences: 0, durationMs: 0, participantCount: 0, participantMillis: 0, counts: {}, durationsMicros: {}, peakLayerCountSum: 0, maxLayerCount: 0, layerPaintEvents: 0, compositingReasons: {}, functions: new Map() };

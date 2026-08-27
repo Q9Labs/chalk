@@ -143,11 +143,7 @@ async function visibleEnabledButton(scope, pattern, description) {
 
 export async function clickFloatingControl(page, pattern, description = String(pattern)) {
   await revealFloatingControls(page);
-  const toolbars = page.getByRole("toolbar", { name: "Space controls" });
-  const count = await toolbars.count();
-  for (let index = count - 1; index >= 0; index -= 1) {
-    const toolbar = toolbars.nth(index);
-    if (!(await toolbar.isVisible())) continue;
+  for (const toolbar of await visibleFloatingToolbars(page)) {
     try {
       const { candidate, box } = await visibleEnabledButton(toolbar, pattern, description);
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -163,11 +159,7 @@ export async function clickFloatingControl(page, pattern, description = String(p
 export async function revealFloatingControls(page) {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error("viewport is unavailable while revealing Space controls");
-  const toolbars = page.getByRole("toolbar", { name: "Space controls" });
-  const count = await toolbars.count();
-  for (let index = count - 1; index >= 0; index -= 1) {
-    const toolbar = toolbars.nth(index);
-    if (!(await toolbar.isVisible())) continue;
+  for (const toolbar of await visibleFloatingToolbars(page)) {
     await toolbar.scrollIntoViewIfNeeded();
     const box = await toolbar.boundingBox();
     if (!box) continue;
@@ -178,6 +170,18 @@ export async function revealFloatingControls(page) {
   }
   await page.mouse.move(viewport.width / 2, Math.max(1, viewport.height - 24));
   await page.waitForTimeout(350);
+}
+
+async function visibleFloatingToolbars(page) {
+  const toolbars = page.getByRole("toolbar", { name: "Space controls" });
+  const count = await toolbars.count();
+  const visible = [];
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const toolbar = toolbars.nth(index);
+    if (!(await toolbar.isVisible())) continue;
+    visible.push(toolbar);
+  }
+  return visible;
 }
 
 export async function clickVisibleControl(page, pattern, description = String(pattern), scope = page) {

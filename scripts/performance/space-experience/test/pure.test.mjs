@@ -9,7 +9,7 @@ import { measurementPlan, parseCli } from "../config.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
 import { analyzeRun } from "../analysis.mjs";
 import { createChatScrollWork } from "../../../../sdks/typescript/react/src/components/composite/chat-panel-model.ts";
-import { createRecorder, runLeaveRejoin, shouldContinueCycles, supportFailed } from "../workload.mjs";
+import { createRecorder, runLeaveRejoin, shouldContinueCycles } from "../workload.mjs";
 
 test("CLI validates mode duration and Participant limits", () => {
   assert.equal(parseCli(["profile", "--minutes", "30", "--participants", "3", "--base", "http://localhost:13070"]).durationMs, 1_800_000);

@@ -142,7 +142,7 @@ export function measurementPlan(options) {
   });
 }
 
-export function createRunId(now = new Date(), random = Math.random()) {
+function createRunId(now = new Date(), random = Math.random()) {
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   const suffix = Math.floor(random * 36 ** 6)
     .toString(36)

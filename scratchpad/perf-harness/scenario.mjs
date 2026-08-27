@@ -240,11 +240,3 @@ export async function whiteboardPanZoom(page) {
   await dragOnStage(page, box, -140, -60);
   await page.keyboard.up(" ");
 }
-
-export async function stageTileInteractions(page) {
-  // Tiles are not draggable; exercise pointer pipelines over the stage grid.
-  const stage = page.locator('[data-tour="video-grid"]').first();
-  const box = await stage.boundingBox({ timeout: 5_000 });
-  if (!box) throw new Error("stage not visible");
-  await dragOnStage(page, box, 80, 30);
-}

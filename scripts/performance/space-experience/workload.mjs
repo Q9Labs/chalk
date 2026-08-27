@@ -33,7 +33,7 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function supportFailed(recorder, feature) {
+function supportFailed(recorder, feature) {
   return recorder.supportStatus(feature) === "failed";
 }
 

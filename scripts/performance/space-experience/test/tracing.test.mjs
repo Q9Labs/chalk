@@ -109,6 +109,13 @@ function browserCdp(options) {
   return new FakeCdp(options);
 }
 
+function assertLayersDisabled(people) {
+  assert.deepEqual(
+    people.map((person) => person.cdp.count("LayerTree.disable")),
+    [1, 1],
+  );
+}
+
 test("uses one browser Tracing start/end and one LayerTree recorder", async () => {
   await withOutput(async (outputPath) => {
     const people = participants(1);
@@ -150,10 +157,7 @@ test("start and stop overlap finish once without a promise cycle", async () => {
   assert.equal(stopResult.browserTrace.counts.Paint, 1);
   assert.equal(browser.count("Tracing.start"), 1);
   assert.equal(browser.count("Tracing.end"), 1);
-  assert.deepEqual(
-    people.map((person) => person.cdp.count("LayerTree.disable")),
-    [1, 1],
-  );
+  assertLayersDisabled(people);
   recorder.dispose();
 });
 
@@ -178,10 +182,7 @@ test("writes an analyzable artifact and cleans up when the action throws", async
     const artifact = JSON.parse(await readFile(outputPath, "utf8"));
     assert.equal(artifact.errors[0].phase, "action");
     assert.equal(browser.count("Tracing.end"), 1);
-    assert.deepEqual(
-      people.map((person) => person.cdp.count("LayerTree.disable")),
-      [1, 1],
-    );
+    assertLayersDisabled(people);
     assert.equal(artifact.participants.length, 2);
   });
 });
@@ -209,10 +210,7 @@ test("bounds tracingComplete wait, writes the partial trace, and disables layers
     await assert.rejects(() => traceFeature({ participants: people, browserCdp: browser, feature: "completion-timeout", action: () => {}, outputPath, observeMs: 0, traceCompleteTimeoutMs: 10 }), /timed out/);
     assert.ok(Date.now() - startedAt < 500);
     assert.equal(browser.count("Tracing.end"), 1);
-    assert.deepEqual(
-      people.map((person) => person.cdp.count("LayerTree.disable")),
-      [1, 1],
-    );
+    assertLayersDisabled(people);
     const artifact = JSON.parse(await readFile(outputPath, "utf8"));
     assert.equal(artifact.errors[0].phase, "stop");
     assert.equal(artifact.browserTrace.counts.Paint, 1);
