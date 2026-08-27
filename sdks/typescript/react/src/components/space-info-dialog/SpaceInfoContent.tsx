@@ -3,7 +3,8 @@ import type React from "react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { cn } from "../../utils/cn";
-import { Copy01Icon, Tick01Icon } from "../../utils/icons";
+import type { Copy01IconHandle } from "../../utils/animated-icons";
+import { Copy01Icon } from "../../utils/icons";
 import type { SpaceInfoDialogProps } from "./SpaceInfoDialog";
 
 type CopyTarget = "invite" | "diagnostic" | null;
@@ -52,6 +53,8 @@ function Row({ label, align = "start", children }: RowProps): React.JSX.Element 
 export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopyLink, diagnosticReference, onCopyDiagnosticReference, onSendFeedback, stats, duration }: SpaceInfoContentProps): React.JSX.Element {
   const [copied, setCopied] = useState<CopyTarget>(null);
   const confirmationTimer = useRef<number | null>(null);
+  const inviteCopyRef = useRef<Copy01IconHandle>(null);
+  const diagnosticCopyRef = useRef<Copy01IconHandle>(null);
 
   useEffect(
     () => () => {
@@ -60,8 +63,9 @@ export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopy
     [],
   );
 
-  const confirmCopy = (target: Exclude<CopyTarget, null>, copy: () => void) => {
+  const confirmCopy = (target: Exclude<CopyTarget, null>, copy: () => void, iconRef: React.RefObject<Copy01IconHandle | null>) => {
     copy();
+    iconRef.current?.startAnimation();
     setCopied(target);
     if (confirmationTimer.current !== null) window.clearTimeout(confirmationTimer.current);
     confirmationTimer.current = window.setTimeout(() => setCopied(null), 2_000);
@@ -81,8 +85,15 @@ export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopy
               <p className={FIELD_CLASS} title={inviteLink}>
                 <span className="truncate">{inviteLink}</span>
               </p>
-              <button type="button" onClick={() => confirmCopy("invite", onCopyLink)} className={ACCENT_BUTTON_CLASS} aria-label={copied === "invite" ? "Space link copied" : "Copy space link"}>
-                {copied === "invite" ? <Tick01Icon size={16} /> : <Copy01Icon size={16} />}
+              <button
+                type="button"
+                onClick={() => confirmCopy("invite", onCopyLink, inviteCopyRef)}
+                onMouseEnter={() => inviteCopyRef.current?.startAnimation()}
+                onFocus={() => inviteCopyRef.current?.startAnimation()}
+                className={ACCENT_BUTTON_CLASS}
+                aria-label={copied === "invite" ? "Space link copied" : "Copy space link"}
+              >
+                <Copy01Icon ref={inviteCopyRef} size={16} aria-hidden="true" onMouseEnter={() => inviteCopyRef.current?.startAnimation()} />
                 {copied === "invite" ? "Copied" : "Copy link"}
               </button>
             </div>
@@ -129,11 +140,13 @@ export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopy
               </code>
               <button
                 type="button"
-                onClick={() => confirmCopy("diagnostic", () => (onCopyDiagnosticReference ? onCopyDiagnosticReference(diagnosticReference) : void navigator.clipboard?.writeText(diagnosticReference)))}
+                onClick={() => confirmCopy("diagnostic", () => (onCopyDiagnosticReference ? onCopyDiagnosticReference(diagnosticReference) : void navigator.clipboard?.writeText(diagnosticReference)), diagnosticCopyRef)}
+                onMouseEnter={() => diagnosticCopyRef.current?.startAnimation()}
+                onFocus={() => diagnosticCopyRef.current?.startAnimation()}
                 className={cn(GHOST_BUTTON_CLASS, "h-7 px-2")}
                 aria-label={copied === "diagnostic" ? "Diagnostic reference copied" : "Copy diagnostic reference"}
               >
-                {copied === "diagnostic" ? <Tick01Icon size={14} /> : <Copy01Icon size={14} />}
+                <Copy01Icon ref={diagnosticCopyRef} size={14} aria-hidden="true" onMouseEnter={() => diagnosticCopyRef.current?.startAnimation()} />
                 {copied === "diagnostic" ? "Copied" : "Copy"}
               </button>
             </div>

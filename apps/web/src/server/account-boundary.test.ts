@@ -101,15 +101,7 @@ describe("account boundary", () => {
       expect(headers.get("cookie")).toBeNull();
       return Response.json({ session_token: "raw-account-token", expires_at: "2030-08-04T12:00:00Z", user: { id: "user-1", name: "Ada", email: "ada@example.com", secret: "remove" } });
     });
-    const response = await handleAccountBoundary(
-      jsonRequest(
-        "/api/auth/login",
-        { email: "ada@example.com", password: "secret" },
-        { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token", Authorization: "Bearer browser-token" },
-      ),
-      upstream,
-      fetcher,
-    );
+    const response = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "ada@example.com", password: "secret" }, { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token", Authorization: "Bearer browser-token" }), upstream, fetcher);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("__Host-chalk_account=raw-account-token");
@@ -135,11 +127,7 @@ describe("account boundary", () => {
 
   it("preserves the account cookie when recent authentication fails", async () => {
     const response = await handleAccountBoundary(
-      jsonRequest(
-        "/api/me/recent-auth",
-        { password: "wrong", action: "api_key.create" },
-        { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" },
-      ),
+      jsonRequest("/api/me/recent-auth", { password: "wrong", action: "api_key.create" }, { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" }),
       upstream,
       vi.fn(async () => Response.json({ error: { code: "auth.invalid_recent_auth", message: "Recent authentication failed" } }, { status: 401 })),
     );
@@ -150,11 +138,7 @@ describe("account boundary", () => {
 
   it("clears account and CSRF cookies on logout", async () => {
     const response = await handleAccountBoundary(
-      jsonRequest(
-        "/api/auth/logout",
-        {},
-        { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" },
-      ),
+      jsonRequest("/api/auth/logout", {}, { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" }),
       upstream,
       vi.fn(async () => new Response(null, { status: 204 })),
     );

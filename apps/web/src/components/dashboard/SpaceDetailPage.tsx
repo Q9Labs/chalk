@@ -16,6 +16,7 @@ import {
   type DashboardSpacePublicInvite,
   type Space,
 } from "../../lib/dashboard-api";
+import { AnimatedCopy01Icon, type AnimatedCopy01IconHandle } from "@q9labsai/chalk-react/utils";
 import { EditSpaceDialog } from "./EditSpaceDialog";
 import { SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, useModalDialog } from "./SpaceDialogPrimitives";
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
@@ -218,17 +219,19 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
     }
   }
 
-  async function copyPublicInvite() {
+  async function copyPublicInvite(): Promise<boolean> {
     const href = publicInvite ? publicSpaceHrefBuilder(publicInvite) : undefined;
     if (!href || !globalThis.navigator?.clipboard?.writeText) {
       setCopyState("error");
-      return;
+      return false;
     }
     try {
       await globalThis.navigator.clipboard.writeText(href);
       setCopyState("copied");
+      return true;
     } catch {
       setCopyState("error");
+      return false;
     }
   }
 
@@ -315,7 +318,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
         mutation={inviteMutation}
         mutationError={inviteMutationError}
         copyState={copyState}
-        onCopy={() => void copyPublicInvite()}
+        onCopy={copyPublicInvite}
         onDisable={() => void setPublicInviteEnabled(false)}
         onEnable={() => void setPublicInviteEnabled(true)}
         onRotate={() => setRotateOpen(true)}
@@ -438,12 +441,18 @@ function PublicInvitePanel({
   mutation: "disable" | "enable" | "rotate" | null;
   mutationError: string | null;
   copyState: "idle" | "copied" | "error";
-  onCopy: () => void;
+  onCopy: () => Promise<boolean>;
   onDisable: () => void;
   onEnable: () => void;
   onRotate: () => void;
   onRetry: () => void;
 }) {
+  const copyIconRef = useRef<AnimatedCopy01IconHandle>(null);
+
+  const handleCopy = async () => {
+    if (await onCopy()) copyIconRef.current?.startAnimation();
+  };
+
   return (
     <section className="space-detail-public-invite" aria-labelledby="space-public-link-heading">
       <PanelStateMessages
@@ -467,7 +476,16 @@ function PublicInvitePanel({
               <label htmlFor="space-public-link">Public URL</label>
               <div className="space-detail-public-link-controls">
                 <input id="space-public-link" readOnly value={publicInviteURL(invite)} />
-                <button className="dashboard-button secondary" type="button" onClick={onCopy} disabled={mutation !== null}>
+                <button
+                  className="dashboard-button secondary"
+                  type="button"
+                  onClick={() => void handleCopy()}
+                  onMouseEnter={() => copyIconRef.current?.startAnimation()}
+                  onFocus={() => copyIconRef.current?.startAnimation()}
+                  disabled={mutation !== null}
+                  aria-label={copyState === "copied" ? "Public link copied" : "Copy link"}
+                >
+                  <AnimatedCopy01Icon ref={copyIconRef} size={16} aria-hidden="true" onMouseEnter={() => copyIconRef.current?.startAnimation()} />
                   Copy link
                 </button>
               </div>
