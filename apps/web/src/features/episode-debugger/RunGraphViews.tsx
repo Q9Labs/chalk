@@ -1,6 +1,6 @@
 import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
 import SearchRemoveIcon from "@hugeicons/core-free-icons/SearchRemoveIcon";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { AnimatedHugeiconsIcon as HugeiconsIcon } from "@q9labsai/chalk-react/utils";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@q9labsai/chalk-ui";
 import type { DiagnosticSnapshotV1 } from "@q9labsai/diagnostics-contracts";
 import { useEffect, useState } from "react";

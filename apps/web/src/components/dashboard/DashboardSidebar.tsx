@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { Logo } from "@q9labsai/chalk-react";
+import { AnimatedHugeiconsIcon as HugeiconsIcon } from "@q9labsai/chalk-react/utils";
 import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
 import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
 import Home01Icon from "@hugeicons/core-free-icons/Home01Icon";
@@ -15,7 +16,6 @@ import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
 import UnfoldMoreIcon from "@hugeicons/core-free-icons/UnfoldMoreIcon";
 import UserCircleIcon from "@hugeicons/core-free-icons/UserCircleIcon";
 import type { IconSvgElement } from "@hugeicons/react";
-import { Logo } from "@q9labsai/chalk-react";
 import {
   Menu,
   MenuContent,
