@@ -84,6 +84,9 @@ export function createChatScrollWork(options: ChatScrollWorkOptions): { readonly
   };
   return {
     onScroll: () => {
+      const scroller = options.getScroller();
+      if (!scroller) return;
+      options.onAtBottomChange?.(isChatScrollAtBottom(scroller));
       if (frame !== null) return;
       frame = requestAnimationFrame(run);
     },

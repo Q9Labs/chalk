@@ -8,6 +8,7 @@ import { createDiagnosticRecorder } from "../browser.mjs";
 import { measurementPlan, parseCli } from "../config.mjs";
 import { TraceLifecycleError } from "../errors.mjs";
 import { analyzeRun } from "../analysis.mjs";
+import { createChatScrollWork } from "../../../../sdks/typescript/react/src/components/composite/chat-panel-model.ts";
 import { createRecorder, runLeaveRejoin, shouldContinueCycles, supportFailed } from "../workload.mjs";
 
 test("CLI validates mode duration and Participant limits", () => {
@@ -75,6 +76,43 @@ test("browser diagnostics coalesce repeats and remove URL query data", () => {
       lastAt: "tick-2",
     },
   ]);
+});
+
+test("chat scroll blocks auto-scroll before its deferred visibility scan", () => {
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  let scheduledFrame;
+  globalThis.requestAnimationFrame = (callback) => {
+    scheduledFrame = callback;
+    return 1;
+  };
+  globalThis.cancelAnimationFrame = () => {};
+  try {
+    const scroller = {
+      scrollHeight: 1_000,
+      scrollTop: 100,
+      clientHeight: 200,
+      getBoundingClientRect: () => ({ top: 0, bottom: 200 }),
+      querySelectorAll: () => [],
+    };
+    let atBottom = true;
+    const scrollWork = createChatScrollWork({
+      getScroller: () => scroller,
+      getLatestSequence: () => null,
+      lastMarkedSequenceRef: { current: null },
+      onAtBottomChange: (next) => {
+        atBottom = next;
+      },
+    });
+
+    scrollWork.onScroll();
+
+    assert.equal(atBottom, false);
+    assert.equal(typeof scheduledFrame, "function");
+  } finally {
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+  }
 });
 
 test("trace lifecycle failures abort the workload after recording evidence", async () => {
