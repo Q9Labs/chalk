@@ -47,8 +47,8 @@ node scripts/performance/space-experience/analyze.mjs .private/chalk-perf/runs/<
 node scripts/performance/space-experience/compare.mjs .private/chalk-perf/runs/<before> .private/chalk-perf/runs/<after>
 ```
 
-Focused pure tests run with:
+Focused contract tests run with:
 
 ```sh
-node --test scripts/performance/space-experience/test/pure.test.mjs
+node --test scripts/performance/space-experience/test/pure.test.mjs scripts/performance/space-experience/test/tracing.test.mjs
 ```
