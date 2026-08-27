@@ -18,22 +18,23 @@ behaves the same in production.
 
 ## Headline numbers (30 min, 4 participants)
 
-| Signal | Value |
-|---|---|
-| Host DOM nodes | 548 → **29,100** (linear, chat-driven) |
-| Host event listeners | 385 → **2,400** (+~1 per chat message) |
-| JS heap (worst page) | 88MB → **484MB** (Casey); others 178–226MB |
-| Retained `PerformanceMeasure` objects | 939 → **170,805** **[dev]** (= ~1.6 component renders/s sustained) |
-| Retained Effect `Context/scope` objects | **≈500,000** across six scope sites |
-| Paints/sec during reaction burst | **300–460/s** (should be ≤60) |
-| Layout events/sec during screen share idle video | **83–182/s** |
-| Style recalc/sec during whiteboard draw | 90–224/s |
-| GC time (whole-run, P1) | 22.8s (1.2%) |
-| Top JS self-time entry (non-idle) | `modifyOwnPropertyDescriptors` (Effect runtime) **18.5s**; `make$11` (Effect) 5.5s |
+| Signal                                           | Value                                                                              |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Host DOM nodes                                   | 548 → **29,100** (linear, chat-driven)                                             |
+| Host event listeners                             | 385 → **2,400** (+~1 per chat message)                                             |
+| JS heap (worst page)                             | 88MB → **484MB** (Casey); others 178–226MB                                         |
+| Retained `PerformanceMeasure` objects            | 939 → **170,805** **[dev]** (= ~1.6 component renders/s sustained)                 |
+| Retained Effect `Context/scope` objects          | **≈500,000** across six scope sites                                                |
+| Paints/sec during reaction burst                 | **300–460/s** (should be ≤60)                                                      |
+| Layout events/sec during screen share idle video | **83–182/s**                                                                       |
+| Style recalc/sec during whiteboard draw          | 90–224/s                                                                           |
+| GC time (whole-run, P1)                          | 22.8s (1.2%)                                                                       |
+| Top JS self-time entry (non-idle)                | `modifyOwnPropertyDescriptors` (Effect runtime) **18.5s**; `make$11` (Effect) 5.5s |
 
 ## Prioritized findings
 
 ### P1 — Stage re-render storm defeats tile memoization (CPU, all calls)
+
 `sdks/typescript/react/src/components/stage/Stage.tsx:162-170` — `frameStyle(...)`
 builds a fresh style object and fresh `click`/`doubleClick` closures inside the
 tile map, so `React.memo` on `ParticipantTile` (participant-tile/ParticipantTile.tsx:53)
@@ -46,6 +47,7 @@ storms of 83–182 Layout events/s while nothing but idle fake video plays
 in the stage `TRANSITION`, forcing layout during every 300ms transition.
 
 ### P2 — Chat: unvirtualized DOM + per-scroll-event layout reads (memory + CPU)
+
 `ChatPanel.tsx:249-302` / `ClassicChatPanel.tsx:229+` render every loaded
 message; DOM grows linearly (548 → 29,100 nodes in 30 min; ~6,400 retained
 `HTMLDivElement`s in the final snapshot) and never shrinks.
@@ -55,6 +57,7 @@ node on **every scroll event** — N+1 forced layouts per wheel tick, with no
 rAF batching. Listeners grow ~1 per message (385 → 2,400).
 
 ### P3 — Speaking-halo animation repaints every frame per speaking tile (GPU)
+
 `packages/ui/src/styles/index.css:1432-1435` — `.chalk-voice-halo` animates
 `box-shadow` spread 6px→14px infinitely (`chalk-voice-halo-breathe`,
 :1392-1401). Box-shadow is non-composited: every frame is a full tile repaint,
@@ -63,6 +66,7 @@ comparison (one-shot, translate3d). Paint evidence: 300–460 Paint events/s
 during reaction windows on a mostly static UI.
 
 ### P4 — Effect store churn on the hot path (CPU)
+
 Effect 4β runtime chunk (`Ref-LZ4OQgDS.js`) is the top JS self-time consumer:
 `modifyOwnPropertyDescriptors` 18.5s + `make$11` 5.5s + anonymous 6.3s over
 30 min, and ≈500k retained `system/Context/scope` objects in the final
@@ -72,28 +76,33 @@ run this machinery on every slice update; with per-frame state flips
 recorded here as the measured baseline.
 
 ### P5 — AudioOutput effect churn (CPU, low-med)
+
 `AudioOutput.tsx:84,96` — `remoteWithAudio`/`remoteWithScreenShareAudio` are
 new arrays every render, so the three effects at :220/:270/:319 tear down and
 rebuild after every render of the component. Not a leak; churn proportional
 to remote count × parent render rate (which P1 inflates).
 
 ### P6 — Background-tab polling continues (CPU, low)
+
 `client/src/media/client.ts:529-541` — remote-publication poll keeps running
 when the tab is hidden. One network poll per interval per hidden tab.
 
 ### P7 — Dev-only amplifiers **[dev]**
+
 - React dev build emits a retained `performance.measure` per component render
   (`react-dom_client.js`, 9 call sites) — 170k objects/30 min, each pinning
   its fiber. Inflates dev-mode heap; invisible in prod builds.
 - `logComponentRender`/`logRenderPhase` add per-render CPU in dev profiles.
 
 ### Verified clean (do not chase)
+
 Media-track lifecycle (capture, toggle-off, leave paths all stop tracks and
 clear `srcObject`), observer pairing (all ResizeObservers disconnect), reaction
 expiry fibers (capped, deduped), whiteboard collab engine disposal, pagehide
 release, dialogs' escape/click-outside pairing.
 
 ## Fix order (one at a time, harness-verified)
+
 1. P1 Stage memo bypass (stable frame styles + handlers; transition to transform-only).
 2. P2 chat scroll rAF batching + rect caching (keep unvirtualized DOM as follow-up).
 3. P3 voice halo → composited transform/opacity ring.
@@ -108,14 +117,14 @@ windowed traces (layouts/s, paints/s) and metric trends against this baseline.
 Fixes 1, 2, 3, 4, 5 applied together (they are independent surfaces), then
 `runs/2026-08-23T15-03-50-366Z` compared against the 30-min baseline:
 
-| Window (feature-matched, per second) | Before | After | Delta |
-|---|---|---|---|
-| Reactions paints/s | 200–463 (avg ≈330) | 100–124 (avg 100) | **≈3.3× fewer** |
-| Reactions layouts/s | 73–224 (avg ≈140) | 57–79 (avg 57) | **≈2.5× fewer** |
-| Reactions styleRecalc/s | ≈140 | ≈57 | **≈2.5× fewer** |
-| Screen-share paints/s | 90–445 (avg ≈330) | 90–106 (avg 90) | **≈3.5× fewer** |
-| Screen-share layouts/s | 43–182 (avg ≈140) | 48–60 (avg 48) | **≈3× fewer** |
-| Host layouts per minute (whole run) | ≈2,416 | ≈196 | **≈12× fewer** |
+| Window (feature-matched, per second) | Before             | After             | Delta           |
+| ------------------------------------ | ------------------ | ----------------- | --------------- |
+| Reactions paints/s                   | 200–463 (avg ≈330) | 100–124 (avg 100) | **≈3.3× fewer** |
+| Reactions layouts/s                  | 73–224 (avg ≈140)  | 57–79 (avg 57)    | **≈2.5× fewer** |
+| Reactions styleRecalc/s              | ≈140               | ≈57               | **≈2.5× fewer** |
+| Screen-share paints/s                | 90–445 (avg ≈330)  | 90–106 (avg 90)   | **≈3.5× fewer** |
+| Screen-share layouts/s               | 43–182 (avg ≈140)  | 48–60 (avg 48)    | **≈3× fewer**   |
+| Host layouts per minute (whole run)  | ≈2,416             | ≈196              | **≈12× fewer**  |
 
 Memory trajectory: worst-page JS heap 91–114MB through the 10-min after-run
 (baseline was 88MB → 484MB over 30 min); host DOM flat instead of growing

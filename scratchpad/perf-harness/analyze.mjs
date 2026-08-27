@@ -20,12 +20,8 @@ function mb(bytes) {
 
 async function snapshots() {
   const entries = await readdir(runDir, { withFileTypes: true });
-  const files = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".summary.json"))
-    .map((entry) => ({ name: entry.name, path: join(runDir, entry.name) }));
-  const withTimes = await Promise.all(
-    files.map(async (file) => ({ ...file, mtime: (await import("node:fs/promises")).stat(file.path).then((stats) => stats.mtimeMs) })),
-  );
+  const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".summary.json")).map((entry) => ({ name: entry.name, path: join(runDir, entry.name) }));
+  const withTimes = await Promise.all(files.map(async (file) => ({ ...file, mtime: (await import("node:fs/promises")).stat(file.path).then((stats) => stats.mtimeMs) })));
   withTimes.sort((a, b) => a.mtime - b.mtime);
   const rows = [];
   for (const file of withTimes) {
@@ -51,7 +47,7 @@ async function metrics() {
     const avg = (array, key) => array.reduce((sum, row) => sum + (row[key] ?? 0), 0) / array.length;
     const deltas = {};
     for (const field of ["scriptDurationDelta", "taskDurationDelta", "layoutCountDelta", "recalcStyleCountDelta"]) {
-      deltas[field] = Number((samples.reduce((sum, row) => sum + (row[field] ?? 0), 0)).toFixed(1));
+      deltas[field] = Number(samples.reduce((sum, row) => sum + (row[field] ?? 0), 0).toFixed(1));
     }
     trends[person] = {
       samples: samples.length,
@@ -83,8 +79,8 @@ async function traces() {
         layoutsPerSec: Number(((trace.counts.Layout ?? 0) / seconds).toFixed(1)),
         styleRecalcPerSec: Number(((trace.counts.UpdateLayoutTree ?? 0) / seconds).toFixed(1)),
         rasterPerSec: Number(((trace.counts.RasterTask ?? 0) / seconds).toFixed(1)),
-        layoutDurMs: Number((((trace.durationsMicros.Layout ?? 0) / 1000)).toFixed(0)),
-        scriptDurMs: Number((((trace.durationsMicros.FunctionCall ?? 0) / 1000)).toFixed(0)),
+        layoutDurMs: Number(((trace.durationsMicros.Layout ?? 0) / 1000).toFixed(0)),
+        scriptDurMs: Number(((trace.durationsMicros.FunctionCall ?? 0) / 1000).toFixed(0)),
       });
     }
     return out.sort((a, b) => a.tag.localeCompare(b.tag));
@@ -169,4 +165,6 @@ try {
       }
     }
   }
-} catch { /* optional */ }
+} catch {
+  /* optional */
+}

@@ -38,9 +38,7 @@ async function clickControl(page, labelPattern) {
 async function fillEntranceName(page, displayName) {
   // With ?name= prefilling the field there may be no placeholder to match.
   const byPlaceholder = page.getByPlaceholder("Enter your name");
-  const input = (await byPlaceholder.count())
-    ? byPlaceholder
-    : page.locator('input[type="text"], input:not([type])').first();
+  const input = (await byPlaceholder.count()) ? byPlaceholder : page.locator('input[type="text"], input:not([type])').first();
   await input.waitFor({ state: "visible", timeout: 30_000 });
   const value = await input.inputValue().catch(() => "");
   if (!value) await input.fill(displayName);

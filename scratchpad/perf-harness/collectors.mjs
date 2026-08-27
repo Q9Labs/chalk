@@ -17,9 +17,7 @@ export async function samplePage(cdp, page) {
       cdp.send("Performance.getMetrics"),
       page.evaluate(() => {
         const m = window.performance?.memory;
-        return m
-          ? { usedJSHeapSize: m.usedJSHeapSize, totalJSHeapSize: m.totalJSHeapSize, jsHeapSizeLimit: m.jsHeapSizeLimit }
-          : null;
+        return m ? { usedJSHeapSize: m.usedJSHeapSize, totalJSHeapSize: m.totalJSHeapSize, jsHeapSizeLimit: m.jsHeapSizeLimit } : null;
       }),
     ]);
     const byName = Object.fromEntries(metrics.map((entry) => [entry.name, entry.value]));
@@ -128,7 +126,9 @@ export async function traceWindow(page, durationMs, categories = ["devtools.time
   const cdp = await page.context().newCDPSession(page);
   const events = [];
   let complete;
-  const completed = new Promise((resolve) => { complete = resolve; });
+  const completed = new Promise((resolve) => {
+    complete = resolve;
+  });
   cdp.on("Tracing.dataCollected", ({ value }) => events.push(...value));
   cdp.on("Tracing.tracingComplete", () => complete());
   await cdp.send("Tracing.start", {
@@ -145,6 +145,10 @@ export async function traceWindow(page, durationMs, categories = ["devtools.time
     counts[event.name] = (counts[event.name] ?? 0) + 1;
     durations[event.name] = (durations[event.name] ?? 0) + (event.dur ?? 0);
   }
-  try { await cdp.detach(); } catch { /* already gone */ }
+  try {
+    await cdp.detach();
+  } catch {
+    /* already gone */
+  }
   return { durationMs, eventCount: events.length, counts, durationsMicros: durations };
 }

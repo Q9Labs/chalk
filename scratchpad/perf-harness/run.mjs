@@ -15,16 +15,7 @@ import { createRequire } from "node:module";
 import { mkdir, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  enableDomains,
-  samplePage,
-  deltaSample,
-  startCpuProfile,
-  stopCpuProfile,
-  takeHeapSnapshot,
-  summarizeHeapSnapshot,
-  traceWindow,
-} from "./collectors.mjs";
+import { enableDomains, samplePage, deltaSample, startCpuProfile, stopCpuProfile, takeHeapSnapshot, summarizeHeapSnapshot, traceWindow } from "./collectors.mjs";
 import * as scenario from "./scenario.mjs";
 
 const harnessDir = fileURLToPath(new URL(".", import.meta.url));
@@ -80,12 +71,7 @@ async function main() {
 
   const browser = await chromium.launch({
     headless: true,
-    args: [
-      "--use-fake-device-for-media-stream",
-      "--use-fake-ui-for-media-stream",
-      "--autoplay-policy=no-user-gesture-required",
-      "--disable-dev-shm-usage",
-    ],
+    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--disable-dev-shm-usage"],
   });
 
   const people = [];
@@ -138,8 +124,7 @@ async function main() {
   const host = people[0];
   let inviteURL;
   await startCpuProfile(host.cdp, 5_000); // whole-run, low rate
-  inviteURL = await step("host join", () =>
-    scenario.joinAsHost(host.page, host.name, (event) => stepLog({ event: "join-progress", ...event })) );
+  inviteURL = await step("host join", () => scenario.joinAsHost(host.page, host.name, (event) => stepLog({ event: "join-progress", ...event })));
   if (!inviteURL) throw new Error("host join failed; aborting run");
   await snapshot("p1-after-join", 0);
 
@@ -176,11 +161,26 @@ async function main() {
 
     // Media toggles, staggered.
     for (const [index, person] of people.entries()) {
-      await step(`${person.name} mic toggle`, () => scenario.toggleMic(person.page).then(() => sleep(400)).then(() => scenario.toggleMic(person.page)));
+      await step(`${person.name} mic toggle`, () =>
+        scenario
+          .toggleMic(person.page)
+          .then(() => sleep(400))
+          .then(() => scenario.toggleMic(person.page)),
+      );
       if (index % 2 === 1) {
-        await step(`${person.name} camera toggle`, () => scenario.toggleCamera(person.page).then(() => sleep(600)).then(() => scenario.toggleCamera(person.page)));
+        await step(`${person.name} camera toggle`, () =>
+          scenario
+            .toggleCamera(person.page)
+            .then(() => sleep(600))
+            .then(() => scenario.toggleCamera(person.page)),
+        );
       }
-      await step(`${person.name} hand raise`, () => scenario.toggleHandRaise(person.page).then(() => sleep(700)).then(() => scenario.toggleHandRaise(person.page)));
+      await step(`${person.name} hand raise`, () =>
+        scenario
+          .toggleHandRaise(person.page)
+          .then(() => sleep(700))
+          .then(() => scenario.toggleHandRaise(person.page)),
+      );
     }
 
     // Chat burst + history scroll (every participant needs its own panel open).
