@@ -52,6 +52,31 @@ describe("ChalkEmbeddedWhiteboardRendererBridge", () => {
     expect(outbound.type).toBe("request_snapshot");
     if (outbound.type !== "request_snapshot") throw new Error("expected request_snapshot");
 
+    let settled = false;
+    void request.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: hostMessage(
+          {
+            type: "operation_result",
+            payload: { requestId: "different-request", ok: true },
+          },
+          "host-message-wrong",
+        ),
+      }),
+    );
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
     window.dispatchEvent(
       new MessageEvent("message", {
         data: hostMessage(

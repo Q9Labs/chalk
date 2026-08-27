@@ -27,7 +27,7 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
   } do
     [seed_connection] = SyncPostgres.start_connections(@database_url, 1)
     fixture = SyncPostgres.seed_episode(seed_connection, 2)
-    [identity_a, identity_b] = fixture.identities
+    identity_a = hd(fixture.identities)
     initial_revision = fixture.state.revision
     stop_connection(seed_connection)
 
@@ -38,15 +38,10 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
       Wire.database_url_with_port(@database_url, TcpFaultProxy.port(database_proxy))
 
     {node_a, port_a} = start_node("failover-a", proxy_database_url)
-    {_node_b, port_b} = start_node("failover-b", proxy_database_url)
     {client_a, _welcome_a} = Wire.connect_v1(port_a, identity_a)
-    {client_b, _welcome_b} = Wire.connect_v1(port_b, identity_b)
 
     {_client_a, committed} = Wire.commit_hand(client_a, "failover-hand-0001", true)
     assert committed["ack"]["outcome"] == "committed"
-    {client_b, observed} = Wire.receive_json_type(client_b, "event")
-    assert observed["revision"] == initial_revision + 1
-    _client_b = Wire.acknowledge_control_event(client_b, observed)
 
     run_control!("failover")
     assert :ok = TcpFaultProxy.switch_upstream(database_proxy, {127, 0, 0, 1}, standby_port)

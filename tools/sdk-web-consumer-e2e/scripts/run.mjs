@@ -259,7 +259,16 @@ async function openParticipant(browser, baseURL, participant) {
 }
 
 function invoke(page, action, argument) {
-  return page.evaluate(([name, value]) => window.__chalk[name](...(value === undefined ? [] : [value])), [action, argument]);
+  return page.evaluate(
+    ([name, value]) => {
+      const pendingInvocations = (window.__chalkPendingInvocations ??= new Set());
+      const invocation = Promise.resolve(window.__chalk[name](...(value === undefined ? [] : [value])));
+      const retainedInvocation = invocation.finally(() => pendingInvocations.delete(retainedInvocation));
+      pendingInvocations.add(retainedInvocation);
+      return retainedInvocation;
+    },
+    [action, argument],
+  );
 }
 
 function waitForState(page, state) {
@@ -267,7 +276,13 @@ function waitForState(page, state) {
 }
 
 async function waitFor(page, predicate, argument) {
-  await page.waitForFunction(([source, value]) => Function("snapshot", "value", `return (${source})(snapshot, value)`)(window.__chalk.snapshot(), value), [String(predicate), argument], { timeout: 10_000 });
+  try {
+    await page.waitForFunction(([source, value]) => Function("snapshot", "value", `return (${source})(snapshot, value)`)(window.__chalk.snapshot(), value), [String(predicate), argument], { timeout: 10_000 });
+  } catch (error) {
+    const snapshot = await page.evaluate(() => window.__chalk.snapshot());
+    process.stderr.write(`[packed-e2e] timed out with snapshot ${JSON.stringify(snapshot)}\n`);
+    throw error;
+  }
 }
 
 async function waitForAccessRefresh(page) {
@@ -316,7 +331,8 @@ async function assertPackedInstall(directory, archiveDirectory_, archives) {
     process.execPath,
     [
       "-e",
-      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@q9labsai/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@q9labsai/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== "0.1.0") throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
+      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@q9labsai/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@q9labsai/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== process.argv[1]) throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
+      diagnosticsManifest.version,
     ],
     directory,
   );

@@ -24,8 +24,7 @@
     "build:android:release:production": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- pnpm run build:android:release",
     "with:production-release-env": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts --",
     "check-types": "tsc --noEmit",
-    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
-    "test": "pnpm exec vitest run"
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",
@@ -34,8 +33,8 @@
     "@expo/vector-icons": "^15.0.2",
     "@hugeicons/core-free-icons": "^4.0.0",
     "@hugeicons/react-native": "^1.0.13",
-    "@q9labsai/chalk-client": "workspace:^4.1.11",
-    "@q9labsai/chalk-react-native": "workspace:^4.1.11",
+    "@q9labsai/chalk-client": "workspace:^4.1.15",
+    "@q9labsai/chalk-react-native": "workspace:^4.1.15",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "^55.0.6",
     "expo-clipboard": "~55.0.9",

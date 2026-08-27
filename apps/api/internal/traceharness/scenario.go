@@ -101,6 +101,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runServiceEpisodeDiagnostics(ctx)
 	case ServiceDashboardSpaceJoinScenario:
 		return runServiceDashboardSpaceJoin(ctx)
+	case ServicePublicInviteLifecycleScenario:
+		return runServicePublicInviteLifecycle(ctx)
 	case ServiceMediaPlaneDefaultResolutionScenario:
 		return runServiceMediaPlaneDefaultResolution(ctx)
 	case RouteWhiteboardFileUploadScenario:
@@ -109,6 +111,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteChatAttachmentUpload(ctx)
 	case RoutePublicInviteObservabilityScenario:
 		return runRoutePublicInviteObservability(ctx)
+	case RoutePublicInviteAccessRecoveryScenario:
+		return runRoutePublicInviteAccessRecovery(ctx)
 	case RouteAPIKeyCustomerFlowScenario:
 		return runRouteAPIKeyCustomerFlow(ctx)
 	case EdgeAPIKeyRejectedScopeScenario:

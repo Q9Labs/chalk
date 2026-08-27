@@ -1168,6 +1168,7 @@ type SyncWhiteboardOperationReceipt struct {
 	SceneID             pgtype.UUID        `json:"scene_id"`
 	Revision            int64              `json:"revision"`
 	EventElements       []byte             `json:"event_elements"`
+	EventPresenting     pgtype.Bool        `json:"event_presenting"`
 	EventEncodedBytes   int32              `json:"event_encoded_bytes"`
 	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
 }
@@ -1183,16 +1184,18 @@ type SyncWhiteboardPermission struct {
 }
 
 type SyncWhiteboardScene struct {
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	SpaceID      pgtype.UUID        `json:"space_id"`
-	SceneID      pgtype.UUID        `json:"scene_id"`
-	IsCurrent    bool               `json:"is_current"`
-	Revision     int64              `json:"revision"`
-	AppState     []byte             `json:"app_state"`
-	ElementCount int32              `json:"element_count"`
-	EncodedBytes int64              `json:"encoded_bytes"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	SpaceID             pgtype.UUID        `json:"space_id"`
+	EpisodeID           pgtype.UUID        `json:"episode_id"`
+	SceneID             pgtype.UUID        `json:"scene_id"`
+	IsCurrent           bool               `json:"is_current"`
+	PresentingEpisodeID pgtype.UUID        `json:"presenting_episode_id"`
+	Revision            int64              `json:"revision"`
+	AppState            []byte             `json:"app_state"`
+	ElementCount        int32              `json:"element_count"`
+	EncodedBytes        int64              `json:"encoded_bytes"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tenant struct {

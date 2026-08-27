@@ -23,9 +23,16 @@ func main() {
 func run() error {
 	color := flag.String("color", "auto", "text color: auto, always, or never")
 	format := flag.String("format", "text", "output format: text or json")
+	list := flag.Bool("list", false, "list available scenarios and exit")
 	style := flag.String("style", "minimal", "timeline style: minimal or tree")
 	scenario := flag.String("scenario", allScenarios, "scenario to run, or all")
 	flag.Parse()
+	if *list {
+		for _, name := range traceharness.ScenarioNames() {
+			fmt.Fprintln(os.Stdout, name)
+		}
+		return nil
+	}
 
 	results, err := runScenarios(context.Background(), *scenario)
 	if err != nil {

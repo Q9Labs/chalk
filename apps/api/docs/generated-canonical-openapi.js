@@ -2091,6 +2091,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             description: "Bad Request",
             "x-chalk-error-codes": ["arrival.invalid_handle", "request.invalid", "request.invalid_idempotency_key"],
           },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.media_proof_rejected"],
+          },
           404: {
             content: {
               "application/json": {
@@ -2111,7 +2122,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict"],
+            "x-chalk-error-codes": ["access.media_proof_expired", "episode.capacity_exceeded", "request.idempotency_conflict"],
           },
           413: {
             content: {
@@ -15217,6 +15228,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             required: ["expires_at", "generation", "intake_path", "token"],
             type: ["object", "null"],
           },
+          episode_started_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
           media: {
             additionalProperties: false,
             properties: {
@@ -17579,8 +17600,11 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             minLength: 1,
             type: "string",
           },
+          replace_media_connection: {
+            type: "boolean",
+          },
         },
-        required: ["media_proof"],
+        required: ["media_proof", "replace_media_connection"],
         type: "object",
       },
       Regions: {

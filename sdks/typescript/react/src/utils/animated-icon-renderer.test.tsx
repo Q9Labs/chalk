@@ -1,57 +1,78 @@
 // @vitest-environment happy-dom
 
 import Calendar01Icon from "@hugeicons/core-free-icons/Calendar01Icon";
-import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import CopyGlyph from "@hugeicons/core-free-icons/Copy01Icon";
 import { Copy01Icon as BarrelCopy01Icon } from "@hugeicons/core-free-icons";
-import { cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnimatedHugeiconsIcon } from "./animated-icon-renderer";
+import { Copy01Icon } from "./animated-icons";
 
-afterEach(cleanup);
+let container: HTMLDivElement;
+let root: Root;
 
-describe("AnimatedHugeiconsIcon", () => {
-  it("renders a mapped glyph through the animated collection", () => {
+beforeEach(() => {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
+
+function render(element: ReactNode) {
+  act(() => root.render(element));
+}
+
+describe("animated Hugeicons boundary", () => {
+  it("preserves mapped and fallback Hugeicons semantics", () => {
     const onClick = vi.fn();
-    const view = render(<AnimatedHugeiconsIcon icon={Copy01Icon} size={18} className="copy-icon" aria-label="Copy" focusable="false" strokeWidth={1.8} onClick={onClick} />);
+    render(<AnimatedHugeiconsIcon icon={CopyGlyph} size={18} className="copy-icon" aria-label="Copy" focusable="false" strokeWidth={1.8} onClick={onClick} />);
 
-    const wrapper = view.container.querySelector('[data-hugeicons-animated="true"]');
+    const wrapper = container.querySelector('[data-hugeicons-animated="true"]');
     const svg = wrapper?.querySelector("svg");
+    expect(wrapper?.classList.contains("copy-icon")).toBe(true);
+    expect(svg?.getAttribute("width")).toBe("18");
+    expect(svg?.getAttribute("aria-label")).toBe("Copy");
+    expect(svg?.getAttribute("stroke-width")).toBe("1.8");
+    expect(svg?.querySelector('path[stroke-width="inherit"]')).not.toBeNull();
 
-    expect(wrapper).toHaveClass("copy-icon");
-    expect(svg).toHaveAttribute("width", "18");
-    expect(svg).toHaveAttribute("height", "18");
-    expect(svg).toHaveAttribute("aria-label", "Copy");
-    expect(svg).toHaveAttribute("focusable", "false");
-    expect(svg).toHaveAttribute("stroke-width", "1.8");
-    expect(svg?.querySelector('path[stroke-width="inherit"]')).toBeInTheDocument();
-
-    if (svg) fireEvent.click(svg);
+    svg?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onClick).toHaveBeenCalledOnce();
+
+    render(<AnimatedHugeiconsIcon icon={Calendar01Icon} size={20} aria-label="Calendar" />);
+    expect(container.querySelector('[data-hugeicons-animated="true"]')).toBeNull();
+    expect(container.querySelector('svg[aria-label="Calendar"]')?.getAttribute("width")).toBe("20");
   });
 
-  it("matches equivalent glyphs from the package barrel and keeps Hugeicons sizing semantics", () => {
-    const view = render(<AnimatedHugeiconsIcon icon={BarrelCopy01Icon} absoluteStrokeWidth strokeWidth={2} size={48} />);
-    const wrapper = view.container.querySelector('[data-hugeicons-animated="true"]');
-    const svg = wrapper?.querySelector("svg");
+  it("matches barrel glyphs and keeps Hugeicons size and stroke rules", () => {
+    render(<AnimatedHugeiconsIcon icon={BarrelCopy01Icon} absoluteStrokeWidth strokeWidth={2} size={48} />);
+    expect(container.querySelector('[data-hugeicons-animated="true"]')).not.toBeNull();
+    expect(container.querySelector("svg")?.getAttribute("stroke-width")).toBe("1");
 
-    expect(wrapper).toBeInTheDocument();
-    expect(svg).toHaveAttribute("width", "48");
-    expect(svg).toHaveAttribute("stroke-width", "1");
+    render(<AnimatedHugeiconsIcon icon={CopyGlyph} />);
+    expect(container.querySelector("svg")?.getAttribute("width")).toBe("24");
   });
 
-  it("uses the 24px Hugeicons default size", () => {
-    const view = render(<AnimatedHugeiconsIcon icon={Copy01Icon} />);
-    const svg = view.container.querySelector("svg");
+  it("starts and stops a nested animation with its parent control", () => {
+    const onMouseEnter = vi.fn();
+    const onMouseLeave = vi.fn();
+    render(
+      <button type="button">
+        Copy
+        <Copy01Icon aria-hidden="true" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} />
+      </button>,
+    );
 
-    expect(svg).toHaveAttribute("width", "24");
-    expect(svg).toHaveAttribute("height", "24");
-  });
+    const button = container.querySelector("button");
+    button?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    button?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
 
-  it("keeps the Hugeicons renderer for glyphs without an animation", () => {
-    const view = render(<AnimatedHugeiconsIcon icon={Calendar01Icon} size={20} aria-label="Calendar" />);
-
-    expect(view.container.querySelector('[data-hugeicons-animated="true"]')).not.toBeInTheDocument();
-    expect(view.getByLabelText("Calendar")).toHaveAttribute("width", "20");
+    expect(onMouseEnter).toHaveBeenCalled();
+    expect(onMouseLeave).toHaveBeenCalled();
   });
 });

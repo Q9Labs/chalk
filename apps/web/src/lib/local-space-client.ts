@@ -4,7 +4,7 @@ import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 
 import type { AccountSpaceCredential, PublicSpaceCredential } from "./chalk-access";
 
-type SpaceOperationJourney = Pick<TelemetryJourney, "recordDiagnostic"> & { readonly context?: TelemetryJourney["context"] };
+type SpaceOperationJourney = Pick<TelemetryJourney, "recordDiagnostic"> & Partial<Pick<TelemetryJourney, "recordRtcSummary">> & { readonly context?: TelemetryJourney["context"] };
 type CreateSpaceClient = (options: SpaceClientOptions, platform: SpaceClientPlatform) => SpaceClient;
 
 export type LocalSpaceClientOptions = {
@@ -22,7 +22,15 @@ type LocalSpaceClientDependencies = {
 /** Creates the app-owned Space client with the verified Space identity and access provider. */
 export function createLocalSpaceClient({ credential, getAccess, connectionAccess, journey }: LocalSpaceClientOptions, dependencies: LocalSpaceClientDependencies = {}): SpaceClient {
   const syncURL = "syncURL" in credential ? credential.syncURL : dashboardSyncURL();
-  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)({ space: credential.space, getAccess, baseUrl: credential.apiBaseURL }, { ...(syncURL ? { syncUrl: syncURL } : {}), ...(connectionAccess ? { connectionAccess } : {}), telemetry: journey.context });
+  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)(
+    { space: credential.space, getAccess, baseUrl: credential.apiBaseURL },
+    {
+      ...(syncURL ? { syncUrl: syncURL } : {}),
+      ...(connectionAccess ? { connectionAccess } : {}),
+      telemetry: journey.context,
+      ...(journey.recordRtcSummary ? { recordRtcSummary: (connection, stats) => journey.recordRtcSummary?.(connection, stats) } : {}),
+    },
+  );
   return instrumentSpaceClient(client, journey, dependencies.now ?? Date.now);
 }
 

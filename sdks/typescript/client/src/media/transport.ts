@@ -14,7 +14,12 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       ...init,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init?.headers },
     });
-    if (!response.ok) throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed");
+    if (!response.ok) {
+      throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
+        status: response.status,
+        retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),
+      });
+    }
     return (await response.json()) as T;
   };
   return {

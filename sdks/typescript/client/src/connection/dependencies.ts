@@ -1,4 +1,4 @@
-import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
+import type { ClientMediaPlane, CloudflareSFUBootstrap, CloudflareSFURtcSummaryRecorder, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
@@ -75,6 +75,8 @@ export type ConnectionMediaClient = ClientMediaPlane & {
 export type ConnectionMediaFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
+  readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
+  readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly onFailure: (error: unknown) => void;
   readonly onScreenEnded: () => void;
 };

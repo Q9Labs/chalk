@@ -1460,6 +1460,7 @@ export interface components {
         intake_path: string;
         token: string;
       } | null;
+      episode_started_at?: components["schemas"]["DateTimeString"] | null;
       media: {
         client_payload: {
           [key: string]:
@@ -2228,6 +2229,7 @@ export interface components {
     };
     RefreshSpacePublicInviteAccessRequest: {
       media_proof: string;
+      replace_media_connection: boolean;
     };
     Regions: {
       regions: {
@@ -4033,6 +4035,15 @@ export interface operations {
       };
       /** @description Bad Request */
       400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
         headers: {
           [name: string]: unknown;
         };

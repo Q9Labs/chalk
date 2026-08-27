@@ -65,9 +65,17 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
     );
   }
   const { subject } = input.access;
+  const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
     participantId: subject.participantId,
+    replaceMediaConnection: replaceMediaConnection
+      ? async () => {
+          const replacement = await replaceMediaConnection();
+          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+          return replacement.clientPayload;
+        }
+      : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
@@ -77,6 +85,7 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       participantId: subject.participantId,
     }),
     onError: input.onFailure,
+    ...(input.recordRtcSummary ? { onRtcSummary: input.recordRtcSummary } : {}),
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);

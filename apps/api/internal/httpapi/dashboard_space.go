@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -48,7 +49,10 @@ type dashboardSpaceSelfLeaveRequest struct {
 	ParticipantGeneration int64
 }
 
-const dashboardJoinCleanupRequestPrefix = "dashboard-join-cleanup-"
+const (
+	dashboardJoinCleanupRequestPrefix = "dashboard-join-cleanup-"
+	dashboardJoinCleanupTimeout       = 5 * time.Second
+)
 
 func dashboardSpaceSelfEndpoints(service DashboardSpaceJoinService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
@@ -75,10 +79,12 @@ func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens Sy
 			return accessGrantResponse{}, err
 		}
 		cleanupFailedJoin := func(cause error) error {
-			if joined.Participant.Status != episodes.ParticipantStatusJoining {
+			if !joined.ParticipantCreated || joined.Participant.Status != episodes.ParticipantStatusJoining {
 				return cause
 			}
-			_, cleanupErr := service.LeaveSelf(ctx, episodes.SelfLeaveInput{
+			cleanupContext, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), dashboardJoinCleanupTimeout)
+			defer cancelCleanup()
+			_, cleanupErr := service.LeaveSelf(cleanupContext, episodes.SelfLeaveInput{
 				TenantID:              request.TenantID,
 				AccountID:             accountID,
 				SpaceSlug:             request.SpaceSlug,
@@ -92,7 +98,7 @@ func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens Sy
 		}
 		var syncCredential synctokens.Token
 		if tokens != nil {
-			syncCredential, err = tokens.Issue(ctx, synctokens.Input{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, ParticipantID: joined.Participant.ID, ParticipantGeneration: joined.Participant.Generation, AdmissionLifecycleIntentID: joined.Intent.ID, DisplayName: request.Body.DisplayName, Role: joined.Participant.Role, Capabilities: append([]string(nil), joined.Participant.Capabilities...)})
+			syncCredential, err = tokens.Issue(ctx, synctokens.Input{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, StartedAt: &joined.Episode.StartedAt, ParticipantID: joined.Participant.ID, ParticipantGeneration: joined.Participant.Generation, AdmissionLifecycleIntentID: joined.Intent.ID, DisplayName: request.Body.DisplayName, Role: joined.Participant.Role, Capabilities: append([]string(nil), joined.Participant.Capabilities...)})
 		} else if refresh != nil {
 			syncCredential, err = refresh.IssueForParticipant(ctx, synctokens.SubjectKey{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, ParticipantID: joined.Participant.ID})
 		} else {

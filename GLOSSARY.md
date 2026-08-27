@@ -9,7 +9,7 @@ seams.
 
 Provenance: the rulings behind every entry, with reasoning and rejected
 candidates, live in
-`scratchpad/ubiquitous-language-decision-session-log-2026-08-03.md`. The
+`scratchpad/history/2026-W32.md`. The
 superseded `sdks/ubiquitous-language.md` is deleted; its UI shape catalog
 remains in git history as input for the React-wave design sheet. A CI
 ratchet (per-surface banned-term counts that may only decrease) enforces this

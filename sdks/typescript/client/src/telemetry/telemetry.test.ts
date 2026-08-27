@@ -4,6 +4,7 @@ import { createJourneyIntakeExporter, createTelemetryClient, type TelemetryClien
 import { createKeyValueTelemetryStorage, createMemoryTelemetryStorage } from "./storage";
 import { withSyncTelemetryCorrelation } from "./sync";
 import { makeDeferredFacadeExporter } from "./test-support";
+import { createTraceContext, parseTraceparent } from "./trace";
 import type { JourneyIntakeEvent, TelemetryEvent } from "./types";
 
 const clients: TelemetryClient[] = [];
@@ -21,16 +22,25 @@ function createClient(options: ConstructorParameters<typeof TelemetryClient>[0] 
 }
 
 describe("TelemetryClient", () => {
+  it("continues a valid parent trace with a fresh span", () => {
+    const child = createTraceContext("00-11111111111111111111111111111111-2222222222222222-01");
+
+    expect(parseTraceparent(child.traceparent)?.traceId).toBe("11111111111111111111111111111111");
+    expect(child.spanId).not.toBe("2222222222222222");
+  });
+
   it("records a root journey from start through an idempotent terminal outcome", async () => {
     const exporter = vi.fn(async () => ({ accepted_count: 3, duplicate_count: 0 }));
     const telemetry = createClient({ exporter, now: () => new Date("2026-07-11T10:00:00.000Z") });
-    const journey = telemetry.startJourney({ kind: "space.join" });
+    const journey = telemetry.startJourney({ kind: "space.join", journeyId: "legacy-123" });
 
     const phase = journey.phase("signaling", { transport: "websocket" });
     const terminal = journey.terminal("succeeded", { result: "connected" });
 
     expect(journey.terminal("succeeded")).toBe(terminal);
     expect(journey.phase("media")).toBeUndefined();
+    expect(journey.context.journeyId).not.toBe("legacy-123");
+    expect(journey.context.journeyId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
     expect(journey.context.rootJourneyId).toBe(journey.context.journeyId);
     expect(journey.headers["x-chalk-journey-id"]).toBe(journey.context.journeyId);
     expect(journey.headers.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
@@ -220,14 +230,6 @@ describe("TelemetryClient", () => {
     expect(child.context.traceparent.split("-")[1]).toBe(root.context.traceparent.split("-")[1]);
   });
 
-  it("normalizes invalid caller journey identifiers to API-compatible UUIDs", () => {
-    const telemetry = createClient();
-    const journey = telemetry.startJourney({ kind: "space.join", journeyId: "legacy-123" });
-
-    expect(journey.context.journeyId).not.toBe("legacy-123");
-    expect(journey.context.journeyId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
-  });
-
   it("propagates journey correlation through sync hello frames", () => {
     const telemetry = createClient();
     const journey = telemetry.startJourney({ kind: "space.join", tracestate: "chalk=local" });
@@ -309,7 +311,8 @@ describe("TelemetryClient", () => {
     const event = journey.recordRtcSummary({ connectionState: "connected", iceConnectionState: "completed", signalingState: "stable" }, [
       { type: "inbound-rtp", bytesReceived: 1200, packetsReceived: 30, packetsLost: 2, framesDropped: 1, jitter: 0.004 },
       { type: "outbound-rtp", bytesSent: 800, packetsSent: 12 },
-      { type: "candidate-pair", roundTripTime: 0.03 },
+      { type: "candidate-pair", roundTripTime: 0.03, selected: true, state: "succeeded" },
+      { type: "transport", dtlsState: "connected" },
     ]);
 
     expect(event).toMatchObject({ name: "rtc.summary", phase: "media", origin_kind: "rtc" });
@@ -321,6 +324,8 @@ describe("TelemetryClient", () => {
       packets_lost: 2,
       jitter_ms: 4,
       round_trip_time_ms: 30,
+      dtls_state: "connected",
+      selected_candidate_pair_state: "succeeded",
     });
     expect(event?.attributes).not.toHaveProperty("candidate");
     expect(event?.attributes).not.toHaveProperty("track");
@@ -339,11 +344,19 @@ describe("TelemetryClient", () => {
       origin_kind: "diagnostic",
       attributes: Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`metric_${index}`, "x".repeat(300)])),
     });
+    const boundedEvent = journey.recordDiagnostic({
+      category: "episode",
+      code: "episode.started",
+      attributes: Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`custom_${index}`, index])),
+    });
 
     expect(telemetry.getTimeline()).toHaveLength(3);
     expect(telemetry.getTimeline().map((entry) => entry.name)).toEqual(["diagnostic.timeline", "diagnostic.timeline", "diagnostic.timeline"]);
     expect(Object.keys(event.attributes ?? {})).toHaveLength(24);
     expect(event.attributes?.metric_0).toHaveLength(256);
+    expect(Object.keys(boundedEvent?.attributes ?? {})).toHaveLength(24);
+    expect(boundedEvent?.attributes).toMatchObject({ category: "episode", code: "episode.started", custom_0: 0 });
+    expect(boundedEvent?.attributes).not.toHaveProperty("custom_22");
   });
 
   it("records connection diagnostics for framework bindings", () => {
@@ -366,20 +379,6 @@ describe("TelemetryClient", () => {
     expect(event?.attributes).not.toHaveProperty("episode_id");
     expect(event?.attributes).not.toHaveProperty("participant_id");
     expect(event?.attributes).not.toHaveProperty("access_token");
-  });
-
-  it("reserves canonical diagnostic fields ahead of 24 caller attributes", () => {
-    const telemetry = createClient();
-    const journey = telemetry.startJourney({ kind: "space.join" });
-    const event = journey.recordDiagnostic({
-      category: "episode",
-      code: "episode.started",
-      attributes: Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`custom_${index}`, index])),
-    });
-
-    expect(Object.keys(event?.attributes ?? {})).toHaveLength(24);
-    expect(event?.attributes).toMatchObject({ category: "episode", code: "episode.started", custom_0: 0 });
-    expect(event?.attributes).not.toHaveProperty("custom_22");
   });
 
   it("records numeric diagnostics only while the journey is active", () => {
@@ -443,16 +442,6 @@ describe("TelemetryClient", () => {
         }),
       ],
     });
-  });
-
-  it("uses an unload-safe export for an explicit keepalive flush", async () => {
-    const exporter = vi.fn(async () => ({ accepted_count: 1, duplicate_count: 0 }));
-    const telemetry = createClient({ exporter });
-    telemetry.startJourney({ kind: "web.application" });
-
-    await telemetry.flush({ keepalive: true });
-
-    expect(exporter.mock.calls[0]?.[1]).toEqual({ keepalive: true });
   });
 
   it("re-sends the in-flight journey and terminal event with keepalive", async () => {

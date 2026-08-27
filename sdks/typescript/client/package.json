@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-client",
-  "version": "4.1.11",
+  "version": "4.1.15",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -227,7 +227,7 @@
   "dependencies": {
     "@cloudflare/realtimekit": "2.0.1",
     "@noble/hashes": "2.3.0",
-    "@q9labsai/diagnostics-contracts": "workspace:^0.1.0",
+    "@q9labsai/diagnostics-contracts": "workspace:^0.1.1",
     "effect": "4.0.0-beta.102"
   },
   "devDependencies": {

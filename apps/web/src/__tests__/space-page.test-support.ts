@@ -13,12 +13,11 @@ function MockEntrance({
   readonly onJoin: (settings: { readonly displayName: string; readonly microphone: boolean; readonly camera: boolean }) => void | Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState(defaultDisplayName);
-  const onDisplayNameChange = (event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value);
   return createElement(
     "main",
     null,
     createElement("label", { htmlFor: "mock-entrance-name" }, "Your name"),
-    createElement("input", { id: "mock-entrance-name", "aria-label": "Your name", value: displayName, onChange: onDisplayNameChange }),
+    createElement("input", { id: "mock-entrance-name", "aria-label": "Your name", value: displayName, onChange: (event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value) }),
     error ? createElement("p", { role: "alert" }, error) : null,
     createElement("button", { type: "button", onClick: () => void onJoin({ displayName: displayName.trim(), microphone: true, camera: true }), disabled: joining || !displayName.trim() }, joining ? "Joining…" : "Continue"),
   );
@@ -26,22 +25,11 @@ function MockEntrance({
 
 const spacePageTestMocks = vi.hoisted(() => {
   const holder: { chalkProps?: Record<string, unknown> } = {};
-  const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn() };
+  const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn(), recordRtcSummary: vi.fn() };
   const telemetry = { configureApiBaseURL: vi.fn() };
-  const episodeID = "33333333-3333-4333-8333-333333333333";
-  const diagnosticsPath = `/developer/episode-diagnostics/${encodeURIComponent(`chalk.episode:${episodeID}`)}`;
-  const clientSnapshot = { connection: { episode: { id: episodeID } } };
-  const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), leave: vi.fn(async () => undefined), dispose: vi.fn() };
-  const getAccess = vi.fn();
-  const connectionAccess = vi.fn();
-  const finish = vi.fn(async () => undefined);
-  const dashboardAccess = {
-    credential: { apiBaseURL: "https://api.chalk.test", space: "space-1", access: { subject: {}, sync: { token: "sync" }, media: { token: "media" } }, participantGeneration: 3 },
-    getAccess,
-    connectionAccess,
-    leave: finish,
-    inviteLink: "/space/design-lab#spaceInviteToken=cspi1.account",
-  };
+  const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } } };
+  const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), media: {}, leave: vi.fn(async () => undefined), dispose: vi.fn() };
+  const finish = vi.fn(async (_options?: { readonly keepalive?: boolean }) => undefined);
   const publicClient = {
     createPublicSpace: vi.fn(),
     arriveBySpacePublicInvite: vi.fn(),
@@ -52,35 +40,37 @@ const spacePageTestMocks = vi.hoisted(() => {
   const prepared = {
     arrival: undefined,
     credential: { apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", space: "design-lab" },
-    getAccess,
-    connectionAccess,
+    getAccess: vi.fn(),
+    connectionAccess: vi.fn(),
     finish,
   };
+  const useEpisodeDiagnosticsAvailability = vi.fn(() => ({
+    path: "/developer/episode-diagnostics/chalk.episode:33333333-3333-4333-8333-333333333333",
+    reference: "chalk.episode:33333333-3333-4333-8333-333333333333",
+    status: "available",
+    supported: true,
+    retry: vi.fn(),
+  }));
   return {
     holder,
     journey,
     telemetry,
-    publicClient,
-    dashboardAccess,
-    prepared,
     client,
-    getAccess,
-    connectionAccess,
+    publicClient,
+    prepared,
     finish,
-    diagnosticsPath,
-    localStorage: { getItem: vi.fn(), setItem: vi.fn() },
-    open: vi.fn(),
-    useEpisodeDiagnosticsAvailability: vi.fn(() => ({ path: diagnosticsPath, status: "available", supported: true, retry: vi.fn() }) satisfies { readonly path?: string; readonly status: "available" | "checking" | "unavailable"; readonly supported: boolean; readonly retry: () => void }),
+    useEpisodeDiagnosticsAvailability,
     createPublicInviteClient: vi.fn(() => publicClient),
     createPreparedPublicSpace: vi.fn(() => prepared),
-    joinDashboardSpace: vi.fn(() => dashboardAccess),
-    listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
     createLocalSpaceClient: vi.fn(() => client),
     createLocalSpaceRelease: vi.fn((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup)),
     Chalk: vi.fn((props: Record<string, unknown>) => {
       holder.chalkProps = props;
       return null;
     }),
+    listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
+    listSpaces: vi.fn(async () => ({ spaces: [], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
+    joinDashboardSpace: vi.fn(),
   };
 });
 
@@ -90,7 +80,7 @@ vi.mock("../lib/chalk-access", () => ({
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
 }));
-vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants }));
+vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
 vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
@@ -113,40 +103,28 @@ export const spacePageTestArrival = {
   space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" },
   access: { subject: {}, sync: { token: "sync" }, media: { token: "media" } },
 };
-export const spacePageTestCreated = {
-  invite_link: `http://localhost:3000/space/created-space#spaceInviteToken=${spacePageTestToken}`,
-  lifecycle_until: "2026-08-19T12:00:00Z",
-  space: { admission_mode: "open", name: "Created Space", slug: "created-space" },
-  arrival: spacePageTestArrival,
-};
 
 export function resetSpacePageTestMocks(): void {
   window.history.replaceState({}, "", "/space");
-  vi.stubGlobal("localStorage", spacePageTestMocks.localStorage);
-  vi.stubGlobal("open", spacePageTestMocks.open);
   spacePageTestMocks.holder.chalkProps = undefined;
-  spacePageTestMocks.publicClient.createPublicSpace.mockReset().mockResolvedValue(spacePageTestCreated);
+  spacePageTestMocks.publicClient.createPublicSpace.mockReset();
   spacePageTestMocks.publicClient.arriveBySpacePublicInvite.mockReset().mockResolvedValue(spacePageTestArrival);
   spacePageTestMocks.publicClient.getSpacePublicInviteArrival.mockReset().mockResolvedValue(spacePageTestArrival);
   spacePageTestMocks.publicClient.refreshSpacePublicInviteAccess.mockReset().mockResolvedValue(spacePageTestArrival.access);
   spacePageTestMocks.publicClient.leaveSpacePublicInviteArrival.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.createPublicInviteClient.mockClear();
   spacePageTestMocks.createPreparedPublicSpace.mockReset().mockReturnValue(spacePageTestMocks.prepared);
-  spacePageTestMocks.joinDashboardSpace.mockReset().mockResolvedValue(spacePageTestMocks.dashboardAccess);
-  spacePageTestMocks.listAllAccountTenants.mockReset().mockResolvedValue([{ tenant: { id: "tenant-1" } }]);
   spacePageTestMocks.prepared.finish.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.createLocalSpaceClient.mockReset().mockReturnValue(spacePageTestMocks.client);
   spacePageTestMocks.createLocalSpaceRelease.mockReset().mockImplementation((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup));
-  spacePageTestMocks.useEpisodeDiagnosticsAvailability.mockReset().mockReturnValue({ path: spacePageTestMocks.diagnosticsPath, status: "available", supported: true, retry: vi.fn() });
+  spacePageTestMocks.useEpisodeDiagnosticsAvailability.mockReset().mockReturnValue({
+    path: "/developer/episode-diagnostics/chalk.episode:33333333-3333-4333-8333-333333333333",
+    reference: "chalk.episode:33333333-3333-4333-8333-333333333333",
+    status: "available",
+    supported: true,
+    retry: vi.fn(),
+  });
   spacePageTestMocks.Chalk.mockClear();
-  spacePageTestMocks.open.mockReset();
-  spacePageTestMocks.telemetry.configureApiBaseURL.mockReset();
-}
-
-export async function cleanupSpacePageTestMocks(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  vi.clearAllMocks();
-  vi.unstubAllGlobals();
 }
 
 function makeRelease(cleanup: () => Promise<void>): ReturnType<typeof vi.fn> {

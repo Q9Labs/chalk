@@ -84,10 +84,10 @@ defmodule ChalkSync.Retention.Scheduler do
   def handle_info({:cleanup_result, _pid, _result}, state), do: {:noreply, state}
 
   def handle_info(
-        {:DOWN, ref, :process, pid, _reason},
+        {:DOWN, ref, :process, pid, reason},
         %{cleanup_pid: pid, cleanup_ref: ref} = state
       ) do
-    {:noreply, finish_cleanup(state, {:error, :cleanup_failed})}
+    {:noreply, finish_cleanup(state, {:error, {:cleanup_process_down, reason}})}
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, state), do: {:noreply, state}
@@ -119,9 +119,10 @@ defmodule ChalkSync.Retention.Scheduler do
   defp cleanup_result(cleanup_fun) do
     cleanup_fun.()
   rescue
-    _exception -> {:error, :cleanup_failed}
+    exception ->
+      {:error, {:cleanup_exception, exception.__struct__, postgres_error_reason(exception)}}
   catch
-    :exit, _reason -> {:error, :cleanup_failed}
+    kind, reason -> {:error, {:cleanup_exit, kind, reason}}
   end
 
   defp finish_cleanup(state, result) do
@@ -160,16 +161,58 @@ defmodule ChalkSync.Retention.Scheduler do
 
         {result, next}
 
-      {:error, _reason} ->
+      {:error, reason} ->
         Telemetry.execute(
           [:retention, :cleanup],
           %{duration_us: duration_us},
-          %{outcome: :failure}
+          Map.merge(%{outcome: :failure}, failure_metadata(reason))
         )
 
         {result, %{state | consecutive_failures: state.consecutive_failures + 1}}
     end
   end
+
+  defp failure_metadata({:error, reason}), do: failure_metadata(reason)
+
+  defp failure_metadata({:cleanup_exception, error_class, error_reason}) do
+    %{error_class: error_class, error_reason: error_reason}
+  end
+
+  defp failure_metadata({:cleanup_exit, kind, reason}) do
+    %{error_class: kind, error_reason: normalize_error_reason(reason)}
+  end
+
+  defp failure_metadata({:cleanup_process_down, reason}) do
+    %{error_class: :cleanup_process_down, error_reason: normalize_error_reason(reason)}
+  end
+
+  defp failure_metadata(%{postgres: %{code: code}}) when is_atom(code) do
+    %{error_class: :postgres, error_reason: code}
+  end
+
+  defp failure_metadata(%{__struct__: error_class}) when is_atom(error_class) do
+    %{error_class: error_class, error_reason: :exception}
+  end
+
+  defp failure_metadata({error_class, reason}) when is_atom(error_class) do
+    %{error_class: error_class, error_reason: normalize_error_reason(reason)}
+  end
+
+  defp failure_metadata(reason) do
+    %{error_class: :cleanup, error_reason: normalize_error_reason(reason)}
+  end
+
+  defp postgres_error_reason(%{postgres: %{code: code}}) when is_atom(code), do: code
+  defp postgres_error_reason(_exception), do: :exception
+
+  defp normalize_error_reason(reason) when is_atom(reason), do: reason
+  defp normalize_error_reason(reason) when is_binary(reason), do: :binary_reason
+  defp normalize_error_reason(reason) when is_integer(reason), do: :integer_reason
+  defp normalize_error_reason(reason) when is_float(reason), do: :float_reason
+  defp normalize_error_reason(reason) when is_list(reason), do: :list_reason
+  defp normalize_error_reason(reason) when is_map(reason), do: :map_reason
+  defp normalize_error_reason(reason) when is_tuple(reason), do: :tuple_reason
+  defp normalize_error_reason(_reason), do: :unknown_reason
 
   defp cleanup_once do
     episode = %EpisodeKey{tenant_id: "retention", space_id: "retention", episode_id: "retention"}

@@ -241,7 +241,17 @@ left join space_public_arrivals creator_arrival
  and creator_arrival.arrival_handle = lifecycle.creator_arrival_handle
 where (lifecycle.state = 'active' or reclaimed.tenant_id is not null)
   and (lifecycle.deadline_at <= sqlc.arg(now_at)
-       or creator_arrival.state in ('left', 'rejected', 'unavailable'))
+       or (
+           creator_arrival.state in ('left', 'rejected', 'unavailable')
+           and not exists (
+               select 1
+               from participants active_participant
+               where active_participant.tenant_id = lifecycle.tenant_id
+                 and active_participant.space_id = lifecycle.space_id
+                 and active_participant.episode_id = creator_arrival.episode_id
+                 and active_participant.status in ('joining', 'active', 'leaving')
+           )
+       ))
   and (lifecycle.next_retry_at is null or lifecycle.next_retry_at <= sqlc.arg(now_at))
 order by lifecycle.deadline_at, lifecycle.tenant_id, lifecycle.space_id
 limit sqlc.arg(page_size)::integer;

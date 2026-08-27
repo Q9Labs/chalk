@@ -86,6 +86,7 @@ export const ATTRIBUTE_KEYS = [
   "state_version",
   "policy_version",
   "release_channel",
+  "close_code",
 ] as const;
 
 export const CORRELATION_KEYS = ["journeyId", "traceId", "spanId", "requestId", "commandId", "providerId", "retryGroupRef", "attempt"] as const;
@@ -105,6 +106,9 @@ export const EVENT_NAME_EXTRA_ROOTS = [
   "diagnostic.created",
   "diagnostic.ended",
   "diagnostic.completed",
+  "whiteboard.connect",
+  "whiteboard.recover",
+  "whiteboard.disconnect",
 ] as const;
 
 export const MAX_DIAGNOSTIC_EVENT_BYTES = 2 * 1024;

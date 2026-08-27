@@ -3,10 +3,10 @@ defmodule ChalkSync.Episodes.ReducerAPIFixtureTest do
 
   alias ChalkSync.Episodes.Reducer
 
-  @fixture Path.expand("../../fixtures/api_episode_snapshot_v1.json", __DIR__)
+  @api_artifact Path.expand("../../fixtures/api_episode_snapshot_v1.json", __DIR__)
 
-  test "accepts the API-created v1 snapshot and applies its pending join" do
-    fixture = @fixture |> File.read!() |> Jason.decode!()
+  test "accepts the current API-generated v1 snapshot and applies its pending join" do
+    fixture = api_artifact()
     snapshot = fixture["folded_state"]
 
     assert {:ok, state} = Reducer.from_snapshot(fixture["episode_id"], snapshot)
@@ -29,4 +29,20 @@ defmodule ChalkSync.Episodes.ReducerAPIFixtureTest do
     assert event.revision == 1
     assert next.participants[fixture["pending_intent"]["participant_id"]].role == "facilitator"
   end
+
+  test "rejects an incompatible API snapshot" do
+    fixture = api_artifact()
+    snapshot = Map.put(fixture["folded_state"], "state_schema_version", 2)
+
+    assert {:error, :invalid_snapshot} = Reducer.from_snapshot(fixture["episode_id"], snapshot)
+  end
+
+  test "rejects API snapshots with unknown fields" do
+    fixture = api_artifact()
+    snapshot = Map.put(fixture["folded_state"], "future_field", true)
+
+    assert {:error, :invalid_snapshot} = Reducer.from_snapshot(fixture["episode_id"], snapshot)
+  end
+
+  defp api_artifact, do: @api_artifact |> File.read!() |> Jason.decode!()
 end

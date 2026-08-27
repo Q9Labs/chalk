@@ -61,4 +61,12 @@ if [[ "${canonical_roles_after_failure}" != "${canonical_roles}" ]]; then
   exit 1
 fi
 
+goose up-to 20260805040000 >/dev/null
+version_after_rerun="$(psql -At -c "select version_id from goose_db_version order by id desc limit 1;")"
+canonical_roles_after_rerun="$(psql -At -c "select string_agg(role, ',' order by role, id) from memberships;")"
+if [[ "${version_after_rerun}" != "${version}" || "${canonical_roles_after_rerun}" != "${canonical_roles}" ]]; then
+  echo "Rerunning the role migration changed its durable result: version=${version_after_rerun} roles=${canonical_roles_after_rerun}" >&2
+  exit 1
+fi
+
 echo "Membership role migration proof passed: Up mapped legacy roles; Down failed deliberately; Goose remained at ${version}."

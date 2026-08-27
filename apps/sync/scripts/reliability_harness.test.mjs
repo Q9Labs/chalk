@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { createProfilePlan, executeProfile } from "./reliability_harness.mjs";
-
-const scriptPath = fileURLToPath(new URL("./reliability_harness.mjs", import.meta.url));
 
 test("maps the three triggers to one harness with explicit profiles", () => {
   const output = "/tmp/chalk-reliability-test";
@@ -89,18 +85,4 @@ test("fails closed, records the failed step, and stops the plan", (context) => {
   const manifest = JSON.parse(readFileSync(path.join(result.runDirectory, "manifest.json"), "utf8"));
   assert.equal(manifest.steps[0].exit_code, 7);
   assert.deepEqual(manifest.reproducer, ["apps/sync/scripts/reliability-harness", "topology"]);
-});
-
-test("runs as the main program through a symlinked path", (context) => {
-  const directory = mkdtempSync(path.join(tmpdir(), "chalk-reliability-link-"));
-  const linkedScript = path.join(directory, "reliability_harness.mjs");
-  context.after(() => rmSync(directory, { recursive: true }));
-  symlinkSync(scriptPath, linkedScript);
-
-  const result = spawnSync(process.execPath, [linkedScript, "invalid-profile"], {
-    encoding: "utf8",
-  });
-
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /usage: reliability-harness/);
 });

@@ -144,6 +144,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
     });
     return createRTKConnectionMediaClient(client);
   }
+  const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
     participantId: subject.participantId,
@@ -156,6 +157,13 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       participantId: subject.participantId,
       fetch,
     }),
+    replaceMediaConnection: replaceMediaConnection
+      ? async () => {
+          const replacement = await replaceMediaConnection();
+          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+          return replacement.clientPayload;
+        }
+      : undefined,
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       observePeerConnection?.(connection as unknown as RtcPeerConnection);

@@ -12,6 +12,39 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.1.15] - 2026-08-25
+
+### Fixed
+
+- Bounded Cloudflare SFU recovery when a persisted remote publication no longer resolves to a provider track, while allowing a newer publication cursor to recover normally.
+- Propagated the authoritative Episode start time to connected SDK surfaces so live duration displays advance correctly.
+- Restored durable Episode diagnostic acknowledgements and production CLI inspection without weakening operator credential or HTTPS requirements.
+
+## [4.1.14] - 2026-08-24
+
+### Fixed
+
+- Recovered public Space media connections after stale access grants while bounding Sync and Whiteboard reconnect backoff.
+- Made production diagnostics references inspectable from the CLI when participant projections are empty.
+
+## [4.1.13] - 2026-08-23
+
+### Added
+
+- Added durable, bounded diagnostics for Whiteboard transport recovery, browser RTC state, Cloudflare SFU failures, and Sync diagnostics export health.
+- Added a fail-closed Sync diagnostics health check and a production uptime monitor that reports exporter degradation without stopping collaboration traffic.
+
+### Fixed
+
+- Recovered stale Cloudflare media sessions before negotiation and replaced sessions after retryable provider failures, so Participants can enable media after a dormant join.
+- Reconnected a Whiteboard after its Sync transport closes, while preventing stale sockets and delayed callbacks from taking ownership of the recovered Board.
+- Fixed Sync retention cleanup so expired Episode collaboration data no longer removes shared Space state that newer Episodes still use, and cleanup failures now report safe diagnostic classes.
+- Kept Sync retention cleanup on the current Space chat prefix and allowed expired screen-share leases to be removed, so cleanup cannot create an interior message-sequence gap or remain blocked by stale leases.
+- Kept public Space lifecycles active while an Episode still has a joining, active, or leaving Participant, so the creator leaving no longer ends the Episode for everyone else.
+- Bound managed API and Sync telemetry identity to each release manifest so deployments cannot serve current images under stale release metadata.
+
+## [4.1.12] - 2026-08-23
+
 ### Added
 
 - Added public docs at `/docs` with Why Chalk, a working Quickstart,
@@ -139,6 +172,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made knock-mode Space arrivals create and replay their admission request from
+  the locked arrival's Tenant and Space scope instead of returning a false
+  idempotency conflict after the arrival was saved.
 - Kept a newly created public Space admitted while its index URL becomes the
   canonical invite route, so that route ownership cannot leave the creator and
   archive the Space before another Participant arrives.

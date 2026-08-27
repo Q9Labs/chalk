@@ -317,6 +317,9 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 		if utilities.IDFromBytes(current.TenantID.Bytes) != input.TenantID {
 			return publicinvites.ErrArrivalNotFound
 		}
+		if !matchesExpectedProviderBinding(current, input) {
+			return publicinvites.ErrMediaProofRejected
+		}
 		if !arrivalTransitionAllowed(publicinvites.ArrivalState(current.State), input.State) {
 			return publicinvites.ErrArrivalUnavailable
 		}
@@ -338,6 +341,10 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 	return result, err
 }
 
+func matchesExpectedProviderBinding(current sqlc.SpacePublicArrival, input publicinvites.UpdateArrivalStateInput) bool {
+	return !input.MatchProviderBinding || (current.Provider.String == input.ExpectedProvider && current.ProviderSubject.String == input.ExpectedProviderSubject)
+}
+
 func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
 	var result publicinvites.AdmissionRequest
 	err := r.mutate(ctx, func(queries publicInviteQuerier) error {
@@ -351,6 +358,8 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if publicinvites.ArrivalState(arrival.State) != publicinvites.ArrivalPending {
 			return publicinvites.ErrAdmissionRequestTerminal
 		}
+		request.TenantID = utilities.IDFromBytes(arrival.TenantID.Bytes)
+		request.SpaceID = utilities.IDFromBytes(arrival.SpaceID.Bytes)
 		row, err := queries.CreateSpacePublicAdmissionRequest(ctx, sqlc.CreateSpacePublicAdmissionRequestParams{
 			RequestHandle: uuid(request.RequestHandle), ArrivalHandle: uuid(request.ArrivalHandle),
 			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, DisplayName: request.DisplayName,

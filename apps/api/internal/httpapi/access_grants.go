@@ -53,10 +53,11 @@ type accessGrantDiagnosticsResponse struct {
 }
 
 type accessGrantResponse struct {
-	Subject     accessGrantSubjectResponse      `json:"subject"`
-	Sync        accessGrantTokenResponse        `json:"sync"`
-	Media       accessGrantMediaResponse        `json:"media"`
-	Diagnostics *accessGrantDiagnosticsResponse `json:"diagnostics,omitempty"`
+	EpisodeStartedAt *string                         `json:"episode_started_at,omitempty"`
+	Subject          accessGrantSubjectResponse      `json:"subject"`
+	Sync             accessGrantTokenResponse        `json:"sync"`
+	Media            accessGrantMediaResponse        `json:"media"`
+	Diagnostics      *accessGrantDiagnosticsResponse `json:"diagnostics,omitempty"`
 }
 
 type issueAccessGrantBody struct {
@@ -275,6 +276,7 @@ func accessGrantSubjectForJoin(request issueAccessGrantRequest, join mediaplane.
 
 func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctokens.Token, mediaCredential accessgrants.MediaCredential, join mediaplane.Join) accessGrantResponse {
 	return accessGrantResponse{
+		EpisodeStartedAt: episodeStartedAt(syncCredential.StartedAt),
 		Subject: accessGrantSubjectResponse{
 			TenantID: subject.TenantID.String(), SpaceID: subject.SpaceID.String(), EpisodeID: subject.EpisodeID.String(),
 			ParticipantID: subject.ParticipantID.String(), ParticipantGeneration: subject.ParticipantGeneration,
@@ -282,6 +284,14 @@ func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctok
 		Sync:  accessGrantTokenResponse{Token: syncCredential.Value, ExpiresAt: syncCredential.ExpiresAt.UTC().Format(time.RFC3339)},
 		Media: accessGrantMediaResponse{Token: mediaCredential.Token, ExpiresAt: mediaCredential.ExpiresAt.UTC().Format(time.RFC3339), Provider: subject.Provider, ClientPayload: join.ClientPayload},
 	}
+}
+
+func episodeStartedAt(value *time.Time) *string {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+	formatted := value.UTC().Format(time.RFC3339Nano)
+	return &formatted
 }
 
 func attachDiagnosticsCredential(ctx context.Context, response *accessGrantResponse, issuer ParticipantDiagnosticsIssuer, subject accessgrants.Subject) {

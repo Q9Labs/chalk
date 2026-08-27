@@ -28,6 +28,8 @@ var (
 	apiErrorArrivalUnavailable       = APIError{Status: http.StatusNotFound, Code: "arrival.unavailable", Message: "Public Space arrival is unavailable"}
 	apiErrorInvalidArrivalHandle     = APIError{Status: http.StatusBadRequest, Code: "arrival.invalid_handle", Message: "Invalid arrival handle"}
 	apiErrorInvalidPublicInviteToken = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid public invite token"}
+	apiErrorMediaProofExpired        = APIError{Status: http.StatusConflict, Code: "access.media_proof_expired", Message: "Media proof expired; replace the media connection"}
+	apiErrorMediaProofRejected       = APIError{Status: http.StatusUnauthorized, Code: "access.media_proof_rejected", Message: "Media proof was rejected"}
 )
 
 var (
@@ -187,11 +189,12 @@ type publicInviteStatusRequest struct {
 }
 
 type publicInviteRefreshRequest struct {
-	ArrivalHandle   string
-	GuestCredential string
-	MediaProof      string
-	AccountID       utilities.ID
-	Native          bool
+	ArrivalHandle          string
+	GuestCredential        string
+	MediaProof             string
+	ReplaceMediaConnection bool
+	AccountID              utilities.ID
+	Native                 bool
 }
 
 type publicInviteLeaveRequest struct {
@@ -445,16 +448,17 @@ func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(
 		if service == nil {
 			return publicAccessGrantResponse{}, apiErrorServiceUnavailable
 		}
-		grant, err := service.RefreshAccess(ctx, publicinvites.PublicInviteRefreshInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaProof: request.MediaProof})
+		grant, err := service.RefreshAccess(ctx, publicinvites.PublicInviteRefreshInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaProof: request.MediaProof, ReplaceMediaConnection: request.ReplaceMediaConnection})
 		if err != nil {
 			return publicAccessGrantResponse{}, err
 		}
 		return newPublicAccessGrantResponse(grant), nil
 	}).RateLimit(authenticatedWriteRateLimit).
 		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RequestBody("RefreshSpacePublicInviteAccessRequest", struct {
-		MediaProof string `json:"media_proof"`
+		MediaProof             string `json:"media_proof"`
+		ReplaceMediaConnection bool   `json:"replace_media_connection"`
 	}{}).Responds(http.StatusCreated, "AccessGrant", publicAccessGrantResponse{}).
-		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.refresh"))
+		Errors(publicInviteRefreshErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.refresh"))
 	if origin != nil {
 		endpoint = endpoint.Middleware(origin)
 	}
@@ -606,7 +610,8 @@ func decodePublicInviteStatusRequest(r *http.Request) (publicInviteStatusRequest
 
 func decodePublicInviteRefreshRequest(r *http.Request) (publicInviteRefreshRequest, error) {
 	body, err := decodeJSONBody[struct {
-		MediaProof string `json:"media_proof"`
+		MediaProof             string `json:"media_proof"`
+		ReplaceMediaConnection bool   `json:"replace_media_connection"`
 	}](r)
 	if err != nil {
 		return publicInviteRefreshRequest{}, err
@@ -618,7 +623,7 @@ func decodePublicInviteRefreshRequest(r *http.Request) (publicInviteRefreshReque
 	if handle == "" {
 		return publicInviteRefreshRequest{}, apiErrorInvalidArrivalHandle
 	}
-	request := publicInviteRefreshRequest{ArrivalHandle: handle, MediaProof: body.MediaProof, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, handle)}
+	request := publicInviteRefreshRequest{ArrivalHandle: handle, MediaProof: body.MediaProof, ReplaceMediaConnection: body.ReplaceMediaConnection, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, handle)}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalUser {
 		request.AccountID = principal.UserID
 	}
@@ -645,6 +650,10 @@ func publicInvitePublicErrors() []APIError {
 	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
 }
 
+func publicInviteRefreshErrors() []APIError {
+	return append(publicInvitePublicErrors(), apiErrorMediaProofExpired, apiErrorMediaProofRejected)
+}
+
 func publicInviteEndpointAPIError(err error) (APIError, bool) {
 	if apiErr, ok := errorAsAPIError(err); ok {
 		return apiErr, true
@@ -656,6 +665,10 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorAdmissionRequestNotFound, true
 	case errors.Is(err, publicinvites.ErrArrivalNotFound), errors.Is(err, publicinvites.ErrArrivalUnavailable), errors.Is(err, publicinvites.ErrCredentialMismatch), errors.Is(err, publicinvites.ErrInvalidCredential):
 		return apiErrorArrivalUnavailable, true
+	case errors.Is(err, publicinvites.ErrMediaProofExpired):
+		return apiErrorMediaProofExpired, true
+	case errors.Is(err, publicinvites.ErrMediaProofRejected):
+		return apiErrorMediaProofRejected, true
 	case errors.Is(err, publicinvites.ErrInvalidIdempotencyKey):
 		return apiErrorInvalidRequestKey, true
 	case errors.Is(err, publicinvites.ErrIdempotencyConflict):
@@ -1025,7 +1038,8 @@ func newPublicSpaceArrivalResponse(arrival publicinvites.PublicSpaceArrival) pub
 
 func newPublicAccessGrantResponse(grant publicinvites.PublicAccessGrant) publicAccessGrantResponse {
 	expiresAt := grant.ExpiresAt.UTC().Format(time.RFC3339)
-	return publicAccessGrantResponse{
+	response := publicAccessGrantResponse{
+		EpisodeStartedAt: episodeStartedAt(grant.StartedAt),
 		Subject: accessGrantSubjectResponse{
 			TenantID: grant.TenantID.String(), SpaceID: grant.SpaceID.String(), EpisodeID: grant.EpisodeID.String(),
 			ParticipantID: grant.ParticipantID.String(), ParticipantGeneration: grant.ParticipantGeneration,
@@ -1033,6 +1047,13 @@ func newPublicAccessGrantResponse(grant publicinvites.PublicAccessGrant) publicA
 		Sync:  accessGrantTokenResponse{Token: grant.SyncToken, ExpiresAt: expiresAt},
 		Media: accessGrantMediaResponse{Token: grant.MediaToken, ExpiresAt: expiresAt, Provider: grant.Provider, ClientPayload: publicAccessClientPayload(grant)},
 	}
+	if grant.Diagnostics != nil {
+		response.Diagnostics = &accessGrantDiagnosticsResponse{
+			Token: grant.Diagnostics.Token, ExpiresAt: grant.Diagnostics.ExpiresAt.UTC().Format(time.RFC3339),
+			Generation: grant.Diagnostics.Generation, IntakePath: grant.Diagnostics.IntakePath,
+		}
+	}
+	return response
 }
 
 func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string]any {

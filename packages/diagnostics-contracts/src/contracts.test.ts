@@ -4,13 +4,13 @@ import {
   ACTION_SET_V1,
   MAX_DIAGNOSTIC_EVENT_BYTES,
   SAFE_ID_CLASSES,
-  actionStatus,
   acceptDiagnosticEvent,
+  actionStatus,
   encodedEventSize,
   fingerprintDiagnosticFilter,
   formatDiagnosticReference,
-  parseAgentBriefQuery,
   parseDiagnosticEventDraft,
+  parseDiagnosticFilter,
   parseDiagnosticIssue,
   parseFlameProjection,
   parseGraphProjection,
@@ -21,10 +21,8 @@ import {
   parseDiagnosticReference,
   redactDiagnosticAttributes,
   renderAgentBriefMarkdown,
-  validateActionCoverage,
   validateDiagnosticEventDraft,
-  validateDiagnosticFilter,
-  validateDiagnosticResolverResponse,
+  validateActionCoverage,
   validateGraphProjection,
   validateParticipantProjection,
   validateRunProjection,
@@ -86,12 +84,13 @@ describe("references and action coverage", () => {
     expect(parseDiagnosticReference("chalkdiag:v1:production:diag01@9")).toEqual(reference);
   });
 
-  it("keeps whiteboard explicit and closes every action", () => {
+  it("covers whiteboard lifecycle and closes every action", () => {
     expect(validateActionCoverage().complete).toBe(true);
-    expect(actionStatus("whiteboard.unsupported")).toBe("unsupported");
-    expect(ACTION_SET_V1.length).toBe(84);
+    expect(actionStatus("whiteboard.connect")).toBe("supported");
+    expect(actionStatus("whiteboard.recover")).toBe("supported");
+    expect(actionStatus("whiteboard.disconnect")).toBe("supported");
+    expect(ACTION_SET_V1.length).toBe(86);
   });
-
   it("fingerprints filters canonically", () => {
     const fingerprint = fingerprintDiagnosticFilter({ source: "sdk", state: "failed" });
     expect(fingerprint).toBe(fingerprintDiagnosticFilter({ state: "failed", source: "sdk" }));
@@ -159,8 +158,7 @@ describe("projection contracts", () => {
   });
 
   it("keeps projection errors bounded and preserves resolver/filter query branches", () => {
-    const participant = validateDiagnosticFilter({ schemaVersion: "DiagnosticFilter/v1", spanId: "span01" });
-    expect(participant).toEqual({ ok: false, issues: [{ path: "$.spanId", message: "spanId requires traceId" }] });
+    expect(() => parseDiagnosticFilter({ schemaVersion: "DiagnosticFilter/v1", spanId: "span01" })).toThrow();
 
     const graph = validateGraphProjection({ schemaVersion: "GraphProjection/v1", nodes: [], edges: [], summary: null });
     expect(graph).toEqual({
@@ -170,9 +168,6 @@ describe("projection contracts", () => {
         { path: "$.summary", message: "summary counters must be non-negative" },
       ],
     });
-
-    expect(validateDiagnosticResolverResponse({ kind: "not_found", reason: "not_available" })).toEqual({ ok: true, value: { kind: "not_found", reason: "not_available" } });
-    expect(parseAgentBriefQuery({ schemaVersion: "AgentBriefQuery/v1", reference: "chalkdiag:v1:development:diag01@7", format: "compact" }).format).toBe("compact");
   });
 
   it("rejects unknown nested projection fields and raw identity values", () => {

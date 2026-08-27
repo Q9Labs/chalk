@@ -1,3 +1,5 @@
+import { createPreviewSyntheticTrack } from "./preview-track";
+
 const WIDTH = 1280;
 const HEIGHT = 720;
 const FRAME_RATE = 4;
@@ -75,27 +77,53 @@ export interface PreviewScreenTrack {
 }
 
 /** Captures a painted canvas as a live video track so the preview stage renders a real screen share. */
-export function createPreviewScreenTrack(): PreviewScreenTrack | null {
-  if (typeof document === "undefined") return null;
+export function createPreviewScreenTrack(id = "preview-screen-track"): PreviewScreenTrack {
+  if (typeof document === "undefined") return createFallbackScreenTrack(id);
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
-  if (typeof canvas.captureStream !== "function") return null;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
+  if (typeof canvas.captureStream !== "function") return createFallbackScreenTrack(id);
+  let context: CanvasRenderingContext2D | null = null;
+  try {
+    context = canvas.getContext("2d");
+  } catch {
+    return createFallbackScreenTrack(id);
+  }
+  if (!context) return createFallbackScreenTrack(id);
   let tick = 0;
   paintDocument(context, tick);
-  const stream = canvas.captureStream(FRAME_RATE);
-  const [track] = stream.getVideoTracks();
-  if (!track) return null;
+  let track: MediaStreamTrack | undefined = undefined;
+  try {
+    const stream = canvas.captureStream(FRAME_RATE);
+    [track] = stream.getVideoTracks();
+  } catch {
+    return createFallbackScreenTrack(id);
+  }
+  if (!track) return createFallbackScreenTrack(id);
   const timer = setInterval(() => {
     tick += 1;
     paintDocument(context, tick);
   }, REDRAW_MS);
+  let stopped = false;
   return {
     track,
     stop: () => {
+      if (stopped) return;
+      stopped = true;
       clearInterval(timer);
+      track.stop();
+    },
+  };
+}
+
+function createFallbackScreenTrack(id: string): PreviewScreenTrack {
+  const track = createPreviewSyntheticTrack("video", id, "Chalk SDK preview screen");
+  let stopped = false;
+  return {
+    track,
+    stop: () => {
+      if (stopped) return;
+      stopped = true;
       track.stop();
     },
   };

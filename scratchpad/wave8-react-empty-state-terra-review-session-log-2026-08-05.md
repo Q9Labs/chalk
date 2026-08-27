@@ -1,4 +1,0 @@
-# Wave 8 React ParticipantGrid empty-state review
-
-- 2026-08-05 10:27 PKT: Started one read-only review of the unstaged `ParticipantGrid` empty-state restoration in the wave-8 reconciliation worktree. Scope is desktop/mobile coverage, preserved grid hooks, accessibility semantics, canonical language/tokens/icon, layout safety, and focused verification.
-- 2026-08-05 10:29 PKT: Review complete with no P0, P1, or P2 findings. The branch precedes both responsive layout paths and preserves the outer grid hooks, live status semantics, heading, canonical Space/Participant language, decorative shared icon, and defined Chalk theme tokens. Focused Vitest passed (1 file, 4 tests). `check:tokens` remains blocked by repository-wide false positives that include existing canonical `text-[var(--chalk-app-text-muted)]` usage; no target-specific failure was identified.

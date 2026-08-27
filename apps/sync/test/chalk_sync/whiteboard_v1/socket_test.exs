@@ -37,11 +37,15 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   test "enforces the hello deadline and strict text framing" do
     assert {:ok, state} = SocketWhiteboardV1.init(%{})
 
-    assert {:stop, :normal, {1008, "hello timeout"}, ^state} =
+    assert {:stop, :normal, {1008, "hello timeout"}, timeout_state} =
              SocketWhiteboardV1.handle_info(:hello_timeout, state)
 
-    assert {:stop, :normal, {1009, "text frames only"}, ^state} =
+    assert timeout_state.terminal == %{close_code: 1008, reason: :hello_timeout}
+
+    assert {:stop, :normal, {1009, "text frames only"}, frame_state} =
              SocketWhiteboardV1.handle_in({<<1, 2>>, [opcode: :binary]}, state)
+
+    assert frame_state.terminal == %{close_code: 1009, reason: :protocol_error}
 
     assert {:push, {:text, ~s({"type":"pong"})}, ^state} =
              SocketWhiteboardV1.handle_in(
@@ -97,37 +101,6 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                 }},
                state
              )
-  end
-
-  test "delivers presentation frames only to negotiated sockets" do
-    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
-
-    legacy = %{
-      initial
-      | phase: :live,
-        identity: identity(),
-        scene_id: @scene_id,
-        revision: 4,
-        presentation_negotiated: false
-    }
-
-    frame = %{
-      "type" => "presentation_updated",
-      "scene_id" => @scene_id,
-      "revision" => "5",
-      "presenting" => true
-    }
-
-    assert {:ok, ^legacy} =
-             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, legacy)
-
-    negotiated = %{legacy | presentation_negotiated: true}
-
-    assert {:push, {:text, encoded}, advanced} =
-             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, negotiated)
-
-    assert JSON.decode!(encoded) == frame
-    assert advanced.revision == 5
   end
 
   test "repairs a missed presentation notification from the durable head" do

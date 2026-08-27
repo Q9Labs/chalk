@@ -524,8 +524,11 @@ func providerStatusClass(statusCode int) string {
 	return fmt.Sprintf("%dxx", statusCode/100)
 }
 
-func providerRejectionCode(code string) string {
+func providerRejectionCode(code string, message string) string {
 	if strings.TrimSpace(code) == "" {
+		if messageCode := providerMessageCode(message); messageCode != "" {
+			return messageCode
+		}
 		return "provider_rejected"
 	}
 	return code

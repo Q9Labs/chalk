@@ -32,6 +32,7 @@ type Input struct {
 	TenantID                   utilities.ID
 	SpaceID                    utilities.ID
 	EpisodeID                  utilities.ID
+	StartedAt                  *time.Time
 	ParticipantID              utilities.ID
 	ParticipantGeneration      int64
 	AdmissionLifecycleIntentID utilities.ID
@@ -43,6 +44,7 @@ type Input struct {
 type Token struct {
 	Value     string
 	ExpiresAt time.Time
+	StartedAt *time.Time
 }
 
 type SubjectKey struct {
@@ -137,7 +139,15 @@ func (s Service) Issue(_ context.Context, input Input) (Token, error) {
 
 	signingInput := header + "." + claims
 	signature := ed25519.Sign(s.config.PrivateKey, []byte(signingInput))
-	return Token{Value: signingInput + "." + base64.RawURLEncoding.EncodeToString(signature), ExpiresAt: expiresAt}, nil
+	return Token{Value: signingInput + "." + base64.RawURLEncoding.EncodeToString(signature), ExpiresAt: expiresAt, StartedAt: copyTime(input.StartedAt)}, nil
+}
+
+func copyTime(value *time.Time) *time.Time {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+	result := value.UTC()
+	return &result
 }
 
 func validDisplayName(value string) bool {

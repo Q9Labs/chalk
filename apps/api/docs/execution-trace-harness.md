@@ -10,6 +10,7 @@ The Execution Trace Harness is local developer tooling under
 `apps/api/internal/traceharness`, exposed by:
 
 ```bash
+go run ./cmd/trace -list
 go run ./cmd/trace
 ```
 
@@ -34,6 +35,7 @@ go run ./cmd/trace -scenario route:api-key-customer-flow
 go run ./cmd/trace -scenario edge:api-key-rejected-scope
 go run ./cmd/trace -scenario route:participant-media-sfu-auth
 go run ./cmd/trace -scenario edge:participant-media-wrong-audience
+go run ./cmd/trace -scenario route:public-invite-access-recovery
 go run ./cmd/trace -scenario service:media-plane-default-resolution
 go run ./cmd/trace -scenario edge:media-plane-disabled
 go run ./cmd/trace -color always
@@ -127,12 +129,14 @@ Registered scenarios:
 - `route:telemetry-journey-event-intake`
 - `route:status-monitor-ingest`
 - `service:episode-diagnostics`
+- `service:public-invite-lifecycle`
 - `route:chat-attachment-upload`
 - `route:whiteboard-file-upload`
 - `route:api-key-customer-flow`
 - `route:public-invite-observability`
 - `edge:api-key-rejected-scope`
 - `route:participant-media-sfu-auth`
+- `route:public-invite-access-recovery`
 - `edge:participant-media-wrong-audience`
 - `policy:tenant-system-allow`
 - `policy:tenant-api-key-scope`

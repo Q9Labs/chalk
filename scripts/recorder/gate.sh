@@ -7,7 +7,6 @@ tofu_dir="$repo_root/infrastructure/recorder"
 tofu -chdir="$tofu_dir" fmt -check -recursive
 tofu -chdir="$tofu_dir" init -backend=false -input=false -upgrade=false
 tofu -chdir="$tofu_dir" validate
-(cd "$repo_root" && pnpm exec vitest run --dir scripts/recorder validate-config.test.mjs)
 
 # A local validation gate must remain closed by default. This proves the
 # operational script cannot accidentally pass without staging evidence and

@@ -2,23 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const addListener = vi.fn();
 const configure = vi.fn(async () => ({ isSupported: true }));
-const endAllCalls = vi.fn(async () => undefined);
 const endCall = vi.fn(async () => undefined);
 const reportConnected = vi.fn(async () => undefined);
-const reportIncomingCall = vi.fn(async () => ({ callUUID: "incoming-uuid" }));
 const startCall = vi.fn(async () => ({ callUUID: "outgoing-uuid" }));
-const updateCall = vi.fn(async () => undefined);
 
 const nativeModule = {
   configure,
-  endAllCalls,
   endCall,
   eventName: "ChalkCallKitEvent",
   isSupported: true,
   reportConnected,
-  reportIncomingCall,
   startCall,
-  updateCall,
 };
 
 const eventEmitter = {
@@ -45,12 +39,9 @@ describe("callKit", () => {
     nativeModule.isSupported = true;
     addListener.mockReset();
     configure.mockClear();
-    endAllCalls.mockClear();
     endCall.mockClear();
     reportConnected.mockClear();
-    reportIncomingCall.mockClear();
     startCall.mockClear();
-    updateCall.mockClear();
   });
 
   it("uses the native event emitter when the iOS module is available", async () => {
@@ -79,17 +70,28 @@ describe("callKit", () => {
     expect(startCall).not.toHaveBeenCalled();
   });
 
-  it("passes configuration through to the native bridge", async () => {
+  it("forwards controller-facing calls and preserves native failures", async () => {
     const { callKit } = await import("./callkit");
+    const callOptions = { callUUID: "call-uuid", displayName: "Space", handle: "space-123", hasVideo: true };
 
     await callKit.configure({
       appName: "Chalk",
       includesCallsInRecents: false,
     });
+    await expect(callKit.startCall(callOptions)).resolves.toEqual({ callUUID: "outgoing-uuid" });
+    await callKit.reportConnected({ callUUID: "outgoing-uuid" });
+    await callKit.endCall({ callUUID: "outgoing-uuid", reason: "remoteEnded" });
 
     expect(configure).toHaveBeenCalledWith({
       appName: "Chalk",
       includesCallsInRecents: false,
     });
+    expect(startCall).toHaveBeenCalledWith(callOptions);
+    expect(reportConnected).toHaveBeenCalledWith({ callUUID: "outgoing-uuid" });
+    expect(endCall).toHaveBeenCalledWith({ callUUID: "outgoing-uuid", reason: "remoteEnded" });
+
+    const nativeFailure = new Error("CallKit unavailable");
+    startCall.mockRejectedValueOnce(nativeFailure);
+    await expect(callKit.startCall(callOptions)).rejects.toBe(nativeFailure);
   });
 });

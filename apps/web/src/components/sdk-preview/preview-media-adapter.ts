@@ -1,10 +1,9 @@
 import { createPreviewAudioTrack, type PreviewAudioTrack } from "./preview-audio-track";
 import { createPreviewCameraTrack, type PreviewCameraTrack } from "./preview-camera-track";
 import { createPreviewScreenTrack, type PreviewScreenTrack } from "./preview-screen-track";
-import { createPreviewSyntheticTrack } from "./preview-track";
 import { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices, type PreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
 
-export { createPreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
+export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
 export type { PreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
 
 export type PreviewMediaKind = "microphone" | "camera" | "screen";
@@ -39,6 +38,8 @@ export type PreviewMediaAdapter = {
 
 export const PREVIEW_MEDIA_DEVICES = PREVIEW_DEVICE_FIXTURES;
 
+export const createPreviewDevices = createPreviewMediaDevices;
+
 export function createPreviewMediaAdapter(): PreviewMediaAdapter {
   const active = new Set<PreviewTrackHandle>();
 
@@ -55,9 +56,9 @@ export function createPreviewMediaAdapter(): PreviewMediaAdapter {
     return handle;
   };
 
-  const createAudio = (id = "preview-audio-track"): PreviewAudioTrack => own(createPreviewAudioTrack() ?? createFallbackTrack("audio", id, "Chalk SDK preview audio"));
+  const createAudio = (id?: string): PreviewAudioTrack => own(createPreviewAudioTrack(id));
   const createCamera = (options?: Parameters<typeof createPreviewCameraTrack>[0]): PreviewCameraTrack => own(createPreviewCameraTrack(options));
-  const createScreen = (id = "preview-screen-track"): PreviewScreenTrack => own(createPreviewScreenTrack() ?? createFallbackTrack("video", id, "Chalk SDK preview screen"));
+  const createScreen = (id?: string): PreviewScreenTrack => own(createPreviewScreenTrack(id));
 
   const createTrackBundle = ({ local = {}, remote = {}, remoteParticipantIds = [] }: PreviewTrackBundleOptions = {}): PreviewTrackBundle => {
     const handles: PreviewTrackHandle[] = [];
@@ -106,15 +107,19 @@ export function createPreviewMediaAdapter(): PreviewMediaAdapter {
   };
 }
 
-function createFallbackTrack(kind: "audio" | "video", id: string, label: string): PreviewAudioTrack | PreviewScreenTrack {
-  const track = createPreviewSyntheticTrack(kind, id, label);
+/** Convenience boundary for callers that need one disposable set of fixtures. */
+export function createPreviewTrackBundle(options: PreviewTrackBundleOptions = {}): PreviewTrackBundle {
+  const adapter = createPreviewMediaAdapter();
+  const bundle = adapter.createTrackBundle(options);
+  const stop = bundle.stop;
   let stopped = false;
   return {
-    track,
+    ...bundle,
     stop: () => {
       if (stopped) return;
       stopped = true;
-      track.stop();
+      stop();
+      adapter.dispose();
     },
   };
 }

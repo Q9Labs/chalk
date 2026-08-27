@@ -3,18 +3,52 @@ set -euo pipefail
 
 managed_root="$(cd "$(dirname "$0")/.." && pwd)"
 controller="${managed_root}/controller/chalk-deployment-controller"
-fixture_root="$(mktemp -d)"
-if [[ "${KEEP_TEST_FIXTURE:-false}" == true ]]; then
-  printf 'fixture=%s\n' "${fixture_root}" >&2
-else
-  trap 'rm -rf -- "${fixture_root}"' EXIT
-fi
 export CHALK_CONTROLLER_ALLOW_NON_ROOT_TESTS=true
 
 fail() {
   echo "FAIL test-deployment-controller: $1" >&2
   exit 1
 }
+
+usage() {
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|ssm-contract|all]\n' "$0"
+}
+
+test_group="all"
+if [[ "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+if [[ $# -gt 0 ]]; then
+  [[ "${1:-}" == "--group" && $# == 2 ]] || { usage >&2; fail "invalid test group arguments"; }
+  test_group="$2"
+fi
+case "${test_group}" in
+  all|validation|adoption|inputs|healthy|rollback|restore|ssm-contract) ;;
+  *) fail "unknown test group: ${test_group}" ;;
+esac
+
+group_enabled() {
+  local group="$1"
+  case "${test_group}:${group}" in
+    all:*) return 0 ;;
+    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|ssm-contract:ssm-contract) return 0 ;;
+    rollback:healthy|restore:healthy|restore:rollback) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+tmp_root="${TMPDIR:-/tmp}"
+if [[ "$(uname -s)" == Darwin ]]; then
+  tmp_root="$(cd "${tmp_root}" && pwd -P)"
+fi
+fixture_root="$(mktemp -d "${tmp_root%/}/chalk-managed-episode-controller.XXXXXX")"
+fixture_root="$(cd "${fixture_root}" && pwd -P)"
+if [[ "${KEEP_TEST_FIXTURE:-false}" == true ]]; then
+  printf 'fixture=%s\n' "${fixture_root}" >&2
+else
+  trap 'rm -rf -- "${fixture_root}"' EXIT
+fi
 
 expect_failure() {
   if "$@" >/dev/null 2>"${fixture_root}/expected-failure.log"; then
@@ -86,7 +120,9 @@ for name in "${names[@]}"; do
   fi
   value=test-only-secret-bytes
   if [[ "$base" == */api.env ]]; then
-    value=$'test-only-secret-bytes\n'
+    value="$(printf 'CHALK_API_VERSION=%s' "${FAKE_API_RELEASE_ID:-test-release}")"
+  elif [[ "$base" == */sync.env ]]; then
+    value="$(printf 'CHALK_SYNC_INSTANCE_ID=sync-test-instance\nCHALK_SYNC_RELEASE_ID=%s\nCHALK_SYNC_SOURCE_COMMIT=%s\nOTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=%s,deployment.environment.name=production,service.instance.id=sync-test-instance' "${FAKE_SYNC_RELEASE_ID:-test-release}" "${FAKE_SYNC_SOURCE_COMMIT:-test-source-revision}" "${FAKE_SYNC_RELEASE_ID:-test-release}")"
   fi
   if [[ -n "${FAKE_EMPTY_SUFFIX:-}" && "$base" == *"/${FAKE_EMPTY_SUFFIX}" ]]; then
     value=""
@@ -227,7 +263,15 @@ run_controller() {
   local request="$2"
   local manifest="$3"
   local mode="${4:-ok}"
+  local api_release_id sync_release_id sync_source_commit
+  api_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "$manifest")"
+  sync_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "$manifest")"
+  sync_source_commit="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "$manifest")"
+  api_release_id="${FAKE_API_RELEASE_ID_OVERRIDE:-$api_release_id}"
+  sync_release_id="${FAKE_SYNC_RELEASE_ID_OVERRIDE:-$sync_release_id}"
+  sync_source_commit="${FAKE_SYNC_SOURCE_COMMIT_OVERRIDE:-$sync_source_commit}"
   FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
+  FAKE_API_RELEASE_ID="$api_release_id" FAKE_SYNC_RELEASE_ID="$sync_release_id" FAKE_SYNC_SOURCE_COMMIT="$sync_source_commit" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
   CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
@@ -248,6 +292,7 @@ invalid_request="${fixture_root}/invalid-request.json"
 manifest="${fixture_root}/manifest.json"
 make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
+if group_enabled validation; then
 jq '.unexpected = true' "${fixture_root}/request.json" >"$invalid_request"
 expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"
 jq '.schema_version = 1' "${fixture_root}/request.json" >"$invalid_request"
@@ -268,15 +313,17 @@ if run_controller "$wrong_region_state" "${fixture_root}/wrong-region-request.js
   fail "cross-region ECR image was accepted"
 fi
 grep -Fq 'ECR image registry does not match the deployment region' "${fixture_root}/wrong-region.log" || fail "cross-region ECR rejection was not reported"
+fi
 
 adoption_state="${fixture_root}/adoption-state"
+if group_enabled adoption; then
 mkdir -p "$adoption_state" "${fixture_root}/run/env" "${fixture_root}/run/evidence" "${fixture_root}/run/release" "${fixture_root}/user-quadlet" "${fixture_root}/user-systemd" "${fixture_root}/install"
 printf '#!/usr/bin/env bash\nexit 1\n' >"${fixture_root}/install/chalk-runtime-health"
 chmod 0755 "${fixture_root}/install/chalk-runtime-health"
 make_manifest legacy >"${fixture_root}/run/release/release-manifest.json"
 printf '%s  release-manifest.json\n' "$(sha256sum "${fixture_root}/run/release/release-manifest.json" | awk '{print $1}')" >"${fixture_root}/run/release/release-manifest.sha256"
-printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
-printf '%s' test-only-secret-bytes >"${fixture_root}/run/env/sync.env"
+printf '%s' 'CHALK_API_VERSION=legacy' >"${fixture_root}/run/env/api.env"
+printf 'CHALK_SYNC_INSTANCE_ID=sync-test-instance\nCHALK_SYNC_RELEASE_ID=legacy\nCHALK_SYNC_SOURCE_COMMIT=%s\nOTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=legacy,deployment.environment.name=production,service.instance.id=sync-test-instance' "$source_revision" >"${fixture_root}/run/env/sync.env"
 printf '%s' test-only-secret-bytes >"${fixture_root}/run/evidence/planetscale-sync-proof.json"
 for component_file in api:chalk-api.container sync:chalk-sync.container redis:chalk-redis.container cloudflared:chalk-cloudflared.container; do
   component="${component_file%%:*}"
@@ -307,10 +354,10 @@ grep -Fq 'live runtime input does not match' "${fixture_root}/adoption-mismatch.
 stops_after_adoption="$(grep -Fc 'stop chalk-runtime.target' "${fixture_root}/commands.log" || true)"
 [[ "$stops_after_adoption" == "$stops_before_adoption" ]] || fail "legacy adoption stopped the runtime before its inputs agreed"
 [[ ! -e "${adoption_state}/active-release.json" ]] || fail "failed legacy adoption wrote an active pointer"
-printf 'test-only-secret-bytes\n' >"${fixture_root}/run/env/api.env"
+printf '%s' 'CHALK_API_VERSION=legacy' >"${fixture_root}/run/env/api.env"
 printf '0' >"${fixture_root}/health-index"
 migration_starts_before_adoption="$(grep -Fc 'start chalk-api-migrate.service' "${fixture_root}/commands.log" || true)"
-if run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" 'ok,fail,ok' >"${fixture_root}/adoption-result.log" 2>&1; then
+if FAKE_API_RELEASE_ID_OVERRIDE=legacy FAKE_SYNC_RELEASE_ID_OVERRIDE=legacy FAKE_SYNC_SOURCE_COMMIT_OVERRIDE="$source_revision" run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" 'ok,fail,ok' >"${fixture_root}/adoption-result.log" 2>&1; then
   fail "failed first candidate was accepted after legacy adoption"
 fi
 grep -Fq '"status":"rolled_back"' "${fixture_root}/adoption-result.log" || fail "legacy adoption did not provide automatic rollback"
@@ -328,8 +375,10 @@ find "${fixture_root}/run" -mindepth 1 -depth -delete
 find "${fixture_root}/user-quadlet" -mindepth 1 -depth -delete
 find "${fixture_root}/user-systemd" -mindepth 1 -depth -delete
 : >"${fixture_root}/secret-state"
+fi
 
 missing_state="${fixture_root}/missing-state"
+if group_enabled inputs; then
 mkdir -p "$missing_state"
 make_request missing "${fixture_root}/request.json"
 make_manifest missing >"${fixture_root}/missing-manifest.json"
@@ -373,14 +422,27 @@ FAKE_EMPTY_SUFFIX=api.env run_controller "$empty_state" "${fixture_root}/empty-r
 jq -e '.inputs[] | select(.id == "api-env" and .missing == true and .version == 1)' "${empty_state}/active-release.json" >/dev/null || fail "excluded empty input was not recorded as missing"
 [[ ! -e "${fixture_root}/run/env/api.env" ]] || fail "excluded empty input was published to /run"
 
+unsafe_release_state="${fixture_root}/unsafe-release-state"
+mkdir -p "$unsafe_release_state"
+make_request 'unsafe/release' "${fixture_root}/unsafe-release-request.json"
+jq '.request_id = "test-unsafe-release"' "${fixture_root}/unsafe-release-request.json" >"${fixture_root}/unsafe-release-request.tmp"
+mv "${fixture_root}/unsafe-release-request.tmp" "${fixture_root}/unsafe-release-request.json"
+chmod 0600 "${fixture_root}/unsafe-release-request.json"
+make_manifest 'unsafe/release' >"${fixture_root}/unsafe-release-manifest.json"
+if run_controller "$unsafe_release_state" "${fixture_root}/unsafe-release-request.json" "${fixture_root}/unsafe-release-manifest.json" ok >/dev/null 2>&1; then
+  fail "path-separating release identifier was accepted"
+fi
+
 staging_state="${fixture_root}/staging-state"
 mkdir -p "$staging_state"
 make_request staging "${fixture_root}/staging-request.json" '[]' staging
 make_manifest staging >"${fixture_root}/staging-manifest.json"
 run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
 jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+fi
 
 stable_state="${fixture_root}/stable-state"
+if group_enabled healthy; then
 mkdir -p "$stable_state"
 make_request stable "${fixture_root}/request.json"
 : >"${fixture_root}/commands.log"
@@ -400,6 +462,13 @@ runtime_start_line="$(grep -nF 'systemctl --user start chalk-runtime.target' "${
 [[ "${migration_start_line}" -lt "${runtime_start_line}" ]] || fail "runtime target started before database migrations"
 ! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "migration credential remained in the Podman secret store"
 [[ -s "${fixture_root}/run/env/api.env" && -s "${fixture_root}/run/env/sync.env" ]] || fail "runtime environment files were not published to /run"
+stable_manifest_api_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "$manifest")"
+stable_manifest_sync_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "$manifest")"
+stable_manifest_sync_source_revision="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "$manifest")"
+grep -Fxq "CHALK_API_VERSION=${stable_manifest_api_release_id}" "${fixture_root}/run/env/api.env" || fail "API runtime identity was not derived from the release manifest"
+grep -Fxq "CHALK_SYNC_RELEASE_ID=${stable_manifest_sync_release_id}" "${fixture_root}/run/env/sync.env" || fail "Sync runtime release identity was not derived from the release manifest"
+grep -Fxq "CHALK_SYNC_SOURCE_COMMIT=${stable_manifest_sync_source_revision}" "${fixture_root}/run/env/sync.env" || fail "Sync source commit was not derived from the release manifest"
+grep -Fxq "OTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=${stable_manifest_sync_release_id},deployment.environment.name=production,service.instance.id=sync-test-instance" "${fixture_root}/run/env/sync.env" || fail "Sync telemetry resource identity was not derived from the release manifest"
 if stat -f '%Lp' "${fixture_root}/run" >/dev/null 2>&1; then
   runtime_root_mode="$(stat -f '%Lp' "${fixture_root}/run")"
   runtime_env_mode="$(stat -f '%Lp' "${fixture_root}/run/env")"
@@ -424,7 +493,9 @@ if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixtur
   fail "a migration target below the manifest minimum was accepted"
 fi
 grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
+fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
+if group_enabled rollback; then
 make_request candidate "${fixture_root}/candidate-request.json"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed"
@@ -487,7 +558,9 @@ jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null
 assert_stable_installed_runtime
 find "${stable_state}/ledger.jsonl" -depth -delete
 cp "${fixture_root}/stable-ledger.jsonl" "${stable_state}/ledger.jsonl"
+fi
 
+if group_enabled restore; then
 printf '0' >"${fixture_root}/health-index"
 : >"${fixture_root}/aws.log"
 find "${fixture_root}/run" -mindepth 1 -depth -delete
@@ -504,7 +577,10 @@ if run_restore "$stable_state" ok >"${fixture_root}/tampered-runtime.log" 2>&1; 
   fail "tampered durable runtime was restored after reboot"
 fi
 grep -Fq 'active rendered runtime hashes do not match pointer' "${fixture_root}/tampered-runtime.log" || fail "durable runtime tampering was not reported"
+fi
 
+if group_enabled ssm-contract; then
 jq -e '.schemaVersion == "2.2" and .mainSteps[0].name == "deployRelease" and .parameters.ManifestBase64.maxChars == 48000 and .parameters.ControllerVersion.default == "2" and (.parameters | has("ExcludedSecrets") and has("AdoptExistingRelease")) and (.parameters | to_entries | all(.value.interpolationType == "ENV_VAR")) and (.mainSteps[0].inputs.runCommand[0] == "#!/bin/bash") and (.mainSteps[0].inputs.runCommand | all(contains("{{") | not) and all(contains("rm -rf") | not) and any(. == "controller_relative=\"controller/chalk-deployment-controller\"") and any(contains("find \"$work_root\" -depth -delete")) and any(contains("controller digest does not match release manifest"))) and (.parameters | has("Command") | not)' "${managed_root}/ssm/chalk-managed-episode-deploy.json" >/dev/null || fail "SSM document contract is unsafe"
+fi
 
-echo "PASS managed-episode deployment controller tests"
+echo "PASS managed-episode deployment controller tests (group=${test_group})"

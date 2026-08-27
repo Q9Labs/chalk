@@ -6,6 +6,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.Auth.Claims
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Contract.GeneratedWhiteboardV1
+  alias ChalkSync.Diagnostics
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -47,6 +48,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        cursor_window_started_at_ms: 0,
        cursor_window_count: 0,
        outbound: OutboundQueue.new(),
+       terminal: nil,
        observability: observability
      }}
   end
@@ -55,16 +57,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_in({text, [opcode: :text]}, state) do
     case Protocol.decode(text) do
       {:ok, frame} -> handle_frame(frame, state)
-      {:error, reason} -> {:stop, :normal, {1009, close_reason(reason)}, state}
+      {:error, reason} -> stop(state, 1009, close_reason(reason), :protocol_error)
     end
   end
 
   def handle_in({_payload, _options}, state),
-    do: {:stop, :normal, {1009, "text frames only"}, state}
+    do: stop(state, 1009, "text frames only", :protocol_error)
 
   @impl true
   def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state),
-    do: {:stop, :normal, {1008, "hello timeout"}, state}
+    do: stop(state, 1008, "hello timeout", :hello_timeout)
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
 
@@ -174,14 +176,14 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   @impl true
-  def terminate(_reason, %{identity: %Identity{episode: episode}} = state) do
+  def terminate(reason, %{identity: %Identity{episode: episode}} = state) do
     Fanout.unsubscribe(episode)
-    observe_terminal(state)
+    observe_terminal(state, reason)
     :ok
   end
 
-  def terminate(_reason, state) do
-    observe_terminal(state)
+  def terminate(reason, state) do
+    observe_terminal(state, reason)
     :ok
   end
 
@@ -194,33 +196,40 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
-         {:ok, welcome} <- Episode.connect(identity) do
+         {:ok, welcome} <- observe_connect_result(Episode.connect(identity), identity, state) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
       welcome = if presentation_negotiated, do: welcome, else: Map.delete(welcome, "presenting")
 
-      {:push, {:text, Protocol.encode!(welcome)},
-       %{
-         state
-         | phase: :live,
-           hello_timer: nil,
-           identity: identity,
-           display_name: claims.display_name,
-           presentation_negotiated: presentation_negotiated,
-           scene_id: welcome["scene_id"],
-           revision: String.to_integer(welcome["revision"])
-       }
-       |> observe_operation("connect", "accepted")}
+      next =
+        %{
+          state
+          | phase: :live,
+            hello_timer: nil,
+            identity: identity,
+            display_name: claims.display_name,
+            presentation_negotiated: presentation_negotiated,
+            scene_id: welcome["scene_id"],
+            revision: String.to_integer(welcome["revision"])
+        }
+        |> observe_operation("connect", "accepted")
+
+      Diagnostics.record(:whiteboard_connect_succeeded, identity,
+        observability: next.observability,
+        attributes: %{transport: :websocket}
+      )
+
+      {:push, {:text, Protocol.encode!(welcome)}, next}
     else
-      {:error, :invalid_token} -> {:stop, :normal, {1008, "invalid token"}, state}
-      {:error, :invalid_identity} -> {:stop, :normal, {1008, "invalid token"}, state}
-      {:error, :permission_denied} -> {:stop, :normal, {1008, "policy violation"}, state}
-      _unavailable -> {:stop, :normal, {1012, "dependency unavailable"}, state}
+      {:error, :invalid_token} -> stop(state, 1008, "invalid token", :invalid_token)
+      {:error, :invalid_identity} -> stop(state, 1008, "invalid token", :invalid_token)
+      {:error, :permission_denied} -> stop(state, 1008, "policy violation", :permission_denied)
+      _unavailable -> stop(state, 1012, "dependency unavailable", :dependency_unavailable)
     end
   end
 
   defp handle_frame({:hello, _hello}, state),
-    do: {:stop, :normal, {1008, "already authenticated"}, state}
+    do: stop(state, 1008, "already authenticated", :protocol_error)
 
   defp handle_frame({:submit_update, operation}, %{phase: :live, identity: identity} = state) do
     if is_nil(state.multipart) do
@@ -330,9 +339,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           remaining: remaining
         }
 
-        {:push, {:text, Protocol.encode!(first)},
-         %{state | phase: :recovering, snapshot: snapshot}
-         |> observe_operation("request_snapshot", "accepted")}
+        next =
+          %{state | phase: :recovering, snapshot: snapshot}
+          |> observe_operation("request_snapshot", "accepted")
+
+        Diagnostics.record(:whiteboard_recovery_started, identity,
+          observability: next.observability,
+          attributes: %{transport: :websocket}
+        )
+
+        {:push, {:text, Protocol.encode!(first)}, next}
 
       failure ->
         operation_failure(request_id, :request_snapshot, failure, state)
@@ -360,17 +376,24 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           {:push, {:text, Protocol.encode!(next)}, %{state | snapshot: next_snapshot}}
 
         [] ->
-          {:ok,
-           %{
-             state
-             | phase: :live,
-               snapshot: nil,
-               scene_id: snapshot.scene_id,
-               revision: String.to_integer(snapshot.revision)
-           }}
+          next =
+            %{
+              state
+              | phase: :live,
+                snapshot: nil,
+                scene_id: snapshot.scene_id,
+                revision: String.to_integer(snapshot.revision)
+            }
+
+          Diagnostics.record(:whiteboard_recovery_succeeded, next.identity,
+            observability: next.observability,
+            attributes: %{transport: :websocket}
+          )
+
+          {:ok, next}
       end
     else
-      {:stop, :normal, {1008, "invalid snapshot acknowledgement"}, state}
+      stop(state, 1008, "invalid snapshot acknowledgement", :invalid_acknowledgement)
     end
   end
 
@@ -402,7 +425,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     do: {:push, {:text, Protocol.pong()}, state}
 
   defp handle_frame(_frame, state),
-    do: {:stop, :normal, {1008, "operation not available in this phase"}, state}
+    do: stop(state, 1008, "operation not available in this phase", :protocol_error)
 
   defp submit_update(identity, operation, state) do
     case Episode.submit_update(identity, operation) do
@@ -443,7 +466,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         push_next(%{state | outbound: queue})
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "whiteboard delivery recovery required"}, state}
+        stop(state, 1012, "whiteboard delivery recovery required", :delivery_unavailable)
     end
   end
 
@@ -462,7 +485,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:ok, state}
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "whiteboard delivery recovery required"}, state}
+        stop(state, 1012, "whiteboard delivery recovery required", :delivery_unavailable)
     end
   end
 
@@ -610,6 +633,29 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end)
   end
 
+  defp observe_connect_result({:ok, _welcome} = result, _identity, _state), do: result
+
+  defp observe_connect_result({:error, reason} = result, identity, state) do
+    Diagnostics.record(:whiteboard_connect_failed, identity,
+      observability: state.observability,
+      attributes: %{transport: :websocket, reason: connect_failure_reason(reason)}
+    )
+
+    result
+  end
+
+  defp observe_connect_result(result, identity, state) do
+    Diagnostics.record(:whiteboard_connect_failed, identity,
+      observability: state.observability,
+      attributes: %{transport: :websocket, reason: :dependency_unavailable}
+    )
+
+    result
+  end
+
+  defp connect_failure_reason(:permission_denied), do: :permission_denied
+  defp connect_failure_reason(_reason), do: :dependency_unavailable
+
   defp observe_operation(state, operation, outcome) do
     observability =
       Observability.phase(state.observability, "sync.whiteboard", %{
@@ -620,10 +666,33 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     %{state | observability: observability}
   end
 
-  defp observe_terminal(state) do
+  defp stop(state, close_code, message, reason) do
+    terminal = %{close_code: close_code, reason: reason}
+    {:stop, :normal, {close_code, message}, %{state | terminal: terminal}}
+  end
+
+  defp observe_terminal(state, terminate_reason) do
+    terminal = state.terminal || %{close_code: 1000, reason: terminal_reason(terminate_reason)}
+
     Observability.terminal(state.observability, "sync.websocket.closed", %{
       protocol: "whiteboard-v1",
-      phase: state.phase
+      phase: state.phase,
+      close_code: terminal.close_code,
+      reason: terminal.reason
     })
+
+    if state.identity do
+      Diagnostics.record(:whiteboard_disconnect_observed, state.identity,
+        observability: state.observability,
+        attributes: %{
+          transport: :websocket,
+          close_code: terminal.close_code,
+          reason: terminal.reason
+        }
+      )
+    end
   end
+
+  defp terminal_reason(:normal), do: :normal
+  defp terminal_reason(_reason), do: :client_closed
 end

@@ -197,6 +197,22 @@ if [[ "${proof_case}" == "unsupported_snapshot" || "${proof_case}" == "unsupport
   exit 0
 fi
 
+goose up-to 20260809170000 >/dev/null
+
+set +e
+down_output="$(goose down 2>&1)"
+down_status=$?
+set -e
+if [[ "${down_status}" -eq 0 ]]; then
+  echo "Expected the canonical snapshot repair migration Down to refuse rollback." >&2
+  exit 1
+fi
+if [[ "${down_output}" != *"canonical control integrity cannot return"* ]]; then
+  echo "Irreversible Down failed without the repair guard:" >&2
+  echo "${down_output}" >&2
+  exit 1
+fi
+
 goose up >/dev/null
 
 psql <<SQL
@@ -282,20 +298,6 @@ begin
 end;
 \$\$;
 SQL
-fi
-
-set +e
-down_output="$(goose down 2>&1)"
-down_status=$?
-set -e
-if [[ "${down_status}" -eq 0 ]]; then
-  echo "Expected the canonical snapshot repair migration Down to refuse rollback." >&2
-  exit 1
-fi
-if [[ "${down_output}" != *"canonical control integrity cannot return"* ]]; then
-  echo "Irreversible Down failed without the repair guard:" >&2
-  echo "${down_output}" >&2
-  exit 1
 fi
 
 echo "episode control snapshot repair ${proof_case} proof passed"

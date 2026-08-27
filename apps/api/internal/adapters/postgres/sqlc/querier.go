@@ -18,6 +18,7 @@ type Querier interface {
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)
 	AssignDiagnosticEventOperation(ctx context.Context, arg AssignDiagnosticEventOperationParams) (int64, error)
 	CancelArtifactJob(ctx context.Context, arg CancelArtifactJobParams) (ArtifactJob, error)
+	CancelDashboardParticipantJoin(ctx context.Context, arg CancelDashboardParticipantJoinParams) (Participant, error)
 	CancelDiagnosticExportJob(ctx context.Context, arg CancelDiagnosticExportJobParams) (DiagnosticExportJob, error)
 	CancelDiagnosticExportJobForOperator(ctx context.Context, arg CancelDiagnosticExportJobForOperatorParams) (DiagnosticExportJob, error)
 	CancelWebhookDeliveriesForOldTarget(ctx context.Context, arg CancelWebhookDeliveriesForOldTargetParams) (int64, error)

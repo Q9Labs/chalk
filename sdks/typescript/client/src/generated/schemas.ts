@@ -98,6 +98,7 @@ export const AccessGrantSchema = Schema.Struct({
       }),
     ),
   ),
+  episode_started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   media: Schema.Struct({
     client_payload: Schema.Record(Schema.String, Schema.Unknown),
     expires_at: DateTimeStringSchema,
@@ -938,6 +939,7 @@ export type RecordingReservation = typeof RecordingReservationSchema.Type;
 
 export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
   media_proof: Schema.String.check(Schema.isMinLength(1)),
+  replace_media_connection: Schema.Boolean,
 });
 export type RefreshSpacePublicInviteAccessRequest = typeof RefreshSpacePublicInviteAccessRequestSchema.Type;
 
@@ -3093,6 +3095,44 @@ export const AccessInvalidPasswordErrorWireSchema = Schema.Struct({
 export const AccessInvalidPasswordErrorSchema = AccessInvalidPasswordErrorWireSchema.pipe(
   Schema.decodeTo(AccessInvalidPasswordError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "AccessInvalidPasswordError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AccessMediaProofExpiredError extends Schema.TaggedErrorClass<AccessMediaProofExpiredError>()("AccessMediaProofExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessMediaProofExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_expired"),
+    message: Schema.String,
+  }),
+});
+export const AccessMediaProofExpiredErrorSchema = AccessMediaProofExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(AccessMediaProofExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessMediaProofExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AccessMediaProofRejectedError extends Schema.TaggedErrorClass<AccessMediaProofRejectedError>()("AccessMediaProofRejectedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_rejected"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessMediaProofRejectedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_rejected"),
+    message: Schema.String,
+  }),
+});
+export const AccessMediaProofRejectedErrorSchema = AccessMediaProofRejectedErrorWireSchema.pipe(
+  Schema.decodeTo(AccessMediaProofRejectedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessMediaProofRejectedError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6475,6 +6515,8 @@ export const RefreshIntegrationConnectionErrorSchema = Schema.Union([
 export type RefreshIntegrationConnectionError = typeof RefreshIntegrationConnectionErrorSchema.Type;
 
 export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
+  AccessMediaProofExpiredErrorSchema,
+  AccessMediaProofRejectedErrorSchema,
   ArrivalInvalidHandleErrorSchema,
   ArrivalUnavailableErrorSchema,
   EpisodeCapacityExceededErrorSchema,

@@ -1252,19 +1252,48 @@
       }
     },
     {
-      "operation": "whiteboard.unsupported",
-      "owner": "whiteboard package",
-      "proofId": "diag.v1.whiteboard.unsupported",
+      "operation": "whiteboard.connect",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.connect",
       "status": "pending",
       "fixtureStatus": "pass",
       "runtimeStatus": "pending",
       "proofCommand": "",
       "proofArtifact": "",
-      "unsupported": true,
       "fixturePaths": {
-        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.whiteboard.unsupported.v1",
-        "success": "fixtures/semantic-events.v1.json#/fixtures/success.whiteboard.unsupported.v1",
-        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.whiteboard.unsupported.v1"
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.whiteboard.connect.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.whiteboard.connect.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.whiteboard.connect.v1"
+      }
+    },
+    {
+      "operation": "whiteboard.recover",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.recover",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.whiteboard.recover.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.whiteboard.recover.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.whiteboard.recover.v1"
+      }
+    },
+    {
+      "operation": "whiteboard.disconnect",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.disconnect",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.whiteboard.disconnect.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.whiteboard.disconnect.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.whiteboard.disconnect.v1"
       }
     }
   ]

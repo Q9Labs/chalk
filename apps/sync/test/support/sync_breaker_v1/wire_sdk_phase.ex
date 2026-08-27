@@ -180,14 +180,13 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
   end
 
   defp exercise_sdk(seed) do
-    root = Path.expand("../..", File.cwd!())
+    root = Path.expand("../../../../..", __DIR__)
     script = Path.join(root, "sdks/typescript/client/scripts/sync-breaker-v1-wire-sdk.mjs")
-    package = Path.join(root, "sdks/typescript/client")
 
     {output, 0} =
       System.cmd(
         "pnpm",
-        ["--dir", package, "exec", "tsx", script, Integer.to_string(seed)],
+        ["exec", "tsx", script, Integer.to_string(seed)],
         cd: root,
         env: [
           {"TSX_TSCONFIG_PATH", Path.join(root, "apps/sync/scripts/tsconfig.wire-sdk.json")}
