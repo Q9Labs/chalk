@@ -8,6 +8,7 @@ defmodule ChalkSync.Operations.Metrics do
 
   use GenServer
 
+  alias ChalkSync.Diagnostics.Exporter
   alias ChalkSync.Episodes.CommandIntake
 
   @events [
@@ -24,14 +25,16 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :external_operation, :poll],
     [:chalk, :sync, :webhook, :production],
     [:chalk, :sync, :webhook, :fanout],
-    [:chalk, :sync, :retention, :cleanup]
+    [:chalk, :sync, :retention, :cleanup],
+    [:chalk, :sync, :diagnostics, :buffer],
+    [:chalk, :sync, :diagnostics, :export]
   ]
 
   @outcomes ~w(
     accepted overloaded server_draining released committed duplicate rejected retryable error
     snapshot replay up_to_date terminal valid malformed event_limit byte_limit age_limit
     replay_page_limit applied already_applied superseded success failure operation_failure queued
-    confirmed terminal_failure pending finalization_failure
+    confirmed terminal_failure pending finalization_failure dropped retry_exhausted
   )
   @external_operations ~w(
     mute_participant stop_participant_camera stop_participant_screen_share
@@ -106,10 +109,18 @@ defmodule ChalkSync.Operations.Metrics do
       admitted_command_bytes: admission.node_bytes,
       admitted_commands: admission.node_commands,
       command_intake_draining: admission.draining?,
-      local_episode_coordinators: supervisor.active
+      local_episode_coordinators: supervisor.active,
+      episode_diagnostics_exporter: diagnostics_health()
     }
   catch
     :exit, _reason -> %{"status" => "unavailable"}
+  end
+
+  defp diagnostics_health do
+    case Application.get_env(:chalk_sync, :episode_diagnostics, %{mode: :off}) do
+      %{mode: :off} -> %{status: :disabled}
+      _enabled -> Exporter.health()
+    end
   end
 
   defp normalize_outcome(outcome) when is_atom(outcome),

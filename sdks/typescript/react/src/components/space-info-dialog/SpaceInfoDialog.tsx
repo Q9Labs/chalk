@@ -1,18 +1,23 @@
-import React, { useState } from "react";
+import React, { useEffect, useId, useRef, type KeyboardEvent } from "react";
 
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, Copy01Icon, Monitor01Icon, Shield01Icon, Tick01Icon } from "../../utils/icons";
-import { ChalkBackdrop, ChalkBadge, ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkPanel } from "../chalk-ui";
+import { Cancel01Icon } from "../../utils/icons";
+import { ChalkBackdrop, ChalkBadge, ChalkDialogPanel, ChalkIconButton } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicSpaceInfoDialog } from "./ClassicSpaceInfoDialog";
+import { SpaceInfoContent } from "./SpaceInfoContent";
 
 export interface SpaceInfoDialogProps {
   isOpen: boolean;
   onClose: () => void;
   spaceName: string;
+  spaceDescription?: string;
   spaceId?: string;
-  inviteLink: string;
-  onCopyLink: () => void;
+  inviteLink?: string;
+  onCopyLink?: () => void;
+  diagnosticReference?: string;
+  onCopyDiagnosticReference?: (reference: string) => void;
+  onSendFeedback?: (context: Readonly<{ diagnosticReference: string }>) => void;
   isRecording?: boolean;
   isTranscribing?: boolean;
   duration?: number;
@@ -34,86 +39,98 @@ const formatDuration = (seconds: number): string => {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
-const ChalkSpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen, onClose, spaceName, spaceId, inviteLink, onCopyLink, isRecording = false, isTranscribing = false, duration = 0, stats = { latency: 28, packetLoss: 0.1, resolution: "1080p · 60fps", region: "Frankfurt, DE" }, className }) => {
-  const skin = useSkin();
-  const [copied, setCopied] = useState(false);
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-  const handleCopy = () => {
-    onCopyLink();
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2_000);
-  };
+/**
+ * Modal Space details. Focus moves into the panel on open, Tab cycles inside it, Escape closes,
+ * and focus returns to the opener when the dialog unmounts.
+ */
+const ChalkSpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen, onClose, spaceName, isRecording = false, isTranscribing = false, duration = 0, className, ...contentProps }) => {
+  const skin = useSkin();
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panel?.focus({ preventScroll: true });
+    return () => {
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab" || !panelRef.current) return;
+    const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    const first = focusable.at(0);
+    const last = focusable.at(-1);
+    if (!first || !last) {
+      event.preventDefault();
+      return;
+    }
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === panelRef.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
-    <div data-chalk-skin={skin} className="fixed inset-0 z-50" onMouseDown={onClose}>
-      <ChalkBackdrop className="z-0 !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_90%,transparent)] !backdrop-blur-[1px]" />
-      <div className="relative z-10 grid h-full place-items-center p-4">
+    <div data-chalk-skin={skin} className="fixed inset-0 z-[70]" onMouseDown={onClose}>
+      <ChalkBackdrop className="z-0 !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_88%,transparent)] !backdrop-blur-[1px]" />
+      <div className="relative z-10 grid h-full place-items-center p-4 sm:p-6">
         <ChalkDialogPanel
-          className={cn("chalk-textured-surface w-full max-w-[500px] overflow-hidden !rounded-[14px] !border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] !p-0 shadow-[var(--chalk-app-shadow-sm)]", className)}
+          ref={panelRef}
+          tabIndex={-1}
+          className={cn(
+            "chalk-textured-surface flex max-h-[calc(100dvh-2rem)] w-full max-w-[600px] flex-col overflow-hidden !rounded-[16px] !border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] !p-0 shadow-[var(--chalk-app-shadow-sm)] outline-none focus-visible:outline-none",
+            className,
+          )}
           aria-modal="true"
-          aria-label="Space details"
+          aria-labelledby={titleId}
+          onKeyDown={handleKeyDown}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <header className="flex items-start justify-between gap-5 border-b border-[var(--chalk-app-line)] px-6 py-5">
+          <header className="flex items-start justify-between gap-4 border-b border-[var(--chalk-app-line)] px-6 pt-5 pb-4">
             <div className="min-w-0">
-              <h2 className="text-xl font-semibold tracking-[-0.025em]">Space details</h2>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[var(--chalk-app-text-muted)]">
-                <span className="truncate">{spaceName}</span>
+              <h2 id={titleId} className="text-[22px] font-semibold leading-[1.2] tracking-[-0.02em]">
+                Space details
+              </h2>
+              <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--chalk-app-text-muted)]">
+                <span className="truncate font-medium text-[var(--chalk-app-text)]">{spaceName}</span>
                 <span aria-hidden="true">·</span>
-                <span className="font-mono tabular-nums">{formatDuration(duration)}</span>
+                <span className="font-mono text-[13px] tabular-nums">{formatDuration(duration)}</span>
                 {isRecording ? (
-                  <ChalkBadge tone="danger" className="!rounded-full !px-2 !py-0.5 !text-[var(--chalk-app-danger)]">
+                  <ChalkBadge tone="danger" className="!min-h-5 !rounded-full !px-2 !py-0 !text-[11px] !text-[var(--chalk-app-danger)]">
                     Recording
                   </ChalkBadge>
                 ) : null}
                 {isTranscribing ? (
-                  <ChalkBadge tone="accent" className="!rounded-full !px-2 !py-0.5 !text-[var(--chalk-app-control-active-text)]">
+                  <ChalkBadge tone="accent" className="!min-h-5 !rounded-full !px-2 !py-0 !text-[11px] !text-[var(--chalk-app-control-active-text)]">
                     Transcribing
                   </ChalkBadge>
                 ) : null}
               </div>
             </div>
-            <ChalkIconButton type="button" onClick={onClose} size="sm" className="!h-9 !w-9 !shrink-0 !rounded-[8px] text-[var(--chalk-app-text-muted)] transition hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" aria-label="Close space details">
-              <Cancel01Icon size={19} />
+            <ChalkIconButton type="button" onClick={onClose} size="md" className="-mt-1 -mr-2 !rounded-[10px] text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" aria-label="Close space details">
+              <Cancel01Icon size={20} />
             </ChalkIconButton>
           </header>
 
-          <div className="space-y-5 p-6">
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold">Invite link</p>
-                {spaceId ? <p className="font-mono text-[11px] text-[var(--chalk-app-text-muted)]">ID {spaceId}</p> : null}
-              </div>
-              <div className="flex items-center gap-2 rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] p-2">
-                <p className="min-w-0 flex-1 truncate px-2 font-mono text-xs text-[var(--chalk-app-text-muted)]">{inviteLink}</p>
-                <ChalkButton variant="solid" type="button" onClick={handleCopy} className="!h-9 !shrink-0 !rounded-[7px] !px-3 !text-xs !font-semibold !text-[var(--chalk-app-control-active-text)] transition" aria-label={copied ? "Space link copied" : "Copy space link"} aria-live="polite">
-                  {copied ? <Tick01Icon size={15} /> : <Copy01Icon size={15} />}
-                  {copied ? "Copied" : "Copy"}
-                </ChalkButton>
-              </div>
-            </div>
-
-            <ChalkPanel className="grid overflow-hidden !rounded-[10px] !border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] !p-0 sm:grid-cols-2">
-              <div className="border-b border-[var(--chalk-app-line)] p-4 sm:border-b-0 sm:border-r">
-                <div className="flex items-center gap-2 text-[var(--chalk-app-control-active-line)]">
-                  <Shield01Icon size={17} />
-                  <span className="text-sm font-semibold">Media protected</span>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-[var(--chalk-app-text-muted)]">Streams are encrypted in transit through the configured provider.</p>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center gap-2">
-                  <Monitor01Icon size={17} />
-                  <span className="text-sm font-semibold">Connection</span>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-[var(--chalk-app-text-muted)]">
-                  {stats.resolution} · {stats.latency} ms · {stats.packetLoss}% loss
-                </p>
-                <p className="mt-1 truncate text-[11px] text-[var(--chalk-app-text-muted)]">{stats.region}</p>
-              </div>
-            </ChalkPanel>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SpaceInfoContent {...contentProps} />
           </div>
         </ChalkDialogPanel>
       </div>
@@ -123,7 +140,7 @@ const ChalkSpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen, onClose
 
 ChalkSpaceInfoDialog.displayName = "ChalkSpaceInfoDialog";
 
-export const SpaceInfoDialog = React.memo<SpaceInfoDialogProps>((props: SpaceInfoDialogProps) => {
+export const SpaceInfoDialog = React.memo<SpaceInfoDialogProps>((props) => {
   const skin = useSkin();
   return skin === "classic" ? <ClassicSpaceInfoDialog {...props} /> : <ChalkSpaceInfoDialog {...props} />;
 });

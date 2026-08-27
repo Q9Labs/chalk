@@ -2,6 +2,7 @@ package spaces
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -131,15 +132,18 @@ type FilteredRepository interface {
 }
 
 type Service struct {
-	repository Repository
+	repository        Repository
+	defaultMediaPlane MediaPlaneProvider
 }
 
 type CreateSpaceInput struct {
 	ID                            utilities.ID
+	PublicInviteHandle            [32]byte
 	Name                          string
 	TenantID                      utilities.ID
 	Slug                          string
 	MediaPlane                    string
+	MediaPlaneSet                 bool
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
@@ -196,12 +200,25 @@ func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
 
+func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaPlaneProvider) Service {
+	return Service{repository: repository, defaultMediaPlane: defaultProvider}
+}
+
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
 	id, err := utilities.NewID()
 	if err != nil {
 		return Space{}, err
 	}
 	input.ID = id
+	if !input.MediaPlaneSet && input.MediaPlane == "" && s.defaultMediaPlane != "" {
+		if s.defaultMediaPlane != MediaPlaneProviderCloudflareSFU {
+			return Space{}, ErrInvalidMediaPlane
+		}
+		input.MediaPlane = string(s.defaultMediaPlane)
+	}
+	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
+		return Space{}, err
+	}
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
@@ -305,7 +322,11 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 	if err != nil {
 		return ErrInvalidMediaPlane
 	}
-	input.MediaPlane = mediaPlane
+	provider, err := ParseMediaPlaneProvider(mediaPlane)
+	if err != nil {
+		return ErrInvalidMediaPlane
+	}
+	input.MediaPlane = string(provider)
 
 	input.Metadata, err = utilities.JSON(input.Metadata)
 	if err != nil {
@@ -343,6 +364,14 @@ func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 	input.MediaPlane, err = requiredOptionalString(input.MediaPlane, ErrInvalidMediaPlane)
 	if err != nil {
 		return err
+	}
+	if input.MediaPlane.Set {
+		provider, parseErr := ParseMediaPlaneProvider(*input.MediaPlane.Value)
+		if parseErr != nil {
+			return ErrInvalidMediaPlane
+		}
+		value := string(provider)
+		input.MediaPlane.Value = &value
 	}
 	input.Metadata, err = utilities.OptionalNullableJSON(input.Metadata)
 	if err != nil {

@@ -2,17 +2,19 @@
 set -euo pipefail
 umask 077
 
-readonly CONTROLLER_VERSION=1
+readonly CONTROLLER_VERSION=2
 readonly CONTROLLER_NAME=chalk-deployment-controller
 readonly MAIN_BASHPID="${BASHPID}"
 CONTROLLER_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly CONTROLLER_DIR
 DEFAULT_MANAGED_ROOT="$(cd "${CONTROLLER_DIR}/.." && pwd)"
 readonly DEFAULT_MANAGED_ROOT
-readonly REQUEST_SCHEMA_KEYS='["aws_region","controller_version","environment","excluded_secrets","parameter_prefix","release_id","request_id","requested_at","schema_version","source_revision"]'
-readonly INPUT_IDS='["api-env","sync-env","planetscale-sync-proof","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]'
+readonly REQUEST_SCHEMA_KEYS='["adopt_existing_release","aws_region","controller_version","environment","excluded_secrets","parameter_prefix","release_id","request_id","requested_at","schema_version","source_revision"]'
+readonly INPUT_IDS='["managed-migrator-database-url","api-env","sync-env","planetscale-sync-proof","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]'
+readonly MIGRATOR_INPUT_ID='managed-migrator-database-url'
+readonly MIGRATOR_SECRET_NAME='chalk-managed-migrator-database-url'
 
-state_root="${CHALK_CONTROLLER_STATE_ROOT:-/var/lib/chalk}"
+state_root="${CHALK_CONTROLLER_STATE_ROOT:-/var/lib/chalk/deployment-controller}"
 run_root="${CHALK_CONTROLLER_RUN_ROOT:-/run/chalk}"
 runtime_user="${CHALK_RUNTIME_USER:-chalk}"
 systemd_root="${CHALK_CONTROLLER_SYSTEMD_ROOT:-/etc/systemd/system}"
@@ -43,6 +45,7 @@ request_prefix=""
 request_id=""
 requested_at=""
 excluded_json='[]'
+adopt_existing_release=false
 stage_root=""
 versions_json='[]'
 missing_json='[]'
@@ -117,8 +120,10 @@ require_host_commands() {
   require_command "$podman_bin"
   require_command "$systemctl_bin"
   require_command bash
+  require_command cmp
   require_command curl
   require_command find
+  require_command grep
   require_command install
   require_command sed
   require_command tail
@@ -237,6 +242,7 @@ load_exclusions() {
     (map(type == "string") | all) and
     (map(. as $id | $allowed | index($id) != null) | all) and
     (index("planetscale-sync-proof") == null) and
+    (index("managed-migrator-database-url") == null) and
     (.[0:] == (sort | unique))
   ' <<<"${excluded_json}" >/dev/null || fail "excluded_secrets must be sorted, unique canonical IDs"
 }
@@ -245,7 +251,8 @@ validate_request() {
   require_regular_file "$request_path"
   jq -e --argjson expected_keys "$REQUEST_SCHEMA_KEYS" '
     type == "object" and (keys | sort) == $expected_keys and
-    .schema_version == 1 and .controller_version == 1 and
+    .schema_version == 2 and .controller_version == 2 and
+    (.adopt_existing_release | type == "boolean") and
     (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.environment | type == "string" and (. == "staging" or . == "production")) and
@@ -255,6 +262,7 @@ validate_request() {
     (.requested_at | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"))
   ' "$request_path" >/dev/null || fail "deployment request is invalid"
   load_exclusions "$request_path"
+  adopt_existing_release="$(jq -r '.adopt_existing_release' "$request_path")"
   request_release_id="$(jq -er '.release_id' "$request_path")"
   request_source_revision="$(jq -er '.source_revision' "$request_path")"
   request_environment="$(jq -er '.environment' "$request_path")"
@@ -272,14 +280,14 @@ validate_inventory() {
   require_regular_file "$inventory"
   jq -e --argjson expected "$INPUT_IDS" '
     type == "object" and (keys | sort) == ["$id","$schema","inputs","schema_version"] and .schema_version == 1 and
-    (.inputs | type == "array" and length == 10 and
+    (.inputs | type == "array" and length == 11 and
       (map(.id) == $expected) and
       all(.[];
         type == "object" and
         (keys | sort) == ["destination", "id", "kind", "suffix"] and
         (.id | type == "string") and (.suffix | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
         (.destination | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
-        (.kind == "env" or .kind == "proof" or .kind == "secret-file")
+        (.kind == "env" or .kind == "proof" or .kind == "secret-file" or .kind == "migration")
       )
     )
   ' "$inventory" >/dev/null || fail "runtime input inventory is invalid"
@@ -296,19 +304,23 @@ validate_manifest() {
     else
       (keys | sort) == ["affected_components","architectures","component_releases","database_compatibility","generated_at","images","protocol_compatibility","release_id","runtime_artifacts","schema_version","source_revision","source_tree_state"]
     end) and
-    (.release_id | type == "string" and length > 0) and
+    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.source_tree_state == "clean") and
     (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64","linux/arm64"]) and
-    (.database_compatibility == {engine:"postgresql",major:18,minimum_migration:20260713130000,maximum_migration:null}) and
+    (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
     (.protocol_compatibility == {sync:1}) and
     (if .schema_version == 2 then
       ((.affected_components == ["api"] or .affected_components == ["sync"] or .affected_components == ["api","sync"]) and
-       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$")))) and
+       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$")))) and
        (. as $manifest | all(.affected_components[]; . as $component | $manifest.component_releases[$component] == {release_id:$manifest.release_id,source_revision:$manifest.source_revision})))
     else true end) and
     (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
-    (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$")))
+    (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
+    (if .schema_version == 2 then
+      ((.affected_components | type == "array" and (length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
+       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
+    else true end)
   ' "$manifest_path" >/dev/null || fail "release manifest is invalid"
   [[ "$(jq -er '.release_id' "$manifest_path")" == "$request_release_id" ]] || fail "request release_id does not match manifest"
   [[ "$(jq -er '.source_revision' "$manifest_path")" == "$request_source_revision" ]] || fail "request source_revision does not match manifest"
@@ -335,7 +347,7 @@ input_type_is_supported() {
   local kind="$1"
   local parameter_type="$2"
   case "$kind" in
-    env | secret-file) [[ "$parameter_type" == SecureString ]] ;;
+    env | migration | secret-file) [[ "$parameter_type" == SecureString ]] ;;
     proof) [[ "$parameter_type" == String || "$parameter_type" == SecureString ]] ;;
     *) return 1 ;;
   esac
@@ -343,7 +355,7 @@ input_type_is_supported() {
 
 reset_staged_inputs() {
   local relative
-  for relative in env evidence secret-inputs; do
+  for relative in env evidence secret-inputs migration; do
     remove_staged_tree "${stage_root}/${relative}"
   done
 }
@@ -371,15 +383,81 @@ record_input() {
 
 write_input_file() {
   local destination="$1"
-  local value="$2"
+  local response_file="$2"
+  local parameter_name="$3"
   local target="${stage_root}/${destination}"
   reject_symlink_components "$(dirname "$target")"
   mkdir -p "$(dirname "$target")"
   chmod 700 "$(dirname "$target")"
   [[ ! -e "$target" || ! -L "$target" ]] || fail "runtime input destination is a symlink"
   umask 077
-  printf '%s' "$value" >"$target"
+  jq -j --arg name "$parameter_name" '.Parameters[] | select(.Name == $name) | .Value' "$response_file" >"$target" || fail "SSM runtime input value could not be written"
+  [[ -s "$target" ]] || fail "SSM runtime input value write was empty"
   chmod 600 "$target"
+}
+
+read_env_value() {
+  local file="$1"
+  local name="$2"
+  awk -v name="$name" '
+    index($0, name "=") == 1 { count++; value=substr($0, length(name) + 2) }
+    END { if (count == 1 && length(value) > 0) print value; else exit 1 }
+  ' "$file"
+}
+
+set_env_value() {
+  local file="$1"
+  local name="$2"
+  local value="$3"
+  [[ "$name" =~ ^[A-Z][A-Z0-9_]*$ ]] || fail "runtime identity environment name is invalid"
+  [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || fail "runtime identity environment value contains a line break"
+  local temporary
+  temporary="$(mktemp "${stage_root}/.env-update.XXXXXX")"
+  chmod 600 "$temporary"
+  awk -v name="$name" -v value="$value" '
+    index($0, name "=") == 1 {
+      if (!written++) print name "=" value
+      next
+    }
+    { print }
+    END { if (!written) print name "=" value }
+  ' "$file" >"$temporary" || fail "runtime identity environment update failed"
+  mv -f "$temporary" "$file" || fail "runtime identity environment activation failed"
+}
+
+manifest_component_value() {
+  local component="$1"
+  local field="$2"
+  jq -er --arg component "$component" --arg field "$field" '
+    if .schema_version == 2 then
+      .component_releases[$component][$field]
+    else
+      .[$field]
+    end
+  ' "$manifest_path"
+}
+
+inject_runtime_identity() {
+  local api_release_id sync_release_id sync_source_revision sync_instance_id
+  api_release_id="$(manifest_component_value api release_id)" || fail "release manifest API identity is invalid"
+  sync_release_id="$(manifest_component_value sync release_id)" || fail "release manifest Sync identity is invalid"
+  sync_source_revision="$(manifest_component_value sync source_revision)" || fail "release manifest Sync source revision is invalid"
+  [[ "$api_release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || fail "release manifest API identity is unsafe"
+  [[ "$sync_release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || fail "release manifest Sync identity is unsafe"
+  [[ "$sync_source_revision" =~ ^[0-9a-f]{40}$ ]] || fail "release manifest Sync source revision is unsafe"
+
+  if [[ -f "${stage_root}/env/api.env" ]]; then
+    require_regular_file "${stage_root}/env/api.env"
+    set_env_value "${stage_root}/env/api.env" CHALK_API_VERSION "$api_release_id"
+  fi
+  if [[ -f "${stage_root}/env/sync.env" ]]; then
+    require_regular_file "${stage_root}/env/sync.env"
+    sync_instance_id="$(read_env_value "${stage_root}/env/sync.env" CHALK_SYNC_INSTANCE_ID)" || fail "CHALK_SYNC_INSTANCE_ID must occur exactly once with a non-empty value"
+    [[ "$sync_instance_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_INSTANCE_ID is not a safe bounded identifier"
+    set_env_value "${stage_root}/env/sync.env" CHALK_SYNC_RELEASE_ID "$sync_release_id"
+    set_env_value "${stage_root}/env/sync.env" CHALK_SYNC_SOURCE_COMMIT "$sync_source_revision"
+    set_env_value "${stage_root}/env/sync.env" OTEL_RESOURCE_ATTRIBUTES "service.name=chalk-sync,service.version=${sync_release_id},deployment.environment.name=production,service.instance.id=${sync_instance_id}"
+  fi
 }
 
 fetch_deployment_inputs() {
@@ -399,9 +477,20 @@ fetch_deployment_inputs() {
 
   local response_file="${stage_root}/ssm-response.json"
   local aws_error="${stage_root}/ssm-error.log"
-  if ! "$aws_bin" ssm get-parameters --names "${names[@]}" --with-decryption --region "$request_region" --output json >"$response_file" 2>"$aws_error"; then
-    fail "SSM runtime input fetch failed"
-  fi
+  local batch_response="${stage_root}/ssm-batch-response.json"
+  local merged_response="${stage_root}/ssm-merged-response.json"
+  local batch_start
+  local -a batch_names
+  printf '{"Parameters":[],"InvalidParameters":[]}\n' >"$response_file"
+  : >"$aws_error"
+  for ((batch_start = 0; batch_start < ${#names[@]}; batch_start += 10)); do
+    batch_names=("${names[@]:batch_start:10}")
+    if ! "$aws_bin" ssm get-parameters --names "${batch_names[@]}" --with-decryption --region "$request_region" --output json >"$batch_response" 2>>"$aws_error"; then
+      fail "SSM runtime input fetch failed"
+    fi
+    jq -s '{Parameters:[.[].Parameters[]],InvalidParameters:[.[].InvalidParameters[]?]}' "$response_file" "$batch_response" >"$merged_response" 2>/dev/null || fail "SSM runtime input response could not be merged"
+    mv "$merged_response" "$response_file"
+  done
   local expected_names_json
   expected_names_json="$(printf '%s\n' "${names[@]}" | jq -R . | jq -s .)"
   jq -e --argjson expected "$expected_names_json" '
@@ -414,7 +503,7 @@ fetch_deployment_inputs() {
   versions_json='[]'
   missing_json='[]'
   input_records_json='[]'
-  local id suffix destination kind name count value version type
+  local id suffix destination kind name count value_length version type
   for index in "${!ids[@]}"; do
     id="${ids[index]}"
     suffix="${suffixes[index]}"
@@ -433,18 +522,29 @@ fetch_deployment_inputs() {
     [[ "$count" == 1 ]] || fail "SSM response contains duplicate runtime input: ${id}"
     type="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Type' "$response_file")" || fail "SSM runtime input type is malformed: ${id}"
     input_type_is_supported "$kind" "$type" || fail "SSM runtime input type is unsupported for its contract kind: ${id}"
-    value="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Value | strings' "$response_file")" || fail "SSM runtime input value is malformed: ${id}"
+    value_length="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Value | strings | length' "$response_file")" || fail "SSM runtime input value is malformed: ${id}"
     version="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Version | numbers' "$response_file")" || fail "SSM runtime input version is malformed: ${id}"
     [[ "$version" =~ ^[1-9][0-9]*$ ]] || fail "SSM runtime input version is malformed: ${id}"
     versions_json="$(jq -c --arg id "$id" --arg name "$name" --argjson version "$version" '. + [{id:$id,name:$name,version:$version}]' <<<"${versions_json}")"
-    if [[ -z "$value" ]]; then
+    if [[ "$value_length" == 0 ]]; then
       json_is_excluded "$id" || fail "required SSM runtime input is empty: ${id}"
       missing_json="$(jq -c --arg id "$id" '. + [$id]' <<<"${missing_json}")"
       record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" true
       continue
     fi
-    write_input_file "$destination" "$value"
+    write_input_file "$destination" "$response_file" "$name"
     record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
+  done
+
+  local raw_inputs_root="${stage_root}/raw-inputs"
+  remove_staged_tree "$raw_inputs_root"
+  mkdir -p "${raw_inputs_root}/env" "${raw_inputs_root}/evidence"
+  chmod 700 "$raw_inputs_root" "${raw_inputs_root}/env" "${raw_inputs_root}/evidence"
+  for relative in env/api.env env/sync.env evidence/planetscale-sync-proof.json; do
+    if [[ -f "${stage_root}/${relative}" ]]; then
+      cp "${stage_root}/${relative}" "${raw_inputs_root}/${relative}"
+      chmod 600 "${raw_inputs_root}/${relative}"
+    fi
   done
 }
 
@@ -472,6 +572,17 @@ install_runtime_files() {
   require_directory "$runtime_source"
   mkdir -p "$runtime_quadlet_dir" "$runtime_systemd_dir"
   chmod 700 "$runtime_quadlet_dir" "$runtime_systemd_dir"
+  remove_absent_runtime_files "${runtime_source}/quadlet" "$runtime_quadlet_dir" \
+    chalk-api-migrate.container \
+    chalk-api.container \
+    chalk-cloudflared.container \
+    chalk-redis.container \
+    chalk-runtime.network \
+    chalk-sync.container
+  remove_absent_runtime_files "${runtime_source}/systemd" "$runtime_systemd_dir" \
+    chalk-runtime.target \
+    chalk-runtime-watchdog.service \
+    chalk-runtime-watchdog.timer
   local file
   for file in "$runtime_source"/quadlet/*; do
     [[ -f "$file" && ! -L "$file" ]] || fail "rendered runtime contains an unsafe Quadlet"
@@ -488,6 +599,20 @@ install_runtime_files() {
     chown -R "${runtime_user}:$(id -gn "$runtime_user")" "$runtime_quadlet_dir" "$runtime_systemd_dir"
   fi
   run_user_systemctl daemon-reload
+}
+
+remove_absent_runtime_files() {
+  local source_directory="$1"
+  local destination_directory="$2"
+  shift 2
+  local name target
+  for name in "$@"; do
+    [[ -e "${source_directory}/${name}" ]] && continue
+    target="${destination_directory}/${name}"
+    [[ ! -e "$target" && ! -L "$target" ]] && continue
+    require_regular_file "$target"
+    rm -- "$target" || fail "obsolete managed runtime file could not be removed: ${name}"
+  done
 }
 
 install_restore_unit() {
@@ -620,6 +745,7 @@ reconcile_secrets() {
   local id destination secret_name source
   while IFS=$'\t' read -r id destination; do
     case "$id" in
+      managed-migrator-database-url) secret_name="$MIGRATOR_SECRET_NAME" ;;
       provider-bridge-api-server-cert) secret_name=chalk-api-provider-server-cert ;;
       provider-bridge-api-server-key) secret_name=chalk-api-provider-server-key ;;
       provider-bridge-sync-client-ca) secret_name=chalk-api-provider-client-ca ;;
@@ -636,12 +762,30 @@ reconcile_secrets() {
       fi
       continue
     fi
+    local -a replace_option=()
     if run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-inspect-error.log"; then
-      run_user_podman secret rm "$secret_name" >/dev/null 2>"${stage_root}/secret-rm-error.log" || fail "Podman secret replacement failed"
+      replace_option=(--replace)
     fi
-    run_user_podman secret create "$secret_name" - <"$source" >/dev/null 2>"${stage_root}/secret-create-error.log" || fail "Podman secret registration failed"
+    if ! cat "$source" | run_user_podman secret create "${replace_option[@]}" "$secret_name" - >/dev/null 2>"${stage_root}/secret-create-error.log"; then
+      local secret_error
+      secret_error="$(tr '\n' ' ' <"${stage_root}/secret-create-error.log" | cut -c 1-512)"
+      fail "Podman secret registration failed for ${secret_name}: ${secret_error:-unknown Podman error}"
+    fi
     run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/secret-verify-error.log" || fail "Podman secret registration could not be verified"
   done < <(jq -r '.[] | [.id, .destination] | @tsv' <<<"${input_records_json}")
+  if ! has_migrator_input; then
+    remove_migrator_secret
+  fi
+}
+
+has_migrator_input() {
+  jq -e --arg id "$MIGRATOR_INPUT_ID" 'any(.[]; .id == $id and .missing == false)' <<<"${input_records_json}" >/dev/null 2>&1
+}
+
+remove_migrator_secret() {
+  if run_user_podman secret inspect "$MIGRATOR_SECRET_NAME" >/dev/null 2>"${stage_root}/migration-secret-inspect-error.log"; then
+    run_user_podman secret rm "$MIGRATOR_SECRET_NAME" >/dev/null 2>"${stage_root}/migration-secret-rm-error.log" || fail "migration credential cleanup failed"
+  fi
 }
 
 pull_images() {
@@ -652,6 +796,7 @@ pull_images() {
     *) fail "host architecture is unsupported" ;;
   esac
   jq -e --arg architecture "linux/${host_architecture}" '.architectures | index($architecture) != null' "$manifest_path" >/dev/null || fail "release manifest does not support the host architecture"
+  authenticate_ecr_registries
 
   local image image_architecture
   while IFS= read -r image; do
@@ -662,10 +807,30 @@ pull_images() {
   done < <(jq -r '.images | .api, .sync, .redis, .cloudflared' "$manifest_path")
 }
 
+authenticate_ecr_registries() {
+  local authenticated_registries=$'\n'
+  local image registry
+  while IFS= read -r image; do
+    registry="${image%%/*}"
+    if [[ ! "$registry" =~ ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com(\.cn)?$ ]]; then
+      continue
+    fi
+    [[ "$registry" =~ ^[0-9]{12}\.dkr\.ecr\.${request_region}\.amazonaws\.com(\.cn)?$ ]] || fail "ECR image registry does not match the deployment region"
+    if [[ "$authenticated_registries" == *$'\n'"${registry}"$'\n'* ]]; then
+      continue
+    fi
+    if ! "$aws_bin" ecr get-login-password --region "$request_region" 2>"${stage_root}/ecr-login-error.log" \
+      | run_user_podman login --username AWS --password-stdin "$registry" >/dev/null 2>"${stage_root}/podman-login-error.log"; then
+      fail "rootless ECR authentication failed"
+    fi
+    authenticated_registries+="${registry}"$'\n'
+  done < <(jq -r '.images | .api, .sync, .redis, .cloudflared' "$manifest_path")
+}
+
 stop_runtime() {
   local unit
   local failed=false
-  for unit in chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
+  for unit in chalk-api-migrate.service chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
     if ! run_user_systemctl stop "$unit" >/dev/null 2>"${stage_root}/stop-${unit}.log"; then
       failed=true
     fi
@@ -678,6 +843,34 @@ stop_runtime() {
 
 start_runtime() {
   run_user_systemctl start chalk-runtime.target >/dev/null 2>"${stage_root}/start-runtime.log"
+}
+
+run_migrations() {
+  local runtime_source="$1"
+  local migration_unit="${runtime_source}/quadlet/chalk-api-migrate.container"
+  if [[ ! -f "$migration_unit" || -L "$migration_unit" ]]; then
+    has_migrator_input && fail "release migration Quadlet is missing"
+    return 0
+  fi
+  has_migrator_input || fail "release migration credential is missing"
+
+  local migration_target
+  migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "$manifest_path")" || fail "release migration target is invalid"
+  [[ "$migration_target" =~ ^[0-9]{14}$ ]] || fail "release migration target is invalid"
+  grep -Fqx 'PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate' "$migration_unit" || fail "release migration unit does not select the migration binary"
+  grep -Eq "^Exec=--database-url-file /run/chalk/migrate/database-url --target ${migration_target}( --allow-missing-version [0-9]{14})*$" "$migration_unit" || fail "release migration unit target does not match the manifest"
+  grep -Fq "Secret=${MIGRATOR_SECRET_NAME}," "$migration_unit" || fail "release migration unit does not mount the dedicated credential"
+
+  run_user_systemctl stop chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-stop.log" || true
+  run_user_systemctl reset-failed chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-reset-failed.log" || true
+  run_user_podman rm --force chalk-api-migrate >/dev/null 2>"${stage_root}/migration-container-rm.log" || true
+  if ! run_user_systemctl start chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-start.log"; then
+    remove_migrator_secret
+    remove_staged_tree "${stage_root}/migration"
+    fail "database migration phase failed"
+  fi
+  remove_migrator_secret
+  remove_staged_tree "${stage_root}/migration"
 }
 
 health_runtime() {
@@ -704,13 +897,157 @@ health_runtime() {
 }
 
 fence_runtime() {
-  stop_runtime
+  local status=0
+  if ! stop_runtime; then
+    status=1
+  fi
+  if ! remove_migrator_secret; then
+    status=1
+  fi
+  if [[ -n "$stage_root" && -d "${stage_root}/migration" ]]; then
+    remove_staged_tree "${stage_root}/migration"
+  fi
+  return "$status"
+}
+
+validate_live_release_manifest() {
+  local live_manifest="$1"
+  local live_checksum="${run_root}/release/release-manifest.sha256"
+  require_regular_file "$live_manifest"
+  require_regular_file "$live_checksum"
+  local expected_checksum
+  expected_checksum="$(awk '$2 == "release-manifest.json" {print $1; exit}' "$live_checksum")"
+  [[ "$expected_checksum" =~ ^[0-9a-f]{64}$ ]] || fail "live release checksum is invalid"
+  [[ "$(sha256_file "$live_manifest")" == "$expected_checksum" ]] || fail "live release manifest checksum does not match"
+
+  local host_architecture
+  case "$(uname -m)" in
+    aarch64 | arm64) host_architecture=arm64 ;;
+    x86_64 | amd64) host_architecture=amd64 ;;
+    *) fail "host architecture is unsupported" ;;
+  esac
+  jq -e --arg architecture "linux/${host_architecture}" '
+    type == "object" and
+    (.schema_version == 1 or .schema_version == 2) and
+    (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
+    (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+    .source_tree_state == "clean" and
+    (.architectures | type == "array" and index($architecture) != null) and
+    (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
+    .protocol_compatibility == {sync:1} and
+    (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
+    (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
+    (if .schema_version == 2 then
+      ((.affected_components | type == "array" and (length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
+       (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
+    else true end)
+  ' "$live_manifest" >/dev/null || fail "live release manifest is invalid"
+  [[ "$(jq -er '.release_id' "$live_manifest")" != "$request_release_id" ]] || fail "live release cannot adopt the candidate identity"
+}
+
+verify_live_runtime_inputs() {
+  local live_manifest="$1"
+  jq -e 'length == 0' <<<"${excluded_json}" >/dev/null || fail "legacy adoption does not allow excluded runtime inputs"
+  local relative comparison_root="${stage_root}/raw-inputs"
+  require_directory "$comparison_root"
+  for relative in env/api.env env/sync.env evidence/planetscale-sync-proof.json; do
+    require_regular_file "${comparison_root}/${relative}"
+    require_regular_file "${run_root}/${relative}"
+    cmp -s "${comparison_root}/${relative}" "${run_root}/${relative}" || fail "live runtime input does not match the versioned SSM value: ${relative}"
+  done
+
+  local expected_api_release_id expected_sync_release_id expected_sync_source_revision sync_instance_id
+  expected_api_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "$live_manifest")" || fail "live release API identity is invalid"
+  expected_sync_release_id="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "$live_manifest")" || fail "live release Sync identity is invalid"
+  expected_sync_source_revision="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "$live_manifest")" || fail "live release Sync source revision is invalid"
+  [[ "$(read_env_value "${run_root}/env/api.env" CHALK_API_VERSION)" == "$expected_api_release_id" ]] || fail "live API telemetry release identifier does not match the release manifest"
+  [[ "$(read_env_value "${run_root}/env/sync.env" CHALK_SYNC_RELEASE_ID)" == "$expected_sync_release_id" ]] || fail "live Sync telemetry release identifier does not match the release manifest"
+  [[ "$(read_env_value "${run_root}/env/sync.env" CHALK_SYNC_SOURCE_COMMIT)" == "$expected_sync_source_revision" ]] || fail "live Sync telemetry source commit does not match the release manifest"
+  sync_instance_id="$(read_env_value "${run_root}/env/sync.env" CHALK_SYNC_INSTANCE_ID)" || fail "live Sync instance identity is invalid"
+  [[ "$sync_instance_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "live Sync instance identity is unsafe"
+  [[ "$(read_env_value "${run_root}/env/sync.env" OTEL_RESOURCE_ATTRIBUTES)" == "service.name=chalk-sync,service.version=${expected_sync_release_id},deployment.environment.name=production,service.instance.id=${sync_instance_id}" ]] || fail "live Sync telemetry resource identity does not match the release manifest"
+
+  local secret_name
+  for secret_name in \
+    chalk-api-provider-server-cert \
+    chalk-api-provider-server-key \
+    chalk-api-provider-client-ca \
+    chalk-sync-provider-client-cert \
+    chalk-sync-provider-client-key \
+    chalk-sync-provider-server-ca \
+    chalk-cloudflare-tunnel-token; do
+    run_user_podman secret inspect "$secret_name" >/dev/null 2>"${stage_root}/adopt-secret-inspect-error.log" || fail "live runtime Podman secret is missing: ${secret_name}"
+  done
+}
+
+snapshot_live_runtime() {
+  local live_manifest="$1"
+  local destination="$2"
+  [[ ! -e "$destination" && ! -L "$destination" ]] || fail "live runtime snapshot path is unsafe"
+  mkdir -p "${destination}/quadlet" "${destination}/systemd"
+  chmod 700 "$destination" "${destination}/quadlet" "${destination}/systemd"
+
+  local file
+  for file in chalk-api.container chalk-sync.container chalk-redis.container chalk-cloudflared.container chalk-runtime.network; do
+    require_regular_file "${runtime_quadlet_dir}/${file}"
+    cp "${runtime_quadlet_dir}/${file}" "${destination}/quadlet/${file}"
+    chmod 600 "${destination}/quadlet/${file}"
+  done
+  if [[ -f "${runtime_quadlet_dir}/chalk-api-migrate.container" ]]; then
+    require_regular_file "${runtime_quadlet_dir}/chalk-api-migrate.container"
+    cp "${runtime_quadlet_dir}/chalk-api-migrate.container" "${destination}/quadlet/chalk-api-migrate.container"
+    chmod 600 "${destination}/quadlet/chalk-api-migrate.container"
+  fi
+  for file in chalk-runtime.target chalk-runtime-watchdog.service chalk-runtime-watchdog.timer; do
+    require_regular_file "${runtime_systemd_dir}/${file}"
+    cp "${runtime_systemd_dir}/${file}" "${destination}/systemd/${file}"
+    chmod 600 "${destination}/systemd/${file}"
+  done
+
+  local component image unit
+  while IFS=$'\t' read -r component unit; do
+    image="$(jq -er --arg component "$component" '.images[$component]' "$live_manifest")"
+    grep -Fqx "Image=${image}" "${destination}/quadlet/${unit}" || fail "live Quadlet image does not match release identity: ${component}"
+  done <<'LIVE_IMAGES'
+api	chalk-api.container
+sync	chalk-sync.container
+redis	chalk-redis.container
+cloudflared	chalk-cloudflared.container
+LIVE_IMAGES
+}
+
+adopt_live_release() {
+  local live_manifest="${run_root}/release/release-manifest.json"
+  validate_live_release_manifest "$live_manifest"
+  verify_live_runtime_inputs "$live_manifest"
+  health_runtime || fail "live runtime health failed before adoption"
+
+  local adopted_runtime="${stage_root}/adopted-runtime"
+  snapshot_live_runtime "$live_manifest" "$adopted_runtime"
+  local candidate_inputs_json="$input_records_json"
+  if [[ ! -f "${adopted_runtime}/quadlet/chalk-api-migrate.container" ]]; then
+    input_records_json="$(jq -c --arg id "$MIGRATOR_INPUT_ID" '[.[] | select(.id != $id)]' <<<"${input_records_json}")"
+  fi
+  local candidate_manifest="$manifest_path"
+  local candidate_release_id="$request_release_id"
+  local candidate_source_revision="$request_source_revision"
+  request_release_id="$(jq -er '.release_id' "$live_manifest")"
+  request_source_revision="$(jq -er '.source_revision' "$live_manifest")"
+  manifest_path="$live_manifest"
+  local adopted_release_root="${state_root}/releases/${request_release_id}"
+  [[ ! -e "$adopted_release_root" && ! -L "$adopted_release_root" ]] || fail "adopted release already exists in durable state"
+  persist_release "$adopted_release_root" "$adopted_runtime" "$active_pointer" adopted
+  manifest_path="$candidate_manifest"
+  request_release_id="$candidate_release_id"
+  request_source_revision="$candidate_source_revision"
+  input_records_json="$candidate_inputs_json"
 }
 
 persist_release() {
   local release_root="$1"
   local rendered_root="$2"
   local pointer_file="$3"
+  local outcome="${4:-healthy}"
   local manifest_sha
   manifest_sha="$(sha256_file "$manifest_path")"
   mkdir -p "$release_root"
@@ -731,21 +1068,21 @@ persist_release() {
     --arg request_id "$request_id" \
     --arg requested_at "$requested_at" \
     --arg manifest_sha256 "$manifest_sha" \
-    --arg release_root "$release_root" \
+    --arg release_root "$release_root" --argjson controller_version "$CONTROLLER_VERSION" \
     --argjson excluded_secrets "$excluded_json" \
     --argjson inputs "$input_records_json" \
     --argjson runtime_sha256 "$runtime_checksums" \
-    '{schema_version:1,controller_version:1,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,request_id:$request_id,requested_at:$requested_at,excluded_secrets:$excluded_secrets,manifest_sha256:$manifest_sha256,runtime_sha256:$runtime_sha256,release_root:$release_root,inputs:$inputs}' >"$pointer_tmp"
+    '{schema_version:1,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,request_id:$request_id,requested_at:$requested_at,excluded_secrets:$excluded_secrets,manifest_sha256:$manifest_sha256,runtime_sha256:$runtime_sha256,release_root:$release_root,inputs:$inputs}' >"$pointer_tmp"
   if [[ -e "$ledger_file" || -L "$ledger_file" ]]; then
     require_regular_file "$ledger_file"
   else
     reject_symlink_components "$ledger_file"
   fi
   jq -cn \
-    --arg outcome "healthy" --arg release_id "$request_release_id" --arg source_revision "$request_source_revision" \
+    --arg outcome "$outcome" --arg release_id "$request_release_id" --arg source_revision "$request_source_revision" \
     --arg request_id "$request_id" --arg requested_at "$requested_at" --arg manifest_sha256 "$manifest_sha" \
-    --argjson excluded_secrets "$excluded_json" --argjson inputs "$input_records_json" \
-    '{schema_version:1,controller_version:1,outcome:$outcome,release_id:$release_id,source_revision:$source_revision,request_id:$request_id,requested_at:$requested_at,manifest_sha256:$manifest_sha256,excluded_secrets:$excluded_secrets,inputs:$inputs}' >>"$ledger_file"
+    --argjson controller_version "$CONTROLLER_VERSION" --argjson excluded_secrets "$excluded_json" --argjson inputs "$input_records_json" \
+    '{schema_version:1,controller_version:$controller_version,outcome:$outcome,release_id:$release_id,source_revision:$source_revision,request_id:$request_id,requested_at:$requested_at,manifest_sha256:$manifest_sha256,excluded_secrets:$excluded_secrets,inputs:$inputs}' >>"$ledger_file"
   chmod 600 "$ledger_file"
   atomic_write "$pointer_file" "$pointer_tmp"
 }
@@ -766,7 +1103,7 @@ load_active_pointer() {
   jq -e --argjson allowed "$INPUT_IDS" '
     type == "object" and
     (keys | sort) == ["aws_region","controller_version","environment","excluded_secrets","inputs","manifest_sha256","parameter_prefix","release_id","release_root","request_id","requested_at","runtime_sha256","schema_version","source_revision"] and
-    .schema_version == 1 and .controller_version == 1 and
+    .schema_version == 1 and .controller_version == 2 and
     (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.aws_region | type == "string" and test("^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$")) and
@@ -776,18 +1113,18 @@ load_active_pointer() {
     (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
     (.runtime_sha256 | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
     (.environment == "staging" or .environment == "production") and
-    (.parameter_prefix == ("/chalk/" + .environment) or (.parameter_prefix | startswith("/chalk/" + .environment + "/"))) and
+    (.environment as $environment | (.parameter_prefix == ("/chalk/" + $environment) or (.parameter_prefix | startswith("/chalk/" + $environment + "/")))) and
     (.excluded_secrets | type == "array" and (map(. as $id | $allowed | index($id) != null) | all) and (.[0:] == (sort | unique))) and
     (
       .excluded_secrets as $excluded |
       .parameter_prefix as $prefix |
-      (.inputs | type == "array" and length == 10 and (map(.id) == $allowed) and all(.[];
+      (.inputs | type == "array" and ((length == 11 and (map(.id) == $allowed)) or (length == 10 and (map(.id) == ($allowed - ["managed-migrator-database-url"])))) and all(.[];
         type == "object" and
         (keys | sort) == ["destination","id","kind","missing","name","suffix","version"] and
         (.name == ($prefix + "/" + .suffix)) and
         (.destination | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
         (.suffix | type == "string" and test("^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
-        (.kind == "env" or .kind == "proof" or .kind == "secret-file") and
+        (.kind == "env" or .kind == "proof" or .kind == "secret-file" or .kind == "migration") and
         (.missing | type == "boolean") and
         (if .missing then ((.version == null) or (.version | type == "number" and floor == . and . >= 1)) else (.version | type == "number" and floor == . and . >= 1) end) and
         (.id as $id | ((.missing | not) or ($excluded | index($id) != null)))
@@ -829,25 +1166,27 @@ restore_inputs_from_pointer() {
       fail "SSM exact-version restore failed: ${id}"
     fi
     jq -e '(.Parameters | type == "array" and length == 1) and ((.InvalidParameters // []) == [])' "$response_file" >/dev/null 2>&1 || fail "SSM exact-version restore response is malformed"
-    local returned_version returned_name returned_value returned_type
+    local returned_version returned_name returned_value_length returned_type
     returned_name="$(jq -er '.Parameters[0].Name | strings' "$response_file")" || fail "SSM restore parameter name is malformed"
     returned_version="$(jq -er '.Parameters[0].Version | numbers' "$response_file")" || fail "SSM restore parameter version is malformed"
     [[ "$returned_name" == "$name" && "$returned_version" == "$version" ]] || fail "SSM restore did not return the requested parameter version"
     returned_type="$(jq -er '.Parameters[0].Type | strings' "$response_file")" || fail "SSM restore parameter type is malformed"
     input_type_is_supported "$kind" "$returned_type" || fail "SSM restore parameter type is unsupported for its contract kind"
-    returned_value="$(jq -er '.Parameters[0].Value | strings' "$response_file")" || fail "SSM restore parameter value is malformed"
-    [[ -n "$returned_value" ]] || fail "required exact-version runtime input is empty: ${id}"
-    write_input_file "$destination" "$returned_value"
+    returned_value_length="$(jq -er '.Parameters[0].Value | strings | length' "$response_file")" || fail "SSM restore parameter value is malformed"
+    [[ "$returned_value_length" != 0 ]] || fail "required exact-version runtime input is empty: ${id}"
+    write_input_file "$destination" "$response_file" "$name"
     record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
   done < <(jq -r '.inputs[] | [.id, .name, (.version // 0), .missing, .destination, .kind, .suffix] | @tsv' "$pointer_file")
 }
 
 run_candidate() {
   local runtime_source="$1"
+  inject_runtime_identity
   install_runtime_files "$runtime_source"
   stop_runtime || fail "runtime services could not be stopped for cutover"
   activate_runtime_inputs
   reconcile_secrets
+  run_migrations "$runtime_source"
   start_runtime
   health_runtime
 }
@@ -865,7 +1204,6 @@ rollback_to_stable() {
   input_records_json='[]'
   restore_inputs_from_pointer "$stable_pointer"
   manifest_path="$stable_manifest"
-  source_root=""
   run_candidate "$stable_runtime"
 }
 
@@ -881,6 +1219,7 @@ deploy() {
   validate_manifest "$managed_root"
   prepare_stage
   fetch_deployment_inputs
+  inject_runtime_identity
   local rendered_root="${stage_root}/runtime"
   mkdir -p "$rendered_root"
   local render_script="${managed_root}/scripts/render-runtime"
@@ -899,11 +1238,22 @@ deploy() {
     --excluded-secrets "$missing_inputs_csv" >"${stage_root}/validate.log" 2>&1 || fail "candidate runtime validation failed"
   pull_images
   local stable_exists=false
+  local stable_was_adopted=false
   if [[ -f "$active_pointer" && ! -L "$active_pointer" ]]; then
     load_active_pointer
     stable_exists=true
   elif [[ -e "$active_pointer" ]]; then
     fail "active release pointer is unsafe"
+  elif [[ "$adopt_existing_release" == true ]]; then
+    local live_manifest="${run_root}/release/release-manifest.json"
+    if [[ -f "$live_manifest" && ! -L "$live_manifest" ]]; then
+      adopt_live_release
+      load_active_pointer
+      stable_exists=true
+      stable_was_adopted=true
+    elif [[ -e "$live_manifest" || -L "$live_manifest" ]]; then
+      fail "live release manifest is unsafe"
+    fi
   fi
   local release_root="${state_root}/releases/${request_release_id}"
   [[ ! -e "$release_root" ]] || fail "release already exists in durable state"
@@ -970,7 +1320,11 @@ deploy() {
   set +e
   (
     set -e
-    rollback_to_stable "$stable_pointer_copy"
+    rollback_to_stable "$stable_pointer_copy" || exit 1
+    if [[ "$stable_was_adopted" == true ]]; then
+      install_controller_runtime "$managed_root"
+      install_restore_unit "${managed_root}/systemd/chalk-runtime-restore.service"
+    fi
   )
   rollback_status=$?
   set -e

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
-import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
 describe("Cloudflare SFU HTTP signaling", () => {
   it("reads a fresh media credential before every signaling request", async () => {
@@ -52,6 +52,9 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain(`"publication_id":"${authoritativePublicationId}"`);
     expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain(`"force":true`);
     expect(String(fetch.mock.calls[0]?.[1]?.body)).not.toContain("app_secret");
+    expect(parseCloudflareSFUPublicationID("provider-connection|camera-track")).toEqual({ connectionId: "provider-connection", trackName: "camera-track" });
+    expect(() => parseCloudflareSFUPublicationID("missing-separator")).toThrow(CloudflareSFUError);
+    expect(() => parseCloudflareSFUPublicationID("a|b|c")).toThrow(CloudflareSFUError);
   });
 
   it("keeps the fixed bearer option as a compatibility bridge", async () => {
@@ -60,11 +63,14 @@ describe("Cloudflare SFU HTTP signaling", () => {
     await transport.listPublications();
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe("Bearer legacy-token");
   });
+  it("marks expired provider connections as retryable connection failures", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response("connection expired", { status: 410 }));
+    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
 
-  it("rejects ambiguous publication references", () => {
-    expect(parseCloudflareSFUPublicationID("provider-connection|camera-track")).toEqual({ connectionId: "provider-connection", trackName: "camera-track" });
-    expect(() => parseCloudflareSFUPublicationID("missing-separator")).toThrow(CloudflareSFUError);
-    expect(() => parseCloudflareSFUPublicationID("a|b|c")).toThrow(CloudflareSFUError);
+    await expect(transport.addTracks({ connectionId: "stale-connection", tracks: [] })).rejects.toMatchObject({
+      code: "signaling_failed",
+      options: { status: 410, retryableConnection: true },
+    });
   });
 });
 
@@ -74,6 +80,39 @@ describe("Cloudflare SFU client", () => {
     await harness.client.start(fakeStream());
     expect(harness.transport.addInputs).toEqual([]);
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, localTracks: [] });
+
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    await harness.client.refreshRemotePublications();
+
+    expect(harness.transport.addInputs.at(-1)?.tracks).toMatchObject([{ location: "remote", trackName: "camera-a" }]);
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
+    harness.client.stop();
+  });
+
+  it("replaces a dormant connection before delayed first publication", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceMediaConnection });
+    await harness.client.start(fakeStream());
+    harness.client.prepareLocalTrack("camera", new FakeTrack("camera-track", "video") as unknown as MediaStreamTrack);
+
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "camera-start", participantId: "participant-1", source: "camera", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(harness.peers[0]?.closed).toBe(true);
+    expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-2"]);
+    harness.client.stop();
+  });
+
+  it("replaces a dead connection once and republishes the pending local tracks", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceMediaConnection });
+    harness.transport.failNextStaleLocalPublish = true;
+
+    await expect(harness.client.start(fakeStream(new FakeTrack("camera-track", "video")))).resolves.toBeUndefined();
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
+    expect(harness.client.getSnapshot().localTracks).toMatchObject([{ source: "camera", enabled: true }]);
     harness.client.stop();
   });
 
@@ -224,7 +263,7 @@ describe("Cloudflare SFU client", () => {
 
   it("pulls a real versioned Chalk publication through its embedded provider reference", async () => {
     const harness = createHarness();
-    await harness.client.start(fakeStream());
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
     const publicationId = versionedPublicationID("remote-connection", "remote-mid", "remote-camera-track");
     harness.transport.snapshot = publicationSnapshot(1, 1, publicationId);
 
@@ -235,21 +274,104 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("does not advance the authoritative cursor when a remote pull fails", async () => {
+  it("recovers a failed remote pull on one fresh media connection", async () => {
+    const { harness, onError, replaceMediaConnection } = await startedReplaceableHarness();
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    harness.transport.failNextRemotePull = true;
+
+    await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+    expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
+    harness.client.stop();
+  });
+
+  it("quarantines a failed remote pull at its publication cursor", async () => {
     const harness = await startedRemoteHarness("remote-connection|camera-a");
     harness.transport.failNextRemotePull = true;
     await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
     expect(harness.client.getSnapshot().remoteTracks).toEqual([]);
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 1 });
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
 
+    await expectNoAdditionalRemotePull(harness);
+
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
     await harness.client.refreshRemotePublications();
-    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-b");
+    harness.client.stop();
+  });
+
+  it("quarantines a failed remote pull without replacing healthy remote tracks", async () => {
+    const { harness, onError, replaceMediaConnection } = await startedReplaceableHarness();
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    await harness.client.refreshRemotePublications();
+    const healthy = harness.client.getSnapshot().remoteTracks[0];
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    harness.transport.failRemotePullCount = 1;
+
+    await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
+
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(healthy?.track.readyState).toBe("live");
+    expect(harness.client.getSnapshot().remoteTracks).toEqual([healthy]);
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 2 });
+
+    await expectNoAdditionalRemotePull(harness);
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    harness.client.stop();
+  });
+
+  it("replaces the media connection when cached remote tracks have ended", async () => {
+    const { harness, replaceMediaConnection } = await startedReplaceableHarness();
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    await harness.client.refreshRemotePublications();
+    harness.client.getSnapshot().remoteTracks[0]?.track.stop();
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    harness.transport.failNextRemotePull = true;
+
+    await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(harness.client.getSnapshot().remoteTracks[0]).toMatchObject({ publicationId: "remote-connection|camera-b", track: { readyState: "live" } });
+    harness.client.stop();
+  });
+
+  it("quarantines an invalid publication without replacing the media connection", async () => {
+    const { harness, replaceMediaConnection } = await startedReplaceableHarness();
+    harness.transport.snapshot = publicationSnapshot(1, 1, "invalid-publication");
+
+    await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "invalid_publication" });
+
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 1 });
+    await expectNoAdditionalRemotePull(harness);
+    harness.client.stop();
+  });
+
+  it("pulls a newer publication cursor after quarantining a failed cursor", async () => {
+    const { harness, replaceMediaConnection } = await startedReplaceableHarness();
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+    await harness.client.refreshRemotePublications();
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    harness.transport.failRemotePullCount = 1;
+    await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
+
+    harness.transport.snapshot = publicationSnapshot(1, 3, "remote-connection|camera-c");
+    await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
+
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 3 });
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-c");
     harness.client.stop();
   });
 
   it("reports a failed immediate renegotiation without failing the current media connection", async () => {
     const harness = createHarness();
-    await harness.client.start(fakeStream());
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
     harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
     harness.transport.immediateRenegotiation = true;
     harness.transport.failRenegotiation = true;
@@ -295,15 +417,6 @@ describe("Cloudflare SFU client", () => {
     expect(screenTransceiver?.sender.track?.id).toBe("screen-track-2");
     expect(harness.transport.addInputs.at(-1)?.tracks[0]).toMatchObject({ source: "screen", mid: "1" });
     expect(harness.transport.addInputs.at(-1)?.tracks[0]?.trackName).not.toBe(harness.transport.addInputs.at(-2)?.tracks[0]?.trackName);
-    harness.client.stop();
-  });
-
-  it("confirms an incremental screen publication without waiting for the already-live connection to reconnect", async () => {
-    const harness = createHarness();
-    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
-    const peer = harness.peers[0] as FakePeerConnection;
-    peer.setNextRemoteDescriptionStates("connecting", "checking");
-    await startScreenPublication(harness, new FakeTrack("screen-track", "video"));
     harness.client.stop();
   });
 
@@ -386,6 +499,26 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("records RTC summaries only for the active connection", async () => {
+    const onRtcSummary = vi.fn<NonNullable<CloudflareSFUClientOptions["onRtcSummary"]>>();
+    const harness = createHarness({ onRtcSummary });
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    await vi.waitFor(() => expect(onRtcSummary).toHaveBeenCalled());
+    const firstPeer = harness.peers[0];
+
+    await harness.client.restart(bootstrap("connection-2"));
+    await vi.waitFor(() => expect(harness.peers).toHaveLength(2));
+    await vi.waitFor(() => expect(onRtcSummary.mock.calls.some(([connection]) => connection.connectionState === "connected")).toBe(true));
+    const callsAfterRestart = onRtcSummary.mock.calls.length;
+
+    firstPeer?.setStates("failed", "failed");
+    await Promise.resolve();
+    expect(onRtcSummary).toHaveBeenCalledTimes(callsAfterRestart);
+    const stats = onRtcSummary.mock.calls.at(-1)?.[1];
+    expect([...(stats ?? [])]).toEqual([{ type: "candidate-pair", state: "succeeded", selected: true }]);
+    harness.client.stop();
+  });
+
   it("idempotently stops every owned track even when tracks and consumer callbacks throw", async () => {
     const reported = vi.fn(() => {
       throw new Error("consumer onError failed");
@@ -423,6 +556,24 @@ async function startedRemoteHarness(publicationId: string): Promise<ReturnType<t
   return harness;
 }
 
+async function startedReplaceableHarness() {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const onError = vi.fn();
+  const harness = createHarness({ onError, replaceMediaConnection });
+  await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+  return { harness, onError, replaceMediaConnection };
+}
+
+async function expectNoAdditionalRemotePull(harness: ReturnType<typeof createHarness>): Promise<void> {
+  const count = remotePullCount(harness);
+  await harness.client.refreshRemotePublications();
+  expect(remotePullCount(harness)).toBe(count);
+}
+
+function remotePullCount(harness: ReturnType<typeof createHarness>): number {
+  return harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
+}
+
 function bootstrap(connectionId: string): CloudflareSFUBootstrap {
   return { connectionId, stunServer: "stun:example.test" };
 }
@@ -450,13 +601,15 @@ async function startScreenPublication(harness: ReturnType<typeof createHarness>,
   expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: true });
 }
 
-function createHarness(options: { readonly autoConnect?: boolean; readonly onError?: (error: unknown) => void; readonly onScreenEnded?: () => void } = {}) {
+function createHarness(options: { readonly autoConnect?: boolean; readonly onError?: (error: unknown) => void; readonly onRtcSummary?: CloudflareSFUClientOptions["onRtcSummary"]; readonly onScreenEnded?: () => void; readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap> } = {}) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
   const client = new CloudflareSFUClient({
     bootstrap: bootstrap("connection-1"),
     participantId: "participant-1",
     transport,
+    replaceMediaConnection: options.replaceMediaConnection,
+    onRtcSummary: options.onRtcSummary,
     pollIntervalMs: 60_000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
@@ -479,7 +632,9 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   }[] = [];
   blockPublicationList = false;
   failNextLocalPublish = false;
+  failNextStaleLocalPublish = false;
   failNextRemotePull = false;
+  failRemotePullCount = 0;
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
@@ -499,6 +654,10 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     const unblock = this.#blockedConnections.get(input.connectionId);
     if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
     if (input.tracks.some((track) => track.location === "remote")) {
+      if (this.failRemotePullCount > 0) {
+        this.failRemotePullCount--;
+        throw new CloudflareSFUError("remote pull failed", "signaling_failed");
+      }
       if (this.failNextRemotePull) {
         this.failNextRemotePull = false;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
@@ -515,6 +674,10 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     if (this.failNextLocalPublish) {
       this.failNextLocalPublish = false;
       throw new CloudflareSFUError("local publish failed", "signaling_failed");
+    }
+    if (this.failNextStaleLocalPublish) {
+      this.failNextStaleLocalPublish = false;
+      throw new CloudflareSFUError("stale local publish failed", "signaling_failed", { status: 410, retryableConnection: true });
     }
     const localMids = input.tracks.flatMap((track) => (track.location === "local" && track.mid !== undefined ? [track.mid] : []));
     const nextLocalMids = new Set([...this.#localMids, ...localMids]);
@@ -633,6 +796,13 @@ class FakePeerConnection extends EventTarget {
 
   async createAnswer(): Promise<RTCSessionDescriptionInit> {
     return { type: "answer", sdp: "browser-answer" };
+  }
+
+  getStats(): Promise<RTCStatsReport> {
+    const stat: RTCStats = { id: "candidate-pair", timestamp: 0, type: "candidate-pair" };
+    Object.assign(stat, { selected: true, state: "succeeded" });
+    const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
+    return Promise.resolve(stats);
   }
 
   async setLocalDescription(description?: RTCSessionDescriptionInit): Promise<void> {

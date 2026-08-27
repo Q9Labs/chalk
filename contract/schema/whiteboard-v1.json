@@ -6,6 +6,12 @@
     "route": "/v1/whiteboard",
     "transport": "websocket-json-text"
   },
+  "extensions": {
+    "presentation": {
+      "name": "presentation_v1",
+      "exactFields": ["name"]
+    }
+  },
   "identity": {
     "credential": "participant-access-token",
     "authorityKey": ["tenant_id", "space_id", "episode_id"],
@@ -20,7 +26,7 @@
     },
     {
       "id": "live",
-      "accepts": ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
+      "accepts": ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "ping"],
       "heartbeatIntervalMs": 20000,
       "missedDeadlinesBeforeClose": 2
     }
@@ -72,7 +78,8 @@
   },
   "frames": {
     "hello": {
-      "exactFields": ["type", "protocol", "token", "cursor"]
+      "exactFields": ["type", "protocol", "token", "cursor"],
+      "extendedExactFields": ["type", "protocol", "token", "cursor", "extensions"]
     },
     "submitUpdate": {
       "exactFields": ["type", "operation_id", "scene_id", "sync_all", "elements"]
@@ -92,12 +99,16 @@
     "setDrawPermission": {
       "exactFields": ["type", "operation_id", "participant_id", "can_draw"]
     },
+    "setPresentation": {
+      "exactFields": ["type", "operation_id", "presenting"]
+    },
     "cursor": {
       "clientExactFields": ["type", "x", "y"],
       "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
     },
     "welcome": {
-      "exactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"]
+      "exactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"],
+      "extendedExactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"]
     },
     "snapshotPage": {
       "exactFields": ["type", "request_id", "scene_id", "revision", "page", "page_count", "elements", "app_state"]
@@ -114,6 +125,9 @@
     "permissionUpdated": {
       "exactFields": ["type", "participant_id", "can_draw"]
     },
+    "presentationUpdated": {
+      "exactFields": ["type", "scene_id", "revision", "presenting"]
+    },
     "resetRequired": {
       "exactFields": ["type", "scene_id", "reason"]
     },
@@ -121,9 +135,9 @@
       "exactFields": ["type", "correlation_id", "operation", "code", "recoverable", "message"]
     }
   },
-  "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
-  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "permission_updated", "reset_required", "operation_error", "pong"],
-  "receiptOperations": ["submit_update", "clear", "set_draw_permission"],
+  "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "ping"],
+  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"],
+  "receiptOperations": ["submit_update", "clear", "set_draw_permission", "set_presentation"],
   "receiptOutcomes": ["committed", "duplicate"],
   "resetReasons": ["scene_changed", "cursor_expired", "gap"],
   "errorCodes": ["unavailable", "permission_denied", "invalid_payload", "stale_scene", "cursor_reset_required", "rate_limited", "overloaded", "storage_unavailable"],

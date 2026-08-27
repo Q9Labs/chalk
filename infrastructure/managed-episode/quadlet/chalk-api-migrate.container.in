@@ -1,0 +1,37 @@
+[Unit]
+Description=Chalk production database migrations
+After=network-online.target
+Before=chalk-runtime.target chalk-api.service chalk-sync.service
+Wants=network-online.target
+
+[Container]
+Image=__API_IMAGE_REFERENCE__
+Pull=never
+ContainerName=chalk-api-migrate
+Network=chalk-runtime.network
+Secret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url,uid=65532,gid=65532,mode=0400
+PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate
+Exec=--database-url-file /run/chalk/migrate/database-url --target __DATABASE_MIGRATION_TARGET__ --allow-missing-version 20260819120000
+User=65532
+Group=65532
+ReadOnly=true
+ReadOnlyTmpfs=true
+Tmpfs=/tmp:rw,nosuid,nodev,noexec,size=64m
+DropCapability=all
+NoNewPrivileges=true
+PidsLimit=128
+PodmanArgs=--memory=512m
+LogDriver=journald
+PodmanArgs=--log-opt=tag=chalk-api-migrate
+PodmanArgs=--stop-signal=SIGTERM
+PodmanArgs=--stop-timeout=20
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=no
+TimeoutStartSec=15min
+TimeoutStopSec=30
+
+[Install]
+WantedBy=chalk-runtime.target

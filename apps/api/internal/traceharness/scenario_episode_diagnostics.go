@@ -143,14 +143,14 @@ func runServiceEpisodeDiagnostics(ctx context.Context) (ScenarioResult, error) {
 		return ScenarioResult{}, err
 	}
 
-	streamStatus, streamMarker := runEpisodeDiagnosticsStream(ctx, service, reference)
-	recorder.Add("http", "GET /_internal/episode-diagnostics/{reference}/stream", "resume the stream from the last cursor and replay the projection marker", map[string]any{
-		"status":          streamStatus,
-		"snapshot_marker": streamMarker,
-		"body":            "redacted SSE control, delta, and close frames",
+	streamStatus, streamRefresh := runEpisodeDiagnosticsStream(ctx, service, reference)
+	recorder.Add("http", "GET /_internal/episode-diagnostics/{reference}/stream", "resume the stream from the last cursor and request a bounded snapshot refresh", map[string]any{
+		"status":           streamStatus,
+		"snapshot_refresh": streamRefresh,
+		"body":             "redacted SSE control, delta, and close frames",
 	})
-	if streamStatus != http.StatusOK || !streamMarker {
-		return ScenarioResult{}, errTraceScenario("diagnostic stream did not return a snapshot marker")
+	if streamStatus != http.StatusOK || !streamRefresh {
+		return ScenarioResult{}, errTraceScenario("diagnostic stream did not return a snapshot refresh directive")
 	}
 
 	endedAt := stallAt.Add(time.Second)
@@ -193,8 +193,8 @@ func runServiceEpisodeDiagnostics(ctx context.Context) (ScenarioResult, error) {
 		} `json:"projection"`
 		Tracing diagnosticsTraceSummary `json:"tracing"`
 		Stream  struct {
-			Status         int  `json:"status"`
-			SnapshotMarker bool `json:"snapshot_marker"`
+			Status          int  `json:"status"`
+			SnapshotRefresh bool `json:"snapshot_refresh"`
 		} `json:"stream"`
 		Lifecycle struct {
 			State   episodediagnostics.DiagnosticState `json:"state"`
@@ -219,9 +219,9 @@ func runServiceEpisodeDiagnostics(ctx context.Context) (ScenarioResult, error) {
 		}{Operations: len(snapshot.Operations), OpenIssues: int(snapshot.Summary.OpenIssueCount), LinkedTrace: tracing.ReleaseLinked && tracing.JourneyIDClass == "chalk.journey" && tracing.TraceIDClass == "w3c.trace" && tracing.SpanIDClass == "w3c.span"},
 		Tracing: tracing,
 		Stream: struct {
-			Status         int  `json:"status"`
-			SnapshotMarker bool `json:"snapshot_marker"`
-		}{Status: streamStatus, SnapshotMarker: streamMarker},
+			Status          int  `json:"status"`
+			SnapshotRefresh bool `json:"snapshot_refresh"`
+		}{Status: streamStatus, SnapshotRefresh: streamRefresh},
 		Lifecycle: struct {
 			State   episodediagnostics.DiagnosticState `json:"state"`
 			Expired bool                               `json:"expired"`
@@ -267,7 +267,7 @@ func runEpisodeDiagnosticsStream(ctx context.Context, service episodediagnostics
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	body := response.Body.String()
-	return response.Code, strings.Contains(body, "event: delta") && strings.Contains(body, `"kind":"snapshot"`)
+	return response.Code, strings.Contains(body, "event: delta") && strings.Contains(body, `"kind":"gap"`) && strings.Contains(body, `"reason":"snapshot_refresh"`) && !strings.Contains(body, `"snapshot":`)
 }
 
 func diagnosticsReference(diagnostic episodediagnostics.EpisodeDiagnostic) string {

@@ -13,7 +13,7 @@ const positionMap = {
   "bottom-left": "bottom-left" as const,
 };
 
-export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }) => {
+export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, position = "bottom-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }) => {
   const activeIds = useRef(new Set<string>());
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {

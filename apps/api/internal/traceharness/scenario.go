@@ -55,6 +55,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteTenantOnboard(ctx, false)
 	case EdgeTenantOnboardConflictScenario:
 		return runRouteTenantOnboard(ctx, true)
+	case EdgeMediaPlaneDisabledScenario:
+		return runEdgeMediaPlaneDisabled(ctx)
 	case RouteTenantCreateScenario:
 		return runCreateTenant(ctx, RouteTenantCreateScenario)
 	case RouteTenantListSystemScenario:
@@ -103,10 +105,18 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runEdgeFeedbackValidationFailure(ctx)
 	case ServiceDashboardSpaceJoinScenario:
 		return runServiceDashboardSpaceJoin(ctx)
+	case ServicePublicInviteLifecycleScenario:
+		return runServicePublicInviteLifecycle(ctx)
+	case ServiceMediaPlaneDefaultResolutionScenario:
+		return runServiceMediaPlaneDefaultResolution(ctx)
 	case RouteWhiteboardFileUploadScenario:
 		return runRouteWhiteboardFileUpload(ctx)
 	case RouteChatAttachmentUploadScenario:
 		return runRouteChatAttachmentUpload(ctx)
+	case RoutePublicInviteObservabilityScenario:
+		return runRoutePublicInviteObservability(ctx)
+	case RoutePublicInviteAccessRecoveryScenario:
+		return runRoutePublicInviteAccessRecovery(ctx)
 	case RouteAPIKeyCustomerFlowScenario:
 		return runRouteAPIKeyCustomerFlow(ctx)
 	case EdgeAPIKeyRejectedScopeScenario:
@@ -133,6 +143,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runAdapterCloudflareR2SignedURL(ctx)
 	case AdapterCloudflareSFUBootstrapScenario:
 		return runAdapterCloudflareSFUBootstrap(ctx)
+	case AdapterCloudflareSFUFailureScenario:
+		return runAdapterCloudflareSFUFailure(ctx)
 	case AdapterProviderBridgeGrantScenario:
 		return runAdapterProviderBridgeGrant(ctx)
 	case AdapterCloudflareRTKJoinScenario:

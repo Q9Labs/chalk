@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-client",
-  "version": "4.0.1",
+  "version": "4.1.15",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -33,6 +33,9 @@
       ],
       "sync": [
         "./dist/sync/index.d.ts"
+      ],
+      "invites": [
+        "./dist/public-invites/index.d.ts"
       ],
       "server": [
         "./dist/server/index.d.ts"
@@ -82,6 +85,20 @@
       "import": "./dist/sync/index.js",
       "require": "./dist/sync/index.js",
       "default": "./dist/sync/index.js"
+    },
+    "./invites": {
+      "types": "./dist/public-invites/index.d.ts",
+      "react-native": {
+        "types": "./dist/public-invites/index.d.ts",
+        "default": "./dist/public-invites/index.js"
+      },
+      "browser": {
+        "types": "./dist/public-invites/index.d.ts",
+        "default": "./dist/public-invites/index.js"
+      },
+      "import": "./dist/public-invites/index.js",
+      "require": "./dist/public-invites/index.js",
+      "default": "./dist/public-invites/index.js"
     },
     "./server": {
       "workerd": {
@@ -192,7 +209,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "pnpm run generate:webhooks && rm -rf ./dist && tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts ./src/media/index.ts ./src/sync/index.ts --format esm --out-dir ./dist --platform browser --external effect && tsup ./src/webhooks/index.ts ./src/webhooks/test.ts ./src/webhooks/server-only.ts --format esm,cjs --out-dir ./dist/webhooks --platform neutral && tsup ./src/server/index.ts ./src/server/server-only.ts --format esm,cjs --out-dir ./dist/server --platform node && pnpm run build:types && pnpm run build:webhooks:cjs-types",
+    "build": "pnpm run generate:webhooks && rm -rf ./dist && tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts ./src/media/index.ts ./src/sync/index.ts ./src/public-invites/index.ts --format esm --out-dir ./dist --platform browser --external effect && tsup ./src/webhooks/index.ts ./src/webhooks/test.ts ./src/webhooks/server-only.ts --format esm,cjs --out-dir ./dist/webhooks --platform neutral && tsup ./src/server/index.ts ./src/server/server-only.ts --format esm,cjs --out-dir ./dist/server --platform node && pnpm run build:types && pnpm run build:webhooks:cjs-types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
     "build:webhooks:cjs-types": "node ./scripts/generate-webhook-cjs-types.mjs",
     "dev": "tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts ./src/media/index.ts ./src/sync/index.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
@@ -208,8 +225,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@cloudflare/realtimekit": "2.0.1",
     "@noble/hashes": "2.3.0",
-    "@q9labsai/diagnostics-contracts": "workspace:^0.1.0",
+    "@q9labsai/diagnostics-contracts": "workspace:^0.1.1",
     "effect": "4.0.0-beta.102"
   },
   "devDependencies": {

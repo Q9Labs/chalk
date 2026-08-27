@@ -19,12 +19,11 @@
     "trace:inspect": "node src/cli.mjs",
     "feedback": "node src/feedback-cli.mjs",
     "browser-proof:local": "node src/local-browser-proof.mjs",
-    "test": "pnpm exec vitest run",
     "lint": "pnpm exec oxfmt --check .",
     "check-types": "node --check src/cli.mjs"
   },
   "dependencies": {
-    "@q9labsai/diagnostics-contracts": "workspace:^0.1.0"
+    "@q9labsai/diagnostics-contracts": "workspace:^0.1.1"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

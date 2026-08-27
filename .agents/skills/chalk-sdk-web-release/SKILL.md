@@ -1,6 +1,6 @@
 ---
 name: chalk-sdk-web-release
-description: "used when Hassan asks for shipping the SDK packages or the web application"
+description: "used when user asks for shipping the SDK packages or the web application"
 ---
 
 # Chalk SDK and Web Release
@@ -14,6 +14,28 @@ Ship only the requested targets. Use one pre-push gate, let each release workflo
 - `sdk+web`: Dispatch both workflows from the same release SHA before waiting for either one.
 
 An SDK release without an explicit version uses the next patch version. A web request means staging first and then production only when the active thread explicitly approves production shipping.
+
+## Gate Mode
+
+Choose the gate mode from the changed files, not from a release mode name. The
+automatic command is `pnpm run gate`; it preserves the affected-workspace and
+reverse-dependent plan. A target-compatible web app or web-platform change may
+use `pnpm run gate -- --target web`, and a target-compatible mobile app or
+React Native change may use `pnpm run gate -- --target mobile`. Use
+`pnpm run gate -- --full` for the full safety net.
+
+The CLI accepts `--target web|mobile` and `--target=web|mobile`.
+`GATE_TARGET=web|mobile` provides the same target for automation. If both are
+set, they must match. A missing, unknown, or repeated target, a CLI/environment
+conflict, or `--full` with either a CLI target or `GATE_TARGET` is rejected
+before checks start. Direct
+opposite-platform changes, mixed web-and-mobile changes, gate definitions,
+root dependency or workspace configuration, unknown paths, and other
+full-required changes are also rejected for target mode. Follow the printed
+`Run instead:` instruction: target mismatch and input errors use
+`pnpm run gate`; full-required changes use `pnpm run gate -- --full`. Target
+selection only bounds validation. It never changes the packages published or
+the app deployed.
 
 ## Waste Budget
 
@@ -37,21 +59,26 @@ An SDK release without an explicit version uses the next patch version. A web re
    - The seven synchronized public Chalk package versions.
    - Internal `workspace:` ranges that point to those packages.
    - The SDK runtime release identifier and its focused test when the client version changes.
-   - `scripts/npm-release.mjs`, `scripts/npm-release.test.mjs`, `pnpm-lock.yaml`, and `CHANGELOG.md`.
+   - `scripts/npm-release.mjs`, `pnpm-lock.yaml`, and `CHANGELOG.md`.
 6. Keep `@q9labsai/diagnostics-contracts` at its independent version unless its contract actually changed.
 7. Reject unrelated lockfile churn. A patch release should change only the affected workspace specifiers, not third-party resolutions.
 8. Run the cheap release checks before the gate:
 
 ```bash
-node --test scripts/npm-release.test.mjs
 git diff --check
 ```
 
-9. Stage only the release diff with `git add -p`, then run the only full local check:
+9. Stage only the release diff with `git add -p`, then run the selected gate once:
 
 ```bash
 pnpm run gate
 ```
+
+For a target-compatible platform-only release, use the matching target command
+from the Gate Mode section. The synchronized `sdk` and `sdk+web` release modes
+always use the automatic command because they change both platform lanes,
+release tooling, and lock data. They never infer a web target. If target
+validation refuses the change, run the command in its `Run instead:` line.
 
 10. Commit the passing staged diff. Fetch `origin/master` again and stop if it moved. Rebase the release on the new revision and rerun the gate only if the release inputs changed.
 11. Push the exact release commit to `master`, then store its full SHA:

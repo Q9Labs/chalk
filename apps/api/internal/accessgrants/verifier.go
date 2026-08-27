@@ -50,6 +50,7 @@ type jwtClaims struct {
 	ParticipantID          string          `json:"participant_id"`
 	ParticipantGeneration  int64           `json:"participant_generation"`
 	MediaProvider          string          `json:"media_provider"`
+	ProviderSubject        string          `json:"provider_subject,omitempty"`
 	CloudflareConnectionID string          `json:"cloudflare_connection_id"`
 }
 
@@ -72,6 +73,17 @@ func NewVerifier(config VerifierConfig) (Verifier, error) {
 }
 
 func (v Verifier) Verify(_ context.Context, credential string) (Subject, error) {
+	return v.verify(credential, false)
+}
+
+// VerifyForRecovery verifies a participant media credential for a replacement
+// connection. It keeps all credential checks intact and only permits an
+// otherwise-valid credential to be past expiry within RecoveryGrace.
+func (v Verifier) VerifyForRecovery(_ context.Context, credential string) (Subject, error) {
+	return v.verify(credential, true)
+}
+
+func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
 	parts := strings.Split(credential, ".")
 	if len(credential) == 0 || len(credential) > maxCredentialLength || len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		return Subject{}, ErrMalformedCredential
@@ -103,7 +115,7 @@ func (v Verifier) Verify(_ context.Context, credential string) (Subject, error) 
 	if !hasExactAudience(claims.Audience) {
 		return Subject{}, ErrInvalidAudience
 	}
-	if err := v.verifyTimeClaims(claims); err != nil {
+	if err := v.verifyTimeClaims(claims, recovery); err != nil {
 		return Subject{}, err
 	}
 	return subjectFromClaims(claims)
@@ -114,7 +126,7 @@ func hasExactAudience(encoded json.RawMessage) bool {
 	return json.Unmarshal(encoded, &audience) == nil && audience == Audience
 }
 
-func (v Verifier) verifyTimeClaims(claims jwtClaims) error {
+func (v Verifier) verifyTimeClaims(claims jwtClaims, recovery bool) error {
 	if claims.IssuedAt <= 0 || claims.NotBefore < claims.IssuedAt || claims.ExpiresAt <= claims.NotBefore {
 		return ErrInvalidTimeClaims
 	}
@@ -127,6 +139,9 @@ func (v Verifier) verifyTimeClaims(claims jwtClaims) error {
 		return ErrNotYetValid
 	}
 	if claims.ExpiresAt <= now-skew {
+		if recovery && claims.ExpiresAt > now-int64(RecoveryGrace/time.Second) {
+			return nil
+		}
 		return ErrExpired
 	}
 	return nil
@@ -149,18 +164,32 @@ func subjectFromClaims(claims jwtClaims) (Subject, error) {
 		return Subject{}, ErrInvalidSubject
 	}
 	participantID, ok := canonicalID(claims.ParticipantID)
-	if !ok || claims.MediaProvider != ProviderCloudflareSFU || !validConnectionID(claims.CloudflareConnectionID) {
+	if !ok {
 		return Subject{}, ErrInvalidSubject
 	}
-	return Subject{
-		TenantID:               tenantID,
-		SpaceID:                spaceID,
-		EpisodeID:              episodeID,
-		ParticipantID:          participantID,
-		ParticipantGeneration:  claims.ParticipantGeneration,
-		Provider:               claims.MediaProvider,
-		CloudflareConnectionID: claims.CloudflareConnectionID,
-	}, nil
+	subject := Subject{
+		TenantID:              tenantID,
+		SpaceID:               spaceID,
+		EpisodeID:             episodeID,
+		ParticipantID:         participantID,
+		ParticipantGeneration: claims.ParticipantGeneration,
+		Provider:              claims.MediaProvider,
+	}
+	switch claims.MediaProvider {
+	case ProviderCloudflareSFU:
+		if !validConnectionID(claims.CloudflareConnectionID) {
+			return Subject{}, ErrInvalidSubject
+		}
+		subject.CloudflareConnectionID = claims.CloudflareConnectionID
+	case ProviderCloudflareRTK:
+		if !validProviderSubject(claims.ProviderSubject) {
+			return Subject{}, ErrInvalidSubject
+		}
+		subject.ProviderSubject = claims.ProviderSubject
+	default:
+		return Subject{}, ErrInvalidSubject
+	}
+	return subject, nil
 }
 
 func decodeJWTPart(part string, target any) error {
@@ -180,13 +209,21 @@ func decodeJWTPart(part string, target any) error {
 }
 
 func validSubject(subject Subject) bool {
-	return !subject.TenantID.IsZero() &&
-		!subject.SpaceID.IsZero() &&
-		!subject.EpisodeID.IsZero() &&
-		!subject.ParticipantID.IsZero() &&
-		subject.ParticipantGeneration > 0 &&
-		subject.Provider == ProviderCloudflareSFU &&
-		validConnectionID(subject.CloudflareConnectionID)
+	if subject.TenantID.IsZero() ||
+		subject.SpaceID.IsZero() ||
+		subject.EpisodeID.IsZero() ||
+		subject.ParticipantID.IsZero() ||
+		subject.ParticipantGeneration <= 0 {
+		return false
+	}
+	switch subject.Provider {
+	case ProviderCloudflareSFU:
+		return subject.ProviderSubject == "" && validConnectionID(subject.CloudflareConnectionID)
+	case ProviderCloudflareRTK:
+		return subject.CloudflareConnectionID == "" && validProviderSubject(subject.ProviderSubject)
+	default:
+		return false
+	}
 }
 
 func canonicalID(value string) (utilities.ID, bool) {
@@ -200,6 +237,18 @@ func validTokenID(value string) bool {
 }
 
 func validConnectionID(value string) bool {
+	if value == "" || len(value) > maxConnectionIDLength || strings.TrimSpace(value) != value || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			return false
+		}
+	}
+	return true
+}
+
+func validProviderSubject(value string) bool {
 	if value == "" || len(value) > maxConnectionIDLength || strings.TrimSpace(value) != value || !utf8.ValidString(value) {
 		return false
 	}

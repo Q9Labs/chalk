@@ -41,6 +41,7 @@ import {
   PinIcon as Pin01IconSvg,
   PlayIcon as PlayIconSvg,
   PlusSignIcon as PlusSignIconSvg,
+  QrCode01Icon as QrCode01IconSvg,
   Radio01Icon as Radio01IconSvg,
   RefreshIcon as RefreshIconSvg,
   Search01Icon as Search01IconSvg,
@@ -48,6 +49,7 @@ import {
   Settings01Icon as Settings01IconSvg,
   Share01Icon as Share01IconSvg,
   Shield01Icon as Shield01IconSvg,
+  SignalFull02Icon as SignalFull02IconSvg,
   SmileIcon as SmileIconSvg,
   SparklesIcon as SparklesIconSvg,
   SquareIcon as SquareIconSvg,
@@ -58,6 +60,7 @@ import {
   Tick01Icon as Tick01IconSvg,
   TickDouble01Icon as TickDouble01IconSvg,
   Upload01Icon as Upload01IconSvg,
+  UserAdd01Icon as UserAdd01IconSvg,
   UserGroupIcon as UserGroupIconSvg,
   UserRemove01Icon as UserRemove01IconSvg,
   Video01Icon as Video01IconSvg,
@@ -121,6 +124,7 @@ export const PictureInPictureIcon = createIcon(LayoutTableIconSvg);
 export const Pin01Icon = createIcon(Pin01IconSvg);
 export const PlayIcon = createIcon(PlayIconSvg);
 export const PlusSignIcon = createIcon(PlusSignIconSvg);
+export const QrCode01Icon = createIcon(QrCode01IconSvg);
 export const Radio01Icon = createIcon(Radio01IconSvg);
 export const RefreshIcon = createIcon(RefreshIconSvg);
 export const Search01Icon = createIcon(Search01IconSvg);
@@ -128,6 +132,7 @@ export const SentIcon = createIcon(SentIconSvg);
 export const Settings01Icon = createIcon(Settings01IconSvg);
 export const Share01Icon = createIcon(Share01IconSvg);
 export const Shield01Icon = createIcon(Shield01IconSvg);
+export const SignalFull02Icon = createIcon(SignalFull02IconSvg);
 export const SmileIcon = createIcon(SmileIconSvg);
 export const SparklesIcon = createIcon(SparklesIconSvg);
 export const SquareIcon = createIcon(SquareIconSvg);
@@ -138,6 +143,7 @@ export const ThumbsUpIcon = createIcon(ThumbsUpIconSvg);
 export const Tick01Icon = createIcon(Tick01IconSvg);
 export const TickDouble01Icon = createIcon(TickDouble01IconSvg);
 export const Upload01Icon = createIcon(Upload01IconSvg);
+export const UserAdd01Icon = createIcon(UserAdd01IconSvg);
 export const UserGroupIcon = createIcon(UserGroupIconSvg);
 export const UserRemove01Icon = createIcon(UserRemove01IconSvg);
 export const Video01Icon = createIcon(Video01IconSvg);

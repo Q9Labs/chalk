@@ -1,5 +1,5 @@
 import * as React from "react";
-import { createFacehashScene, getColor, type Intensity3D, type Variant } from "./core/index.js";
+import { createFacehashScene, getColor, getForegroundColor, type Intensity3D, type Variant } from "./core/index.js";
 import { FacehashSceneSvg } from "./FacehashSceneSvg.js";
 
 export interface FacehashProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
@@ -36,6 +36,7 @@ export const Facehash = React.forwardRef<HTMLDivElement, FacehashProps>(function
     [colorsLength, intensity3d, interactive, isHovered, name],
   );
   const backgroundColor = getColor(colors, scene.data.colorIndex);
+  const foregroundColor = getForegroundColor(backgroundColor);
   const sizeValue = typeof size === "number" ? `${size}px` : size;
   const svgIdPrefix = React.useMemo(() => sanitizeId(`facehash-${reactId}-${name}`), [name, reactId]);
 
@@ -60,7 +61,7 @@ export const Facehash = React.forwardRef<HTMLDivElement, FacehashProps>(function
       style={{
         alignItems: "center",
         backgroundColor,
-        color: "#ffffff",
+        color: foregroundColor,
         display: "flex",
         height: sizeValue,
         justifyContent: "center",

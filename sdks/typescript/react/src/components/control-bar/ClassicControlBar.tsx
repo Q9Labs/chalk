@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useCan, useChat, useConnection, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { Tooltip } from "@q9labsai/chalk-ui";
+import { useCan, useChat, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { cn } from "../../utils/cn";
 import {
   CallEnd01Icon,
@@ -109,7 +111,7 @@ interface ControlBarSurfaceProps {
   className?: string;
 }
 
-const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "transcription", "thumbsup", "pip", "settings"];
+const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "thumbsup", "pip", "settings"];
 
 const formatDuration = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
@@ -124,21 +126,22 @@ const formatDuration = (seconds: number) => {
 
 function FloatingControlBarButton({ icon, label, onClick, active = false, danger = false, badge }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick?: () => void; readonly active?: boolean; readonly danger?: boolean; readonly badge?: number }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      className={cn(
-        "chalk-textured-surface relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] transition hover:-translate-y-0.5 hover:border-[var(--chalk-app-line-strong)] hover:bg-[var(--chalk-app-control-hover)]",
-        active && "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]",
-        danger && "ml-2 border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] !text-white hover:border-[var(--chalk-app-danger-hover)] hover:bg-[var(--chalk-app-danger-hover)]",
-      )}
-    >
-      {icon}
-      {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] !text-white">{badge > 99 ? "99+" : badge}</span> : null}
-    </button>
+    <Tooltip content={label} position="top">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        aria-pressed={active}
+        className={cn(
+          "chalk-textured-surface relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] transition hover:-translate-y-0.5 hover:border-[var(--chalk-app-line-strong)] hover:bg-[var(--chalk-app-control-hover)]",
+          active && "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)]",
+          danger && "ml-2 border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] !text-white hover:border-[var(--chalk-app-danger-hover)] hover:bg-[var(--chalk-app-danger-hover)]",
+        )}
+      >
+        {icon}
+        {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] !text-white">{badge > 99 ? "99+" : badge}</span> : null}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -245,7 +248,7 @@ const ControlBarSurface = React.memo(
               label={isScreenSharing ? "Stop Share" : "Share Screen"}
               onClick={onToggleScreenShare}
               active={isScreenSharing}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
               data-tour="controls-screenshare"
             />
@@ -262,7 +265,7 @@ const ControlBarSurface = React.memo(
                 label="Chat"
                 onClick={onToggleChat}
                 active={isChatOpen}
-                activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+                activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
                 showLabel={showLabels}
                 data-tour="controls-chat"
               />
@@ -277,10 +280,10 @@ const ControlBarSurface = React.memo(
             <ControlBarButton
               key="participants"
               icon={<UserGroupIcon />}
-              label="People"
+              label="Participants"
               onClick={onToggleParticipants}
               active={isParticipantsOpen}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
               data-tour="controls-participants"
             />
@@ -294,7 +297,7 @@ const ControlBarSurface = React.memo(
               label="Transcript"
               onClick={onToggleTranscription}
               active={isTranscriptionEnabled}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
             />
           );
@@ -307,7 +310,7 @@ const ControlBarSurface = React.memo(
               label={isHandRaised ? "Lower Hand" : "Raise Hand"}
               onClick={onToggleHandRaise}
               active={isHandRaised}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
             />
           );
@@ -323,7 +326,7 @@ const ControlBarSurface = React.memo(
               label="Whiteboard"
               onClick={onToggleWhiteboard}
               active={isWhiteboardOpen}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
             />
           );
@@ -344,7 +347,7 @@ const ControlBarSurface = React.memo(
                   : undefined
               }
               active={isPictureInPictureActive}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
             />
           );
@@ -414,56 +417,78 @@ const ControlBarSurface = React.memo(
             {/* Group 2: Interactions */}
             <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
               {buttonsToRender.includes("handraise") && onToggleHandRaise && (
-                <button
-                  type="button"
-                  onClick={onToggleHandRaise}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
-                  aria-pressed={isHandRaised}
-                >
-                  <HandIcon className="w-5 h-5" />
-                </button>
+                <Tooltip content={isHandRaised ? "Lower hand" : "Raise hand"} position="top">
+                  <button
+                    type="button"
+                    onClick={onToggleHandRaise}
+                    className={cn(
+                      "flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]",
+                      isHandRaised ? "bg-[var(--chalk-app-control-active)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : "",
+                    )}
+                    aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
+                    aria-pressed={isHandRaised}
+                  >
+                    <HandIcon className="w-5 h-5" />
+                  </button>
+                </Tooltip>
               )}
               {buttonsToRender.includes("reactions") && onOpenReactions && (
-                <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
-                  <ThumbsUpIcon className="w-5 h-5" />
-                </button>
+                <Tooltip content="Reactions" position="top">
+                  <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
+                    <ThumbsUpIcon className="w-5 h-5" />
+                  </button>
+                </Tooltip>
               )}
               {buttonsToRender.includes("whiteboard") && onToggleWhiteboard && (
-                <button
-                  type="button"
-                  onClick={onToggleWhiteboard}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isWhiteboardOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label="Whiteboard"
-                  aria-pressed={isWhiteboardOpen}
-                >
-                  <Edit02Icon className="w-5 h-5" />
-                </button>
+                <Tooltip content="Board" position="top">
+                  <button
+                    type="button"
+                    onClick={onToggleWhiteboard}
+                    className={cn(
+                      "flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]",
+                      isWhiteboardOpen ? "bg-[var(--chalk-app-control-active)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : "",
+                    )}
+                    aria-label="Whiteboard"
+                    aria-pressed={isWhiteboardOpen}
+                  >
+                    <Edit02Icon className="w-5 h-5" />
+                  </button>
+                </Tooltip>
               )}
               {buttonsToRender.includes("participants") && onToggleParticipants && (
-                <button
-                  type="button"
-                  onClick={onToggleParticipants}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isParticipantsOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label="People"
-                  aria-pressed={isParticipantsOpen}
-                >
-                  <UserGroupIcon className="w-5 h-5" />
-                </button>
+                <Tooltip content="Participants" position="top">
+                  <button
+                    type="button"
+                    onClick={onToggleParticipants}
+                    className={cn(
+                      "flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]",
+                      isParticipantsOpen ? "bg-[var(--chalk-app-control-active)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : "",
+                    )}
+                    aria-label="Participants"
+                    aria-pressed={isParticipantsOpen}
+                  >
+                    <UserGroupIcon className="w-5 h-5" />
+                  </button>
+                </Tooltip>
               )}
               {buttonsToRender.includes("chat") && onToggleChat && (
-                <button
-                  type="button"
-                  onClick={onToggleChat}
-                  className={cn("relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isChatOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
-                  aria-label="Chat"
-                  aria-pressed={isChatOpen}
-                >
-                  <Message01Icon className="w-5 h-5" />
-                  {unreadChatCount > 0 && !isChatOpen ? (
-                    <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
-                  ) : null}
-                </button>
+                <Tooltip content="Chat" position="top">
+                  <button
+                    type="button"
+                    onClick={onToggleChat}
+                    className={cn(
+                      "relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]",
+                      isChatOpen ? "bg-[var(--chalk-app-control-active)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : "",
+                    )}
+                    aria-label="Chat"
+                    aria-pressed={isChatOpen}
+                  >
+                    <Message01Icon className="w-5 h-5" />
+                    {unreadChatCount > 0 && !isChatOpen ? (
+                      <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
+                    ) : null}
+                  </button>
+                </Tooltip>
               )}
             </div>
 
@@ -475,18 +500,22 @@ const ControlBarSurface = React.memo(
                 </button>
               ) : null}
               {buttonsToRender.includes("more") && onOpenMore && (
-                <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
-                  <MoreHorizontalIcon className="w-5 h-5" />
-                </button>
+                <Tooltip content="More options" position="top">
+                  <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
+                    <MoreHorizontalIcon className="w-5 h-5" />
+                  </button>
+                </Tooltip>
               )}
-              <button
-                type="button"
-                onClick={onLeft}
-                className="flex h-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] px-4 text-white transition active:scale-95 hover:bg-[var(--chalk-app-danger-hover)] sm:h-[46px]"
-                aria-label="Leave space"
-              >
-                <CallEnd01Icon className="w-5 h-5" />
-              </button>
+              <Tooltip content="Leave Space" position="top">
+                <button
+                  type="button"
+                  onClick={onLeft}
+                  className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] p-0 text-white transition active:scale-95 hover:bg-[var(--chalk-app-danger-hover)] sm:h-[46px] sm:w-[46px]"
+                  aria-label="Leave space"
+                >
+                  <CallEnd01Icon className="w-5 h-5" />
+                </button>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -510,7 +539,7 @@ const ControlBarSurface = React.memo(
             return <FloatingControlBarButton key={type} icon={<HandIcon />} label={isHandRaised ? "Lower" : "Raise"} onClick={onToggleHandRaise} active={isHandRaised} />;
           case "participants":
             if (!onToggleParticipants) return null;
-            return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} />;
+            return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="Participants" onClick={onToggleParticipants} active={isParticipantsOpen} />;
           case "chat":
             if (!onToggleChat) return null;
             return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} />;
@@ -546,7 +575,7 @@ const ControlBarSurface = React.memo(
 
       return (
         <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
-          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
+          <div className={cn("group pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
             {buttonsToRender.includes("mic") ? (
               <DevicePopover
                 type="mic"
@@ -566,7 +595,9 @@ const ControlBarSurface = React.memo(
             {buttonsToRender.includes("video") ? (
               <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
             ) : null}
-            {buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}
+            <div className="pointer-events-none -ml-2 grid min-w-0 grid-cols-[0fr] -translate-x-1.5 opacity-0 transition-[grid-template-columns,margin,opacity,transform] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[grid-template-columns,opacity,transform] group-hover:pointer-events-auto group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:ml-0 group-focus-within:grid-cols-[1fr] group-focus-within:translate-x-0 group-focus-within:opacity-100 motion-reduce:transition-none">
+              <div className="-my-2 flex min-w-0 items-center gap-2 overflow-hidden py-2">{buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}</div>
+            </div>
             {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger /> : null}
           </div>
         </div>
@@ -605,7 +636,8 @@ export function ClassicControlBar(props: ControlBarProps): React.JSX.Element {
   const self = useSelf();
   const media = useMedia();
   const chat = useChat();
-  const connection = useConnection();
+  const measuredEpisodeDuration = useEpisodeDuration();
+  const episodeDuration = props.duration ?? measuredEpisodeDuration;
   const canPublishScreen = useCan("publishScreen");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
@@ -613,15 +645,7 @@ export function ClassicControlBar(props: ControlBarProps): React.JSX.Element {
   const microphoneEnabled = media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting";
   const cameraEnabled = media.local.camera.state === "enabled" || media.local.camera.state === "requesting";
   const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
-  const episodeStart = connection.episode?.startedAt ? Date.parse(connection.episode.startedAt) : null;
-  const [now, setNow] = useState(() => Date.now());
   const [commandError, setCommandError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!episodeStart) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [episodeStart]);
 
   const run = useCallback(
     async (command: () => Promise<unknown>) => {
@@ -663,7 +687,7 @@ export function ClassicControlBar(props: ControlBarProps): React.JSX.Element {
       <ControlBarSurface
         {...props}
         buttons={buttons}
-        duration={episodeStart ? Math.max(0, Math.floor((now - episodeStart) / 1000)) : 0}
+        duration={episodeDuration}
         isMuted={!microphoneEnabled}
         isVideoEnabled={cameraEnabled}
         isScreenSharing={screenSharing}

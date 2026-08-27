@@ -1,4 +1,4 @@
-import type { DashboardSpace } from "../../lib/dashboard-api";
+import type { DashboardSpace, DashboardSpacePublicInvite } from "../../lib/dashboard-api";
 
 export type SpaceHrefBuilder = (space: Pick<DashboardSpace, "slug">) => string;
 
@@ -10,6 +10,15 @@ export const defaultSpaceHrefBuilder: SpaceHrefBuilder = (space) => `/space/${en
 
 export function dashboardSpaceHref(space: Pick<DashboardSpace, "id">): string {
   return `/spaces/${encodeURIComponent(space.id)}`;
+}
+
+/**
+ * Returns the server-issued public URL. The canonical URL owns the invite
+ * fragment, so this helper deliberately leaves it untouched.
+ */
+export function publicSpaceHrefBuilder(invite: Pick<DashboardSpacePublicInvite, "canonical_url">): string | undefined {
+  const href = invite.canonical_url?.trim();
+  return href || undefined;
 }
 
 export function episodeHistoryHref(episode: { space_id: string; id: string }): string {

@@ -1,23 +1,23 @@
 "use client";
 
-import { createSpaceClient, type ChatUploadFile, type ClientEventMap, type FeedbackSource, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type FeedbackSource, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
+import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsDialog";
-import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
-import { SkinProvider, useSkin } from "../skin-context";
+import { SkinProvider } from "../skin-context";
 import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
-import { ChalkButton } from "../chalk-ui";
 import { FeedbackDialog } from "../feedback/FeedbackDialog";
+import { StatusSurface } from "./StatusSurface";
 
 export type SpaceLayout = "focus" | "grid" | "presentation";
 
@@ -31,6 +31,8 @@ export type ChalkFeatures = {
   readonly handRaise?: boolean;
   readonly info?: boolean;
   readonly settings?: boolean;
+  /** Join / leave / message / hand-raise / reaction cues. The user can still mute them from Settings. */
+  readonly sounds?: boolean;
 };
 
 type SpaceIntegration = { readonly client: SpaceClient; readonly space?: never; readonly getAccess?: never } | { readonly client?: never; readonly space: string; readonly getAccess: GetAccess };
@@ -57,6 +59,9 @@ export type ChalkProps = SpaceIntegration &
     readonly logoUrl?: string;
     readonly spaceName?: string;
     readonly inviteLink?: string;
+    readonly spaceDescription?: string;
+    readonly diagnosticReference?: string;
+    readonly onSendFeedback?: (context: Readonly<{ diagnosticReference: string }>) => void;
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
     readonly onOpenDiagnostics?: () => void;
@@ -116,14 +121,23 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
 function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
+  const participants = useParticipants();
   const previousStatus = useRef(connection.status);
   const hasObservedStatus = useRef(false);
   const hasBeenLive = useRef(connection.status === "live" || connection.status === "reconnecting");
   const autoJoinAttempted = useRef(false);
   const previousClient = useRef(client);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const lastEpisode = useRef(connection.episode);
+  const lastParticipantCount = useRef(participants.roster.length);
+  const [retryPending, setRetryPending] = useState(false);
+  const [episodeEnded, setEpisodeEnded] = useState(false);
+  const [endedAt, setEndedAt] = useState<string | null>(null);
   const entrance = props.entrance ?? true;
   const spaceName = props.spaceName ?? props.space ?? "Space";
+
+  if (connection.episode) lastEpisode.current = connection.episode;
+  if (participants.roster.length > 0) lastParticipantCount.current = participants.roster.length;
 
   if (previousClient.current !== client) {
     previousClient.current = client;
@@ -147,10 +161,23 @@ function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.R
   );
   const retryAutomaticJoin = useCallback(() => {
     autoJoinAttempted.current = true;
-    void join(defaultJoinOptions(props));
+    setRetryPending(true);
+    void join(defaultJoinOptions(props)).finally(() => setRetryPending(false));
   }, [join, props]);
 
   useEffect(() => setJoinError(null), [client]);
+  useEffect(() => {
+    setEpisodeEnded(false);
+    setEndedAt(null);
+  }, [client]);
+  useEffect(
+    () =>
+      client.on("episodeEnded", () => {
+        setEpisodeEnded(true);
+        setEndedAt(new Date().toISOString());
+      }),
+    [client],
+  );
   useEffect(() => {
     if (entrance || connection.status !== "idle" || autoJoinAttempted.current) return;
     autoJoinAttempted.current = true;
@@ -165,20 +192,34 @@ function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.R
     previousStatus.current = connection.status;
     hasObservedStatus.current = true;
     if (connection.status === "live" || connection.status === "reconnecting") hasBeenLive.current = true;
+    if (connection.status === "left" && previous !== "left") setEndedAt((current) => current ?? new Date().toISOString());
   }, [connection.status, props.onJoined, props.onLeft]);
 
   if (connection.status === "idle") {
-    if (!entrance) return <StatusView message={joinError ?? `Entering ${spaceName}…`} onRetry={joinError ? retryAutomaticJoin : undefined} />;
+    if (!entrance) return <StatusSurface message={joinError ?? `Entering ${spaceName}…`} onRetry={joinError ? retryAutomaticJoin : undefined} retryPending={retryPending} retryError={joinError} />;
     return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} theme={props.theme} onJoin={join} />;
   }
   if (connection.status === "joining")
-    return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} /> : <StatusView message={`Entering ${spaceName}…`} />;
+    return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} /> : <StatusSurface message={`Entering ${spaceName}…`} />;
   if (connection.status === "failed") {
     if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={connection.lastError?.message ?? joinError ?? "Unable to enter this Space."} theme={props.theme} onJoin={join} />;
-    return <StatusView message={connection.lastError?.message ?? joinError ?? "This Space is unavailable."} onRetry={() => void join(defaultJoinOptions(props))} />;
+    return <StatusSurface phase="failed" message={connection.lastError?.message ?? joinError ?? "This Space is unavailable."} onRetry={retryAutomaticJoin} retryPending={retryPending} retryError={joinError} />;
   }
-  if (connection.status === "leaving") return <StatusView message={`Leaving ${spaceName}…`} />;
-  if (connection.status === "left") return <StatusView message="You have left this Space." onRetry={() => void join(defaultJoinOptions(props))} />;
+  if (connection.status === "leaving") return <StatusSurface phase="leaving" message={`Leaving ${spaceName}…`} spaceName={spaceName} />;
+  if (connection.status === "left")
+    return (
+      <StatusSurface
+        phase={episodeEnded ? "episode-ended" : "left"}
+        message={episodeEnded ? "This Episode has ended for everyone." : "Your connection is closed. You can re-enter from here."}
+        spaceName={spaceName}
+        episode={lastEpisode.current}
+        endedAt={endedAt}
+        participantCount={lastParticipantCount.current}
+        onRetry={episodeEnded ? undefined : retryAutomaticJoin}
+        retryPending={retryPending}
+        retryError={joinError}
+      />
+    );
   return <SpaceSurface {...props} spaceName={spaceName} reconnecting={connection.status === "reconnecting"} />;
 }
 
@@ -186,12 +227,12 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
   const client = useSpaceClient();
   const self = useSelf();
   const media = useMedia();
+  const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
-  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.skin ?? "classic", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
@@ -239,22 +280,31 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
     }
   }, []);
   const whiteboardTransport = client.whiteboard.transport();
+  const whiteboardAvailable = props.features?.whiteboard !== false;
+  const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardAvailable);
+  const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? bindWhiteboardPresentation(whiteboardSubscription.transport) : undefined;
+  useEffect(() => {
+    if (whiteboardSubscription.status === "failed") setCommandError(whiteboardSubscription.error.message);
+    else if (whiteboardSubscription.status === "loading" || whiteboardSubscription.status === "ready") setCommandError(null);
+  }, [whiteboardSubscription]);
   const whiteboard =
-    props.features?.whiteboard !== false && whiteboardOpen && canDrawWhiteboard && whiteboardTransport
+    whiteboardAvailable && whiteboardState.engine.presenting && whiteboardSubscription.status === "ready"
       ? {
           isOpen: true,
           props: {
             canDraw: canDrawWhiteboard,
             collab: {
               canDraw: canDrawWhiteboard,
-              subscribe: (listener: NonNullable<WhiteboardViewProps["collab"]>["subscribe"] extends (listener: infer T) => unknown ? T : never) => whiteboardTransport.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
-              submitUpdate: async (input: NonNullable<WhiteboardViewProps["collab"]>["submitUpdate"] extends (input: infer T) => unknown ? T : never) => whiteboardTransport.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
-              sendCursor: (input: NonNullable<WhiteboardViewProps["collab"]>["sendCursor"] extends (input: infer T) => unknown ? T : never) => whiteboardTransport.sendCursor(input),
-              requestSnapshot: () => whiteboardTransport.requestSnapshot(),
-              clear: () => whiteboardTransport.clear(),
-              initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => whiteboardTransport.files.initiateUpload(input),
-              finalizeUpload: (uploadId: string) => whiteboardTransport.files.finalizeUpload(uploadId),
-              presignDownload: (fileId: string) => whiteboardTransport.files.getDownloadUrl(fileId),
+              subscribe: (listener: NonNullable<WhiteboardViewProps["collab"]>["subscribe"] extends (listener: infer T) => unknown ? T : never) => whiteboardSubscription.transport.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
+              submitUpdate: async (input: NonNullable<WhiteboardViewProps["collab"]>["submitUpdate"] extends (input: infer T) => unknown ? T : never) =>
+                whiteboardSubscription.transport.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
+              sendCursor: (input: NonNullable<WhiteboardViewProps["collab"]>["sendCursor"] extends (input: infer T) => unknown ? T : never) => whiteboardSubscription.transport.sendCursor(input),
+              requestSnapshot: () => whiteboardSubscription.transport.requestSnapshot(),
+              onSubmissionError: (cause: unknown) => setCommandError(cause instanceof Error ? cause.message : "Whiteboard could not sync."),
+              clear: () => whiteboardSubscription.transport.clear(),
+              initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => whiteboardSubscription.transport.files.initiateUpload(input),
+              finalizeUpload: (uploadId: string) => whiteboardSubscription.transport.files.finalizeUpload(uploadId),
+              presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
             },
           },
         }
@@ -269,17 +319,34 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
       skin={settings.appearance.skin ?? resolvedSkin}
       palette={settings.appearance.palette ?? resolvedPalette}
       texture={settings.appearance.texture ?? resolvedTexture}
+      generatedAvatars={settings.appearance.generatedAvatars}
+      commandError={commandError ?? undefined}
+      onDismissCommandError={() => setCommandError(null)}
       layout={settings.appearance.layout === "focus" || settings.appearance.layout === "grid" || settings.appearance.layout === "presentation" ? settings.appearance.layout : (props.layout ?? "focus")}
       onLayoutChange={(nextLayout) => {
         setSettings((current) => ({ ...current, appearance: { ...current.appearance, layout: nextLayout } }));
         props.onLayoutChange?.(nextLayout);
       }}
-      features={props.features}
+      features={{ ...props.features, sounds: props.features?.sounds !== false && settings.experience.sounds }}
       onOpenDiagnostics={props.onOpenDiagnostics}
       onOpenFeedback={() => setFeedbackOpen(true)}
       whiteboard={whiteboard}
-      onToggleWhiteboard={() => setWhiteboardOpen((open) => !open)}
-      infoDialog={props.features?.info !== false && props.inviteLink ? { isOpen: infoOpen, onOpenChange: setInfoOpen, spaceName: props.spaceName, inviteLink: props.inviteLink, onCopyLink: () => void navigator.clipboard?.writeText(props.inviteLink!) } : undefined}
+      onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
+      infoDialog={
+        props.features?.info !== false && (props.inviteLink || props.diagnosticReference || props.spaceDescription)
+          ? {
+              isOpen: infoOpen,
+              onOpenChange: setInfoOpen,
+              spaceName: props.spaceName,
+              spaceDescription: props.spaceDescription,
+              inviteLink: props.inviteLink,
+              onCopyLink: props.inviteLink ? () => void navigator.clipboard?.writeText(props.inviteLink!) : undefined,
+              diagnosticReference: props.diagnosticReference,
+              onCopyDiagnosticReference: (reference) => void navigator.clipboard?.writeText(reference),
+              onSendFeedback: props.onSendFeedback,
+            }
+          : undefined
+      }
       onOpenSettings={
         props.features?.settings !== false
           ? () => {
@@ -344,29 +411,16 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
             <MediaRequestDialog request={media.incomingRequests[0]} onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId))} onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId))} />
           ) : null}
           <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} client={client} source={props.feedbackSource} captureRootRef={props.feedbackRootRef} />
-          <CommandErrorAlert message={commandError ?? undefined} />
         </>
       }
     />
   );
 }
 
-function StatusView({ message, onRetry }: { readonly message: string; readonly onRetry?: () => void }): React.JSX.Element {
-  const skin = useSkin();
-  return (
-    <main data-chalk-skin={skin} className="grid h-full min-h-0 place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
-      <div className="grid max-w-sm gap-4 justify-items-center">
-        <p role="status" className="text-sm text-[var(--chalk-muted-text)]">
-          {message}
-        </p>
-        {onRetry ? (
-          <ChalkButton type="button" onClick={onRetry} variant="solid" tone="accent" className="text-sm font-semibold text-[var(--chalk-accent-text)]">
-            Try again
-          </ChalkButton>
-        ) : null}
-      </div>
-    </main>
-  );
+function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((presenting: boolean) => Promise<void>) | undefined {
+  const setPresentation = transport.setPresentation;
+  if (!setPresentation) return undefined;
+  return (presenting) => setPresentation.call(transport, presenting);
 }
 
 function defaultJoinOptions(props: ChalkProps): JoinOptions {
@@ -408,6 +462,6 @@ function createSettings(displayName: string, layout: SpaceLayout, skin: ThemeSki
     audio: { outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
     video: { quality: "auto" },
     appearance: { layout, theme: palette === "light" ? "light" : "dark", skin, palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
-    experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
+    experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
   };
 }

@@ -890,13 +890,12 @@ func (r *EpisodeDiagnosticsRepository) loadProjectionState(ctx context.Context, 
 	if participantErr != nil {
 		return state, counts, participantErr
 	}
-	participants, participantErr := queries.ListDiagnosticParticipants(ctx, sqlc.ListDiagnosticParticipantsParams{PageLimit: int32(minInt(branchLimit, 100)), TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), ParticipantID: participantFilter})
+	participants, participantErr := loadDiagnosticParticipantProjections(ctx, queries, uuid(tenantID), uuid(diagnosticID), participantFilter, int32(minInt(branchLimit, 100)))
 	if participantErr != nil {
 		return state, counts, fmt.Errorf("list diagnostic participants: %w", participantErr)
 	}
 	for _, participant := range participants {
-		mapped := mapDiagnosticParticipant(participant)
-		state.Participants[mapped.ParticipantID] = mapped
+		state.Participants[participant.ParticipantID] = participant
 	}
 	var operations []sqlc.DiagnosticOperation
 	var targetIDs []string
@@ -1206,29 +1205,32 @@ func mapDiagnosticBranch(row sqlc.DiagnosticBranch, _ episodediagnostics.Episode
 	return episodediagnostics.DiagnosticBranchDetail{SchemaVersion: "BranchDetail/v1", ID: idString(row.ID), Kind: episodediagnostics.BranchKind(row.Kind), State: episodediagnostics.BranchState(row.State), LeaseEndsAt: timestamp(row.LeaseEndsAt).UTC(), StartedAt: nullableTimestampUTC(row.StartedAt), TerminalAt: nullableTimestampUTC(row.TerminalAt), TerminalCursor: nullableInt64(row.TerminalCursor), Attempts: int(row.Attempts), FanInChildren: decodeStringSlice(row.FanInChildren), UnknownReason: episodediagnostics.UnknownReason(nullableString(row.UnknownReason))}
 }
 
-func mapDiagnosticParticipant(row sqlc.ListDiagnosticParticipantsRow) episodediagnostics.ParticipantProjectionV1 {
+func mapDiagnosticParticipant(row sqlc.ListDiagnosticParticipantsRow, ordinal int) episodediagnostics.ParticipantProjectionV1 {
 	participantID := idString(row.ParticipantID)
-	state := "active"
-	if row.LatestLifecycleName == "participant.leave" {
+	state := "unknown"
+	switch row.LatestLifecycleName {
+	case "participant.join", "participant.rejoin":
+		state = "joined"
+	case "participant.reconnect":
+		switch episodediagnostics.EventState(row.LatestLifecycleState) {
+		case episodediagnostics.EventStarted:
+			state = "reconnecting"
+		case episodediagnostics.EventObserved, episodediagnostics.EventSucceeded, episodediagnostics.EventLateObserved:
+			state = "joined"
+		}
+	case "participant.leave":
 		state = "left"
-	} else if row.LatestLifecycleName == "" {
-		state = "unknown"
 	}
-	label := "participant-"
-	if len(participantID) >= 8 {
-		label += participantID[:8]
-	} else {
-		label += "unknown"
-	}
+	label := fmt.Sprintf("Participant %d", ordinal)
 	return episodediagnostics.ParticipantProjectionV1{
 		SchemaVersion:  "ParticipantProjection/v1",
 		ParticipantID:  participantID,
 		AnonymousLabel: label,
-		IdentityKind:   "anonymous",
+		IdentityKind:   "unknown",
 		State:          state,
 		JoinedAt:       nullableTimestampUTC(row.JoinedAt),
 		LeftAt:         nullableTimestampUTC(row.LeftAt),
-		Visibility:     "opaque",
+		Visibility:     "not_observable",
 		VisibilityGaps: []string{"identity_redacted"},
 		OperationCount: row.OperationCount,
 		IssueCount:     row.IssueCount,
@@ -1239,8 +1241,54 @@ func mapDiagnosticParticipant(row sqlc.ListDiagnosticParticipantsRow) episodedia
 	}
 }
 
-func mapDiagnosticParticipantAfter(row sqlc.ListDiagnosticParticipantsAfterRow) episodediagnostics.ParticipantProjectionV1 {
-	return mapDiagnosticParticipant(sqlc.ListDiagnosticParticipantsRow(row))
+func mapDiagnosticParticipantProjection(row sqlc.GetDiagnosticParticipantProjectionRow) episodediagnostics.ParticipantProjectionV1 {
+	return mapDiagnosticParticipant(sqlc.ListDiagnosticParticipantsRow{
+		ParticipantID:        row.ParticipantID,
+		JoinedAt:             row.JoinedAt,
+		LeftAt:               row.LeftAt,
+		LatestLifecycleName:  row.LatestLifecycleName,
+		LatestLifecycleState: row.LatestLifecycleState,
+		OperationCount:       row.OperationCount,
+		IssueCount:           row.IssueCount,
+		FirstObservedAt:      row.FirstObservedAt,
+		LastObservedAt:       row.LastObservedAt,
+	}, int(row.Ordinal))
+}
+
+func mapDiagnosticParticipantAfter(row sqlc.ListDiagnosticParticipantsAfterRow, ordinal int) episodediagnostics.ParticipantProjectionV1 {
+	return mapDiagnosticParticipant(sqlc.ListDiagnosticParticipantsRow(row), ordinal)
+}
+
+type diagnosticParticipantQuerier interface {
+	ListDiagnosticParticipants(context.Context, sqlc.ListDiagnosticParticipantsParams) ([]sqlc.ListDiagnosticParticipantsRow, error)
+	GetDiagnosticParticipantProjection(context.Context, sqlc.GetDiagnosticParticipantProjectionParams) (sqlc.GetDiagnosticParticipantProjectionRow, error)
+}
+
+func loadDiagnosticParticipantProjections(ctx context.Context, queries diagnosticParticipantQuerier, tenantID, diagnosticID, participantFilter pgtype.UUID, pageLimit int32) ([]episodediagnostics.ParticipantProjectionV1, error) {
+	if !participantFilter.Valid {
+		rows, err := queries.ListDiagnosticParticipants(ctx, sqlc.ListDiagnosticParticipantsParams{PageLimit: pageLimit, TenantID: tenantID, DiagnosticID: diagnosticID})
+		if err != nil {
+			return nil, err
+		}
+		participants := make([]episodediagnostics.ParticipantProjectionV1, 0, len(rows))
+		for index, row := range rows {
+			participants = append(participants, mapDiagnosticParticipant(row, index+1))
+		}
+		return participants, nil
+	}
+
+	row, err := queries.GetDiagnosticParticipantProjection(ctx, sqlc.GetDiagnosticParticipantProjectionParams{
+		TenantID:      tenantID,
+		DiagnosticID:  diagnosticID,
+		ParticipantID: participantFilter,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return []episodediagnostics.ParticipantProjectionV1{mapDiagnosticParticipantProjection(row)}, nil
 }
 
 func diagnosticLifecycleForEpisode(episode episodes.Episode) (string, pgtype.Timestamptz) {

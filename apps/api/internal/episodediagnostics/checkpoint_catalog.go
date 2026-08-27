@@ -85,14 +85,21 @@ var checkpointCatalogOverrides = map[string][]checkpointCatalogEntry{
 		{key: "target_delivery", class: CheckpointRequired},
 		conditionalCheckpointCatalog("target_application", "target is observable"),
 	},
-	"whiteboard.unsupported": {
-		{key: "unsupported", class: CheckpointRequired, predicate: "whiteboard is outside v1"},
+	"whiteboard.connect": {
+		{key: "transport_live", class: CheckpointRequired},
+	},
+	"whiteboard.recover": {
+		{key: "recovery_started", class: CheckpointRequired},
+		{key: "restored_cursor", class: CheckpointRequired},
+	},
+	"whiteboard.disconnect": {
+		{key: "terminal", class: CheckpointRequired},
 	},
 }
 
 // checkpointCatalog returns the exact semantic family for every operation in
 // ActionOperationKeys. The shared TypeScript catalog uses the same families;
-// the parity test loads its generated semantic fixture and checks all 84
+// the parity test loads its generated semantic fixture and checks all 86
 // operations, so a newly-added action cannot silently fall back to intent and
 // terminal checkpoints.
 func checkpointCatalog(operation string) []checkpointCatalogEntry {

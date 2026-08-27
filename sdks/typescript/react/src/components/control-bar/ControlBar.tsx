@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useCan, useChat, useConnection, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { Tooltip } from "@q9labsai/chalk-ui";
+import { useCan, useChat, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { cn } from "../../utils/cn";
 import {
   CallEnd01Icon,
@@ -117,6 +119,8 @@ export interface ControlBarProps {
   readonly position?: "bottom" | "top";
   readonly placement?: "inline" | "floating";
   readonly density?: "comfortable" | "compact";
+  /** A shared Episode clock supplied by the owning Space surface. */
+  readonly duration?: number;
   readonly showLabels?: boolean;
   readonly buttons?: ControlBarButtonName[];
   readonly activePanel?: "chat" | "participants" | null;
@@ -137,7 +141,7 @@ export interface ControlBarProps {
   readonly className?: string;
 }
 
-const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "transcription", "thumbsup", "pip", "settings"];
+const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "thumbsup", "pip", "settings"];
 
 const formatDuration = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
@@ -152,19 +156,20 @@ const formatDuration = (seconds: number) => {
 
 function FloatingControlBarButton({ icon, label, onClick, active = false, danger = false, badge, seed }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick?: () => void; readonly active?: boolean; readonly danger?: boolean; readonly badge?: number; readonly seed: string }) {
   return (
-    <ChalkIconButton
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      seed={seed}
-      size="lg"
-      tone={danger ? "danger" : active ? "accent" : "neutral"}
-      className={cn("h-[52px] w-[52px] shrink-0 text-[var(--chalk-app-text)] transition hover:-translate-y-0.5", danger && "ml-2 !text-[var(--chalk-app-control-active-text)]")}
-    >
-      {icon}
-      {badge && badge > 0 ? <ChalkBadge className="absolute top-1 right-1 min-h-4 min-w-4 px-1 text-[10px] !text-[var(--chalk-app-control-active-text)]" count={badge} max={99} aria-label={`${badge} unread messages`} seed={`${seed}-badge`} tone="danger" /> : null}
-    </ChalkIconButton>
+    <Tooltip content={label} position="top">
+      <ChalkIconButton
+        onClick={onClick}
+        aria-label={label}
+        aria-pressed={active}
+        seed={seed}
+        size="lg"
+        tone={danger ? "danger" : active ? "accent" : "neutral"}
+        className={cn("h-[52px] w-[52px] shrink-0 text-[var(--chalk-app-text)] transition hover:-translate-y-0.5", active && "ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)]", danger && "ml-2 !text-[var(--chalk-app-control-active-text)]")}
+      >
+        {icon}
+        {badge && badge > 0 ? <ChalkBadge className="absolute top-1 right-1 min-h-4 min-w-4 px-1 text-[10px] !text-[var(--chalk-app-control-active-text)]" count={badge} max={99} aria-label={`${badge} unread messages`} seed={`${seed}-badge`} tone="danger" /> : null}
+      </ChalkIconButton>
+    </Tooltip>
   );
 }
 
@@ -300,7 +305,7 @@ const ControlBarSurface = React.memo(
           );
         case "participants":
           if (!onToggleParticipants) return null;
-          return <ControlBarButton key="participants" icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} seed="control-participants" showLabel={showLabels} data-tour="controls-participants" />;
+          return <ControlBarButton key="participants" icon={<UserGroupIcon />} label="Participants" onClick={onToggleParticipants} active={isParticipantsOpen} seed="control-participants" showLabel={showLabels} data-tour="controls-participants" />;
         case "transcription":
           if (!onToggleTranscription) return null;
           return <ControlBarButton key="transcription" icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} seed="control-transcription" showLabel={showLabels} />;
@@ -395,30 +400,64 @@ const ControlBarSurface = React.memo(
             <ChalkPanel className="order-3 shrink-0 rounded-none p-1" seed="control-compact-interactions">
               <ChalkControlGroup aria-label="Interaction controls" className="gap-1">
                 {buttonsToRender.includes("handraise") && onToggleHandRaise ? (
-                  <ChalkIconButton aria-label={isHandRaised ? "Lower hand" : "Raise hand"} aria-pressed={isHandRaised} onClick={onToggleHandRaise} seed="control-compact-handraise" size="lg" tone={isHandRaised ? "accent" : "neutral"}>
-                    <HandIcon className="h-5 w-5" />
-                  </ChalkIconButton>
+                  <Tooltip content={isHandRaised ? "Lower hand" : "Raise hand"} position="top">
+                    <ChalkIconButton
+                      aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
+                      aria-pressed={isHandRaised}
+                      className={isHandRaised ? "ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : undefined}
+                      onClick={onToggleHandRaise}
+                      seed="control-compact-handraise"
+                      size="lg"
+                      tone={isHandRaised ? "accent" : "neutral"}
+                    >
+                      <HandIcon className="h-5 w-5" />
+                    </ChalkIconButton>
+                  </Tooltip>
                 ) : null}
                 {buttonsToRender.includes("reactions") && onOpenReactions ? (
-                  <ChalkIconButton aria-label="Reactions" onClick={onOpenReactions} seed="control-compact-reactions" size="lg" tone="accent">
-                    <ThumbsUpIcon className="h-5 w-5" />
-                  </ChalkIconButton>
+                  <Tooltip content="Reactions" position="top">
+                    <ChalkIconButton aria-label="Reactions" onClick={onOpenReactions} seed="control-compact-reactions" size="lg" tone="accent">
+                      <ThumbsUpIcon className="h-5 w-5" />
+                    </ChalkIconButton>
+                  </Tooltip>
                 ) : null}
                 {buttonsToRender.includes("whiteboard") && onToggleWhiteboard ? (
-                  <ChalkIconButton aria-label="Whiteboard" aria-pressed={isWhiteboardOpen} onClick={onToggleWhiteboard} seed="control-compact-whiteboard" size="lg" tone={isWhiteboardOpen ? "accent" : "neutral"}>
-                    <Edit02Icon className="h-5 w-5" />
-                  </ChalkIconButton>
+                  <Tooltip content="Board" position="top">
+                    <ChalkIconButton
+                      aria-label="Whiteboard"
+                      aria-pressed={isWhiteboardOpen}
+                      className={isWhiteboardOpen ? "ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : undefined}
+                      onClick={onToggleWhiteboard}
+                      seed="control-compact-whiteboard"
+                      size="lg"
+                      tone={isWhiteboardOpen ? "accent" : "neutral"}
+                    >
+                      <Edit02Icon className="h-5 w-5" />
+                    </ChalkIconButton>
+                  </Tooltip>
                 ) : null}
                 {buttonsToRender.includes("participants") && onToggleParticipants ? (
-                  <ChalkIconButton aria-label="People" aria-pressed={isParticipantsOpen} onClick={onToggleParticipants} seed="control-compact-participants" size="lg" tone={isParticipantsOpen ? "accent" : "neutral"}>
-                    <UserGroupIcon className="h-5 w-5" />
-                  </ChalkIconButton>
+                  <Tooltip content="Participants" position="top">
+                    <ChalkIconButton
+                      aria-label="Participants"
+                      aria-pressed={isParticipantsOpen}
+                      className={isParticipantsOpen ? "ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : undefined}
+                      onClick={onToggleParticipants}
+                      seed="control-compact-participants"
+                      size="lg"
+                      tone={isParticipantsOpen ? "accent" : "neutral"}
+                    >
+                      <UserGroupIcon className="h-5 w-5" />
+                    </ChalkIconButton>
+                  </Tooltip>
                 ) : null}
                 {buttonsToRender.includes("chat") && onToggleChat ? (
                   <div className="relative">
-                    <ChalkIconButton aria-label="Chat" aria-pressed={isChatOpen} onClick={onToggleChat} seed="control-compact-chat" size="lg" tone={isChatOpen ? "accent" : "neutral"}>
-                      <Message01Icon className="h-5 w-5" />
-                    </ChalkIconButton>
+                    <Tooltip content="Chat" position="top">
+                      <ChalkIconButton aria-label="Chat" aria-pressed={isChatOpen} className={isChatOpen ? "ring-2 ring-[var(--chalk-app-control-active-line)] ring-inset" : undefined} onClick={onToggleChat} seed="control-compact-chat" size="lg" tone={isChatOpen ? "accent" : "neutral"}>
+                        <Message01Icon className="h-5 w-5" />
+                      </ChalkIconButton>
+                    </Tooltip>
                     {unreadChatCount > 0 && !isChatOpen ? (
                       <ChalkBadge className="absolute -top-1 -right-1 min-h-4 min-w-4 px-1 text-[10px] !text-[var(--chalk-app-control-active-text)]" count={unreadChatCount} max={99} aria-label={`${unreadChatCount} unread messages`} seed="control-compact-chat-badge" tone="danger" />
                     ) : null}
@@ -435,13 +474,17 @@ const ControlBarSurface = React.memo(
                   </ChalkIconButton>
                 ) : null}
                 {buttonsToRender.includes("more") && onOpenMore ? (
-                  <ChalkIconButton aria-label="More options" onClick={onOpenMore} seed="control-compact-more" size="lg">
-                    <MoreHorizontalIcon className="h-5 w-5" />
-                  </ChalkIconButton>
+                  <Tooltip content="More options" position="top">
+                    <ChalkIconButton aria-label="More options" onClick={onOpenMore} seed="control-compact-more" size="lg">
+                      <MoreHorizontalIcon className="h-5 w-5" />
+                    </ChalkIconButton>
+                  </Tooltip>
                 ) : null}
-                <ChalkButton aria-label="Leave space" className="h-[46px] min-w-[46px] px-3 !text-[var(--chalk-app-control-active-text)]" onClick={onLeft} seed="control-compact-leave" tone="danger" variant="solid">
-                  <CallEnd01Icon className="h-5 w-5" />
-                </ChalkButton>
+                <Tooltip content="Leave Space" position="top">
+                  <ChalkButton aria-label="Leave space" className="h-12 w-12 min-w-12 px-0 !text-[var(--chalk-app-control-active-text)]" onClick={onLeft} seed="control-compact-leave" tone="danger" variant="solid">
+                    <CallEnd01Icon className="h-5 w-5" />
+                  </ChalkButton>
+                </Tooltip>
               </ChalkControlGroup>
             </ChalkPanel>
           </ChalkControlGroup>
@@ -466,7 +509,7 @@ const ControlBarSurface = React.memo(
             return <FloatingControlBarButton key={type} icon={<HandIcon />} label={isHandRaised ? "Lower" : "Raise"} onClick={onToggleHandRaise} active={isHandRaised} seed="control-floating-handraise" />;
           case "participants":
             if (!onToggleParticipants) return null;
-            return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} seed="control-floating-participants" />;
+            return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="Participants" onClick={onToggleParticipants} active={isParticipantsOpen} seed="control-floating-participants" />;
           case "chat":
             if (!onToggleChat) return null;
             return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} seed="control-floating-chat" />;
@@ -502,7 +545,7 @@ const ControlBarSurface = React.memo(
 
       return (
         <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
-          <ChalkPanel className={cn("pointer-events-auto max-w-full rounded-none p-2", className)} role="toolbar" aria-label="Space controls" seed="control-floating-shell" style={themeVariables as React.CSSProperties}>
+          <ChalkPanel className={cn("group pointer-events-auto max-w-full rounded-none p-2", className)} role="toolbar" aria-label="Space controls" seed="control-floating-shell" style={themeVariables as React.CSSProperties} filled={false}>
             <ChalkControlGroup className="max-w-full gap-2 overflow-visible">
               {buttonsToRender.includes("mic") ? (
                 <DevicePopover
@@ -523,7 +566,9 @@ const ControlBarSurface = React.memo(
               {buttonsToRender.includes("video") ? (
                 <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
               ) : null}
-              {buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}
+              <div className="pointer-events-none -ml-2 grid min-w-0 grid-cols-[0fr] -translate-x-1.5 opacity-0 transition-[grid-template-columns,margin,opacity,transform] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[grid-template-columns,opacity,transform] group-hover:pointer-events-auto group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:ml-0 group-focus-within:grid-cols-[1fr] group-focus-within:translate-x-0 group-focus-within:opacity-100 motion-reduce:transition-none">
+                <div className="-my-2 flex min-w-0 items-center gap-2 overflow-hidden py-2">{buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}</div>
+              </div>
               {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger seed="control-floating-leave" /> : null}
             </ChalkControlGroup>
           </ChalkPanel>
@@ -565,7 +610,6 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
   const self = useSelf();
   const media = useMedia();
   const chat = useChat();
-  const connection = useConnection();
   const canPublishScreen = useCan("publishScreen");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
@@ -573,15 +617,9 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
   const microphoneEnabled = media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting";
   const cameraEnabled = media.local.camera.state === "enabled" || media.local.camera.state === "requesting";
   const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
-  const episodeStart = connection.episode?.startedAt ? Date.parse(connection.episode.startedAt) : null;
-  const [now, setNow] = useState(() => Date.now());
+  const measuredEpisodeDuration = useEpisodeDuration();
+  const episodeDuration = props.duration ?? measuredEpisodeDuration;
   const [commandError, setCommandError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!episodeStart) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [episodeStart]);
 
   const run = useCallback(
     async (command: () => Promise<unknown>) => {
@@ -623,7 +661,7 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
       <ControlBarSurface
         {...props}
         buttons={buttons}
-        duration={episodeStart ? Math.max(0, Math.floor((now - episodeStart) / 1000)) : 0}
+        duration={episodeDuration}
         isMuted={!microphoneEnabled}
         isVideoEnabled={cameraEnabled}
         isScreenSharing={screenSharing}

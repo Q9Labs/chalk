@@ -9,7 +9,7 @@ seams.
 
 Provenance: the rulings behind every entry, with reasoning and rejected
 candidates, live in
-`scratchpad/ubiquitous-language-decision-session-log-2026-08-03.md`. The
+`scratchpad/history/2026-W32.md`. The
 superseded `sdks/ubiquitous-language.md` is deleted; its UI shape catalog
 remains in git history as input for the React-wave design sheet. A CI
 ratchet (per-surface banned-term counts that may only decrease) enforces this
@@ -216,16 +216,6 @@ participant identity, expirations. Replaces ParticipantAccess. Customers
 never construct or inspect it; the client's `getAccess` callback returns
 it and Connection manages its refresh.
 
-### EpisodeLease
-
-The broker's Durable Object: a bounded, expiring edge claim embodying
-one live Episode — it mints AccessGrants, creates client sessions with
-the media plane, and expires the run by alarm. Replaces the broker's
-MeetingSession. A lease is not an Episode; it is the edge's claim on
-media infrastructure for one. `MeetingStore` → `LeaseStore`,
-`meetingLifetimeSeconds` → `episodeDeadlineSeconds`, and the package is
-`infrastructure/episode-broker` (worker/stack/env names follow).
-
 ### React bindings
 
 `@q9labsai/chalk-react` and `@q9labsai/chalk-react-native` expose an
@@ -244,15 +234,14 @@ commands); one hook per snapshot slice — `useConnection()`, `useSelf()`,
 slice's `can()`. No `Chalk` prefix (the package is the namespace), and
 no other public hooks: anything a component needs comes from these.
 
-## The five "sessions", resolved
+## The internal "sessions", resolved
 
-The five internal abstractions that shared the banned word each have a
+The four internal abstractions that shared the banned word each have a
 ruled true name:
 
 | Old name                      | True name                                                                  |
 | ----------------------------- | -------------------------------------------------------------------------- |
 | Go `sessionlifecycle`         | Episode-named lifecycle package                                            |
-| Broker `MeetingSession` (DO)  | `EpisodeLease` (see entry)                                                 |
 | RN `ClientSession`            | Dies, no successor — its duties are Connection's access loop + AccessGrant |
 | Elixir `Live.Session`         | `Live.Episode`                                                             |
 | Elixir `Sessions.Coordinator` | `Episodes.Coordinator`                                                     |

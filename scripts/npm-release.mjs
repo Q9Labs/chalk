@@ -12,19 +12,19 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = "https://registry.npmjs.org/";
 const githubRepository = "Q9Labs/chalk";
-const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs", "scripts/npm-release.test.mjs"]);
+const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs"]);
 const attwIgnoreRules = ["cjs-resolves-to-esm", "internal-resolution-error"];
 const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"];
 
 export const releasePackages = Object.freeze([
-  { directory: "packages/diagnostics-contracts", name: "@q9labsai/diagnostics-contracts", version: "0.1.0" },
-  { directory: "packages/assets", name: "@q9labsai/chalk-assets", version: "4.0.1" },
-  { directory: "packages/facehash", name: "@q9labsai/facehash", version: "4.0.1" },
-  { directory: "packages/ui", name: "@q9labsai/chalk-ui", version: "4.0.1" },
-  { directory: "packages/whiteboard", name: "@q9labsai/chalk-whiteboard", version: "4.0.1" },
-  { directory: "sdks/typescript/client", name: "@q9labsai/chalk-client", version: "4.0.1" },
-  { directory: "sdks/typescript/react", name: "@q9labsai/chalk-react", version: "4.0.1" },
-  { directory: "sdks/typescript/react-native", name: "@q9labsai/chalk-react-native", version: "4.0.1" },
+  { directory: "packages/diagnostics-contracts", name: "@q9labsai/diagnostics-contracts", version: "0.1.1" },
+  { directory: "packages/assets", name: "@q9labsai/chalk-assets", version: "4.1.15" },
+  { directory: "packages/facehash", name: "@q9labsai/facehash", version: "4.1.15" },
+  { directory: "packages/ui", name: "@q9labsai/chalk-ui", version: "4.1.15" },
+  { directory: "packages/whiteboard", name: "@q9labsai/chalk-whiteboard", version: "4.1.15" },
+  { directory: "sdks/typescript/client", name: "@q9labsai/chalk-client", version: "4.1.15" },
+  { directory: "sdks/typescript/react", name: "@q9labsai/chalk-react", version: "4.1.15" },
+  { directory: "sdks/typescript/react-native", name: "@q9labsai/chalk-react-native", version: "4.1.15" },
 ]);
 
 const packageByName = new Map(releasePackages.map((releasePackage) => [releasePackage.name, releasePackage]));

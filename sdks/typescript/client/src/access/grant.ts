@@ -21,18 +21,29 @@ export type ParticipantSyncAccess = {
   readonly expiresAt: string;
 };
 
-export type ParticipantMediaAccess = {
-  readonly token: ParticipantMediaCredential;
-  readonly expiresAt: string;
-  readonly provider: "cloudflare_sfu";
-  readonly clientPayload: {
-    readonly connectionId: string;
-    readonly stunServer: string;
-  };
-};
+export type ParticipantMediaAccess =
+  | {
+      readonly token: ParticipantMediaCredential;
+      readonly expiresAt: string;
+      readonly provider: "cloudflare_sfu";
+      readonly clientPayload: {
+        readonly connectionId: string;
+        readonly stunServer: string;
+      };
+    }
+  | {
+      readonly token: ParticipantMediaCredential;
+      readonly expiresAt: string;
+      readonly provider: "cloudflare_rtk";
+      readonly clientPayload: {
+        readonly providerSubject: string;
+        readonly token: string;
+      };
+    };
 
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
+  readonly episodeStartedAt?: string | null;
   readonly sync: ParticipantSyncAccess;
   readonly media: ParticipantMediaAccess;
   readonly diagnostics?: EpisodeDiagnosticCredential | null;
@@ -55,9 +66,11 @@ export class AccessGrantError extends TypeError {
 export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
   if (!isRecord(value)) throw new AccessGrantError();
   const subject = parseSubject(value.subject);
+  const episodeStartedAt = parseOptionalDateTime(value.episode_started_at);
   const diagnostics = parseEpisodeDiagnosticCredential(value.diagnostics);
   return {
     subject,
+    episodeStartedAt,
     sync: parseSyncAccess(value.sync),
     media: parseMediaAccess(value.media),
     diagnostics: diagnostics?.generation === subject.participantGeneration ? diagnostics : null,
@@ -77,12 +90,13 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
       participant_id: value.subject.participantId,
       participant_generation: value.subject.participantGeneration,
     },
+    ...(value.episodeStartedAt ? { episode_started_at: value.episodeStartedAt } : {}),
     sync: { token: value.sync.token, expires_at: value.sync.expiresAt },
     media: {
       token: value.media.token,
       expires_at: value.media.expiresAt,
       provider: value.media.provider,
-      client_payload: { ...value.media.clientPayload },
+      client_payload: mediaClientPayload(value.media),
     },
     ...(value.diagnostics
       ? {
@@ -158,17 +172,44 @@ function parseSyncAccess(value: unknown): ParticipantSyncAccess {
 }
 
 function parseMediaAccess(value: unknown): ParticipantMediaAccess {
-  if (!isRecord(value) || value.provider !== "cloudflare_sfu" || !isRecord(value.client_payload ?? value.clientPayload)) throw new AccessGrantError();
-  const payload = (value.client_payload ?? value.clientPayload) as Record<string, unknown>;
-  return {
-    token: requireCredential(value.token, "chalk-media") as ParticipantMediaCredential,
-    expiresAt: requireDateTime(value.expires_at ?? value.expiresAt),
-    provider: value.provider,
-    clientPayload: {
-      connectionId: requireNonEmptyString(payload.connectionId),
-      stunServer: requireNonEmptyString(payload.stunServer),
-    },
-  };
+  if (!isRecord(value)) throw new AccessGrantError();
+  const payload = value.client_payload ?? value.clientPayload;
+  if (!isRecord(payload)) throw new AccessGrantError();
+  const token = requireCredential(value.token, "chalk-media") as ParticipantMediaCredential;
+  const expiresAt = requireDateTime(value.expires_at ?? value.expiresAt);
+  switch (value.provider) {
+    case "cloudflare_sfu":
+      return {
+        token,
+        expiresAt,
+        provider: value.provider,
+        clientPayload: {
+          connectionId: requireNonEmptyString(payload.connectionId),
+          stunServer: requireNonEmptyString(payload.stunServer),
+        },
+      };
+    case "cloudflare_rtk":
+      return {
+        token,
+        expiresAt,
+        provider: value.provider,
+        clientPayload: {
+          providerSubject: requireNonEmptyString(payload.provider_subject ?? payload.providerSubject),
+          token: requireNonEmptyString(payload.token),
+        },
+      };
+    default:
+      throw new AccessGrantError();
+  }
+}
+
+function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<string, string>> {
+  switch (value.provider) {
+    case "cloudflare_sfu":
+      return { connectionId: value.clientPayload.connectionId, stunServer: value.clientPayload.stunServer };
+    case "cloudflare_rtk":
+      return { provider_subject: value.clientPayload.providerSubject, token: value.clientPayload.token };
+  }
 }
 
 function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media"): string {
@@ -190,6 +231,11 @@ function requireDateTime(value: unknown): string {
   const dateTime = requireNonEmptyString(value);
   if (!Number.isFinite(Date.parse(dateTime))) throw new AccessGrantError();
   return dateTime;
+}
+
+function parseOptionalDateTime(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "" || !Number.isFinite(Date.parse(value))) return null;
+  return value;
 }
 
 function requireNonEmptyString(value: unknown): string {

@@ -24,6 +24,7 @@ export interface ChatPanelProps {
   readonly className?: string;
   readonly title?: string;
   readonly variant?: "sidebar" | "mobile";
+  readonly generatedAvatars?: boolean;
 }
 
 interface ChatPanelSurfaceProps extends ChatPanelProps {
@@ -65,6 +66,7 @@ const ChatPanelSurface = React.memo(
     placeholder = "Type a message...",
     title = "Chat",
     variant = "sidebar",
+    generatedAvatars = true,
     error,
     className,
   }: ChatPanelSurfaceProps) => {
@@ -203,7 +205,7 @@ const ChatPanelSurface = React.memo(
     };
 
     return (
-      <ChalkPanel className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent p-0 text-[var(--chalk-app-text)]", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
+      <ChalkPanel className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent p-0 text-[var(--chalk-app-text)]", className)} contentClassName="flex h-full min-h-0 flex-col" role="complementary" aria-label="Chat panel">
         <div className="flex h-full min-h-0 w-full flex-col">
           {variant === "sidebar" ? (
             <header className="group relative flex items-center justify-between bg-[var(--chalk-app-panel)] px-5 py-[18px]">
@@ -261,6 +263,7 @@ const ChatPanelSurface = React.memo(
                           showSender={index === 0}
                           showTimestamp={index === group.messages.length - 1}
                           showAvatar
+                          generatedAvatars={generatedAvatars}
                           status={readBy.length > 0 ? "read" : "sent"}
                           attachments={message.attachments}
                           readBy={readBy}
@@ -275,7 +278,16 @@ const ChatPanelSurface = React.memo(
             )}
             {pendingMessages.map((pending) => (
               <div key={pending.clientMessageId} className="my-2">
-                <MessageBubble content={pending.text} senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"} timestamp={new Date().toISOString()} isLocal status="pending" attachments={pending.attachments} onResolveAttachmentUrl={onResolveAttachmentUrl} />
+                <MessageBubble
+                  content={pending.text}
+                  senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"}
+                  timestamp={new Date().toISOString()}
+                  isLocal
+                  status="pending"
+                  attachments={pending.attachments}
+                  generatedAvatars={generatedAvatars}
+                  onResolveAttachmentUrl={onResolveAttachmentUrl}
+                />
                 {pending.status === "failed" ? (
                   <div className="mr-14 flex items-center justify-end gap-2 text-xs text-[var(--chalk-app-text-muted)]">
                     <span>{pending.error?.message || "Not sent"}</span>

@@ -13,6 +13,7 @@ const RECENT_AUTH_HEADER = "x-chalk-recent-auth";
 const CSRF_HEADER = "x-chalk-csrf";
 const RECENT_AUTH_GOOGLE_MESSAGE = "chalk.recent-auth.google.complete";
 const UUID_SEGMENT_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
+const REQUEST_HANDLE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 
 type BoundaryRoute = {
   upstreamPath: string;
@@ -79,7 +80,7 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
     }
 
     const upstreamURL = resolveUpstreamURL(env.CHALK_API_ORIGIN, route.upstreamPath, allowedSearch(url, route.queryParameters));
-    const headers = upstreamHeaders(request, journeyID, accountToken);
+    const headers = upstreamHeaders(request, journeyID, accountToken, route.mutation ? url.origin : undefined);
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : await boundedBody(request, route.maxBodyBytes ?? MAX_BODY_BYTES);
     const upstream = await fetcher(upstreamURL, { method: request.method, headers, body, redirect: "manual" });
     let response: Response;
@@ -203,6 +204,22 @@ function resolveSpaceRoute(method: string, segments: string[], tenantID: string)
   }
   if (segments[5] === "archive" && segments.length === 6 && method === "POST") return { upstreamPath: `${spacePath}/archive`, authenticated: true, mutation: true };
   if (segments[5] === "restore" && segments.length === 6 && method === "POST") return { upstreamPath: `${spacePath}/restore`, authenticated: true, mutation: true };
+  if (segments[5] === "public-invite") {
+    const publicInvitePath = `${spacePath}/public-invite`;
+    if (segments.length === 6 && method === "GET") return { upstreamPath: publicInvitePath, authenticated: true };
+    if (segments.length === 6 && method === "PATCH") return { upstreamPath: publicInvitePath, authenticated: true, mutation: true };
+    if (segments.length === 7 && segments[6] === "rotations" && method === "POST") return { upstreamPath: `${publicInvitePath}/rotations`, authenticated: true, mutation: true };
+    return undefined;
+  }
+  if (segments[5] === "public-admission-requests") {
+    const admissionRequestsPath = `${spacePath}/public-admission-requests`;
+    if (segments.length === 6 && method === "GET") return { upstreamPath: admissionRequestsPath, authenticated: true, queryParameters: ["state"] };
+    if (segments.length === 8 && REQUEST_HANDLE_PATTERN.test(segments[6] ?? "") && method === "POST") {
+      const action = segments[7];
+      if (action === "approval" || action === "denial") return { upstreamPath: `${admissionRequestsPath}/${segments[6]}/${action}`, authenticated: true, mutation: true };
+    }
+    return undefined;
+  }
   if (segments[5] !== "episodes") return undefined;
 
   const episodesPath = `${spacePath}/episodes`;
@@ -259,11 +276,12 @@ function validateMutationRequest(request: Request, url: URL): Response | undefin
   return undefined;
 }
 
-function upstreamHeaders(request: Request, journeyID: string, accountToken?: string): Headers {
+function upstreamHeaders(request: Request, journeyID: string, accountToken?: string, validatedOrigin?: string): Headers {
   const headers = forwardedContextHeaders(request, journeyID);
   headers.set("Accept", "application/json");
   if (request.headers.get("content-type")) headers.set("Content-Type", "application/json");
   if (accountToken) headers.set("Authorization", `Bearer ${accountToken}`);
+  if (validatedOrigin) headers.set("Origin", validatedOrigin);
   const requestKey = request.headers.get(IDEMPOTENCY_HEADER);
   if (requestKey) headers.set("Idempotency-Key", requestKey);
   const recentAuth = request.headers.get(RECENT_AUTH_HEADER);

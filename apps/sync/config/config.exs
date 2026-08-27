@@ -9,9 +9,8 @@ config :chalk_sync,
   listen_ip: {127, 0, 0, 1},
   max_synchronous_wal_lag_bytes: 0,
   port: 4100,
-  # Sync requires its stateholder tables, constraints, and columns at this
-  # floor. Later additive API and recorder migrations remain compatible.
-  minimum_compatible_sync_migration: 20_260_713_130_000,
+  # Sync requires the complete release migration set before it reports ready.
+  minimum_compatible_sync_migration: 20_260_819_130_000,
   provider_bridge: nil,
   retention_cleanup_interval_ms: 1_000,
   require_production_auth: false,

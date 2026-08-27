@@ -1,4 +1,4 @@
-import type { CloudflareSFUSnapshot } from "../media";
+import type { ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import type { AccessSubject } from "../access/grant";
 import type { ChalkChatState, ChalkCollaborationCapability, ChalkIncomingMediaRequest, ChalkLocalMedia, ChalkMediaSource, ChalkParticipantMediaState, ChalkReactionEvent, ConnectionConnectionPhase, ConnectionFailure, ConnectionSnapshot, ConnectionState, ChalkWhiteboardSummary } from "./types";
@@ -19,7 +19,7 @@ const MEDIA_CONNECTION_PHASES = {
   live: "healthy",
   failed: "failed",
   stopped: "stopped",
-} as const satisfies Readonly<Record<CloudflareSFUSnapshot["connection"]["phase"], ConnectionConnectionPhase>>;
+} as const satisfies Readonly<Record<ConnectionMediaSnapshot["connection"]["phase"], ConnectionConnectionPhase>>;
 const EMPTY_CONTROL_SLICES = {
   admissionPolicy: null,
   participants: [],
@@ -36,7 +36,7 @@ type ConnectionProjectionInput = {
   readonly state: ConnectionState;
   readonly subject: AccessSubject | null;
   readonly sync: V1EpisodeSnapshot | null;
-  readonly media: CloudflareSFUSnapshot | null;
+  readonly media: ConnectionMediaSnapshot | null;
   readonly localTracks: ReadonlyMap<ChalkMediaSource, MediaStreamTrack>;
   readonly localIntent: Readonly<Record<"microphone" | "camera", boolean>>;
   readonly failure: ConnectionFailure | null;
@@ -48,7 +48,7 @@ type ConnectionProjectionInput = {
   readonly incomingMediaRequests?: readonly ChalkIncomingMediaRequest[];
 };
 type SnapshotControl = NonNullable<V1EpisodeSnapshot["control"]>;
-type LocalPublication = CloudflareSFUSnapshot["localTracks"][number];
+type LocalPublication = ConnectionMediaSnapshot["localTracks"][number];
 
 export function initialConnectionSnapshot(): ConnectionSnapshot {
   return freezeSnapshot({
@@ -161,7 +161,7 @@ function controlSlices(control: SnapshotControl | null): Pick<ConnectionSnapshot
   };
 }
 
-function remoteMediaFor(media: CloudflareSFUSnapshot | null): ConnectionSnapshot["remoteMedia"] {
+function remoteMediaFor(media: ConnectionMediaSnapshot | null): ConnectionSnapshot["remoteMedia"] {
   return media?.remoteTracks.map((publication) => ({ participantId: publication.participantId, source: publication.source, publicationId: publication.publicationId, track: publication.track })) ?? [];
 }
 
@@ -269,6 +269,7 @@ function emptyWhiteboard(): ChalkWhiteboardSummary {
     capabilities: [],
     canDraw: false,
     canClear: false,
+    presenting: false,
     error: null,
   };
 }
@@ -277,7 +278,7 @@ function mapSyncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefine
   return phase === undefined ? "idle" : SYNC_CONNECTION_PHASES[phase];
 }
 
-function mapMediaPhase(phase: CloudflareSFUSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
+function mapMediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
   return phase === undefined ? "idle" : MEDIA_CONNECTION_PHASES[phase];
 }
 

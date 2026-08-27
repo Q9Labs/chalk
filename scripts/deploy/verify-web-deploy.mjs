@@ -4,8 +4,9 @@ const DEFAULT_DEADLINE_MS = 90_000;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const DIAGNOSTICS_PROBE_PATH = "/_internal/episode-diagnostics/chalkdiag%3Av1%3Aproduction%3Adiag01";
+const DIAGNOSTICS_DOCUMENT_PROBE_PATH = "/developer/episode-diagnostics/chalk.episode%3A00000000-0000-4000-8000-000000000001";
 
-export async function verifyWebDeploy({ baseURL, expectedSHA, production = false, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }) {
+export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }) {
   const origin = normalizeBaseURL(baseURL);
   const normalizedSHA = normalizeSHA(expectedSHA);
   const deadline = Date.now() + deadlineMs;
@@ -15,7 +16,7 @@ export async function verifyWebDeploy({ baseURL, expectedSHA, production = false
   while (Date.now() <= deadline) {
     attempt += 1;
     try {
-      await verifyOnce(origin, normalizedSHA, production, requestTimeoutMs);
+      await verifyOnce(origin, normalizedSHA, requestTimeoutMs);
       console.log(`Web deployment verified at ${origin.origin} on attempt ${attempt}.`);
       return;
     } catch (error) {
@@ -39,11 +40,11 @@ export function parseArguments(arguments_) {
   return { baseURL: positional[0], expectedSHA: normalizeSHA(positional[1]), production };
 }
 
-async function verifyOnce(baseURL, expectedSHA, production, requestTimeoutMs) {
+async function verifyOnce(baseURL, expectedSHA, requestTimeoutMs) {
   await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs);
   await verifyBoundaryHealth(baseURL, requestTimeoutMs);
   await verifyDiagnosticsGateway(baseURL, requestTimeoutMs);
-  if (production) await verifyLocalChalkHealth(baseURL, requestTimeoutMs);
+  await verifyDiagnosticsDocument(baseURL, requestTimeoutMs);
 }
 
 async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
@@ -73,15 +74,18 @@ async function verifyDiagnosticsGateway(baseURL, requestTimeoutMs) {
   requireStatus(diagnosticsGateway, 401, "Episode Diagnostics gateway unauthenticated probe");
 }
 
-async function verifyLocalChalkHealth(baseURL, requestTimeoutMs) {
-  const localChalkHealth = await request(endpointURL(baseURL, "/local-chalk/health"), requestTimeoutMs);
-  requireStatus(localChalkHealth, 200, "production local Chalk health");
+async function verifyDiagnosticsDocument(baseURL, requestTimeoutMs) {
+  const diagnosticsDocument = await request(endpointURL(baseURL, DIAGNOSTICS_DOCUMENT_PROBE_PATH), requestTimeoutMs, "text/html");
+  requireStatus(diagnosticsDocument, 200, "Episode Diagnostics document deep link");
+  if (!diagnosticsDocument.headers.get("content-type")?.startsWith("text/html")) {
+    throw new Error("Episode Diagnostics document deep link did not return HTML");
+  }
 }
 
-async function request(url, timeoutMs) {
+async function request(url, timeoutMs, accept = "application/json") {
   return fetch(url, {
     cache: "no-store",
-    headers: { Accept: "application/json" },
+    headers: { Accept: accept },
     signal: AbortSignal.timeout(timeoutMs),
   });
 }

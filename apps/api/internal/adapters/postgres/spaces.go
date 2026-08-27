@@ -197,6 +197,7 @@ func (r SpaceRepository) withSpaceRoles(ctx context.Context, space spaces.Space)
 func createSpaceParams(input spaces.CreateSpaceInput) sqlc.CreateSpaceParams {
 	return sqlc.CreateSpaceParams{
 		ID:                            uuid(input.ID),
+		PublicInviteHandle:            append([]byte(nil), input.PublicInviteHandle[:]...),
 		Name:                          input.Name,
 		TenantID:                      uuid(input.TenantID),
 		Slug:                          input.Slug,

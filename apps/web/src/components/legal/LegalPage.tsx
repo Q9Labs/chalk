@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { Logo } from "@q9labsai/chalk-react";
 
 type LegalPageKind = "privacy" | "terms";
 
@@ -89,7 +90,7 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
     <div className="legal-page">
       <header className="legal-header">
         <a href="/" className="legal-brand" aria-label="Chalk home">
-          <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
+          <Logo accessibilityLabel={null} color="currentColor" height={30} motion="orbit-burst" variant="wordmark" />
         </a>
         <nav className="legal-nav" aria-label="Legal navigation">
           <a href="/privacy" className={kind === "privacy" ? "is-active" : ""}>
@@ -177,10 +178,10 @@ function PrivacyPolicy() {
           </tr>
           <tr>
             <td>
-              <code>__Secure-chalk_participant_credential</code>
+              <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>
             </td>
-            <td>Lets you return to a Space you were admitted to</td>
-            <td>1 hour</td>
+            <td>Keeps your public Space arrival available in this browser (HttpOnly, Secure)</td>
+            <td>Until you leave or close your browser</td>
           </tr>
         </tbody>
       </table>

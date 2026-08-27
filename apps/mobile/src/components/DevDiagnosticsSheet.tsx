@@ -69,7 +69,7 @@ export function DevDiagnosticsSheet({ visible, onClose, onClearSpaceContext, onR
             <Row label="Target" value={diagnostics.environment.target} />
             <Row label="Build" value={diagnostics.environment.buildProfile} />
             <Row label="Route" value={diagnostics.environment.routeKind} />
-            <Row label="Broker" value={diagnostics.environment.brokerUrl} />
+            <Row label="API base" value={diagnostics.environment.apiBaseURL} />
             <Row label="Space" value={diagnostics.environment.routeSpaceId} />
           </Section>
           <Section icon={SmartPhone01Icon} title="Device">

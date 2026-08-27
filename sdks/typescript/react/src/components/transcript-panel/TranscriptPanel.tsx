@@ -485,14 +485,8 @@ const TranscriptPanelSurface = React.memo(
     // Sidebar variant
     if (variant === "sidebar") {
       return (
-        <ChalkPanel
-          className={cn("relative h-full w-full overflow-hidden bg-transparent p-0 font-sans", !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
-          data-tour="transcription-panel"
-          role="complementary"
-          aria-label="Live transcription"
-          style={themeVariables as React.CSSProperties}
-        >
-          <div className="flex h-full w-full flex-col">
+        <ChalkPanel className={cn("relative h-full w-full overflow-hidden bg-transparent p-0 font-sans", className)} contentClassName="flex h-full min-h-0 flex-col" data-tour="transcription-panel" role="complementary" aria-label="Live transcription" style={themeVariables as React.CSSProperties}>
+          <div className="flex h-full min-h-0 w-full flex-col">
             {/* Header */}
             <header className="group relative flex items-center justify-between px-6 pb-4 pt-6">
               <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-canvas))" part="transcript-header" />
@@ -520,8 +514,8 @@ const TranscriptPanelSurface = React.memo(
             </div>
 
             {/* Content */}
-            <div className="flex flex-1 flex-col overflow-y-auto px-6 pb-6">
-              <ChalkPanel ref={containerRef} className="relative min-h-[300px] flex-1 overflow-y-auto rounded-2xl bg-[var(--chalk-stage)] p-4" onScroll={handleScroll}>
+            <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+              <ChalkPanel ref={containerRef} className="relative min-h-0 flex-1 overflow-y-auto rounded-2xl bg-[var(--chalk-stage)] p-4" contentClassName="min-h-full" onScroll={handleScroll}>
                 {renderTranscriptContent()}
                 {renderNewContentIndicator()}
               </ChalkPanel>

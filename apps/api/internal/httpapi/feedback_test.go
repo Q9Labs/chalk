@@ -20,6 +20,14 @@ type feedbackHTTPServiceStub struct {
 	calls   int
 }
 
+type feedbackAccountAuthorizerStub struct {
+	scope EpisodeDiagnosticsAccountScope
+}
+
+func (s feedbackAccountAuthorizerStub) AuthorizeEpisodeDiagnosticsAccount(context.Context, authentication.Principal) (EpisodeDiagnosticsAccountScope, error) {
+	return s.scope, nil
+}
+
 func (s *feedbackHTTPServiceStub) Submit(context.Context, feedback.SubmitInput) (feedback.Receipt, error) {
 	s.calls++
 	return s.receipt, nil
@@ -144,7 +152,7 @@ func TestFeedbackOperatorRejectsDashboardAccountPrincipal(t *testing.T) {
 	request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: mustHTTPFeedbackID(t, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")}))
 	response := httptest.NewRecorder()
 
-	_, ok := authenticateFeedbackOperator(response, request, FeedbackHTTPOptions{Operator: EpisodeDiagnosticsHTTPOptions{Mode: "hosted", AccountAuthorizer: episodeDiagnosticsAccountAuthorizerStub{scope: episodediagnosticsAccountScopeFixture{subjectHash: "account", authorizedTenantIDs: []string{"11111111-1111-4111-8111-111111111111"}, capabilities: map[string]struct{}{"feedback.read": {}}}}}}, "feedback.read")
+	_, ok := authenticateFeedbackOperator(response, request, FeedbackHTTPOptions{Operator: EpisodeDiagnosticsHTTPOptions{Mode: "hosted", AccountAuthorizer: feedbackAccountAuthorizerStub{scope: EpisodeDiagnosticsAccountScope{SubjectHash: "account", AuthorizedTenantIDs: []string{"11111111-1111-4111-8111-111111111111"}, Capabilities: map[string]struct{}{"feedback.read": {}}}}}}, "feedback.read")
 	if ok || response.Code != http.StatusUnauthorized {
 		t.Fatalf("dashboard account operator = %v, status = %d; want false, 401", ok, response.Code)
 	}

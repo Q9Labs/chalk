@@ -114,7 +114,7 @@ func (r *tracedDashboardSpaceJoinRepository) JoinSelf(_ context.Context, input e
 	})
 	r.recorder.Add("database", "COMMIT", "make the Episode and account Participant durable together", nil)
 	r.committed = true
-	result := episodes.SelfJoinResult{Episode: r.durableEpisode, Participant: participant, EpisodeCreated: created}
+	result := episodes.SelfJoinResult{Episode: r.durableEpisode, Participant: participant, EpisodeCreated: created, ParticipantCreated: created}
 	span.End("account join committed", dashboardSpaceJoinResultFields(result), nil)
 	return result, nil
 }

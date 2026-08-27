@@ -335,7 +335,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		}
 		var syncCredential synctokens.Token
 		if tokens != nil {
-			token, err := tokens.Issue(ctx, synctokens.Input{TenantID: admission.Participant.TenantID, SpaceID: admission.Participant.SpaceID, EpisodeID: admission.Participant.EpisodeID, ParticipantID: admission.Participant.ID, ParticipantGeneration: admission.Participant.Generation, AdmissionLifecycleIntentID: admission.Intent.ID, DisplayName: request.Body.Name, Role: admission.Participant.Role, Capabilities: append([]string(nil), admission.Participant.Capabilities...)})
+			token, err := tokens.Issue(ctx, synctokens.Input{TenantID: admission.Participant.TenantID, SpaceID: admission.Participant.SpaceID, EpisodeID: admission.Participant.EpisodeID, StartedAt: &admission.Episode.StartedAt, ParticipantID: admission.Participant.ID, ParticipantGeneration: admission.Participant.Generation, AdmissionLifecycleIntentID: admission.Intent.ID, DisplayName: request.Body.Name, Role: admission.Participant.Role, Capabilities: append([]string(nil), admission.Participant.Capabilities...)})
 			if err != nil {
 				return participantLifecycleResponse{}, err
 			}

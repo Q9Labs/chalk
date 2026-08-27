@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { decodeWhiteboardV1ClientFrame, decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
+import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
 
 const sceneId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 
 describe("whiteboard-v1 codec", () => {
-  it("round-trips strict client frames", () => {
+  it("encodes strict client frames", () => {
     const frame = {
       type: "hello",
       protocol: "whiteboard-v1",
@@ -12,7 +12,27 @@ describe("whiteboard-v1 codec", () => {
       cursor: { scene_id: sceneId, revision: "18446744073709551615" },
     } as const;
 
-    expect(decodeWhiteboardV1ClientFrame(JSON.parse(encodeWhiteboardV1ClientFrame(frame)))).toEqual(frame);
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame(frame))).toEqual(frame);
+
+    const extended = { ...frame, extensions: [{ name: "presentation_v1" }] } as const;
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame(extended))).toEqual(extended);
+  });
+
+  it("accepts both legacy and negotiated welcomes", () => {
+    const welcome = {
+      type: "welcome",
+      protocol: "whiteboard-v1",
+      participant_id: sceneId,
+      participant_generation: 1,
+      capabilities: ["drawWhiteboard"],
+      participant_capabilities: ["drawWhiteboard"],
+      scene_id: sceneId,
+      revision: "1",
+      can_draw: true,
+    } as const;
+
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify(welcome))).toEqual(welcome);
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ ...welcome, presenting: true }))).toEqual({ ...welcome, presenting: true });
   });
 
   it("rejects unknown server fields", () => {
@@ -30,7 +50,7 @@ describe("whiteboard-v1 codec", () => {
 
   it("rejects the legacy participant wire field", () => {
     expect(() =>
-      decodeWhiteboardV1ClientFrame({
+      encodeWhiteboardV1ClientFrame({
         type: "set_draw_permission",
         operation_id: "operation-000001",
         participant_session_id: sceneId,

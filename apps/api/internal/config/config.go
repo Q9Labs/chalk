@@ -8,9 +8,12 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 const (
@@ -33,15 +36,24 @@ const (
 	OpsIngestToken        = APIOpsIngestToken
 	APIVersion            = "CHALK_API_VERSION"
 
-	AuthEmailVerificationRequired = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
-	AuthRecentAuthSecret          = "CHALK_AUTH_RECENT_AUTH_SECRET"
-	AuthOAuthStateTTLMS           = "CHALK_AUTH_OAUTH_STATE_TTL_MS"
-	AuthSessionTTLMS              = "CHALK_AUTH_SESSION_TTL_MS"
-	SyncTokenAudience             = "CHALK_SYNC_TOKEN_AUDIENCE"
-	SyncTokenIssuer               = "CHALK_SYNC_TOKEN_ISSUER"
-	SyncTokenKeyID                = "CHALK_SYNC_TOKEN_KEY_ID"
-	SyncTokenPrivateKey           = "CHALK_SYNC_TOKEN_PRIVATE_KEY"
-	MediaTokenVerificationKeys    = "CHALK_MEDIA_TOKEN_VERIFICATION_KEYS"
+	AuthEmailVerificationRequired    = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
+	AuthRecentAuthSecret             = "CHALK_AUTH_RECENT_AUTH_SECRET"
+	AuthOAuthStateTTLMS              = "CHALK_AUTH_OAUTH_STATE_TTL_MS"
+	AuthSessionTTLMS                 = "CHALK_AUTH_SESSION_TTL_MS"
+	SyncTokenAudience                = "CHALK_SYNC_TOKEN_AUDIENCE"
+	SyncTokenIssuer                  = "CHALK_SYNC_TOKEN_ISSUER"
+	SyncTokenKeyID                   = "CHALK_SYNC_TOKEN_KEY_ID"
+	SyncTokenPrivateKey              = "CHALK_SYNC_TOKEN_PRIVATE_KEY"
+	MediaTokenVerificationKeys       = "CHALK_MEDIA_TOKEN_VERIFICATION_KEYS"
+	PublicInviteManagedTenantID      = "CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID"
+	PublicInviteDefaultMediaPlane    = "CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE"
+	PublicInviteWebOrigin            = "CHALK_PUBLIC_INVITE_WEB_ORIGIN"
+	PublicInviteKeyID                = "CHALK_PUBLIC_INVITE_KEY_ID"
+	PublicInvitePrivateKey           = "CHALK_PUBLIC_INVITE_PRIVATE_KEY"
+	PublicInviteVerificationKeys     = "CHALK_PUBLIC_INVITE_VERIFICATION_KEYS"
+	PublicInviteAutoLifecycleSeconds = "CHALK_PUBLIC_INVITE_AUTO_LIFECYCLE_SECONDS"
+	PublicInviteSchedulerIntervalMS  = "CHALK_PUBLIC_INVITE_SCHEDULER_INTERVAL_MS"
+	PublicInviteSchedulerBatch       = "CHALK_PUBLIC_INVITE_SCHEDULER_BATCH"
 
 	DatabaseURL                 = "CHALK_DATABASE_URL"
 	DatabaseMaxConns            = "CHALK_DATABASE_MAX_CONNS"
@@ -96,6 +108,7 @@ const (
 	CloudflareRTKPresetFacilitator     = "CHALK_CLOUDFLARE_RTK_PRESET_FACILITATOR"
 	CloudflareRTKPresetContributor     = "CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR"
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
+	DefaultMediaPlane                  = "CHALK_DEFAULT_MEDIA_PLANE"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
 	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
@@ -134,6 +147,9 @@ const (
 	DefaultDBMinConns                            = int32(0)
 	DefaultDeadlineSchedulerIntervalMS           = int64(1000)
 	DefaultDeadlineSchedulerBatch                = int32(50)
+	DefaultPublicInviteSchedulerIntervalMS       = int64(60 * 1000)
+	DefaultPublicInviteSchedulerBatch            = int32(50)
+	DefaultPublicInviteAutoLifecycleSeconds      = int32(60 * 60)
 	DefaultEpisodeDiagnosticsAppendDBMaxConns    = int32(5)
 	DefaultEpisodeDiagnosticsQueryDBMaxConns     = int32(5)
 	DefaultEpisodeDiagnosticsProjectorIntervalMS = int64(500)
@@ -260,6 +276,19 @@ type SyncTokenConfig struct {
 	VerificationKeys map[string]ed25519.PublicKey
 }
 
+type PublicInviteConfig struct {
+	Enabled               bool
+	ManagedTenantID       string
+	DefaultMediaPlane     string
+	WebOrigin             string
+	KeyID                 string
+	PrivateKey            ed25519.PrivateKey
+	VerificationKeys      map[string]ed25519.PublicKey
+	AutoLifecycleLifetime time.Duration
+	SchedulerInterval     time.Duration
+	SchedulerBatch        int32
+}
+
 type GoogleOAuthConfig struct {
 	ClientID     string
 	ClientSecret string
@@ -331,12 +360,14 @@ type Config struct {
 	Auth               AuthConfig
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
+	DefaultMediaPlane  spaces.MediaPlaneProvider
 	Composio           ComposioConfig
 	Database           DatabaseConfig
 	DeadlineScheduler  DeadlineSchedulerConfig
 	EpisodeDiagnostics EpisodeDiagnosticsConfig
 	GoogleOAuth        GoogleOAuthConfig
 	Observability      ObservabilityConfig
+	PublicInvite       PublicInviteConfig
 	ProviderBridge     ProviderBridgeConfig
 	R2                 R2Config
 	Redis              RedisConfig
@@ -489,6 +520,10 @@ func Load() (Config, error) {
 	if err := validateOpsIngestToken(environment, opsIngestToken); err != nil {
 		return Config{}, err
 	}
+	publicInvite, err := loadPublicInviteConfig(environment)
+	if err != nil {
+		return Config{}, err
+	}
 	realtimeBaseURL := strings.TrimRight(strings.TrimSpace(envOrDefault(CloudflareRealtimeBaseURL, "")), "/")
 	if realtimeBaseURL != "" {
 		if environment != DefaultEnvironment {
@@ -500,6 +535,28 @@ func Load() (Config, error) {
 		if parseErr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
 			return Config{}, fmt.Errorf("%s must be an absolute localhost URL without query or fragment", CloudflareRealtimeBaseURL)
 		}
+	}
+	defaultMediaPlane, err := loadDefaultMediaPlane()
+	if err != nil {
+		return Config{}, err
+	}
+	cloudflareRealtime := CloudflareRealtimeConfig{
+		AccountID:            envOrDefault(CloudflareAccountID, ""),
+		APIToken:             envOrDefault(CloudflareAPIToken, ""),
+		RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
+		RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
+		RealtimeBaseURL:      realtimeBaseURL,
+		RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
+		RTKTokenOrgID:        envOrDefault(CloudflareRTKTokenOrgID, ""),
+		RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
+		RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
+		RequestTimeout:       cloudflareRealtimeRequestTimeout,
+	}
+	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime); err != nil {
+		return Config{}, err
+	}
+	if err := validateProviderBridgeMediaPlaneProcessConfig(providerBridge, cloudflareRealtime); err != nil {
+		return Config{}, err
 	}
 	r2Config := R2Config{
 		AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
@@ -543,19 +600,9 @@ func Load() (Config, error) {
 			RecentAuthSecret:          recentAuthSecret,
 			SessionTTL:                sessionTTL,
 		},
-		Capabilities: capabilities,
-		CloudflareRealtime: CloudflareRealtimeConfig{
-			AccountID:            envOrDefault(CloudflareAccountID, ""),
-			APIToken:             envOrDefault(CloudflareAPIToken, ""),
-			RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
-			RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
-			RealtimeBaseURL:      realtimeBaseURL,
-			RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
-			RTKTokenOrgID:        envOrDefault(CloudflareRTKTokenOrgID, ""),
-			RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
-			RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
-			RequestTimeout:       cloudflareRealtimeRequestTimeout,
-		},
+		Capabilities:       capabilities,
+		CloudflareRealtime: cloudflareRealtime,
+		DefaultMediaPlane:  defaultMediaPlane,
 		Composio: ComposioConfig{
 			APIKey:         composioAPIKey,
 			BaseURL:        envOrDefault(ComposioBaseURL, DefaultComposioBaseURL),
@@ -588,6 +635,7 @@ func Load() (Config, error) {
 			SlowRequestThreshold: slowRequestThreshold,
 			Version:              envOrDefault(APIVersion, DefaultVersion),
 		},
+		PublicInvite:   publicInvite,
 		ProviderBridge: providerBridge,
 		R2:             r2Config,
 		Redis: RedisConfig{
@@ -612,6 +660,57 @@ func validateOpsIngestToken(environment, token string) error {
 	}
 	if len(token) < opsIngestTokenMinLength {
 		return fmt.Errorf("%s must be at least %d bytes", APIOpsIngestToken, opsIngestTokenMinLength)
+	}
+	return nil
+}
+
+func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
+	value, ok := os.LookupEnv(DefaultMediaPlane)
+	if !ok || strings.TrimSpace(value) == "" {
+		return "", nil
+	}
+
+	provider, err := spaces.ParseMediaPlaneProvider(value)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", DefaultMediaPlane, err)
+	}
+	if provider != spaces.MediaPlaneProviderCloudflareSFU {
+		return "", fmt.Errorf("%s must be %s because the Dashboard access-grant path requires Cloudflare SFU", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
+	return provider, nil
+}
+
+func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig) error {
+	if provider == "" {
+		return nil
+	}
+	if processConfig.RequestTimeout <= 0 {
+		return fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
+	}
+
+	switch provider {
+	case spaces.MediaPlaneProviderCloudflareSFU:
+		if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
+			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)
+		}
+		if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
+			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppSecret, DefaultMediaPlane, provider)
+		}
+	default:
+		return fmt.Errorf("%s must be %s", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
+	return nil
+}
+
+func validateProviderBridgeMediaPlaneProcessConfig(providerBridge ProviderBridgeConfig, processConfig CloudflareRealtimeConfig) error {
+	if !providerBridge.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
+		return fmt.Errorf("%s must be set when the ProviderBridge is enabled", CloudflareRealtimeAppID)
+	}
+	if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
+		return fmt.Errorf("%s must be set when the ProviderBridge is enabled", CloudflareRealtimeAppSecret)
 	}
 	return nil
 }
@@ -1051,6 +1150,165 @@ func loadSyncTokenConfig(environment string) (SyncTokenConfig, error) {
 		return SyncTokenConfig{}, fmt.Errorf("%s must contain the current %s public key", MediaTokenVerificationKeys, SyncTokenKeyID)
 	}
 	return config, nil
+}
+
+const (
+	publicInviteMaxSchedulerIntervalMS  = int64(24 * 60 * 60 * 1000)
+	publicInviteMaxSchedulerBatch       = int32(1000)
+	publicInviteMinAutoLifecycleSeconds = int32(60)
+	publicInviteMaxAutoLifecycleSeconds = int32(60 * 60)
+)
+
+var publicInviteUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
+	managedTenantID := strings.TrimSpace(envOrDefault(PublicInviteManagedTenantID, ""))
+	defaultMediaPlane := strings.TrimSpace(envOrDefault(PublicInviteDefaultMediaPlane, ""))
+	webOrigin := strings.TrimSpace(envOrDefault(PublicInviteWebOrigin, ""))
+	keyID := strings.TrimSpace(envOrDefault(PublicInviteKeyID, ""))
+	encodedPrivateKey := strings.TrimSpace(envOrDefault(PublicInvitePrivateKey, ""))
+	encodedVerificationKeys := strings.TrimSpace(envOrDefault(PublicInviteVerificationKeys, ""))
+
+	coreConfigured := 0
+	for _, value := range []string{managedTenantID, defaultMediaPlane, webOrigin, keyID, encodedPrivateKey, encodedVerificationKeys} {
+		if value != "" {
+			coreConfigured++
+		}
+	}
+	schedulerConfigured := 0
+	for _, name := range []string{PublicInviteSchedulerIntervalMS, PublicInviteSchedulerBatch} {
+		if strings.TrimSpace(envOrDefault(name, "")) != "" {
+			schedulerConfigured++
+		}
+	}
+	if coreConfigured == 0 && schedulerConfigured == 0 {
+		if environment == DefaultEnvironment {
+			return PublicInviteConfig{}, nil
+		}
+		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, %s, and %s must be set outside local environments", PublicInviteManagedTenantID, PublicInviteDefaultMediaPlane, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
+	}
+	if coreConfigured != 6 {
+		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, %s, and %s must be set together", PublicInviteManagedTenantID, PublicInviteDefaultMediaPlane, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
+	}
+	if schedulerConfigured == 1 {
+		return PublicInviteConfig{}, fmt.Errorf("%s and %s must be set together", PublicInviteSchedulerIntervalMS, PublicInviteSchedulerBatch)
+	}
+
+	canonicalTenantID := strings.ToLower(managedTenantID)
+	if !publicInviteUUIDPattern.MatchString(canonicalTenantID) {
+		return PublicInviteConfig{}, fmt.Errorf("%s must be a canonical UUID", PublicInviteManagedTenantID)
+	}
+	if !validPublicInviteMediaPlane(defaultMediaPlane) {
+		return PublicInviteConfig{}, fmt.Errorf("%s must be a non-empty ASCII media plane", PublicInviteDefaultMediaPlane)
+	}
+	if err := validatePublicInviteWebOrigin(environment, webOrigin); err != nil {
+		return PublicInviteConfig{}, err
+	}
+	if err := validatePublicInviteKeyID(keyID); err != nil {
+		return PublicInviteConfig{}, fmt.Errorf("%s: %w", PublicInviteKeyID, err)
+	}
+	privateKeyBytes, err := base64.RawURLEncoding.DecodeString(encodedPrivateKey)
+	if err != nil || len(privateKeyBytes) != ed25519.PrivateKeySize {
+		return PublicInviteConfig{}, fmt.Errorf("%s must be an unpadded base64url Ed25519 private key", PublicInvitePrivateKey)
+	}
+	privateKey := append(ed25519.PrivateKey(nil), privateKeyBytes...)
+	currentPublicKey, ok := privateKey.Public().(ed25519.PublicKey)
+	if !ok || len(currentPublicKey) != ed25519.PublicKeySize {
+		return PublicInviteConfig{}, fmt.Errorf("%s is not a valid Ed25519 private key", PublicInvitePrivateKey)
+	}
+	verificationKeys, err := parsePublicInviteVerificationKeys(encodedVerificationKeys)
+	if err != nil {
+		return PublicInviteConfig{}, err
+	}
+	configuredCurrent, ok := verificationKeys[keyID]
+	if !ok || !configuredCurrent.Equal(currentPublicKey) {
+		return PublicInviteConfig{}, fmt.Errorf("%s must contain the current %s public key", PublicInviteVerificationKeys, PublicInviteKeyID)
+	}
+	autoLifecycleSeconds, err := envBoundedInt32(PublicInviteAutoLifecycleSeconds, DefaultPublicInviteAutoLifecycleSeconds, publicInviteMinAutoLifecycleSeconds, publicInviteMaxAutoLifecycleSeconds)
+	if err != nil {
+		return PublicInviteConfig{}, err
+	}
+	schedulerInterval, err := envBoundedMilliseconds(PublicInviteSchedulerIntervalMS, DefaultPublicInviteSchedulerIntervalMS, 1, publicInviteMaxSchedulerIntervalMS)
+	if err != nil {
+		return PublicInviteConfig{}, err
+	}
+	schedulerBatch, err := envBoundedInt32(PublicInviteSchedulerBatch, DefaultPublicInviteSchedulerBatch, 1, publicInviteMaxSchedulerBatch)
+	if err != nil {
+		return PublicInviteConfig{}, err
+	}
+
+	return PublicInviteConfig{
+		Enabled:               true,
+		ManagedTenantID:       canonicalTenantID,
+		DefaultMediaPlane:     defaultMediaPlane,
+		WebOrigin:             webOrigin,
+		KeyID:                 keyID,
+		PrivateKey:            privateKey,
+		VerificationKeys:      verificationKeys,
+		AutoLifecycleLifetime: time.Duration(autoLifecycleSeconds) * time.Second,
+		SchedulerInterval:     schedulerInterval,
+		SchedulerBatch:        schedulerBatch,
+	}, nil
+}
+
+func validatePublicInviteWebOrigin(environment, origin string) error {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Hostname() == "" || parsed.Opaque != "" || parsed.User != nil || parsed.Path != "" || parsed.RawPath != "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.Contains(origin, "#") {
+		return fmt.Errorf("%s must be an absolute origin with scheme and host and no credentials, path, query, or fragment", PublicInviteWebOrigin)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("%s must use http or https", PublicInviteWebOrigin)
+	}
+	if environment != DefaultEnvironment && parsed.Scheme != "https" {
+		return fmt.Errorf("%s must use https outside local environments", PublicInviteWebOrigin)
+	}
+	return nil
+}
+
+func parsePublicInviteVerificationKeys(encoded string) (map[string]ed25519.PublicKey, error) {
+	var keyring map[string]string
+	if err := json.Unmarshal([]byte(encoded), &keyring); err != nil || len(keyring) == 0 {
+		return nil, fmt.Errorf("%s must be a non-empty JSON object of key IDs to unpadded base64url Ed25519 public keys", PublicInviteVerificationKeys)
+	}
+	verificationKeys := make(map[string]ed25519.PublicKey, len(keyring))
+	for keyID, encodedKey := range keyring {
+		keyID = strings.TrimSpace(keyID)
+		if err := validatePublicInviteKeyID(keyID); err != nil {
+			return nil, fmt.Errorf("%s contains an invalid key ID", PublicInviteVerificationKeys)
+		}
+		publicKey, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encodedKey))
+		if err != nil || len(publicKey) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("%s contains an invalid Ed25519 public key", PublicInviteVerificationKeys)
+		}
+		verificationKeys[keyID] = append(ed25519.PublicKey(nil), publicKey...)
+	}
+	return verificationKeys, nil
+}
+
+func validatePublicInviteKeyID(keyID string) error {
+	if keyID == "" || len(keyID) > 32 {
+		return fmt.Errorf("key ID must be 1 through 32 bytes")
+	}
+	for _, character := range keyID {
+		if (character < 'A' || character > 'Z') &&
+			(character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') && character != '_' && character != '-' {
+			return fmt.Errorf("key ID contains invalid characters")
+		}
+	}
+	return nil
+}
+
+func validPublicInviteMediaPlane(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		if character > 0x7f || character == ' ' || character == '\t' || character == '\r' || character == '\n' {
+			return false
+		}
+	}
+	return true
 }
 
 func validateOTLPEndpoint(environment string, endpoint string, insecure bool) error {

@@ -98,6 +98,7 @@ export const AccessGrantSchema = Schema.Struct({
       }),
     ),
   ),
+  episode_started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   media: Schema.Struct({
     client_payload: Schema.Record(Schema.String, Schema.Unknown),
     expires_at: DateTimeStringSchema,
@@ -406,6 +407,11 @@ export const CreateMembershipRequestSchema = Schema.Struct({
 });
 export type CreateMembershipRequest = typeof CreateMembershipRequestSchema.Type;
 
+export const CreatePublicSpaceRequestSchema = Schema.Struct({
+  display_name: Schema.String.check(Schema.isMinLength(1)),
+});
+export type CreatePublicSpaceRequest = typeof CreatePublicSpaceRequestSchema.Type;
+
 export const CreateRecordingDownloadURLRequestSchema = Schema.Struct({
   expires_in_seconds: Schema.Number,
 });
@@ -432,7 +438,7 @@ export const CreateSpaceRequestSchema = Schema.Struct({
   default_episode_duration_seconds: Schema.Number,
   linger_window_seconds: Schema.Number,
   maximum_episode_duration_seconds: Schema.Number,
-  media_plane: Schema.String.check(Schema.isMinLength(1)),
+  media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.String.check(Schema.isMinLength(1)),
   recurring_policy: Schema.optional(Schema.Unknown),
@@ -892,6 +898,52 @@ export const ParticipantRemovalSchema = Schema.Struct({
 });
 export type ParticipantRemoval = typeof ParticipantRemovalSchema.Type;
 
+export const PublicAdmissionRequestSchema = Schema.Struct({
+  display_name: Schema.String,
+  expires_at: DateTimeStringSchema,
+  request_handle: Schema.String,
+  requested_at: DateTimeStringSchema,
+  state: Schema.String,
+});
+export type PublicAdmissionRequest = typeof PublicAdmissionRequestSchema.Type;
+
+export const PublicAdmissionRequestPageSchema = Schema.Struct({
+  requests: Schema.Array(PublicAdmissionRequestSchema),
+});
+export type PublicAdmissionRequestPage = typeof PublicAdmissionRequestPageSchema.Type;
+
+export const PublicSpaceArrivalSchema = Schema.Struct({
+  access: Schema.optional(Schema.NullOr(AccessGrantSchema)),
+  arrival_handle: Schema.optional(Schema.String),
+  guest_credential: Schema.optional(Schema.String),
+  identity: Schema.optional(Schema.String),
+  retry_after: Schema.optional(Schema.Number),
+  space: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        admission_mode: Schema.String,
+        name: Schema.String,
+        slug: Schema.String,
+      }),
+    ),
+  ),
+  state: Schema.String,
+});
+export type PublicSpaceArrival = typeof PublicSpaceArrivalSchema.Type;
+
+export const PublicSpaceCreatedSchema = Schema.Struct({
+  arrival: PublicSpaceArrivalSchema,
+  guest_credential: Schema.optional(Schema.String),
+  invite_link: Schema.String,
+  lifecycle_until: DateTimeStringSchema,
+  space: Schema.Struct({
+    admission_mode: Schema.String,
+    name: Schema.String,
+    slug: Schema.String,
+  }),
+});
+export type PublicSpaceCreated = typeof PublicSpaceCreatedSchema.Type;
+
 export const StatusComponentIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("StatusComponentId"));
 export type StatusComponentId = typeof StatusComponentIdSchema.Type;
 
@@ -995,6 +1047,12 @@ export const RecordingReservationSchema = Schema.Struct({
 });
 export type RecordingReservation = typeof RecordingReservationSchema.Type;
 
+export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
+  media_proof: Schema.String.check(Schema.isMinLength(1)),
+  replace_media_connection: Schema.Boolean,
+});
+export type RefreshSpacePublicInviteAccessRequest = typeof RefreshSpacePublicInviteAccessRequestSchema.Type;
+
 export const RegionsSchema = Schema.Struct({
   regions: Schema.Array(
     Schema.Struct({
@@ -1077,6 +1135,28 @@ export const SpaceListSchema = Schema.Struct({
   spaces: Schema.Array(SpaceSchema),
 });
 export type SpaceList = typeof SpaceListSchema.Type;
+
+export const SpacePublicInviteSchema = Schema.Struct({
+  admission_mode: Schema.String,
+  canonical_url: URLStringSchema,
+  created_at: DateTimeStringSchema,
+  disabled_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  enabled: Schema.Boolean,
+  generation: Schema.Number,
+  public_role: Schema.String,
+  rotated_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  schema_version: Schema.String,
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+  updated_at: DateTimeStringSchema,
+});
+export type SpacePublicInvite = typeof SpacePublicInviteSchema.Type;
+
+export const SpacePublicInviteArrivalRequestSchema = Schema.Struct({
+  display_name: Schema.String.check(Schema.isMinLength(1)),
+  space_invite_token: Schema.String.check(Schema.isMinLength(1)),
+});
+export type SpacePublicInviteArrivalRequest = typeof SpacePublicInviteArrivalRequestSchema.Type;
 
 export const StartIntegrationConnectionRequestSchema = Schema.Struct({
   account_alias: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
@@ -1188,6 +1268,11 @@ export const UpdateRecordingRequestSchema = Schema.Struct({
   storage_provider: Schema.optional(Schema.Literal("r2")),
 });
 export type UpdateRecordingRequest = typeof UpdateRecordingRequestSchema.Type;
+
+export const UpdateSpacePublicInviteRequestSchema = Schema.Struct({
+  enabled: Schema.Boolean,
+});
+export type UpdateSpacePublicInviteRequest = typeof UpdateSpacePublicInviteRequestSchema.Type;
 
 export const UpdateSpaceRequestSchema = Schema.Struct({
   admission_policy: Schema.optional(Schema.Unknown),
@@ -1416,6 +1501,28 @@ export const AdmitEpisodeParticipant429ResponseHeadersSchema = Schema.Struct({
 });
 export type AdmitEpisodeParticipant429ResponseHeaders = typeof AdmitEpisodeParticipant429ResponseHeadersSchema.Type;
 
+export const ApproveSpacePublicAdmissionRequestPathParamsSchema = Schema.Struct({
+  request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type ApproveSpacePublicAdmissionRequestPathParams = typeof ApproveSpacePublicAdmissionRequestPathParamsSchema.Type;
+
+export const ApproveSpacePublicAdmissionRequestRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type ApproveSpacePublicAdmissionRequestRequestHeaders = typeof ApproveSpacePublicAdmissionRequestRequestHeadersSchema.Type;
+
+export const ApproveSpacePublicAdmissionRequestResponseSchema = PublicAdmissionRequestSchema;
+export type ApproveSpacePublicAdmissionRequestResponse = typeof ApproveSpacePublicAdmissionRequestResponseSchema.Type;
+
+export const ApproveSpacePublicAdmissionRequest429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ApproveSpacePublicAdmissionRequest429ResponseHeaders = typeof ApproveSpacePublicAdmissionRequest429ResponseHeadersSchema.Type;
+
 export const ArchiveSpacePathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
   tenant_id: TenantIdSchema,
@@ -1431,6 +1538,25 @@ export const ArchiveSpace429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type ArchiveSpace429ResponseHeaders = typeof ArchiveSpace429ResponseHeadersSchema.Type;
+
+export const ArriveBySpacePublicInviteRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  "X-Chalk-Arrival-Handle": Schema.optional(Schema.String),
+});
+export type ArriveBySpacePublicInviteRequestHeaders = typeof ArriveBySpacePublicInviteRequestHeadersSchema.Type;
+
+export const ArriveBySpacePublicInviteRequestBodySchema = SpacePublicInviteArrivalRequestSchema;
+export type ArriveBySpacePublicInviteRequestBody = typeof ArriveBySpacePublicInviteRequestBodySchema.Type;
+
+export const ArriveBySpacePublicInviteResponseSchema = PublicSpaceArrivalSchema;
+export type ArriveBySpacePublicInviteResponse = typeof ArriveBySpacePublicInviteResponseSchema.Type;
+
+export const ArriveBySpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ArriveBySpacePublicInvite429ResponseHeaders = typeof ArriveBySpacePublicInvite429ResponseHeadersSchema.Type;
 
 export const CloseCloudflareSFUTracksPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -1591,6 +1717,24 @@ export const CreateParticipantFeedbackReport429ResponseHeadersSchema = Schema.St
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type CreateParticipantFeedbackReport429ResponseHeaders = typeof CreateParticipantFeedbackReport429ResponseHeadersSchema.Type;
+
+export const CreatePublicSpaceRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type CreatePublicSpaceRequestHeaders = typeof CreatePublicSpaceRequestHeadersSchema.Type;
+
+export const CreatePublicSpaceRequestBodySchema = CreatePublicSpaceRequestSchema;
+export type CreatePublicSpaceRequestBody = typeof CreatePublicSpaceRequestBodySchema.Type;
+
+export const CreatePublicSpaceResponseSchema = PublicSpaceCreatedSchema;
+export type CreatePublicSpaceResponse = typeof CreatePublicSpaceResponseSchema.Type;
+
+export const CreatePublicSpace429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CreatePublicSpace429ResponseHeaders = typeof CreatePublicSpace429ResponseHeadersSchema.Type;
 
 export const CreateRecordingPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -1771,6 +1915,28 @@ export const DeleteWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type DeleteWebhookEndpoint429ResponseHeaders = typeof DeleteWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const DenySpacePublicAdmissionRequestPathParamsSchema = Schema.Struct({
+  request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type DenySpacePublicAdmissionRequestPathParams = typeof DenySpacePublicAdmissionRequestPathParamsSchema.Type;
+
+export const DenySpacePublicAdmissionRequestRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type DenySpacePublicAdmissionRequestRequestHeaders = typeof DenySpacePublicAdmissionRequestRequestHeadersSchema.Type;
+
+export const DenySpacePublicAdmissionRequestResponseSchema = PublicAdmissionRequestSchema;
+export type DenySpacePublicAdmissionRequestResponse = typeof DenySpacePublicAdmissionRequestResponseSchema.Type;
+
+export const DenySpacePublicAdmissionRequest429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type DenySpacePublicAdmissionRequest429ResponseHeaders = typeof DenySpacePublicAdmissionRequest429ResponseHeadersSchema.Type;
 
 export const DisableIntegrationConnectionPathParamsSchema = Schema.Struct({
   connection_id: UUIDSchema,
@@ -1976,6 +2142,37 @@ export type GetSpacePathParams = typeof GetSpacePathParamsSchema.Type;
 
 export const GetSpaceResponseSchema = SpaceSchema;
 export type GetSpaceResponse = typeof GetSpaceResponseSchema.Type;
+
+export const GetSpacePublicInvitePathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetSpacePublicInvitePathParams = typeof GetSpacePublicInvitePathParamsSchema.Type;
+
+export const GetSpacePublicInviteResponseSchema = SpacePublicInviteSchema;
+export type GetSpacePublicInviteResponse = typeof GetSpacePublicInviteResponseSchema.Type;
+
+export const GetSpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetSpacePublicInvite429ResponseHeaders = typeof GetSpacePublicInvite429ResponseHeadersSchema.Type;
+
+export const GetSpacePublicInviteArrivalRequestHeadersSchema = Schema.Struct({
+  "X-Chalk-Arrival-Handle": Schema.String,
+});
+export type GetSpacePublicInviteArrivalRequestHeaders = typeof GetSpacePublicInviteArrivalRequestHeadersSchema.Type;
+
+export const GetSpacePublicInviteArrivalResponseSchema = PublicSpaceArrivalSchema;
+export type GetSpacePublicInviteArrivalResponse = typeof GetSpacePublicInviteArrivalResponseSchema.Type;
+
+export const GetSpacePublicInviteArrival429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetSpacePublicInviteArrival429ResponseHeaders = typeof GetSpacePublicInviteArrival429ResponseHeadersSchema.Type;
 
 export const GetTenantPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -2204,6 +2401,18 @@ export const LeaveDashboardSpaceSelf429ResponseHeadersSchema = Schema.Struct({
 });
 export type LeaveDashboardSpaceSelf429ResponseHeaders = typeof LeaveDashboardSpaceSelf429ResponseHeadersSchema.Type;
 
+export const LeaveSpacePublicInviteArrivalRequestHeadersSchema = Schema.Struct({
+  "X-Chalk-Arrival-Handle": Schema.String,
+});
+export type LeaveSpacePublicInviteArrivalRequestHeaders = typeof LeaveSpacePublicInviteArrivalRequestHeadersSchema.Type;
+
+export const LeaveSpacePublicInviteArrival429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type LeaveSpacePublicInviteArrival429ResponseHeaders = typeof LeaveSpacePublicInviteArrival429ResponseHeadersSchema.Type;
+
 export const ListAPIKeysPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -2330,6 +2539,27 @@ export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
 
 export const ListRegionsResponseSchema = RegionsSchema;
 export type ListRegionsResponse = typeof ListRegionsResponseSchema.Type;
+
+export const ListSpacePublicAdmissionRequestsPathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type ListSpacePublicAdmissionRequestsPathParams = typeof ListSpacePublicAdmissionRequestsPathParamsSchema.Type;
+
+export const ListSpacePublicAdmissionRequestsQueryParamsSchema = Schema.Struct({
+  state: Schema.optional(Schema.Literal("pending")),
+});
+export type ListSpacePublicAdmissionRequestsQueryParams = typeof ListSpacePublicAdmissionRequestsQueryParamsSchema.Type;
+
+export const ListSpacePublicAdmissionRequestsResponseSchema = PublicAdmissionRequestPageSchema;
+export type ListSpacePublicAdmissionRequestsResponse = typeof ListSpacePublicAdmissionRequestsResponseSchema.Type;
+
+export const ListSpacePublicAdmissionRequests429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListSpacePublicAdmissionRequests429ResponseHeaders = typeof ListSpacePublicAdmissionRequests429ResponseHeadersSchema.Type;
 
 export const ListSpacesPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -2535,6 +2765,24 @@ export const RefreshIntegrationConnection429ResponseHeadersSchema = Schema.Struc
 });
 export type RefreshIntegrationConnection429ResponseHeaders = typeof RefreshIntegrationConnection429ResponseHeadersSchema.Type;
 
+export const RefreshSpacePublicInviteAccessRequestHeadersSchema = Schema.Struct({
+  "X-Chalk-Arrival-Handle": Schema.String,
+});
+export type RefreshSpacePublicInviteAccessRequestHeaders = typeof RefreshSpacePublicInviteAccessRequestHeadersSchema.Type;
+
+export const RefreshSpacePublicInviteAccessRequestBodySchema = RefreshSpacePublicInviteAccessRequestSchema;
+export type RefreshSpacePublicInviteAccessRequestBody = typeof RefreshSpacePublicInviteAccessRequestBodySchema.Type;
+
+export const RefreshSpacePublicInviteAccessResponseSchema = AccessGrantSchema;
+export type RefreshSpacePublicInviteAccessResponse = typeof RefreshSpacePublicInviteAccessResponseSchema.Type;
+
+export const RefreshSpacePublicInviteAccess429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RefreshSpacePublicInviteAccess429ResponseHeaders = typeof RefreshSpacePublicInviteAccess429ResponseHeadersSchema.Type;
+
 export const RegisterRequestBodySchema = RegisterRequestSchema;
 export type RegisterRequestBody = typeof RegisterRequestBodySchema.Type;
 
@@ -2688,6 +2936,27 @@ export const RotateAPIKey429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RotateAPIKey429ResponseHeaders = typeof RotateAPIKey429ResponseHeadersSchema.Type;
+
+export const RotateSpacePublicInvitePathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RotateSpacePublicInvitePathParams = typeof RotateSpacePublicInvitePathParamsSchema.Type;
+
+export const RotateSpacePublicInviteRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type RotateSpacePublicInviteRequestHeaders = typeof RotateSpacePublicInviteRequestHeadersSchema.Type;
+
+export const RotateSpacePublicInviteResponseSchema = SpacePublicInviteSchema;
+export type RotateSpacePublicInviteResponse = typeof RotateSpacePublicInviteResponseSchema.Type;
+
+export const RotateSpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RotateSpacePublicInvite429ResponseHeaders = typeof RotateSpacePublicInvite429ResponseHeadersSchema.Type;
 
 export const RotateWebhookEndpointSecretPathParamsSchema = Schema.Struct({
   endpoint_id: UUIDSchema,
@@ -2862,6 +3131,25 @@ export const UpdateSpace429ResponseHeadersSchema = Schema.Struct({
 });
 export type UpdateSpace429ResponseHeaders = typeof UpdateSpace429ResponseHeadersSchema.Type;
 
+export const UpdateSpacePublicInvitePathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type UpdateSpacePublicInvitePathParams = typeof UpdateSpacePublicInvitePathParamsSchema.Type;
+
+export const UpdateSpacePublicInviteRequestBodySchema = UpdateSpacePublicInviteRequestSchema;
+export type UpdateSpacePublicInviteRequestBody = typeof UpdateSpacePublicInviteRequestBodySchema.Type;
+
+export const UpdateSpacePublicInviteResponseSchema = SpacePublicInviteSchema;
+export type UpdateSpacePublicInviteResponse = typeof UpdateSpacePublicInviteResponseSchema.Type;
+
+export const UpdateSpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type UpdateSpacePublicInvite429ResponseHeaders = typeof UpdateSpacePublicInvite429ResponseHeadersSchema.Type;
+
 export const UpdateTenantPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -2962,6 +3250,44 @@ export const AccessInvalidPasswordErrorSchema = AccessInvalidPasswordErrorWireSc
   }),
 );
 
+export class AccessMediaProofExpiredError extends Schema.TaggedErrorClass<AccessMediaProofExpiredError>()("AccessMediaProofExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessMediaProofExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_expired"),
+    message: Schema.String,
+  }),
+});
+export const AccessMediaProofExpiredErrorSchema = AccessMediaProofExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(AccessMediaProofExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessMediaProofExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AccessMediaProofRejectedError extends Schema.TaggedErrorClass<AccessMediaProofRejectedError>()("AccessMediaProofRejectedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_rejected"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessMediaProofRejectedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.media_proof_rejected"),
+    message: Schema.String,
+  }),
+});
+export const AccessMediaProofRejectedErrorSchema = AccessMediaProofRejectedErrorWireSchema.pipe(
+  Schema.decodeTo(AccessMediaProofRejectedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessMediaProofRejectedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class AccessRecentAuthRequiredError extends Schema.TaggedErrorClass<AccessRecentAuthRequiredError>()("AccessRecentAuthRequiredError", {
   error: Schema.Struct({
     code: Schema.Literal("access.recent_auth_required"),
@@ -2996,6 +3322,25 @@ export const AccessUnauthenticatedErrorWireSchema = Schema.Struct({
 export const AccessUnauthenticatedErrorSchema = AccessUnauthenticatedErrorWireSchema.pipe(
   Schema.decodeTo(AccessUnauthenticatedError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "AccessUnauthenticatedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AdmissionRequestNotFoundError extends Schema.TaggedErrorClass<AdmissionRequestNotFoundError>()("AdmissionRequestNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("admission_request.not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const AdmissionRequestNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("admission_request.not_found"),
+    message: Schema.String,
+  }),
+});
+export const AdmissionRequestNotFoundErrorSchema = AdmissionRequestNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(AdmissionRequestNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AdmissionRequestNotFoundError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -3072,6 +3417,44 @@ export const ApiKeySecretNotReplayableErrorWireSchema = Schema.Struct({
 export const ApiKeySecretNotReplayableErrorSchema = ApiKeySecretNotReplayableErrorWireSchema.pipe(
   Schema.decodeTo(ApiKeySecretNotReplayableError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "ApiKeySecretNotReplayableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ArrivalInvalidHandleError extends Schema.TaggedErrorClass<ArrivalInvalidHandleError>()("ArrivalInvalidHandleError", {
+  error: Schema.Struct({
+    code: Schema.Literal("arrival.invalid_handle"),
+    message: Schema.String,
+  }),
+}) {}
+export const ArrivalInvalidHandleErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("arrival.invalid_handle"),
+    message: Schema.String,
+  }),
+});
+export const ArrivalInvalidHandleErrorSchema = ArrivalInvalidHandleErrorWireSchema.pipe(
+  Schema.decodeTo(ArrivalInvalidHandleError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ArrivalInvalidHandleError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ArrivalUnavailableError extends Schema.TaggedErrorClass<ArrivalUnavailableError>()("ArrivalUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("arrival.unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const ArrivalUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("arrival.unavailable"),
+    message: Schema.String,
+  }),
+});
+export const ArrivalUnavailableErrorSchema = ArrivalUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(ArrivalUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ArrivalUnavailableError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4520,6 +4903,25 @@ export const SpaceInvalidIdErrorSchema = SpaceInvalidIdErrorWireSchema.pipe(
   }),
 );
 
+export class SpaceInvalidMediaPlaneError extends Schema.TaggedErrorClass<SpaceInvalidMediaPlaneError>()("SpaceInvalidMediaPlaneError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_media_plane"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceInvalidMediaPlaneErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_media_plane"),
+    message: Schema.String,
+  }),
+});
+export const SpaceInvalidMediaPlaneErrorSchema = SpaceInvalidMediaPlaneErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceInvalidMediaPlaneError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidMediaPlaneError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class SpaceInvalidSlugError extends Schema.TaggedErrorClass<SpaceInvalidSlugError>()("SpaceInvalidSlugError", {
   error: Schema.Struct({
     code: Schema.Literal("space.invalid_slug"),
@@ -4554,6 +4956,25 @@ export const SpaceNotFoundErrorWireSchema = Schema.Struct({
 export const SpaceNotFoundErrorSchema = SpaceNotFoundErrorWireSchema.pipe(
   Schema.decodeTo(SpaceNotFoundError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class SpacePublicInviteUnavailableError extends Schema.TaggedErrorClass<SpacePublicInviteUnavailableError>()("SpacePublicInviteUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space_public_invite.unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpacePublicInviteUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space_public_invite.unavailable"),
+    message: Schema.String,
+  }),
+});
+export const SpacePublicInviteUnavailableErrorSchema = SpacePublicInviteUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(SpacePublicInviteUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpacePublicInviteUnavailableError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -5414,8 +5835,39 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
 ]);
 export type AdmitEpisodeParticipantError = typeof AdmitEpisodeParticipantErrorSchema.Type;
 
+export const ApproveSpacePublicAdmissionRequestErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  AdmissionRequestNotFoundErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type ApproveSpacePublicAdmissionRequestError = typeof ApproveSpacePublicAdmissionRequestErrorSchema.Type;
+
 export const ArchiveSpaceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
 export type ArchiveSpaceError = typeof ArchiveSpaceErrorSchema.Type;
+
+export const ArriveBySpacePublicInviteErrorSchema = Schema.Union([
+  ArrivalInvalidHandleErrorSchema,
+  ArrivalUnavailableErrorSchema,
+  EpisodeCapacityExceededErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpacePublicInviteUnavailableErrorSchema,
+]);
+export type ArriveBySpacePublicInviteError = typeof ArriveBySpacePublicInviteErrorSchema.Type;
 
 export const CloseCloudflareSFUTracksErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -5517,6 +5969,21 @@ export const CreateParticipantFeedbackReportErrorSchema = Schema.Union([
 ]);
 export type CreateParticipantFeedbackReportError = typeof CreateParticipantFeedbackReportErrorSchema.Type;
 
+export const CreatePublicSpaceErrorSchema = Schema.Union([
+  ArrivalInvalidHandleErrorSchema,
+  ArrivalUnavailableErrorSchema,
+  EpisodeCapacityExceededErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpacePublicInviteUnavailableErrorSchema,
+]);
+export type CreatePublicSpaceError = typeof CreatePublicSpaceErrorSchema.Type;
+
 export const CreateRecordingDownloadURLErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5586,6 +6053,7 @@ export const CreateSpaceErrorSchema = Schema.Union([
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
+  SpaceInvalidMediaPlaneErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
@@ -5690,6 +6158,22 @@ export const DeleteWebhookEndpointErrorSchema = Schema.Union([
   WebhookUnsafeUrlErrorSchema,
 ]);
 export type DeleteWebhookEndpointError = typeof DeleteWebhookEndpointErrorSchema.Type;
+
+export const DenySpacePublicAdmissionRequestErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  AdmissionRequestNotFoundErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type DenySpacePublicAdmissionRequestError = typeof DenySpacePublicAdmissionRequestErrorSchema.Type;
 
 export const DisableIntegrationConnectionErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -5849,6 +6333,36 @@ export type GetRecordingReservationError = typeof GetRecordingReservationErrorSc
 
 export const GetSpaceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetSpaceError = typeof GetSpaceErrorSchema.Type;
+
+export const GetSpacePublicInviteArrivalErrorSchema = Schema.Union([
+  ArrivalInvalidHandleErrorSchema,
+  ArrivalUnavailableErrorSchema,
+  EpisodeCapacityExceededErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpacePublicInviteUnavailableErrorSchema,
+]);
+export type GetSpacePublicInviteArrivalError = typeof GetSpacePublicInviteArrivalErrorSchema.Type;
+
+export const GetSpacePublicInviteErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  AdmissionRequestNotFoundErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetSpacePublicInviteError = typeof GetSpacePublicInviteErrorSchema.Type;
 
 export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
 export type GetTenantError = typeof GetTenantErrorSchema.Type;
@@ -6035,6 +6549,20 @@ export const LeaveDashboardSpaceSelfErrorSchema = Schema.Union([
 ]);
 export type LeaveDashboardSpaceSelfError = typeof LeaveDashboardSpaceSelfErrorSchema.Type;
 
+export const LeaveSpacePublicInviteArrivalErrorSchema = Schema.Union([
+  ArrivalInvalidHandleErrorSchema,
+  ArrivalUnavailableErrorSchema,
+  EpisodeCapacityExceededErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpacePublicInviteUnavailableErrorSchema,
+]);
+export type LeaveSpacePublicInviteArrivalError = typeof LeaveSpacePublicInviteArrivalErrorSchema.Type;
+
 export const ListAPIKeysErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListAPIKeysError = typeof ListAPIKeysErrorSchema.Type;
 
@@ -6106,6 +6634,22 @@ export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
 
 export const ListRegionsErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type ListRegionsError = typeof ListRegionsErrorSchema.Type;
+
+export const ListSpacePublicAdmissionRequestsErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  AdmissionRequestNotFoundErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type ListSpacePublicAdmissionRequestsError = typeof ListSpacePublicAdmissionRequestsErrorSchema.Type;
 
 export const ListSpacesErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6263,6 +6807,23 @@ export const RefreshIntegrationConnectionErrorSchema = Schema.Union([
 ]);
 export type RefreshIntegrationConnectionError = typeof RefreshIntegrationConnectionErrorSchema.Type;
 
+export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
+  AccessMediaProofExpiredErrorSchema,
+  AccessMediaProofRejectedErrorSchema,
+  ArrivalInvalidHandleErrorSchema,
+  ArrivalUnavailableErrorSchema,
+  EpisodeCapacityExceededErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpacePublicInviteUnavailableErrorSchema,
+]);
+export type RefreshSpacePublicInviteAccessError = typeof RefreshSpacePublicInviteAccessErrorSchema.Type;
+
 export const RegisterErrorSchema = Schema.Union([
   AccessInvalidPasswordErrorSchema,
   IdentityEmailRegisteredErrorSchema,
@@ -6381,6 +6942,22 @@ export const RotateAPIKeyErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type RotateAPIKeyError = typeof RotateAPIKeyErrorSchema.Type;
+
+export const RotateSpacePublicInviteErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  AdmissionRequestNotFoundErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type RotateSpacePublicInviteError = typeof RotateSpacePublicInviteErrorSchema.Type;
 
 export const RotateWebhookEndpointSecretErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6524,11 +7101,29 @@ export const UpdateSpaceErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpaceInvalidIdErrorSchema,
+  SpaceInvalidMediaPlaneErrorSchema,
   SpaceNotFoundErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
 export type UpdateSpaceError = typeof UpdateSpaceErrorSchema.Type;
+
+export const UpdateSpacePublicInviteErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  AdmissionRequestNotFoundErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type UpdateSpacePublicInviteError = typeof UpdateSpacePublicInviteErrorSchema.Type;
 
 export const UpdateTenantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6579,7 +7174,9 @@ export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema
 export const ChalkOperationPolicies = {
   addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  approveSpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   archiveSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  arriveBySpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   completeRecentAuthGoogle: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
@@ -6588,6 +7185,7 @@ export const ChalkOperationPolicies = {
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createParticipantFeedbackReport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  createPublicSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecordingDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecordingReservation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6598,6 +7196,7 @@ export const ChalkOperationPolicies = {
   createWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   disableIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6606,6 +7205,8 @@ export const ChalkOperationPolicies = {
   finalizeWhiteboardFileUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getMe: { rateLimit: { limit: 100, policy: "auth.me", windowSeconds: 60 } },
+  getSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  getSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   ingestMonitorResult: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
@@ -6617,7 +7218,9 @@ export const ChalkOperationPolicies = {
   issueRecentAuthProof: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.recent_auth", windowSeconds: 60 } },
   joinDashboardSpaceSelf: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   leaveDashboardSpaceSelf: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  listSpacePublicAdmissionRequests: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
@@ -6625,6 +7228,7 @@ export const ChalkOperationPolicies = {
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshDashboardSpaceSelfAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   releaseRecordingReservation: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6633,6 +7237,7 @@ export const ChalkOperationPolicies = {
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   revokeAPIKey: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  rotateSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
@@ -6642,6 +7247,7 @@ export const ChalkOperationPolicies = {
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  updateSpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
 } as const;

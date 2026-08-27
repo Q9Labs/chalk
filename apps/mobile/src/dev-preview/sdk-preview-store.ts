@@ -234,6 +234,7 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
         eligibleRoles: request.eligibleRoles,
         capabilities: ["publishAudio", "publishVideo", "subscribe", "raiseHand"],
         media: inactiveParticipantMedia(),
+        presence: { state: "connected", speaking: false, activeSpeaker: false },
       };
       return { ...current, participants: { roster: [...current.participants.roster, participant], admissionQueue: current.participants.admissionQueue.filter((candidate) => candidate.requestId !== requestId) } };
     });
@@ -264,7 +265,7 @@ export function createPreviewSnapshot(search: PreviewSearch): SpaceSnapshot {
     },
     chat: chatFor(search),
     reactions: { active: PREVIEW_REACTIONS },
-    whiteboard: { open: search.stage === "whiteboard", engine: { status: "ready", sceneId: "preview-board", revision: "1", error: null } },
+    whiteboard: { open: search.stage === "whiteboard", engine: { status: "ready", sceneId: "preview-board", revision: "1", presenting: search.stage === "whiteboard", error: null } },
   };
 }
 
@@ -300,6 +301,7 @@ function participantsFor(count: PreviewSearch["participants"], search: PreviewSe
     eligibleRoles: fixture.role === "owner" ? ["owner", "collaborator", "observer"] : ["collaborator", "observer"],
     capabilities: [...fixture.capabilities],
     media: participantMediaFor(fixture.id, search),
+    presence: { state: "connected", speaking: false, activeSpeaker: false },
   }));
 }
 
@@ -368,6 +370,7 @@ function createPreviewWhiteboardTransport(): ChalkWhiteboardV1Transport {
     requestSnapshot: async () => emitSnapshot(),
     clear: async () => commit([]),
     setDrawPermission: async () => undefined,
+    setPresentation: async () => undefined,
     files: {
       initiateUpload: unsupportedFileOperation,
       finalizeUpload: unsupportedFileOperation,

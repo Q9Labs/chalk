@@ -1,9 +1,23 @@
 import { Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { VolumeSlider } from "../atomic";
-import type { ParticipantOptionsMenuProps } from "./participant-options-menu";
+import { runParticipantAction, type ParticipantOptionsMenuProps } from "./participant-options-menu-contract";
 
-export function ClassicParticipantOptionsMenu({ participant, variant, canManageParticipants, onClose, onMuteParticipant, onRequestUnmute, onStopParticipantCamera, onRequestStartCamera, onRemoveParticipant, onEditName, participantVolumes, onParticipantVolumeChange }: ParticipantOptionsMenuProps) {
+export function ClassicParticipantOptionsMenu({
+  participant,
+  variant,
+  canManageParticipants,
+  onClose,
+  onMuteParticipant,
+  onRequestUnmute,
+  onStopParticipantCamera,
+  onRequestStartCamera,
+  onRemoveParticipant,
+  onEditName,
+  participantVolumes,
+  onParticipantVolumeChange,
+  onCommandError,
+}: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
   const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant);
@@ -54,8 +68,7 @@ export function ClassicParticipantOptionsMenu({ participant, variant, canManageP
             <button
               type="button"
               onClick={() => {
-                onMuteParticipant(participant.id);
-                onClose();
+                void runParticipantAction(() => onMuteParticipant(participant.id), onClose, onCommandError);
               }}
               className={menuItemClassName}
             >
@@ -68,8 +81,7 @@ export function ClassicParticipantOptionsMenu({ participant, variant, canManageP
             <button
               type="button"
               onClick={() => {
-                onRequestUnmute(participant.id);
-                onClose();
+                void runParticipantAction(() => onRequestUnmute(participant.id), onClose, onCommandError);
               }}
               className={menuItemClassName}
             >
@@ -82,8 +94,7 @@ export function ClassicParticipantOptionsMenu({ participant, variant, canManageP
             <button
               type="button"
               onClick={() => {
-                onStopParticipantCamera(participant.id);
-                onClose();
+                void runParticipantAction(() => onStopParticipantCamera(participant.id), onClose, onCommandError);
               }}
               className={menuItemClassName}
             >
@@ -96,8 +107,7 @@ export function ClassicParticipantOptionsMenu({ participant, variant, canManageP
             <button
               type="button"
               onClick={() => {
-                onRequestStartCamera(participant.id);
-                onClose();
+                void runParticipantAction(() => onRequestStartCamera(participant.id), onClose, onCommandError);
               }}
               className={menuItemClassName}
             >
@@ -110,8 +120,7 @@ export function ClassicParticipantOptionsMenu({ participant, variant, canManageP
             <button
               type="button"
               onClick={() => {
-                onRemoveParticipant(participant.id);
-                onClose();
+                void runParticipantAction(() => onRemoveParticipant(participant.id), onClose, onCommandError);
               }}
               className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-[var(--chalk-app-danger)] transition-colors hover:bg-[var(--chalk-app-danger)]/10"
             >

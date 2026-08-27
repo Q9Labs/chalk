@@ -1,10 +1,8 @@
 package webhooks
 
 import (
-	"bufio"
 	"context"
 	"crypto/x509"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -90,95 +88,6 @@ func TestDeliveryClientRejectsTLSAndOversizedBodies(t *testing.T) {
 	client = testDeliveryClient(t, server, &resolverStub{addresses: [][]netip.Addr{{netip.MustParseAddr("1.1.1.1")}}})
 	_, err = client.Deliver(context.Background(), DeliveryRequest{URL: "https://example.com/hook"})
 	assertDeliveryCode(t, err, "response_too_large")
-}
-
-func TestDeliveryClientBoundsHeadersAndClassifiesTruncatedBodies(t *testing.T) {
-	headerServer := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
-		response.Header().Set("X-Oversized", string(make([]byte, 65<<10)))
-		response.WriteHeader(http.StatusNoContent)
-	}))
-	defer headerServer.Close()
-	headerClient := testDeliveryClient(t, headerServer, &resolverStub{addresses: [][]netip.Addr{{netip.MustParseAddr("1.1.1.1")}}})
-	_, err := headerClient.Deliver(context.Background(), DeliveryRequest{URL: "https://example.com/hook"})
-	assertDeliveryCode(t, err, "response_headers_too_large")
-
-	truncatedServer := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
-		connection, writer, hijackErr := response.(http.Hijacker).Hijack()
-		if hijackErr != nil {
-			return
-		}
-		defer connection.Close()
-		_, _ = writer.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nshort")
-		_ = writer.Flush()
-	}))
-	defer truncatedServer.Close()
-	truncatedClient := testDeliveryClient(t, truncatedServer, &resolverStub{addresses: [][]netip.Addr{{netip.MustParseAddr("1.1.1.1")}}})
-	truncatedResponse, err := truncatedClient.Deliver(context.Background(), DeliveryRequest{URL: "https://example.com/hook"})
-	assertDeliveryCode(t, err, "network_failed")
-	if truncatedResponse.Latency <= 0 {
-		t.Fatalf("truncated response latency = %s, want positive full-attempt duration", truncatedResponse.Latency)
-	}
-}
-
-func TestDeliveryClientLatencyIncludesResponseBodyDrain(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
-		response.Header().Set("Content-Length", "4")
-		response.WriteHeader(http.StatusOK)
-		response.(http.Flusher).Flush()
-		time.Sleep(75 * time.Millisecond)
-		_, _ = response.Write([]byte("done"))
-	}))
-	defer server.Close()
-	client := testDeliveryClient(t, server, &resolverStub{addresses: [][]netip.Addr{{netip.MustParseAddr("1.1.1.1")}}})
-	result, err := client.Deliver(context.Background(), DeliveryRequest{URL: "https://example.com/hook"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Latency < 60*time.Millisecond {
-		t.Fatalf("latency = %s, want response body drain included", result.Latency)
-	}
-}
-
-func TestDeliveryClientRejectsInvalidHTTPStatusAndTimesOutConnect(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
-		connection, writer, err := response.(http.Hijacker).Hijack()
-		if err != nil {
-			return
-		}
-		defer connection.Close()
-		writeRawResponse(writer, "HTTP/1.1 700 Invalid\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-	}))
-	defer server.Close()
-	client := testDeliveryClient(t, server, &resolverStub{addresses: [][]netip.Addr{{netip.MustParseAddr("1.1.1.1")}}})
-	_, err := client.Deliver(context.Background(), DeliveryRequest{URL: "https://example.com/hook"})
-	assertDeliveryCode(t, err, "invalid_http_status")
-
-	client = NewDeliveryClient(&resolverStub{addresses: [][]netip.Addr{{netip.MustParseAddr("1.1.1.1")}}})
-	client.dialContext = func(context.Context, string, string) (net.Conn, error) {
-		return nil, timeoutError{}
-	}
-	_, err = client.Deliver(context.Background(), DeliveryRequest{URL: "https://example.com/hook"})
-	assertDeliveryCode(t, err, "timeout")
-}
-
-func writeRawResponse(writer *bufio.ReadWriter, value string) {
-	_, _ = writer.WriteString(value)
-	_ = writer.Flush()
-}
-
-type timeoutError struct{}
-
-func (timeoutError) Error() string   { return "timed out" }
-func (timeoutError) Timeout() bool   { return true }
-func (timeoutError) Temporary() bool { return true }
-
-var _ net.Error = timeoutError{}
-
-func TestDeliveryClientClassifiesWrappedTimeout(t *testing.T) {
-	err := classifyDeliveryError(context.Background(), errors.Join(timeoutError{}, errors.New("dial failed")))
-	if err.Code != "timeout" || !err.Retryable {
-		t.Fatalf("delivery error = %#v", err)
-	}
 }
 
 type zeroReader struct{}

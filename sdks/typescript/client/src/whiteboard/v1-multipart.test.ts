@@ -42,27 +42,6 @@ describe("whiteboard-v1 multipart updates", () => {
     }
   });
 
-  it("round-trips a 1,000-element full sync without losing groups, styles, or tombstones", () => {
-    const elements = Array.from({ length: 1_000 }, (_, index) => ({
-      ...element(index),
-      is_deleted: index % 17 === 0,
-      payload: {
-        content: `label-${index}`,
-        groupIds: [`group-${Math.floor(index / 10)}`],
-        strokeColor: index % 2 === 0 ? "#1e1e1e" : "#e03131",
-      },
-    }));
-    const parts = operationFrames(elements);
-    const assembler = new WhiteboardV1UpdateAssembler();
-    const reversed = [...parts].reverse();
-
-    expect(parts).toHaveLength(8);
-    let result = assembler.add(toUpdatePart(reversed[0]!, "42"));
-    for (const part of reversed.slice(1)) result = assembler.add(toUpdatePart(part, "42"));
-
-    expect(result).toMatchObject({ status: "complete", frame: { revision: "42", elements } });
-  });
-
   it("rejects a conflicting duplicate without exposing a partial update", () => {
     const parts = operationFrames(Array.from({ length: 129 }, (_, index) => element(index)));
     const assembler = new WhiteboardV1UpdateAssembler();

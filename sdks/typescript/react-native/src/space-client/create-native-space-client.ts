@@ -1,5 +1,6 @@
 import {
   AsyncStorageV1PendingTargetStore,
+  CloudflareRTKClient,
   CloudflareSFUClient,
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
@@ -21,8 +22,10 @@ import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc
 import { AppState } from "react-native";
 
 import { authenticatedNativeCredential, bindNativeAuthenticatedTelemetry, createTelemetry, registerNativeJourneyContext, syncTransportCloseDiagnostic, type RtcPeerConnection, type TelemetryJourney } from "../telemetry";
+import { createNativeRealtimeKitClient } from "./cloudflare-rtk-native";
 
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
+type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
 type MediaFactoryInput = Parameters<NonNullable<PlatformDependencies["createMediaClient"]>>[0];
 type SyncFactoryInput = Parameters<NonNullable<PlatformDependencies["createSyncClient"]>>[0];
 type ChatFileFactoryInput = Parameters<NonNullable<PlatformDependencies["createChatFileTransport"]>>[0];
@@ -132,9 +135,20 @@ function joinTracePhase(step: NonNullable<PlatformDiagnostic["step"]>): "authent
   }
 }
 
-function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch, observePeerConnection: ((peerConnection: RtcPeerConnection) => () => void) | undefined, journey: TelemetryJourney | undefined) {
+function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch, observePeerConnection: ((peerConnection: RtcPeerConnection) => () => void) | undefined, journey: TelemetryJourney | undefined): NativeMediaClient {
   const { subject } = input.access;
-  return new CloudflareSFUClient({
+  if (input.access.media.provider === "cloudflare_rtk") {
+    const client = new CloudflareRTKClient({
+      authToken: input.access.media.clientPayload.token,
+      participantId: subject.participantId,
+      clientFactory: createNativeRealtimeKitClient,
+      onError: input.onFailure,
+      onScreenEnded: input.onScreenEnded,
+    });
+    return createRTKConnectionMediaClient(client);
+  }
+  const replaceMediaConnection = input.replaceMediaConnection;
+  const client = new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
     participantId: subject.participantId,
     transport: createCloudflareSFUHTTPTransport({
@@ -146,6 +160,13 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       participantId: subject.participantId,
       fetch,
     }),
+    replaceMediaConnection: replaceMediaConnection
+      ? async () => {
+          const replacement = await replaceMediaConnection();
+          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+          return replacement.clientPayload;
+        }
+      : undefined,
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       observePeerConnection?.(connection as unknown as RtcPeerConnection);
@@ -154,6 +175,46 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
     onError: input.onFailure,
     onScreenEnded: input.onScreenEnded,
   });
+  return createSFUConnectionMediaClient(client);
+}
+
+function createRTKConnectionMediaClient(client: CloudflareRTKClient): NativeMediaClient {
+  return {
+    setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    observeLocalPublications: client.observeLocalPublications.bind(client),
+    observeRemotePublications: client.observeRemotePublications.bind(client),
+    start: client.start.bind(client),
+    stop: client.stop.bind(client),
+    restart: (input) => {
+      if (!("provider" in input) || input.provider !== "cloudflare_rtk") throw new TypeError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant");
+      return client.restart(input);
+    },
+    prepareLocalTrack: client.prepareLocalTrack.bind(client),
+    clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
+    getSnapshot: client.getSnapshot.bind(client),
+    subscribe: client.subscribe.bind(client),
+  };
+}
+
+function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
+  return {
+    setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    observeLocalPublications: client.observeLocalPublications.bind(client),
+    observeRemotePublications: client.observeRemotePublications.bind(client),
+    start: client.start.bind(client),
+    stop: client.stop.bind(client),
+    restart: (input) => {
+      if ("provider" in input) {
+        if (input.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+        return client.restart(input.clientPayload);
+      }
+      return client.restart(input);
+    },
+    prepareLocalTrack: client.prepareLocalTrack.bind(client),
+    clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
+    getSnapshot: client.getSnapshot.bind(client),
+    subscribe: client.subscribe.bind(client),
+  };
 }
 
 function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>, storage: ReactNativeAsyncStorage | undefined) {

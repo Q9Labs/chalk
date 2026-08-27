@@ -1,4 +1,5 @@
 import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import { Logo } from "@q9labsai/chalk-react";
 import { useState } from "react";
 
 import { Icon } from "./Icon";
@@ -38,7 +39,7 @@ export function SiteNav() {
     <header className="nav" data-menu-open={menuOpen ? "true" : "false"}>
       <div className="container nav-inner">
         <a href="/" className="nav-logo" aria-label="Chalk home">
-          <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
+          <Logo accessibilityLabel={null} color="currentColor" height={26} motion="orbit-burst" variant="wordmark" />
         </a>
 
         <nav className="nav-links" aria-label="Product navigation">

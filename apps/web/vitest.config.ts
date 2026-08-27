@@ -6,6 +6,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       exclude: configDefaults.exclude,
+      maxWorkers: 2,
     },
   }),
 );

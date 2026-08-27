@@ -15,7 +15,8 @@
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.ts"],
       "@q9labsai/facehash/react": ["../../../packages/facehash/src/react.ts"],
       "@q9labsai/chalk-ui/button": ["../../../packages/ui/dist/button.d.ts"],
-      "@q9labsai/chalk-ui/reactions": ["../../../packages/ui/dist/reactions.d.ts"]
+      "@q9labsai/chalk-ui/reactions": ["../../../packages/ui/dist/reactions.d.ts"],
+      "@q9labsai/chalk-ui/assets": ["../../../packages/ui/dist/assets.d.ts"]
     }
   },
   "include": ["src/**/*"],

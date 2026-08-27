@@ -22,7 +22,7 @@ domains:
       evidence: ["docs/redesign/north-star.md"]
     - capability: "Managed production deployment is qualified in this repository"
       done: true
-      evidence: ["infrastructure/managed-episode", "infrastructure/episode-broker"]
+      evidence: ["infrastructure/managed-episode"]
     - capability: "Public product documentation app"
       done: false
       evidence: ["AGENTS.md"]
@@ -45,10 +45,10 @@ domains:
       evidence: ["apps/web/src/routes/space.tsx"]
     - capability: "Public web create-Space flow"
       done: true
-      evidence: ["apps/web/src/routes/space.tsx", "infrastructure/episode-broker/src/episode-lease.ts"]
+      evidence: ["apps/web/src/routes/space.tsx", "apps/api/internal/httpapi/public_invites.go"]
     - capability: "Production-ready hosted web Space experience"
       done: true
-      evidence: ["apps/web/src/routes/space.tsx", "infrastructure/episode-broker"]
+      evidence: ["apps/web/src/routes/space.tsx", "apps/api/internal/httpapi/public_invites.go"]
     - capability: "Mobile invite-link join flow"
       done: true
       evidence: ["apps/mobile/App.tsx", "apps/mobile/src/screens/HomeScreen.shared.tsx"]
@@ -174,7 +174,7 @@ domains:
       evidence: ["apps/api/internal/httpapi/transcripts.go", "apps/api/internal/httpapi/router.go"]
     - capability: "Provider dispatcher, retry, finalization, and cleanup implementation"
       done: true
-      evidence: ["apps/transcription-dispatcher/src", "apps/transcription-dispatcher/test"]
+      evidence: ["apps/transcription-dispatcher/src"]
     - capability: "React transcript and transcription UI"
       done: true
       evidence: ["sdks/typescript/react/src/components"]
@@ -210,6 +210,9 @@ domains:
     - capability: "Server-only Promise SDK for Spaces, Episodes, AccessGrants, and API keys"
       done: true
       evidence: ["sdks/typescript/client/src/server", "sdks/typescript/client/scripts/check-server-package.mjs"]
+    - capability: "Public `appName` client identity flows from SDK options through the transport to server spans and logs"
+      done: false
+      evidence: ["sdks/typescript/client/src/client.ts", "sdks/typescript/react/src/components/chalk/Chalk.tsx", "apps/api/internal/httpapi/middleware.go"]
     - capability: "All public API routes are represented in OpenAPI and generated SDKs"
       done: false
       evidence: ["apps/api/AGENTS.md"]

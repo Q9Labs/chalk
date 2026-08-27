@@ -55,6 +55,8 @@ type LiveControllerOptions = Readonly<{
   delay?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 }>;
 
+const SNAPSHOT_REFRESH_REASON = "snapshot_refresh";
+
 const canonical = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") {
@@ -294,9 +296,13 @@ export class DiagnosticLiveController {
 
     if (delta.gap) {
       if (delta.gap.fromCursor > delta.gap.toCursor) throw new Error("The live stream sent an inverted visibility gap");
+      const targetCursor = Math.max(delta.cursor, delta.gap.toCursor);
+      if (delta.gap.reason === SNAPSHOT_REFRESH_REASON) {
+        await this.refreshSnapshotAtLeast(targetCursor);
+        return;
+      }
       const visibleGaps = [...this.state.visibleGaps, delta.gap].slice(-25);
       this.setState({ visibleGaps });
-      const targetCursor = Math.max(delta.cursor, delta.gap.toCursor);
       if (targetCursor <= this.state.lastAppliedCursor) await this.refreshSnapshotAtLeast(targetCursor);
       else await this.refillThrough(targetCursor);
       return;

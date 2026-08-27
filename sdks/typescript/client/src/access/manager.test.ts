@@ -1,84 +1,97 @@
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
+import type { ConnectionAccessRequest } from "../connection/dependencies";
+import type { ParsedAccessGrant } from "./grant";
 import { ConnectionAccessService, makeConnectionAccessLayer } from "./manager";
-import { ACCESS_SUBJECT, accessGrant } from "./grant.test.helpers";
+import { accessGrant } from "./grant.test.helpers";
 
-const START = Date.parse("2026-07-21T12:00:00.000Z");
 describe("ConnectionAccessService", () => {
-  it("uses TestClock for the R1 refresh window and supplies the current media proof", async () => {
-    const first = accessGrant(START + 61_000, "first", "connection-1");
-    const second = accessGrant(START + 300_000, "second", "connection-1");
-    const requests: unknown[] = [];
-    const harness = accessHarness((request) =>
-      Effect.sync(() => {
-        requests.push(request);
-        return requests.length === 1 ? first : second;
-      }),
-    );
+  it("serializes one replacement when the current media access has expired", async () => {
+    const requests: ConnectionAccessRequest[] = [];
+    const automaticReplacements: ParsedAccessGrant[] = [];
+    const initial = accessGrant(1_000, "initial", "connection-1");
+    const replacement = accessGrant(10_000, "replacement", "connection-2");
+    const provider = (request: ConnectionAccessRequest) => {
+      requests.push(request);
+      return Effect.succeed(request.replaceMediaConnection ? replacement : initial);
+    };
+    const program = Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      yield* service.subscribeAutomaticMediaReplacement((access) => automaticReplacements.push(access));
+      yield* service.initialize();
+      yield* TestClock.adjust("1 second");
+      const [left, right] = yield* Effect.all([service.ensureFresh("sync_recovery"), service.ensureFresh("sync_recovery")], { concurrency: "unbounded" });
+      return { left, right };
+    });
 
-    await expect(harness.initialize()).resolves.toEqual(first);
-    await harness.runtime.runPromise(TestClock.adjust(1_000));
-    await expect(harness.runtime.runPromise(harness.service.getMediaToken())).resolves.toEqual(second.media.token);
-    expect(requests[1]).toEqual({ reason: "scheduled_refresh", replaceMediaConnection: false, currentMediaToken: first.media.token, expectedParticipantGeneration: 1 });
+    const result = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider, 0)), Effect.provide(TestClock.layer())));
 
-    await harness.runtime.dispose();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({ replaceMediaConnection: true, expectedParticipantGeneration: 1 });
+    expect(automaticReplacements).toEqual([replacement]);
+    expect(result.left.media.clientPayload.connectionId).toBe("connection-2");
+    expect(result.right.media.clientPayload.connectionId).toBe("connection-2");
   });
 
-  it("rejects a refresh that changes identity or replaces media outside recovery", async () => {
-    const first = accessGrant(START + 300_000, "first", "connection-1");
-    const changed = { ...accessGrant(START + 300_000, "second", "connection-2"), subject: { ...ACCESS_SUBJECT, participantId: "participant-2" } };
-    let calls = 0;
-    const harness = accessHarness(() => Effect.sync(() => (calls++ === 0 ? first : changed)));
+  it("rejects a replacement that keeps the expired media binding", async () => {
+    const initial = accessGrant(1_000, "initial", "connection-1");
+    const provider = (request: ConnectionAccessRequest) => Effect.succeed(request.replaceMediaConnection ? accessGrant(10_000, "replacement", "connection-1") : initial);
+    const program = Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      yield* service.initialize();
+      yield* TestClock.adjust("1 second");
+      return yield* service.ensureFresh("sync_recovery").pipe(Effect.flip);
+    });
 
-    await harness.initialize();
-    await expect(harness.runtime.runPromise(harness.service.refresh("scheduled_refresh", false))).rejects.toMatchObject({ _tag: "ConnectionAccessFailure", code: "access.invalid" });
+    const failure = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider, 0)), Effect.provide(TestClock.layer())));
 
-    await harness.runtime.dispose();
+    expect(failure.code).toBe("access.invalid");
   });
 
-  it("replaces the media connection after access is rejected", async () => {
-    const first = accessGrant(START + 300_000, "first", "connection-1");
-    const replacement = accessGrant(START + 300_000, "replacement", "connection-2");
-    const requests: unknown[] = [];
-    const harness = accessHarness((request) =>
-      Effect.sync(() => {
-        requests.push(request);
-        return requests.length === 1 ? first : replacement;
-      }),
-    );
+  it("accepts a replacement that changes media provider", async () => {
+    const initial = accessGrant(1_000, "initial", "connection-1");
+    const replacement = rtkAccessGrant(10_000, "replacement", "participant-ref-2");
+    const provider = (request: ConnectionAccessRequest) => Effect.succeed(request.replaceMediaConnection ? replacement : initial);
+    const program = Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      yield* service.initialize();
+      yield* TestClock.adjust("1 second");
+      return yield* service.ensureFresh("sync_recovery");
+    });
 
-    await harness.initialize();
-    await expect(harness.runtime.runPromise(harness.service.refreshAfterRejection())).resolves.toEqual(replacement);
-    expect(requests[1]).toEqual({ reason: "access_retry", replaceMediaConnection: true, currentMediaToken: first.media.token, expectedParticipantGeneration: 1 });
+    const result = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider, 0)), Effect.provide(TestClock.layer())));
 
-    await harness.runtime.dispose();
+    expect(result.media.provider).toBe("cloudflare_rtk");
   });
 
-  it("replaces one expired Join grant before publishing it", async () => {
-    let calls = 0;
-    const harness = accessHarness(() => Effect.sync(() => (calls++ === 0 ? accessGrant(START - 1, "expired", "connection-1") : accessGrant(START + 300_000, "fresh", "connection-1"))));
+  it("rejects an ordinary refresh that changes media provider", async () => {
+    const initial = accessGrant(10_000, "initial", "connection-1");
+    const replacement = rtkAccessGrant(10_000, "replacement", "participant-ref-2");
+    let requests = 0;
+    const provider = (_request: ConnectionAccessRequest) => Effect.succeed(requests++ === 0 ? initial : replacement);
+    const program = Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      yield* service.initialize();
+      return yield* service.refresh("scheduled_refresh", false).pipe(Effect.flip);
+    });
 
-    await expect(harness.initialize()).resolves.toMatchObject({ media: { clientPayload: { connectionId: "connection-1" } } });
-    expect(calls).toBe(2);
+    const failure = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider, 0)), Effect.provide(TestClock.layer())));
 
-    await harness.runtime.dispose();
+    expect(failure.code).toBe("access.invalid");
   });
 });
 
-function runtimeFor(provider: Parameters<typeof makeConnectionAccessLayer>[0]) {
-  return ManagedRuntime.make(makeConnectionAccessLayer(provider).pipe(Layer.provideMerge(TestClock.layer({ warningDelay: "1 hour" }))));
-}
-
-function accessHarness(provider: Parameters<typeof makeConnectionAccessLayer>[0]) {
-  const runtime = runtimeFor(provider);
-  const service = runtime.runSync(Effect.service(ConnectionAccessService));
+function rtkAccessGrant(expiresAt: number, suffix: string, providerSubject: string): ParsedAccessGrant {
+  const base = accessGrant(expiresAt, suffix);
   return {
-    runtime,
-    service,
-    initialize: async () => {
-      await runtime.runPromise(TestClock.setTime(START));
-      return runtime.runPromise(service.initialize());
+    subject: base.subject,
+    sync: base.sync,
+    media: {
+      token: base.media.token,
+      expiresAt: base.media.expiresAt,
+      provider: "cloudflare_rtk",
+      clientPayload: { providerSubject, token: `rtk-${suffix}` },
     },
   };
 }

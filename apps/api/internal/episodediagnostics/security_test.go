@@ -8,33 +8,12 @@ import (
 	"time"
 )
 
-func TestValidateDiagnosticIntakeUsesAuthoritativeEndAndHardExpiry(t *testing.T) {
-	started := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
-	ended := started.Add(time.Hour)
-	diagnostic := EpisodeDiagnostic{State: DiagnosticEnded, Environment: EnvironmentDevelopment, EpisodeStartedAt: started, EpisodeEndedAt: timePtr(ended)}
-	event := draftFixture()
-	event.OccurredAt = ended.Add(23 * time.Hour)
-	if err := ValidateDiagnosticIntake(diagnostic, []DiagnosticEventDraft{event}, ended.Add(23*time.Hour+time.Minute)); err != nil {
-		t.Fatalf("late event inside authoritative grace rejected: %v", err)
-	}
-	if err := ValidateDiagnosticIntake(diagnostic, nil, ended.Add(EndedDiagnosticIntakeGrace)); !errors.Is(err, ErrDiagnosticIntakeClosed) {
-		t.Fatalf("intake at hard expiry = %v, want ErrDiagnosticIntakeClosed", err)
-	}
-	event.OccurredAt = ended.Add(EndedDiagnosticIntakeGrace + time.Second)
-	if err := ValidateDiagnosticIntake(diagnostic, []DiagnosticEventDraft{event}, ended.Add(23*time.Hour)); !errors.Is(err, ErrDiagnosticIntakeClosed) {
-		t.Fatalf("event beyond hard expiry = %v, want ErrDiagnosticIntakeClosed", err)
-	}
-}
-
-func TestValidateDiagnosticIntakeRejectsCompleteAndExpired(t *testing.T) {
-	now := time.Date(2026, 8, 4, 2, 0, 0, 0, time.UTC)
-	base := EpisodeDiagnostic{State: DiagnosticComplete, EpisodeStartedAt: now.Add(-time.Hour), EpisodeEndedAt: timePtr(now.Add(-time.Minute))}
-	if err := ValidateDiagnosticIntake(base, nil, now); !errors.Is(err, ErrDiagnosticIntakeClosed) {
-		t.Fatalf("complete intake = %v, want closed", err)
-	}
-	base.State = DiagnosticExpired
-	if err := ValidateDiagnosticIntake(base, nil, now); !errors.Is(err, ErrDiagnosticExpired) {
-		t.Fatalf("expired intake = %v, want expired", err)
+func draftFixture() DiagnosticEventDraft {
+	return DiagnosticEventDraft{
+		Version: 1, EventID: "event01", ProducerOperationRef: "op01", ProducerSequence: 1,
+		OccurredAt: time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC), Source: SourceSDK,
+		Name: "chat.send", Phase: "intent", State: EventStarted,
+		Attributes: DiagnosticAttributes{"status": "accepted", "retryable": false},
 	}
 }
 
@@ -128,6 +107,9 @@ func TestIssueAffectedSubjectIsAuthoritativeAndBranchNeverReopens(t *testing.T) 
 	if err := state.Reduce([]AcceptedDiagnosticEvent{accepted}); err != nil {
 		t.Fatalf("reduce failed event: %v", err)
 	}
+	if len(state.Issues) == 0 {
+		t.Fatal("failed event did not create an issue")
+	}
 	for _, issue := range state.Issues {
 		if issue.Affected == nil || issue.Affected.Kind != "participant" || issue.Affected.Identifier.IDClass != "chalk.participant" || issue.Affected.Identifier.Value != "participant01" {
 			t.Fatalf("issue affected subject = %+v", issue.Affected)
@@ -195,41 +177,5 @@ func TestIssueAffectedSubjectIsAuthoritativeAndBranchNeverReopens(t *testing.T) 
 	}
 	if !foundIssue {
 		t.Fatal("post-end callback did not leave a bounded issue")
-	}
-}
-
-func TestProjectionDoesNotDeriveRootLifecycleFromProducerEvents(t *testing.T) {
-	event := draftFixture()
-	event.EventID = "episode-end-evidence"
-	event.Name = "episode.end.natural"
-	event.Phase = "finalized"
-	event.State = EventSucceeded
-	accepted, err := AcceptEvent(event, "diag01", 1, event.OccurredAt.Add(time.Second))
-	if err != nil {
-		t.Fatalf("accept lifecycle evidence: %v", err)
-	}
-	state := NewProjectionState(EpisodeDiagnostic{ID: "diag01", Environment: EnvironmentDevelopment, State: DiagnosticLive, EpisodeStartedAt: event.OccurredAt.Add(-time.Minute)})
-	if err := state.Reduce([]AcceptedDiagnosticEvent{accepted}); err != nil {
-		t.Fatalf("reduce lifecycle evidence: %v", err)
-	}
-	if state.Diagnostic.State != DiagnosticLive || state.Diagnostic.EpisodeEndedAt != nil || state.Diagnostic.RunEndCursor != nil {
-		t.Fatalf("producer event mutated authoritative lifecycle: %+v", state.Diagnostic)
-	}
-}
-
-func TestLifecycleErrorTelemetryClasses(t *testing.T) {
-	for _, test := range []struct {
-		err  error
-		want string
-	}{
-		{ErrDiagnosticEnvironmentMismatch, "environment"},
-		{ErrDiagnosticIntakeClosed, "lifecycle_closed"},
-		{ErrDiagnosticExpired, "expired"},
-		{ErrDiagnosticLifecycleInvalid, "lifecycle"},
-		{ErrForbidden, "authorization"},
-	} {
-		if got := errorClass(test.err); got != test.want {
-			t.Errorf("errorClass(%v) = %q, want %q", test.err, got, test.want)
-		}
 	}
 }

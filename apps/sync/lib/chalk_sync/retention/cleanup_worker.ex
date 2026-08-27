@@ -350,10 +350,19 @@ defmodule ChalkSync.Retention.CleanupWorker do
   end
 
   defp delete_collaboration_data(transaction, candidate) do
+    Postgrex.query!(transaction, SQL.lock_chat_stream(), space_scope(candidate))
+
+    _measurement =
+      delete_measurement(transaction, SQL.delete_chat_read_receipts(), candidate)
+
+    _measurement = delete_measurement(transaction, SQL.delete_chat_messages(), candidate)
+
+    Postgrex.query!(transaction, SQL.reconcile_chat_stream(), space_scope(candidate))
+
+    _measurement =
+      delete_space_measurement(transaction, SQL.delete_chat_streams(), candidate)
+
     collaboration_deletions = [
-      SQL.delete_chat_read_receipts(),
-      SQL.delete_chat_messages(),
-      SQL.delete_chat_streams(),
       SQL.delete_whiteboard_operation_receipts(),
       SQL.delete_whiteboard_permissions(),
       SQL.delete_whiteboard_elements(),
@@ -364,6 +373,14 @@ defmodule ChalkSync.Retention.CleanupWorker do
       _measurement = delete_measurement(transaction, query, candidate)
     end)
   end
+
+  defp delete_space_measurement(transaction, query, candidate) do
+    case Postgrex.query!(transaction, query, space_scope(candidate)).rows do
+      [[rows, bytes]] -> {rows, bytes}
+    end
+  end
+
+  defp space_scope(candidate), do: [candidate.tenant_id, candidate.space_id]
 
   defp candidate([
          tenant_id,

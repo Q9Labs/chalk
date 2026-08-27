@@ -35,7 +35,7 @@
       "properties": {
         "engine": { "const": "postgresql" },
         "major": { "const": 18 },
-        "minimum_migration": { "const": 20260713130000 },
+        "minimum_migration": { "type": "integer", "minimum": 20260713130000 },
         "maximum_migration": { "type": "null" }
       }
     },

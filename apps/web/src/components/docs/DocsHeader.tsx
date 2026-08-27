@@ -2,6 +2,7 @@ import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Logo } from "@q9labsai/chalk-react";
 import type { RefObject } from "react";
 
 type DocsHeaderProps = {
@@ -16,7 +17,7 @@ export function DocsHeader({ menuButtonRef, mobileNavOpen, onMenuToggle, onSearc
     <header className="docs-header">
       <div className="docs-header-inner">
         <a href="/" className="docs-logo" aria-label="Chalk home">
-          <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
+          <Logo accessibilityLabel={null} color="currentColor" height={34} motion="orbit-burst" variant="wordmark" />
           <span>Docs</span>
         </a>
         <nav className="docs-header-nav" aria-label="Documentation header">

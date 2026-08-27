@@ -42,6 +42,35 @@ load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
 Redis-backed rate limiting through `CHALK_REDIS_URL`.
 
+### Default MediaPlane
+
+`CHALK_DEFAULT_MEDIA_PLANE` selects the deployment-owned MediaPlane used when
+a Create Space request omits `media_plane`. The supported deployment default is
+`cf_sfu`, because the Dashboard access-grant path is SFU-only. Managed
+production requires this setting; generic local and test processes may omit it,
+but then Create Space requests must supply a provider. Explicit Space and
+Tenant-managed provider configuration can still select `cf_rtk`.
+
+An absent Tenant provider configuration may use deployment credentials only
+when the Space provider matches this default. A concrete Tenant configuration
+remains authoritative, an explicit disable never falls back, and deployment
+credentials are never borrowed across providers.
+
+The checked-in local launcher sets `cf_sfu`. The deployment default requires the
+Realtime app ID and secret.
+
+The ProviderBridge currently uses the Cloudflare SFU executor independently of
+the deployment default. When the bridge is enabled, its Realtime app ID and
+secret remain required.
+
+### Google OAuth
+
+Google sign-in activates only with a complete
+`CHALK_GOOGLE_OAUTH_CLIENT_ID`, `CHALK_GOOGLE_OAUTH_CLIENT_SECRET`, and
+`CHALK_GOOGLE_OAUTH_REDIRECT_URL` triplet. Generic local development may omit
+the triplet. Managed production requires it and requires the redirect URL to be
+`https://chalkmeet.com/api/auth/google/callback`.
+
 ### Production capabilities
 
 Integrations, recording, and transcription are explicit runtime capabilities:
@@ -144,6 +173,40 @@ Production requires `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`,
 `CHALK_SYNC_TOKEN_KEY_ID`, and `CHALK_SYNC_TOKEN_PRIVATE_KEY`. The private key is
 the unpadded base64url encoding of a 64-byte Ed25519 private key and must be
 supplied through the runtime secret boundary.
+
+## Public Space invites
+
+Public Space links use a dedicated `cspi1` Ed25519 keyring. Hosted environments
+must configure all of these values:
+
+- `CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID` identifies the Tenant that owns Spaces
+  created from the public Open a Space flow.
+- `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` selects the media plane for those
+  auto-created Spaces.
+- `CHALK_PUBLIC_INVITE_WEB_ORIGIN` is the HTTPS origin used to build canonical
+  `/space/{slug}#spaceInviteToken=...` links.
+- `CHALK_PUBLIC_INVITE_KEY_ID` and `CHALK_PUBLIC_INVITE_PRIVATE_KEY` select the
+  current signing key. The private key is an unpadded base64url Ed25519 private
+  key and must stay inside the runtime secret boundary.
+- `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` is a non-empty JSON object that maps
+  key IDs to unpadded base64url Ed25519 public keys. It must include the public
+  key for the current signing key.
+
+`CHALK_PUBLIC_INVITE_AUTO_LIFECYCLE_SECONDS` controls how long an auto-created
+Space may remain active before Chalk ends its live Episode and archives it. It
+defaults to one hour and accepts values from 60 through 3600 seconds.
+
+`CHALK_PUBLIC_INVITE_SCHEDULER_INTERVAL_MS` and
+`CHALK_PUBLIC_INVITE_SCHEDULER_BATCH` are optional, but they must be set
+together. They control the worker that ends an auto-created Space's live
+Episode and archives the Space after its creator leaves or its deadline passes.
+
+Keep an outgoing public key in `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` while
+links signed by that key must remain valid. Removing the key invalidates those
+links; rotating a Space invite invalidates the prior link through its persisted
+generation instead. Local development derives a local-only keyring and creates
+or reuses a neutral managed Tenant when these variables are absent. It requires
+at least one non-wildcard API CORS origin so canonical links have a safe origin.
 
 Sensitive dashboard mutations use a five-minute, action- and resource-bound
 recent-auth proof. Local development uses a deterministic local-only default;

@@ -11,6 +11,7 @@
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.ts"],
       "@q9labsai/facehash/react": ["../../../packages/facehash/src/react.ts"],
       "@q9labsai/chalk-ui": ["../../../packages/ui/src/index.ts"],
+      "@q9labsai/chalk-ui/assets": ["../../../packages/ui/src/assets.ts"],
       "@q9labsai/chalk-ui/button": ["../../../packages/ui/src/button.tsx"],
       "@q9labsai/chalk-ui/reactions": ["../../../packages/ui/src/reactions.ts"],
       "@q9labsai/chalk-whiteboard": ["../../../packages/whiteboard/src/index.ts"],

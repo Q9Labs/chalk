@@ -131,6 +131,12 @@ suffixes and canonical IDs live in
 payloads and secret-file payloads must be SSM `SecureString` values. The
 PlanetScale proof may be `String` or `SecureString`.
 
+`managed-migrator-database-url` is also mandatory and must be an SSM
+`SecureString` under the same managed prefix. It is a dedicated owner/migrator
+credential, not the runtime database user. The controller mounts it only in the
+release's one-shot `chalk-api-migrate` unit, removes it after that unit exits,
+and never passes it to API or Sync. It cannot be excluded.
+
 Missing or empty inputs fail before the stable runtime stops. A dispatch may
 name an allowed missing environment or secret-file input through the
 `managed_secret_exclusions` input. The PlanetScale durability proof is always
@@ -144,19 +150,36 @@ On the host, `chalk-deployment-controller` performs this transaction:
 
 1. Validate the versioned request, manifest, source artifacts, SSM response,
    image digests, and host architecture.
-2. Fetch all allowlisted SSM inputs with decryption and record their exact
-   versions without recording values.
-3. Render and validate the candidate while the stable runtime is still live,
-   then pull its immutable images.
-4. Stop the runtime, atomically publish `/run/chalk/env` and the checksummed
-   release identity, stream Podman secrets over standard input, start the hard
-   dependency target, and run aggregate health with bounded retries.
-5. Promote only after health. Any activation, health, or promotion failure
+2. Fetch all allowlisted SSM inputs with decryption, preserve their exact bytes
+   including trailing newlines, and record exact versions without values.
+3. On the first controller run, adopt a healthy legacy runtime only when its
+   release identity, installed Quadlets, live env/proof, Podman secrets, and
+   versioned SSM inputs agree. This creates the rollback point without stopping
+   the live services.
+4. Render and validate the candidate while the stable runtime is still live,
+   exchange the host role for a transient rootless ECR token over standard
+   input, then pull its immutable images.
+5. Stop the runtime, atomically publish `/run/chalk/env` and the checksummed
+   release identity, and stream Podman secrets over standard input.
+6. Run the exact `minimum_migration` target from the release manifest in the
+   one-shot migration unit. The unit may name an exact checked-in migration as
+   an allowed repair; the migrator applies only that missing version below a
+   recorded newer version and rejects any other out-of-order gap before it
+   continues through the target. API and Sync activation waits for this unit to
+   succeed; the migrator credential is removed before the runtime target starts.
+7. Start the hard dependency target and run aggregate health with bounded
+   retries. The API readiness check also rejects a database below the manifest
+   migration target.
+8. Promote only after health. Any activation, health, or promotion failure
    fences the candidate and restores the prior rendered runtime and exact SSM
-   parameter versions. A failed rollback leaves the runtime fenced.
+   parameter versions. A healthy first-deploy rollback also installs the
+   controller and boot restore unit around the adopted release. A failed
+   rollback leaves the runtime fenced. Database migrations are forward-only:
+   runtime rollback never attempts to undo an applied migration.
 
 A healthy release writes its non-secret manifest, rendered runtime, active
-pointer, and append-only ledger under `/var/lib/chalk`. The root
+pointer, and append-only ledger under `/var/lib/chalk/deployment-controller`.
+The root
 `chalk-runtime-restore.service` retries transient boot failures. After a reboot
 clears `/run`, it reads the active pointer, fetches the recorded SSM versions,
 rebuilds the env and release identity, reconciles the rootless Podman secrets,
@@ -201,10 +224,15 @@ infrastructure/managed-episode/scripts/validate-runtime \
   --sync-proof /tmp/chalk-inputs/evidence/planetscale-sync-proof.json \
   --rendered-root /tmp/chalk-release/runtime
 
-infrastructure/managed-episode/scripts/test-config
 infrastructure/managed-episode/scripts/test-deployment-controller
 node --test scripts/deploy/deploy-managed-release.test.mjs
 ```
+
+The controller harness runs every group by default. Use `--group validation`,
+`adoption`, `inputs`, `healthy`, `rollback`, `restore`, or `ssm-contract` for a
+focused check. `rollback` includes the healthy deployment setup, and `restore`
+includes both earlier groups because those checks need the durable stable
+release.
 
 The controller runs this validator against its private `/run` stage. It removes
 the transient secret inputs after Podman registration, so they are not kept in

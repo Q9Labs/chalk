@@ -30,14 +30,15 @@ const (
 )
 
 var (
-	safeTokenPattern      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@+/=-]*$`)
-	safeOpaquePattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
-	safeClassPattern      = regexp.MustCompile(`^[a-z][a-z0-9]*(?:\.[a-z0-9_-]+)*$`)
-	eventNamePattern      = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
-	phasePattern          = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	printableASCII        = regexp.MustCompile(`^[\x20-\x7e]+$`)
-	forbiddenKeyPattern   = regexp.MustCompile(`(?i)(?:text|content|body|payload|display.?name|filename|url|uri|token|secret|password|credential|cookie|authorization|exception|stack|sdp|ice|candidate|address|phone|email|webhook)`)
-	forbiddenValuePattern = regexp.MustCompile(`(?i)(?:https?://|wss?://|bearer\s+[a-z0-9._~+/=-]+|-----begin|candidate:|v=0\r?\n|\b(?:\d{1,3}\.){3}\d{1,3}\b|[\w.+-]+@[\w.-]+\.[a-z]{2,})`)
+	safeTokenPattern        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@+/=-]*$`)
+	safeOpaquePattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+	safeClassPattern        = regexp.MustCompile(`^[a-z][a-z0-9]*(?:\.[a-z0-9_-]+)*$`)
+	eventNamePattern        = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
+	phasePattern            = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	participantLabelPattern = regexp.MustCompile(`^Participant [0-9]{1,4}$`)
+	printableASCII          = regexp.MustCompile(`^[\x20-\x7e]+$`)
+	forbiddenKeyPattern     = regexp.MustCompile(`(?i)(?:text|content|body|payload|display.?name|filename|url|uri|token|secret|password|credential|cookie|authorization|exception|stack|sdp|ice|candidate|address|phone|email|webhook)`)
+	forbiddenValuePattern   = regexp.MustCompile(`(?i)(?:https?://|wss?://|bearer\s+[a-z0-9._~+/=-]+|-----begin|candidate:|v=0\r?\n|\b(?:\d{1,3}\.){3}\d{1,3}\b|[\w.+-]+@[\w.-]+\.[a-z]{2,})`)
 )
 
 var allowedPhases = map[string]struct{}{
@@ -72,7 +73,7 @@ var allowedAttributes = map[string]struct{}{
 	"storage_state": {}, "object_ref_class": {}, "attachment_type": {}, "size_bucket": {}, "safe_id_class": {}, "visibility": {},
 	"recipient_count": {}, "projection_count": {}, "observable_recipient_count": {}, "attempt": {}, "retryable": {}, "budget_remaining": {},
 	"duration_ms": {}, "latency_ms": {}, "bytes": {}, "count": {}, "cursor": {}, "sequence": {}, "grace_ms": {}, "deadline_ms": {},
-	"state_version": {}, "policy_version": {}, "release_channel": {},
+	"state_version": {}, "policy_version": {}, "release_channel": {}, "close_code": {},
 }
 
 // ActionOperationKeys is the closed v1 action catalog. Event names may append
@@ -95,10 +96,10 @@ var ActionOperationKeys = []string{
 	"cleanup.resource.release", "cleanup.fan_in", "cleanup.complete",
 	"artifact.reserve", "artifact.write", "artifact.commit", "artifact.fail",
 	"webhook.enqueue", "webhook.attempt", "webhook.retry", "webhook.deliver", "webhook.exhaust",
-	"whiteboard.unsupported",
+	"whiteboard.connect", "whiteboard.recover", "whiteboard.disconnect",
 }
 
-var eventExtraRoots = []string{"coverage.started_late", "coverage.gap", "coverage.rejected", "operation.started", "operation.ended", "checkpoint.observed", "checkpoint.missed", "issue.opened", "issue.resolved", "branch.started", "branch.ended", "diagnostic.created", "diagnostic.ended", "diagnostic.completed"}
+var eventExtraRoots = []string{"coverage.started_late", "coverage.gap", "coverage.rejected", "operation.started", "operation.ended", "checkpoint.observed", "checkpoint.missed", "issue.opened", "issue.resolved", "branch.started", "branch.ended", "diagnostic.created", "diagnostic.ended", "diagnostic.completed", "whiteboard.connect", "whiteboard.recover", "whiteboard.disconnect"}
 
 var allowedEventNames = func() map[string]struct{} {
 	set := make(map[string]struct{}, len(ActionOperationKeys)+len(eventExtraRoots))
@@ -914,6 +915,55 @@ func ValidateBranch(branch DiagnosticBranchDetail) error {
 }
 func ValidateDiagnosticBranch(branch DiagnosticBranchDetail) error { return ValidateBranch(branch) }
 
+func ValidateParticipantProjection(participant ParticipantProjectionV1) error {
+	if participant.SchemaVersion != "ParticipantProjection/v1" || !validToken(participant.ParticipantID, 128) || !participantLabelPattern.MatchString(participant.AnonymousLabel) {
+		return errors.New("participant projection identity is invalid")
+	}
+	if participant.IdentityKind != "user" && participant.IdentityKind != "agent" && participant.IdentityKind != "guest" && participant.IdentityKind != "unknown" {
+		return errors.New("participant projection identity kind is not allowlisted")
+	}
+	if participant.State != "joined" && participant.State != "reconnecting" && participant.State != "left" && participant.State != "unknown" {
+		return errors.New("participant projection state is not allowlisted")
+	}
+	if participant.JoinedAt != nil && !validDate(*participant.JoinedAt) || participant.LeftAt != nil && !validDate(*participant.LeftAt) {
+		return errors.New("participant projection timestamp is invalid")
+	}
+	if participant.Visibility != "observable" && participant.Visibility != "not_observable" && participant.Visibility != "disconnected" {
+		return errors.New("participant projection visibility is not allowlisted")
+	}
+	if len(participant.VisibilityGaps) > MaxPageSize {
+		return errors.New("participant projection visibility gaps are unbounded")
+	}
+	for _, gap := range participant.VisibilityGaps {
+		if len(gap) > 160 || !printableASCII.MatchString(gap) || forbiddenValuePattern.MatchString(gap) {
+			return errors.New("participant projection visibility gap is unsafe")
+		}
+	}
+	if participant.OperationCount < 0 || participant.IssueCount < 0 {
+		return errors.New("participant projection counts are invalid")
+	}
+	if participant.Display.Label.Value == "" && participant.Display.Label.UnknownReason == "" {
+		return errors.New("participant projection label is unavailable")
+	}
+	if participant.Display.Label.Value != "" && !participantLabelPattern.MatchString(participant.Display.Label.Value) {
+		return errors.New("participant projection display label is invalid")
+	}
+	if participant.Display.RawIdentity.Value != "" {
+		return errors.New("participant projection raw identity is retained")
+	}
+	for _, reason := range []UnknownReason{participant.Display.Label.UnknownReason, participant.Display.RawIdentity.UnknownReason} {
+		if reason != "" {
+			if _, ok := allowedUnknownReasons[reason]; !ok {
+				return errors.New("participant projection unknown reason is not allowlisted")
+			}
+		}
+	}
+	if participant.Display.RawIdentity.UnknownReason == "" {
+		return errors.New("participant projection raw identity reason is unavailable")
+	}
+	return nil
+}
+
 func ValidateSnapshot(snapshot DiagnosticSnapshotV1) error {
 	if snapshot.SchemaVersion != "DiagnosticSnapshot/v1" || snapshot.Reference == "" || !validEnvironment(snapshot.Environment) || snapshot.CommittedCursor < 0 || snapshot.ProjectedCursor < 0 || snapshot.ProjectedCursor > snapshot.CommittedCursor {
 		return errors.New("snapshot envelope is invalid")
@@ -936,6 +986,11 @@ func ValidateSnapshot(snapshot DiagnosticSnapshotV1) error {
 	}
 	for _, branch := range snapshot.Branches {
 		if err := ValidateBranch(branch); err != nil {
+			return err
+		}
+	}
+	for _, participant := range snapshot.Participants {
+		if err := ValidateParticipantProjection(participant); err != nil {
 			return err
 		}
 	}

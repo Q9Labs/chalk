@@ -52,7 +52,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
               revision: 0,
               capabilities: ["drawWhiteboard", "manageWhiteboard"],
               participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
-              can_draw: true
+              can_draw: true,
+              is_presenting: false
             }} =
              PostgresRepository.connect(host)
 
@@ -109,6 +110,27 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert {:error, :permission_denied} =
              PostgresRepository.commit_update(participant, denied_update)
 
+    presentation = %{operation_id: "whiteboard-presentation-0001", presenting: true}
+
+    assert {:ok, %{outcome: :committed, scene_id: ^scene_id, revision: 2}} =
+             PostgresRepository.set_presentation(host, presentation)
+
+    assert {:ok, %{is_presenting: true}} = PostgresRepository.connect(participant)
+
+    assert {:ok, %{outcome: :duplicate, revision: 2, presenting: true}} =
+             PostgresRepository.set_presentation(host, presentation)
+
+    second_update = %{denied_update | operation_id: "whiteboard-update-0003"}
+
+    assert {:ok, %{outcome: :committed, revision: 3}} =
+             PostgresRepository.commit_update(host, second_update)
+
+    assert {:ok,
+            [
+              %{type: :presentation, revision: 2, presenting: true},
+              %{type: :update, revision: 3}
+            ]} = PostgresRepository.read_after(participant, scene_id, 1)
+
     clear = %{operation_id: "whiteboard-clear-0001", scene_id: scene_id}
 
     assert {:ok, %{outcome: :committed, scene_id: new_scene_id, revision: 0}} =
@@ -117,7 +139,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert new_scene_id != scene_id
     assert {:error, :stale_scene} = PostgresRepository.commit_update(host, denied_update)
 
-    assert {:ok, %{scene_id: ^new_scene_id, revision: 0, elements: []}} =
+    assert {:ok, %{scene_id: ^new_scene_id, revision: 0, elements: [], is_presenting: true}} =
              PostgresRepository.snapshot(host)
   end
 

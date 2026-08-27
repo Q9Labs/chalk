@@ -523,15 +523,18 @@ defmodule ChalkSync.SyncPostgres do
   defp insert_product_rows(connection, episode, participants, policy) do
     config_snapshot = episode_config_snapshot(episode.episode_id, policy)
 
-    Postgrex.query!(connection, "insert into tenants (id, name) values ($1, 'Sync Test')", [
-      uuid(episode.tenant_id)
-    ])
+    Postgrex.query!(
+      connection,
+      "insert into tenants (id, name) values ($1, 'Sync Test') on conflict (id) do nothing",
+      [uuid(episode.tenant_id)]
+    )
 
     Postgrex.query!(
       connection,
       """
       insert into spaces (id, name, tenant_id, slug, media_plane)
       values ($1, 'Sync Test Space', $2, $3, 'cf_rtk')
+      on conflict (id) do nothing
       """,
       [uuid(episode.space_id), uuid(episode.tenant_id), "sync-test-#{episode.space_id}"]
     )

@@ -17,6 +17,7 @@ var (
 	ErrInvalidParticipantID               = errors.New("invalid episode participant id")
 	ErrInvalidParticipantGeneration       = errors.New("invalid episode participant generation")
 	ErrInvalidParticipantName             = errors.New("invalid episode participant name")
+	ErrInvalidIdentityMode                = errors.New("invalid episode participant identity mode")
 	ErrInvalidAdmissionPolicy             = errors.New("invalid episode admission policy")
 	ErrInvalidRole                        = errors.New("invalid episode participant role")
 	ErrInvalidRoleCapabilities            = errors.New("invalid episode role capabilities")
@@ -37,6 +38,7 @@ var (
 	ErrParticipantNotFound                = errors.New("episode participant not found")
 	ErrParticipantNotActive               = errors.New("episode participant is not active")
 	ErrParticipantGenerationMismatch      = errors.New("episode participant generation mismatch")
+	ErrPublicParticipantNotReady          = errors.New("public episode participant is not ready")
 	ErrDeadlineChangePending              = errors.New("episode deadline change is already pending")
 	ErrEpisodeControlBusy                 = errors.New("episode control is busy")
 	ErrIdempotencyConflict                = errors.New("episode request key conflicts with original request")
@@ -152,10 +154,11 @@ type SelfLeaveInput struct {
 }
 
 type SelfJoinResult struct {
-	Episode        Episode
-	Participant    Participant
-	Intent         Intent
-	EpisodeCreated bool
+	Episode            Episode
+	Participant        Participant
+	Intent             Intent
+	EpisodeCreated     bool
+	ParticipantCreated bool
 }
 
 type SelfLeaveResult struct {
@@ -375,6 +378,57 @@ func (s Service) LeaveSelf(ctx context.Context, input SelfLeaveInput) (SelfLeave
 		return SelfLeaveResult{}, ErrSynchronousCommit
 	}
 	return repository.LeaveSelf(ctx, input)
+}
+
+func (s Service) JoinPublic(ctx context.Context, input PublicJoinInput) (PublicJoinResult, error) {
+	if err := preparePublicJoinInput(&input); err != nil {
+		return PublicJoinResult{}, err
+	}
+	repository, ok := s.repository.(PublicJoinRepository)
+	if !ok {
+		return PublicJoinResult{}, ErrSynchronousCommit
+	}
+	result, err := repository.JoinPublic(ctx, input)
+	if err != nil {
+		return PublicJoinResult{}, err
+	}
+	if result.EpisodeCreated {
+		s.observeEpisodeCommitted(result.Episode)
+	}
+	return result, nil
+}
+
+func (s Service) FindPublic(ctx context.Context, input PublicAccessInput) (PublicJoinResult, error) {
+	if err := preparePublicAccessInput(&input); err != nil {
+		return PublicJoinResult{}, err
+	}
+	repository, ok := s.repository.(PublicJoinRepository)
+	if !ok {
+		return PublicJoinResult{}, ErrSynchronousCommit
+	}
+	return repository.FindPublic(ctx, input)
+}
+
+func (s Service) LeavePublic(ctx context.Context, input PublicLeaveInput) (PublicLeaveResult, error) {
+	if err := preparePublicLeaveInput(&input); err != nil {
+		return PublicLeaveResult{}, err
+	}
+	repository, ok := s.repository.(PublicJoinRepository)
+	if !ok {
+		return PublicLeaveResult{}, ErrSynchronousCommit
+	}
+	return repository.LeavePublic(ctx, input)
+}
+
+func (s Service) WaitPublicParticipantReady(ctx context.Context, key PublicParticipantKey) (PublicJoinResult, error) {
+	if err := validatePublicParticipantKey(key); err != nil {
+		return PublicJoinResult{}, err
+	}
+	repository, ok := s.repository.(PublicJoinRepository)
+	if !ok {
+		return PublicJoinResult{}, ErrSynchronousCommit
+	}
+	return repository.WaitPublicParticipantReady(ctx, key)
 }
 
 func (s Service) WithCommitObserver(observer CommitObserver) Service {

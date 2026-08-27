@@ -1,5 +1,6 @@
 import { EntranceView } from "./EntranceView";
 import { Image } from "react-native";
+import { Logo } from "./logo/Logo";
 
 export type EntranceDefaults = {
   readonly microphone?: boolean;
@@ -31,7 +32,7 @@ export function Entrance({ spaceName, logoUrl, defaultDisplayName, defaults, err
       initialAudioEnabled={defaults?.microphone ?? true}
       initialVideoEnabled={defaults?.camera ?? true}
       joinDisabled={joining}
-      logo={logoUrl ? <Image accessibilityLabel="Chalk" source={{ uri: logoUrl }} style={{ height: 32, width: 120 }} /> : undefined}
+      logo={logoUrl ? <Image accessibilityLabel="Chalk" source={{ uri: logoUrl }} style={{ height: 32, width: 120 }} /> : <Logo height={32} variant="wordmark" />}
       onCancel={onCancel}
       onJoin={({ displayName, microphoneEnabled, cameraEnabled }) => void onJoin({ displayName, microphone: microphoneEnabled, camera: cameraEnabled })}
       spaceName={spaceName}

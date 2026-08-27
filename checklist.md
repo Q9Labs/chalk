@@ -124,6 +124,7 @@ The web experience is the launch-critical surface. The mobile redesign remains i
 - [x] React Native provider, hooks, meeting surfaces, and platform bridges
 - [x] Turnkey React web provider, hooks, and join flow
 - [x] Server-only Promise SDK for rooms, sessions, participant access, and API keys
+- [ ] Public `appName` client identity flows from SDK options through the transport to server spans and logs
 - [ ] All public API routes are represented in OpenAPI and generated SDKs
 - [ ] Swift SDK
 - [ ] Kotlin SDK

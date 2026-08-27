@@ -1,5 +1,5 @@
 defmodule ChalkSync.WhiteboardV1.SocketTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -8,14 +8,44 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   @participant_id "20000000-0000-4000-8000-000000000002"
   @scene_id "10000000-0000-4000-8000-000000000001"
 
+  defmodule Repository do
+    def read_after(_identity, scene_id, 4) do
+      {:ok,
+       [
+         %{
+           type: :presentation,
+           operation_id: "whiteboard-presentation-0001",
+           scene_id: scene_id,
+           revision: 5,
+           presenting: true
+         }
+       ]}
+    end
+  end
+
+  setup do
+    previous = Application.get_env(:chalk_sync, :whiteboard_v1_repository)
+    Application.put_env(:chalk_sync, :whiteboard_v1_repository, Repository)
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:chalk_sync, :whiteboard_v1_repository, previous),
+        else: Application.delete_env(:chalk_sync, :whiteboard_v1_repository)
+    end)
+  end
+
   test "enforces the hello deadline and strict text framing" do
     assert {:ok, state} = SocketWhiteboardV1.init(%{})
 
-    assert {:stop, :normal, {1008, "hello timeout"}, ^state} =
+    assert {:stop, :normal, {1008, "hello timeout"}, timeout_state} =
              SocketWhiteboardV1.handle_info(:hello_timeout, state)
 
-    assert {:stop, :normal, {1009, "text frames only"}, ^state} =
+    assert timeout_state.terminal == %{close_code: 1008, reason: :hello_timeout}
+
+    assert {:stop, :normal, {1009, "text frames only"}, frame_state} =
              SocketWhiteboardV1.handle_in({<<1, 2>>, [opcode: :binary]}, state)
+
+    assert frame_state.terminal == %{close_code: 1009, reason: :protocol_error}
 
     assert {:push, {:text, ~s({"type":"pong"})}, ^state} =
              SocketWhiteboardV1.handle_in(
@@ -71,6 +101,48 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                 }},
                state
              )
+  end
+
+  test "repairs a missed presentation notification from the durable head" do
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    assert {:push, {:text, encoded}, repaired} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_v1_head, @scene_id, 5},
+               state
+             )
+
+    assert JSON.decode!(encoded) == %{
+             "type" => "presentation_updated",
+             "scene_id" => @scene_id,
+             "revision" => "5",
+             "presenting" => true
+           }
+
+    assert repaired.revision == 5
+
+    legacy = %{state | presentation_negotiated: false}
+
+    assert {:push, {:text, legacy_encoded}, _legacy_repair} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_v1_head, @scene_id, 5},
+               legacy
+             )
+
+    assert JSON.decode!(legacy_encoded) == %{
+             "type" => "reset_required",
+             "scene_id" => @scene_id,
+             "reason" => "gap"
+           }
   end
 
   test "keeps a multipart update private until complete and fails an expired assembly" do

@@ -52,18 +52,12 @@ const SettingsPanelSurface = React.memo(
     className,
   }: SettingsPanelSurfaceProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
-    const [activeTab, setActiveTab] = useState<"audio" | "video" | "general">("audio");
+    const [activeTab, setActiveTab] = useState<"audio-video" | "general">("audio-video");
     const [speakerVolume, setSpeakerVolume] = useState(100);
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed), [participantColorSeed]);
 
     return (
-      <div
-        className={cn("flex flex-col h-full w-80 shadow-xl", "bg-[var(--chalk-surface)]", "border-l border-[var(--chalk-line)]", !prefersReducedMotion && "animate-in slide-in-from-right duration-300", className)}
-        data-tour="settings-panel"
-        role="dialog"
-        aria-label="Settings"
-        style={themeVariables as React.CSSProperties}
-      >
+      <div className={cn("flex flex-col h-full w-80 shadow-xl", "bg-[var(--chalk-surface)]", "border-l border-[var(--chalk-line)]", className)} data-tour="settings-panel" role="dialog" aria-label="Settings" style={themeVariables as React.CSSProperties}>
         <div className="flex items-center justify-between p-4 border-b border-[var(--chalk-line)]">
           <div className="flex items-center gap-2">
             <Settings01Icon className="w-4 h-4 text-[var(--chalk-muted-text)]" />
@@ -72,31 +66,26 @@ const SettingsPanelSurface = React.memo(
           {onClose && <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close settings" />}
         </div>
 
-        <div className="flex border-b border-[var(--chalk-line)]">
+        <div className="flex border-b border-[var(--chalk-line)]" role="tablist" aria-label="Settings categories">
           <button
             type="button"
-            onClick={() => setActiveTab("audio")}
-            className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "audio" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            onClick={() => setActiveTab("audio-video")}
+            className={cn("flex-1 border-b-2 py-2.5 text-sm font-medium transition-colors", activeTab === "audio-video" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            aria-selected={activeTab === "audio-video"}
+            role="tab"
           >
             <div className="flex items-center justify-center gap-2">
               <Microphone01Icon className="w-4 h-4" />
-              Audio
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("video")}
-            className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "video" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
-          >
-            <div className="flex items-center justify-center gap-2">
               <Video01Icon className="w-4 h-4" />
-              Video
+              Audio &amp; video
             </div>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("general")}
-            className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "general" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            className={cn("flex-1 border-b-2 py-2.5 text-sm font-medium transition-colors", activeTab === "general" ? "text-[var(--chalk-accent)] border-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] border-transparent hover:text-[var(--chalk-text)]")}
+            aria-selected={activeTab === "general"}
+            role="tab"
           >
             <div className="flex items-center justify-center gap-2">
               <Settings01Icon className="w-4 h-4" />
@@ -106,8 +95,8 @@ const SettingsPanelSurface = React.memo(
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {activeTab === "audio" && (
-            <div className={cn("space-y-6", !prefersReducedMotion && "animate-in fade-in duration-200")}>
+          {activeTab === "audio-video" && (
+            <div className={cn("space-y-5", !prefersReducedMotion && "animate-in fade-in duration-200")}>
               <div className="space-y-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--chalk-muted-text)]">Microphone</h3>
                 <DeviceSelector type="audioinput" devices={audioInputDevices} selectedDeviceId={selectedAudioInput} onChange={(id) => onAudioInputChange?.(id)} label="Input Device" audioLevel={audioLevel} participantColorSeed={participantColorSeed} />
@@ -115,7 +104,7 @@ const SettingsPanelSurface = React.memo(
                 {onNoiseSuppressionChange && <NoiseSuppressionToggle enabled={noiseSuppression} onChange={onNoiseSuppressionChange} level="medium" onLevelChange={() => {}} />}
               </div>
 
-              <div className="space-y-4 pt-4 border-t border-[var(--chalk-line)]">
+              <div className="space-y-4 border-t border-[var(--chalk-line)] pt-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--chalk-muted-text)]">Speakers</h3>
                 <DeviceSelector type="audiooutput" devices={audioOutputDevices} selectedDeviceId={selectedAudioOutput} onChange={(id) => onAudioOutputChange?.(id)} label="Output Device" participantColorSeed={participantColorSeed} />
 
@@ -124,12 +113,7 @@ const SettingsPanelSurface = React.memo(
                   <VolumeSlider value={speakerVolume} onChange={setSpeakerVolume} showValue />
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === "video" && (
-            <div className={cn("space-y-6", !prefersReducedMotion && "animate-in fade-in duration-200")}>
-              <div className="space-y-4">
+              <div className="space-y-4 border-t border-[var(--chalk-line)] pt-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--chalk-muted-text)]">Camera</h3>
                 <DeviceSelector type="videoinput" devices={videoInputDevices} selectedDeviceId={selectedVideoInput} onChange={(id) => onVideoInputChange?.(id)} label="Input Device" previewTrack={videoTrack} participantColorSeed={participantColorSeed} />
               </div>

@@ -1,79 +1,63 @@
-import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react-native";
 import type { ConnectionSlice } from "@q9labsai/chalk-client";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
+import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cleanupParticipantCredential, createAccessGrantGetter, prepareParticipantCredential, spaceInviteLink, type ParticipantCredential, type SpaceRoute } from "../lib/spaces";
 import { getMobileFeedbackEvidence } from "../lib/mobile-feedback";
 import { createMobileTelemetry, flushAndDisposeTelemetry } from "../lib/telemetry";
+import { cleanupSpaceArrival, createGuestAccessGetter, prepareSpaceArrival, type MobileSpaceArrival, type SpaceOperationObserver, type SpaceRoute } from "../lib/spaces";
 import { pickMobileChatFiles } from "../lib/chat-files";
 import { MOBILE_SPACE_FEATURES } from "./mobile-space-features";
 import { createMobileSpaceClient, createMobileSpaceRelease, ownMobileSpaceClient } from "./mobile-space-client";
-import { recordMobileSpaceJoined, terminalizeMobileSpaceJourney } from "./mobile-space-telemetry-lifecycle";
+import { recordMobileSpaceJoined, recordMobileSpaceLifecycle, terminalizeMobileSpaceJourney } from "./mobile-space-telemetry-lifecycle";
 
 type MobileSpaceScreenProps = {
-  readonly brokerUrl: string;
+  readonly apiBaseURL: string;
   readonly defaultDisplayName?: string | null;
   readonly onClose: () => Promise<void>;
   readonly onDiagnosticsConnection?: (snapshot: Pick<ConnectionSlice, "status" | "lastError"> | null) => void;
   readonly onDiagnosticsFailure?: (error: { readonly message: string }) => void;
+  readonly onOperation?: SpaceOperationObserver;
   readonly route: SpaceRoute;
   readonly telemetryEnabled: boolean;
 };
 
-type Arrival = {
-  readonly credential: ParticipantCredential;
-  readonly displayName: string;
-  readonly defaults: Pick<EntranceSettings, "camera" | "microphone">;
-  readonly journey: TelemetryJourney | undefined;
-};
-
-export function MobileSpaceScreen({ brokerUrl, defaultDisplayName, onClose, onDiagnosticsConnection, onDiagnosticsFailure, route, telemetryEnabled }: MobileSpaceScreenProps): React.JSX.Element {
+export function MobileSpaceScreen({ apiBaseURL, defaultDisplayName, onClose, onDiagnosticsConnection, onDiagnosticsFailure, onOperation, route, telemetryEnabled }: MobileSpaceScreenProps): React.JSX.Element {
   const feedbackEvidence = useMemo(() => getMobileFeedbackEvidence(), []);
-  const telemetryApiBaseURLRef = useRef<string | undefined>(undefined);
-  const authenticatedTelemetryHeadersRef = useRef<Readonly<Record<string, string>> | undefined>(undefined);
-  const telemetry = useMemo(
-    () =>
-      createMobileTelemetry({
-        enabled: telemetryEnabled,
-        getApiBaseURL: () => telemetryApiBaseURLRef.current,
-        getAuthenticatedTelemetryHeaders: () => authenticatedTelemetryHeadersRef.current,
-      }),
-    [telemetryEnabled],
-  );
+  const telemetry = useMemo(() => createMobileTelemetry({ enabled: telemetryEnabled, getApiBaseURL: () => apiBaseURL }), [apiBaseURL, telemetryEnabled]);
   const journeyRef = useRef<TelemetryJourney | undefined>(undefined);
-  const arrivalRef = useRef<Arrival | undefined>(undefined);
-  const cleanupPromisesRef = useRef(new Map<string, Promise<void>>());
+  const arrivalRef = useRef<MobileSpaceArrival | undefined>(undefined);
   const isClosingRef = useRef(false);
   const episodeEndedRef = useRef(false);
   const isMountedRef = useRef(false);
-  const [arrival, setArrival] = useState<Arrival>();
+  const [arrival, setArrival] = useState<MobileSpaceArrival>();
   const [arrivalError, setArrivalError] = useState<string>();
   const [isPreparing, setIsPreparing] = useState(false);
   arrivalRef.current = arrival;
 
+  const recordOperation = useCallback<SpaceOperationObserver>(
+    (operation, state) => {
+      recordMobileSpaceLifecycle(journeyRef.current, operation, state);
+      onOperation?.(operation, state);
+    },
+    [onOperation],
+  );
+
   useEffect(() => {
+    isMountedRef.current = true;
     episodeEndedRef.current = false;
-    const journey = telemetry.startJourney({
-      kind: "space.join",
-      attributes: { source: route.source },
-    });
-    authenticatedTelemetryHeadersRef.current = undefined;
-    Object.assign(journey, {
-      setAuthenticatedTelemetryHeaders: (headers: Readonly<Record<string, string>> | undefined) => {
-        authenticatedTelemetryHeadersRef.current = headers;
-      },
-    });
+    const journey = telemetry.startJourney({ kind: "space.join", attributes: { source: route.source } });
     journey.phase("authentication");
     journeyRef.current = journey;
+    if (route.source === "created-space") recordOperation("create", "succeeded");
 
     return () => {
+      isMountedRef.current = false;
       terminalizeMobileSpaceJourney(journey, "unmounted");
-      authenticatedTelemetryHeadersRef.current = undefined;
       if (journeyRef.current === journey) journeyRef.current = undefined;
       void telemetry.flush();
     };
-  }, [route.source, telemetry]);
+  }, [recordOperation, route.source, telemetry]);
 
   useEffect(
     () => () => {
@@ -82,61 +66,22 @@ export function MobileSpaceScreen({ brokerUrl, defaultDisplayName, onClose, onDi
     [telemetry],
   );
 
-  const cleanupCredential = useCallback(
-    (credential: ParticipantCredential): Promise<void> => {
-      const key = credential.participantCredentialId;
-      const existing = cleanupPromisesRef.current.get(key);
-      if (existing) return existing;
-
-      const cleanup = cleanupParticipantCredential({
-        brokerUrl,
-        credential,
-        headers: journeyRef.current?.headers,
-      })
-        .then(() => {
-          authenticatedTelemetryHeadersRef.current = undefined;
-        })
-        .catch((cause: unknown) => {
-          onDiagnosticsFailure?.(cause instanceof Error ? cause : new Error("Unable to clear access."));
-          throw cause;
-        })
-        .finally(() => {
-          if (cleanupPromisesRef.current.get(key) === cleanup) cleanupPromisesRef.current.delete(key);
-        });
-      cleanupPromisesRef.current.set(key, cleanup);
-      return cleanup;
-    },
-    [brokerUrl, onDiagnosticsFailure],
-  );
-  const cleanupCredentialRef = useRef(cleanupCredential);
-  cleanupCredentialRef.current = cleanupCredential;
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      const credential = arrivalRef.current?.credential;
-      if (!credential || isClosingRef.current) return;
-
-      terminalizeMobileSpaceJourney(journeyRef.current, "unmounted");
-      void cleanupCredentialRef.current(credential).catch(() => undefined);
-    };
-  }, []);
-
   const closeSpace = useMemo(
     () =>
       createMobileSpaceRelease({
-        cleanupCredential,
+        cleanupCredential: (credential) => cleanupSpaceArrival({ apiBaseURL, credential, onOperation: recordOperation }),
         onClose,
         onReleaseFailure: () => {
           isClosingRef.current = false;
+          recordOperation("leave", "failed");
         },
         onReleaseStart: () => {
           isClosingRef.current = true;
+          recordOperation("leave", "observed");
           terminalizeMobileSpaceJourney(journeyRef.current, "left");
         },
       }),
-    [cleanupCredential, onClose],
+    [apiBaseURL, onClose, recordOperation],
   );
 
   const prepareArrival = useCallback(
@@ -144,54 +89,35 @@ export function MobileSpaceScreen({ brokerUrl, defaultDisplayName, onClose, onDi
       setArrivalError(undefined);
       setIsPreparing(true);
       try {
-        const credential = await prepareParticipantCredential({
-          brokerUrl,
-          displayName: settings.displayName,
-          headers: journeyRef.current?.headers,
-          spaceInviteToken: route.spaceInviteToken,
-        });
-        if (isClosingRef.current || !isMountedRef.current) {
-          await cleanupCredential(credential);
+        const nextArrival = await prepareSpaceArrival({ apiBaseURL, displayName: settings.displayName, onOperation: recordOperation, route });
+        if (!isMountedRef.current || isClosingRef.current) {
+          await cleanupSpaceArrival({ apiBaseURL, credential: nextArrival.credential, onOperation: recordOperation });
           return;
         }
-        telemetryApiBaseURLRef.current = credential.apiBaseURL;
-        void telemetry.flush();
-        setArrival({ credential, defaults: { camera: settings.camera, microphone: settings.microphone }, displayName: settings.displayName, journey: journeyRef.current });
+        setArrival({ ...nextArrival, defaults: { camera: settings.camera, microphone: settings.microphone }, displayName: settings.displayName });
       } catch (cause) {
-        const error = cause instanceof Error ? cause : new Error("Unable to prepare access.");
+        const error = cause instanceof Error ? cause : new Error("Unable to join this Space.");
         setArrivalError(error.message);
         onDiagnosticsFailure?.(error);
       } finally {
         setIsPreparing(false);
       }
     },
-    [brokerUrl, cleanupCredential, onDiagnosticsFailure, route.spaceInviteToken, telemetry],
+    [apiBaseURL, onDiagnosticsFailure, recordOperation, route],
   );
 
-  const getAccess = useMemo(
-    () =>
-      arrival
-        ? createAccessGrantGetter({
-            brokerUrl,
-            credential: arrival.credential,
-            headers: journeyRef.current?.headers,
-          })
-        : undefined,
-    [arrival, brokerUrl],
-  );
-
+  const getAccess = useMemo(() => (arrival ? createGuestAccessGetter({ apiBaseURL, credential: arrival.credential, initialAccess: arrival.access, onOperation: recordOperation }) : undefined), [apiBaseURL, arrival, recordOperation]);
   const client = useMemo(
     () =>
       arrival && getAccess
         ? createMobileSpaceClient({
-            credential: arrival.credential,
+            apiBaseURL,
             defaults: arrival.defaults,
             getAccess,
-            journey: arrival.journey,
             space: route.space,
           })
         : undefined,
-    [arrival, getAccess, route.space],
+    [apiBaseURL, arrival, getAccess, route.space],
   );
   const clientOwner = useMemo(() => (client ? ownMobileSpaceClient(client) : undefined), [client]);
 
@@ -230,8 +156,10 @@ export function MobileSpaceScreen({ brokerUrl, defaultDisplayName, onClose, onDi
     episodeEndedRef.current = true;
     terminalizeMobileSpaceJourney(journeyRef.current, "episode_ended");
     void telemetry.flush();
-    void closeSpace(arrivalRef.current?.credential).catch(() => undefined);
-  }, [closeSpace, telemetry]);
+    void closeSpace(arrivalRef.current?.credential).catch((cause: unknown) => {
+      onDiagnosticsFailure?.(cause instanceof Error ? cause : new Error("Unable to leave this Space."));
+    });
+  }, [closeSpace, onDiagnosticsFailure, telemetry]);
 
   const handleError = useCallback(
     ({ error }: { readonly error: Error }) => {
@@ -244,17 +172,21 @@ export function MobileSpaceScreen({ brokerUrl, defaultDisplayName, onClose, onDi
   );
 
   const handleEntranceCancel = useCallback(() => {
-    void closeSpace().catch(() => undefined);
-  }, [closeSpace]);
+    void closeSpace().catch((cause: unknown) => {
+      onDiagnosticsFailure?.(cause instanceof Error ? cause : new Error("Unable to leave this Space."));
+    });
+  }, [closeSpace, onDiagnosticsFailure]);
 
   const handleLeft = useCallback(() => {
     if (!arrival) return;
     void telemetry.flush();
-    void closeSpace(arrival.credential).catch(() => undefined);
-  }, [arrival, closeSpace, telemetry]);
+    void closeSpace(arrival.credential).catch((cause: unknown) => {
+      onDiagnosticsFailure?.(cause instanceof Error ? cause : new Error("Unable to leave this Space."));
+    });
+  }, [arrival, closeSpace, onDiagnosticsFailure, telemetry]);
 
   if (!arrival || !client) {
-    return <Entrance defaultDisplayName={defaultDisplayName ?? undefined} defaults={{ camera: true, microphone: true }} error={arrivalError} joining={isPreparing} onCancel={handleEntranceCancel} onJoin={prepareArrival} spaceName={route.spaceName ?? "Space"} />;
+    return <Entrance defaultDisplayName={defaultDisplayName ?? undefined} defaults={{ camera: true, microphone: true }} error={arrivalError} joining={isPreparing} onCancel={handleEntranceCancel} onJoin={prepareArrival} spaceName={route.spaceName ?? route.space} />;
   }
 
   return (
@@ -265,13 +197,13 @@ export function MobileSpaceScreen({ brokerUrl, defaultDisplayName, onClose, onDi
       entrance={false}
       features={MOBILE_SPACE_FEATURES}
       feedbackEvidence={feedbackEvidence}
-      inviteLink={spaceInviteLink(arrival.credential.spaceInviteToken)}
+      inviteLink={route.inviteLink}
       onEpisodeEnded={handleEpisodeEnded}
       onError={handleError}
       onJoined={handleJoined}
       onLeft={handleLeft}
       pickChatFiles={pickMobileChatFiles}
-      spaceName={route.spaceName ?? "Space"}
+      spaceName={route.spaceName ?? arrival.spaceName}
     />
   );
 }

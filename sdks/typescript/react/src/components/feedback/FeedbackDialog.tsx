@@ -90,6 +90,13 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
 
   if (!isOpen) return null;
 
+  const reviseFeedback = (): void => {
+    if (!submitError) return;
+    setSubmitError(undefined);
+    setPrepared(null);
+    void prepareFeedback(screenshotUrl !== undefined);
+  };
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedMessage = message.trim();
@@ -152,7 +159,16 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
                 <div className="grid gap-2 sm:grid-cols-3">
                   {CATEGORIES.map((option) => (
                     <label key={option.value} className={cn("flex cursor-pointer items-center gap-2 rounded-md border border-[var(--chalk-app-line)] px-3 py-2 text-sm", category === option.value && "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)]/10")}>
-                      <input type="radio" name="feedback-category" value={option.value} checked={category === option.value} onChange={() => setCategory(option.value)} />
+                      <input
+                        type="radio"
+                        name="feedback-category"
+                        value={option.value}
+                        checked={category === option.value}
+                        onChange={() => {
+                          setCategory(option.value);
+                          reviseFeedback();
+                        }}
+                      />
                       <span>{option.label}</span>
                     </label>
                   ))}
@@ -161,7 +177,19 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
 
               <label className="block text-sm font-semibold" htmlFor="chalk-feedback-message">
                 Message
-                <ChalkTextarea id="chalk-feedback-message" className="mt-2" required maxLength={8_000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="What should we know?" aria-describedby="chalk-feedback-message-help" />
+                <ChalkTextarea
+                  id="chalk-feedback-message"
+                  className="mt-2"
+                  required
+                  maxLength={8_000}
+                  value={message}
+                  onChange={(event) => {
+                    setMessage(event.target.value);
+                    reviseFeedback();
+                  }}
+                  placeholder="What should we know?"
+                  aria-describedby="chalk-feedback-message-help"
+                />
               </label>
               <p id="chalk-feedback-message-help" className="text-xs text-[var(--chalk-app-text-muted)]">
                 One message is enough. Please don’t include secrets or private content.
@@ -193,7 +221,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
                   {submitError}
                 </p>
               ) : null}
-              <ChalkButton type="submit" variant="solid" tone="accent" loading={submitting} disabled={!message.trim()} className="w-full !text-[var(--chalk-app-control-active-text)]">
+              <ChalkButton type="submit" variant="solid" tone="accent" loading={submitting} disabled={preparing || !message.trim()} className="w-full !text-[var(--chalk-app-control-active-text)]">
                 Send feedback
               </ChalkButton>
             </form>

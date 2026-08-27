@@ -2,9 +2,9 @@
 Description=Chalk managed Episode runtime
 ConditionPathExists=/run/chalk/release/release-manifest.json
 ConditionPathExists=/run/chalk/release/release-manifest.sha256
-Requires=chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service
+Requires=chalk-api-migrate.service chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service
 Wants=chalk-runtime-watchdog.timer
-After=chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service
+After=chalk-api-migrate.service chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service
 
 [Install]
 WantedBy=default.target

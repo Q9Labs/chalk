@@ -23,10 +23,12 @@ api_image="$(jq -er '.images.api' "${manifest}")"
 sync_image="$(jq -er '.images.sync' "${manifest}")"
 redis_image="$(jq -er '.images.redis' "${manifest}")"
 cloudflared_image="$(jq -er '.images.cloudflared' "${manifest}")"
+database_migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "${manifest}")"
 image_pattern='^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$'
 for image in "${api_image}" "${sync_image}" "${redis_image}" "${cloudflared_image}"; do
   [[ "${image}" =~ ${image_pattern} ]] || { echo "manifest contains a non-digest image reference" >&2; exit 1; }
 done
+[[ "${database_migration_target}" =~ ^[0-9]{14}$ ]] || { echo "manifest contains an invalid database migration target" >&2; exit 1; }
 
 mkdir -p "${output}/quadlet" "${output}/systemd"
 for template in "${managed_root}"/quadlet/*; do
@@ -36,6 +38,7 @@ for template in "${managed_root}"/quadlet/*; do
   contents="${contents//__SYNC_IMAGE_REFERENCE__/${sync_image}}"
   contents="${contents//__REDIS_IMAGE_REFERENCE__/${redis_image}}"
   contents="${contents//__CLOUDFLARED_IMAGE_REFERENCE__/${cloudflared_image}}"
+  contents="${contents//__DATABASE_MIGRATION_TARGET__/${database_migration_target}}"
   if [[ "${contents}" == *'__'* ]]; then
     echo "unresolved placeholder in ${name}" >&2
     exit 1

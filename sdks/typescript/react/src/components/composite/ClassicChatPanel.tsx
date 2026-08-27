@@ -53,6 +53,7 @@ const ChatPanelSurface = React.memo(
     placeholder = "Type a message...",
     title = "Chat",
     variant = "sidebar",
+    generatedAvatars = true,
     error,
     className,
   }: ChatPanelSurfaceProps) => {
@@ -191,7 +192,7 @@ const ChatPanelSurface = React.memo(
     };
 
     return (
-      <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
+      <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", className)} role="complementary" aria-label="Chat panel">
         {variant === "sidebar" ? (
           <header className="chalk-textured-surface flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-[18px]">
             <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
@@ -240,6 +241,7 @@ const ChatPanelSurface = React.memo(
                         showSender={index === 0}
                         showTimestamp={index === group.messages.length - 1}
                         showAvatar
+                        generatedAvatars={generatedAvatars}
                         status={readBy.length > 0 ? "read" : "sent"}
                         attachments={message.attachments}
                         readBy={readBy}
@@ -254,7 +256,16 @@ const ChatPanelSurface = React.memo(
           )}
           {pendingMessages.map((pending) => (
             <div key={pending.clientMessageId} className="my-2">
-              <MessageBubble content={pending.text} senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"} timestamp={new Date().toISOString()} isLocal status="pending" attachments={pending.attachments} onResolveAttachmentUrl={onResolveAttachmentUrl} />
+              <MessageBubble
+                content={pending.text}
+                senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"}
+                timestamp={new Date().toISOString()}
+                isLocal
+                status="pending"
+                attachments={pending.attachments}
+                generatedAvatars={generatedAvatars}
+                onResolveAttachmentUrl={onResolveAttachmentUrl}
+              />
               {pending.status === "failed" ? (
                 <div className="mr-14 flex items-center justify-end gap-2 text-xs text-[var(--chalk-app-text-muted)]">
                   <span>{pending.error?.message || "Not sent"}</span>

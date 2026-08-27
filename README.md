@@ -24,9 +24,9 @@ Run the core profile with:
 pnpm dev
 ```
 
-This starts Postgres, Redis, migrations, the Go API, Postgres-backed Sync, the
-local Wrangler Worker and Durable Object broker, SDK watchers, the web app,
-and local observability. It waits for readiness and verifies a real no-track
+This starts Postgres, Redis, migrations, the Go API, Postgres-backed Sync, SDK
+watchers, the web app, and local observability. It waits for readiness and
+verifies a real no-track
 connection through the Cloudflare SFU before it prints the summary. All Chalk
 listeners use `127.0.0.1`; this command is for local development and never
 touches production.
@@ -53,7 +53,6 @@ The ready summary uses these localhost endpoints:
 | Service | URL                                                                  |
 | ------- | -------------------------------------------------------------------- |
 | Web     | `http://127.0.0.1:3070`                                              |
-| Broker  | `http://127.0.0.1:8787/local-chalk`                                  |
 | API     | `http://127.0.0.1:8080`                                              |
 | Sync    | `ws://127.0.0.1:4100/v1/sync`                                        |
 | Grafana | `http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability` |
@@ -72,9 +71,8 @@ pnpm dev:reset                # destructive: asks before removing local state
 pnpm dev:reset -- --yes       # skip only the confirmation prompt
 ```
 
-`--fresh` replaces only this checkout's tenant, Space, broker key, and local
-Durable Object fixture. It leaves backing services, unrelated rows, and caches
-in place.
+`--fresh` replaces only this checkout's tenant and Space fixture. It leaves
+backing services, unrelated rows, and caches in place.
 
 The core uses a dedicated `chalk_dev` database inside the shared
 `chalk-postgres` container. A normal stop keeps that database and its volume.
@@ -90,10 +88,6 @@ normal command again to restore the stack.
 
 Run `pnpm run gate` for the canonical repository quality gate;
 `pnpm run gate:explain` describes its checks.
-
-## Cost model
-
-[`scratchpad/chalk-infra-cost-model-2026-07-12.md`](./scratchpad/chalk-infra-cost-model-2026-07-12.md) contains dated planning assumptions and formulas. It is a model, not a current hosting-price guarantee. The interactive calculator is [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html).
 
 ## License
 

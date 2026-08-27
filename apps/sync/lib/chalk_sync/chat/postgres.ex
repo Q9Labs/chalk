@@ -98,7 +98,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     case Postgrex.query(
            Database.connection(episode),
            SQL.read_head(),
-           space_params(episode),
+           episode_params(episode),
            timeout: 1_000
          ) do
       {:ok, %{rows: []}} -> {:ok, empty_head()}
@@ -588,6 +588,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     Postgrex.query!(connection, SQL.transaction_settings(), [])
   end
 
+  defp head(nil, nil), do: empty_head()
   defp head(0, nil), do: empty_head()
 
   defp head(head_sequence, retained_floor) do

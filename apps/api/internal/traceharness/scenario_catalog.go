@@ -59,6 +59,7 @@ const (
 	ServiceEpisodeDiagnosticsScenario     = "service:episode-diagnostics"
 	ServiceFeedbackSubmissionScenario     = "service:feedback-submit"
 	ServiceDashboardSpaceJoinScenario     = "service:dashboard-space-join"
+	ServicePublicInviteLifecycleScenario  = "service:public-invite-lifecycle"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
 	PolicyTenantAPIKeyScopeScenario = "policy:tenant-api-key-scope"
@@ -71,6 +72,7 @@ const (
 	AdapterRedisRateLimitScenario         = "adapter:redis-rate-limit"
 	AdapterCloudflareR2SignedURLScenario  = "adapter:cloudflare-r2-signed-url"
 	AdapterCloudflareSFUBootstrapScenario = "adapter:cloudflare-sfu-bootstrap"
+	AdapterCloudflareSFUFailureScenario   = "adapter:cloudflare-sfu-failure-observability"
 	AdapterProviderBridgeGrantScenario    = "adapter:provider-bridge-publication-grant"
 	AdapterCloudflareRTKJoinScenario      = "adapter:cloudflare-rtk-join"
 	AdapterResendSendEmailScenario        = "adapter:resend-send-email"
@@ -94,6 +96,7 @@ func ScenarioNames() []string {
 		RouteAuthGoogleCallbackScenario,
 		RouteMeScenario,
 		RouteTenantOnboardScenario,
+		ServiceMediaPlaneDefaultResolutionScenario,
 		RouteTenantCreateScenario,
 		RouteTenantListSystemScenario,
 		RouteTenantGetAuthorizedScenario,
@@ -117,7 +120,10 @@ func ScenarioNames() []string {
 		ServiceEpisodeDiagnosticsScenario,
 		ServiceFeedbackSubmissionScenario,
 		ServiceDashboardSpaceJoinScenario,
+		ServicePublicInviteLifecycleScenario,
 		RouteChatAttachmentUploadScenario,
+		RoutePublicInviteObservabilityScenario,
+		RoutePublicInviteAccessRecoveryScenario,
 		RouteWhiteboardFileUploadScenario,
 		RouteAPIKeyCustomerFlowScenario,
 		EdgeAPIKeyRejectedScopeScenario,
@@ -132,6 +138,7 @@ func ScenarioNames() []string {
 		AdapterRedisRateLimitScenario,
 		AdapterCloudflareR2SignedURLScenario,
 		AdapterCloudflareSFUBootstrapScenario,
+		AdapterCloudflareSFUFailureScenario,
 		AdapterProviderBridgeGrantScenario,
 		AdapterCloudflareRTKJoinScenario,
 		AdapterResendSendEmailScenario,
@@ -140,6 +147,7 @@ func ScenarioNames() []string {
 		EdgeInvalidRouteIDScenario,
 		EdgeTenantOnboardConflictScenario,
 		EdgeFeedbackValidationFailureScenario,
+		EdgeMediaPlaneDisabledScenario,
 		WebhookDeliveryAttemptScenario,
 	}
 }

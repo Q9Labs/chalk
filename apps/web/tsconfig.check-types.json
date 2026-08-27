@@ -12,6 +12,7 @@
       "@q9labsai/chalk-react/utils": ["../../sdks/typescript/react/src/utils/index.ts"],
       "@q9labsai/chalk-react/ui": ["../../sdks/typescript/react/src/components/ui/index.ts"],
       "@q9labsai/chalk-ui": ["../../packages/ui/src/index.ts"],
+      "@q9labsai/chalk-ui/assets": ["../../packages/ui/src/assets.ts"],
       "@q9labsai/chalk-ui/reactions": ["../../packages/ui/src/reactions.ts"],
       "@q9labsai/chalk-whiteboard": ["../../packages/whiteboard/src/index.ts"],
       "@q9labsai/chalk-whiteboard/react": ["../../packages/whiteboard/src/react/index.ts"],

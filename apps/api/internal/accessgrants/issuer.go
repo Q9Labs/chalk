@@ -67,6 +67,7 @@ func (i Issuer) Issue(_ context.Context, subject Subject) (MediaCredential, erro
 		ParticipantGeneration:  subject.ParticipantGeneration,
 		MediaProvider:          subject.Provider,
 		CloudflareConnectionID: subject.CloudflareConnectionID,
+		ProviderSubject:        subject.ProviderSubject,
 	})
 	if err != nil {
 		return MediaCredential{}, ErrSigningFailed

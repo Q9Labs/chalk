@@ -49,6 +49,7 @@ export function usage() {
   --parameter-prefix </chalk/environment/path> \\
   --request-id <ci-run-id> \\
   --log-group-name <cloudwatch-log-group> \\
+  [--adopt-existing-release] \\
   [--exclude-secret <canonical-id>]... \\
   [--timeout-seconds <60-3600>] \\
   [--dry-run]
@@ -79,6 +80,7 @@ export function normalizeExclusions(exclusions, allowedSecretIds) {
 
 function createDefaultOptions() {
   return {
+    adoptExistingRelease: false,
     dryRun: false,
     excludedSecrets: [],
     timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
@@ -97,6 +99,7 @@ function applyArgument(options, tokens, index) {
 
 function applyFlag(options, argument) {
   const handlers = {
+    "--adopt-existing-release": () => enableAdoptExistingRelease(options),
     "--dry-run": () => enableDryRun(options),
     "--help": () => {
       options.help = true;
@@ -109,6 +112,11 @@ function applyFlag(options, argument) {
   if (!handler) return false;
   handler();
   return true;
+}
+
+function enableAdoptExistingRelease(options) {
+  if (options.adoptExistingRelease) throw usageError("--adopt-existing-release was provided more than once");
+  options.adoptExistingRelease = true;
 }
 
 function enableDryRun(options) {

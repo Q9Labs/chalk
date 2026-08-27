@@ -100,6 +100,8 @@ type Options struct {
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	Feedback               FeedbackHTTPOptions
+	PublicInvites          PublicInviteService
+	PublicInviteAudits     PublicInviteAuditWriter
 	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
 	// value is disabled and therefore does not mount any /_internal route.
 	EpisodeDiagnostics EpisodeDiagnosticsHTTPOptions

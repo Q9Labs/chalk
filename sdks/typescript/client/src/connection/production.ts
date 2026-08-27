@@ -1,8 +1,8 @@
-import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
+import { CloudflareRTKClient, CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createV1SyncClient } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileHttpTransport } from "../whiteboard";
-import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
+import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
 
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ConnectionDependencies {
@@ -53,11 +53,29 @@ function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFa
   });
 }
 
-function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): CloudflareSFUClient {
+function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
+  if (input.access.media.provider === "cloudflare_rtk") {
+    return createRTKConnectionMediaClient(
+      new CloudflareRTKClient({
+        authToken: input.access.media.clientPayload.token,
+        participantId: input.access.subject.participantId,
+        onError: input.onFailure,
+        onScreenEnded: input.onScreenEnded,
+      }),
+    );
+  }
   const { subject } = input.access;
-  return new CloudflareSFUClient({
+  const replaceMediaConnection = input.replaceMediaConnection;
+  const client = new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
     participantId: subject.participantId,
+    replaceMediaConnection: replaceMediaConnection
+      ? async () => {
+          const replacement = await replaceMediaConnection();
+          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+          return replacement.clientPayload;
+        }
+      : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
@@ -67,8 +85,44 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       participantId: subject.participantId,
     }),
     onError: input.onFailure,
+    ...(input.recordRtcSummary ? { onRtcSummary: input.recordRtcSummary } : {}),
     onScreenEnded: input.onScreenEnded,
   });
+  return createSFUConnectionMediaClient(client);
+}
+
+function createRTKConnectionMediaClient(client: CloudflareRTKClient): ConnectionMediaClient {
+  return bindConnectionMediaClient(client, (input) => {
+    if (!("provider" in input) || input.provider !== "cloudflare_rtk") throw new TypeError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant");
+    return client.restart(input);
+  });
+}
+
+function createSFUConnectionMediaClient(client: CloudflareSFUClient): ConnectionMediaClient {
+  return bindConnectionMediaClient(client, (input) => {
+    if ("provider" in input) {
+      if (input.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+      return client.restart(input.clientPayload);
+    }
+    return client.restart(input);
+  });
+}
+
+type BoundMediaClient = Pick<ConnectionMediaClient, "setLocalPublicationTarget" | "observeLocalPublications" | "observeRemotePublications" | "start" | "stop" | "prepareLocalTrack" | "clearPreparedLocalTrack" | "getSnapshot" | "subscribe">;
+
+function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
+  return {
+    setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    observeLocalPublications: client.observeLocalPublications.bind(client),
+    observeRemotePublications: client.observeRemotePublications.bind(client),
+    start: client.start.bind(client),
+    stop: client.stop.bind(client),
+    restart,
+    prepareLocalTrack: client.prepareLocalTrack.bind(client),
+    clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
+    getSnapshot: client.getSnapshot.bind(client),
+    subscribe: client.subscribe.bind(client),
+  };
 }
 
 function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {

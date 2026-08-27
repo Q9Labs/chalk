@@ -29684,21 +29684,19 @@
         }
       ]
     },
-    "expectation.whiteboard.unsupported.v1": {
+    "expectation.whiteboard.connect.v1": {
       "schemaVersion": "EpisodeDiagnosticFixture/v1",
-      "fixtureId": "expectation.whiteboard.unsupported.v1",
-      "operation": "whiteboard.unsupported",
+      "fixtureId": "expectation.whiteboard.connect.v1",
+      "operation": "whiteboard.connect",
       "variant": "expectation",
-      "owner": "whiteboard package",
-      "proofId": "diag.v1.whiteboard.unsupported",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.connect",
       "expectationVersion": 1,
-      "unsupported": true,
       "checkpoints": [
         {
-          "key": "unsupported",
+          "key": "transport_live",
           "class": "required",
           "displayOrder": 0,
-          "predicate": "whiteboard is outside v1",
           "deadlineAt": "2026-08-04T01:23:02.000Z",
           "deadlineMilliseconds": 2000
         }
@@ -29706,18 +29704,18 @@
       "events": [
         {
           "version": 1,
-          "eventId": "fixture.whiteboard.unsupported.expectation.0",
-          "producerOperationRef": "fixture.operation.whiteboard.unsupported.expectation",
+          "eventId": "fixture.whiteboard.connect.expectation.0",
+          "producerOperationRef": "fixture.operation.whiteboard.connect.expectation",
           "producerSequence": 0,
           "occurredAt": "2026-08-04T01:23:00.000Z",
           "source": "ui",
-          "name": "whiteboard.unsupported",
-          "phase": "unsupported",
+          "name": "whiteboard.connect",
+          "phase": "intent",
           "state": "started",
           "expectation": {
-            "name": "expectation.whiteboard.unsupported.v1",
+            "name": "expectation.whiteboard.connect.v1",
             "version": 1,
-            "checkpoint": "unsupported",
+            "checkpoint": "transport_live",
             "checkpointClass": "required",
             "deadlineAt": "2026-08-04T01:23:02.000Z"
           },
@@ -29733,31 +29731,28 @@
             "sourceCommit": "fixture-commit-v1"
           },
           "attributes": {
-            "action": "whiteboard.unsupported",
-            "checkpoint": "unsupported",
+            "action": "whiteboard.connect",
+            "checkpoint": "transport_live",
             "status": "expected",
             "deadline_ms": 2000,
-            "attempt": 0,
-            "reason": "unsupported"
+            "attempt": 0
           }
         }
       ]
     },
-    "success.whiteboard.unsupported.v1": {
+    "success.whiteboard.connect.v1": {
       "schemaVersion": "EpisodeDiagnosticFixture/v1",
-      "fixtureId": "success.whiteboard.unsupported.v1",
-      "operation": "whiteboard.unsupported",
+      "fixtureId": "success.whiteboard.connect.v1",
+      "operation": "whiteboard.connect",
       "variant": "success",
-      "owner": "whiteboard package",
-      "proofId": "diag.v1.whiteboard.unsupported",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.connect",
       "expectationVersion": 1,
-      "unsupported": true,
       "checkpoints": [
         {
-          "key": "unsupported",
+          "key": "transport_live",
           "class": "required",
           "displayOrder": 0,
-          "predicate": "whiteboard is outside v1",
           "deadlineAt": "2026-08-04T01:23:02.000Z",
           "deadlineMilliseconds": 2000
         }
@@ -29765,18 +29760,18 @@
       "events": [
         {
           "version": 1,
-          "eventId": "fixture.whiteboard.unsupported.success.0",
-          "producerOperationRef": "fixture.operation.whiteboard.unsupported.success",
+          "eventId": "fixture.whiteboard.connect.success.0",
+          "producerOperationRef": "fixture.operation.whiteboard.connect.success",
           "producerSequence": 0,
           "occurredAt": "2026-08-04T01:23:01.750Z",
           "source": "ui",
-          "name": "whiteboard.unsupported",
-          "phase": "unsupported",
-          "state": "not_observable",
+          "name": "whiteboard.connect",
+          "phase": "succeeded",
+          "state": "succeeded",
           "expectation": {
-            "name": "expectation.whiteboard.unsupported.v1",
+            "name": "expectation.whiteboard.connect.v1",
             "version": 1,
-            "checkpoint": "unsupported",
+            "checkpoint": "transport_live",
             "checkpointClass": "required",
             "deadlineAt": "2026-08-04T01:23:02.000Z"
           },
@@ -29792,31 +29787,28 @@
             "sourceCommit": "fixture-commit-v1"
           },
           "attributes": {
-            "action": "whiteboard.unsupported",
-            "checkpoint": "unsupported",
-            "status": "unsupported",
+            "action": "whiteboard.connect",
+            "checkpoint": "transport_live",
+            "status": "succeeded",
             "deadline_ms": 2000,
-            "attempt": 0,
-            "reason": "unsupported"
+            "attempt": 0
           }
         }
       ]
     },
-    "failure.whiteboard.unsupported.v1": {
+    "failure.whiteboard.connect.v1": {
       "schemaVersion": "EpisodeDiagnosticFixture/v1",
-      "fixtureId": "failure.whiteboard.unsupported.v1",
-      "operation": "whiteboard.unsupported",
+      "fixtureId": "failure.whiteboard.connect.v1",
+      "operation": "whiteboard.connect",
       "variant": "failure_or_gap",
-      "owner": "whiteboard package",
-      "proofId": "diag.v1.whiteboard.unsupported",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.connect",
       "expectationVersion": 1,
-      "unsupported": true,
       "checkpoints": [
         {
-          "key": "unsupported",
+          "key": "transport_live",
           "class": "required",
           "displayOrder": 0,
-          "predicate": "whiteboard is outside v1",
           "deadlineAt": "2026-08-04T01:23:02.000Z",
           "deadlineMilliseconds": 2000
         }
@@ -29824,18 +29816,18 @@
       "events": [
         {
           "version": 1,
-          "eventId": "fixture.whiteboard.unsupported.failure_or_gap.0",
-          "producerOperationRef": "fixture.operation.whiteboard.unsupported.failure_or_gap",
+          "eventId": "fixture.whiteboard.connect.failure_or_gap.0",
+          "producerOperationRef": "fixture.operation.whiteboard.connect.failure_or_gap",
           "producerSequence": 0,
           "occurredAt": "2026-08-04T01:23:02.250Z",
           "source": "ui",
-          "name": "whiteboard.unsupported",
-          "phase": "unsupported",
-          "state": "not_observable",
+          "name": "whiteboard.connect",
+          "phase": "failed",
+          "state": "failed",
           "expectation": {
-            "name": "expectation.whiteboard.unsupported.v1",
+            "name": "expectation.whiteboard.connect.v1",
             "version": 1,
-            "checkpoint": "unsupported",
+            "checkpoint": "transport_live",
             "checkpointClass": "required",
             "deadlineAt": "2026-08-04T01:23:02.000Z"
           },
@@ -29851,12 +29843,443 @@
             "sourceCommit": "fixture-commit-v1"
           },
           "attributes": {
-            "action": "whiteboard.unsupported",
-            "checkpoint": "unsupported",
-            "status": "unsupported",
+            "action": "whiteboard.connect",
+            "checkpoint": "transport_live",
+            "status": "failed",
             "deadline_ms": 2000,
             "attempt": 1,
-            "reason": "unsupported"
+            "reason": "checkpoint_deadline"
+          }
+        }
+      ]
+    },
+    "expectation.whiteboard.recover.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "expectation.whiteboard.recover.v1",
+      "operation": "whiteboard.recover",
+      "variant": "expectation",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.recover",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "recovery_started",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:24:02.000Z",
+          "deadlineMilliseconds": 2000
+        },
+        {
+          "key": "restored_cursor",
+          "class": "required",
+          "displayOrder": 1,
+          "deadlineAt": "2026-08-04T01:24:03.000Z",
+          "deadlineMilliseconds": 3000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.recover.expectation.0",
+          "producerOperationRef": "fixture.operation.whiteboard.recover.expectation",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:24:00.000Z",
+          "source": "ui",
+          "name": "whiteboard.recover",
+          "phase": "intent",
+          "state": "started",
+          "expectation": {
+            "name": "expectation.whiteboard.recover.v1",
+            "version": 1,
+            "checkpoint": "recovery_started",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:24:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.84",
+            "traceId": "trace.fixture.84",
+            "spanId": "span.fixture.expectation.0",
+            "requestId": "request.fixture.84",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.recover",
+            "checkpoint": "recovery_started",
+            "status": "expected",
+            "deadline_ms": 2000,
+            "attempt": 0
+          }
+        },
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.recover.expectation.1",
+          "producerOperationRef": "fixture.operation.whiteboard.recover.expectation",
+          "producerSequence": 1,
+          "occurredAt": "2026-08-04T01:24:00.000Z",
+          "source": "ui",
+          "name": "whiteboard.recover",
+          "phase": "intent",
+          "state": "started",
+          "expectation": {
+            "name": "expectation.whiteboard.recover.v1",
+            "version": 1,
+            "checkpoint": "restored_cursor",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:24:03.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.84",
+            "traceId": "trace.fixture.84",
+            "spanId": "span.fixture.expectation.1",
+            "requestId": "request.fixture.84",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.recover",
+            "checkpoint": "restored_cursor",
+            "status": "expected",
+            "deadline_ms": 3000,
+            "attempt": 0
+          }
+        }
+      ]
+    },
+    "success.whiteboard.recover.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "success.whiteboard.recover.v1",
+      "operation": "whiteboard.recover",
+      "variant": "success",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.recover",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "recovery_started",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:24:02.000Z",
+          "deadlineMilliseconds": 2000
+        },
+        {
+          "key": "restored_cursor",
+          "class": "required",
+          "displayOrder": 1,
+          "deadlineAt": "2026-08-04T01:24:03.000Z",
+          "deadlineMilliseconds": 3000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.recover.success.0",
+          "producerOperationRef": "fixture.operation.whiteboard.recover.success",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:24:01.750Z",
+          "source": "ui",
+          "name": "whiteboard.recover",
+          "phase": "succeeded",
+          "state": "succeeded",
+          "expectation": {
+            "name": "expectation.whiteboard.recover.v1",
+            "version": 1,
+            "checkpoint": "recovery_started",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:24:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.84",
+            "traceId": "trace.fixture.84",
+            "spanId": "span.fixture.success.0",
+            "requestId": "request.fixture.84",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.recover",
+            "checkpoint": "recovery_started",
+            "status": "succeeded",
+            "deadline_ms": 2000,
+            "attempt": 0
+          }
+        },
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.recover.success.1",
+          "producerOperationRef": "fixture.operation.whiteboard.recover.success",
+          "producerSequence": 1,
+          "occurredAt": "2026-08-04T01:24:02.750Z",
+          "source": "ui",
+          "name": "whiteboard.recover",
+          "phase": "succeeded",
+          "state": "succeeded",
+          "expectation": {
+            "name": "expectation.whiteboard.recover.v1",
+            "version": 1,
+            "checkpoint": "restored_cursor",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:24:03.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.84",
+            "traceId": "trace.fixture.84",
+            "spanId": "span.fixture.success.1",
+            "requestId": "request.fixture.84",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.recover",
+            "checkpoint": "restored_cursor",
+            "status": "succeeded",
+            "deadline_ms": 3000,
+            "attempt": 0
+          }
+        }
+      ]
+    },
+    "failure.whiteboard.recover.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "failure.whiteboard.recover.v1",
+      "operation": "whiteboard.recover",
+      "variant": "failure_or_gap",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.recover",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "recovery_started",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:24:02.000Z",
+          "deadlineMilliseconds": 2000
+        },
+        {
+          "key": "restored_cursor",
+          "class": "required",
+          "displayOrder": 1,
+          "deadlineAt": "2026-08-04T01:24:03.000Z",
+          "deadlineMilliseconds": 3000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.recover.failure_or_gap.0",
+          "producerOperationRef": "fixture.operation.whiteboard.recover.failure_or_gap",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:24:02.250Z",
+          "source": "ui",
+          "name": "whiteboard.recover",
+          "phase": "failed",
+          "state": "failed",
+          "expectation": {
+            "name": "expectation.whiteboard.recover.v1",
+            "version": 1,
+            "checkpoint": "recovery_started",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:24:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.84",
+            "traceId": "trace.fixture.84",
+            "spanId": "span.fixture.failure_or_gap.0",
+            "requestId": "request.fixture.84",
+            "attempt": 1
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.recover",
+            "checkpoint": "recovery_started",
+            "status": "failed",
+            "deadline_ms": 2000,
+            "attempt": 1,
+            "reason": "checkpoint_deadline"
+          }
+        }
+      ]
+    },
+    "expectation.whiteboard.disconnect.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "expectation.whiteboard.disconnect.v1",
+      "operation": "whiteboard.disconnect",
+      "variant": "expectation",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.disconnect",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "terminal",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:25:02.000Z",
+          "deadlineMilliseconds": 2000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.disconnect.expectation.0",
+          "producerOperationRef": "fixture.operation.whiteboard.disconnect.expectation",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:25:00.000Z",
+          "source": "ui",
+          "name": "whiteboard.disconnect",
+          "phase": "intent",
+          "state": "started",
+          "expectation": {
+            "name": "expectation.whiteboard.disconnect.v1",
+            "version": 1,
+            "checkpoint": "terminal",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:25:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.85",
+            "traceId": "trace.fixture.85",
+            "spanId": "span.fixture.expectation.0",
+            "requestId": "request.fixture.85",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.disconnect",
+            "checkpoint": "terminal",
+            "status": "expected",
+            "deadline_ms": 2000,
+            "attempt": 0
+          }
+        }
+      ]
+    },
+    "success.whiteboard.disconnect.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "success.whiteboard.disconnect.v1",
+      "operation": "whiteboard.disconnect",
+      "variant": "success",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.disconnect",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "terminal",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:25:02.000Z",
+          "deadlineMilliseconds": 2000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.disconnect.success.0",
+          "producerOperationRef": "fixture.operation.whiteboard.disconnect.success",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:25:01.750Z",
+          "source": "ui",
+          "name": "whiteboard.disconnect",
+          "phase": "succeeded",
+          "state": "succeeded",
+          "expectation": {
+            "name": "expectation.whiteboard.disconnect.v1",
+            "version": 1,
+            "checkpoint": "terminal",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:25:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.85",
+            "traceId": "trace.fixture.85",
+            "spanId": "span.fixture.success.0",
+            "requestId": "request.fixture.85",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.disconnect",
+            "checkpoint": "terminal",
+            "status": "succeeded",
+            "deadline_ms": 2000,
+            "attempt": 0
+          }
+        }
+      ]
+    },
+    "failure.whiteboard.disconnect.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "failure.whiteboard.disconnect.v1",
+      "operation": "whiteboard.disconnect",
+      "variant": "failure_or_gap",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.disconnect",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "terminal",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:25:02.000Z",
+          "deadlineMilliseconds": 2000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.disconnect.failure_or_gap.0",
+          "producerOperationRef": "fixture.operation.whiteboard.disconnect.failure_or_gap",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:25:02.250Z",
+          "source": "ui",
+          "name": "whiteboard.disconnect",
+          "phase": "failed",
+          "state": "failed",
+          "expectation": {
+            "name": "expectation.whiteboard.disconnect.v1",
+            "version": 1,
+            "checkpoint": "terminal",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:25:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.85",
+            "traceId": "trace.fixture.85",
+            "spanId": "span.fixture.failure_or_gap.0",
+            "requestId": "request.fixture.85",
+            "attempt": 1
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.disconnect",
+            "checkpoint": "terminal",
+            "status": "failed",
+            "deadline_ms": 2000,
+            "attempt": 1,
+            "reason": "checkpoint_deadline"
           }
         }
       ]

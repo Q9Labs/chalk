@@ -1,311 +1,257 @@
-import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
+import { createChalkPublicClient, type AccessGrant, type AccessGrantSource, type GetAccess, type PublicArrivalOptions, type PublicSpaceArrival, type PublicSpaceCreated } from "@q9labsai/chalk-client";
 import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 
-const localBackendPath = "/local-chalk";
-
-export type ParticipantCredential = {
+export type PublicSpaceCredential = {
   readonly apiBaseURL: string;
   readonly syncURL: string;
-  readonly spaceInviteToken?: string;
+  readonly space: string;
 };
 
-export type DashboardSpaceCredential = {
+export type AccountSpaceCredential = {
   readonly apiBaseURL: string;
   readonly space: string;
-  readonly access: AccessGrant;
+  readonly access: AccessGrantSource;
   readonly participantGeneration: number;
 };
 
-export type DashboardSpaceAccess = {
-  readonly credential: DashboardSpaceCredential;
+export type AccountSpaceAccess = {
+  readonly credential: AccountSpaceCredential;
   readonly getAccess: GetAccess;
-  readonly connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]>;
-  readonly leave: (options?: ParticipantCredentialCleanupOptions) => Promise<void>;
+  readonly leave: (options?: SpaceAccessCleanupOptions) => Promise<void>;
+  readonly inviteLink?: string;
 };
 
-type JourneyBrokerTelemetry = Pick<TelemetryJourney, "headers" | "recordHttpRequest">;
-
-export type ParticipantCredentialCleanupOptions = {
+export type SpaceAccessCleanupOptions = {
   readonly keepalive?: boolean;
 };
 
-const DASHBOARD_REQUEST_TIMEOUT_MS = 15_000;
+export type PublicInviteClient = {
+  readonly createPublicSpace: (displayName: string) => Promise<PublicSpaceCreated>;
+  readonly arriveBySpacePublicInvite: (spaceInviteToken: string, displayName: string, options?: Pick<PublicArrivalOptions, "arrivalHandle">) => Promise<PublicSpaceArrival>;
+  readonly getSpacePublicInviteArrival: (arrivalHandle: string) => Promise<PublicSpaceArrival>;
+  readonly refreshSpacePublicInviteAccess: (arrivalHandle: string, mediaProof: string, options?: { readonly replaceMediaConnection?: boolean }) => Promise<AccessGrant>;
+  readonly leaveSpacePublicInviteArrival: (arrivalHandle: string, options?: SpaceAccessCleanupOptions) => Promise<void>;
+};
 
-export async function createParticipantCredential(displayName: string, spaceInviteToken?: string, journey?: JourneyBrokerTelemetry): Promise<ParticipantCredential> {
-  try {
-    return await request(
-      "/participant-credentials",
-      {
-        displayName,
-        ...(spaceInviteToken ? { spaceInviteToken } : {}),
-      },
-      journey,
-      parseParticipantCredential,
-    );
-  } catch (cause) {
-    if (cause instanceof ParticipantCredentialResponseError) await cleanupParticipantCredential(journey).catch(() => undefined);
-    throw cause;
-  }
+export type PreparedPublicSpace = {
+  readonly arrival: PublicSpaceArrival;
+  readonly credential: PublicSpaceCredential | AccountSpaceCredential;
+  readonly getAccess: GetAccess;
+  readonly connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]>;
+  readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
+};
+
+type JourneyOptions = Pick<TelemetryJourney, "headers"> & {
+  readonly context?: TelemetryJourney["context"];
+  readonly recordHttpRequest?: TelemetryJourney["recordHttpRequest"];
+};
+
+const defaultAPIOrigin = "https://api.chalkmeet.com";
+const dashboardCSRF: { token?: string; expiresAt: number } = { token: undefined, expiresAt: 0 };
+const dashboardRequestTimeoutMS = 15_000;
+
+export function createPublicInviteClient(journey?: JourneyOptions): PublicInviteClient {
+  const client = createChalkPublicClient({
+    baseUrl: publicAPIBaseURL(),
+    credentials: "include",
+    ...(journey?.headers ? { headers: journey.headers } : {}),
+    ...(journey?.context ? { telemetry: journey.context } : {}),
+  });
+
+  return {
+    createPublicSpace: (displayName) => client.createPublicSpace({ displayName }, { idempotencyKey: requestKey() }),
+    arriveBySpacePublicInvite: (spaceInviteToken, displayName, options) => client.arriveBySpacePublicInvite({ spaceInviteToken, displayName }, { idempotencyKey: requestKey(), ...(options?.arrivalHandle === undefined ? {} : { arrivalHandle: options.arrivalHandle }) }),
+    getSpacePublicInviteArrival: (arrivalHandle) => client.getSpacePublicInviteArrival({ arrivalHandle }),
+    refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof, options) =>
+      options?.replaceMediaConnection === undefined ? client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle }) : client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle, replaceMediaConnection: options.replaceMediaConnection }),
+    leaveSpacePublicInviteArrival: (arrivalHandle, options) => client.leaveSpacePublicInviteArrival(arrivalHandle, options),
+  };
 }
 
-export function createAccessGrantProvider(journey?: JourneyBrokerTelemetry): GetAccess {
-  return async (): Promise<AccessGrant> => request<AccessGrant>("/access-grants", undefined, journey);
-}
-
-/** Forwards refresh intent and media proof so the broker renews without replacing the media connection. */
-export function createBrokerConnectionAccess(journey?: JourneyBrokerTelemetry): NonNullable<SpaceClientPlatform["connectionAccess"]> {
-  return async (accessRequest) =>
-    request<AccessGrant>(
-      "/access-grants",
-      {
-        replaceMediaConnection: accessRequest?.replaceMediaConnection ?? false,
-        ...(accessRequest?.currentMediaToken && !accessRequest.replaceMediaConnection ? { currentMediaToken: accessRequest.currentMediaToken } : {}),
-      },
-      journey,
-    );
-}
-
-export async function cleanupParticipantCredential(journey?: JourneyBrokerTelemetry, options: ParticipantCredentialCleanupOptions = {}): Promise<void> {
-  await request<void>("/participant-credentials/cleanup", undefined, journey, undefined, options);
-}
-
-/** Account-bound Dashboard access never persists the opaque grant in storage. */
-export async function joinDashboardSpace(tenantID: string, spaceSlug: string, displayName: string, journey?: JourneyBrokerTelemetry): Promise<DashboardSpaceAccess> {
+export async function joinDashboardSpace(tenantID: string, spaceSlug: string, displayName: string, journey?: JourneyOptions): Promise<AccountSpaceAccess> {
   const path = `/api/tenants/${encodeURIComponent(tenantID)}/spaces/by-slug/${encodeURIComponent(spaceSlug)}/participants/self`;
-  const value = await dashboardRequest(path, "POST", { display_name: displayName }, journey);
-  const parsed = parseDashboardGrant(value);
-  let current = parsed;
+  const current = dashboardGrant(await dashboardRequest(path, "POST", { display_name: displayName }, journey));
+  const inviteLink = await dashboardInviteLink(current.tenantID, current.spaceID, journey);
+  let active = current;
   let initial = true;
   let left = false;
+
+  const getAccess: GetAccess = async ({ reason }) => {
+    if (left) throw new Error("This Space access has been released.");
+    if (initial && reason === "join") {
+      initial = false;
+      return active.access;
+    }
+    active = dashboardGrant(
+      await dashboardRequest(
+        `${path}/access-grants`,
+        "POST",
+        {
+          participant_generation: active.participantGeneration,
+          replace_media_connection: reason === "retry",
+          ...(reason === "retry" ? {} : { current_media_token: active.mediaToken }),
+        },
+        journey,
+      ),
+    );
+    return active.access;
+  };
+
+  const leave = async (options: SpaceAccessCleanupOptions = {}): Promise<void> => {
+    if (left) return;
+    await dashboardRequest(path, "DELETE", { participant_generation: active.participantGeneration }, journey, options);
+    left = true;
+  };
+
+  return {
+    credential: { apiBaseURL: publicAPIBaseURL(), space: active.spaceID, access: active.access, participantGeneration: active.participantGeneration },
+    getAccess,
+    leave,
+    inviteLink,
+  };
+}
+
+export function createPreparedPublicSpace(client: PublicInviteClient, arrival: PublicSpaceArrival): PreparedPublicSpace {
+  const access = requireArrivalAccess(arrival);
+  let mediaProof = accessMediaProof(access);
+  let current = access;
+  let left = false;
+  let initial = true;
+
   const connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]> = async (request) => {
-    if (left) throw new Error("Dashboard Space access has been released.");
+    if (left) throw new Error("This Space access has been released.");
     if (initial && (!request || request.reason === "join")) {
       initial = false;
-      return current.access;
+      return current;
     }
-    const refreshed = await dashboardRequest(
-      `${path}/access-grants`,
-      "POST",
-      {
-        participant_generation: current.participantGeneration,
-        replace_media_connection: request?.replaceMediaConnection ?? false,
-        ...(request?.replaceMediaConnection ? {} : { current_media_token: request?.currentMediaToken ?? current.mediaToken }),
-      },
-      journey,
-    );
-    current = parseDashboardGrant(refreshed);
-    return current.access;
+    mediaProof = request?.currentMediaToken ?? mediaProof;
+    current = request?.replaceMediaConnection ? await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof, { replaceMediaConnection: true }) : await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof);
+    mediaProof = accessMediaProof(current);
+    return current;
   };
-  const getAccess: GetAccess = async ({ reason }) =>
-    connectionAccess({
-      reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry",
-      replaceMediaConnection: reason === "retry",
-    });
-  const leave = async (options: ParticipantCredentialCleanupOptions = {}): Promise<void> => {
+  const getAccess: GetAccess = async ({ reason }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection: reason === "retry" });
+  const finish = async (options: SpaceAccessCleanupOptions = {}): Promise<void> => {
     if (left) return;
+    const arrivalHandle = arrival.arrival_handle;
+    if (arrivalHandle) await client.leaveSpacePublicInviteArrival(arrivalHandle, options);
     left = true;
-    await dashboardRequest(path, "DELETE", { participant_generation: current.participantGeneration }, journey, options);
   };
+
   return {
-    credential: { apiBaseURL: dashboardAPIBaseURL(), space: spaceSlug, access: current.access, participantGeneration: current.participantGeneration },
+    arrival,
+    credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), space: publicSpaceSlug(arrival) },
     getAccess,
     connectionAccess,
-    leave,
+    finish,
   };
 }
 
-export function isUnauthenticatedDashboardSpaceError(cause: unknown): boolean {
-  return cause instanceof DashboardSpaceRequestError && cause.status === 401;
+export function publicAPIBaseURL(): string {
+  const configured = import.meta.env.VITE_API_URL?.trim();
+  if (configured) return configured;
+  if (globalThis.location?.origin) return globalThis.location.origin;
+  return defaultAPIOrigin;
 }
 
-async function request<T>(path: string, body: unknown = {}, journey?: JourneyBrokerTelemetry, parse?: (value: unknown) => T, options: ParticipantCredentialCleanupOptions = {}): Promise<T> {
-  const startedAt = Date.now();
-  let response: Response | undefined;
-
-  try {
-    response = await fetch(`${localBackendPath}${path}`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json", ...journey?.headers },
-      body: JSON.stringify(body ?? {}),
-      keepalive: options.keepalive,
-    });
-    if (!response.ok) {
-      journey?.recordHttpRequest({
-        method: "POST",
-        route: `${localBackendPath}${path}`,
-        statusCode: response.status,
-        durationMs: Date.now() - startedAt,
-        state: "failed",
-      });
-      const message = await errorMessage(response);
-      throw new ParticipantCredentialRequestError(message, response.status);
-    }
-    if (response.status === 204) {
-      journey?.recordHttpRequest({
-        method: "POST",
-        route: `${localBackendPath}${path}`,
-        statusCode: response.status,
-        durationMs: Date.now() - startedAt,
-        state: "succeeded",
-      });
-      return undefined as T;
-    }
-    try {
-      const value: unknown = await response.json();
-      const result = parse ? parse(value) : (value as T);
-      journey?.recordHttpRequest({
-        method: "POST",
-        route: `${localBackendPath}${path}`,
-        statusCode: response.status,
-        durationMs: Date.now() - startedAt,
-        state: "succeeded",
-      });
-      return result;
-    } catch (cause) {
-      journey?.recordHttpRequest({
-        method: "POST",
-        route: `${localBackendPath}${path}`,
-        statusCode: response.status,
-        durationMs: Date.now() - startedAt,
-        state: "failed",
-      });
-      throw cause;
-    }
-  } catch (cause) {
-    if (!response) {
-      journey?.recordHttpRequest({
-        method: "POST",
-        route: `${localBackendPath}${path}`,
-        durationMs: Date.now() - startedAt,
-        state: "failed",
-      });
-    }
-    throw cause;
-  }
-}
-
-let csrfToken: string | undefined;
-
-async function dashboardRequest(path: string, method: "POST" | "DELETE", body: unknown, journey?: JourneyBrokerTelemetry, options: ParticipantCredentialCleanupOptions = {}): Promise<unknown> {
-  const startedAt = Date.now();
-  const key = requestKey();
-  const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), DASHBOARD_REQUEST_TIMEOUT_MS);
-  try {
-    const tokenResponse = await fetch("/api/auth/csrf", { credentials: "same-origin", signal: controller.signal });
-    if (!tokenResponse.ok) throw new DashboardSpaceRequestError("Could not establish secure Dashboard access.", tokenResponse.status);
-    const tokenBody = (await tokenResponse.json()) as { readonly csrf_token?: unknown };
-    csrfToken = typeof tokenBody.csrf_token === "string" ? tokenBody.csrf_token : csrfToken;
-    if (!csrfToken) throw new Error("Could not establish secure Dashboard access.");
-    const response = await fetch(path, {
-      method,
-      credentials: "same-origin",
-      headers: { "content-type": "application/json", "x-chalk-csrf": csrfToken, "idempotency-key": key, ...journey?.headers },
-      body: JSON.stringify(body ?? {}),
-      keepalive: options.keepalive,
-      signal: controller.signal,
-    });
-    journey?.recordHttpRequest({ method, route: path, statusCode: response.status, durationMs: Date.now() - startedAt, state: response.ok ? "succeeded" : "failed" });
-    if (!response.ok) throw new DashboardSpaceRequestError(await errorMessage(response), response.status);
-    if (response.status === 204) return undefined;
-    return response.json();
-  } catch (cause) {
-    if (controller.signal.aborted) throw new DashboardSpaceRequestError("Dashboard access timed out. Please try again.", 504);
-    throw cause;
-  } finally {
-    globalThis.clearTimeout(timeout);
-  }
-}
-
-function parseDashboardGrant(value: unknown): { readonly access: AccessGrant; readonly mediaToken: string; readonly participantGeneration: number } {
-  if (!isRecord(value) || !isRecord(value.subject) || !isRecord(value.sync) || !isRecord(value.media)) throw new Error("The Dashboard access grant response was invalid.");
-  const generation = value.subject.participant_generation;
-  if (typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1 || typeof value.sync.token !== "string" || typeof value.media.token !== "string") throw new Error("The Dashboard access grant response was invalid.");
-  return { access: value as AccessGrant, mediaToken: value.media.token, participantGeneration: generation };
-}
-
-function dashboardAPIBaseURL(): string {
-  const configured = (import.meta as ImportMeta & { readonly env?: Record<string, unknown> }).env?.VITE_API_URL;
-  if (typeof configured === "string" && configured.length > 0) return configured;
-  return globalThis.location?.origin ?? "http://localhost";
+export function publicSyncURL(apiBaseURL: string): string {
+  const configured = import.meta.env.VITE_CHALK_SYNC_URL?.trim();
+  if (configured) return configured;
+  const url = new URL(apiBaseURL);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  if (url.hostname.startsWith("api.")) url.hostname = `sync.${url.hostname.slice(4)}`;
+  url.pathname = "/v1/sync";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 function requestKey(): string {
   return crypto.randomUUID().replaceAll("-", "").slice(0, 32);
 }
 
-function parseParticipantCredential(value: unknown): ParticipantCredential {
-  if (!isRecord(value)) throw new ParticipantCredentialResponseError("The participant credential response was invalid.");
-
-  return {
-    apiBaseURL: endpoint(value.apiBaseURL, ["http", "https"], "API"),
-    syncURL: endpoint(value.syncURL, ["ws", "wss"], "Sync"),
-    ...(value.spaceInviteToken === undefined ? {} : { spaceInviteToken: capability(value.spaceInviteToken, "Space invite") }),
-  };
+function requireArrivalAccess(arrival: PublicSpaceArrival): AccessGrant {
+  if (!arrival.access) throw new Error("This Space is not ready yet.");
+  return arrival.access;
 }
 
-function endpoint(value: unknown, protocols: readonly string[], label: string): string {
-  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) throw new ParticipantCredentialResponseError(`The participant credential returned an invalid ${label} URL.`);
+type DashboardGrant = {
+  readonly access: AccessGrantSource;
+  readonly mediaToken: string;
+  readonly participantGeneration: number;
+  readonly tenantID: string;
+  readonly spaceID: string;
+};
 
-  let url: URL;
+function dashboardGrant(value: unknown): DashboardGrant {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("This Space is unavailable.");
+  const subject = "subject" in value && typeof value.subject === "object" && value.subject !== null && !Array.isArray(value.subject) ? value.subject : undefined;
+  const media = "media" in value && typeof value.media === "object" && value.media !== null && !Array.isArray(value.media) ? value.media : undefined;
+  const generation = subject && "participant_generation" in subject ? subject.participant_generation : undefined;
+  const tenantID = subject && "tenant_id" in subject ? subject.tenant_id : undefined;
+  const spaceID = subject && "space_id" in subject ? subject.space_id : undefined;
+  const mediaToken = media && "token" in media ? media.token : undefined;
+  if (typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1 || typeof mediaToken !== "string" || !mediaToken || typeof tenantID !== "string" || !tenantID || typeof spaceID !== "string" || !spaceID) throw new Error("This Space is unavailable.");
+  return { access: value, mediaToken, participantGeneration: generation, tenantID, spaceID };
+}
+
+function accessMediaProof(access: AccessGrant): string {
+  const value: unknown = access;
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !("media" in value) || typeof value.media !== "object" || value.media === null || Array.isArray(value.media) || !("token" in value.media) || typeof value.media.token !== "string" || !value.media.token) {
+    throw new Error("This Space is unavailable.");
+  }
+  return value.media.token;
+}
+
+async function dashboardRequest(path: string, method: "GET" | "POST" | "DELETE", body: unknown, journey?: JourneyOptions, options: SpaceAccessCleanupOptions = {}): Promise<unknown> {
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), dashboardRequestTimeoutMS);
+  let statusCode: number | undefined;
   try {
-    url = new URL(value);
-  } catch {
-    throw new ParticipantCredentialResponseError(`The participant credential returned an invalid ${label} URL.`);
-  }
-  if (!protocols.includes(url.protocol.slice(0, -1)) || url.username || url.password || url.hash) throw new ParticipantCredentialResponseError(`The participant credential returned an invalid ${label} URL.`);
-  return value;
-}
-
-function capability(value: unknown, label: string): string {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(value)) throw new ParticipantCredentialResponseError(`The participant credential returned an invalid ${label}.`);
-  return value;
-}
-
-class ParticipantCredentialResponseError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ParticipantCredentialResponseError";
-  }
-}
-
-class ParticipantCredentialRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "ParticipantCredentialRequestError";
+    const csrf = method === "GET" ? undefined : await dashboardCSRFToken(controller.signal);
+    const response = await fetch(path, {
+      method,
+      credentials: "same-origin",
+      headers: { ...(method === "GET" ? {} : { "content-type": "application/json", "x-chalk-csrf": csrf ?? "", "idempotency-key": requestKey() }), ...(journey?.headers ?? {}) },
+      ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
+      keepalive: options.keepalive,
+      signal: controller.signal,
+    });
+    statusCode = response.status;
+    journey?.recordHttpRequest?.({ method, route: path, statusCode, durationMs: Date.now() - startedAt, state: response.ok ? "succeeded" : "failed" });
+    if (!response.ok) throw new Error("This Space is unavailable.");
+    if (response.status === 204) return undefined;
+    return response.json();
+  } catch (cause) {
+    if (!statusCode) journey?.recordHttpRequest?.({ method, route: path, durationMs: Date.now() - startedAt, state: "failed" });
+    if (controller.signal.aborted) throw new Error("This Space is unavailable.");
+    throw cause;
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
 }
 
-class DashboardSpaceRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "DashboardSpaceRequestError";
-  }
+async function dashboardCSRFToken(signal: AbortSignal): Promise<string> {
+  if (dashboardCSRF.token && dashboardCSRF.expiresAt > Date.now()) return dashboardCSRF.token;
+  const response = await fetch("/api/auth/csrf", { credentials: "same-origin", headers: { accept: "application/json" }, signal });
+  if (!response.ok) throw new Error("This Space is unavailable.");
+  const value: unknown = await response.json();
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !("csrf_token" in value) || typeof value.csrf_token !== "string" || !value.csrf_token) throw new Error("This Space is unavailable.");
+  dashboardCSRF.token = value.csrf_token;
+  dashboardCSRF.expiresAt = Date.now() + 55 * 60 * 1_000;
+  return value.csrf_token;
 }
 
-export function isTerminalParticipantCredentialCleanupError(cause: unknown): boolean {
-  return cause instanceof ParticipantCredentialRequestError && [401, 404, 410].includes(cause.status);
+async function dashboardInviteLink(tenantID: string, spaceID: string, journey?: JourneyOptions): Promise<string | undefined> {
+  const value = await dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/spaces/${encodeURIComponent(spaceID)}/public-invite`, "GET", undefined, journey);
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !("canonical_url" in value) || typeof value.canonical_url !== "string") return undefined;
+  const inviteLink = value.canonical_url.trim();
+  return inviteLink || undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function errorMessage(response: Response): Promise<string> {
-  try {
-    const body = (await response.json()) as { readonly error?: unknown };
-    if (typeof body.error === "string" && body.error.length > 0) return body.error;
-    if (isRecord(body.error) && typeof body.error.message === "string" && body.error.message.length > 0) return body.error.message;
-  } catch {
-    // The HTTP status remains useful when a proxy returns a non-JSON error page.
-  }
-  return `The Chalk access service returned HTTP ${response.status}`;
+function publicSpaceSlug(arrival: PublicSpaceArrival): string {
+  const slug = arrival.space?.slug?.trim();
+  if (!slug) throw new Error("This Space is unavailable.");
+  return slug;
 }

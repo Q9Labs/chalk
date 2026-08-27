@@ -143,6 +143,7 @@ function isLockfile(relativePath) {
 
 const REFERENCE_FILENAMES = new Set(["CHANGELOG.md", "GLOSSARY.md", "checklist.md"]);
 const VENDORED_DIRECTORIES = new Set(["node_modules", "dist", "vendor", "sqlc"]);
+const PROVIDER_VOCABULARY_ADAPTERS = new Set(["sdks/typescript/client/src/media/rtk.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.test.ts"]);
 
 function exclusionContext(relativePath) {
   const parts = relativePath.split("/");
@@ -169,14 +170,11 @@ function matchesGeneratedPath({ basename, directories }) {
   return hasDirectory(directories, isGeneratedDirectory) || GENERATED_FILE.test(basename);
 }
 
-const FROZEN_LEGACY_BROKER_PREFIX = `infrastructure/${"meet" + "ing"}-broker/`;
-
 const EXCLUSION_RULES = [
   [({ relativePath }) => relativePath === "tools/language-ratchet/baseline.json", "ratchet baseline"],
   [({ parts }) => parts[0] === "scratchpad", "scratchpad"],
-  // The old Worker is kept source-controlled only while its Durable Object drains.
-  [({ relativePath }) => relativePath.startsWith(FROZEN_LEGACY_BROKER_PREFIX), "frozen legacy broker compatibility"],
   [({ relativePath }) => relativePath.startsWith("apps/api/db/migrations/"), "immutable migration history"],
+  [({ relativePath }) => PROVIDER_VOCABULARY_ADAPTERS.has(relativePath), "provider SDK vocabulary adapter"],
   [isReferenceFile, "migration reference or checklist"],
   [({ relativePath }) => relativePath === "sdks/ubiquitous-language.md", "superseded vocabulary catalog"],
   [({ relativePath }) => isLockfile(relativePath), "lockfile or dependency checksum"],

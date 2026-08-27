@@ -1,11 +1,15 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
 
 import { DOCS_PAGES } from "../src/docs/manifest.ts";
+import { SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts";
 
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
+const shellDirectoryPath = resolve(clientDir, "_shell");
+const shellIndexPath = resolve(shellDirectoryPath, "index.html");
+const appShellUrl = "/_shell/";
 const indexPath = resolve(clientDir, "index.html");
 const fallback404Path = resolve(clientDir, "404.html");
 const spaceDirPath = resolve(clientDir, "space");
@@ -16,8 +20,6 @@ const privacyIndexPath = resolve(clientDir, "privacy", "index.html");
 const termsIndexPath = resolve(clientDir, "terms", "index.html");
 const serviceWorkerPath = resolve(clientDir, "sw.js");
 const packageJsonPath = resolve(process.cwd(), "package.json");
-const publicOrigin = "https://chalkmeet.com";
-const docsSocialImage = `${publicOrigin}/images/landing/chalk-flow-hero-20260818.webp`;
 
 function resolveCommitHash() {
   const commitHash = process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || execSync("git rev-parse HEAD").toString().trim();
@@ -37,13 +39,17 @@ for (const publicPagePath of [indexPath, statusIndexPath, privacyIndexPath, term
   }
 }
 
+mkdirSync(shellDirectoryPath, { recursive: true });
+cpSync(shellPath, shellIndexPath);
+rmSync(shellPath);
+
 // Cloudflare Pages: ensure unknown paths and Space deep links load the SPA shell
 // even if a redirect rule is bypassed.
-cpSync(shellPath, fallback404Path);
+cpSync(shellIndexPath, fallback404Path);
 mkdirSync(spaceDirPath, { recursive: true });
-cpSync(shellPath, spaceIndexPath);
+cpSync(shellIndexPath, spaceIndexPath);
 
-const shellHtml = readFileSync(shellPath, "utf8");
+const shellHtml = readFileSync(shellIndexPath, "utf8");
 
 function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -51,7 +57,7 @@ function escapeHtml(value) {
 
 function buildDocsHtml(page) {
   const title = `${page.title} | Chalk Docs`;
-  const canonicalUrl = `${publicOrigin}${page.href}`;
+  const canonicalUrl = `${SITE_ORIGIN}${page.href}`;
   const titleTag = `<title>${escapeHtml(title)}</title>`;
   const descriptionTag = `<meta name="description" content="${escapeHtml(page.description)}">`;
   const socialTags = [
@@ -61,11 +67,11 @@ function buildDocsHtml(page) {
     `<meta property="og:title" content="${escapeHtml(title)}">`,
     `<meta property="og:description" content="${escapeHtml(page.description)}">`,
     `<meta property="og:url" content="${canonicalUrl}">`,
-    `<meta property="og:image" content="${docsSocialImage}">`,
+    `<meta property="og:image" content="${SOCIAL_IMAGE_URL}">`,
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${escapeHtml(title)}">`,
     `<meta name="twitter:description" content="${escapeHtml(page.description)}">`,
-    `<meta name="twitter:image" content="${docsSocialImage}">`,
+    `<meta name="twitter:image" content="${SOCIAL_IMAGE_URL}">`,
   ].join("\n    ");
 
   const withTitle = shellHtml.replace(/<title>[^<]*<\/title>/i, titleTag);
@@ -107,12 +113,12 @@ function collectClientFiles(dir) {
   });
 }
 
-const precacheUrls = Array.from(new Set(["/", "/index.html", "/404.html", ...collectClientFiles(clientDir)])).sort();
+const precacheUrls = Array.from(new Set(["/", "/index.html", "/404.html", appShellUrl, ...collectClientFiles(clientDir)])).sort();
 
 const swSource = `
 const BUILD_META = ${JSON.stringify(buildMeta, null, 2)};
 const CACHE_NAME = "chalk-web-${buildMeta.version}-${buildMeta.commitHash}";
-const APP_SHELL_URL = "/_shell.html";
+const APP_SHELL_URL = ${JSON.stringify(appShellUrl)};
 const PRECACHE_URLS = ${JSON.stringify(precacheUrls, null, 2)};
 const ASSET_EXT_RE = /\\.[a-z0-9]+$/i;
 

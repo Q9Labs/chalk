@@ -1,5 +1,5 @@
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
-import type { CloudflareSFUSnapshot } from "../media";
+import type { ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
@@ -17,6 +17,7 @@ const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5_000;
 
 type RecoveryKind = "sync" | "media";
+type EpisodeControl = NonNullable<V1EpisodeSnapshot["control"]>;
 type RecoveryPlan = {
   readonly kind: RecoveryKind;
   readonly deadline: number;
@@ -63,7 +64,7 @@ type Model = {
   sync: ConnectionSyncClient | null;
   media: ConnectionMediaClient | null;
   syncSnapshot: V1EpisodeSnapshot | null;
-  mediaSnapshot: CloudflareSFUSnapshot | null;
+  mediaSnapshot: ConnectionMediaSnapshot | null;
   failure: ConnectionFailure | null;
   initialMedia: InitialMedia;
   intent: { microphone: boolean; camera: boolean };
@@ -166,7 +167,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Effect.tryPromise({ try: operation, catch: (cause) => lifecycleFailure(code, true, message, cause) });
       const toPromise = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect);
       const publish = (): Effect.Effect<void> =>
-        Effect.sync(() => snapshotFor(model, access.currentUnsafe()?.subject ?? null)).pipe(
+        Effect.sync(() => snapshotFor(model, access.currentUnsafe())).pipe(
           Effect.tap((snapshot) => SubscriptionRef.set(snapshotRef, snapshot)),
           Effect.asVoid,
           Effect.tap(() =>
@@ -350,6 +351,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   platform.createMediaClient({
                     access: grant,
                     credential: () => toPromise(access.getMediaToken()),
+                    replaceMediaConnection: () => toPromise(access.refresh("media_recovery", true)).then((replacement) => replacement.media),
+                    ...(options.recordRtcSummary ? { recordRtcSummary: options.recordRtcSummary } : {}),
                     onFailure: () => enqueueBackground(handleMediaFailure()),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),
@@ -505,7 +508,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const sync = model.sync;
           if (!media || !sync) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Media recovery requires active ports"));
           const grant = yield* access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure));
-          yield* foreign(() => media.restart(grant.media.clientPayload));
+          const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
+          yield* foreign(() => media.restart(restartInput));
           model.mediaSnapshot = media.getSnapshot();
           yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000));
         });
@@ -548,7 +552,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* stopPorts();
           yield* transition("failed");
         });
-      const handleMediaSnapshot = (media: ConnectionMediaClient, snapshot: CloudflareSFUSnapshot): Effect.Effect<void> =>
+      const handleMediaSnapshot = (media: ConnectionMediaClient, snapshot: ConnectionMediaSnapshot): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
@@ -557,6 +561,19 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* publish();
         });
       const handleMediaFailure = (): Effect.Effect<void> => (model.media ? handleMediaSnapshot(model.media, model.media.getSnapshot()) : Effect.void);
+      const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          const media = model.media;
+          if (!media || !active(model)) return;
+          const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
+          const restarted = yield* Effect.exit(foreign(() => media.restart(restartInput), "media_start_failed", "The media client could not apply a replacement access grant"));
+          if (restarted._tag === "Failure") {
+            yield* recover("media");
+            return;
+          }
+          model.mediaSnapshot = media.getSnapshot();
+          yield* publish();
+        });
       const notifyScreenEnded = (): Effect.Effect<void> =>
         Effect.sync(() => {
           if (!active(model)) return;
@@ -580,10 +597,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             })
           : Deferred.complete(work.deferred, work.effect).pipe(Effect.asVoid);
       yield* Effect.forkScoped(Queue.take(queue).pipe(Effect.flatMap(process), Effect.forever));
+      const accessReplacementUnsubscribe = yield* access.subscribeAutomaticMediaReplacement((grant) => enqueueBackground(applyAutomaticMediaReplacement(grant)));
       const foregroundUnsubscribe = platform.subscribeForeground?.(() => enqueueBackground(refreshAccess())) ?? null;
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           model.closed = true;
+          accessReplacementUnsubscribe();
           foregroundUnsubscribe?.();
           if (activeJoin) yield* Fiber.interrupt(activeJoin);
           yield* performLeave().pipe(Effect.ignore);
@@ -664,14 +683,28 @@ function idleSnapshot(): ConnectionLifecycleSnapshot {
   return Object.freeze({ state: "idle", subject: null, episode: null, connection: Object.freeze({ sync: "idle", media: "idle" }), failure: null });
 }
 
-function snapshotFor(model: Model, subject: ParsedAccessGrant["subject"] | null): ConnectionLifecycleSnapshot {
+function snapshotFor(model: Model, access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot {
   const control = model.syncSnapshot?.optimisticControl ?? model.syncSnapshot?.control;
   return Object.freeze({
     state: model.state,
-    subject: subject ? Object.freeze({ ...subject }) : null,
-    episode: subject ? Object.freeze({ id: subject.episodeId, startedAt: null, deadline: control ? new Date(control.deadlineAtMs).toISOString() : null }) : null,
+    subject: subjectFor(access),
+    episode: episodeFor(access, control),
     connection: Object.freeze({ sync: syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
+  });
+}
+
+function subjectFor(access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot["subject"] {
+  if (!access) return null;
+  return Object.freeze({ ...access.subject });
+}
+
+function episodeFor(access: ParsedAccessGrant | null, control: EpisodeControl | null | undefined): ConnectionLifecycleSnapshot["episode"] {
+  if (!access) return null;
+  return Object.freeze({
+    id: access.subject.episodeId,
+    startedAt: access.episodeStartedAt ?? null,
+    deadline: control ? new Date(control.deadlineAtMs).toISOString() : null,
   });
 }
 
@@ -728,7 +761,7 @@ function syncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefined):
   return "idle";
 }
 
-function mediaPhase(phase: CloudflareSFUSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
+function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
   if (phase === "live") return "healthy";
   if (phase === "recovering") return "recovering";
   if (phase === "failed") return "failed";

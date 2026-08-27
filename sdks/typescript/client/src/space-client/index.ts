@@ -35,6 +35,7 @@ export type {
   MediaRequestKind,
   MediaSlice,
   Participant,
+  ParticipantPresence,
   ParticipantsController,
   ParticipantsSlice,
   Reaction,

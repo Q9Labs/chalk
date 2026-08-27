@@ -1,5 +1,5 @@
 defmodule ChalkSync.WhiteboardV1.Fanout do
-  @moduledoc "Disposable local and Postgres whiteboard-v1 head/cursor fan-out."
+  @moduledoc "Disposable local and Postgres whiteboard-v1 durable-head/transient fan-out."
 
   use GenServer
 
@@ -26,10 +26,14 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   end
 
   def publish_cursor(%EpisodeKey{} = episode, frame, server \\ @server) do
+    publish_transient(episode, frame, server)
+  end
+
+  def publish_transient(%EpisodeKey{} = episode, frame, server \\ @server) do
     broadcast_local(episode, frame)
 
     if Process.whereis(server),
-      do: GenServer.cast(server, {:publish_cursor, episode, frame}),
+      do: GenServer.cast(server, {:publish_transient, episode, frame}),
       else: :ok
   end
 
@@ -60,7 +64,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   end
 
   @impl GenServer
-  def handle_cast({:publish_cursor, episode, frame}, state) do
+  def handle_cast({:publish_transient, episode, frame}, state) do
     payload =
       JSON.encode!(%{
         "source_node" => state.source_id,
@@ -74,7 +78,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
           :ok
 
         {:error, reason} ->
-          Logger.warning("whiteboard cursor notification failed: #{inspect(reason)}")
+          Logger.warning("whiteboard transient notification failed: #{inspect(reason)}")
       end
     end
 
@@ -115,7 +119,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
       broadcast_local(episode_key, frame)
     else
       true -> :ok
-      _ -> Logger.warning("discarded malformed whiteboard-v1 cursor notification")
+      _ -> Logger.warning("discarded malformed whiteboard-v1 transient notification")
     end
 
     {:noreply, state}

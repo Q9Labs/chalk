@@ -135,7 +135,6 @@ function resetTargets(config) {
     databases: [{ container: "chalk-postgres", name: config.databaseName || "chalk_dev", action: "drop-and-recreate" }],
     volumes: [config.redis.volume, "chalk-observability-postgres-data", "chalk-observability-lgtm-data"],
     preservedVolumes: ["chalk-postgres"],
-    workerState: `${config.runtimeRoot}/wrangler`,
     privateRuntimeDirectory: config.runtimeRoot,
   };
 }

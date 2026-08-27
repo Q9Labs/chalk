@@ -1431,6 +1431,27 @@ const regionsGroup = HttpApiGroup.make("regions").add(
 
 const spacesGroup = HttpApiGroup.make("spaces")
   .add(
+    HttpApiEndpoint.post("approveSpacePublicAdmissionRequest", "/v1/tenants/:tenant_id/spaces/:space_id/public-admission-requests/:request_handle/approval", {
+      params: S.ApproveSpacePublicAdmissionRequestPathParamsSchema,
+      headers: S.ApproveSpacePublicAdmissionRequestRequestHeadersSchema,
+      success: S.ApproveSpacePublicAdmissionRequestResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.AdmissionRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("archiveSpace", "/v1/tenants/:tenant_id/spaces/:space_id/archive", {
       params: S.ArchiveSpacePathParamsSchema,
       success: S.ArchiveSpaceResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -1447,6 +1468,46 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.post("arriveBySpacePublicInvite", "/v1/public/space-invite-arrivals", {
+      headers: S.ArriveBySpacePublicInviteRequestHeadersSchema,
+      payload: S.ArriveBySpacePublicInviteRequestBodySchema,
+      success: S.ArriveBySpacePublicInviteResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.ArrivalInvalidHandleErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ArrivalUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpacePublicInviteUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("createPublicSpace", "/v1/public/spaces", {
+      headers: S.CreatePublicSpaceRequestHeadersSchema,
+      payload: S.CreatePublicSpaceRequestBodySchema,
+      success: S.CreatePublicSpaceResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.ArrivalInvalidHandleErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ArrivalUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpacePublicInviteUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createSpace", "/v1/tenants/:tenant_id/spaces", {
       params: S.CreateSpacePathParamsSchema,
       headers: S.CreateSpaceRequestHeadersSchema,
@@ -1455,12 +1516,34 @@ const spacesGroup = HttpApiGroup.make("spaces")
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidMediaPlaneErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.SpaceSlugConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("denySpacePublicAdmissionRequest", "/v1/tenants/:tenant_id/spaces/:space_id/public-admission-requests/:request_handle/denial", {
+      params: S.DenySpacePublicAdmissionRequestPathParamsSchema,
+      headers: S.DenySpacePublicAdmissionRequestRequestHeadersSchema,
+      success: S.DenySpacePublicAdmissionRequestResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.AdmissionRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -1477,6 +1560,44 @@ const spacesGroup = HttpApiGroup.make("spaces")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getSpacePublicInvite", "/v1/tenants/:tenant_id/spaces/:space_id/public-invite", {
+      params: S.GetSpacePublicInvitePathParamsSchema,
+      success: S.GetSpacePublicInviteResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.AdmissionRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getSpacePublicInviteArrival", "/v1/public/space-invite-arrival", {
+      headers: S.GetSpacePublicInviteArrivalRequestHeadersSchema,
+      success: S.GetSpacePublicInviteArrivalResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.ArrivalInvalidHandleErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ArrivalUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpacePublicInviteUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
@@ -1534,6 +1655,45 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("leaveSpacePublicInviteArrival", "/v1/public/space-invite-arrival", {
+      headers: S.LeaveSpacePublicInviteArrivalRequestHeadersSchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.ArrivalInvalidHandleErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ArrivalUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpacePublicInviteUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("listSpacePublicAdmissionRequests", "/v1/tenants/:tenant_id/spaces/:space_id/public-admission-requests", {
+      params: S.ListSpacePublicAdmissionRequestsPathParamsSchema,
+      query: S.ListSpacePublicAdmissionRequestsQueryParamsSchema,
+      success: S.ListSpacePublicAdmissionRequestsResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.AdmissionRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listSpaces", "/v1/tenants/:tenant_id/spaces", {
       params: S.ListSpacesPathParamsSchema,
       query: S.ListSpacesQueryParamsSchema,
@@ -1574,6 +1734,28 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.post("refreshSpacePublicInviteAccess", "/v1/public/space-invite-arrival/access-grants", {
+      headers: S.RefreshSpacePublicInviteAccessRequestHeadersSchema,
+      payload: S.RefreshSpacePublicInviteAccessRequestBodySchema,
+      success: S.RefreshSpacePublicInviteAccessResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.ArrivalInvalidHandleErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessMediaProofRejectedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ArrivalUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpacePublicInviteUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.AccessMediaProofExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("restoreSpace", "/v1/tenants/:tenant_id/spaces/:space_id/restore", {
       params: S.RestoreSpacePathParamsSchema,
       success: S.RestoreSpaceResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -1590,6 +1772,27 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.post("rotateSpacePublicInvite", "/v1/tenants/:tenant_id/spaces/:space_id/public-invite/rotations", {
+      params: S.RotateSpacePublicInvitePathParamsSchema,
+      headers: S.RotateSpacePublicInviteRequestHeadersSchema,
+      success: S.RotateSpacePublicInviteResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.AdmissionRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.patch("updateSpace", "/v1/tenants/:tenant_id/spaces/:space_id", {
       params: S.UpdateSpacePathParamsSchema,
       payload: S.UpdateSpaceRequestBodySchema,
@@ -1597,11 +1800,34 @@ const spacesGroup = HttpApiGroup.make("spaces")
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidMediaPlaneErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.SpaceSlugConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.patch("updateSpacePublicInvite", "/v1/tenants/:tenant_id/spaces/:space_id/public-invite", {
+      params: S.UpdateSpacePublicInvitePathParamsSchema,
+      payload: S.UpdateSpacePublicInviteRequestBodySchema,
+      success: S.UpdateSpacePublicInviteResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.AdmissionRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),

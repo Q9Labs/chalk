@@ -19,18 +19,26 @@ function shouldRetryAvailability(error: unknown): boolean {
   return ![400, 401, 403].includes(error.status ?? 0);
 }
 
-export function useEpisodeDiagnosticsAvailability({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__, api: apiInput }: EpisodeDiagnosticsAvailabilityOptions): { readonly path?: string; readonly status: AvailabilityState; readonly supported: boolean; readonly retry: () => void } {
+export function useEpisodeDiagnosticsAvailability({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__, api: apiInput }: EpisodeDiagnosticsAvailabilityOptions): {
+  readonly path?: string;
+  readonly reference?: string;
+  readonly status: AvailabilityState;
+  readonly supported: boolean;
+  readonly retry: () => void;
+} {
   const reference = diagnosticReference?.trim() ?? "";
   const path = episodeDebuggerPath(reference);
   const alternateReference = isAlternateDiagnosticReference(reference) ? reference : undefined;
   const api = useMemo(() => apiInput ?? new EpisodeDiagnosticsApiClient(), [apiInput]);
   const [availability, setAvailability] = useState<AvailabilityState>(alternateReference ? "checking" : "available");
+  const [resolvedReference, setResolvedReference] = useState<string | undefined>(alternateReference ? undefined : reference || undefined);
   const [retryAttempt, setRetryAttempt] = useState(0);
   const [retryGeneration, setRetryGeneration] = useState(0);
 
   useEffect(() => {
     if (!enabled || !path || !alternateReference) {
       setAvailability(path ? "available" : "unavailable");
+      setResolvedReference(path ? reference : undefined);
       setRetryAttempt(0);
       return;
     }
@@ -41,8 +49,11 @@ export function useEpisodeDiagnosticsAvailability({ diagnosticReference, enabled
     setAvailability("checking");
 
     void api.resolveAlternate(alternateReference, abort.signal).then(
-      () => {
-        if (active) setAvailability("available");
+      (nextReference) => {
+        if (active) {
+          setResolvedReference(nextReference);
+          setAvailability("available");
+        }
       },
       (error: unknown) => {
         if (!active) return;
@@ -53,6 +64,7 @@ export function useEpisodeDiagnosticsAvailability({ diagnosticReference, enabled
           }, retryDelay);
           return;
         }
+        setResolvedReference(undefined);
         setAvailability("unavailable");
       },
     );
@@ -69,7 +81,7 @@ export function useEpisodeDiagnosticsAvailability({ diagnosticReference, enabled
     setRetryGeneration((current) => current + 1);
   }, []);
 
-  return { path: enabled && availability === "available" ? path : undefined, status: availability, supported: Boolean(path), retry };
+  return { path: enabled && availability === "available" ? path : undefined, reference: enabled && availability === "available" ? resolvedReference : undefined, status: availability, supported: Boolean(path), retry };
 }
 
 export function EpisodeDiagnosticsDeveloperLink({ diagnosticReference, enabled = __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__, api }: EpisodeDiagnosticsAvailabilityOptions) {

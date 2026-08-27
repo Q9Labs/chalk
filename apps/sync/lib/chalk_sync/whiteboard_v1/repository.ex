@@ -17,6 +17,8 @@ defmodule ChalkSync.WhiteboardV1.Repository do
               {:ok, commit()} | {:error, atom()} | {:retryable, atom()}
   @callback set_draw_permission(Identity.t(), map()) ::
               {:ok, commit()} | {:error, atom()} | {:retryable, atom()}
+  @callback set_presentation(Identity.t(), map()) ::
+              {:ok, commit()} | {:error, atom()} | {:retryable, atom()}
   @callback snapshot(Identity.t()) :: {:ok, map()} | {:error, atom()} | {:retryable, atom()}
   @callback read_after(Identity.t(), String.t(), non_neg_integer()) ::
               {:ok, [map()]} | {:error, atom()} | {:retryable, atom()}
@@ -27,6 +29,8 @@ defmodule ChalkSync.WhiteboardV1.Repository do
 
   def set_draw_permission(identity, operation),
     do: impl().set_draw_permission(identity, operation)
+
+  def set_presentation(identity, operation), do: impl().set_presentation(identity, operation)
 
   def snapshot(identity), do: impl().snapshot(identity)
 

@@ -44,7 +44,7 @@
   text-decoration: none;
 }
 
-.docs-logo img {
+.docs-logo svg {
   width: 86px;
   height: auto;
 }
@@ -1065,7 +1065,7 @@ a.docs-feature-card:hover {
     gap: 14px;
   }
 
-  .docs-logo img {
+  .docs-logo svg {
     width: 77px;
   }
 

@@ -73,7 +73,7 @@ export const ToastStack = React.memo<ToastStackProps>((props) => {
   return skin === "classic" ? <ClassicToastStack {...props} /> : <ChalkToastStack {...props} />;
 });
 
-function ChalkToastStack({ toasts, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }: ToastStackProps) {
+function ChalkToastStack({ toasts, onDismiss, position = "bottom-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }: ToastStackProps) {
   const activeIds = useRef(new Set<string>());
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {

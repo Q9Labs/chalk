@@ -51,22 +51,28 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
 
   defp read_in_transaction(connection, episode, direction, cursor, limit) do
     stream_params = space_params(episode)
-    params = space_params(episode)
+    params = episode_params(episode)
 
     case Postgrex.query!(connection, SQL.lock_stream_for_read(), stream_params).rows do
       [] ->
         {:ok, empty_page()}
 
-      [[head_sequence, retained_floor]] ->
-        read_retained(
-          connection,
-          params,
-          direction,
-          cursor,
-          limit,
-          head_sequence,
-          retained_floor
-        )
+      [[_space_head, _space_floor]] ->
+        case Postgrex.query!(connection, SQL.read_head(), params).rows do
+          [[nil, nil]] ->
+            {:ok, empty_page()}
+
+          [[head_sequence, retained_floor]] ->
+            read_retained(
+              connection,
+              params,
+              direction,
+              cursor,
+              limit,
+              head_sequence,
+              retained_floor
+            )
+        end
     end
   end
 
@@ -206,5 +212,9 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
       UUID.dump!(episode.tenant_id),
       UUID.dump!(episode.space_id)
     ]
+  end
+
+  defp episode_params(episode) do
+    space_params(episode) ++ [UUID.dump!(episode.episode_id)]
   end
 end

@@ -45,6 +45,8 @@ const MAX_LIVE_TARGET_RETRY_DELAY_MS = 1_000;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const OPERATION_PENDING_POLL_INTERVAL_MS = 1_000;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
+const DEFAULT_RECONNECT_DELAY_MS = 250;
+const MAX_RECONNECT_DELAY_MS = 5_000;
 const MAX_COLLABORATION_REQUESTS_IN_FLIGHT = 64;
 
 type CommandDeferred = Deferred<V1CommandResult> & { readonly frame: SyncV1ClientFrame; retries: number; readonly durableTarget: boolean; readonly createdAt: number };
@@ -118,6 +120,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #startupGeneration = 0;
   #connectionGeneration = 0;
   #reconnectTimer: unknown;
+  #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
   #unsubscribeLifecycle: (() => void) | undefined;
@@ -1086,6 +1089,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;
     this.#recovery = null;
     this.#phase = { phase: "live" };
+    this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
     for (const pending of this.#commands.values()) {
       pending.retries = 0;
@@ -1176,10 +1180,13 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#phase = { phase: "connecting" };
     this.#emit();
     this.#clearReconnect();
+    const configuredDelay = this.#options.reconnectDelayMs;
+    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
       this.#connect();
-    }, this.#options.reconnectDelayMs ?? 250);
+    }, delay);
   }
 
   #recover(reason: string): void {

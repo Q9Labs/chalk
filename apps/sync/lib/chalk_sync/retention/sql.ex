@@ -68,6 +68,7 @@ defmodule ChalkSync.Retention.SQL do
         select 1 from sync_screen_share_leases lease
         where lease.tenant_id = control.tenant_id
           and lease.episode_id = control.episode_id
+          and lease.hard_expires_at > $2
       )
       and not exists (
         select 1 from sync_publication_fences fence
@@ -90,6 +91,43 @@ defmodule ChalkSync.Retention.SQL do
         select 1 from sync_chat_attachments attachment
         where attachment.tenant_id = control.tenant_id
           and attachment.episode_id = control.episode_id
+      )
+      and (
+        not exists (
+          select 1
+          from sync_chat_messages candidate_message
+          where candidate_message.tenant_id = control.tenant_id
+            and candidate_message.space_id = control.space_id
+            and candidate_message.episode_id = control.episode_id
+        )
+        or exists (
+          select 1
+          from sync_chat_streams stream
+          cross join lateral (
+            select
+              min(candidate_message.sequence) as first_sequence,
+              max(candidate_message.sequence) as last_sequence,
+              count(*)::bigint as message_count
+            from sync_chat_messages candidate_message
+            where candidate_message.tenant_id = control.tenant_id
+              and candidate_message.space_id = control.space_id
+              and candidate_message.episode_id = control.episode_id
+          ) candidate_messages
+          where stream.tenant_id = control.tenant_id
+            and stream.space_id = control.space_id
+            and stream.retained_floor_sequence = candidate_messages.first_sequence
+            and candidate_messages.last_sequence <= stream.head_sequence
+            and not exists (
+              select 1
+              from sync_chat_messages other_message
+              where other_message.tenant_id = control.tenant_id
+                and other_message.space_id = control.space_id
+                and other_message.episode_id <> control.episode_id
+                and other_message.sequence < candidate_messages.last_sequence
+            )
+            and candidate_messages.message_count =
+              candidate_messages.last_sequence - candidate_messages.first_sequence + 1
+        )
       )
     order by episode.ended_at, control.tenant_id, control.episode_id
     limit $3
@@ -186,13 +224,73 @@ defmodule ChalkSync.Retention.SQL do
   def delete_chat_messages, do: delete_rows("sync_chat_messages")
   def delete_chat_read_receipts, do: delete_rows("sync_chat_read_receipts")
 
+  def lock_chat_stream do
+    """
+    select head_sequence
+    from sync_chat_streams
+    where tenant_id = $1 and space_id = $2
+    for update
+    """
+  end
+
+  def reconcile_chat_stream do
+    """
+    update sync_chat_streams stream
+    set
+      retained_floor_sequence = case
+        when aggregate.message_count = 0 and stream.head_sequence = 0 then null
+        when aggregate.message_count = 0 then stream.head_sequence + 1
+        else aggregate.retained_floor_sequence
+      end,
+      message_count = aggregate.message_count,
+      message_bytes = aggregate.message_bytes,
+      updated_at = now()
+    from (
+      select
+        stream.tenant_id,
+        stream.space_id,
+        stream.head_sequence,
+        count(message.sequence)::bigint as message_count,
+        coalesce(sum(message.encoded_bytes), 0)::bigint as message_bytes,
+        min(message.sequence)::bigint as retained_floor_sequence
+      from sync_chat_streams stream
+      left join sync_chat_messages message
+        on message.tenant_id = stream.tenant_id
+        and message.space_id = stream.space_id
+      where stream.tenant_id = $1 and stream.space_id = $2
+      group by stream.tenant_id, stream.space_id, stream.head_sequence
+    ) aggregate
+    where stream.tenant_id = aggregate.tenant_id
+      and stream.space_id = aggregate.space_id
+    returning stream.head_sequence, stream.retained_floor_sequence,
+      stream.message_count, stream.message_bytes
+    """
+  end
+
   def delete_chat_streams do
     """
     with deleted as (
-      delete from sync_chat_streams
-      where tenant_id = $1
-        and space_id = (select space_id from episodes where tenant_id = $1 and id = $2)
-      returning pg_column_size(sync_chat_streams)::bigint as encoded_bytes
+      delete from sync_chat_streams stream
+      where stream.tenant_id = $1 and stream.space_id = $2
+        and not exists (
+          select 1
+          from sync_chat_messages message
+          where message.tenant_id = stream.tenant_id
+            and message.space_id = stream.space_id
+        )
+        and not exists (
+          select 1
+          from sync_chat_attachments attachment
+          where attachment.tenant_id = stream.tenant_id
+            and attachment.space_id = stream.space_id
+        )
+        and not exists (
+          select 1
+          from sync_chat_read_receipts receipt
+          where receipt.tenant_id = stream.tenant_id
+            and receipt.space_id = stream.space_id
+        )
+      returning pg_column_size(stream)::bigint as encoded_bytes
     )
     select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted
     """
@@ -208,8 +306,7 @@ defmodule ChalkSync.Retention.SQL do
     """
     with deleted as (
       delete from sync_whiteboard_scenes
-      where tenant_id = $1
-        and space_id = (select space_id from episodes where tenant_id = $1 and id = $2)
+      where tenant_id = $1 and episode_id = $2
       returning pg_column_size(sync_whiteboard_scenes)::bigint as encoded_bytes
     )
     select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted

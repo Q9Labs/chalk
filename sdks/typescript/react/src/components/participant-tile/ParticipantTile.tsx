@@ -1,13 +1,13 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { cn } from "../../utils/cn";
-import { MicrophoneOff01Icon, Monitor01Icon, HandIcon, WifiOffIcon } from "../../utils/icons";
-import { Avatar } from "../atomic/Avatar";
-import { ChalkBadge, ChalkChrome, ChalkPanel } from "../chalk-ui";
-import { useSkin } from "../skin-context";
-import { ClassicParticipantTile } from "./ClassicParticipantTile";
+import React, { useMemo, useRef } from "react";
+
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { cn } from "../../utils/cn";
 import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
-import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
+import { HandIcon, MicrophoneOff01Icon, Monitor01Icon, WifiOffIcon } from "../../utils/icons";
+import { Avatar } from "../atomic/Avatar";
+import { ChalkBadge } from "../chalk-ui";
+import { TileShell } from "./TileShell";
+import { useVideoTrack } from "./useVideoTrack";
 
 export interface ParticipantTileProps {
   participant: {
@@ -19,10 +19,12 @@ export interface ParticipantTileProps {
     isVideoEnabled?: boolean;
     isScreenSharing?: boolean;
     isHandRaised?: boolean;
-    connectionQuality?: 1 | 2 | 3 | 4;
+    /** 0 means unknown; 1–2 show a poor-connection badge. */
+    connectionQuality?: 0 | 1 | 2 | 3 | 4;
     avatarUrl?: string;
   };
   videoTrack?: MediaStreamTrack | null;
+  /** Mirror the video horizontally. Defaults to true for the local participant's own camera. */
   mirror?: boolean;
   showName?: boolean;
   showStatus?: boolean;
@@ -34,11 +36,11 @@ export interface ParticipantTileProps {
   style?: React.CSSProperties;
   children?: React.ReactNode;
   showAvatar?: boolean;
+  /** Show a generated Facehash when the Participant has no uploaded avatar. */
+  generatedAvatars?: boolean;
   gradientPreference?: ParticipantGradientPreference;
-}
-
-function isTrackUsable(track: MediaStreamTrack | null | undefined): boolean {
-  return !!track && track.readyState === "live" && track.enabled;
+  /** Keeps the tile mounted but out of the accessibility tree and tab order (off-page on the stage). */
+  hidden?: boolean;
 }
 
 const aspectRatioClasses = {
@@ -48,214 +50,93 @@ const aspectRatioClasses = {
   fill: "",
 };
 
-const ChalkParticipantTile = React.memo(({ participant, videoTrack, mirror, showName = true, showStatus = true, showAvatar = true, aspectRatio = "16:9", onClick, onDoubleClick, pinned, className, style, children, gradientPreference }: ParticipantTileProps) => {
+export const ParticipantTile = React.memo(function ParticipantTile({
+  participant,
+  videoTrack,
+  mirror,
+  showName = true,
+  showStatus = true,
+  showAvatar = true,
+  generatedAvatars = true,
+  aspectRatio = "16:9",
+  onClick,
+  onDoubleClick,
+  pinned,
+  className,
+  style,
+  children,
+  gradientPreference,
+  hidden,
+}: ParticipantTileProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [trackError, setTrackError] = useState<string | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [, setCurrentTrackId] = useState<string | null>(null);
-  const [, forceUpdate] = useState(0);
-
-  const attachTrack = useCallback((videoEl: HTMLVideoElement, track: MediaStreamTrack) => {
-    const stream = new MediaStream([track]);
-    videoEl.srcObject = stream;
-
-    const attemptPlay = () => {
-      videoEl.play().catch((err) => {
-        if (err.name === "AbortError") return;
-        const errorMsg = err instanceof Error ? err.message : "Play failed";
-        if (!errorMsg.includes("interrupted")) {
-          setTrackError(errorMsg);
-        }
-      });
-    };
-
-    attemptPlay();
-  }, []);
-
-  useEffect(() => {
-    const videoEl = videoRef.current;
-    if (!videoEl) return;
-
-    setTrackError(null);
-    setIsLoaded(false);
-
-    const shouldShowVideo = participant.isVideoEnabled && videoTrack;
-
-    if (!shouldShowVideo) {
-      videoEl.srcObject = null;
-      setCurrentTrackId(null);
-      return;
-    }
-
-    if (!isTrackUsable(videoTrack)) {
-      videoEl.srcObject = null;
-      setCurrentTrackId(null);
-      return;
-    }
-
-    const trackId = videoTrack.id;
-    setCurrentTrackId(trackId);
-
-    attachTrack(videoEl, videoTrack);
-
-    const handleEnded = () => {
-      setTrackError("Track ended");
-      setIsLoaded(false);
-      forceUpdate((n) => n + 1);
-    };
-
-    const handleMute = () => {
-      forceUpdate((n) => n + 1);
-    };
-
-    const handleUnmute = () => {
-      if (isTrackUsable(videoTrack)) {
-        attachTrack(videoEl, videoTrack);
-        setTrackError(null);
-      }
-    };
-
-    videoTrack.addEventListener("ended", handleEnded);
-    videoTrack.addEventListener("mute", handleMute);
-    videoTrack.addEventListener("unmute", handleUnmute);
-
-    return () => {
-      videoTrack.removeEventListener("ended", handleEnded);
-      videoTrack.removeEventListener("mute", handleMute);
-      videoTrack.removeEventListener("unmute", handleUnmute);
-    };
-  }, [videoTrack, participant.isVideoEnabled, attachTrack]);
-
-  const handleVideoLoaded = useCallback(() => {
-    setIsLoaded(true);
-    if (videoRef.current && videoTrack) observeFirstRenderedFrame(videoRef.current, videoTrack);
-  }, [videoTrack]);
-
-  const isTrackValid = isTrackUsable(videoTrack);
-  const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError && isLoaded;
-
-  const participantColors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
-
-  const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality <= 2;
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (!onClick) return;
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        onClick();
-      }
-    },
-    [onClick],
-  );
+  const status = useVideoTrack(videoRef, videoTrack, participant.isVideoEnabled === true);
+  const showVideo = status === "playing";
+  const mirrored = mirror ?? participant.isLocal === true;
+  const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
+  const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality > 0 && participant.connectionQuality <= 2;
 
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-[8px] border border-transparent bg-[var(--chalk-app-tile-base)] outline-none transition-all duration-300",
-        aspectRatioClasses[aspectRatio],
-        pinned && "ring-2",
-        participant.isSpeaking && !prefersReducedMotion && "chalk-animate-harmonic-pulse",
-        participant.isSpeaking && prefersReducedMotion && "border-solid",
-        onClick && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-canvas)]",
-        className,
-      )}
-      style={
-        {
-          ...style,
-          "--chalk-accent-speaking": participantColors.primary,
-          "--chalk-accent-speaking-glow": `${participantColors.primary}4D`, // 30% opacity hex
-          "--chalk-participant-color": participantColors.primary,
-          borderColor: participant.isSpeaking && prefersReducedMotion ? participantColors.primary : undefined,
-          ...(pinned ? { "--tw-ring-color": `${participantColors.primary}80` } : {}),
-        } as React.CSSProperties
-      }
+    <TileShell
+      label={`Video tile for ${participant.displayName}`}
+      accentColor={colors.primary}
+      pinned={pinned}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      onKeyDown={handleKeyDown}
-      data-tour={participant.isLocal ? "local-video" : "video-grid"}
-      role={onClick ? "button" : "region"}
-      tabIndex={onClick ? 0 : undefined}
-      aria-label={`Video tile for ${participant.displayName}`}
+      className={cn(aspectRatioClasses[aspectRatio], className)}
+      style={style}
+      dataTour={participant.isLocal ? "local-video" : "video-grid"}
+      hidden={hidden}
+      corner={
+        showStatus && hasPoorConnection ? (
+          <ChalkBadge tone="danger" className="pointer-events-none absolute top-2 right-2 z-20 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
+            <WifiOffIcon size={12} className="text-[var(--chalk-danger)]" />
+          </ChalkBadge>
+        ) : null
+      }
+      chip={
+        showName || showStatus ? (
+          <>
+            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} gradientPreference={gradientPreference} className="hidden shrink-0 @[240px]:flex" />}
+            {showName && (
+              <span className="min-w-0 truncate text-[11px] leading-4 font-medium tracking-[-0.01em] text-white @[240px]:text-[13px] @[240px]:leading-5" title={participant.displayName}>
+                {participant.displayName}
+                {participant.isLocal && participant.displayName !== "You" && <span className="text-white/65"> (You)</span>}
+              </span>
+            )}
+            {showStatus && (participant.isMuted || participant.isSpeaking || participant.isHandRaised || participant.isScreenSharing) && (
+              <span className="flex shrink-0 items-center gap-1 @[240px]:gap-1.5">
+                {participant.isMuted && <MicrophoneOff01Icon size={14} className="h-3 w-3 text-[var(--chalk-app-danger,var(--chalk-danger))] @[240px]:h-3.5 @[240px]:w-3.5" aria-label="Muted" />}
+                {!participant.isMuted && participant.isSpeaking && (
+                  <span className="chalk-sound-bars" role="img" aria-label="Speaking">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                )}
+                {participant.isHandRaised && (
+                  <span className={cn("flex h-4 w-4 items-center justify-center rounded-full bg-[var(--chalk-yellow,#e2c25f)] text-[#1b1d22] @[240px]:h-[18px] @[240px]:w-[18px]", !prefersReducedMotion && "chalk-animate-hand-bounce")} aria-label="Hand raised">
+                    <HandIcon size={11} className="h-2.5 w-2.5 @[240px]:h-[11px] @[240px]:w-[11px]" />
+                  </span>
+                )}
+                {participant.isScreenSharing && <Monitor01Icon size={14} className="h-3 w-3 text-white/85 @[240px]:h-3.5 @[240px]:w-3.5" aria-label="Sharing screen" />}
+              </span>
+            )}
+          </>
+        ) : null
+      }
     >
-      {/* Video element (always rendered, visibility controlled by CSS) */}
-      <video ref={videoRef} autoPlay playsInline muted onLoadedData={handleVideoLoaded} className={cn("h-full w-full object-cover transition-opacity duration-500", mirror && "scale-x-[-1]", !showVideo ? "opacity-0" : "opacity-100")} />
-
-      {/* Avatar background when video is off or loading */}
+      <video ref={videoRef} autoPlay playsInline muted className={cn("relative z-10 block h-full w-full object-cover transition-opacity duration-300", mirrored && "scale-x-[-1]", showVideo ? "opacity-100" : "opacity-0")} />
       {!showVideo && showAvatar && (
-        <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 flex items-center justify-center transition-opacity duration-300">
-          <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={Boolean(participant.avatarUrl)} className="opacity-90" gradientPreference={gradientPreference} />
+        <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 z-10 flex items-center justify-center">
+          <span className={cn("relative grid place-items-center rounded-full", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}>
+            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} className="opacity-90" gradientPreference={gradientPreference} />
+          </span>
         </div>
       )}
-
       {children}
-
-      {/* Poor connection warning, top-right */}
-      {showStatus && hasPoorConnection && (
-        <ChalkBadge tone="danger" className="pointer-events-none absolute top-2 right-2 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
-          <WifiOffIcon size={12} className="text-[var(--chalk-danger)]" />
-        </ChalkBadge>
-      )}
-
-      {/* Compact bottom-left info chip */}
-      {(showName || showStatus) && (
-        <div className="pointer-events-none absolute right-2 bottom-2 left-2">
-          <ChalkPanel tone="neutral" filled className="inline-flex max-w-full items-center gap-1.5 rounded-[5px] p-1.5">
-            <div className="flex max-w-full items-center gap-1.5">
-              {/* Small avatar when video is off */}
-              {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={Boolean(participant.avatarUrl)} gradientPreference={gradientPreference} />}
-
-              {/* Name */}
-              {showName && (
-                <span className="max-w-[120px] truncate text-xs font-medium !text-[var(--chalk-accent-text)]" title={participant.displayName}>
-                  {participant.displayName}
-                  {participant.isLocal && participant.displayName !== "You" && <span className="!text-[var(--chalk-accent-text)]"> (You)</span>}
-                </span>
-              )}
-
-              {/* Status icons inline */}
-              {showStatus && (
-                <div className="ml-auto flex items-center gap-1">
-                  {participant.isMuted && (
-                    <ChalkBadge tone="danger" className="min-h-0 min-w-0 p-0.5">
-                      <MicrophoneOff01Icon size={10} className="text-[var(--chalk-accent-text)]" />
-                    </ChalkBadge>
-                  )}
-                  {participant.isHandRaised && (
-                    <ChalkBadge tone="accent" className={cn("min-h-0 min-w-0 p-0.5", !prefersReducedMotion && "chalk-animate-hand-bounce")}>
-                      <HandIcon size={10} className="text-[var(--chalk-accent-text)]" />
-                    </ChalkBadge>
-                  )}
-                  {participant.isScreenSharing && (
-                    <ChalkBadge tone="success" className="min-h-0 min-w-0 p-0.5" style={{ backgroundColor: `${participantColors.primary}CC` }}>
-                      <Monitor01Icon size={10} className="text-[var(--chalk-accent-text)]" />
-                    </ChalkBadge>
-                  )}
-                </div>
-              )}
-            </div>
-          </ChalkPanel>
-        </div>
-      )}
-
-      <ChalkChrome
-        className="pointer-events-none absolute inset-0 z-20 h-full w-full"
-        focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))"
-        radius={8}
-        roughness={0.9}
-        stroke={participant.isSpeaking ? "var(--chalk-accent-speaking, var(--chalk-app-line-strong, currentColor))" : "var(--chalk-app-line-strong, currentColor)"}
-        part="participant-tile"
-      />
-    </div>
+    </TileShell>
   );
-});
-
-ChalkParticipantTile.displayName = "ChalkParticipantTile";
-
-export const ParticipantTile = React.memo((props: ParticipantTileProps) => {
-  const skin = useSkin();
-  return skin === "classic" ? <ClassicParticipantTile {...props} /> : <ChalkParticipantTile {...props} />;
 });
 
 ParticipantTile.displayName = "ParticipantTile";

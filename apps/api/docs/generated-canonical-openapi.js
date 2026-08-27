@@ -1975,6 +1975,688 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         },
       },
     },
+    "/v1/public/space-invite-arrival": {
+      delete: {
+        operationId: "leaveSpacePublicInviteArrival",
+        parameters: [
+          {
+            in: "header",
+            name: "X-Chalk-Arrival-Handle",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          204: {
+            description: "No Content",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["arrival.invalid_handle", "request.invalid", "request.invalid_idempotency_key"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Leave space public invite arrival",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+      get: {
+        operationId: "getSpacePublicInviteArrival",
+        parameters: [
+          {
+            in: "header",
+            name: "X-Chalk-Arrival-Handle",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PublicSpaceArrival",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["arrival.invalid_handle", "request.invalid", "request.invalid_idempotency_key"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Get space public invite arrival",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/public/space-invite-arrival/access-grants": {
+      post: {
+        operationId: "refreshSpacePublicInviteAccess",
+        parameters: [
+          {
+            in: "header",
+            name: "X-Chalk-Arrival-Handle",
+            required: true,
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/RefreshSpacePublicInviteAccessRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          201: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/AccessGrant",
+                },
+              },
+            },
+            description: "Created",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["arrival.invalid_handle", "request.invalid", "request.invalid_idempotency_key"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.media_proof_rejected"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["access.media_proof_expired", "episode.capacity_exceeded", "request.idempotency_conflict"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Refresh space public invite access",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/public/space-invite-arrivals": {
+      post: {
+        operationId: "arriveBySpacePublicInvite",
+        parameters: [
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+          {
+            in: "header",
+            name: "X-Chalk-Arrival-Handle",
+            required: false,
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/SpacePublicInviteArrivalRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          201: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PublicSpaceArrival",
+                },
+              },
+            },
+            description: "Created",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["arrival.invalid_handle", "request.invalid", "request.invalid_idempotency_key"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Arrive by space public invite",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/public/spaces": {
+      post: {
+        operationId: "createPublicSpace",
+        parameters: [
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/CreatePublicSpaceRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          201: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PublicSpaceCreated",
+                },
+              },
+            },
+            description: "Created",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["arrival.invalid_handle", "request.invalid", "request.invalid_idempotency_key"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Create public space",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/regions": {
       get: {
         operationId: "listRegions",
@@ -6545,7 +7227,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_media_plane", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -7365,7 +8047,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "space.invalid_id", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["request.invalid", "space.invalid_id", "space.invalid_media_plane", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -10241,6 +10923,1014 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         ],
         summary: "Create recording",
         "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests": {
+      get: {
+        operationId: "listSpacePublicAdmissionRequests",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+          {
+            in: "query",
+            name: "state",
+            required: false,
+            schema: {
+              enum: ["pending"],
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PublicAdmissionRequestPage",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["admission_request.not_found", "space.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["request.idempotency_conflict"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "List space public admission requests",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/approval": {
+      post: {
+        operationId: "approveSpacePublicAdmissionRequest",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+          {
+            in: "path",
+            name: "request_handle",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]{16,128}$",
+              type: "string",
+            },
+          },
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PublicAdmissionRequest",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["admission_request.not_found", "space.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["request.idempotency_conflict"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Approve space public admission request",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/denial": {
+      post: {
+        operationId: "denySpacePublicAdmissionRequest",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+          {
+            in: "path",
+            name: "request_handle",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]{16,128}$",
+              type: "string",
+            },
+          },
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PublicAdmissionRequest",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["admission_request.not_found", "space.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["request.idempotency_conflict"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Deny space public admission request",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite": {
+      get: {
+        operationId: "getSpacePublicInvite",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SpacePublicInvite",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["admission_request.not_found", "space.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["request.idempotency_conflict"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Get space public invite",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+      patch: {
+        operationId: "updateSpacePublicInvite",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/UpdateSpacePublicInviteRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SpacePublicInvite",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["admission_request.not_found", "space.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["request.idempotency_conflict"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Update space public invite",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations": {
+      post: {
+        operationId: "rotateSpacePublicInvite",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "space_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+          {
+            in: "header",
+            name: "Idempotency-Key",
+            required: true,
+            schema: {
+              maxLength: 128,
+              minLength: 16,
+              pattern: "^[A-Za-z0-9_-]+$",
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          201: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SpacePublicInvite",
+                },
+              },
+            },
+            description: "Created",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "space.invalid_id", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["admission_request.not_found", "space.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["request.idempotency_conflict"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Rotate space public invite",
         "x-chalk-rate-limit": {
           limit: 60,
           name: "v1.authenticated.write",
@@ -13872,6 +15562,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             required: ["expires_at", "generation", "intake_path", "token"],
             type: ["object", "null"],
           },
+          episode_started_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
           media: {
             additionalProperties: false,
             properties: {
@@ -14565,6 +16265,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["role", "user_id"],
         type: "object",
       },
+      CreatePublicSpaceRequest: {
+        additionalProperties: false,
+        properties: {
+          display_name: {
+            minLength: 1,
+            type: "string",
+          },
+        },
+        required: ["display_name"],
+        type: "object",
+      },
       CreateRecordingDownloadURLRequest: {
         additionalProperties: false,
         properties: {
@@ -14659,7 +16370,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             type: "string",
           },
         },
-        required: ["default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "name", "slug"],
+        required: ["default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "name", "slug"],
         type: "object",
       },
       CreateTenantRequest: {
@@ -16122,6 +17833,124 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["external_operation", "participant"],
         type: "object",
       },
+      PublicAdmissionRequest: {
+        additionalProperties: false,
+        properties: {
+          display_name: {
+            type: "string",
+          },
+          expires_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          request_handle: {
+            type: "string",
+          },
+          requested_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          state: {
+            type: "string",
+          },
+        },
+        required: ["display_name", "expires_at", "request_handle", "requested_at", "state"],
+        type: "object",
+      },
+      PublicAdmissionRequestPage: {
+        additionalProperties: false,
+        properties: {
+          requests: {
+            items: {
+              $ref: "#/components/schemas/PublicAdmissionRequest",
+            },
+            type: "array",
+          },
+        },
+        required: ["requests"],
+        type: "object",
+      },
+      PublicSpaceArrival: {
+        additionalProperties: false,
+        properties: {
+          access: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/AccessGrant",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
+          arrival_handle: {
+            type: "string",
+          },
+          guest_credential: {
+            type: "string",
+          },
+          identity: {
+            type: "string",
+          },
+          retry_after: {
+            type: "integer",
+          },
+          space: {
+            additionalProperties: false,
+            properties: {
+              admission_mode: {
+                type: "string",
+              },
+              name: {
+                type: "string",
+              },
+              slug: {
+                type: "string",
+              },
+            },
+            required: ["admission_mode", "name", "slug"],
+            type: ["object", "null"],
+          },
+          state: {
+            type: "string",
+          },
+        },
+        required: ["state"],
+        type: "object",
+      },
+      PublicSpaceCreated: {
+        additionalProperties: false,
+        properties: {
+          arrival: {
+            $ref: "#/components/schemas/PublicSpaceArrival",
+          },
+          guest_credential: {
+            type: "string",
+          },
+          invite_link: {
+            type: "string",
+          },
+          lifecycle_until: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          space: {
+            additionalProperties: false,
+            properties: {
+              admission_mode: {
+                type: "string",
+              },
+              name: {
+                type: "string",
+              },
+              slug: {
+                type: "string",
+              },
+            },
+            required: ["admission_mode", "name", "slug"],
+            type: "object",
+          },
+        },
+        required: ["arrival", "invite_link", "lifecycle_until", "space"],
+        type: "object",
+      },
       PublicStatus: {
         additionalProperties: false,
         properties: {
@@ -16426,6 +18255,20 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["created_at", "ends_at", "episode_id", "id", "input_bitrate_bps", "max_duration_minutes", "participant_count", "recording_id", "scheduled_start", "space_id", "state", "tenant_id", "updated_at"],
         type: "object",
       },
+      RefreshSpacePublicInviteAccessRequest: {
+        additionalProperties: false,
+        properties: {
+          media_proof: {
+            minLength: 1,
+            type: "string",
+          },
+          replace_media_connection: {
+            type: "boolean",
+          },
+        },
+        required: ["media_proof", "replace_media_connection"],
+        type: "object",
+      },
       Regions: {
         additionalProperties: false,
         properties: {
@@ -16673,6 +18516,79 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         },
         required: ["pagination", "spaces"],
+        type: "object",
+      },
+      SpacePublicInvite: {
+        additionalProperties: false,
+        properties: {
+          admission_mode: {
+            type: "string",
+          },
+          canonical_url: {
+            $ref: "#/components/schemas/URLString",
+          },
+          created_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          disabled_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
+          enabled: {
+            type: "boolean",
+          },
+          generation: {
+            minimum: 0,
+            type: "integer",
+          },
+          public_role: {
+            type: "string",
+          },
+          rotated_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
+          schema_version: {
+            type: "string",
+          },
+          space_id: {
+            $ref: "#/components/schemas/SpaceId",
+          },
+          tenant_id: {
+            $ref: "#/components/schemas/TenantId",
+          },
+          updated_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+        },
+        required: ["admission_mode", "canonical_url", "created_at", "enabled", "generation", "public_role", "schema_version", "space_id", "tenant_id", "updated_at"],
+        type: "object",
+      },
+      SpacePublicInviteArrivalRequest: {
+        additionalProperties: false,
+        properties: {
+          display_name: {
+            minLength: 1,
+            type: "string",
+          },
+          space_invite_token: {
+            minLength: 1,
+            type: "string",
+          },
+        },
+        required: ["display_name", "space_invite_token"],
         type: "object",
       },
       StartIntegrationConnectionRequest: {
@@ -17129,6 +19045,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             type: "string",
           },
         },
+        type: "object",
+      },
+      UpdateSpacePublicInviteRequest: {
+        additionalProperties: false,
+        properties: {
+          enabled: {
+            type: "boolean",
+          },
+        },
+        required: ["enabled"],
         type: "object",
       },
       UpdateSpaceRequest: {

@@ -5,9 +5,9 @@ cd "$(dirname "$0")/.."
 
 container="${CHALK_REDIS_CONTAINER:-chalk-redis}"
 volume="${CHALK_REDIS_VOLUME:-chalk-redis}"
-image="${CHALK_REDIS_IMAGE:-redis:8.8.0-alpine}"
+image="${CHALK_REDIS_IMAGE:-redis:8.10.0-alpine}"
 port="${CHALK_REDIS_PORT:-6379}"
-expected_version="${CHALK_REDIS_EXPECTED_VERSION:-8.8.0}"
+expected_version="${CHALK_REDIS_EXPECTED_VERSION:-8.10.0}"
 cmd="${1:-start}"
 
 redis_url="redis://127.0.0.1:${port}/0"
@@ -32,7 +32,7 @@ Commands:
 Defaults:
   container: chalk-redis
   volume:    chalk-redis
-  image:     redis:8.8.0-alpine
+  image:     redis:8.10.0-alpine
   port:      6379
 EOF
 }

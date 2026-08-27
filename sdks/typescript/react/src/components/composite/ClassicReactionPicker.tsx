@@ -6,6 +6,7 @@ import { Search01Icon } from "../../utils/icons";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 import { DEFAULT_QUICK_REACTIONS, EMOJI_CATEGORIES, EMOJI_KEYWORDS, type ReactionCategoryKey } from "@q9labsai/chalk-ui/reactions";
 import type { ReactionPickerProps } from "./ReactionPicker";
+import { ReactionTray } from "./ReactionTray";
 
 export const ClassicReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -66,10 +67,25 @@ export const ClassicReactionPicker = React.memo(({ isOpen, onClose, onSelect, re
 
   if (!isOpen) return null;
 
+  if (allowedReactions) {
+    return (
+      <ReactionTray
+        reactions={allowedReactions}
+        position={position}
+        className={className}
+        onSelect={(emoji) => {
+          onSelect(emoji);
+          onClose();
+        }}
+        onClose={onClose}
+      />
+    );
+  }
+
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
 
       {/* Picker Panel */}
       <div

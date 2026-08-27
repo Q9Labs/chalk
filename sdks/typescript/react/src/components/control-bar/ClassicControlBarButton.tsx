@@ -59,7 +59,7 @@ export const ClassicControlBarButton = React.memo(
           // No Border state (Ghost)
           !disabled && !active && !danger && noBorder && "bg-[var(--chalk-app-control)]",
           // Active state
-          !disabled && active && !activeClassName && "border-transparent bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]",
+          !disabled && active && !activeClassName && "border-transparent bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]",
           // Custom active state
           !disabled && active && activeClassName && activeClassName,
           // Danger state - vibrant red for visibility

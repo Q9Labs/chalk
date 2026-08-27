@@ -54,7 +54,7 @@ export type ChalkWhiteboardV1Commit = {
   readonly revision: string;
 };
 
-export type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download";
+export type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_presentation" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download";
 
 export type ChalkWhiteboardV1ErrorCode = "unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "storage_unavailable" | "file_transfer_failed";
 
@@ -96,19 +96,21 @@ export type ChalkWhiteboardV1FileTransport = {
 
 export type ChalkWhiteboardV1Transport = {
   readonly startSceneSubscription: () => Promise<void>;
-  readonly stopSceneSubscription: () => void;
+  readonly stopSceneSubscription: () => void | Promise<void>;
+  readonly subscribeSummary?: (listener: (summary: ChalkWhiteboardSummary) => void) => () => void;
   readonly subscribe: (listener: (event: ChalkWhiteboardV1Event) => void) => () => void;
   readonly submitUpdate: (input: ChalkWhiteboardV1UpdateInput) => Promise<ChalkWhiteboardV1Commit>;
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
   readonly setDrawPermission: (participantId: string, canDraw: boolean) => Promise<void>;
+  readonly setPresentation?: (presenting: boolean) => Promise<void>;
   readonly files: ChalkWhiteboardV1FileTransport;
 };
 
 export type ChalkWhiteboardV1PendingOperation = {
   readonly operationId: string;
-  readonly frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>;
+  readonly frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_presentation" }>;
   readonly createdAt: number;
   readonly bytes: number;
 };
@@ -141,6 +143,7 @@ export type ChalkWhiteboardSummary = {
   readonly capabilities: readonly ChalkWhiteboardV1Capability[];
   readonly canDraw: boolean;
   readonly canClear: boolean;
+  readonly presenting: boolean;
   readonly error: ChalkWhiteboardV1Failure | null;
 };
 import type { WhiteboardV1ClientFrame } from "../generated/whiteboard-v1";

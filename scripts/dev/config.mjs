@@ -31,7 +31,6 @@ const defaultPorts = Object.freeze({
   prometheus: 9090,
   collector: 13133,
   observabilityPostgres: 55433,
-  broker: 8787,
   providerBridge: 8444,
 });
 const toolByProfile = Object.freeze({
@@ -144,7 +143,6 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     prometheus: defaultPorts.prometheus,
     collector: defaultPorts.collector,
     observabilityPostgres: defaultPorts.observabilityPostgres,
-    broker: numberFromEnv(env, "CHALK_DEV_BROKER_PORT", defaultPorts.broker),
     providerBridge: numberFromEnv(env, "CHALK_DEV_PROVIDER_BRIDGE_PORT", defaultPorts.providerBridge),
   };
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
@@ -170,6 +168,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       environment: env.CHALK_API_ENV || "local",
     },
     secretResolver,
+    observabilityEnabled: env.CHALK_DEV_OBSERVABILITY !== "disabled",
     databaseName: "chalk_dev",
     redis: {
       port: redisPort,
@@ -181,7 +180,6 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       api: `http://127.0.0.1:${ports.api}`,
       sync: `http://127.0.0.1:${ports.sync}`,
       web: `http://127.0.0.1:${ports.web}`,
-      broker: `http://127.0.0.1:${ports.broker}/local-chalk`,
     },
     sourceRoots,
     requiredTools: requiredTools || toolByProfile[profile],

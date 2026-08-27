@@ -144,7 +144,7 @@ func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes
 		if err != nil {
 			return fmt.Errorf("create dashboard participant intent: %w", err)
 		}
-		result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent), EpisodeCreated: episodeCreated}
+		result = episodes.SelfJoinResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent), EpisodeCreated: episodeCreated, ParticipantCreated: true}
 		return nil
 	})
 	if err != nil {
@@ -228,6 +228,26 @@ func (r EpisodeLifecycleRepository) LeaveSelf(ctx context.Context, input episode
 		}
 		if input.ParticipantGeneration > 0 && participant.Generation != input.ParticipantGeneration {
 			return episodes.ErrParticipantGenerationMismatch
+		}
+		if participant.Status == episodes.ParticipantStatusJoining {
+			cancelled, cancelErr := queries.CancelDashboardParticipantJoin(ctx, sqlc.CancelDashboardParticipantJoinParams{
+				SnapshotReservationBytes: episodes.ParticipantSnapshotReservationBytes,
+				ReservationBytes:         episodes.LifecycleReservationBytes,
+				TenantID:                 uuid(input.TenantID),
+				SpaceID:                  space.ID,
+				EpisodeID:                participant.EpisodeID,
+				ParticipantID:            participant.ID,
+				ParticipantGeneration:    participant.Generation,
+			})
+			if errors.Is(cancelErr, pgx.ErrNoRows) {
+				return fmt.Errorf("cancel dashboard participant join: %w", episodes.ErrSynchronousCommit)
+			}
+			if cancelErr != nil {
+				return fmt.Errorf("cancel dashboard participant join: %w", cancelErr)
+			}
+			result.Participant = mapLifecycleParticipant(cancelled)
+			result.Removed = true
+			return nil
 		}
 		_, err = lockTenantExternalOperation(ctx, queries, input.TenantID, utilities.IDFromBytes(space.ID.Bytes), utilities.IDFromBytes(participant.EpisodeID.Bytes), episodes.OperationRemoveParticipant, input.Request)
 		if err == nil {

@@ -21,6 +21,7 @@ const observabilityPortOwners = Object.freeze([
 ]);
 
 export function createResourceManager(config, { runner = runChecked, docker = dockerInspect, identityGenerator = generateSigningIdentity } = {}) {
+  const observabilityEnabled = config.observabilityEnabled !== false;
   const state = { postgres: {}, redis: {}, observability: {}, identity: undefined };
   const databaseName = config.databaseName || "chalk_dev";
   const resourceLogPath = join(config.logRoot, "observability.log");
@@ -35,32 +36,30 @@ export function createResourceManager(config, { runner = runChecked, docker = do
     state,
     async preflight(options = {}) {
       const allowBusyPorts = new Set(config.allowBusyPorts);
-      const portOwners = [["postgres", "chalk-postgres"], ["redis", config.redis?.container || "chalk-dev-redis"], ...observabilityPortOwners];
+      const portOwners = [["postgres", "chalk-postgres"], ["redis", config.redis?.container || "chalk-dev-redis"], ...(observabilityEnabled ? observabilityPortOwners : [])];
       const containers = new Map();
       for (const [name, containerName] of portOwners) {
         const port = config.ports[name];
         if (!port) continue;
+        if (!containers.has(containerName)) containers.set(containerName, await docker(containerName));
+        const container = containers.get(containerName);
+        if (container?.running && Array.isArray(container.hostPorts) && !container.hostPorts.includes(port)) {
+          throw failure(FailureKind.CONFIG, `${containerName} is already running without configured ${name} port ${port}; use its published host port or stop the container`, { stage: "preflight" });
+        }
         const result = await probePort(port);
         if (result.available) continue;
-        if (!containers.has(containerName)) containers.set(containerName, await docker(containerName));
-        if (adoptable(name, containers.get(containerName))) allowBusyPorts.add(name);
+        if (adoptable(name, container)) allowBusyPorts.add(name);
       }
       return preflight(config, { ...options, allowBusyPorts });
     },
     async start({ lease } = {}) {
       state.postgres.before = await docker("chalk-postgres");
       state.redis.before = await docker(config.redis.container);
-      state.observability.before = await docker("chalk-observability-lgtm");
+      if (observabilityEnabled) state.observability.before = await docker("chalk-observability-lgtm");
       const databaseEnv = {
         CHALK_POSTGRES_CONTAINER: "chalk-postgres",
         CHALK_POSTGRES_VOLUME: "chalk-postgres",
         CHALK_POSTGRES_PORT: String(config.ports.postgres),
-      };
-      const observabilityEnv = {
-        CHALK_OBSERVABILITY_LEDGER_TARGET: "api",
-        CHALK_GRAFANA_LEDGER_DATABASE: databaseName,
-        CHALK_GRAFANA_LEDGER_URL: "host.docker.internal:5432",
-        CHALK_OBSERVABILITY_POSTGRES_PORT: String(config.ports.observabilityPostgres),
       };
       try {
         await runResource("bash", [scripts.postgres, "start"], { cwd: config.root, env: databaseEnv }, "postgres");
@@ -87,11 +86,19 @@ export function createResourceManager(config, { runner = runChecked, docker = do
         state.redis.after = await docker(config.redis.container);
         state.redis.started = !state.redis.before?.running && Boolean(state.redis.after?.running);
       }
-      try {
-        await runResource("bash", [scripts.services, "start"], { cwd: config.root, env: observabilityEnv }, "observability");
-      } finally {
-        state.observability.after = await docker("chalk-observability-lgtm");
-        state.observability.started = !state.observability.before?.running && Boolean(state.observability.after?.running);
+      if (observabilityEnabled) {
+        const observabilityEnv = {
+          CHALK_OBSERVABILITY_LEDGER_TARGET: "api",
+          CHALK_GRAFANA_LEDGER_DATABASE: databaseName,
+          CHALK_GRAFANA_LEDGER_URL: "host.docker.internal:5432",
+          CHALK_OBSERVABILITY_POSTGRES_PORT: String(config.ports.observabilityPostgres),
+        };
+        try {
+          await runResource("bash", [scripts.services, "start"], { cwd: config.root, env: observabilityEnv }, "observability");
+        } finally {
+          state.observability.after = await docker("chalk-observability-lgtm");
+          state.observability.started = !state.observability.before?.running && Boolean(state.observability.after?.running);
+        }
       }
       await runResource("bash", [scripts.migrate, "--allow-missing", "up"], { cwd: join(config.root, "apps/api"), env: { CHALK_DATABASE_URL: databaseURL(config) } }, "migrations");
       const identity = await prepareIdentity(config, identityGenerator, lease?.runtimeId || "00000000-0000-4000-8000-000000000000");
@@ -109,15 +116,16 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       if (state.postgres.started) await runResource("bash", [scripts.postgres, "stop"], { cwd: config.root, env: { CHALK_POSTGRES_CONTAINER: "chalk-postgres", CHALK_POSTGRES_PORT: String(config.ports.postgres) } }, "postgres").catch(() => {});
     },
     async reset() {
-      await runResource(
-        "bash",
-        [scripts.services, "reset"],
-        {
-          cwd: config.root,
-          env: { CHALK_OBSERVABILITY_LEDGER_TARGET: "api", CHALK_GRAFANA_LEDGER_DATABASE: databaseName, CHALK_GRAFANA_LEDGER_URL: "host.docker.internal:5432", CHALK_OBSERVABILITY_POSTGRES_PORT: String(config.ports.observabilityPostgres) },
-        },
-        "observability",
-      );
+      if (observabilityEnabled)
+        await runResource(
+          "bash",
+          [scripts.services, "reset"],
+          {
+            cwd: config.root,
+            env: { CHALK_OBSERVABILITY_LEDGER_TARGET: "api", CHALK_GRAFANA_LEDGER_DATABASE: databaseName, CHALK_GRAFANA_LEDGER_URL: "host.docker.internal:5432", CHALK_OBSERVABILITY_POSTGRES_PORT: String(config.ports.observabilityPostgres) },
+          },
+          "observability",
+        );
       await runResource(
         "bash",
         [scripts.redis, "wipe"],
@@ -190,7 +198,7 @@ function adoptable(name, container) {
   if (!container?.running) return false;
   const image = String(container.image || "");
   if (name === "postgres" && (!image.startsWith("postgres:18.3") || container.dataChecksums !== "on")) return false;
-  if (name === "redis" && !image.startsWith("redis:8.8")) return false;
+  if (name === "redis" && !image.startsWith("redis:8.10")) return false;
   if (name === "observabilityPostgres" && !image.startsWith("postgres:18.3")) return false;
   if (observabilityPortOwners.some(([portName]) => portName === name && portName !== "observabilityPostgres")) {
     if (!image.startsWith("grafana/otel-lgtm:0.28.0")) return false;
@@ -264,7 +272,11 @@ async function dockerInspect(name) {
         dataChecksums = undefined;
       }
     }
-    return { running: container?.State?.Running === true, healthy: container?.State?.Health?.Status === "healthy", image: container?.Config?.Image, dataChecksums, name };
+    const hostPorts = Object.values(container?.NetworkSettings?.Ports || {})
+      .flatMap((bindings) => bindings || [])
+      .map((binding) => Number(binding.HostPort))
+      .filter(Number.isInteger);
+    return { running: container?.State?.Running === true, healthy: container?.State?.Health?.Status === "healthy", image: container?.Config?.Image, dataChecksums, hostPorts, name };
   } catch (error) {
     if (error.code === 1 || error.code === "ENOENT") return undefined;
     throw failure(FailureKind.IO, `docker inspect failed for ${name}`, { stage: "preflight", cause: error });

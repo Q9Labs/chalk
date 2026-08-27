@@ -51,7 +51,15 @@ const ChalkControlBarButton = React.memo(
         seed={seed}
         size={size}
         tone={danger ? "danger" : active ? "accent" : "neutral"}
-        className={cn("chalk-button-tactile transition-all duration-300 ease-out", inlineLabel && "gap-2.5", "text-[var(--chalk-app-text)]", noBorder && "opacity-95", active && activeClassName, className)}
+        className={cn(
+          "chalk-button-tactile transition-all duration-300 ease-out",
+          inlineLabel && "gap-2.5",
+          "text-[var(--chalk-app-text)]",
+          noBorder && "opacity-95",
+          active && !activeClassName && "ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)]",
+          active && activeClassName,
+          className,
+        )}
         aria-label={label}
         aria-pressed={active}
       >

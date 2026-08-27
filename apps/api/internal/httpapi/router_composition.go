@@ -8,6 +8,7 @@ func mountV1Routes(r chi.Router, options Options) {
 		mountPublicAuthRoutes(r, options)
 		mountStatusRoutes(r, options)
 		mountJourneyRoutes(r, options)
+		mountPublicInviteRoutes(r, options)
 		mountAuthenticatedSessionRoutes(r, options)
 
 		r.Group(func(r chi.Router) {

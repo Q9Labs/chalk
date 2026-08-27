@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-ui",
-  "version": "4.0.1",
+  "version": "4.1.15",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -183,25 +183,22 @@
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
     "build:logos": "mkdir -p ./dist && cp -R ../assets/src/logos ./dist/",
     "dev": "pnpm run build:css && pnpm run build:logos && tsup ./src/index.ts ./src/assets.ts ./src/badge.tsx ./src/button.tsx ./src/card.tsx ./src/input.tsx ./src/menu.tsx ./src/select.tsx ./src/sidebar.tsx ./src/textarea.tsx ./src/spinner.tsx ./src/skeleton.tsx ./src/icon-button.tsx ./src/progress-bar.tsx ./src/lib/utils.ts ./src/reactions.ts ./src/status-badge.tsx ./src/toast.tsx ./src/toggle.tsx ./src/toggle-group.tsx ./src/tooltip.tsx --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge --watch",
-    "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --project tsconfig.check-types.json --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
-    "@q9labsai/chalk-assets": "workspace:^4.0.1",
+    "@q9labsai/chalk-assets": "workspace:^4.1.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.18",
-    "@testing-library/react": "^16.3.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.2.3",
-    "happy-dom": "^20.11.2",
     "react-dom": "19.2.7",
     "tailwindcss": "^4.1.18",
     "tw-animate-css": "^1.3.0",

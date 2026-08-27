@@ -1,214 +1,243 @@
-import { useId, type MouseEvent } from "react";
-import { Button } from "@q9labsai/chalk-react/ui";
+import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
+import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import RotateLeft01Icon from "@hugeicons/core-free-icons/RotateLeft01Icon";
+import SidebarLeftIcon from "@hugeicons/core-free-icons/SidebarLeftIcon";
+import SidebarRightIcon from "@hugeicons/core-free-icons/SidebarRightIcon";
+import SlidersHorizontalIcon from "@hugeicons/core-free-icons/SlidersHorizontalIcon";
+import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
-import {
-  createPreviewHref,
-  ENTRANCE_STATES,
-  patchPreviewSearch,
-  PREVIEW_CHAT_STATES,
-  PREVIEW_DIALOGS,
-  PREVIEW_LAYOUTS,
-  PREVIEW_PANELS,
-  PREVIEW_PARTICIPANT_COUNTS,
-  PREVIEW_PALETTES,
-  PREVIEW_SKINS,
-  PREVIEW_STAGES,
-  PREVIEW_TEXTURES,
-  PREVIEW_TOASTS,
-  PREVIEW_VIEWS,
-  SPACE_STATES,
-  type PreviewSearch,
-  type PreviewSearchPatch,
-  type PreviewState,
-} from "./preview-state";
-import { THEME_SKINS } from "../../../../../sdks/typescript/react/src/components/theme";
+import { PREVIEW_CONTROL_TABS, readPreviewControlTab, readPreviewDockSide, storePreviewControlTab, storePreviewDockSide, type PreviewControlTab, type PreviewDockSide } from "./preview-chrome-preferences";
+import { AccessSection, LookSection, MediaSection, SpaceSection, StatesSection } from "./preview-control-sections";
+import { paletteLabel, skinLabel, stateLabel, viewLabel } from "./preview-labels";
+import { createPreviewHref, DEFAULT_PREVIEW_SEARCH, ENTRANCE_STATES, SPACE_STATES, type PreviewSearch, type PreviewSearchPatch, type PreviewState } from "./preview-state";
 
 interface PreviewGalleryToolbarProps {
   readonly search: PreviewSearch;
   readonly onChange: (patch: PreviewSearchPatch) => void;
 }
 
-const fieldClassName = "mt-1 h-8 w-full min-w-0 rounded-md border border-[#c9c8c2] bg-white px-2 text-xs text-[#202329] outline-none transition focus:border-[#55aac9] focus:ring-2 focus:ring-[#55aac9]/25";
-const optionClassName = "rounded-md border border-[#deddd7] bg-white px-2.5 py-1.5 text-xs text-[#40454d] transition hover:border-[#55aac9] hover:bg-[#f7fbfc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#55aac9]/40";
+const TAB_LABELS: Readonly<Record<PreviewControlTab, string>> = {
+  states: "States",
+  space: "Space",
+  media: "Media",
+  access: "Access",
+  look: "Look",
+};
 
-function valueLabel(value: string): string {
-  const labels: Record<string, string> = {
-    people: "Participants",
-    participants: "Participants",
-    screenshare: "Screen share",
-    "soft-grid": "Soft grid",
-    "soft-dots": "Soft dots",
-    none: "None",
-  };
+const TOGGLE_KEY = "`";
+const COPY_FEEDBACK_MS = 1600;
 
-  return labels[value] ?? value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const headerButtonClassName = "inline-flex size-8 items-center justify-center rounded-lg text-[#555b65] transition-colors hover:bg-[#eceae4] hover:text-[#202329] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#55aac9]/60 disabled:opacity-40";
+const stepButtonClassName = "inline-flex size-7 items-center justify-center rounded-md border border-[#d9d8d2] bg-white text-[#555b65] transition-colors hover:border-[#55aac9] hover:text-[#202329] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#55aac9]/60";
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
 }
 
-function stateLabel(state: PreviewState): string {
-  return valueLabel(state);
+function statesFor(view: PreviewSearch["view"]): readonly PreviewState[] {
+  return view === "entrance" ? ENTRANCE_STATES : SPACE_STATES;
 }
 
-function skinLabel(skin: PreviewSearch["skin"]): string {
-  return THEME_SKINS.find((option) => option.value === skin)?.label ?? valueLabel(skin);
+function stepState(search: PreviewSearch, direction: 1 | -1): PreviewState {
+  const states = statesFor(search.view);
+  const index = states.indexOf(search.state);
+  return states[(index + direction + states.length) % states.length] ?? search.state;
 }
 
-function skinDescription(skin: PreviewSearch["skin"]): string | undefined {
-  return THEME_SKINS.find((option) => option.value === skin)?.description;
+function Kbd({ children }: { readonly children: ReactNode }) {
+  return <kbd className="rounded border border-[#d9d8d2] bg-white px-1 font-mono text-[11px] text-[#555b65]">{children}</kbd>;
 }
 
-function SelectField<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-  format = (option) => valueLabel(String(option)),
-  describe,
-}: {
-  readonly label: string;
-  readonly value: T;
-  readonly options: readonly T[];
-  readonly onChange: (value: T) => void;
-  readonly format?: (value: T) => string;
-  readonly describe?: (value: T) => string | undefined;
-}) {
-  return (
-    <label className="min-w-0 text-[11px] font-semibold text-[#555b65]">
-      <span>{label}</span>
-      <select
-        className={fieldClassName}
-        value={String(value)}
-        aria-label={label}
-        onChange={(event) => {
-          const next = options.find((option) => String(option) === event.target.value);
-          if (next !== undefined) onChange(next);
-        }}
-      >
-        {options.map((option) => (
-          <option key={String(option)} value={String(option)} title={describe?.(option)}>
-            {format(option)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function ToggleField({ label, checked, onChange }: { readonly label: string; readonly checked: boolean; readonly onChange: (checked: boolean) => void }) {
-  return (
-    <label className="flex min-h-8 cursor-pointer items-center justify-between gap-2 rounded-md border border-[#deddd7] bg-white px-2.5 py-1.5 text-xs text-[#40454d]">
-      <span>{label}</span>
-      <input type="checkbox" checked={checked} aria-label={label} className="h-4 w-4 accent-[#315f72]" onChange={(event) => onChange(event.target.checked)} />
-    </label>
-  );
-}
-
-function StateLinks({ search, onChange }: PreviewGalleryToolbarProps) {
-  const linkFor = (view: PreviewSearch["view"], state: PreviewState) => createPreviewHref(patchPreviewSearch(search, { view, state }));
-  const selectState = (event: MouseEvent<HTMLAnchorElement>, view: PreviewSearch["view"], state: PreviewState) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    onChange({ view, state });
-  };
-
-  return (
-    <fieldset className="border-0 p-0">
-      <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6d727b]">Direct state links</legend>
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <div>
-          <h3 className="text-[11px] font-semibold text-[#555b65]">Entrance</h3>
-          <nav aria-label="Entrance states" className="mt-1.5 flex flex-wrap gap-1.5">
-            {ENTRANCE_STATES.map((state) => (
-              <a key={state} href={linkFor("entrance", state)} aria-current={search.view === "entrance" && search.state === state ? "page" : undefined} className={optionClassName} onClick={(event) => selectState(event, "entrance", state)}>
-                {stateLabel(state)}
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div>
-          <h3 className="text-[11px] font-semibold text-[#555b65]">Space</h3>
-          <nav aria-label="Space states" className="mt-1.5 flex flex-wrap gap-1.5">
-            {SPACE_STATES.map((state) => (
-              <a key={state} href={linkFor("space", state)} aria-current={search.view === "space" && search.state === state ? "page" : undefined} className={optionClassName} onClick={(event) => selectState(event, "space", state)}>
-                {stateLabel(state)}
-              </a>
-            ))}
-          </nav>
-        </div>
-      </div>
-    </fieldset>
-  );
+function dockClassName(side: PreviewDockSide): string {
+  return side === "right" ? "sm:left-auto sm:right-4 justify-end" : "sm:left-4 sm:right-auto justify-start";
 }
 
 export function PreviewGalleryToolbar({ search, onChange }: PreviewGalleryToolbarProps) {
   const controlsId = useId();
+  const headingId = `${controlsId}-heading`;
   const isVisible = search.chrome === "visible";
-  const stateOptions = search.view === "entrance" ? ENTRANCE_STATES : SPACE_STATES;
+  const showButtonRef = useRef<HTMLButtonElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const previousVisibilityRef = useRef(isVisible);
+  const [dock, setDock] = useState<PreviewDockSide>(readPreviewDockSide);
+  const [tab, setTab] = useState<PreviewControlTab>(readPreviewControlTab);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
+  useLayoutEffect(() => {
+    const previous = previousVisibilityRef.current;
+    previousVisibilityRef.current = isVisible;
+    if (previous === isVisible) return;
+    if (isVisible) headingRef.current?.focus();
+    else showButtonRef.current?.focus();
+  }, [isVisible]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
+      const current = searchRef.current;
+      if (event.key === TOGGLE_KEY) {
+        event.preventDefault();
+        onChange({ chrome: current.chrome === "visible" ? "hidden" : "visible" });
+        return;
+      }
+      if (event.key === "[" || event.key === "]") {
+        event.preventDefault();
+        onChange({ state: stepState(current, event.key === "]" ? 1 : -1) });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onChange]);
+
+  useEffect(() => {
+    if (copyStatus === "idle") return;
+    const timer = window.setTimeout(() => setCopyStatus("idle"), COPY_FEEDBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [copyStatus]);
+
+  const changeDock = (side: PreviewDockSide) => {
+    storePreviewDockSide(side);
+    setDock(side);
+  };
+  const changeTab = (next: PreviewControlTab) => {
+    storePreviewControlTab(next);
+    setTab(next);
+  };
+  const closeOnEscape = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    onChange({ chrome: "hidden" });
+  };
+  const moveTabFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const index = PREVIEW_CONTROL_TABS.indexOf(tab);
+    const offset = event.key === "ArrowRight" ? 1 : -1;
+    const next = PREVIEW_CONTROL_TABS[(index + offset + PREVIEW_CONTROL_TABS.length) % PREVIEW_CONTROL_TABS.length] ?? tab;
+    changeTab(next);
+    event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus();
+  };
+  const copyLink = async () => {
+    const href = new URL(createPreviewHref(search), window.location.href).toString();
+    if (!navigator.clipboard) {
+      window.prompt("Copy this preview link", href);
+      return;
+    }
+    await navigator.clipboard.writeText(href);
+    setCopyStatus("copied");
+  };
+  const reset = () => onChange({ ...DEFAULT_PREVIEW_SEARCH, chrome: "visible" });
+
+  const wrapperClassName = `fixed inset-x-2 bottom-24 z-[65] flex sm:bottom-4 ${dockClassName(dock)}`;
 
   if (!isVisible) {
     return (
-      <div className="fixed inset-x-2 bottom-24 z-[65] flex justify-start sm:left-4 sm:right-auto sm:bottom-4">
-        <Button type="button" variant="outline" size="sm" className="border-[#c9c8c2] bg-[#fbfaf7] text-[#202329] shadow-md hover:bg-white" aria-controls={controlsId} aria-expanded={false} onClick={() => onChange({ chrome: "visible" })}>
-          Show preview controls
-        </Button>
+      <div className={`${wrapperClassName} pointer-events-none`}>
+        <button
+          ref={showButtonRef}
+          type="button"
+          aria-controls={controlsId}
+          aria-expanded={false}
+          aria-label="Show preview controls"
+          title={`Preview controls (${TOGGLE_KEY})`}
+          onClick={() => onChange({ chrome: "visible" })}
+          className="group pointer-events-auto inline-flex h-9 max-w-9 items-center gap-2 overflow-hidden rounded-full border border-white/15 bg-[#202329]/70 px-2 text-[13px] font-medium text-white/90 opacity-55 shadow-[0_6px_24px_rgba(12,14,18,0.25)] backdrop-blur transition-[max-width,opacity,background-color] duration-300 hover:max-w-64 hover:bg-[#202329]/90 hover:opacity-100 focus-visible:max-w-64 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#55aac9]"
+        >
+          <HugeiconsIcon icon={SlidersHorizontalIcon} className="size-[18px] shrink-0" strokeWidth={2} />
+          <span className="whitespace-nowrap pr-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">Preview controls</span>
+        </button>
       </div>
     );
   }
 
+  const previousState = stepState(search, -1);
+  const nextState = stepState(search, 1);
+  const summary = `${search.participants} participants · ${search.layout} · ${skinLabel(search.skin)} · ${paletteLabel(search.palette)}`;
+
   return (
-    <div className="pointer-events-none fixed inset-x-2 bottom-24 z-[65] flex justify-start sm:left-4 sm:right-auto sm:bottom-4">
-      <section id={controlsId} aria-label="Preview controls" className="pointer-events-auto max-h-[min(82vh,680px)] w-[min(370px,calc(100vw-1rem))] overflow-y-auto overscroll-contain rounded-xl border border-[#c9c8c2] bg-[#fbfaf7]/95 p-3 shadow-[0_20px_60px_rgba(12,14,18,0.18)] backdrop-blur">
-        <header className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-[#202329]">Preview controls</h2>
-            <p className="mt-0.5 text-[11px] text-[#858a92]">Open a focused state or tune the Space.</p>
+    <div className={`${wrapperClassName} pointer-events-none`}>
+      <section
+        id={controlsId}
+        aria-label="Preview controls"
+        aria-labelledby={headingId}
+        onKeyDown={closeOnEscape}
+        className="pointer-events-auto flex max-h-[min(86vh,760px)] w-[min(440px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-[#d4d3cd] bg-[#fbfaf7]/[0.97] text-[#202329] shadow-[0_24px_70px_rgba(12,14,18,0.22)] backdrop-blur-md"
+      >
+        <header className="shrink-0 border-b border-[#e6e4de] px-4 pb-3 pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-[15px] font-semibold tracking-[-0.01em] outline-none">
+              Preview controls
+            </h2>
+            <div className="flex items-center gap-0.5">
+              <button type="button" className={headerButtonClassName} aria-label={copyStatus === "copied" ? "Preview link copied" : "Copy preview link"} title="Copy preview link" onClick={() => void copyLink()}>
+                <HugeiconsIcon icon={copyStatus === "copied" ? Tick02Icon : Copy01Icon} className={`size-4 ${copyStatus === "copied" ? "text-[#2f8f5b]" : ""}`} strokeWidth={2} />
+              </button>
+              <button type="button" className={headerButtonClassName} aria-label="Reset preview to defaults" title="Reset to defaults" onClick={reset}>
+                <HugeiconsIcon icon={RotateLeft01Icon} className="size-4" strokeWidth={2} />
+              </button>
+              <button type="button" className={headerButtonClassName} aria-label={dock === "left" ? "Dock controls to the right" : "Dock controls to the left"} title={dock === "left" ? "Dock right" : "Dock left"} onClick={() => changeDock(dock === "left" ? "right" : "left")}>
+                <HugeiconsIcon icon={dock === "left" ? SidebarRightIcon : SidebarLeftIcon} className="size-4" strokeWidth={2} />
+              </button>
+              <button type="button" className={headerButtonClassName} aria-label="Hide preview controls" title={`Hide (Esc or ${TOGGLE_KEY})`} aria-controls={controlsId} aria-expanded={true} onClick={() => onChange({ chrome: "hidden" })}>
+                <HugeiconsIcon icon={Cancel01Icon} className="size-4" strokeWidth={2} />
+              </button>
+            </div>
           </div>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Hide preview controls" aria-controls={controlsId} aria-expanded={true} onClick={() => onChange({ chrome: "hidden" })}>
-            <span aria-hidden="true">×</span>
-          </Button>
+          <div className="mt-2 flex items-center gap-2">
+            <button type="button" className={stepButtonClassName} aria-label={`Previous state: ${stateLabel(previousState)}`} title={`Previous state: ${stateLabel(previousState)} ([)`} onClick={() => onChange({ state: previousState })}>
+              <HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" strokeWidth={2} />
+            </button>
+            <p className="min-w-0 flex-1 truncate text-[13px] font-semibold" aria-live="polite">
+              {viewLabel(search.view)} · {stateLabel(search.state)}
+              <span className="ml-2 font-normal text-[#858a92]">{summary}</span>
+            </p>
+            <button type="button" className={stepButtonClassName} aria-label={`Next state: ${stateLabel(nextState)}`} title={`Next state: ${stateLabel(nextState)} (])`} onClick={() => onChange({ state: nextState })}>
+              <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" strokeWidth={2} />
+            </button>
+          </div>
         </header>
 
-        <div className="mt-3 space-y-3">
-          <StateLinks search={search} onChange={onChange} />
-
-          <fieldset className="border-0 p-0">
-            <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6d727b]">View and state</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <SelectField label="View" value={search.view} options={PREVIEW_VIEWS} onChange={(view) => onChange({ view, state: view === "entrance" ? ENTRANCE_STATES[0] : SPACE_STATES[0] })} />
-              <SelectField label="State" value={search.state} options={stateOptions} format={stateLabel} onChange={(state) => onChange({ state })} />
-            </div>
-          </fieldset>
-
-          <fieldset className="border-0 p-0">
-            <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6d727b]">Space data</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <SelectField label="Participants" value={search.participants} options={PREVIEW_PARTICIPANT_COUNTS} format={(count) => `${count} Participant${count === 1 ? "" : "s"}`} onChange={(participants) => onChange({ participants })} />
-              <SelectField label="Chat data" value={search.chat} options={PREVIEW_CHAT_STATES} onChange={(chat) => onChange({ chat })} />
-              <SelectField label="Stage" value={search.stage} options={PREVIEW_STAGES} onChange={(stage) => onChange({ stage })} />
-              <SelectField label="Panel" value={search.panel} options={PREVIEW_PANELS} format={valueLabel} onChange={(panel) => onChange({ panel })} />
-              <SelectField label="Dialog" value={search.dialog} options={PREVIEW_DIALOGS} onChange={(dialog) => onChange({ dialog })} />
-              <SelectField label="Layout" value={search.layout} options={PREVIEW_LAYOUTS} onChange={(layout) => onChange({ layout })} />
-            </div>
-          </fieldset>
-
-          <fieldset className="border-0 p-0">
-            <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6d727b]">Appearance and signals</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <SelectField label="Skin" value={search.skin} options={PREVIEW_SKINS} format={skinLabel} describe={skinDescription} onChange={(skin) => onChange({ skin })} />
-              <SelectField label="Palette" value={search.palette} options={PREVIEW_PALETTES} onChange={(palette) => onChange({ palette })} />
-              <SelectField label="Texture" value={search.texture} options={PREVIEW_TEXTURES} onChange={(texture) => onChange({ texture })} />
-              <SelectField label="Toast" value={search.toast} options={PREVIEW_TOASTS} onChange={(toast) => onChange({ toast })} />
-            </div>
-          </fieldset>
-
-          <fieldset className="border-0 p-0">
-            <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6d727b]">Participant media</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <ToggleField label="Microphone" checked={search.mic} onChange={(mic) => onChange({ mic })} />
-              <ToggleField label="Camera" checked={search.camera} onChange={(camera) => onChange({ camera })} />
-              <ToggleField label="Raised hand" checked={search.hand} onChange={(hand) => onChange({ hand })} />
-            </div>
-          </fieldset>
+        <div role="tablist" aria-label="Preview control sections" onKeyDown={moveTabFocus} className="flex shrink-0 gap-1 border-b border-[#e6e4de] px-3 pt-2">
+          {PREVIEW_CONTROL_TABS.map((option) => {
+            const selected = option === tab;
+            return (
+              <button
+                key={option}
+                type="button"
+                role="tab"
+                data-tab={option}
+                id={`${controlsId}-tab-${option}`}
+                aria-selected={selected}
+                aria-controls={`${controlsId}-panel-${option}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => changeTab(option)}
+                className={`-mb-px rounded-t-lg border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#55aac9]/60 ${selected ? "border-[#202329] text-[#202329]" : "border-transparent text-[#6d727b] hover:text-[#202329]"}`}
+              >
+                {TAB_LABELS[option]}
+              </button>
+            );
+          })}
         </div>
+
+        <div id={`${controlsId}-panel-${tab}`} role="tabpanel" aria-labelledby={`${controlsId}-tab-${tab}`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+          {tab === "states" ? <StatesSection search={search} onChange={onChange} /> : null}
+          {tab === "space" ? <SpaceSection search={search} onChange={onChange} /> : null}
+          {tab === "media" ? <MediaSection search={search} onChange={onChange} /> : null}
+          {tab === "access" ? <AccessSection search={search} onChange={onChange} /> : null}
+          {tab === "look" ? <LookSection search={search} onChange={onChange} /> : null}
+        </div>
+
+        <footer className="shrink-0 border-t border-[#e6e4de] px-4 py-2 text-[11px] text-[#858a92]">
+          <Kbd>{TOGGLE_KEY}</Kbd> show or hide · <Kbd>Esc</Kbd> hide · <Kbd>[</Kbd> <Kbd>]</Kbd> step states · every change updates the URL
+        </footer>
       </section>
     </div>
   );

@@ -105,6 +105,17 @@ validate_image() {
   [[ "${image}" =~ ${image_pattern} ]] || fail "${name} image must be a fully qualified sha256 digest reference"
 }
 
+latest_migration_version() {
+  local migration_dir="${repo_root}/apps/api/db/migrations"
+  local version
+  version="$(find "${migration_dir}" -maxdepth 1 -type f -name '*.sql' -exec basename {} \; |
+    sed -n 's/^\([0-9]\{14\}\)_.*/\1/p' | sort -n | tail -n 1)"
+  [[ "${version}" =~ ^[0-9]{14}$ ]] || fail "API migration set has no valid migration version"
+  printf '%s\n' "${version}"
+}
+
+current_migration_version="$(latest_migration_version)"
+
 validate_stable_manifest() {
   local file="$1"
   [[ -f "${file}" && ! -L "${file}" ]] || fail "stable manifest is not a regular file"
@@ -120,7 +131,7 @@ validate_stable_manifest() {
         (.source_tree_state == "clean" or .source_tree_state == "dirty") and
         (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
         (.images | type == "object" and (["api", "sync", "redis", "cloudflared"] - keys | length == 0)) and
-        (.database_compatibility == {engine:"postgresql", major:18, minimum_migration:20260713130000, maximum_migration:null}) and
+        (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
         (.protocol_compatibility == {sync:1}) and
         (.runtime_artifacts | type == "object" and length > 0)
       ' "${file}" >/dev/null || fail "stable manifest v1 contract is invalid"
@@ -136,7 +147,7 @@ validate_stable_manifest() {
         (.images | type == "object" and (["api", "sync", "redis", "cloudflared"] - keys | length == 0)) and
         (.affected_components | type == "array" and length >= 1 and length <= 2 and unique == . and (length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
         (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | test("^[0-9a-f]{40}$")))) and
-        (.database_compatibility == {engine:"postgresql", major:18, minimum_migration:20260713130000, maximum_migration:null}) and
+        (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
         (.protocol_compatibility == {sync:1}) and
         (.runtime_artifacts | type == "object" and length > 0)
       ' "${file}" >/dev/null || fail "stable manifest v2 contract is invalid"
@@ -278,10 +289,14 @@ component_releases_json="$({
 } | jq -s '{api:.[0],sync:.[1]}')"
 affected_components_json="$(jq -cn --arg value "${affected_components_arg}" '$value | split(",")')"
 
-database_compatibility_json='{ "engine": "postgresql", "major": 18, "minimum_migration": 20260713130000, "maximum_migration": null }'
+database_compatibility_json="{ \"engine\": \"postgresql\", \"major\": 18, \"minimum_migration\": ${current_migration_version}, \"maximum_migration\": null }"
 protocol_compatibility_json='{ "sync": 1 }'
 if [[ -n "${stable_manifest}" ]]; then
-  database_compatibility_json="$(jq -c '.database_compatibility' "${stable_manifest}")"
+  stable_migration_version="$(jq -er '.database_compatibility.minimum_migration | numbers' "${stable_manifest}")" || fail "stable manifest migration compatibility is invalid"
+  if (( stable_migration_version > current_migration_version )); then
+    current_migration_version="${stable_migration_version}"
+  fi
+  database_compatibility_json="{ \"engine\": \"postgresql\", \"major\": 18, \"minimum_migration\": ${current_migration_version}, \"maximum_migration\": null }"
   protocol_compatibility_json="$(jq -c '.protocol_compatibility' "${stable_manifest}")"
 fi
 

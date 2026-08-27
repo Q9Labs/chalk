@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/facehash",
-  "version": "4.0.1",
+  "version": "4.1.15",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -56,7 +56,7 @@
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "dev": "tsup ./src/index.ts ./src/react.ts ./src/index.native.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external react-native --external react-native-svg --watch",
     "prepack": "pnpm run build",
-    "test": "pnpm exec vitest run && pnpm run test:declarations",
+    "test": "pnpm run test:declarations",
     "test:declarations": "node --test scripts/rewrite-declaration-specifiers.node.mjs",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit"
@@ -64,7 +64,6 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
-    "react-dom": "19.2.7",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {

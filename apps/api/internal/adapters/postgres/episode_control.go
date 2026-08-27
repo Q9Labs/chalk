@@ -15,6 +15,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+const maximumEpisodeDurationExpiredOperationName = "maximum_episode_duration_expired"
+
 type tenantExternalOperationInput struct {
 	TenantID                    utilities.ID
 	SpaceID                     utilities.ID
@@ -156,7 +158,7 @@ func createTenantExternalOperation(ctx context.Context, queries *sqlc.Queries, t
 	operation, err := queries.CreateTenantExternalOperation(ctx, sqlc.CreateTenantExternalOperationParams{
 		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
 		ExternalOperationID: uuid(operationID), RequestKey: input.Request.Key, RequestFingerprint: input.Request.Fingerprint[:],
-		OperationName: input.OperationName, TargetParticipantID: uuid(input.TargetParticipantID),
+		OperationName: operationNameForStorage(input.OperationName), TargetParticipantID: uuid(input.TargetParticipantID),
 		TargetParticipantGeneration: optionalInt8(input.TargetParticipantGeneration), DeadlineGeneration: optionalInt8(input.DeadlineGeneration),
 		RecordingID: uuid(input.RecordingID), FenceActive: input.FenceActive,
 		JourneyID: uuid(journey.JourneyID), ParentJourneyEventID: uuid(journey.ParentEventID),
@@ -166,6 +168,13 @@ func createTenantExternalOperation(ctx context.Context, queries *sqlc.Queries, t
 		return sqlc.SyncExternalOperation{}, fmt.Errorf("create %s external operation: %w", input.OperationName, err)
 	}
 	return operation, nil
+}
+
+func operationNameForStorage(operationName string) string {
+	if operationName == episodes.OperationMaximumDurationExpired {
+		return maximumEpisodeDurationExpiredOperationName
+	}
+	return operationName
 }
 
 func createEndReadyOperation(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, input tenantExternalOperationInput) (sqlc.SyncExternalOperation, error) {

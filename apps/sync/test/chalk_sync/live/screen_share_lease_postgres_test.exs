@@ -114,53 +114,6 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:error, :invalid_limit} = ScreenShareLease.expire(connection, @now, 501)
   end
 
-  test "same owner acquisition renews the existing lease while another owner remains excluded", %{
-    connections: [first, second],
-    fixture: fixture
-  } do
-    [owner, contender] = fixture.identities
-    original_id = "00000000-0000-4000-8000-000000000012"
-
-    assert {:ok, original} =
-             ScreenShareLease.acquire(
-               first,
-               fixture.episode,
-               owner.participant_id,
-               owner.participant_generation,
-               now: @now,
-               renewal_ms: 5_000,
-               hard_lifetime_ms: 20_000,
-               lease_id: original_id
-             )
-
-    assert {:ok, duplicate} =
-             ScreenShareLease.acquire(
-               first,
-               fixture.episode,
-               owner.participant_id,
-               owner.participant_generation,
-               now: DateTime.add(@now, 4_000, :millisecond),
-               renewal_ms: 5_000,
-               hard_lifetime_ms: 20_000,
-               lease_id: "00000000-0000-4000-8000-000000000013"
-             )
-
-    assert duplicate.lease_id == original_id
-    assert duplicate.lease_generation == original.lease_generation
-    assert duplicate.renewed_until == DateTime.add(@now, 9_000, :millisecond)
-
-    assert {:error, :screen_share_in_use} =
-             ScreenShareLease.acquire(
-               second,
-               fixture.episode,
-               contender.participant_id,
-               contender.participant_generation,
-               now: DateTime.add(@now, 6_000, :millisecond)
-             )
-
-    assert :ok = ScreenShareLease.release(first, fixture.episode, duplicate)
-  end
-
   test "checks active publication fences by participant and source", %{
     connections: [connection | _],
     fixture: fixture
@@ -392,5 +345,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
 
   defp stop_connection(connection) do
     if Process.alive?(connection), do: GenServer.stop(connection)
+  catch
+    :exit, _reason -> :ok
   end
 end

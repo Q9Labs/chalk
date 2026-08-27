@@ -23,6 +23,8 @@ const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEPENDENCY_UNAVAILABLE_CLOSE_CODE = 1012;
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const MAX_MISSED_HEARTBEATS = 2;
+const DEFAULT_RECONNECT_DELAY_MS = 250;
+const MAX_RECONNECT_DELAY_MS = 5_000;
 const encoder = new TextEncoder();
 
 type Deferred<T> = {
@@ -54,8 +56,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #options: ChalkWhiteboardV1ClientOptions;
   readonly #store;
   readonly #listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
+  readonly #summaryListeners = new Set<(summary: ChalkWhiteboardSummary) => void>();
   readonly #operations = new Map<string, OperationEntry>();
   readonly #reservedOperationIds = new Set<string>();
+  readonly #awaitingOperationIds = new Set<string>();
+  readonly #pendingStoreWrites = new Set<Promise<void>>();
   readonly #operationRetryTimers = new Map<string, unknown>();
   readonly #snapshots = new Map<string, SnapshotAssembly>();
   readonly #updateAssembler = new WhiteboardV1UpdateAssembler();
@@ -69,11 +74,18 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #revision: string | null;
   #capabilities: readonly ChalkWhiteboardV1Capability[] = [];
   #canDraw = false;
+  #presentationSupported = false;
+  #presenting = false;
+  #useLegacyHello = false;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
+  #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
   #initialSnapshot: Deferred<void> | null = null;
   #startPromise: Promise<void> | null = null;
+  #stopPromise: Promise<void> | null = null;
+  #waitingForOperations = false;
   #reconnectTimer: unknown;
+  #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
   #lastCursorAt = Number.NEGATIVE_INFINITY;
@@ -93,8 +105,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   startSceneSubscription(): Promise<void> {
+    if (this.#stopPromise) return this.#stopPromise.then(() => this.startSceneSubscription());
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
+    this.#useLegacyHello = false;
     this.#phase = "connecting";
     this.#publishSummary("loading", null);
     const generation = ++this.#startupGeneration;
@@ -105,7 +119,21 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     return this.#startPromise;
   }
 
-  stopSceneSubscription(): void {
+  stopSceneSubscription(): Promise<void> {
+    if (this.#stopPromise) return this.#stopPromise;
+    if (this.#phase === "stopped" && !this.#started) return Promise.resolve();
+
+    this.#stopPromise = Promise.resolve().then(async () => {
+      while (this.#pendingStoreWrites.size > 0) {
+        await Promise.allSettled([...this.#pendingStoreWrites]);
+      }
+      this.#stopNow();
+      this.#stopPromise = null;
+    });
+    return this.#stopPromise;
+  }
+
+  #stopNow(): void {
     this.#started = false;
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
@@ -114,6 +142,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearHeartbeat();
     this.#clearOperationRetryTimers();
     this.#clearUpdateAssemblies();
+    this.#awaitingOperationIds.clear();
+    this.#waitingForOperations = false;
     this.#socket?.close(1000, "whiteboard subscription stopped");
     this.#socket = null;
     this.#phase = "stopped";
@@ -125,12 +155,24 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#participantId = null;
     this.#capabilities = [];
     this.#canDraw = false;
+    this.#presenting = false;
     this.#publishSummary("unsubscribed", null);
   }
 
   subscribe(listener: (event: ChalkWhiteboardV1Event) => void): () => void {
     this.#listeners.add(listener);
+    if (this.#phase !== "live") return () => this.#listeners.delete(listener);
+    if (this.#latestSnapshot && this.#latestSnapshot.sceneId === this.#sceneId && this.#latestSnapshot.revision === this.#revision) {
+      listener(this.#latestSnapshot);
+    }
+    if (this.#snapshots.size === 0 && !this.#waitingForOperations) void this.#requestSnapshot().catch(() => undefined);
     return () => this.#listeners.delete(listener);
+  }
+
+  subscribeSummary(listener: (summary: ChalkWhiteboardSummary) => void): () => void {
+    this.#summaryListeners.add(listener);
+    this.#notifySummaryListener(listener, this.#summary());
+    return () => this.#summaryListeners.delete(listener);
   }
 
   submitUpdate(input: ChalkWhiteboardV1UpdateInput): Promise<ChalkWhiteboardV1Commit> {
@@ -184,6 +226,22 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       participant_id: participantId,
       can_draw: canDraw,
     } as Extract<WhiteboardV1ClientFrame, { readonly type: "set_draw_permission" }>;
+    await this.#queueOperation(frame);
+  }
+
+  async setPresentation(presenting: boolean): Promise<void> {
+    this.#assertLive("set_presentation");
+    if (!this.#presentationSupported) {
+      throw error(failure("set_presentation", "unavailable", true, "Whiteboard presentation is unavailable on this Sync server."));
+    }
+    if (!this.#canDraw || !this.#capabilities.includes("drawWhiteboard")) {
+      throw error(failure("set_presentation", "permission_denied", false, "Whiteboard draw permission is required."));
+    }
+    const frame = {
+      type: "set_presentation",
+      operation_id: this.#nextId(),
+      presenting,
+    } as Extract<WhiteboardV1ClientFrame, { readonly type: "set_presentation" }>;
     await this.#queueOperation(frame);
   }
 
@@ -249,14 +307,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = "authenticating";
-      this.#send({
-        type: "hello",
-        protocol: "whiteboard-v1",
-        token,
-        cursor: this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null,
-      });
+      this.#presentationSupported = false;
+      const cursor = this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null;
+      this.#send(this.#useLegacyHello ? { type: "hello", protocol: "whiteboard-v1", token, cursor } : { type: "hello", protocol: "whiteboard-v1", token, cursor, extensions: [{ name: "presentation_v1" }] });
     } catch {
-      socket.close(1008, "whiteboard authentication failed");
+      socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard authentication failed");
     }
   }
 
@@ -307,11 +362,22 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         if (frame.participant_id === this.#participantId) this.#canDraw = frame.can_draw;
         this.#publishSummary("ready", null);
         return;
+      case "presentation_updated":
+        this.#requireLive();
+        this.#sceneId = frame.scene_id;
+        this.#revision = frame.revision;
+        this.#presenting = frame.presenting;
+        this.#publishSummary("ready", null);
+        return;
       case "reset_required":
         this.#requireLive();
         this.#sceneId = frame.scene_id;
         this.#revision = null;
         this.#publishSummary("recovering", failure("request_snapshot", "cursor_reset_required", true, "Whiteboard snapshot recovery is required."));
+        if (this.#presentationSupported) {
+          this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard presentation recovery required");
+          return;
+        }
         this.#emit({ type: "reset_required", sceneId: frame.scene_id, reason: frame.reason });
         return;
       case "operation_error":
@@ -364,18 +430,31 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
+    this.#reconnectAttempt = 0;
     this.#participantId = frame.participant_id;
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#capabilities = [...frame.capabilities];
     this.#canDraw = frame.can_draw;
+    this.#presentationSupported = "presenting" in frame;
+    this.#presenting = "presenting" in frame ? frame.presenting : false;
     this.#publishSummary("loading", null);
     this.#missedHeartbeats = 0;
-    for (const entry of [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending))) {
+    const pendingOperations = [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
+    this.#awaitingOperationIds.clear();
+    this.#waitingForOperations = true;
+    for (const entry of pendingOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
+    for (const entry of pendingOperations) {
       this.#sendOperation(entry.pending.frame);
     }
-    void this.#requestSnapshot().catch(() => undefined);
+    this.#requestSnapshotAfterOperations();
     this.#startHeartbeat();
+  }
+
+  #requestSnapshotAfterOperations(): void {
+    if (this.#phase !== "live" || !this.#waitingForOperations || this.#awaitingOperationIds.size > 0) return;
+    this.#waitingForOperations = false;
+    void this.#requestSnapshot().catch(() => undefined);
   }
 
   #requestSnapshot(): Promise<void> {
@@ -435,7 +514,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
   }
 
-  async #queueOperation(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>): Promise<ChalkWhiteboardV1Commit> {
+  async #queueOperation(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_presentation" }>): Promise<ChalkWhiteboardV1Commit> {
     this.#assertOperationCapacity();
     whiteboardV1OperationFrames(frame);
     const pending = {
@@ -449,11 +528,19 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       throw error(failure("submit_update", "unavailable", true, "Whiteboard operation byte capacity is full."));
     }
     this.#reservedOperationIds.add(frame.operation_id);
+    let storeWrite: Promise<void>;
     try {
-      await this.#store.put(pending);
+      storeWrite = this.#store.put(pending);
+    } catch (cause) {
+      throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
+    }
+    this.#pendingStoreWrites.add(storeWrite);
+    try {
+      await storeWrite;
     } catch (cause) {
       throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
     } finally {
+      this.#pendingStoreWrites.delete(storeWrite);
       this.#reservedOperationIds.delete(frame.operation_id);
     }
     let deferred!: Deferred<ChalkWhiteboardV1Commit>;
@@ -473,6 +560,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearOperationRetryTimer(frame.operation_id);
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
+    this.#awaitingOperationIds.delete(frame.operation_id);
     this.#publishSummary("ready", null);
     entry.deferred &&
       resolveDeferred(entry.deferred, {
@@ -481,6 +569,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         revision: frame.revision,
       });
     void this.#store.remove(frame.operation_id).catch(() => undefined);
+    this.#requestSnapshotAfterOperations();
   }
 
   #operationError(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>): void {
@@ -493,9 +582,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       }
       this.#operations.delete(frame.correlation_id);
       this.#clearOperationRetryTimer(frame.correlation_id);
+      this.#awaitingOperationIds.delete(frame.correlation_id);
       entry.deferred && rejectDeferred(entry.deferred, error(failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message)));
       this.#publishSummary("ready", failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message));
       void this.#store.remove(frame.correlation_id).catch(() => undefined);
+      this.#requestSnapshotAfterOperations();
       return;
     }
     const snapshot = this.#snapshots.get(frame.correlation_id);
@@ -525,29 +616,55 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #disconnected(socket: SyncSocket, closeCode: number): void {
     if (socket !== this.#socket) return;
+    const rejectedPresentationHello = this.#rejectedPresentationHello(closeCode);
+    this.#resetDisconnectedState();
+    if (!this.#started || !this.#transportAvailable) return;
+    if (rejectedPresentationHello) {
+      this.#useLegacyHello = true;
+      this.#scheduleReconnect();
+      return;
+    }
+    if (terminalCloseCode(closeCode)) {
+      this.#failRejectedConnection(closeCode);
+      return;
+    }
+    this.#scheduleReconnect();
+  }
+
+  #rejectedPresentationHello(closeCode: number): boolean {
+    return this.#phase === "authenticating" && !this.#useLegacyHello && terminalCloseCode(closeCode);
+  }
+
+  #resetDisconnectedState(): void {
     this.#socket = null;
     this.#clearHeartbeat();
     this.#clearUpdateAssemblies();
     this.#phase = "connecting";
+    this.#waitingForOperations = false;
     this.#participantId = null;
     this.#capabilities = [];
     this.#canDraw = false;
     this.#rejectSnapshots(failure("request_snapshot", "unavailable", true, "Whiteboard connection interrupted."));
     this.#publishSummary("recovering", failure("start_scene_subscription", "unavailable", true, "Whiteboard connection interrupted."));
-    if (!this.#started || !this.#transportAvailable) return;
-    if (closeCode === 1008 || closeCode === 1009) {
-      const terminalFailure = failure("start_scene_subscription", closeCode === 1008 ? "permission_denied" : "invalid_payload", false, "Whiteboard connection was rejected.");
-      this.#started = false;
-      this.#publishSummary("failed", terminalFailure);
-      if (this.#initialSnapshot) rejectDeferred(this.#initialSnapshot, error(terminalFailure));
-      this.#rejectOperationCallers(terminalFailure);
-      return;
-    }
+  }
+
+  #failRejectedConnection(closeCode: number): void {
+    const terminalFailure = failure("start_scene_subscription", closeCode === 1008 ? "permission_denied" : "invalid_payload", false, "Whiteboard connection was rejected.");
+    this.#started = false;
+    this.#publishSummary("failed", terminalFailure);
+    if (this.#initialSnapshot) rejectDeferred(this.#initialSnapshot, error(terminalFailure));
+    this.#rejectOperationCallers(terminalFailure);
+  }
+
+  #scheduleReconnect(): void {
     this.#clearReconnect();
+    const configuredDelay = this.#options.reconnectDelayMs;
+    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
       this.#connect();
-    }, this.#options.reconnectDelayMs ?? 250);
+    }, delay);
   }
 
   #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {
@@ -589,23 +706,38 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #emit(event: ChalkWhiteboardV1Event): void {
+    if (event.type === "snapshot") this.#latestSnapshot = event;
     for (const listener of this.#listeners) listener(event);
   }
 
   #publishSummary(status: ChalkWhiteboardSummary["status"], summaryError: ChalkWhiteboardV1Failure | null): void {
     this.#summaryStatus = status;
     this.#summaryError = summaryError;
-    const summary: ChalkWhiteboardSummary = {
+    const summary = this.#summary();
+    try {
+      this.#options.onSummary?.(summary);
+    } catch {
+      // Consumer summary callbacks cannot interfere with transport ownership.
+    }
+    for (const listener of this.#summaryListeners) this.#notifySummaryListener(listener, summary);
+  }
+
+  #summary(): ChalkWhiteboardSummary {
+    return {
       status: this.#summaryStatus,
       sceneId: this.#sceneId,
       revision: this.#revision,
       capabilities: [...this.#capabilities],
       canDraw: this.#canDraw,
       canClear: this.#capabilities.includes("manageWhiteboard"),
+      presenting: this.#presenting,
       error: this.#summaryError,
     };
+  }
+
+  #notifySummaryListener(listener: (summary: ChalkWhiteboardSummary) => void, summary: ChalkWhiteboardSummary): void {
     try {
-      this.#options.onSummary?.(summary);
+      listener(summary);
     } catch {
       // Consumer summary callbacks cannot interfere with transport ownership.
     }
@@ -736,12 +868,16 @@ function elementFromFrame(element: WhiteboardV1Element): ChalkWhiteboardV1Elemen
   };
 }
 
-function operationName(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>): ChalkWhiteboardV1Operation {
+function operationName(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_presentation" }>): ChalkWhiteboardV1Operation {
   return frame.type;
 }
 
 function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>["code"]): boolean {
   return code === "unavailable" || code === "overloaded" || code === "rate_limited" || code === "storage_unavailable";
+}
+
+function terminalCloseCode(closeCode: number): boolean {
+  return closeCode === 1008 || closeCode === 1009;
 }
 
 function mapErrorCode(code: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>["code"]): ChalkWhiteboardV1Failure["code"] {
