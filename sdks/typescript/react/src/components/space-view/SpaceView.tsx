@@ -87,6 +87,7 @@ export interface SpaceViewProps {
   readonly commandError?: string;
   readonly onDismissCommandError?: () => void;
   readonly onOpenDiagnostics?: () => void;
+  readonly onOpenFeedback?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
@@ -131,6 +132,7 @@ function ChalkSpaceView({
   commandError: externalCommandError,
   onDismissCommandError,
   onOpenDiagnostics,
+  onOpenFeedback,
   onOpenSettings,
   onToggleWhiteboard,
   whiteboard,
@@ -179,6 +181,7 @@ function ChalkSpaceView({
     ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
     ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
+    ...(onOpenFeedback ? ["feedback" as const] : []),
     "leave",
   ];
 
@@ -296,6 +299,7 @@ function ChalkSpaceView({
                       onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                       onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                       onOpenDiagnostics={onOpenDiagnostics}
+                      onOpenFeedback={onOpenFeedback}
                       onOpenSettings={openSettings}
                       onCommandError={setCommandError}
                       onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
@@ -314,6 +318,7 @@ function ChalkSpaceView({
                       onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                       onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
                       onOpenDiagnostics={onOpenDiagnostics}
+                      onOpenFeedback={onOpenFeedback}
                       onOpenSettings={openSettings}
                       onCommandError={setCommandError}
                       onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}

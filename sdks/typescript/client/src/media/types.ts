@@ -1,4 +1,7 @@
 import type { MediaPublication, MediaSource } from "./plane";
+import type { RtcConnectionStateSnapshot, RtcStatsLike } from "../telemetry/rtc";
+
+export type CloudflareSFURtcSummaryRecorder = (connection: RtcConnectionStateSnapshot, stats: Iterable<RtcStatsLike>) => void;
 
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
@@ -82,6 +85,8 @@ export type CloudflareSFUClientOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;
   readonly participantId: string;
   readonly transport: CloudflareSFUSignalingTransport;
+  readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
+  readonly onRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly pollIntervalMs?: number;
   readonly onError?: (error: unknown) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
@@ -113,6 +118,7 @@ export class CloudflareSFUError extends Error {
   constructor(
     message: string,
     readonly code: CloudflareSFUFailureCode,
+    readonly options: { readonly status?: number; readonly retryableConnection?: boolean } = {},
   ) {
     super(message);
     this.name = "CloudflareSFUError";

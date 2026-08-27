@@ -20,6 +20,8 @@ export const TELEMETRY_BUILT_IN_ATTRIBUTE_KEYS = [
   "connection_state",
   "ice_connection_state",
   "signaling_state",
+  "dtls_state",
+  "selected_candidate_pair_state",
   "bytes_received",
   "bytes_sent",
   "frames_dropped",

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { AnimatedCopy01Icon, type AnimatedCopy01IconHandle } from "@q9labsai/chalk-react/utils";
 import { createAPIKey, createRecentAuthProof, DashboardAPIError, type DashboardAPIKey, type DashboardPagination, type RecentAuthProof, listAPIKeys, revokeAPIKey, rotateAPIKey, startRecentAuthGoogle } from "../../lib/dashboard-api";
 import { Icon, ResourcePageHeader } from "./DashboardShell";
 import { useModalDialog } from "./SpaceDialogPrimitives";
@@ -433,6 +434,7 @@ function RecentAuthDialog({
 function SecretDialog({ secret, copied, onCopied, onClose }: { secret: SecretState; copied: boolean; onCopied: () => void; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const secretRef = useRef<HTMLInputElement>(null);
+  const copyIconRef = useRef<AnimatedCopy01IconHandle>(null);
   const [copyFallback, setCopyFallback] = useState(false);
   useModalDialog(dialogRef, Boolean(secret));
   if (!secret) return null;
@@ -442,11 +444,13 @@ function SecretDialog({ secret, copied, onCopied, onClose }: { secret: SecretSta
       await navigator.clipboard.writeText(secret.secret);
       setCopyFallback(false);
       onCopied();
+      copyIconRef.current?.startAnimation();
     } catch {
       secretRef.current?.focus();
       secretRef.current?.select();
       setCopyFallback(true);
       onCopied();
+      copyIconRef.current?.startAnimation();
     }
   };
   return (
@@ -474,7 +478,8 @@ function SecretDialog({ secret, copied, onCopied, onClose }: { secret: SecretSta
           {copyFallback ? "Clipboard access is unavailable. The secret is selected; use your keyboard copy command." : copied ? "Secret copied." : ""}
         </p>
         <div className="dialog-actions">
-          <button className="dashboard-button secondary" type="button" onClick={copySecret}>
+          <button className="dashboard-button secondary" type="button" onClick={copySecret} onMouseEnter={() => copyIconRef.current?.startAnimation()} onFocus={() => copyIconRef.current?.startAnimation()}>
+            <AnimatedCopy01Icon ref={copyIconRef} size={16} aria-hidden="true" onMouseEnter={() => copyIconRef.current?.startAnimation()} />
             {copyFallback ? "Selected" : copied ? "Copied" : "Copy secret"}
           </button>
           <button className="dashboard-button primary" type="submit" disabled={!copied}>

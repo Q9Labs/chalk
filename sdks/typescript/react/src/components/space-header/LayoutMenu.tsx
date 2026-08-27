@@ -8,11 +8,13 @@ import type { SpaceHeaderProps } from "./space-header-contract";
 
 export type StageLayoutValue = NonNullable<SpaceHeaderProps["layout"]>;
 
+type LayoutIcon = (props: { size?: number; className?: string }) => React.ReactNode;
+
 export const LAYOUT_OPTIONS = [
   { value: "focus", label: "Spotlight", description: "One large tile with others beside it", Icon: Maximize01Icon },
   { value: "grid", label: "Grid", description: "Everyone gets one equally sized tile", Icon: LayoutGridIcon },
   { value: "presentation", label: "Presentation", description: "Shared content with people alongside", Icon: Monitor01Icon },
-] as const satisfies readonly { value: StageLayoutValue; label: string; description: string; Icon: typeof LayoutGridIcon }[];
+] as const satisfies readonly { value: StageLayoutValue; label: string; description: string; Icon: LayoutIcon }[];
 
 const isLayoutValue = (value: unknown): value is StageLayoutValue => LAYOUT_OPTIONS.some((option) => option.value === value);
 

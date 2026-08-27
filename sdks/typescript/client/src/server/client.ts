@@ -201,6 +201,7 @@ function segment(value: string): string {
 }
 
 type AccessGrantWire = {
+  readonly episode_started_at?: string | null;
   readonly subject: {
     readonly tenant_id: string;
     readonly space_id: string;
@@ -234,6 +235,7 @@ function participantLifecycle(value: ParticipantLifecycleWire): ParticipantLifec
 function accessGrant(value: AccessGrantWire): AccessGrant {
   const payload = mediaClientPayload(value.media);
   return parseAccessGrant({
+    episode_started_at: value.episode_started_at,
     subject: {
       tenant_id: value.subject.tenant_id,
       space_id: requiredResponseID(value.subject.space_id),

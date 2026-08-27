@@ -25,7 +25,7 @@ func (r EpisodeLifecycleRepository) GetSyncTokenSubject(ctx context.Context, key
 		}
 		subject = synctokens.Input{
 			TenantID: utilities.IDFromBytes(row.TenantID.Bytes), SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes),
-			EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), ParticipantID: utilities.IDFromBytes(row.ParticipantID.Bytes),
+			EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), StartedAt: nullableTimestamp(row.StartedAt), ParticipantID: utilities.IDFromBytes(row.ParticipantID.Bytes),
 			ParticipantGeneration: row.Generation, AdmissionLifecycleIntentID: utilities.IDFromBytes(row.AdmissionLifecycleIntentID.Bytes),
 			DisplayName: row.Name.String, Role: row.Role, Capabilities: append([]string(nil), row.Capabilities...),
 		}

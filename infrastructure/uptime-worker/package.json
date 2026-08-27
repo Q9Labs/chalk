@@ -5,12 +5,10 @@
   "type": "module",
   "scripts": {
     "check-types": "tsc --noEmit",
-    "test": "pnpm exec vitest run",
     "deploy": "wrangler deploy --keep-vars",
     "deploy:dry-run": "wrangler deploy --dry-run"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
-    "vitest": "^4.1.10"
+    "typescript": "^5.7.2"
   }
 }

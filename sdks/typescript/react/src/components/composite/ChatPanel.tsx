@@ -4,7 +4,8 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
+import { SentIcon, type SentIconHandle } from "../../utils/animated-icons";
+import { Cancel01Icon, Message01Icon, Upload01Icon } from "../../utils/icons";
 import { ChalkAlert, ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner, ChalkTextarea } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicChatPanel } from "./ClassicChatPanel";
@@ -79,6 +80,7 @@ const ChatPanelSurface = React.memo(
     const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const sendIconRef = useRef<SentIconHandle>(null);
     const isAtBottomRef = useRef(true);
     const mountedRef = useRef(false);
     const lastMarkedSequenceRef = useRef<string | null>(localReadThroughSequence);
@@ -354,9 +356,11 @@ const ChatPanelSurface = React.memo(
               className="relative z-[1] h-11 w-11 shrink-0 rounded-[8px] p-0 !text-[var(--chalk-app-control-active-text)]"
               disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
               onClick={() => void send()}
+              onMouseEnter={() => sendIconRef.current?.startAnimation()}
+              onFocus={() => sendIconRef.current?.startAnimation()}
               aria-label="Send message"
             >
-              <SentIcon className="h-5 w-5" />
+              <SentIcon ref={sendIconRef} className="h-5 w-5" />
             </ChalkButton>
           </div>
         </div>

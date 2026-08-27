@@ -16,6 +16,7 @@ import {
   type ReactNativeAsyncStorage,
 } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
+import type { FeedbackSource } from "@q9labsai/chalk-client";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
@@ -41,6 +42,7 @@ export type NativeSpaceClientOptions = {
   readonly syncStartupTimeoutMs?: number;
   readonly storage?: ReactNativeAsyncStorage;
   readonly telemetry?: TelemetryJourney;
+  readonly feedbackSource?: FeedbackSource;
 };
 
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
@@ -86,6 +88,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       initialMicrophoneEnabled: options.microphone,
       initialCameraEnabled: options.camera,
       onConnectionDiagnostic: (event) => journey?.recordDiagnostic(connectionDiagnostic(event)),
+      feedbackSource: options.feedbackSource ?? "embedded",
     },
   );
   bindNativeAuthenticatedTelemetry(client, journey);
@@ -144,6 +147,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
     });
     return createRTKConnectionMediaClient(client);
   }
+  const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
     participantId: subject.participantId,
@@ -156,6 +160,13 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       participantId: subject.participantId,
       fetch,
     }),
+    replaceMediaConnection: replaceMediaConnection
+      ? async () => {
+          const replacement = await replaceMediaConnection();
+          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+          return replacement.clientPayload;
+        }
+      : undefined,
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       observePeerConnection?.(connection as unknown as RtcPeerConnection);

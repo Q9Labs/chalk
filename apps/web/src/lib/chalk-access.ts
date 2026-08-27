@@ -30,7 +30,7 @@ export type PublicInviteClient = {
   readonly createPublicSpace: (displayName: string) => Promise<PublicSpaceCreated>;
   readonly arriveBySpacePublicInvite: (spaceInviteToken: string, displayName: string, options?: Pick<PublicArrivalOptions, "arrivalHandle">) => Promise<PublicSpaceArrival>;
   readonly getSpacePublicInviteArrival: (arrivalHandle: string) => Promise<PublicSpaceArrival>;
-  readonly refreshSpacePublicInviteAccess: (arrivalHandle: string, mediaProof: string) => Promise<AccessGrant>;
+  readonly refreshSpacePublicInviteAccess: (arrivalHandle: string, mediaProof: string, options?: { readonly replaceMediaConnection?: boolean }) => Promise<AccessGrant>;
   readonly leaveSpacePublicInviteArrival: (arrivalHandle: string, options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 
@@ -63,7 +63,8 @@ export function createPublicInviteClient(journey?: JourneyOptions): PublicInvite
     createPublicSpace: (displayName) => client.createPublicSpace({ displayName }, { idempotencyKey: requestKey() }),
     arriveBySpacePublicInvite: (spaceInviteToken, displayName, options) => client.arriveBySpacePublicInvite({ spaceInviteToken, displayName }, { idempotencyKey: requestKey(), ...(options?.arrivalHandle === undefined ? {} : { arrivalHandle: options.arrivalHandle }) }),
     getSpacePublicInviteArrival: (arrivalHandle) => client.getSpacePublicInviteArrival({ arrivalHandle }),
-    refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof) => client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle }),
+    refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof, options) =>
+      options?.replaceMediaConnection === undefined ? client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle }) : client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle, replaceMediaConnection: options.replaceMediaConnection }),
     leaveSpacePublicInviteArrival: (arrivalHandle, options) => client.leaveSpacePublicInviteArrival(arrivalHandle, options),
   };
 }
@@ -125,7 +126,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
       return current;
     }
     mediaProof = request?.currentMediaToken ?? mediaProof;
-    current = await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof);
+    current = request?.replaceMediaConnection ? await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof, { replaceMediaConnection: true }) : await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof);
     mediaProof = accessMediaProof(current);
     return current;
   };

@@ -85,8 +85,9 @@
     "webhook.retry",
     "webhook.deliver",
     "webhook.exhaust",
-    "whiteboard.unsupported"
+    "whiteboard.connect",
+    "whiteboard.recover",
+    "whiteboard.disconnect"
   ],
-  "contentCaptured": false,
-  "whiteboard": "explicitly unsupported"
+  "contentCaptured": false
 }

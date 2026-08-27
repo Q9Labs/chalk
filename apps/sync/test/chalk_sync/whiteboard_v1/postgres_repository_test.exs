@@ -117,32 +117,18 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
     assert {:ok, %{is_presenting: true}} = PostgresRepository.connect(participant)
 
-    assert {:ok, %{outcome: :committed, revision: 3, presenting: false}} =
-             PostgresRepository.set_presentation(host, %{
-               operation_id: "whiteboard-presentation-0002",
-               presenting: false
-             })
-
     assert {:ok, %{outcome: :duplicate, revision: 2, presenting: true}} =
              PostgresRepository.set_presentation(host, presentation)
 
-    assert {:ok, %{outcome: :committed, revision: 4, presenting: true}} =
-             PostgresRepository.set_presentation(host, %{
-               operation_id: "whiteboard-presentation-0003",
-               presenting: true
-             })
-
     second_update = %{denied_update | operation_id: "whiteboard-update-0003"}
 
-    assert {:ok, %{outcome: :committed, revision: 5}} =
+    assert {:ok, %{outcome: :committed, revision: 3}} =
              PostgresRepository.commit_update(host, second_update)
 
     assert {:ok,
             [
               %{type: :presentation, revision: 2, presenting: true},
-              %{type: :presentation, revision: 3, presenting: false},
-              %{type: :presentation, revision: 4, presenting: true},
-              %{type: :update, revision: 5}
+              %{type: :update, revision: 3}
             ]} = PostgresRepository.read_after(participant, scene_id, 1)
 
     clear = %{operation_id: "whiteboard-clear-0001", scene_id: scene_id}

@@ -20,10 +20,6 @@ func NewWorkloadNonceStore(client *goredis.Client) WorkloadNonceStore {
 	return WorkloadNonceStore{client: client}
 }
 
-func newWorkloadNonceStore(client workloadNonceClient) WorkloadNonceStore {
-	return WorkloadNonceStore{client: client}
-}
-
 // Consume atomically records a nonce. The true result means this caller owns
 // the nonce; false means another request already consumed it.
 func (s WorkloadNonceStore) Consume(ctx context.Context, nonce string, ttl time.Duration) (bool, error) {

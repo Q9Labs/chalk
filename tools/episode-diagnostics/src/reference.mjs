@@ -2,11 +2,11 @@
 
 import { DiagnosticInspectError } from "./errors.mjs";
 
-const ENVIRONMENTS = new Set(["localhost", "development", "staging"]);
+const ENVIRONMENTS = new Set(["localhost", "development", "staging", "production"]);
 const REFERENCE_PATTERN = /^chalkdiag:v1:([a-z]+):([A-Za-z0-9][A-Za-z0-9_-]{0,127})(?::(op|issue|event):([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?(?:@([0-9]+))?$/u;
 
 /**
- * @typedef {{ version: 1; environment: "localhost"|"development"|"staging"; diagnosticId: string; focus?: { kind: "op"|"issue"|"event"; id: string }; cursor?: number }} DiagnosticReference
+ * @typedef {{ version: 1; environment: "localhost"|"development"|"staging"|"production"; diagnosticId: string; focus?: { kind: "op"|"issue"|"event"; id: string }; cursor?: number }} DiagnosticReference
  */
 
 /**

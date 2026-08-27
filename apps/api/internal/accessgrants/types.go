@@ -31,6 +31,7 @@ const (
 	ProviderCloudflareSFU = "cloudflare_sfu"
 	Lifetime              = 5 * time.Minute
 	ClockSkew             = 30 * time.Second
+	RecoveryGrace         = 2 * time.Minute
 )
 
 type Subject struct {

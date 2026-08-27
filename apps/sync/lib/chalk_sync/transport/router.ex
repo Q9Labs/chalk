@@ -10,6 +10,7 @@ defmodule ChalkSync.Transport.Router do
   plug(:match)
   plug(:dispatch)
 
+  alias ChalkSync.Diagnostics.Exporter, as: DiagnosticsExporter
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Metrics
   alias ChalkSync.Operations.Readiness
@@ -28,6 +29,12 @@ defmodule ChalkSync.Transport.Router do
 
   get "/metrics" do
     send_json(conn, 200, Metrics.snapshot())
+  end
+
+  get "/diagnostics/healthz" do
+    health = diagnostics_health()
+    status = if health.status == :healthy, do: 200, else: 503
+    send_json(conn, status, health)
   end
 
   get "/v1/sync" do
@@ -133,5 +140,12 @@ defmodule ChalkSync.Transport.Router do
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(status, JSON.encode!(body))
+  end
+
+  defp diagnostics_health do
+    case Application.get_env(:chalk_sync, :episode_diagnostics, %{mode: :off}) do
+      %{mode: :off} -> %{status: :disabled}
+      _enabled -> DiagnosticsExporter.health()
+    end
   end
 end

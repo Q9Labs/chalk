@@ -109,7 +109,7 @@ The endpoint contract is consumed by `PreviewRouteContracts()`.
   constants when a route exposes a stable new API error.
 - Reuse shared optional/nullable transport helpers so schema output describes
   the wire shape, not Go internals.
-- Update `internal/httpapi/route_contracts_test.go` when the intentional route
+- Update the retained route contract proof when the intentional route
   inventory changes.
 
 ## 5. Verify The Change

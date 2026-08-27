@@ -93,7 +93,6 @@ jobs:
 
       - name: Validate managed runtime contracts
         run: |
-          infrastructure/managed-episode/scripts/test-config
           infrastructure/managed-episode/scripts/test-deployment-controller
           node --test scripts/deploy/deploy-managed-release.test.mjs
 

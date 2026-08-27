@@ -1,16 +1,15 @@
 import Alert02Icon from "@hugeicons/core-free-icons/Alert02Icon";
 import ArrowLeft02Icon from "@hugeicons/core-free-icons/ArrowLeft02Icon";
 import ChartBarLineIcon from "@hugeicons/core-free-icons/ChartBarLineIcon";
-import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
 import Download04Icon from "@hugeicons/core-free-icons/Download04Icon";
 import Flag02Icon from "@hugeicons/core-free-icons/Flag02Icon";
 import FilterIcon from "@hugeicons/core-free-icons/FilterIcon";
 import ListViewIcon from "@hugeicons/core-free-icons/ListViewIcon";
 import Pulse01Icon from "@hugeicons/core-free-icons/Pulse01Icon";
-import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
 import WorkflowSquare06Icon from "@hugeicons/core-free-icons/WorkflowSquare06Icon";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import type { IconSvgElement } from "@hugeicons/react";
+import { AnimatedCopy01Icon, AnimatedHugeiconsIcon as HugeiconsIcon, type AnimatedCopy01IconHandle } from "@q9labsai/chalk-react/utils";
 import { Button, Input, ToastProvider, ToastViewport, toast } from "@q9labsai/chalk-ui";
 import { formatDiagnosticReference, parseDiagnosticReference, parseDiagnosticFilter, renderAgentBriefMarkdown, type DiagnosticFilterV1 } from "@q9labsai/diagnostics-contracts";
 import { useParams } from "@tanstack/react-router";
@@ -54,6 +53,9 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
   const [alternateStatus, setAlternateStatus] = useState<"idle" | "resolving" | "failed">("idle");
   const [fallbackText, setFallbackText] = useState("");
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
+  const copyReferenceIconRef = useRef<AnimatedCopy01IconHandle>(null);
+  const copyAllIconRef = useRef<AnimatedCopy01IconHandle>(null);
+  const copyAgentIconRef = useRef<AnimatedCopy01IconHandle>(null);
   const controllerRef = useRef<DiagnosticLiveController | undefined>(undefined);
   const canonicalInputReference = useMemo(() => {
     try {
@@ -148,12 +150,13 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
     if (exportState.phase === "cancelled") toast.info({ title: "Export cancelled" });
   }, [exportState.error, exportState.phase]);
 
-  const copyText = async (text: string, label: string): Promise<void> => {
+  const copyText = async (text: string, label: string, onCopied?: () => void): Promise<void> => {
     const result = await writeClipboardText(text);
     if (result.copied) {
       setAnnouncement(`${label} copied.`);
       toast.success({ title: `${label} copied` });
       setFallbackText("");
+      onCopied?.();
       return;
     }
     setFallbackText(text);
@@ -161,7 +164,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
     toast.warning({ title: "Clipboard unavailable", description: "The prepared text is selected. Use the keyboard copy command." });
   };
 
-  const copyBrief = async (format: "compact" | "markdown"): Promise<void> => {
+  const copyBrief = async (format: "compact" | "markdown", onCopied?: () => void): Promise<void> => {
     if (!normalizedReference) return;
     setAnnouncement(format === "compact" ? "Preparing AgentBrief/v1." : "Preparing complete AgentBrief/v1 Markdown.");
     try {
@@ -173,10 +176,10 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
         const compact = await api.readBrief(focusedReference, "compact", briefQuery);
         const exportJob = await api.createExportJob(normalizedReference, liveState.lastAppliedCursor);
         const fallback = `${renderAgentBriefMarkdown(compact.brief)}\n\nFull Markdown omitted: ${prepared.length} characters exceeds the clipboard safety limit.\nExport job reference: ${exportJob.jobId}`;
-        await copyText(fallback, "Compact AgentBrief with export reference");
+        await copyText(fallback, "Compact AgentBrief with export reference", onCopied);
         return;
       }
-      await copyText(prepared, format === "compact" ? "AgentBrief" : "AgentBrief Markdown");
+      await copyText(prepared, format === "compact" ? "AgentBrief" : "AgentBrief Markdown", onCopied);
     } catch (error) {
       setAnnouncement(error instanceof Error ? error.message : "The AgentBrief could not be copied.");
     }
@@ -230,11 +233,29 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
             </div>
           </div>
           <div className="episode-top-actions" role="group" aria-label="Diagnostic export and copy actions">
-            <Button variant="ghost" size="icon" title="Copy Diagnostic Reference" aria-label="Copy Diagnostic Reference" data-episode-action="copy-reference" onClick={() => void copyText(normalizedReference, "Diagnostic Reference")}>
-              <HugeiconsIcon icon={Copy01Icon} strokeWidth={1.7} />
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Copy Diagnostic Reference"
+              aria-label="Copy Diagnostic Reference"
+              data-episode-action="copy-reference"
+              onClick={() => void copyText(normalizedReference, "Diagnostic Reference", () => copyReferenceIconRef.current?.startAnimation())}
+              onMouseEnter={() => copyReferenceIconRef.current?.startAnimation()}
+              onFocus={() => copyReferenceIconRef.current?.startAnimation()}
+            >
+              <AnimatedCopy01Icon ref={copyReferenceIconRef} size={16} aria-hidden="true" onMouseEnter={() => copyReferenceIconRef.current?.startAnimation()} />
             </Button>
-            <Button variant="ghost" size="icon" title="Copy the complete AgentBrief Markdown" aria-label="Copy the complete AgentBrief Markdown" data-episode-action="copy-all" onClick={() => void copyBrief("markdown")}>
-              <HugeiconsIcon icon={ListViewIcon} strokeWidth={1.7} />
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Copy the complete AgentBrief Markdown"
+              aria-label="Copy the complete AgentBrief Markdown"
+              data-episode-action="copy-all"
+              onClick={() => void copyBrief("markdown", () => copyAllIconRef.current?.startAnimation())}
+              onMouseEnter={() => copyAllIconRef.current?.startAnimation()}
+              onFocus={() => copyAllIconRef.current?.startAnimation()}
+            >
+              <AnimatedCopy01Icon ref={copyAllIconRef} size={16} aria-hidden="true" onMouseEnter={() => copyAllIconRef.current?.startAnimation()} />
             </Button>
             <Button
               variant="ghost"
@@ -247,8 +268,8 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
             >
               <HugeiconsIcon icon={Download04Icon} strokeWidth={1.7} />
             </Button>
-            <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact")}>
-              <HugeiconsIcon icon={SparklesIcon} strokeWidth={1.7} />
+            <Button data-episode-action="copy-agent" onClick={() => void copyBrief("compact", () => copyAgentIconRef.current?.startAnimation())} onMouseEnter={() => copyAgentIconRef.current?.startAnimation()} onFocus={() => copyAgentIconRef.current?.startAnimation()}>
+              <AnimatedCopy01Icon ref={copyAgentIconRef} size={16} aria-hidden="true" onMouseEnter={() => copyAgentIconRef.current?.startAnimation()} />
               Copy for Agent
             </Button>
           </div>

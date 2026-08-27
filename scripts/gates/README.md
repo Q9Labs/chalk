@@ -86,8 +86,8 @@ errors keep their current behavior.
   identifier-aware banned-term counts per surface with the committed baseline;
   decreases require `pnpm run language:ratchet:update` so each migration wave
   becomes the next locked baseline.
-- Formatting, Fallow, Semgrep, test-presence, workspace type checks, coverage
-  tests, and builds follow affected source files and workspace dependents.
+- Formatting, Fallow, Semgrep, workspace type checks, coverage tests, and
+  builds follow affected source files and workspace dependents.
 - Tests run once with coverage; lint aliases do not repeat formatting or type
   checks.
 - Go API changes run the complete language gate. Elixir Sync changes run the
@@ -95,6 +95,7 @@ errors keep their current behavior.
   replayed v1 breaker, and focused Sync and whiteboard SDK tests. Both use a
   disposable, migrated PostgreSQL container that is removed on exit.
 - Contract producers and consumers run generated-contract and SDK drift checks.
+- The patched image-size parser fixture runs when its patch or guard changes.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.

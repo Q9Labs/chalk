@@ -4,7 +4,8 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
+import { SentIcon, type SentIconHandle } from "../../utils/animated-icons";
+import { Cancel01Icon, Message01Icon, Upload01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
@@ -66,6 +67,7 @@ const ChatPanelSurface = React.memo(
     const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const sendIconRef = useRef<SentIconHandle>(null);
     const isAtBottomRef = useRef(true);
     const mountedRef = useRef(false);
     const lastMarkedSequenceRef = useRef<string | null>(localReadThroughSequence);
@@ -332,9 +334,11 @@ const ChatPanelSurface = React.memo(
             className="h-11 w-11 shrink-0 rounded-[8px] bg-[var(--chalk-app-control-primary)] !text-white hover:bg-[var(--chalk-app-control-primary-hover)]"
             disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
             onClick={() => void send()}
+            onMouseEnter={() => sendIconRef.current?.startAnimation()}
+            onFocus={() => sendIconRef.current?.startAnimation()}
             aria-label="Send message"
           >
-            <SentIcon className="h-5 w-5" />
+            <SentIcon ref={sendIconRef} className="h-5 w-5" />
           </Button>
         </div>
       </div>

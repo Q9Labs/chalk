@@ -195,6 +195,17 @@ export class EpisodeDiagnosticRuntime {
     return this.#enabled() ? this.context() : undefined;
   }
 
+  /** Internal Feedback seam. It returns only a short-lived verified credential to the private transport. */
+  feedbackCredentialUnsafe(): EpisodeDiagnosticCredential | null {
+    if (!this.#enabled() || !this.#credential) return null;
+    return Object.freeze({ ...this.#credential });
+  }
+
+  feedbackAvailabilityUnsafe(): "available" | "disabled" | "disposed" | "unavailable" {
+    if (this.#disposed) return "disposed";
+    return this.#enabled() ? "available" : "disabled";
+  }
+
   startOperation(name: string, attributes?: Readonly<Record<string, unknown>>, parentOperationRef?: string, producerOperationRef?: string, correlationInput?: EpisodeDiagnosticCorrelationInput): EpisodeDiagnosticOperation | undefined {
     if (!this.#enabled()) return undefined;
     const credentialGeneration = this.#credential?.generation;
@@ -644,8 +655,17 @@ function stripTrailingUrlSlash(value: string): string {
 
 function intakeResponse(value: unknown): IntakeResponse | null {
   if (!isRecord(value) || typeof value.diagnosticReference !== "string" || !Number.isSafeInteger(value.committedCursor)) return null;
-  if (!Array.isArray(value.accepted) || !Array.isArray(value.duplicates) || !Array.isArray(value.conflicts)) return null;
-  return { accepted: value.accepted, duplicates: value.duplicates, conflicts: value.conflicts };
+  const accepted = legacyEmptyAcknowledgement(value.accepted);
+  const duplicates = legacyEmptyAcknowledgement(value.duplicates);
+  const conflicts = legacyEmptyAcknowledgement(value.conflicts);
+  if (accepted === null || duplicates === null || conflicts === null) return null;
+  return { accepted, duplicates, conflicts };
+}
+
+/** @param {unknown} value */
+function legacyEmptyAcknowledgement(value: unknown): readonly unknown[] | null {
+  if (value === null) return [];
+  return Array.isArray(value) ? value : null;
 }
 
 function completeDelivery(delivery: Readonly<{ accepted: readonly string[]; duplicates: readonly string[]; conflicts: readonly string[] }>, expected: ReadonlySet<string>): EpisodeDiagnosticDeliveryResult | null {

@@ -5,6 +5,13 @@ export { resolveOperatorConfig, configEnvironmentVariables } from "./config.mjs"
 export { buildAgentBrief, formatCompactBrief, formatMarkdownBrief, briefResponse, briefLimits } from "./brief.mjs";
 export { renderDiagnosticResult } from "./render.mjs";
 export { DiagnosticInspectError, asDiagnosticInspectError, exitCodeFor } from "./errors.mjs";
+export { createFeedbackClient, FEEDBACK_PATH, MAX_JSON_RESPONSE_BYTES, MAX_SCREENSHOT_BYTES } from "./feedback-client.mjs";
+export { parseFeedbackId, parseFeedbackListResponse, parseFeedbackReport, parseFeedbackEvidence, parseFeedbackEvidenceBytes, parseFeedbackCorrelations, FEEDBACK_REPORT_SCHEMA, FEEDBACK_EVIDENCE_SCHEMA } from "./feedback-parsers.mjs";
+export { resolveFeedbackOperatorConfig, parseObservabilityAllowlist, isAllowedObservabilityURL, feedbackConfigEnvironmentVariables } from "./feedback-config.mjs";
+export { writeFeedbackPull, feedbackPullManifestSchema } from "./feedback-download.mjs";
+export { buildFeedbackOpenTarget, openFeedbackReport, launcherArguments } from "./feedback-open.mjs";
+export { escapeTerminalControls, safeFeedbackJSON, renderFeedbackList, renderFeedbackShow, renderFeedbackPull, renderFeedbackOpen } from "./feedback-render.mjs";
+export { main as feedbackMain, parseFeedbackCliArguments, FEEDBACK_HELP, FEEDBACK_USAGE } from "./feedback-cli.mjs";
 export { createDiagnosticFixtureServer, fixtureReference, fixtureSnapshot, FIXTURE_CLOCK, FIXTURE_ENVIRONMENT, FIXTURE_STATES, VISUAL_VIEWPORTS } from "./fixture-server.mjs";
 export { runVisualMatrix, visualMatrixURLs, requireDebuggerURL, inspectDebuggerContract, assertDebuggerContract, readReadiness, VISUAL_STATES, VISUAL_MATRIX, REQUIRED_VIEWS, REQUIRED_ACTIONS, RECOVERY_STATES, GAP_STATES } from "./visual-matrix.mjs";
 export { runEpisodeDiagnosticBrowserProof } from "./browser-proof.mjs";

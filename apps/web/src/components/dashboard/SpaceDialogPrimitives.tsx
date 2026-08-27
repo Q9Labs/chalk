@@ -41,9 +41,23 @@ export function SpaceDialogHeading({ title, description }: { title: string; desc
   );
 }
 
-export function SpaceDialogFrame({ dialogRef, onClose, onSubmit, children }: { dialogRef: RefObject<HTMLDialogElement | null>; onClose: () => void; onSubmit: FormEventHandler<HTMLFormElement>; children: ReactNode }) {
+export function SpaceDialogFrame({
+  dialogRef,
+  onClose,
+  onSubmit,
+  children,
+  ariaLabel,
+  dataFeedbackPrivate = false,
+}: {
+  dialogRef: RefObject<HTMLDialogElement | null>;
+  onClose: () => void;
+  onSubmit: FormEventHandler<HTMLFormElement>;
+  children: ReactNode;
+  ariaLabel?: string;
+  dataFeedbackPrivate?: boolean;
+}) {
   return (
-    <dialog ref={dialogRef} className="space-dialog" onClose={onClose} onCancel={onClose}>
+    <dialog ref={dialogRef} aria-label={ariaLabel} className="space-dialog" data-chalk-feedback-private={dataFeedbackPrivate ? "true" : undefined} onClose={onClose} onCancel={onClose}>
       <form onSubmit={onSubmit}>
         <SpaceDialogChrome onClose={onClose} />
         {children}

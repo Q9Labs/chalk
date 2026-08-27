@@ -43,7 +43,7 @@ type providerFailureDetails struct {
 }
 
 func newProviderResponseFailure(operation string, stage providerFailureStage, statusCode int, rawCode string, message string, responseTrackCount int, failedTrackCount int) providerFailure {
-	failure := newProviderFailure(operation, stage, statusCode, providerRejectionCode(rawCode))
+	failure := newProviderFailure(operation, stage, statusCode, providerRejectionCode(rawCode, message))
 	failure.details = providerFailureDetails{
 		rawCode:            observableProviderCode(rawCode, failure.providerCode),
 		message:            observableProviderMessage(message),
@@ -52,6 +52,18 @@ func newProviderResponseFailure(operation string, stage providerFailureStage, st
 		failedTrackCount:   failedTrackCount,
 	}
 	return failure
+}
+
+func providerMessageCode(message string) string {
+	normalized := strings.ToLower(strings.Join(strings.Fields(message), " "))
+	switch {
+	case strings.Contains(normalized, "not connected"), strings.Contains(normalized, "not ready"):
+		return "connection_not_connected"
+	case strings.Contains(normalized, "not found"), strings.Contains(normalized, "no longer exists"), strings.Contains(normalized, "expired"):
+		return "connection_not_found"
+	default:
+		return ""
+	}
 }
 
 func enrichProviderFailure(err error, body any, responseBytes int) error {

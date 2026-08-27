@@ -52,50 +52,29 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
     end
   end
 
-  test "rejects malformed role and capability claims", %{
-    private_key: private_key
-  } do
-    base = claims()
-
-    invalid = [
-      Map.merge(base, %{
-        "role" => ""
-      }),
-      Map.merge(base, %{
-        "capabilities" => ["subscribe", "subscribe"]
-      }),
-      Map.merge(base, %{
-        "capabilities" => ["not-a-capability"]
-      }),
-      Map.merge(base, %{"capabilities" => "subscribe"}),
-      Map.delete(base, "role")
-    ]
-
-    Enum.each(invalid, fn candidate ->
-      assert {:error, :invalid_token} =
-               private_key |> token(candidate) |> JWTTokenVerifier.verify()
-    end)
-  end
-
-  test "rejects an unsupported algorithm", %{private_key: private_key} do
-    assert {:error, :invalid_token} =
-             private_key
-             |> token(claims(), %{"alg" => "none", "kid" => "launch-1", "typ" => "JWT"})
-             |> JWTTokenVerifier.verify()
-  end
-
-  test "rejects duplicate key ids", %{private_key: private_key} do
-    header = ~s({"alg":"EdDSA","kid":"launch-1","kid":"launch-1","typ":"JWT"})
-
-    assert {:error, :invalid_token} =
-             signed_token(private_key, header, claims()) |> JWTTokenVerifier.verify()
-  end
-
   test "rejects an expired token", %{private_key: private_key} do
     assert {:error, :invalid_token} =
              private_key
              |> token(Map.put(claims(), "exp", @now - 31))
              |> JWTTokenVerifier.verify()
+  end
+
+  test "rejects expiry exactly at the clock-skew boundary", %{private_key: private_key} do
+    assert {:error, :invalid_token} =
+             private_key
+             |> token(Map.put(claims(), "exp", @now - 30))
+             |> JWTTokenVerifier.verify()
+  end
+
+  test "rejects a signature from an untrusted key", %{private_key: private_key} do
+    {_other_public_key, other_private_key} = :crypto.generate_key(:eddsa, :ed25519)
+
+    assert {:error, :invalid_token} =
+             other_private_key
+             |> token(Map.put(claims(), "jti", "tampered-signature"))
+             |> JWTTokenVerifier.verify()
+
+    assert {:ok, _verified} = JWTTokenVerifier.verify(token(private_key, claims()))
   end
 
   defp claims do

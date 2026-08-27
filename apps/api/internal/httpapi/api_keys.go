@@ -135,10 +135,6 @@ type rotateAPIKeyRequest struct {
 	Body       rotateAPIKeyBody
 }
 
-func mountAPIKeyRoutes(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, limits RateLimitOptions) {
-	mountAPIKeyRoutesWithOptions(r, service, authorizer, audits, APIKeyRouteOptions{}, limits)
-}
-
 func mountAPIKeyRoutesWithOptions(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, options APIKeyRouteOptions, limits RateLimitOptions) {
 	for _, endpoint := range apiKeyEndpoints(service, authorizer, audits, options.RecentAuth) {
 		endpoint.Mount(r, limits)

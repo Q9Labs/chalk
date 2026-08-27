@@ -24,6 +24,17 @@ export function SpaceScreen() {
 the join request. The native experience has focus, grid, and presentation
 layouts, and `features.settings` is enabled unless explicitly set to `false`.
 
+## Feedback
+
+The Space action menu includes Feedback. It captures only the Chalk-owned native
+view, shows a removable or refreshable preview, and sends bounded Journey,
+trace, runtime, and diagnostic context directly to Chalk. Capture failures and
+unsupported macOS native capture never block the message.
+
+The host app must install the `react-native-view-shot` peer dependency.
+Embedded products use the default `embedded` source; Chalk's mobile app
+configures `chalk_mobile`.
+
 The platform subpaths (`android`, `ios`, `ios-phone`, `ios-pad`, and `macos`)
 export the same public surface as the root package.
 

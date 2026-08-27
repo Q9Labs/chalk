@@ -122,17 +122,17 @@ governance controls are deferred beyond v1.
 
 ## Coverage
 
-| Layer                  | Captured in v1                                                                                                       | Connection to the journey                           |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| TypeScript client      | lifecycle, fan-out, diagnostics, HTTP, sync frames, bounded aggregate RTC statistics, exporter health and drops      | journey ID, W3C trace context, parent event IDs     |
-| Go API                 | edge requests, authentication, rate limits, business phases, provider calls, errors, runtime signals, ledger intake  | propagated context and durable ledger               |
-| Elixir sync            | upgrade, protocol frames, Space/Episode operations, OTP handoffs, connection terminal paths, BEAM health             | propagated frame/header context and span links      |
-| Webhook dispatcher     | Event commit and fanout, queue age, claim and lease recovery, signed HTTP Attempts, retries, terminal state, cleanup | durable branch Events and producer-linked traces    |
-| Cloudflare SFU         | Chalk adapter calls and endpoint RTC summaries; provider analytics, logs, and webhooks are deployment inputs         | provider IDs mapped to journey and trace attributes |
-| Cloudflare RealtimeKit | the same adapter-boundary and endpoint coverage on the uncommon path                                                 | provider IDs mapped to journey and trace attributes |
-| Data stores            | operation timing, failures, pool/runtime health, journey writes                                                      | active trace and journey attributes                 |
-| Telemetry pipeline     | collector health, rejected/refused exports, stale-pipeline canary                                                    | independent critical alerts                         |
-| Operations             | traces, metrics, logs, profiles, durable journey timeline, alert state                                               | one provisioned Grafana surface                     |
+| Layer                  | Captured in v1                                                                                                                                           | Connection to the journey                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| TypeScript client      | lifecycle, fan-out, diagnostics, HTTP, sync frames, bounded aggregate RTC, ICE, DTLS, and selected candidate-pair state, exporter health and drops       | journey ID, W3C trace context, parent event IDs                 |
+| Go API                 | edge requests, authentication, rate limits, business phases, provider calls, errors, runtime signals, ledger intake                                      | propagated context and durable ledger                           |
+| Elixir sync            | upgrade, protocol frames, Space/Episode operations, OTP handoffs, durable whiteboard connect/recovery/terminal events, BEAM and diagnostic-export health | propagated frame/header context, durable events, and span links |
+| Webhook dispatcher     | Event commit and fanout, queue age, claim and lease recovery, signed HTTP Attempts, retries, terminal state, cleanup                                     | durable branch Events and producer-linked traces                |
+| Cloudflare SFU         | Chalk adapter calls and endpoint RTC summaries; provider analytics, logs, and webhooks are deployment inputs                                             | provider IDs mapped to journey and trace attributes             |
+| Cloudflare RealtimeKit | the same adapter-boundary and endpoint coverage on the uncommon path                                                                                     | provider IDs mapped to journey and trace attributes             |
+| Data stores            | operation timing, failures, pool/runtime health, journey writes                                                                                          | active trace and journey attributes                             |
+| Telemetry pipeline     | collector health, rejected/refused exports, stale-pipeline canary, and Sync diagnostic-export failure classes                                            | independent critical alerts and uptime projection               |
+| Operations             | traces, metrics, logs, profiles, durable journey timeline, alert state                                                                                   | one provisioned Grafana surface                                 |
 
 ## Shipping contract
 
@@ -157,6 +157,32 @@ appropriate health or synthetic target to the registry in
 status projection when customers experience it as a distinct component. The
 proof must observe the deployed check fail and recover; a handler returning 200
 in isolation is insufficient.
+
+### Episode Diagnostic delivery health
+
+Sync exposes `/diagnostics/healthz` separately from service readiness. An
+Episode Diagnostic delivery failure must not stop collaboration traffic, but
+it must be visible as an operational impairment. The endpoint returns `200`
+only while the exporter is configured and healthy. It returns `503` when the
+exporter is disabled, unavailable, or degraded, while the general readiness
+endpoint stays independent so collaboration traffic can continue. The response
+reports only bounded counters, ages, and a closed failure class such as
+`unauthorized`, `dns_failed`, `tls_failed`, `request_timeout`, or
+`malformed_response`. It never returns a token, URL, Episode identifier,
+participant identifier, response body, certificate detail, or raw transport
+error.
+
+The uptime worker checks this endpoint as `sync.diagnostics`. A successful
+append clears the current degraded state, while cumulative failure and dropped
+batch counters remain available from Sync `/metrics`. A deployment proof must
+exercise one rejected append, observe the monitor failure, restore intake,
+append another event, and observe recovery plus a durable event cursor.
+
+Whiteboard sockets persist `whiteboard.connect`, `whiteboard.recover`, and
+`whiteboard.disconnect` events when an authenticated participant scope exists.
+The terminal event includes the WebSocket close code, bounded close reason,
+journey ID, and W3C trace correlation without retaining protocol frames or
+whiteboard content.
 
 ## Deliberate limits and blind spots
 

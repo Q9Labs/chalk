@@ -23,6 +23,8 @@ const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEPENDENCY_UNAVAILABLE_CLOSE_CODE = 1012;
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const MAX_MISSED_HEARTBEATS = 2;
+const DEFAULT_RECONNECT_DELAY_MS = 250;
+const MAX_RECONNECT_DELAY_MS = 5_000;
 const encoder = new TextEncoder();
 
 type Deferred<T> = {
@@ -54,6 +56,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #options: ChalkWhiteboardV1ClientOptions;
   readonly #store;
   readonly #listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
+  readonly #summaryListeners = new Set<(summary: ChalkWhiteboardSummary) => void>();
   readonly #operations = new Map<string, OperationEntry>();
   readonly #reservedOperationIds = new Set<string>();
   readonly #awaitingOperationIds = new Set<string>();
@@ -82,6 +85,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #stopPromise: Promise<void> | null = null;
   #waitingForOperations = false;
   #reconnectTimer: unknown;
+  #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
   #lastCursorAt = Number.NEGATIVE_INFINITY;
@@ -163,6 +167,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     if (this.#snapshots.size === 0 && !this.#waitingForOperations) void this.#requestSnapshot().catch(() => undefined);
     return () => this.#listeners.delete(listener);
+  }
+
+  subscribeSummary(listener: (summary: ChalkWhiteboardSummary) => void): () => void {
+    this.#summaryListeners.add(listener);
+    this.#notifySummaryListener(listener, this.#summary());
+    return () => this.#summaryListeners.delete(listener);
   }
 
   submitUpdate(input: ChalkWhiteboardV1UpdateInput): Promise<ChalkWhiteboardV1Commit> {
@@ -301,7 +311,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       const cursor = this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null;
       this.#send(this.#useLegacyHello ? { type: "hello", protocol: "whiteboard-v1", token, cursor } : { type: "hello", protocol: "whiteboard-v1", token, cursor, extensions: [{ name: "presentation_v1" }] });
     } catch {
-      socket.close(1008, "whiteboard authentication failed");
+      socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard authentication failed");
     }
   }
 
@@ -420,6 +430,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
+    this.#reconnectAttempt = 0;
     this.#participantId = frame.participant_id;
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
@@ -647,10 +658,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #scheduleReconnect(): void {
     this.#clearReconnect();
+    const configuredDelay = this.#options.reconnectDelayMs;
+    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
       this.#connect();
-    }, this.#options.reconnectDelayMs ?? 250);
+    }, delay);
   }
 
   #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {
@@ -699,7 +713,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #publishSummary(status: ChalkWhiteboardSummary["status"], summaryError: ChalkWhiteboardV1Failure | null): void {
     this.#summaryStatus = status;
     this.#summaryError = summaryError;
-    const summary: ChalkWhiteboardSummary = {
+    const summary = this.#summary();
+    try {
+      this.#options.onSummary?.(summary);
+    } catch {
+      // Consumer summary callbacks cannot interfere with transport ownership.
+    }
+    for (const listener of this.#summaryListeners) this.#notifySummaryListener(listener, summary);
+  }
+
+  #summary(): ChalkWhiteboardSummary {
+    return {
       status: this.#summaryStatus,
       sceneId: this.#sceneId,
       revision: this.#revision,
@@ -709,8 +733,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       presenting: this.#presenting,
       error: this.#summaryError,
     };
+  }
+
+  #notifySummaryListener(listener: (summary: ChalkWhiteboardSummary) => void, summary: ChalkWhiteboardSummary): void {
     try {
-      this.#options.onSummary?.(summary);
+      listener(summary);
     } catch {
       // Consumer summary callbacks cannot interfere with transport ownership.
     }

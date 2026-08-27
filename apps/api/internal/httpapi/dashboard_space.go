@@ -98,7 +98,7 @@ func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens Sy
 		}
 		var syncCredential synctokens.Token
 		if tokens != nil {
-			syncCredential, err = tokens.Issue(ctx, synctokens.Input{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, ParticipantID: joined.Participant.ID, ParticipantGeneration: joined.Participant.Generation, AdmissionLifecycleIntentID: joined.Intent.ID, DisplayName: request.Body.DisplayName, Role: joined.Participant.Role, Capabilities: append([]string(nil), joined.Participant.Capabilities...)})
+			syncCredential, err = tokens.Issue(ctx, synctokens.Input{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, StartedAt: &joined.Episode.StartedAt, ParticipantID: joined.Participant.ID, ParticipantGeneration: joined.Participant.Generation, AdmissionLifecycleIntentID: joined.Intent.ID, DisplayName: request.Body.DisplayName, Role: joined.Participant.Role, Capabilities: append([]string(nil), joined.Participant.Capabilities...)})
 		} else if refresh != nil {
 			syncCredential, err = refresh.IssueForParticipant(ctx, synctokens.SubjectKey{TenantID: joined.Participant.TenantID, SpaceID: joined.Participant.SpaceID, EpisodeID: joined.Participant.EpisodeID, ParticipantID: joined.Participant.ID})
 		} else {

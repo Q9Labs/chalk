@@ -184,6 +184,7 @@ select
     participants.tenant_id,
     participants.space_id,
     participants.episode_id,
+    episodes.started_at,
     participants.id as participant_id,
     participants.generation,
     participants.name,

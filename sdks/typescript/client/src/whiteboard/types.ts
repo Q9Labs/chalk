@@ -97,6 +97,7 @@ export type ChalkWhiteboardV1FileTransport = {
 export type ChalkWhiteboardV1Transport = {
   readonly startSceneSubscription: () => Promise<void>;
   readonly stopSceneSubscription: () => void | Promise<void>;
+  readonly subscribeSummary?: (listener: (summary: ChalkWhiteboardSummary) => void) => () => void;
   readonly subscribe: (listener: (event: ChalkWhiteboardV1Event) => void) => () => void;
   readonly submitUpdate: (input: ChalkWhiteboardV1UpdateInput) => Promise<ChalkWhiteboardV1Commit>;
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;

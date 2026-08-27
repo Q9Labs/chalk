@@ -57,6 +57,7 @@ const (
 	RouteJourneyEventIntakeScenario       = "route:telemetry-journey-event-intake"
 	RouteStatusMonitorIngestScenario      = "route:status-monitor-ingest"
 	ServiceEpisodeDiagnosticsScenario     = "service:episode-diagnostics"
+	ServiceFeedbackSubmissionScenario     = "service:feedback-submit"
 	ServiceDashboardSpaceJoinScenario     = "service:dashboard-space-join"
 	ServicePublicInviteLifecycleScenario  = "service:public-invite-lifecycle"
 
@@ -76,10 +77,11 @@ const (
 	AdapterCloudflareRTKJoinScenario      = "adapter:cloudflare-rtk-join"
 	AdapterResendSendEmailScenario        = "adapter:resend-send-email"
 
-	EdgeUnauthenticatedRouteScenario  = "edge:unauthenticated-route"
-	EdgeForbiddenTenantRouteScenario  = "edge:forbidden-tenant-route"
-	EdgeInvalidRouteIDScenario        = "edge:invalid-route-id"
-	EdgeTenantOnboardConflictScenario = "edge:tenant-onboard-idempotency-conflict"
+	EdgeUnauthenticatedRouteScenario      = "edge:unauthenticated-route"
+	EdgeForbiddenTenantRouteScenario      = "edge:forbidden-tenant-route"
+	EdgeInvalidRouteIDScenario            = "edge:invalid-route-id"
+	EdgeTenantOnboardConflictScenario     = "edge:tenant-onboard-idempotency-conflict"
+	EdgeFeedbackValidationFailureScenario = "edge:feedback-validation-failure"
 )
 
 // ScenarioNames returns every scenario accepted by Run, in review order.
@@ -116,10 +118,12 @@ func ScenarioNames() []string {
 		RouteJourneyEventIntakeScenario,
 		RouteStatusMonitorIngestScenario,
 		ServiceEpisodeDiagnosticsScenario,
+		ServiceFeedbackSubmissionScenario,
 		ServiceDashboardSpaceJoinScenario,
 		ServicePublicInviteLifecycleScenario,
 		RouteChatAttachmentUploadScenario,
 		RoutePublicInviteObservabilityScenario,
+		RoutePublicInviteAccessRecoveryScenario,
 		RouteWhiteboardFileUploadScenario,
 		RouteAPIKeyCustomerFlowScenario,
 		EdgeAPIKeyRejectedScopeScenario,
@@ -142,6 +146,7 @@ func ScenarioNames() []string {
 		EdgeForbiddenTenantRouteScenario,
 		EdgeInvalidRouteIDScenario,
 		EdgeTenantOnboardConflictScenario,
+		EdgeFeedbackValidationFailureScenario,
 		EdgeMediaPlaneDisabledScenario,
 		WebhookDeliveryAttemptScenario,
 	}

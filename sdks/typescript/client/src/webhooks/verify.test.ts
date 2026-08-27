@@ -33,6 +33,13 @@ describe("verifyWebhook", () => {
       const event = await verifyWebhook({ rawBody, headers: fixtureHeaders, secrets: [secret], now });
       expect(event.event).toBe(fixture.event);
     }
+
+    const unknownFixture = getTestOnlyWebhookFixture("endpoint.test");
+    const unknownBody = JSON.parse(new TextDecoder().decode(unknownFixture.rawBody)) as Record<string, unknown>;
+    unknownBody.event = "space.future_state";
+    const unknownRawBody = encoder.encode(JSON.stringify(unknownBody));
+    const unknownHeaders = await signTestOnlyWebhook({ rawBody: unknownRawBody, webhookId: String(unknownBody.id), timestamp: Number(vectors.webhook_timestamp), secrets: [secret] });
+    await expect(verifyWebhook({ rawBody: unknownRawBody, headers: unknownHeaders, secrets: [secret], now })).resolves.toMatchObject({ event: "space.future_state" });
   });
 
   it("verifies the official Unicode fixture with either rotation secret", async () => {
@@ -151,9 +158,6 @@ describe("verifyWebhook", () => {
         expect(message).not.toContain("東京");
       }
     }
-  });
-
-  it("normalizes malformed runtime secret collections", async () => {
     const input = { rawBody: encoder.encode(vectors.body_utf8), headers: headers(), now };
     const malformedSecrets: unknown[] = [null, vectors.secrets[0]!.value, { 0: vectors.secrets[0]!.value, length: 1 }, [vectors.secrets[0]!.value, null], [vectors.secrets[0]!.value, 7]];
     for (const secrets of malformedSecrets) {
@@ -192,16 +196,5 @@ describe("verifyWebhook", () => {
     await expectCode(verifyWebhook(await signBody({ ...parsed, id: "00000000-0000-4000-8000-000000000099" })), "identifier_mismatch");
     await expectCode(verifyWebhook(await signBody({ ...parsed, api_version: 2 })), "unsupported_api_version");
     await expectCode(verifyWebhook(await signBody({ ...parsed, data: { object: { status: "active" } } })), "invalid_event_body");
-  });
-
-  it("acknowledges an authenticated unknown Event after envelope validation", async () => {
-    const fixture = getTestOnlyWebhookFixture("endpoint.test");
-    const body = JSON.parse(new TextDecoder().decode(fixture.rawBody)) as Record<string, unknown>;
-    body.event = "space.future_state";
-    const rawBody = encoder.encode(JSON.stringify(body));
-    const secret = vectors.secrets[0]!.value;
-    const signed = await signTestOnlyWebhook({ rawBody, webhookId: String(body.id), timestamp: Number(vectors.webhook_timestamp), secrets: [secret] });
-    const event = await verifyWebhook({ rawBody, headers: signed, secrets: [secret], now });
-    expect(event.event).toBe("space.future_state");
   });
 });

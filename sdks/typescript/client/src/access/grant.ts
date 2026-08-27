@@ -43,6 +43,7 @@ export type ParticipantMediaAccess =
 
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
+  readonly episodeStartedAt?: string | null;
   readonly sync: ParticipantSyncAccess;
   readonly media: ParticipantMediaAccess;
   readonly diagnostics?: EpisodeDiagnosticCredential | null;
@@ -65,9 +66,11 @@ export class AccessGrantError extends TypeError {
 export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
   if (!isRecord(value)) throw new AccessGrantError();
   const subject = parseSubject(value.subject);
+  const episodeStartedAt = parseOptionalDateTime(value.episode_started_at);
   const diagnostics = parseEpisodeDiagnosticCredential(value.diagnostics);
   return {
     subject,
+    episodeStartedAt,
     sync: parseSyncAccess(value.sync),
     media: parseMediaAccess(value.media),
     diagnostics: diagnostics?.generation === subject.participantGeneration ? diagnostics : null,
@@ -87,6 +90,7 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
       participant_id: value.subject.participantId,
       participant_generation: value.subject.participantGeneration,
     },
+    ...(value.episodeStartedAt ? { episode_started_at: value.episodeStartedAt } : {}),
     sync: { token: value.sync.token, expires_at: value.sync.expiresAt },
     media: {
       token: value.media.token,
@@ -227,6 +231,11 @@ function requireDateTime(value: unknown): string {
   const dateTime = requireNonEmptyString(value);
   if (!Number.isFinite(Date.parse(dateTime))) throw new AccessGrantError();
   return dateTime;
+}
+
+function parseOptionalDateTime(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "" || !Number.isFinite(Date.parse(value))) return null;
+  return value;
 }
 
 function requireNonEmptyString(value: unknown): string {

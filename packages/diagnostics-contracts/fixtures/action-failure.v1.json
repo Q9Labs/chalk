@@ -85,9 +85,10 @@
     "webhook.retry",
     "webhook.deliver",
     "webhook.exhaust",
-    "whiteboard.unsupported"
+    "whiteboard.connect",
+    "whiteboard.recover",
+    "whiteboard.disconnect"
   ],
   "missingConfirmation": "first required checkpoint is named",
-  "contentCaptured": false,
-  "whiteboard": "unsupported marker remains explicit"
+  "contentCaptured": false
 }

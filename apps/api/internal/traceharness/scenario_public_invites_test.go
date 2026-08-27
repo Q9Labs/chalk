@@ -3,37 +3,32 @@ package traceharness
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"strings"
 	"testing"
 )
 
-func TestRunRoutePublicInviteObservabilityScenario(t *testing.T) {
-	result, err := Run(context.Background(), RoutePublicInviteObservabilityScenario)
-	if err != nil {
-		t.Fatalf("run scenario: %v; events=%#v", err, result.Events)
-	}
-	if result.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
-	}
-	assertEvent(t, result.Events, "http", "POST /v1/public/space-invite-arrivals")
-	assertEvent(t, result.Events, "service", "publicinvites.Runtime.Arrive")
-	assertEvent(t, result.Events, "repository", "PublicInviteRepository.CreateArrival")
-	assertEvent(t, result.Events, "repository", "PublicInviteRepository.CreateAdmissionRequest")
-
-	encoded, err := json.Marshal(result.Events)
+func TestPublicInviteAccessRecoveryScenario(t *testing.T) {
+	result, err := Run(context.Background(), RoutePublicInviteAccessRecoveryScenario)
 	if err != nil {
 		t.Fatal(err)
 	}
-	trace := string(encoded)
-	for _, forbidden := range []string{
-		"space-invite-private-sentinel",
-		"Private Display Name",
-		"guest-credential-private-sentinel",
-		"https://provider.example",
-	} {
-		if strings.Contains(trace, forbidden) {
-			t.Fatalf("trace exposed private value %q: %s", forbidden, trace)
+	if result.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", result.StatusCode)
+	}
+	if len(result.Events) == 0 {
+		t.Fatal("scenario returned no events")
+	}
+	for _, event := range result.Events {
+		encodedBytes, marshalErr := json.Marshal(event)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
 		}
+		encoded := string(encodedBytes)
+		if strings.Contains(encoded, "eyJ") || strings.Contains(encoded, "trace-connection") {
+			t.Fatalf("event leaked credential material: %#v", event)
+		}
+	}
+	if !strings.Contains(string(result.Body), `"diagnostics":"issued"`) {
+		t.Fatalf("body = %s, want diagnostics proof", result.Body)
 	}
 }

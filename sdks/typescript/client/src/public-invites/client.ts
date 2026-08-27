@@ -77,7 +77,7 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
     const response = await Effect.runPromise(
       client.spaces.refreshSpacePublicInviteAccess({
         headers: { "X-Chalk-Arrival-Handle": normalized.arrivalHandle },
-        payload: { media_proof: required(normalized.mediaProof, "mediaProof") },
+        payload: { media_proof: required(normalized.mediaProof, "mediaProof"), replace_media_connection: normalized.replaceMediaConnection ?? false },
       }),
     );
     return parseAccessGrant(response);
@@ -138,7 +138,7 @@ function refreshInput(input: PublicRefreshAccessInput | string, arrival: PublicA
   const values =
     typeof input === "string"
       ? { arrivalHandle: arrival?.arrivalHandle, guestCredential: arrival?.guestCredential, mediaProof: input }
-      : { arrivalHandle: input.arrivalHandle ?? arrival?.arrivalHandle, guestCredential: input.guestCredential ?? arrival?.guestCredential, mediaProof: input.mediaProof };
+      : { arrivalHandle: input.arrivalHandle ?? arrival?.arrivalHandle, guestCredential: input.guestCredential ?? arrival?.guestCredential, mediaProof: input.mediaProof, replaceMediaConnection: input.replaceMediaConnection };
   return {
     ...values,
     arrivalHandle: required(values.arrivalHandle ?? "", "arrivalHandle"),

@@ -120,15 +120,7 @@ const checkpointDeadlineBase = (checkpointClass: CheckpointClass): number => {
   return REQUIRED_DEADLINE_MS;
 };
 
-const UNSUPPORTED_FIXTURE_IDS: Readonly<Partial<Record<SemanticFixtureVariant, string>>> = {
-  success: "success.whiteboard.unsupported.v1",
-  failure_or_gap: "failure.whiteboard.unsupported.v1",
-};
-
-const fixtureIdFor = (operation: string, variant: SemanticFixtureVariant, unsupported: boolean): string => {
-  const unsupportedFixtureId = unsupported ? UNSUPPORTED_FIXTURE_IDS[variant] : undefined;
-  return unsupportedFixtureId ?? `${variant === "failure_or_gap" ? "failure" : variant}.${operation}.v1`;
-};
+const fixtureIdFor = (operation: string, variant: SemanticFixtureVariant): string => `${variant === "failure_or_gap" ? "failure" : variant}.${operation}.v1`;
 
 const expectationNameFor = (operation: string): string => `expectation.${operation}.v1`;
 
@@ -293,7 +285,7 @@ const makeFixture = (action: ActionContractV1, actionIndex: number, variant: Sem
   const unsupported = action.unsupported === true;
   const selected = variant === "failure_or_gap" ? [firstRequiredCheckpoint(checkpoints), ...checkpoints.filter((checkpoint) => checkpoint.class === "conditional")] : checkpoints;
   const events = selected.map((checkpoint, index) => parseDiagnosticEventDraft(makeEvent(action, actionIndex, start, variant, checkpoint, index)));
-  const fixtureId = fixtureIdFor(action.operation, variant, unsupported);
+  const fixtureId = fixtureIdFor(action.operation, variant);
   return {
     schemaVersion: "EpisodeDiagnosticFixture/v1",
     fixtureId,
