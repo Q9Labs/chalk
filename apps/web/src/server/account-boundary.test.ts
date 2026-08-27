@@ -149,6 +149,32 @@ describe("account boundary", () => {
     expect(cookies.join("\n")).toContain("__Host-chalk_csrf=");
     expect(cookies.join("\n")).toContain("Max-Age=0");
   });
+
+  it("relays Feedback through its bounded account route without browser cookies", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const fetcher = vi.fn<typeof globalThis.fetch>(async () => Response.json({ schema_version: "FeedbackReportReceipt/v1", id: "22222222-2222-4222-8222-222222222222", submitted_at: "2026-08-19T12:00:00Z" }, { status: 201 }));
+    const headers = {
+      Origin: secureOrigin,
+      Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token; host_cookie=never-forward",
+      "X-Chalk-CSRF": "csrf-token",
+      "Idempotency-Key": "feedback-request-123456",
+      Traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+    };
+    const response = await handleAccountBoundary(jsonRequest(`/api/tenants/${tenantID}/feedback-reports`, { schema_version: "FeedbackReportRequest/v1", category: "bug", message: "x".repeat(80 * 1024), source: "dashboard", evidence: {} }, headers), upstream, fetcher);
+
+    expect(response.status).toBe(201);
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(String(url)).toBe(`${upstream.CHALK_API_ORIGIN}/v1/tenants/${tenantID}/feedback-reports`);
+    const upstreamRequestHeaders = new Headers(init?.headers);
+    expect(upstreamRequestHeaders.get("authorization")).toBe("Bearer account-token");
+    expect(upstreamRequestHeaders.get("cookie")).toBeNull();
+    expect(upstreamRequestHeaders.get("idempotency-key")).toBe("feedback-request-123456");
+    expect(upstreamRequestHeaders.get("traceparent")).toBe(headers.Traceparent);
+
+    const oversized = await handleAccountBoundary(jsonRequest(`/api/tenants/${tenantID}/feedback-reports`, { message: "x".repeat((1 << 20) + 1) }, headers), upstream, fetcher);
+    expect(oversized.status).toBe(413);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
 });
 
 function jsonRequest(path: string, body: unknown, headers: HeadersInit): Request {

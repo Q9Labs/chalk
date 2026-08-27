@@ -1,4 +1,4 @@
-import type { ChatUploadFile } from "@q9labsai/chalk-client";
+import type { ChatUploadFile, FeedbackEvidenceInput } from "@q9labsai/chalk-client";
 import { resolvePlatformVariant } from "../platform/platform";
 import type { Layout } from "../ui/native-types";
 import { SpaceViewAndroid } from "./SpaceView.android";
@@ -30,6 +30,7 @@ export interface SpaceViewProps {
   onLeave: () => void | Promise<void>;
   onEndEpisode?: () => void | Promise<void>;
   onOpenDiagnostics?: () => void;
+  feedbackEvidence?: Partial<FeedbackEvidenceInput>;
   onDiagnosticsChange?: (snapshot: SpaceViewDiagnosticsSnapshot) => void;
   /** Selects files; the SDK owns bounds, upload, and send sequencing. */
   pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;

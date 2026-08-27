@@ -545,6 +545,116 @@ export const ExtendRecordingReservationRequestSchema = Schema.Struct({
 });
 export type ExtendRecordingReservationRequest = typeof ExtendRecordingReservationRequestSchema.Type;
 
+export const FeedbackReportReceiptV1Schema = Schema.Struct({
+  id: UUIDSchema,
+  schema_version: Schema.String,
+  submitted_at: DateTimeStringSchema,
+});
+export type FeedbackReportReceiptV1 = typeof FeedbackReportReceiptV1Schema.Type;
+
+export const FeedbackReportRequestV1Schema = Schema.Struct({
+  category: Schema.String.check(Schema.isMinLength(1)),
+  evidence: Schema.Struct({
+    app: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          build: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          name: Schema.String.check(Schema.isMinLength(1)),
+          version: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        }),
+      ),
+    ),
+    collected_at: DateTimeStringSchema,
+    connection: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          error_code: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          state: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+    cookies: Schema.Struct({
+      entries: Schema.Array(
+        Schema.Struct({
+          name: Schema.String.check(Schema.isMinLength(1)),
+          present: Schema.Boolean,
+          value: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        }),
+      ),
+      registry_version: Schema.String.check(Schema.isMinLength(1)),
+    }),
+    correlations: Schema.Struct({
+      command_id: Schema.optional(UUIDSchema),
+      diagnostic_reference: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      journey_id: Schema.optional(UUIDSchema),
+      request_id: Schema.optional(UUIDSchema),
+      root_journey_id: Schema.optional(UUIDSchema),
+      span_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(16), Schema.isPattern(new RegExp("^(?=.*[1-9a-fA-F])[0-9a-fA-F]{16}$"))))),
+      trace_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(32), Schema.isMaxLength(32), Schema.isPattern(new RegExp("^(?=.*[1-9a-fA-F])[0-9a-fA-F]{32}$"))))),
+    }),
+    diagnostics: Schema.Struct({
+      availability: Schema.String.check(Schema.isMinLength(1)),
+      diagnostic_events: Schema.Array(Schema.Unknown),
+      dropped_count: Schema.Number,
+      telemetry_events: Schema.Array(Schema.Unknown),
+    }),
+    local_state: Schema.Struct({
+      entries: Schema.Array(
+        Schema.Struct({
+          key: Schema.String.check(Schema.isMinLength(1)),
+          value: Schema.Unknown,
+        }),
+      ),
+      registry_version: Schema.String.check(Schema.isMinLength(1)),
+    }),
+    platform: Schema.Struct({
+      browser_name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      browser_version: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      device_class: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      device_model: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      kind: Schema.String.check(Schema.isMinLength(1)),
+      os_name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      os_version: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    }),
+    schema_version: Schema.String.check(Schema.isMinLength(1)),
+    scope: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          episode_id: Schema.optional(EpisodeIdSchema),
+          participant_id: Schema.optional(ParticipantIdSchema),
+          space_id: Schema.optional(SpaceIdSchema),
+        }),
+      ),
+    ),
+    screenshot: Schema.Struct({
+      captured_at: Schema.optional(DateTimeStringSchema),
+      failure_code: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      state: Schema.String.check(Schema.isMinLength(1)),
+    }),
+    sdk: Schema.Struct({
+      client: Schema.String.check(Schema.isMinLength(1)),
+      react: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      react_native: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    }),
+  }),
+  message: Schema.String.check(Schema.isMinLength(1)),
+  schema_version: Schema.String.check(Schema.isMinLength(1)),
+  screenshot: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        captured_at: DateTimeStringSchema,
+        data_base64: Schema.String.check(Schema.isMinLength(1)),
+        height: Schema.Number,
+        mime_type: Schema.String.check(Schema.isMinLength(1)),
+        schema_version: Schema.String.check(Schema.isMinLength(1)),
+        width: Schema.Number,
+      }),
+    ),
+  ),
+  source: Schema.String.check(Schema.isMinLength(1)),
+});
+export type FeedbackReportRequestV1 = typeof FeedbackReportRequestV1Schema.Type;
+
 export const InitiateChatAttachmentUploadRequestSchema = Schema.Struct({
   byteLength: Schema.Number,
   clientAttachmentId: Schema.String.check(Schema.isMinLength(1)),
@@ -1501,6 +1611,29 @@ export const CompleteRecentAuthGoogle429ResponseHeadersSchema = Schema.Struct({
 });
 export type CompleteRecentAuthGoogle429ResponseHeaders = typeof CompleteRecentAuthGoogle429ResponseHeadersSchema.Type;
 
+export const CreateAccountFeedbackReportPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type CreateAccountFeedbackReportPathParams = typeof CreateAccountFeedbackReportPathParamsSchema.Type;
+
+export const CreateAccountFeedbackReportRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type CreateAccountFeedbackReportRequestHeaders = typeof CreateAccountFeedbackReportRequestHeadersSchema.Type;
+
+export const CreateAccountFeedbackReportRequestBodySchema = FeedbackReportRequestV1Schema;
+export type CreateAccountFeedbackReportRequestBody = typeof CreateAccountFeedbackReportRequestBodySchema.Type;
+
+export const CreateAccountFeedbackReportResponseSchema = FeedbackReportReceiptV1Schema;
+export type CreateAccountFeedbackReportResponse = typeof CreateAccountFeedbackReportResponseSchema.Type;
+
+export const CreateAccountFeedbackReport429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CreateAccountFeedbackReport429ResponseHeaders = typeof CreateAccountFeedbackReport429ResponseHeadersSchema.Type;
+
 export const CreateAPIKeyPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -1566,6 +1699,24 @@ export const CreateMembership429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type CreateMembership429ResponseHeaders = typeof CreateMembership429ResponseHeadersSchema.Type;
+
+export const CreateParticipantFeedbackReportRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type CreateParticipantFeedbackReportRequestHeaders = typeof CreateParticipantFeedbackReportRequestHeadersSchema.Type;
+
+export const CreateParticipantFeedbackReportRequestBodySchema = FeedbackReportRequestV1Schema;
+export type CreateParticipantFeedbackReportRequestBody = typeof CreateParticipantFeedbackReportRequestBodySchema.Type;
+
+export const CreateParticipantFeedbackReportResponseSchema = FeedbackReportReceiptV1Schema;
+export type CreateParticipantFeedbackReportResponse = typeof CreateParticipantFeedbackReportResponseSchema.Type;
+
+export const CreateParticipantFeedbackReport429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CreateParticipantFeedbackReport429ResponseHeaders = typeof CreateParticipantFeedbackReport429ResponseHeadersSchema.Type;
 
 export const CreatePublicSpaceRequestHeadersSchema = Schema.Struct({
   "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
@@ -3612,6 +3763,82 @@ export const EpisodeNotFoundErrorSchema = EpisodeNotFoundErrorWireSchema.pipe(
   }),
 );
 
+export class FeedbackIdempotencyConflictError extends Schema.TaggedErrorClass<FeedbackIdempotencyConflictError>()("FeedbackIdempotencyConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.idempotency_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const FeedbackIdempotencyConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.idempotency_conflict"),
+    message: Schema.String,
+  }),
+});
+export const FeedbackIdempotencyConflictErrorSchema = FeedbackIdempotencyConflictErrorWireSchema.pipe(
+  Schema.decodeTo(FeedbackIdempotencyConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "FeedbackIdempotencyConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class FeedbackInvalidEvidenceError extends Schema.TaggedErrorClass<FeedbackInvalidEvidenceError>()("FeedbackInvalidEvidenceError", {
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.invalid_evidence"),
+    message: Schema.String,
+  }),
+}) {}
+export const FeedbackInvalidEvidenceErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.invalid_evidence"),
+    message: Schema.String,
+  }),
+});
+export const FeedbackInvalidEvidenceErrorSchema = FeedbackInvalidEvidenceErrorWireSchema.pipe(
+  Schema.decodeTo(FeedbackInvalidEvidenceError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "FeedbackInvalidEvidenceError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class FeedbackInvalidScreenshotError extends Schema.TaggedErrorClass<FeedbackInvalidScreenshotError>()("FeedbackInvalidScreenshotError", {
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.invalid_screenshot"),
+    message: Schema.String,
+  }),
+}) {}
+export const FeedbackInvalidScreenshotErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.invalid_screenshot"),
+    message: Schema.String,
+  }),
+});
+export const FeedbackInvalidScreenshotErrorSchema = FeedbackInvalidScreenshotErrorWireSchema.pipe(
+  Schema.decodeTo(FeedbackInvalidScreenshotError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "FeedbackInvalidScreenshotError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class FeedbackStorageUnavailableError extends Schema.TaggedErrorClass<FeedbackStorageUnavailableError>()("FeedbackStorageUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.storage_unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const FeedbackStorageUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("feedback.storage_unavailable"),
+    message: Schema.String,
+  }),
+});
+export const FeedbackStorageUnavailableErrorSchema = FeedbackStorageUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(FeedbackStorageUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "FeedbackStorageUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class IdentityEmailRegisteredError extends Schema.TaggedErrorClass<IdentityEmailRegisteredError>()("IdentityEmailRegisteredError", {
   error: Schema.Struct({
     code: Schema.Literal("identity.email_registered"),
@@ -4467,6 +4694,25 @@ export const RecordingReservationNotFoundErrorSchema = RecordingReservationNotFo
   }),
 );
 
+export class RequestForbiddenError extends Schema.TaggedErrorClass<RequestForbiddenError>()("RequestForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("request.forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const RequestForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("request.forbidden"),
+    message: Schema.String,
+  }),
+});
+export const RequestForbiddenErrorSchema = RequestForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(RequestForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RequestForbiddenError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class RequestIdempotencyConflictError extends Schema.TaggedErrorClass<RequestIdempotencyConflictError>()("RequestIdempotencyConflictError", {
   error: Schema.Struct({
     code: Schema.Literal("request.idempotency_conflict"),
@@ -4558,6 +4804,25 @@ export const RequestRateLimitedErrorWireSchema = Schema.Struct({
 export const RequestRateLimitedErrorSchema = RequestRateLimitedErrorWireSchema.pipe(
   Schema.decodeTo(RequestRateLimitedError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "RequestRateLimitedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class RequestUnauthenticatedError extends Schema.TaggedErrorClass<RequestUnauthenticatedError>()("RequestUnauthenticatedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("request.unauthenticated"),
+    message: Schema.String,
+  }),
+}) {}
+export const RequestUnauthenticatedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("request.unauthenticated"),
+    message: Schema.String,
+  }),
+});
+export const RequestUnauthenticatedErrorSchema = RequestUnauthenticatedErrorWireSchema.pipe(
+  Schema.decodeTo(RequestUnauthenticatedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RequestUnauthenticatedError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -5627,6 +5892,20 @@ export type CompleteGoogleSignInError = typeof CompleteGoogleSignInErrorSchema.T
 export const CompleteRecentAuthGoogleErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, AuthInvalidRecentAuthErrorSchema, OauthNotConfiguredErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type CompleteRecentAuthGoogleError = typeof CompleteRecentAuthGoogleErrorSchema.Type;
 
+export const CreateAccountFeedbackReportErrorSchema = Schema.Union([
+  FeedbackIdempotencyConflictErrorSchema,
+  FeedbackInvalidEvidenceErrorSchema,
+  FeedbackInvalidScreenshotErrorSchema,
+  FeedbackStorageUnavailableErrorSchema,
+  RequestForbiddenErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  RequestUnauthenticatedErrorSchema,
+  ServiceInternalErrorSchema,
+]);
+export type CreateAccountFeedbackReportError = typeof CreateAccountFeedbackReportErrorSchema.Type;
+
 export const CreateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessRecentAuthRequiredErrorSchema,
@@ -5675,6 +5954,20 @@ export const CreateMembershipErrorSchema = Schema.Union([
   UserInvalidIdErrorSchema,
 ]);
 export type CreateMembershipError = typeof CreateMembershipErrorSchema.Type;
+
+export const CreateParticipantFeedbackReportErrorSchema = Schema.Union([
+  FeedbackIdempotencyConflictErrorSchema,
+  FeedbackInvalidEvidenceErrorSchema,
+  FeedbackInvalidScreenshotErrorSchema,
+  FeedbackStorageUnavailableErrorSchema,
+  RequestForbiddenErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  RequestUnauthenticatedErrorSchema,
+  ServiceInternalErrorSchema,
+]);
+export type CreateParticipantFeedbackReportError = typeof CreateParticipantFeedbackReportErrorSchema.Type;
 
 export const CreatePublicSpaceErrorSchema = Schema.Union([
   ArrivalInvalidHandleErrorSchema,
@@ -6887,9 +7180,11 @@ export const ChalkOperationPolicies = {
   closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   completeRecentAuthGoogle: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
+  createAccountFeedbackReport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  createParticipantFeedbackReport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createPublicSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecordingDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

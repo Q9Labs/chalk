@@ -5,11 +5,16 @@ import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
 type APIAuth string
 
 const (
-	APIAuthSessionOrBearer  APIAuth = "session_or_bearer"
-	APIAuthParticipantMedia APIAuth = "participant_media"
-	APIAuthParticipantSync  APIAuth = "participant_sync"
-	APIAuthOpsToken         APIAuth = "ops_token"
+	APIAuthSessionOrBearer        APIAuth = "session_or_bearer"
+	APIAuthParticipantMedia       APIAuth = "participant_media"
+	APIAuthParticipantSync        APIAuth = "participant_sync"
+	APIAuthParticipantDiagnostics APIAuth = "participant_diagnostics"
+	APIAuthOpsToken               APIAuth = "ops_token"
 )
+
+func accountRouteAuth() APIAuth {
+	return APIAuthSessionOrBearer
+}
 
 type APISchemaRef struct {
 	Name string
@@ -80,6 +85,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
 	endpoints = append(endpoints, integrationEndpoints(nil, nil, integrationRouteOptions{})...)
 	endpoints = append(endpoints, webhookEndpoints(nil, nil)...)
+	endpoints = append(endpoints, feedbackEndpoints(nil, nil)...)
 	endpoints = append(endpoints, publicInviteEndpoints(nil, nil)...)
 	return routeContracts(endpoints)
 }

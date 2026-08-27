@@ -9,6 +9,7 @@
       "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"],
       "@q9labsai/chalk-client/telemetry": ["../../sdks/typescript/client/src/telemetry/index.ts"],
       "@q9labsai/chalk-react": ["../../sdks/typescript/react/src/index.ts"],
+      "@q9labsai/chalk-react/utils": ["../../sdks/typescript/react/src/utils/index.ts"],
       "@q9labsai/chalk-react/ui": ["../../sdks/typescript/react/src/components/ui/index.ts"],
       "@q9labsai/chalk-ui": ["../../packages/ui/src/index.ts"],
       "@q9labsai/chalk-ui/assets": ["../../packages/ui/src/assets.ts"],

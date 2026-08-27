@@ -101,6 +101,7 @@ interface ControlBarSurfaceProps {
   onOpenReactions?: () => void;
   onOpenSettings?: () => void;
   onOpenDiagnostics?: () => void;
+  onOpenFeedback?: () => void;
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
   onLeft?: () => void;
@@ -185,6 +186,7 @@ const ControlBarSurface = React.memo(
     onOpenReactions,
     onOpenSettings,
     onOpenDiagnostics,
+    onOpenFeedback,
     onOpenMore,
     onOpenInfo,
     onLeft,
@@ -228,7 +230,7 @@ const ControlBarSurface = React.memo(
 
     const showLeave = buttonsToRender.includes("leave");
     const mediaButtons = buttonsToRender.filter((b) => b === "mic" || b === "video" || b === "screenshare" || b === "record" || b === "whiteboard" || b === "handraise");
-    const interactionButtons = buttonsToRender.filter((b) => b === "participants" || b === "chat" || b === "transcription" || b === "thumbsup" || b === "pip" || b === "reactions" || b === "settings" || b === "diagnostics" || b === "more" || b === "info");
+    const interactionButtons = buttonsToRender.filter((b) => b === "participants" || b === "chat" || b === "transcription" || b === "thumbsup" || b === "pip" || b === "reactions" || b === "settings" || b === "diagnostics" || b === "feedback" || b === "more" || b === "info");
 
     const renderButton = (type: ControlBarButtonName) => {
       switch (type) {
@@ -357,6 +359,9 @@ const ControlBarSurface = React.memo(
             return null;
           }
           return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} showLabel={showLabels} />;
+        case "feedback":
+          if (!onOpenFeedback) return null;
+          return <ControlBarButton key="feedback" icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} showLabel={showLabels} />;
         case "more":
           if (!onOpenMore) return null;
           return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} showLabel={showLabels} />;
@@ -489,6 +494,11 @@ const ControlBarSurface = React.memo(
 
             {/* Group 3: More & Leave */}
             <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
+              {buttonsToRender.includes("feedback") && onOpenFeedback ? (
+                <button type="button" onClick={onOpenFeedback} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Feedback">
+                  <Message01Icon className="h-5 w-5" />
+                </button>
+              ) : null}
               {buttonsToRender.includes("more") && onOpenMore && (
                 <Tooltip content="More options" position="top">
                   <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
@@ -550,6 +560,8 @@ const ControlBarSurface = React.memo(
             return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} />;
           case "diagnostics":
             return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} /> : null;
+          case "feedback":
+            return onOpenFeedback ? <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} /> : null;
           case "more":
             if (!onOpenMore) return null;
             return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} />;
@@ -702,6 +714,7 @@ export function ClassicControlBar(props: ControlBarProps): React.JSX.Element {
         onOpenReactions={props.onOpenReactions}
         onOpenSettings={props.onOpenSettings}
         onOpenDiagnostics={props.onOpenDiagnostics}
+        onOpenFeedback={props.onOpenFeedback}
         onOpenMore={props.onOpenMore}
         onOpenInfo={props.onOpenInfo}
         onLeft={leave}

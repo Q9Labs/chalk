@@ -47,6 +47,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added Chalk Feedback across the React, React Native, web, mobile, and
+  Dashboard surfaces. Bug reports, feature requests, and other feedback carry
+  a removable screenshot plus bounded Journey, trace, runtime, and diagnostic
+  evidence to a Chalk-only operator store and investigation CLI.
 - Added public docs at `/docs` with Why Chalk, a working Quickstart,
   first-class TypeScript, React, and React Native guides, product concepts,
   feature guides, webhooks, public API guidance, local search, and responsive

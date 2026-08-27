@@ -5,6 +5,7 @@ import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
 import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
 import Home01Icon from "@hugeicons/core-free-icons/Home01Icon";
 import Logout03Icon from "@hugeicons/core-free-icons/Logout03Icon";
+import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
 import Moon02Icon from "@hugeicons/core-free-icons/Moon02Icon";
 import MoreHorizontalIcon from "@hugeicons/core-free-icons/MoreHorizontalIcon";
 import PlayCircleIcon from "@hugeicons/core-free-icons/PlayCircleIcon";
@@ -60,7 +61,7 @@ const utilityNavigation = [{ to: "/developer", label: "Developer", icon: SourceC
 /** Text that folds away when the sidebar collapses to its icon rail. */
 const collapsedHidden = "group-data-[collapsible=icon]:hidden";
 
-export function DashboardSidebar({ pathname, onCreateSpace }: { pathname: string; onCreateSpace: () => void }) {
+export function DashboardSidebar({ pathname, onCreateSpace, onOpenFeedback }: { pathname: string; onCreateSpace: () => void; onOpenFeedback?: () => void }) {
   const { account, current, tenants, selectTenant, signOut } = useDashboardAccount();
   const initials = account.name
     .split(/\s+/)
@@ -95,7 +96,7 @@ export function DashboardSidebar({ pathname, onCreateSpace }: { pathname: string
 
       <SidebarContent>
         <NavigationGroup label="Workspace" items={primaryNavigation} pathname={pathname} />
-        <NavigationGroup label="Tools" items={utilityNavigation} pathname={pathname} />
+        <NavigationGroup label="Tools" items={utilityNavigation} pathname={pathname} action={onOpenFeedback ? { label: "Feedback", icon: Message01Icon, onClick: onOpenFeedback } : undefined} />
       </SidebarContent>
 
       <SidebarFooter>
@@ -163,7 +164,7 @@ function ThemePicker() {
   );
 }
 
-function NavigationGroup({ label, items, pathname }: { label: string; items: readonly { to: string; label: string; icon: IconSvgElement }[]; pathname: string }) {
+function NavigationGroup({ label, items, pathname, action }: { label: string; items: readonly { to: string; label: string; icon: IconSvgElement }[]; pathname: string; action?: { label: string; icon: IconSvgElement; onClick: () => void } }) {
   const { setOpenMobile, isMobile } = useSidebar();
 
   return (
@@ -188,6 +189,14 @@ function NavigationGroup({ label, items, pathname }: { label: string; items: rea
             </SidebarMenuItem>
           );
         })}
+        {action ? (
+          <SidebarMenuItem>
+            <SidebarMenuButton tooltip={action.label} onClick={action.onClick}>
+              <HugeiconsIcon icon={action.icon} strokeWidth={1.6} />
+              <span className={collapsedHidden}>{action.label}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : null}
       </SidebarMenu>
     </SidebarGroup>
   );

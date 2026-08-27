@@ -140,6 +140,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/feedback-reports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create participant feedback report */
+    post: operations["createParticipantFeedbackReport"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/me": {
     parameters: {
       query?: never;
@@ -479,6 +496,23 @@ export interface paths {
     get: operations["getAuditLog"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/feedback-reports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create account feedback report */
+    post: operations["createAccountFeedbackReport"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1875,6 +1909,118 @@ export interface components {
     };
     ExtendRecordingReservationRequest: {
       max_duration_minutes: number;
+    };
+    FeedbackReportReceiptV1: {
+      id: components["schemas"]["UUID"];
+      schema_version: string;
+      submitted_at: components["schemas"]["DateTimeString"];
+    };
+    FeedbackReportRequestV1: {
+      category: string;
+      evidence: {
+        app?: {
+          build?: string;
+          name: string;
+          version?: string;
+        } | null;
+        collected_at: components["schemas"]["DateTimeString"];
+        connection?: {
+          error_code?: string;
+          state: string;
+        } | null;
+        cookies: {
+          entries: {
+            name: string;
+            present: boolean;
+            value?: string;
+          }[];
+          registry_version: string;
+        };
+        correlations: {
+          command_id?: components["schemas"]["UUID"];
+          diagnostic_reference?: string;
+          journey_id?: components["schemas"]["UUID"];
+          request_id?: components["schemas"]["UUID"];
+          root_journey_id?: components["schemas"]["UUID"];
+          span_id?: string | null;
+          trace_id?: string | null;
+        };
+        diagnostics: {
+          availability: string;
+          diagnostic_events: (
+            | {
+                [key: string]: unknown;
+              }
+            | unknown[]
+            | string
+            | number
+            | boolean
+            | null
+          )[];
+          dropped_count: number;
+          telemetry_events: (
+            | {
+                [key: string]: unknown;
+              }
+            | unknown[]
+            | string
+            | number
+            | boolean
+            | null
+          )[];
+        };
+        local_state: {
+          entries: {
+            key: string;
+            value:
+              | {
+                  [key: string]: unknown;
+                }
+              | unknown[]
+              | string
+              | number
+              | boolean
+              | null;
+          }[];
+          registry_version: string;
+        };
+        platform: {
+          browser_name?: string;
+          browser_version?: string;
+          device_class?: string;
+          device_model?: string;
+          kind: string;
+          os_name?: string;
+          os_version?: string;
+        };
+        schema_version: string;
+        scope?: {
+          episode_id?: components["schemas"]["EpisodeId"];
+          participant_id?: components["schemas"]["ParticipantId"];
+          space_id?: components["schemas"]["SpaceId"];
+        } | null;
+        screenshot: {
+          captured_at?: components["schemas"]["DateTimeString"];
+          failure_code?: string;
+          state: string;
+        };
+        sdk: {
+          client: string;
+          react?: string;
+          react_native?: string;
+        };
+      };
+      message: string;
+      schema_version: string;
+      screenshot?: {
+        captured_at: components["schemas"]["DateTimeString"];
+        data_base64: string;
+        height: number;
+        mime_type: string;
+        schema_version: string;
+        width: number;
+      } | null;
+      source: string;
     };
     InitiateChatAttachmentUploadRequest: {
       byteLength: number;
@@ -3330,6 +3476,107 @@ export interface operations {
       };
       /** @description Bad Gateway */
       502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createParticipantFeedbackReport: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FeedbackReportRequestV1"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FeedbackReportReceiptV1"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
         headers: {
           [name: string]: unknown;
         };
@@ -5323,6 +5570,109 @@ export interface operations {
       /** @description Not Found */
       404: {
         headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createAccountFeedbackReport: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FeedbackReportRequestV1"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FeedbackReportReceiptV1"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {

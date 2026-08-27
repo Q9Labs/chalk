@@ -3,6 +3,7 @@ import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { getMobileFeedbackEvidence } from "../lib/mobile-feedback";
 import { createMobileTelemetry, flushAndDisposeTelemetry } from "../lib/telemetry";
 import { cleanupSpaceArrival, createGuestAccessGetter, prepareSpaceArrival, type MobileSpaceArrival, type SpaceOperationObserver, type SpaceRoute } from "../lib/spaces";
 import { pickMobileChatFiles } from "../lib/chat-files";
@@ -22,6 +23,7 @@ type MobileSpaceScreenProps = {
 };
 
 export function MobileSpaceScreen({ apiBaseURL, defaultDisplayName, onClose, onDiagnosticsConnection, onDiagnosticsFailure, onOperation, route, telemetryEnabled }: MobileSpaceScreenProps): React.JSX.Element {
+  const feedbackEvidence = useMemo(() => getMobileFeedbackEvidence(), []);
   const telemetry = useMemo(() => createMobileTelemetry({ enabled: telemetryEnabled, getApiBaseURL: () => apiBaseURL }), [apiBaseURL, telemetryEnabled]);
   const journeyRef = useRef<TelemetryJourney | undefined>(undefined);
   const arrivalRef = useRef<MobileSpaceArrival | undefined>(undefined);
@@ -194,6 +196,7 @@ export function MobileSpaceScreen({ apiBaseURL, defaultDisplayName, onClose, onD
       displayName={arrival.displayName}
       entrance={false}
       features={MOBILE_SPACE_FEATURES}
+      feedbackEvidence={feedbackEvidence}
       inviteLink={route.inviteLink}
       onEpisodeEnded={handleEpisodeEnded}
       onError={handleError}

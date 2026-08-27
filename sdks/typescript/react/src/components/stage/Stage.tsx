@@ -62,7 +62,21 @@ function frameStyle(frame: StageFrame, currentPage: number, stride: number, anim
  * Single renderer for every layout: a flat list of tiles positioned by the pure fitter, so
  * switching between grid, focus and presentation never remounts a video element.
  */
-export function Stage({ items, layout, pinnedId, onPinnedChange, onItemClick, onItemDoubleClick, maxPerPage = DEFAULT_GRID_OPTIONS.maxPerPage, minTileWidth = DEFAULT_GRID_OPTIONS.minTileWidth, renderPrimaryContent, generatedAvatars = true, gradientPreference, emptyState, className }: StageProps): React.JSX.Element {
+export function Stage({
+  items,
+  layout,
+  pinnedId,
+  onPinnedChange,
+  onItemClick,
+  onItemDoubleClick,
+  maxPerPage = DEFAULT_GRID_OPTIONS.maxPerPage,
+  minTileWidth = DEFAULT_GRID_OPTIONS.minTileWidth,
+  renderPrimaryContent,
+  generatedAvatars = true,
+  gradientPreference,
+  emptyState,
+  className,
+}: StageProps): React.JSX.Element {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { ref: boxRef, dimensions: box } = useResizeObserver<HTMLDivElement>(FALLBACK_BOX);
   const [uncontrolledPinnedId, setUncontrolledPinnedId] = useState<string | null>(null);
@@ -167,7 +181,21 @@ export function Stage({ items, layout, pinnedId, onPinnedChange, onItemClick, on
             };
             const doubleClick = onItemDoubleClick ? () => onItemDoubleClick(item) : undefined;
             if (item.kind === "participant") {
-              return <ParticipantTile key={item.id} participant={item.participant} videoTrack={onPage ? item.participant.videoTrack : null} aspectRatio="fill" pinned={pinned} onClick={click} onDoubleClick={doubleClick} style={style} hidden={!onPage} generatedAvatars={generatedAvatars} gradientPreference={gradientPreference} />;
+              return (
+                <ParticipantTile
+                  key={item.id}
+                  participant={item.participant}
+                  videoTrack={onPage ? item.participant.videoTrack : null}
+                  aspectRatio="fill"
+                  pinned={pinned}
+                  onClick={click}
+                  onDoubleClick={doubleClick}
+                  style={style}
+                  hidden={!onPage}
+                  generatedAvatars={generatedAvatars}
+                  gradientPreference={gradientPreference}
+                />
+              );
             }
             if (frame.role === "primary" && renderPrimaryContent) {
               return (
