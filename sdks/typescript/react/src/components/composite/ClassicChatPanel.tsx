@@ -4,10 +4,11 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
+import { SentIcon, type SentIconHandle } from "../../utils/animated-icons";
+import { Cancel01Icon, Message01Icon, Upload01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { MessageBubble } from "./MessageBubble";
-import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
+import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
 import type { ChatMessage } from "./chat-types";
 import type { ChatPanelProps } from "./ChatPanel";
@@ -66,6 +67,7 @@ const ChatPanelSurface = React.memo(
     const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const sendIconRef = useRef<SentIconHandle>(null);
     const isAtBottomRef = useRef(true);
     const mountedRef = useRef(false);
     const lastMarkedSequenceRef = useRef<string | null>(localReadThroughSequence);
@@ -178,18 +180,22 @@ const ChatPanelSurface = React.memo(
       }
     };
 
-    const handleScroll = () => {
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const atBottom = isChatScrollAtBottom(scroller);
-      isAtBottomRef.current = atBottom;
-      if (atBottom) {
-        if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
-        return;
-      }
-      const visibleSequence = latestVisibleChatSequence(scroller);
-      if (visibleSequence) markChatSequenceRead(visibleSequence, lastMarkedSequenceRef, onMarkRead);
-    };
+    const scrollWork = useMemo(
+      () =>
+        createChatScrollWork({
+          getScroller: () => scrollRef.current,
+          getLatestSequence: () => messages.at(-1)?.sequence ?? null,
+          lastMarkedSequenceRef,
+          onMarkRead,
+          onAtBottomChange: (atBottom) => {
+            isAtBottomRef.current = atBottom;
+          },
+        }),
+      [messages, onMarkRead],
+    );
+    useEffect(() => () => scrollWork.dispose(), [scrollWork]);
+
+    const handleScroll = scrollWork.onScroll;
 
     return (
       <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", className)} role="complementary" aria-label="Chat panel">
@@ -328,9 +334,11 @@ const ChatPanelSurface = React.memo(
             className="h-11 w-11 shrink-0 rounded-[8px] bg-[var(--chalk-app-control-primary)] !text-white hover:bg-[var(--chalk-app-control-primary-hover)]"
             disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
             onClick={() => void send()}
+            onMouseEnter={() => sendIconRef.current?.startAnimation()}
+            onFocus={() => sendIconRef.current?.startAnimation()}
             aria-label="Send message"
           >
-            <SentIcon className="h-5 w-5" />
+            <SentIcon ref={sendIconRef} className="h-5 w-5" />
           </Button>
         </div>
       </div>

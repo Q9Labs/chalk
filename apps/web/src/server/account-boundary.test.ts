@@ -101,15 +101,7 @@ describe("account boundary", () => {
       expect(headers.get("cookie")).toBeNull();
       return Response.json({ session_token: "raw-account-token", expires_at: "2030-08-04T12:00:00Z", user: { id: "user-1", name: "Ada", email: "ada@example.com", secret: "remove" } });
     });
-    const response = await handleAccountBoundary(
-      jsonRequest(
-        "/api/auth/login",
-        { email: "ada@example.com", password: "secret" },
-        { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token", Authorization: "Bearer browser-token" },
-      ),
-      upstream,
-      fetcher,
-    );
+    const response = await handleAccountBoundary(jsonRequest("/api/auth/login", { email: "ada@example.com", password: "secret" }, { Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token", Authorization: "Bearer browser-token" }), upstream, fetcher);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("__Host-chalk_account=raw-account-token");
@@ -135,11 +127,7 @@ describe("account boundary", () => {
 
   it("preserves the account cookie when recent authentication fails", async () => {
     const response = await handleAccountBoundary(
-      jsonRequest(
-        "/api/me/recent-auth",
-        { password: "wrong", action: "api_key.create" },
-        { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" },
-      ),
+      jsonRequest("/api/me/recent-auth", { password: "wrong", action: "api_key.create" }, { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" }),
       upstream,
       vi.fn(async () => Response.json({ error: { code: "auth.invalid_recent_auth", message: "Recent authentication failed" } }, { status: 401 })),
     );
@@ -150,11 +138,7 @@ describe("account boundary", () => {
 
   it("clears account and CSRF cookies on logout", async () => {
     const response = await handleAccountBoundary(
-      jsonRequest(
-        "/api/auth/logout",
-        {},
-        { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" },
-      ),
+      jsonRequest("/api/auth/logout", {}, { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" }),
       upstream,
       vi.fn(async () => new Response(null, { status: 204 })),
     );
@@ -164,6 +148,32 @@ describe("account boundary", () => {
     expect(cookies.join("\n")).toContain("__Host-chalk_account=");
     expect(cookies.join("\n")).toContain("__Host-chalk_csrf=");
     expect(cookies.join("\n")).toContain("Max-Age=0");
+  });
+
+  it("relays Feedback through its bounded account route without browser cookies", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const fetcher = vi.fn<typeof globalThis.fetch>(async () => Response.json({ schema_version: "FeedbackReportReceipt/v1", id: "22222222-2222-4222-8222-222222222222", submitted_at: "2026-08-19T12:00:00Z" }, { status: 201 }));
+    const headers = {
+      Origin: secureOrigin,
+      Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token; host_cookie=never-forward",
+      "X-Chalk-CSRF": "csrf-token",
+      "Idempotency-Key": "feedback-request-123456",
+      Traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+    };
+    const response = await handleAccountBoundary(jsonRequest(`/api/tenants/${tenantID}/feedback-reports`, { schema_version: "FeedbackReportRequest/v1", category: "bug", message: "x".repeat(80 * 1024), source: "dashboard", evidence: {} }, headers), upstream, fetcher);
+
+    expect(response.status).toBe(201);
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(String(url)).toBe(`${upstream.CHALK_API_ORIGIN}/v1/tenants/${tenantID}/feedback-reports`);
+    const upstreamRequestHeaders = new Headers(init?.headers);
+    expect(upstreamRequestHeaders.get("authorization")).toBe("Bearer account-token");
+    expect(upstreamRequestHeaders.get("cookie")).toBeNull();
+    expect(upstreamRequestHeaders.get("idempotency-key")).toBe("feedback-request-123456");
+    expect(upstreamRequestHeaders.get("traceparent")).toBe(headers.Traceparent);
+
+    const oversized = await handleAccountBoundary(jsonRequest(`/api/tenants/${tenantID}/feedback-reports`, { message: "x".repeat((1 << 20) + 1) }, headers), upstream, fetcher);
+    expect(oversized.status).toBe(413);
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 });
 

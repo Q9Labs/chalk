@@ -398,6 +398,7 @@ function LocalSpace({
         spaceName={spaceName}
         spaceDescription={spaceDescription}
         inviteLink={inviteLink}
+        feedbackSource="chalk_web"
         diagnosticReference={diagnostics.reference}
         admissionControl={admissionControl}
         onEpisodeEnded={releaseFromLifecycle}

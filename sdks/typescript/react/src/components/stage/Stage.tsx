@@ -62,7 +62,21 @@ function frameStyle(frame: StageFrame, currentPage: number, stride: number, anim
  * Single renderer for every layout: a flat list of tiles positioned by the pure fitter, so
  * switching between grid, focus and presentation never remounts a video element.
  */
-export function Stage({ items, layout, pinnedId, onPinnedChange, onItemClick, onItemDoubleClick, maxPerPage = DEFAULT_GRID_OPTIONS.maxPerPage, minTileWidth = DEFAULT_GRID_OPTIONS.minTileWidth, renderPrimaryContent, generatedAvatars = true, gradientPreference, emptyState, className }: StageProps): React.JSX.Element {
+export function Stage({
+  items,
+  layout,
+  pinnedId,
+  onPinnedChange,
+  onItemClick,
+  onItemDoubleClick,
+  maxPerPage = DEFAULT_GRID_OPTIONS.maxPerPage,
+  minTileWidth = DEFAULT_GRID_OPTIONS.minTileWidth,
+  renderPrimaryContent,
+  generatedAvatars = true,
+  gradientPreference,
+  emptyState,
+  className,
+}: StageProps): React.JSX.Element {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { ref: boxRef, dimensions: box } = useResizeObserver<HTMLDivElement>(FALLBACK_BOX);
   const [uncontrolledPinnedId, setUncontrolledPinnedId] = useState<string | null>(null);
@@ -114,6 +128,8 @@ export function Stage({ items, layout, pinnedId, onPinnedChange, onItemClick, on
   const stride = box.width + DEFAULT_GRID_OPTIONS.gap;
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
 
+  const animate = !prefersReducedMotion;
+
   const togglePin = useCallback(
     (item: StageItem) => {
       const next = activePinnedId === item.id ? null : item.id;
@@ -122,6 +138,29 @@ export function Stage({ items, layout, pinnedId, onPinnedChange, onItemClick, on
     },
     [activePinnedId, onPinnedChange, pinnedId],
   );
+
+  // Stable per-tile props: without these, every Stage render (speaker flips,
+  // roster deltas, resize) rebuilds style objects and closures and defeats
+  // React.memo on ParticipantTile/StageContentTile.
+  const stylesById = useMemo(() => {
+    const map = new Map<string, CSSProperties>();
+    for (const frame of geometry.frames) map.set(frame.id, frameStyle(frame, currentPage, stride, animate));
+    return map;
+  }, [animate, currentPage, geometry.frames, stride]);
+
+  const handlersById = useMemo(() => {
+    const map = new Map<string, { onClick: () => void; onDoubleClick?: () => void }>();
+    for (const item of ordered) {
+      map.set(item.id, {
+        onClick: () => {
+          togglePin(item);
+          onItemClick?.(item);
+        },
+        onDoubleClick: onItemDoubleClick ? () => onItemDoubleClick(item) : undefined,
+      });
+    }
+    return map;
+  }, [onItemDoubleClick, onItemClick, ordered, togglePin]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -140,7 +179,6 @@ export function Stage({ items, layout, pinnedId, onPinnedChange, onItemClick, on
     );
   }
 
-  const animate = !prefersReducedMotion;
   const participantCount = ordered.filter((item) => item.kind === "participant").length;
 
   return (
@@ -159,15 +197,27 @@ export function Stage({ items, layout, pinnedId, onPinnedChange, onItemClick, on
             const frame = framesById.get(item.id);
             if (!frame) return null;
             const onPage = frame.role === "primary" || frame.page === currentPage;
-            const style = frameStyle(frame, currentPage, stride, animate);
+            const style = stylesById.get(item.id);
             const pinned = activePinnedId === item.id;
-            const click = () => {
-              togglePin(item);
-              onItemClick?.(item);
-            };
-            const doubleClick = onItemDoubleClick ? () => onItemDoubleClick(item) : undefined;
+            const handlers = handlersById.get(item.id);
+            const click = handlers?.onClick;
+            const doubleClick = handlers?.onDoubleClick;
             if (item.kind === "participant") {
-              return <ParticipantTile key={item.id} participant={item.participant} videoTrack={onPage ? item.participant.videoTrack : null} aspectRatio="fill" pinned={pinned} onClick={click} onDoubleClick={doubleClick} style={style} hidden={!onPage} generatedAvatars={generatedAvatars} gradientPreference={gradientPreference} />;
+              return (
+                <ParticipantTile
+                  key={item.id}
+                  participant={item.participant}
+                  videoTrack={onPage ? item.participant.videoTrack : null}
+                  aspectRatio="fill"
+                  pinned={pinned}
+                  onClick={click}
+                  onDoubleClick={doubleClick}
+                  style={style}
+                  hidden={!onPage}
+                  generatedAvatars={generatedAvatars}
+                  gradientPreference={gradientPreference}
+                />
+              );
             }
             if (frame.role === "primary" && renderPrimaryContent) {
               return (

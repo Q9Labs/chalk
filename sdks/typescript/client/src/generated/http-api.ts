@@ -172,6 +172,26 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("createAccountFeedbackReport", "/v1/tenants/:tenant_id/feedback-reports", {
+      params: S.CreateAccountFeedbackReportPathParamsSchema,
+      headers: S.CreateAccountFeedbackReportRequestHeadersSchema,
+      payload: S.CreateAccountFeedbackReportRequestBodySchema,
+      success: S.CreateAccountFeedbackReportResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.FeedbackInvalidEvidenceErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.FeedbackInvalidScreenshotErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.RequestForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.FeedbackIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.FeedbackStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createAPIKey", "/v1/tenants/:tenant_id/api-keys", {
       params: S.CreateAPIKeyPathParamsSchema,
       headers: S.CreateAPIKeyRequestHeadersSchema,
@@ -191,6 +211,25 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("createParticipantFeedbackReport", "/v1/feedback-reports", {
+      headers: S.CreateParticipantFeedbackReportRequestHeadersSchema,
+      payload: S.CreateParticipantFeedbackReportRequestBodySchema,
+      success: S.CreateParticipantFeedbackReportResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.FeedbackInvalidEvidenceErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.FeedbackInvalidScreenshotErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.RequestForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.FeedbackIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.FeedbackStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
   )

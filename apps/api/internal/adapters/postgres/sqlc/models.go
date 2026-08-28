@@ -413,6 +413,49 @@ type EpisodeDiagnosticCursorHead struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type FeedbackReport struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	Category              string             `json:"category"`
+	Source                string             `json:"source"`
+	Message               string             `json:"message"`
+	SubmitterKind         string             `json:"submitter_kind"`
+	SubmitterID           string             `json:"submitter_id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	Environment           pgtype.Text        `json:"environment"`
+	Audience              pgtype.Text        `json:"audience"`
+	DiagnosticReference   pgtype.Text        `json:"diagnostic_reference"`
+	JourneyID             pgtype.UUID        `json:"journey_id"`
+	RootJourneyID         pgtype.UUID        `json:"root_journey_id"`
+	TraceID               pgtype.Text        `json:"trace_id"`
+	SpanID                pgtype.Text        `json:"span_id"`
+	RequestID             pgtype.Text        `json:"request_id"`
+	CommandID             pgtype.Text        `json:"command_id"`
+	SubmissionJourneyID   pgtype.UUID        `json:"submission_journey_id"`
+	SubmissionTraceID     pgtype.Text        `json:"submission_trace_id"`
+	SubmissionSpanID      pgtype.Text        `json:"submission_span_id"`
+	IdempotencyKey        string             `json:"idempotency_key"`
+	RequestDigest         []byte             `json:"request_digest"`
+	EvidenceObjectKey     string             `json:"evidence_object_key"`
+	EvidenceContentType   string             `json:"evidence_content_type"`
+	EvidenceSize          int64              `json:"evidence_size"`
+	EvidenceSha256        []byte             `json:"evidence_sha256"`
+	EvidenceSchemaVersion string             `json:"evidence_schema_version"`
+	ScreenshotObjectKey   pgtype.Text        `json:"screenshot_object_key"`
+	ScreenshotContentType pgtype.Text        `json:"screenshot_content_type"`
+	ScreenshotSize        pgtype.Int8        `json:"screenshot_size"`
+	ScreenshotSha256      []byte             `json:"screenshot_sha256"`
+	ScreenshotWidth       pgtype.Int4        `json:"screenshot_width"`
+	ScreenshotHeight      pgtype.Int4        `json:"screenshot_height"`
+	ScreenshotCapturedAt  pgtype.Timestamptz `json:"screenshot_captured_at"`
+	ScreenshotFailureCode pgtype.Text        `json:"screenshot_failure_code"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	SubmittedAt           pgtype.Timestamptz `json:"submitted_at"`
+}
+
 type Identity struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`

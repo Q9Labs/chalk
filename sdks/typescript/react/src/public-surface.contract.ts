@@ -32,6 +32,7 @@ type ExpectedChalkProps =
   | "layout"
   | "onLayoutChange"
   | "onOpenDiagnostics"
+  | "feedbackSource"
   | "diagnosticReference"
   | "onSendFeedback"
   | "onJoined"

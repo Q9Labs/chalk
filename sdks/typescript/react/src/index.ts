@@ -4,6 +4,8 @@ export type { ChalkAdmissionControl, ChalkAdmissionRequest } from "./bindings/ad
 export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
 export { Chalk } from "./components/chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
+export { FeedbackDialog } from "./components/feedback/FeedbackDialog";
+export type { FeedbackDialogProps } from "./components/feedback/FeedbackDialog";
 export { Entrance } from "./components/entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./components/entrance/Entrance";
 export { Logo } from "./components/logo/Logo";

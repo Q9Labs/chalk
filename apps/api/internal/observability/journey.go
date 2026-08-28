@@ -32,6 +32,7 @@ func JourneyMiddleware(next http.Handler) http.Handler {
 		}
 
 		w.Header().Set(journeyHeader, journeyID.String())
+		r.Header.Set(journeyHeader, journeyID.String())
 		ctx := ContextWithJourneyID(r.Context(), journeyID)
 		if span := trace.SpanFromContext(ctx); span.IsRecording() {
 			span.SetAttributes(journeyAttribute(journeyID.String()))
