@@ -8,7 +8,7 @@ import { SentIcon, type SentIconHandle } from "../../utils/animated-icons";
 import { Cancel01Icon, Message01Icon, Upload01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { MessageBubble } from "./MessageBubble";
-import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
+import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
 import type { ChatMessage } from "./chat-types";
 import type { ChatPanelProps } from "./ChatPanel";
@@ -180,18 +180,22 @@ const ChatPanelSurface = React.memo(
       }
     };
 
-    const handleScroll = () => {
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const atBottom = isChatScrollAtBottom(scroller);
-      isAtBottomRef.current = atBottom;
-      if (atBottom) {
-        if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
-        return;
-      }
-      const visibleSequence = latestVisibleChatSequence(scroller);
-      if (visibleSequence) markChatSequenceRead(visibleSequence, lastMarkedSequenceRef, onMarkRead);
-    };
+    const scrollWork = useMemo(
+      () =>
+        createChatScrollWork({
+          getScroller: () => scrollRef.current,
+          getLatestSequence: () => messages.at(-1)?.sequence ?? null,
+          lastMarkedSequenceRef,
+          onMarkRead,
+          onAtBottomChange: (atBottom) => {
+            isAtBottomRef.current = atBottom;
+          },
+        }),
+      [messages, onMarkRead],
+    );
+    useEffect(() => () => scrollWork.dispose(), [scrollWork]);
+
+    const handleScroll = scrollWork.onScroll;
 
     return (
       <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", className)} role="complementary" aria-label="Chat panel">
