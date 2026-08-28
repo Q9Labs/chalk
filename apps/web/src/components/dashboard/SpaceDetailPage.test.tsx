@@ -52,7 +52,7 @@ describe("SpaceDetailPage admission requests", () => {
       .mockResolvedValueOnce({ requests: [] })
       .mockResolvedValueOnce({ requests: [request] });
 
-    renderSpaceDetail({ listSpacePublicAdmissionRequests });
+    const view = renderSpaceDetail({ listSpacePublicAdmissionRequests });
     await flushEffects();
 
     expect(listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(1);
@@ -65,21 +65,13 @@ describe("SpaceDetailPage admission requests", () => {
 
     expect(listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(2);
     expect(screen.getByText("Ada")).toBeTruthy();
-  });
-
-  it("stops refreshing after unmount", async () => {
-    const listSpacePublicAdmissionRequests = vi.fn<NonNullable<SpaceDetailClient["listSpacePublicAdmissionRequests"]>>().mockResolvedValue({ requests: [] });
-    const view = renderSpaceDetail({ listSpacePublicAdmissionRequests });
-    await flushEffects();
-
-    expect(listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(1);
     view.unmount();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
 
-    expect(listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(1);
+    expect(listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(2);
   });
 });
 

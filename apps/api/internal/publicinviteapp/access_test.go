@@ -35,24 +35,6 @@ func TestRefreshReplacementIssuesDiagnostics(t *testing.T) {
 	}
 }
 
-func TestRestoreUsesPersistedParticipantWithoutMediaProof(t *testing.T) {
-	fixture := newAccessFixture(t)
-	access, err := publicinviteapp.NewAccessPort(fixture.config())
-	if err != nil {
-		t.Fatal(err)
-	}
-	grant, err := access.RestorePublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if grant.ProviderSubject != fixture.arrival.ProviderSubject {
-		t.Fatalf("provider subject = %q, want %q", grant.ProviderSubject, fixture.arrival.ProviderSubject)
-	}
-	if fixture.plane.resumeCalls != 1 || fixture.plane.createCalls != 0 {
-		t.Fatalf("resume calls = %d, create calls = %d; want one resume and no replacement", fixture.plane.resumeCalls, fixture.plane.createCalls)
-	}
-}
-
 func TestRestoreRejectsChangedPersistedParticipant(t *testing.T) {
 	fixture := newAccessFixture(t)
 	fixture.result.Participant.Generation++

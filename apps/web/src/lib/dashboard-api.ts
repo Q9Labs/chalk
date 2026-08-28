@@ -245,7 +245,7 @@ async function decideSpacePublicAdmissionRequest(action: "approve" | "deny", inp
   return result;
 }
 
-export function publicAdmissionDecisionRequestScope(action: "approve" | "deny", requestHandle: string): string {
+function publicAdmissionDecisionRequestScope(action: "approve" | "deny", requestHandle: string): string {
   return `space-public-admission-${action}-${requestHandle}`;
 }
 
