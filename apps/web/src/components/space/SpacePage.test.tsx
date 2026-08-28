@@ -40,6 +40,22 @@ describe("public Space entry", () => {
 });
 
 describe("account Space admission", () => {
+  it("does not poll when the account cannot manage admission", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    mocks.setCanManageAdmission(false);
+    mocks.joinDashboardSpace.mockResolvedValue({
+      credential: { apiBaseURL: "https://api.chalk.test", tenantID: "tenant-1", space: "space-1", access: {}, participantGeneration: 1 },
+      getAccess: vi.fn(),
+      leave: vi.fn(async () => undefined),
+    });
+
+    render(<SpacePage slug="design-lab" />);
+    enterName("Member");
+
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    expect(mocks.listSpacePublicAdmissionRequests).not.toHaveBeenCalled();
+  });
+
   it("shows and approves public arrivals inside the Space", async () => {
     window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
     mocks.joinDashboardSpace.mockResolvedValue({

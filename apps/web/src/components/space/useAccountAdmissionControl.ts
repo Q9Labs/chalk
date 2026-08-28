@@ -8,8 +8,8 @@ import type { useWebTelemetry } from "../../lib/web-telemetry-context";
 const publicAdmissionPollIntervalMS = 1_000;
 const publicAdmissionDecisionError = "Could not update this admission request. Try again.";
 
-export function useAccountAdmissionControl(credential: AccountSpaceCredential | PublicSpaceCredential, admissionMode: "open" | "knock" | "members_only" | undefined, journey: ReturnType<typeof useWebTelemetry>["journey"]): ChalkAdmissionControl | undefined {
-  const tenantID = admissionMode === "knock" && "tenantID" in credential ? credential.tenantID : undefined;
+export function useAccountAdmissionControl(credential: AccountSpaceCredential | PublicSpaceCredential, admissionMode: "open" | "knock" | "members_only" | undefined, canManageAdmission: boolean, journey: ReturnType<typeof useWebTelemetry>["journey"]): ChalkAdmissionControl | undefined {
+  const tenantID = admissionMode === "knock" && canManageAdmission && "tenantID" in credential ? credential.tenantID : undefined;
   const spaceID = tenantID ? credential.space : undefined;
   const [requests, setRequests] = useState<readonly ChalkAdmissionRequest[]>([]);
   const [loading, setLoading] = useState(Boolean(tenantID));

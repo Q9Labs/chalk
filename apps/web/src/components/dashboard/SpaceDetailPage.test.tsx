@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardEpisodePage, DashboardPublicAdmissionRequest, Space } from "../../lib/dashboard-api";
@@ -46,21 +46,17 @@ afterEach(() => {
 });
 
 describe("SpaceDetailPage admission requests", () => {
-  it("refreshes an initially empty request list", async () => {
+  it("retries a failed request load and stops polling after unmount", async () => {
     const listSpacePublicAdmissionRequests = vi
       .fn<NonNullable<SpaceDetailClient["listSpacePublicAdmissionRequests"]>>()
-      .mockResolvedValueOnce({ requests: [] })
+      .mockRejectedValueOnce(new Error("network unavailable"))
       .mockResolvedValueOnce({ requests: [request] });
 
     const view = renderSpaceDetail({ listSpacePublicAdmissionRequests });
     await flushEffects();
 
     expect(listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("No pending join requests.")).toBeTruthy();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await flushEffects();
 
     expect(listSpacePublicAdmissionRequests).toHaveBeenCalledTimes(2);

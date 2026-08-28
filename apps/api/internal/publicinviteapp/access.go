@@ -237,7 +237,7 @@ func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.
 	// The lifecycle request is durable. Provider removal is deliberately best
 	// effort so a provider outage cannot undo that request or keep the arrival
 	// in its admitted state.
-	service, episode, err := a.resolveMedia(ctx, arrival.TenantID, arrival.SpaceID, arrival.EpisodeID, arrival.Provider)
+	service, episode, err := a.resolveMedia(ctx, arrival.TenantID, arrival.SpaceID, arrival.EpisodeID, arrival.Provider, arrival.ProviderEpisodeRef)
 	if err != nil {
 		return nil
 	}
@@ -248,7 +248,7 @@ func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.
 }
 
 func (a accessPort) DiscardPublicAccess(ctx context.Context, grant publicinvites.PublicAccessGrant) error {
-	service, episode, err := a.resolveMedia(ctx, grant.TenantID, grant.SpaceID, grant.EpisodeID, grant.Provider)
+	service, episode, err := a.resolveMedia(ctx, grant.TenantID, grant.SpaceID, grant.EpisodeID, grant.Provider, grant.ProviderEpisodeRef)
 	if err != nil {
 		return err
 	}
@@ -286,7 +286,11 @@ func (a accessPort) waitReady(ctx context.Context, result episodes.PublicJoinRes
 }
 
 func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, result episodes.PublicJoinResult, refresh, replaceMediaConnection bool) (publicinvites.PublicAccessGrant, error) {
-	service, episode, err := a.resolveMedia(ctx, arrival.TenantID, arrival.SpaceID, result.Episode.ID, arrival.Provider)
+	persistedEpisodeRef := ""
+	if refresh && !replaceMediaConnection {
+		persistedEpisodeRef = arrival.ProviderEpisodeRef
+	}
+	service, episode, err := a.resolveMedia(ctx, arrival.TenantID, arrival.SpaceID, result.Episode.ID, arrival.Provider, persistedEpisodeRef)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
@@ -353,11 +357,11 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, ExpiresAt: expiresAt,
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID, StartedAt: syncToken.StartedAt,
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
-		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload, Diagnostics: diagnostics,
+		Provider: provider, ProviderEpisodeRef: episode.Ref, ProviderSubject: providerSubject, ClientPayload: clientPayload, Diagnostics: diagnostics,
 	}, nil
 }
 
-func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episodeID utilities.ID, persistedProvider string) (*mediaplane.Service, mediaplane.Episode, error) {
+func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episodeID utilities.ID, persistedProvider, persistedEpisodeRef string) (*mediaplane.Service, mediaplane.Episode, error) {
 	tenant, err := a.tenants.GetTenant(ctx, tenantID)
 	if err != nil {
 		return nil, mediaplane.Episode{}, err
@@ -381,6 +385,9 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	}
 	if service.Provider() != mediaplane.ProviderCloudflareRTK && service.Provider() != mediaplane.ProviderCloudflareSFU {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
+	}
+	if strings.TrimSpace(persistedEpisodeRef) != "" {
+		return service, mediaplane.Episode{Provider: service.Provider(), Ref: persistedEpisodeRef}, nil
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{
 		Provider: service.Provider(), EpisodeKey: episodeID.String(), Title: "public-" + episodeID.String(),

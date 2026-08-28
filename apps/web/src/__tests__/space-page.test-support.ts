@@ -34,7 +34,8 @@ const spacePageTestMocks = vi.hoisted(() => {
   const holder: { chalkProps?: Record<string, unknown> } = {};
   const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn(), recordRtcSummary: vi.fn() };
   const telemetry = { configureApiBaseURL: vi.fn() };
-  const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } } };
+  let canManageAdmission = true;
+  const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } }, self: { can: (capability: string) => capability === "manageAdmission" && canManageAdmission } };
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), media: {}, leave: vi.fn(async () => undefined), dispose: vi.fn() };
   const finish = vi.fn(async (_options?: { readonly keepalive?: boolean }) => undefined);
   const publicClient = {
@@ -62,6 +63,9 @@ const spacePageTestMocks = vi.hoisted(() => {
     holder,
     journey,
     telemetry,
+    setCanManageAdmission: (allowed: boolean) => {
+      canManageAdmission = allowed;
+    },
     client,
     publicClient,
     prepared,
@@ -123,6 +127,7 @@ export const spacePageTestArrival = {
 export function resetSpacePageTestMocks(): void {
   window.history.replaceState({}, "", "/space");
   spacePageTestMocks.holder.chalkProps = undefined;
+  spacePageTestMocks.setCanManageAdmission(true);
   spacePageTestMocks.publicClient.createPublicSpace.mockReset();
   spacePageTestMocks.publicClient.arriveBySpacePublicInvite.mockReset().mockResolvedValue(spacePageTestArrival);
   spacePageTestMocks.publicClient.getSpacePublicInviteArrival.mockReset().mockResolvedValue(spacePageTestArrival);

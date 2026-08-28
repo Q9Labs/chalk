@@ -67,6 +67,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
   const [publicInviteState, setPublicInviteState] = useState<PublicInviteState>("loading");
   const [publicInviteError, setPublicInviteError] = useState<string | null>(null);
   const [publicInviteReloadGeneration, setPublicInviteReloadGeneration] = useState(0);
+  const [admissionRequestsReloadGeneration, setAdmissionRequestsReloadGeneration] = useState(0);
   const [pendingRequests, setPendingRequests] = useState<DashboardPublicAdmissionRequest[]>([]);
   const [admissionRequestsState, setAdmissionRequestsState] = useState<AdmissionRequestsState>("loading");
   const [admissionRequestsError, setAdmissionRequestsError] = useState<string | null>(null);
@@ -220,7 +221,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
       active = false;
       if (pollTimeout !== undefined) clearTimeout(pollTimeout);
     };
-  }, [client, space, state, tenantID]);
+  }, [admissionRequestsReloadGeneration, client, space, state, tenantID]);
 
   function replaceSpace(nextSpace: Space) {
     setSpace(nextSpace);
@@ -373,7 +374,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
           requestAction={requestAction}
           onApprove={(request) => void decideAdmissionRequest(request, "approve")}
           onDeny={(request) => void decideAdmissionRequest(request, "deny")}
-          onRetry={() => setPublicInviteReloadGeneration((current) => current + 1)}
+          onRetry={() => setAdmissionRequestsReloadGeneration((current) => current + 1)}
         />
       ) : null}
 

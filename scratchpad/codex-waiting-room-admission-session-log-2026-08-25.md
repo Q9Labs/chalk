@@ -42,3 +42,9 @@
 - Bulk admit and deny actions shared an action-wide browser retry key, so concurrent decisions could overwrite each other's retry identity. Each key is now scoped by action and request handle, which keeps retries stable and independent.
 - Focused Space and dashboard API tests plus web, React, and language checks pass after both fixes.
 - The final clean remote smart gate passed after running the mobile app's documented diagnostics-contract prebuild. The initial clean run exposed that missing build artifact rather than a source failure.
+
+## 2026-08-28: Master reconciliation and final review
+
+- Reconciled the combined branch with current `master` and removed half of the newly added tests. The retained boundaries killed targeted mutations for provider restore, persisted participant identity, polling cleanup, approval removal, and failed-decision visibility.
+- The final branch review found three release blockers: RTK recovery did not retain its original meeting, non-managers polled the admission API, and dashboard retry updated the wrong reload signal.
+- Public arrivals now persist the provider Episode reference through a reversible migration, recovery reuses that exact reference, polling requires `manageAdmission`, and retry triggers the admission poll. Each fix kills its matching mutation, and the migration passed an isolated up/down/up cycle.

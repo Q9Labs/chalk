@@ -143,6 +143,7 @@ type Arrival struct {
 	ParticipantID          utilities.ID
 	ParticipantGeneration  int64
 	Provider               string
+	ProviderEpisodeRef     string
 	ProviderSubject        string
 	ExpiresAt              time.Time
 	TerminalReason         string
@@ -235,18 +236,20 @@ type CreateArrivalResult struct {
 }
 
 type UpdateArrivalStateInput struct {
-	TenantID                utilities.ID
-	ArrivalHandle           utilities.ID
-	State                   ArrivalState
-	Reason                  string
-	EpisodeID               utilities.ID
-	ParticipantID           utilities.ID
-	ParticipantGeneration   int64
-	Provider                string
-	ProviderSubject         string
-	MatchProviderBinding    bool
-	ExpectedProvider        string
-	ExpectedProviderSubject string
+	TenantID                   utilities.ID
+	ArrivalHandle              utilities.ID
+	State                      ArrivalState
+	Reason                     string
+	EpisodeID                  utilities.ID
+	ParticipantID              utilities.ID
+	ParticipantGeneration      int64
+	Provider                   string
+	ProviderEpisodeRef         string
+	ProviderSubject            string
+	MatchProviderBinding       bool
+	ExpectedProvider           string
+	ExpectedProviderEpisodeRef string
+	ExpectedProviderSubject    string
 }
 
 type CreateAdmissionRequestInput struct {
@@ -362,6 +365,7 @@ type PublicAccessGrant struct {
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	Provider              string
+	ProviderEpisodeRef    string
 	ProviderSubject       string
 	ClientPayload         PublicAccessClientPayload
 	Diagnostics           *PublicAccessDiagnostics
@@ -525,6 +529,19 @@ func validateProviderBinding(provider, subject string, required bool) error {
 		return nil
 	}
 	if len(provider) > MaxProviderBytes || len(subject) > MaxProviderSubjectBytes || !isASCII(provider) || !isASCII(subject) {
+		return ErrInvalidArrival
+	}
+	return nil
+}
+
+func validateProviderEpisodeRef(reference string, required bool) error {
+	if reference == "" {
+		if required {
+			return ErrInvalidArrival
+		}
+		return nil
+	}
+	if len(reference) > MaxProviderSubjectBytes || !isASCII(reference) {
 		return ErrInvalidArrival
 	}
 	return nil

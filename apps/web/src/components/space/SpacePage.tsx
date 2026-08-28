@@ -355,9 +355,10 @@ function LocalSpace({
     return nextClient;
   }, [connectionAccess, credential, deviceSelection, getAccess, journey]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
-  const episodeID = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection.episode?.id;
+  const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
+  const episodeID = snapshot.connection.episode?.id;
   const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
-  const admissionControl = useAccountAdmissionControl(credential, admissionMode, journey);
+  const admissionControl = useAccountAdmissionControl(credential, admissionMode, snapshot.self.can("manageAdmission"), journey);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const openDiagnostics = useCallback(() => {
     if (diagnostics.path) globalThis.open(diagnostics.path, "_blank", "noopener");
