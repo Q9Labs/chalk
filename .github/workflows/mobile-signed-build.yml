@@ -1,0 +1,131 @@
+name: Signed mobile release builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-mobile-signed-build
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+
+jobs:
+  android:
+    if: (inputs.platform == 'all' || inputs.platform == 'android') && github.ref == 'refs/heads/master'
+    name: Signed Android bundle
+    runs-on: ubuntu-latest
+    environment: production-signing
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 25.6.1
+          cache: pnpm
+
+      - name: Set up Java 17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-disabled: true
+
+      - name: Install 1Password CLI
+        uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and verify signed Android bundle
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        run: apps/mobile/scripts/release/build-signed-android.sh
+
+      - name: Preserve signed Android evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: chalk-android-signed
+          path: apps/mobile/build/releases/*.aab
+          if-no-files-found: warn
+          retention-days: 14
+
+  ios:
+    if: (inputs.platform == 'all' || inputs.platform == 'ios') && github.ref == 'refs/heads/master'
+    name: Signed iOS archive
+    runs-on: macos-26
+    environment: production-signing
+    timeout-minutes: 120
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 25.6.1
+          cache: pnpm
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
+        with:
+          ruby-version: 3.3.12
+          bundler-cache: true
+          working-directory: apps/mobile
+
+      - name: Install 1Password CLI
+        uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install CocoaPods dependencies
+        working-directory: apps/mobile
+        run: bundle exec pod install --project-directory=ios
+
+      - name: Build and verify signed iOS archive
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        run: apps/mobile/scripts/release/build-signed-ios.sh
+
+      - name: Preserve signed iOS evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: chalk-ios-signed
+          path: |
+            apps/mobile/build/releases/*.ipa
+            apps/mobile/build/releases/*-dsyms.zip
+          if-no-files-found: warn
+          retention-days: 14

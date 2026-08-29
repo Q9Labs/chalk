@@ -6,7 +6,8 @@ import java.util.Properties
 import java.io.FileInputStream
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
-def keystorePropertiesFile = rootProject.file("app/keystore.properties")
+def keystorePropertiesPath = System.getenv("CHALK_ANDROID_KEYSTORE_PROPERTIES") ?: "app/keystore.properties"
+def keystorePropertiesFile = rootProject.file(keystorePropertiesPath)
 def keystoreProperties = new Properties()
 def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '28').toString())
 def appVersionName = (findProperty('chalk.versionName') ?: '2.0.1').toString()
@@ -129,7 +130,9 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.release
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
