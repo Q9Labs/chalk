@@ -82,7 +82,7 @@ jobs:
 
       - name: Build unsigned Android release
         working-directory: apps/mobile/android
-        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
 
       - name: Preserve unsigned Android evidence
         if: always()
