@@ -587,6 +587,15 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	googleOAuth := GoogleOAuthConfig{
+		ClientID:                    envOrDefault(GoogleOAuthClientID, ""),
+		ClientSecret:                envOrDefault(GoogleOAuthClientSecret, ""),
+		RedirectURL:                 envOrDefault(GoogleOAuthRedirectURL, DefaultGoogleRedirectURL),
+		ReauthenticationRedirectURL: envOrDefault(GoogleOAuthReauthenticationRedirectURL, ""),
+	}
+	if err := validateGoogleOAuthConfig(environment, googleOAuth); err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		API: APIConfig{
@@ -618,12 +627,7 @@ func Load() (Config, error) {
 		},
 		DeadlineScheduler:  DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
 		EpisodeDiagnostics: episodeDiagnostics,
-		GoogleOAuth: GoogleOAuthConfig{
-			ClientID:                    envOrDefault(GoogleOAuthClientID, ""),
-			ClientSecret:                envOrDefault(GoogleOAuthClientSecret, ""),
-			RedirectURL:                 envOrDefault(GoogleOAuthRedirectURL, DefaultGoogleRedirectURL),
-			ReauthenticationRedirectURL: envOrDefault(GoogleOAuthReauthenticationRedirectURL, ""),
-		},
+		GoogleOAuth:        googleOAuth,
 		Observability: ObservabilityConfig{
 			Environment:          environment,
 			LogFormat:            logFormat,
@@ -652,6 +656,14 @@ func Load() (Config, error) {
 		Transcription: transcriptionConfig,
 		Webhooks:      webhookConfig,
 	}, nil
+}
+
+func validateGoogleOAuthConfig(environment string, googleOAuth GoogleOAuthConfig) error {
+	googleConfigured := strings.TrimSpace(googleOAuth.ClientID) != "" || strings.TrimSpace(googleOAuth.ClientSecret) != ""
+	if environment != DefaultEnvironment && googleConfigured && strings.TrimSpace(googleOAuth.ReauthenticationRedirectURL) == "" {
+		return fmt.Errorf("%s must be set when Google OAuth is configured outside local environments", GoogleOAuthReauthenticationRedirectURL)
+	}
+	return nil
 }
 
 func validateOpsIngestToken(environment, token string) error {
