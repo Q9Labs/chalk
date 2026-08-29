@@ -12,6 +12,11 @@ def keystoreProperties = new Properties()
 def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '28').toString())
 def appVersionName = (findProperty('chalk.versionName') ?: '2.0.1').toString()
 
+def configuredBuildDirectory = findProperty('chalk.androidBuildDirectory')
+if (configuredBuildDirectory) {
+    layout.buildDirectory.set(file(configuredBuildDirectory.toString()))
+}
+
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }

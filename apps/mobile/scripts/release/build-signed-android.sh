@@ -6,13 +6,20 @@ mobile_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 repo_root=$(cd "$mobile_root/../.." && pwd)
 manifest="$repo_root/release/manifest.json"
 output_dir=${SIGNED_OUTPUT_DIR:-"$mobile_root/build/releases"}
+mkdir -p "$output_dir"
+output_dir=$(cd "$output_dir" && pwd)
 temp_parent=${RUNNER_TEMP:-/private/tmp}
 temp_dir=$(mktemp -d "$temp_parent/chalk-android-signing.XXXXXX")
+gradle_build_dir=""
 
 cleanup() {
   unset CHALK_ANDROID_KEYSTORE_PROPERTIES
   unset CHALK_APP_VARIANT
+  unset GRADLE_USER_HOME
 
+  if [[ -n "$gradle_build_dir" && -d "$gradle_build_dir" && ! -L "$gradle_build_dir" && $(dirname "$gradle_build_dir") == "$output_dir" && $(basename "$gradle_build_dir") == .chalk-gradle-build.* ]]; then
+    find "$gradle_build_dir" -depth -delete
+  fi
   if [[ -d "$temp_dir" && ! -L "$temp_dir" && $(basename "$temp_dir") == chalk-android-signing.* ]]; then
     find "$temp_dir" -depth -delete
   fi
@@ -32,28 +39,35 @@ signing_ref="op://$vault/$signing_item_id"
 
 echo "Recovering Chalk Android release credentials from 1Password."
 op read --force --out-file "$temp_dir/upload.jks" "$signing_ref/keystore" >/dev/null
-chmod 600 "$temp_dir/upload.jks"
+op read --force --out-file "$temp_dir/store.password" "$signing_ref/password" >/dev/null
+op read --force --out-file "$temp_dir/key.password" "$signing_ref/key_password" >/dev/null
+op read --force --out-file "$temp_dir/key.alias" "$signing_ref/key_alias" >/dev/null
+chmod 600 "$temp_dir"/*
 
-store_password=$(op read "$signing_ref/password")
-key_password=$(op read "$signing_ref/key_password")
-key_alias=$(op read "$signing_ref/key_alias")
-
-printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
-  "$temp_dir/upload.jks" "$store_password" "$key_alias" "$key_password" > "$temp_dir/keystore.properties"
-chmod 600 "$temp_dir/keystore.properties"
-export CHALK_ANDROID_KEYSTORE_PROPERTIES="$temp_dir/keystore.properties"
+gradle_user_home="$temp_dir/gradle-user-home"
+mkdir -p "$gradle_user_home"
+chmod 700 "$gradle_user_home"
+gradle_properties="$gradle_user_home/keystore.properties"
+{
+  printf 'storeFile=%s\n' "$temp_dir/upload.jks"
+  printf 'storePassword='
+  cat "$temp_dir/store.password"
+  printf '\n'
+  printf 'keyAlias='
+  cat "$temp_dir/key.alias"
+  printf '\n'
+  printf 'keyPassword='
+  cat "$temp_dir/key.password"
+  printf '\n'
+} > "$gradle_properties"
+chmod 600 "$gradle_properties"
+export CHALK_ANDROID_KEYSTORE_PROPERTIES="$gradle_properties"
+export GRADLE_USER_HOME="$gradle_user_home"
 export CHALK_APP_VARIANT=production
 
 expected_keystore_sha256=$(jq -er '.android.keystore_sha256' "$manifest")
 expected_certificate_sha256=$(jq -er '.android.certificate_sha256' "$manifest")
 actual_keystore_sha256=$(shasum -a 256 "$temp_dir/upload.jks" | sed 's/ .*//')
-
-keytool -list -v \
-  -keystore "$temp_dir/upload.jks" \
-  -alias "$key_alias" \
-  -storepass "$store_password" \
-  > "$temp_dir/keytool.txt"
-actual_certificate_sha256=$(sed -n 's/^[[:space:]]*SHA256: //p' "$temp_dir/keytool.txt" | head -n 1)
 
 normalize_fingerprint() {
   printf '%s' "$1" | tr -d ':' | tr '[:lower:]' '[:upper:]'
@@ -66,14 +80,18 @@ if [[ "$actual_keystore_sha256" != "$expected_keystore_sha256" || \
 fi
 
 echo "Running Chalk Android tests and signed release build."
+gradle_build_dir=$(mktemp -d "$output_dir/.chalk-gradle-build.XXXXXX")
+chmod 700 "$gradle_build_dir"
 (
   cd "$repo_root"
   pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies
   cd "$mobile_root/android"
-  ./gradlew --no-daemon testDebugUnitTest bundleRelease
+  ./gradlew --no-daemon \
+    -Pchalk.androidBuildDirectory="$gradle_build_dir" \
+    testDebugUnitTest bundleRelease
 )
 
-built_bundle="$mobile_root/android/app/build/outputs/bundle/release/app-release.aab"
+built_bundle="$gradle_build_dir/outputs/bundle/release/app-release.aab"
 if [[ ! -f "$built_bundle" ]]; then
   echo "Gradle completed without producing the expected Chalk release bundle." >&2
   exit 1
@@ -89,7 +107,6 @@ fi
 timestamp=${CHALK_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
 version_name=$(jq -er '.android.version_name' "$manifest")
 version_code=$(jq -er '.android.version_code' "$manifest")
-mkdir -p "$output_dir"
 output_bundle="$output_dir/chalk-android-$version_name-$version_code-$timestamp.aab"
 cp "$built_bundle" "$output_bundle"
 

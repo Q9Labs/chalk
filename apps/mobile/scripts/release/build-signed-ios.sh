@@ -6,6 +6,8 @@ mobile_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 repo_root=$(cd "$mobile_root/../.." && pwd)
 manifest="$repo_root/release/manifest.json"
 output_dir=${SIGNED_OUTPUT_DIR:-"$mobile_root/build/releases"}
+mkdir -p "$output_dir"
+output_dir=$(cd "$output_dir" && pwd)
 temp_parent=${RUNNER_TEMP:-/private/tmp}
 temp_dir=$(mktemp -d "$temp_parent/chalk-ios-signing.XXXXXX")
 keychain_path="$temp_dir/chalk-release.keychain-db"
@@ -15,6 +17,7 @@ screen_share_profile_path=""
 main_profile_was_present=false
 screen_share_profile_was_present=false
 original_keychains=()
+build_dir=""
 
 while IFS= read -r keychain; do
   keychain=${keychain#*\"}
@@ -36,6 +39,9 @@ cleanup() {
   fi
 
   unset CHALK_APP_VARIANT
+  if [[ -n "$build_dir" && -d "$build_dir" && ! -L "$build_dir" && $(dirname "$build_dir") == "$output_dir" && $(basename "$build_dir") == .chalk-xcodebuild.* ]]; then
+    find "$build_dir" -depth -delete
+  fi
   if [[ -d "$temp_dir" && ! -L "$temp_dir" && $(basename "$temp_dir") == chalk-ios-signing.* ]]; then
     find "$temp_dir" -depth -delete
   fi
@@ -98,7 +104,6 @@ if [[ "$(normalize_fingerprint "$profile_certificate_sha256")" != "$(normalize_f
   exit 1
 fi
 
-p12_password=$(<"$temp_dir/p12.pass")
 p12_certificate_sha256=$(openssl pkcs12 -legacy -in "$temp_dir/distribution.p12" -passin file:"$temp_dir/p12.pass" -clcerts -nokeys 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//')
 if [[ "$(normalize_fingerprint "$p12_certificate_sha256")" != "$(normalize_fingerprint "$expected_profile_certificate_sha256")" ]]; then
   echo "The shared Apple Distribution p12 does not match the Chalk App Store profiles." >&2
@@ -106,11 +111,14 @@ if [[ "$(normalize_fingerprint "$p12_certificate_sha256")" != "$(normalize_finge
   exit 1
 fi
 
+openssl pkcs12 -legacy -in "$temp_dir/distribution.p12" -passin file:"$temp_dir/p12.pass" -clcerts -nodes -out "$temp_dir/distribution.pem"
+chmod 600 "$temp_dir/distribution.pem"
+
 keychain_password=$(openssl rand -hex 24)
 security create-keychain -p "$keychain_password" "$keychain_path" >/dev/null
 security set-keychain-settings -lut 21600 "$keychain_path"
 security unlock-keychain -p "$keychain_password" "$keychain_path"
-security import "$temp_dir/distribution.p12" -k "$keychain_path" -P "$p12_password" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+security import "$temp_dir/distribution.pem" -k "$keychain_path" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" >/dev/null
 security list-keychains -d user -s "$keychain_path" "${original_keychains[@]}"
 
@@ -123,14 +131,18 @@ cp "$temp_dir/main.mobileprovision" "$main_profile_path"
 cp "$temp_dir/screen-share.mobileprovision" "$screen_share_profile_path"
 
 export CHALK_APP_VARIANT=production
-archive_path="$temp_dir/Chalk.xcarchive"
-archive_log="$temp_dir/archive.log"
+timestamp=${CHALK_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
+build_dir=$(mktemp -d "$output_dir/.chalk-xcodebuild.XXXXXX")
+chmod 700 "$build_dir"
+archive_path="$build_dir/Chalk.xcarchive"
+archive_log="$build_dir/archive.log"
 echo "Building Chalk's signed iOS archive."
 if ! xcodebuild \
   -workspace "$mobile_root/ios/Chalk.xcworkspace" \
   -scheme Chalk \
   -configuration Release \
   -destination generic/platform=iOS \
+  -derivedDataPath "$build_dir/DerivedData" \
   -archivePath "$archive_path" \
   archive > "$archive_log" 2>&1; then
   rg -n 'error:|ARCHIVE FAILED' "$archive_log" | tail -80 >&2 || true
@@ -138,7 +150,7 @@ if ! xcodebuild \
   exit 1
 fi
 
-cat > "$temp_dir/ExportOptions.plist" <<PLIST
+cat > "$build_dir/ExportOptions.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -164,13 +176,13 @@ cat > "$temp_dir/ExportOptions.plist" <<PLIST
 </plist>
 PLIST
 
-export_path="$temp_dir/export"
+export_path="$build_dir/export"
 if ! xcodebuild -exportArchive \
   -archivePath "$archive_path" \
   -exportPath "$export_path" \
-  -exportOptionsPlist "$temp_dir/ExportOptions.plist" > "$temp_dir/export.log" 2>&1; then
-  rg -n 'error:|EXPORT FAILED' "$temp_dir/export.log" | tail -80 >&2 || true
-  tail -120 "$temp_dir/export.log" >&2
+  -exportOptionsPlist "$build_dir/ExportOptions.plist" > "$build_dir/export.log" 2>&1; then
+  rg -n 'error:|EXPORT FAILED' "$build_dir/export.log" | tail -80 >&2 || true
+  tail -120 "$build_dir/export.log" >&2
   exit 1
 fi
 
@@ -209,7 +221,6 @@ if [[ "$embedded_screen_share_uuid" != "$expected_screen_share_profile_uuid" || 
   exit 1
 fi
 
-timestamp=${CHALK_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
 version_name=$(xcodebuild -workspace "$mobile_root/ios/Chalk.xcworkspace" -scheme Chalk -configuration Release -showBuildSettings 2>/dev/null | sed -n 's/^[[:space:]]*MARKETING_VERSION = //p' | head -n 1)
 build_number=$(xcodebuild -workspace "$mobile_root/ios/Chalk.xcworkspace" -scheme Chalk -configuration Release -showBuildSettings 2>/dev/null | sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION = //p' | head -n 1)
 mkdir -p "$output_dir"
