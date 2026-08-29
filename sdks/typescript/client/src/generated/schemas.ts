@@ -145,7 +145,9 @@ export type StorageProviderConfig = typeof StorageProviderConfigSchema.Type;
 
 export const TenantSchema = Schema.Struct({
   ai_provider_config: Schema.NullOr(AIProviderConfigSchema),
-  cors_allowed_origins: Schema.Array(Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i))).check(Schema.isMaxLength(32)),
+  cors_allowed_origins: Schema.Array(
+    Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+  ).check(Schema.isMaxLength(32)),
   created_at: DateTimeStringSchema,
   default_media_plane: Schema.NullOr(Schema.String),
   default_region: Schema.NullOr(Schema.String),
@@ -449,7 +451,11 @@ export type CreateSpaceRequest = typeof CreateSpaceRequestSchema.Type;
 
 export const CreateTenantRequestSchema = Schema.Struct({
   ai_provider_config: Schema.optional(Schema.NullOr(AIProviderConfigSchema)),
-  cors_allowed_origins: Schema.optional(Schema.Array(Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i))).check(Schema.isMaxLength(32))),
+  cors_allowed_origins: Schema.optional(
+    Schema.Array(
+      Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+    ).check(Schema.isMaxLength(32)),
+  ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
@@ -1300,7 +1306,11 @@ export type UpdateSpaceRequest = typeof UpdateSpaceRequestSchema.Type;
 
 export const UpdateTenantRequestSchema = Schema.Struct({
   ai_provider_config: Schema.optional(Schema.NullOr(AIProviderConfigSchema)),
-  cors_allowed_origins: Schema.optional(Schema.Array(Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i))).check(Schema.isMaxLength(32))),
+  cors_allowed_origins: Schema.optional(
+    Schema.Array(
+      Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+    ).check(Schema.isMaxLength(32)),
+  ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),

@@ -69,8 +69,7 @@ type TenantRepository interface {
 }
 
 type Service struct {
-	repository   TenantRepository
-	originPolicy *OriginPolicy
+	repository TenantRepository
 }
 
 type CreateTenantInput struct {
@@ -152,7 +151,7 @@ type OnboardTenantResult struct {
 }
 
 func NewService(repository TenantRepository) Service {
-	return Service{repository: repository, originPolicy: NewOriginPolicy(repository)}
+	return Service{repository: repository}
 }
 
 func NewAccountService(repository AccountTenantRepository) AccountService {
@@ -268,12 +267,7 @@ func (s Service) UpdateTenant(ctx context.Context, id utilities.ID, input Update
 		return Tenant{}, err
 	}
 
-	tenant, err := s.repository.UpdateTenant(ctx, id, input)
-	if err != nil {
-		return Tenant{}, err
-	}
-	s.originPolicy.Remember(id, tenant.CORSAllowedOrigins)
-	return tenant, nil
+	return s.repository.UpdateTenant(ctx, id, input)
 }
 
 func (s Service) AllowsOrigin(ctx context.Context, id utilities.ID, origin string) (bool, error) {
@@ -284,12 +278,19 @@ func (s Service) AllowsOrigin(ctx context.Context, id utilities.ID, origin strin
 	if err != nil {
 		return false, nil
 	}
-	allowed, err := s.originPolicy.Allows(ctx, id, prepared)
+	origins, err := s.repository.GetTenantCORSAllowedOrigins(ctx, id)
 	if errors.Is(err, ErrTenantNotFound) {
-		s.originPolicy.Remember(id, nil)
 		return false, nil
 	}
-	return allowed, err
+	if err != nil {
+		return false, err
+	}
+	for _, allowed := range origins {
+		if allowed == prepared {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (Service) AvailableRegions(ctx context.Context) ([]regions.Region, error) {
