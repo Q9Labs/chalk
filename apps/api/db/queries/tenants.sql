@@ -7,6 +7,7 @@ select
     media_plane_provider_config,
     ai_provider_config,
     storage_provider_config,
+    cors_allowed_origins,
     logo_key,
     website,
     updated_at,
@@ -23,6 +24,7 @@ select
     media_plane_provider_config,
     ai_provider_config,
     storage_provider_config,
+    cors_allowed_origins,
     logo_key,
     website,
     updated_at,
@@ -48,6 +50,7 @@ insert into tenants (
     media_plane_provider_config,
     ai_provider_config,
     storage_provider_config,
+    cors_allowed_origins,
     logo_key,
     website
 ) values (
@@ -58,6 +61,7 @@ insert into tenants (
     sqlc.narg(media_plane_provider_config),
     sqlc.narg(ai_provider_config),
     sqlc.narg(storage_provider_config),
+    sqlc.arg(cors_allowed_origins),
     sqlc.narg(logo_key),
     sqlc.narg(website)
 )
@@ -69,6 +73,7 @@ returning
     media_plane_provider_config,
     ai_provider_config,
     storage_provider_config,
+    cors_allowed_origins,
     logo_key,
     website,
     updated_at,
@@ -101,6 +106,10 @@ set
         when sqlc.arg(storage_provider_config_set)::boolean then sqlc.narg(storage_provider_config)::jsonb
         else storage_provider_config
     end,
+    cors_allowed_origins = case
+        when sqlc.arg(cors_allowed_origins_set)::boolean then sqlc.arg(cors_allowed_origins)::text[]
+        else cors_allowed_origins
+    end,
     logo_key = case
         when sqlc.arg(logo_key_set)::boolean then sqlc.narg(logo_key)::text
         else logo_key
@@ -119,7 +128,13 @@ returning
     media_plane_provider_config,
     ai_provider_config,
     storage_provider_config,
+    cors_allowed_origins,
     logo_key,
     website,
     updated_at,
     created_at;
+
+-- name: GetTenantCORSAllowedOrigins :one
+select cors_allowed_origins
+from tenants
+where id = sqlc.arg(id);

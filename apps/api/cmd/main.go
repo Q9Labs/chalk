@@ -478,6 +478,7 @@ func run() error {
 		},
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
+			TenantOrigins:  tenantService,
 		},
 		LocalSystemToken:       cfg.API.LocalSystemToken,
 		OpsIngestToken:         cfg.API.OpsIngestToken,

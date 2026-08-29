@@ -671,6 +671,9 @@ func (r tracedTenantRepository) UpdateTenant(ctx context.Context, id utilities.I
 	if input.DefaultMediaPlane.Set {
 		tenant.DefaultMediaPlane = input.DefaultMediaPlane.Value
 	}
+	if input.CORSAllowedOrigins.Set {
+		tenant.CORSAllowedOrigins = append([]string(nil), input.CORSAllowedOrigins.Value...)
+	}
 	if input.LogoKey.Set {
 		tenant.LogoKey = input.LogoKey.Value
 	}
@@ -682,6 +685,21 @@ func (r tracedTenantRepository) UpdateTenant(ctx context.Context, id utilities.I
 		"tenant": tenantFields(tenant),
 	}, nil)
 	return tenant, nil
+}
+
+func (r tracedTenantRepository) GetTenantCORSAllowedOrigins(ctx context.Context, id utilities.ID) ([]string, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "TenantRepository.GetTenantCORSAllowedOrigins", "select Tenant CORS allowlist", map[string]any{
+		"tenant_id": id.String(),
+	})
+	r.recorder.Add("database", "SELECT cors_allowed_origins FROM tenants WHERE id = $1", "execute query", map[string]any{
+		"params": map[string]any{"id": id.String()},
+	})
+	origins := append([]string(nil), tenantFixture(r.now).CORSAllowedOrigins...)
+	span.End("map database value to Tenant CORS allowlist", map[string]any{
+		"origin_count": len(origins),
+	}, nil)
+	return origins, nil
 }
 
 type allowAllLimiter struct{}
@@ -706,6 +724,7 @@ func tenantCreateInputFields(input tenants.CreateTenantInput) map[string]any {
 		"name":                input.Name,
 		"default_region":      input.DefaultRegion,
 		"default_media_plane": input.DefaultMediaPlane,
+		"cors_origin_count":   len(input.CORSAllowedOrigins),
 		"logo_key":            input.LogoKey,
 		"website":             input.Website,
 	}
@@ -717,6 +736,7 @@ func tenantFields(tenant tenants.Tenant) map[string]any {
 		"name":                tenant.Name,
 		"default_region":      tenant.DefaultRegion,
 		"default_media_plane": tenant.DefaultMediaPlane,
+		"cors_origin_count":   len(tenant.CORSAllowedOrigins),
 		"logo_key":            tenant.LogoKey,
 		"website":             tenant.Website,
 		"created_at":          tenant.CreatedAt.UTC().Format(time.RFC3339Nano),

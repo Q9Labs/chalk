@@ -37,6 +37,20 @@ environment variables and defaults.
 
 Read the code for more details. Starting at `apps/api/internal/config/config.go`.
 
+### Tenant CORS
+
+Tenant-scoped routes use the Tenant's `cors_allowed_origins` in addition to
+the deployment's exact `CHALK_API_CORS_ALLOWED_ORIGINS` entries. This keeps the
+first-party Dashboard available while each Tenant controls its customer app
+origins. A deployment wildcard applies only to routes without a Tenant ID and
+cannot bypass a Tenant allowlist.
+
+Set the list with `PATCH /v1/tenants/{tenant_id}`. Each entry must be an exact
+origin with no path, query, credentials, or wildcard. Hosted origins must use
+HTTPS. HTTP is accepted only for `localhost` or an IP loopback address, and
+each port is a separate origin. The list accepts at most 32 entries; an empty
+list denies customer cross-origin browser requests.
+
 Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
 load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use

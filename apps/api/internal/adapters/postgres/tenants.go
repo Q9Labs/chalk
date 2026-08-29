@@ -20,6 +20,7 @@ type TenantRepository struct {
 type tenantQuerier interface {
 	CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.CreateTenantRow, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.GetTenantRow, error)
+	GetTenantCORSAllowedOrigins(ctx context.Context, id pgtype.UUID) ([]string, error)
 	ListTenants(ctx context.Context, arg sqlc.ListTenantsParams) ([]sqlc.ListTenantsRow, error)
 	UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.UpdateTenantRow, error)
 }
@@ -37,6 +38,7 @@ func (s TenantRepository) CreateTenant(ctx context.Context, input tenants.Create
 		MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig),
 		AiProviderConfig:         jsonBytes(input.AIProviderConfig),
 		StorageProviderConfig:    jsonBytes(input.StorageProviderConfig),
+		CorsAllowedOrigins:       input.CORSAllowedOrigins,
 		LogoKey:                  text(input.LogoKey),
 		Website:                  text(input.Website),
 	})
@@ -57,6 +59,17 @@ func (s TenantRepository) GetTenant(ctx context.Context, id utilities.ID) (tenan
 	}
 
 	return mapTenant(getTenantRecord(tenant)), nil
+}
+
+func (s TenantRepository) GetTenantCORSAllowedOrigins(ctx context.Context, id utilities.ID) ([]string, error) {
+	origins, err := s.queries.GetTenantCORSAllowedOrigins(ctx, uuid(id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, tenants.ErrTenantNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get tenant CORS allowed origins: %w", err)
+	}
+	return origins, nil
 }
 
 func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
@@ -108,6 +121,8 @@ func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, inp
 		AiProviderConfig:            jsonBytes(input.AIProviderConfig.Value),
 		StorageProviderConfigSet:    input.StorageProviderConfig.Set,
 		StorageProviderConfig:       jsonBytes(input.StorageProviderConfig.Value),
+		CorsAllowedOriginsSet:       input.CORSAllowedOrigins.Set,
+		CorsAllowedOrigins:          input.CORSAllowedOrigins.Value,
 		LogoKeySet:                  input.LogoKey.Set,
 		LogoKey:                     text(input.LogoKey.Value),
 		WebsiteSet:                  input.Website.Set,
@@ -147,6 +162,7 @@ func mapTenant(tenant tenantRecord) tenants.Tenant {
 		MediaPlaneProviderConfig: jsonRaw(tenant.MediaPlaneProviderConfig),
 		AIProviderConfig:         jsonRaw(tenant.AiProviderConfig),
 		StorageProviderConfig:    jsonRaw(tenant.StorageProviderConfig),
+		CORSAllowedOrigins:       append([]string(nil), tenant.CorsAllowedOrigins...),
 		LogoKey:                  nullableText(tenant.LogoKey),
 		Website:                  nullableText(tenant.Website),
 		UpdatedAt:                timestamp(tenant.UpdatedAt),
@@ -162,6 +178,7 @@ type tenantRecord struct {
 	MediaPlaneProviderConfig []byte
 	AiProviderConfig         []byte
 	StorageProviderConfig    []byte
+	CorsAllowedOrigins       []string
 	LogoKey                  pgtype.Text
 	Website                  pgtype.Text
 	UpdatedAt                pgtype.Timestamptz
@@ -177,6 +194,7 @@ func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
 		AiProviderConfig:         row.AiProviderConfig,
 		StorageProviderConfig:    row.StorageProviderConfig,
+		CorsAllowedOrigins:       row.CorsAllowedOrigins,
 		LogoKey:                  row.LogoKey,
 		Website:                  row.Website,
 		UpdatedAt:                row.UpdatedAt,
@@ -193,6 +211,7 @@ func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
 		AiProviderConfig:         row.AiProviderConfig,
 		StorageProviderConfig:    row.StorageProviderConfig,
+		CorsAllowedOrigins:       row.CorsAllowedOrigins,
 		LogoKey:                  row.LogoKey,
 		Website:                  row.Website,
 		UpdatedAt:                row.UpdatedAt,
@@ -209,6 +228,7 @@ func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
 		AiProviderConfig:         row.AiProviderConfig,
 		StorageProviderConfig:    row.StorageProviderConfig,
+		CorsAllowedOrigins:       row.CorsAllowedOrigins,
 		LogoKey:                  row.LogoKey,
 		Website:                  row.Website,
 		UpdatedAt:                row.UpdatedAt,
@@ -225,6 +245,7 @@ func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
 		AiProviderConfig:         row.AiProviderConfig,
 		StorageProviderConfig:    row.StorageProviderConfig,
+		CorsAllowedOrigins:       row.CorsAllowedOrigins,
 		LogoKey:                  row.LogoKey,
 		Website:                  row.Website,
 		UpdatedAt:                row.UpdatedAt,

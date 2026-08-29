@@ -3022,7 +3022,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_field", "tenant.invalid_name", "tenant.invalid_region"],
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_cors_origin", "tenant.invalid_field", "tenant.invalid_name", "tenant.invalid_region"],
           },
           401: {
             content: {
@@ -3254,7 +3254,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_field", "tenant.invalid_id", "tenant.invalid_name", "tenant.invalid_region"],
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_cors_origin", "tenant.invalid_field", "tenant.invalid_id", "tenant.invalid_name", "tenant.invalid_region"],
           },
           401: {
             content: {
@@ -16386,6 +16386,15 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             ],
           },
+          cors_allowed_origins: {
+            items: {
+              format: "uri",
+              maxLength: 2048,
+              type: "string",
+            },
+            maxItems: 32,
+            type: "array",
+          },
           default_media_plane: {
             minLength: 1,
             type: ["string", "null"],
@@ -18781,6 +18790,15 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             ],
           },
+          cors_allowed_origins: {
+            items: {
+              format: "uri",
+              maxLength: 2048,
+              type: "string",
+            },
+            maxItems: 32,
+            type: "array",
+          },
           created_at: {
             $ref: "#/components/schemas/DateTimeString",
           },
@@ -18833,7 +18851,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             ],
           },
         },
-        required: ["ai_provider_config", "created_at", "default_media_plane", "default_region", "id", "logo_key", "media_plane_provider_config", "name", "storage_provider_config", "updated_at", "website"],
+        required: ["ai_provider_config", "cors_allowed_origins", "created_at", "default_media_plane", "default_region", "id", "logo_key", "media_plane_provider_config", "name", "storage_provider_config", "updated_at", "website"],
         type: "object",
       },
       TenantId: {
@@ -19142,6 +19160,15 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
                 type: "null",
               },
             ],
+          },
+          cors_allowed_origins: {
+            items: {
+              format: "uri",
+              maxLength: 2048,
+              type: "string",
+            },
+            maxItems: 32,
+            type: "array",
           },
           default_media_plane: {
             minLength: 1,

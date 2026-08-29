@@ -176,7 +176,7 @@ func createAccountTenantParams(input tenants.CreateTenantInput) sqlc.CreateTenan
 	return sqlc.CreateTenantParams{
 		ID: uuid(input.ID), Name: input.Name, DefaultRegion: text(input.DefaultRegion), DefaultMediaPlane: text(input.DefaultMediaPlane),
 		MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig), AiProviderConfig: jsonBytes(input.AIProviderConfig),
-		StorageProviderConfig: jsonBytes(input.StorageProviderConfig), LogoKey: text(input.LogoKey), Website: text(input.Website),
+		StorageProviderConfig: jsonBytes(input.StorageProviderConfig), CorsAllowedOrigins: input.CORSAllowedOrigins, LogoKey: text(input.LogoKey), Website: text(input.Website),
 	}
 }
 
@@ -185,7 +185,7 @@ func mapListAccountTenant(row sqlc.ListAccountTenantsRow) tenants.AccountTenant 
 		Tenant: mapTenant(tenantRecord{
 			ID: row.ID, Name: row.Name, DefaultRegion: row.DefaultRegion, DefaultMediaPlane: row.DefaultMediaPlane,
 			MediaPlaneProviderConfig: row.MediaPlaneProviderConfig, AiProviderConfig: row.AiProviderConfig,
-			StorageProviderConfig: row.StorageProviderConfig, LogoKey: row.LogoKey, Website: row.Website,
+			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			UpdatedAt: row.UpdatedAt, CreatedAt: row.CreatedAt,
 		}),
 		Access: tenants.TenantAccess{
@@ -201,7 +201,7 @@ func mapOnboardedAccountTenant(row sqlc.GetAccountTenantByOnboardingRow) tenants
 		Tenant: mapTenant(tenantRecord{
 			ID: row.ID, Name: row.Name, DefaultRegion: row.DefaultRegion, DefaultMediaPlane: row.DefaultMediaPlane,
 			MediaPlaneProviderConfig: row.MediaPlaneProviderConfig, AiProviderConfig: row.AiProviderConfig,
-			StorageProviderConfig: row.StorageProviderConfig, LogoKey: row.LogoKey, Website: row.Website,
+			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			UpdatedAt: row.UpdatedAt, CreatedAt: row.CreatedAt,
 		}),
 		Access: tenants.TenantAccess{

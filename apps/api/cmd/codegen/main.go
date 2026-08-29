@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -388,6 +389,17 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 			"items": map[string]any{"type": "string"},
 		}
 	}
+	if isOptionalCORSOrigins(t) {
+		return map[string]any{
+			"type":     "array",
+			"maxItems": tenants.MaxCORSOrigins,
+			"items": map[string]any{
+				"type":      "string",
+				"format":    "uri",
+				"maxLength": tenants.MaxCORSOriginBytes,
+			},
+		}
+	}
 	if isOptionalTimeRequest(t) {
 		return nullableSchema(timestampSchema())
 	}
@@ -507,6 +519,18 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 		}
 		return applyFieldConstraints(schema, schemaName, fieldName, request)
 	}
+	if isOptionalCORSOrigins(fieldType) {
+		schema := map[string]any{
+			"type":     "array",
+			"maxItems": tenants.MaxCORSOrigins,
+			"items": map[string]any{
+				"type":      "string",
+				"format":    "uri",
+				"maxLength": tenants.MaxCORSOriginBytes,
+			},
+		}
+		return applyFieldConstraints(schema, schemaName, fieldName, request)
+	}
 
 	schema := g.schemaFromType(fieldType, request, schemaName)
 	return applyFieldConstraints(schema, schemaName, fieldName, request)
@@ -557,6 +581,13 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["minItems"] = 1
 		if items, ok := schema["items"].(map[string]any); ok {
 			items["minLength"] = 1
+		}
+	}
+	if fieldName == "cors_allowed_origins" && schemaTypeIs(schema, "array") {
+		schema["maxItems"] = tenants.MaxCORSOrigins
+		if items, ok := schema["items"].(map[string]any); ok {
+			items["format"] = "uri"
+			items["maxLength"] = tenants.MaxCORSOriginBytes
 		}
 	}
 	if schemaName == "JourneyEventBatch" && fieldName == "events" {
@@ -640,6 +671,7 @@ func isOptionalRequestField(t reflect.Type) bool {
 		isOptionalString(t) ||
 		isOptionalJSON(t) ||
 		isOptionalStrings(t) ||
+		isOptionalCORSOrigins(t) ||
 		isOptionalTimeRequest(t)
 }
 
@@ -651,6 +683,9 @@ func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bo
 		return optionalStringAllowsNull(schemaName, fieldName)
 	}
 	if isOptionalStrings(t) {
+		return false
+	}
+	if isOptionalCORSOrigins(t) {
 		return false
 	}
 	return isOptionalJSON(t) || isOptionalTimeRequest(t)
@@ -678,6 +713,10 @@ func isOptionalJSON(t reflect.Type) bool {
 
 func isOptionalStrings(t reflect.Type) bool {
 	return dereference(t) == reflect.TypeOf(transcripts.OptionalStrings{})
+}
+
+func isOptionalCORSOrigins(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(tenants.OptionalCORSOrigins{})
 }
 
 func isRawJSON(t reflect.Type) bool {

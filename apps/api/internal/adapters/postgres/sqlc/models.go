@@ -1249,6 +1249,7 @@ type Tenant struct {
 	MediaPlaneProviderConfig []byte             `json:"media_plane_provider_config"`
 	AiProviderConfig         []byte             `json:"ai_provider_config"`
 	StorageProviderConfig    []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins       []string           `json:"cors_allowed_origins"`
 	LogoKey                  pgtype.Text        `json:"logo_key"`
 	Website                  pgtype.Text        `json:"website"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`

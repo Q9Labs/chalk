@@ -184,6 +184,7 @@ type Querier interface {
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
 	GetTenantAPIKey(ctx context.Context, arg GetTenantAPIKeyParams) (GetTenantAPIKeyRow, error)
 	GetTenantAuditLog(ctx context.Context, arg GetTenantAuditLogParams) (AuditLog, error)
+	GetTenantCORSAllowedOrigins(ctx context.Context, id pgtype.UUID) ([]string, error)
 	GetTenantEpisode(ctx context.Context, arg GetTenantEpisodeParams) (Episode, error)
 	GetTenantIdentityByExternalID(ctx context.Context, arg GetTenantIdentityByExternalIDParams) (Identity, error)
 	GetTenantMembershipForUser(ctx context.Context, arg GetTenantMembershipForUserParams) (Membership, error)

@@ -20,6 +20,7 @@ select
     tenants.media_plane_provider_config,
     tenants.ai_provider_config,
     tenants.storage_provider_config,
+    tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
     tenants.updated_at,
@@ -49,6 +50,7 @@ type GetAccountTenantByOnboardingRow struct {
 	MediaPlaneProviderConfig []byte             `json:"media_plane_provider_config"`
 	AiProviderConfig         []byte             `json:"ai_provider_config"`
 	StorageProviderConfig    []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins       []string           `json:"cors_allowed_origins"`
 	LogoKey                  pgtype.Text        `json:"logo_key"`
 	Website                  pgtype.Text        `json:"website"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
@@ -71,6 +73,7 @@ func (q *Queries) GetAccountTenantByOnboarding(ctx context.Context, arg GetAccou
 		&i.MediaPlaneProviderConfig,
 		&i.AiProviderConfig,
 		&i.StorageProviderConfig,
+		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
 		&i.UpdatedAt,
@@ -119,6 +122,7 @@ select
     tenants.media_plane_provider_config,
     tenants.ai_provider_config,
     tenants.storage_provider_config,
+    tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
     tenants.updated_at,
@@ -158,6 +162,7 @@ type ListAccountTenantsRow struct {
 	MediaPlaneProviderConfig []byte             `json:"media_plane_provider_config"`
 	AiProviderConfig         []byte             `json:"ai_provider_config"`
 	StorageProviderConfig    []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins       []string           `json:"cors_allowed_origins"`
 	LogoKey                  pgtype.Text        `json:"logo_key"`
 	Website                  pgtype.Text        `json:"website"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
@@ -192,6 +197,7 @@ func (q *Queries) ListAccountTenants(ctx context.Context, arg ListAccountTenants
 			&i.MediaPlaneProviderConfig,
 			&i.AiProviderConfig,
 			&i.StorageProviderConfig,
+			&i.CorsAllowedOrigins,
 			&i.LogoKey,
 			&i.Website,
 			&i.UpdatedAt,

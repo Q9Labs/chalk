@@ -1713,6 +1713,47 @@
 .settings-signout > .auth-error {
   grid-column: 2;
 }
+.tenant-cors-form {
+  display: grid;
+  gap: 12px;
+}
+.tenant-cors-form label {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.tenant-cors-form textarea {
+  width: 100%;
+  min-height: 168px;
+  padding: 13px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  outline: none;
+  background: var(--surface);
+  color: var(--ink);
+  font: 13px/1.6 var(--font-mono);
+}
+.tenant-cors-form textarea:focus {
+  border-color: #56755f;
+  box-shadow: 0 0 0 3px rgba(86, 117, 95, 0.12);
+}
+.tenant-cors-form textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.tenant-cors-help,
+.tenant-cors-success {
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tenant-cors-success {
+  color: var(--app-success-ink);
+}
+.tenant-cors-form .dashboard-button {
+  justify-self: start;
+}
 
 @media (max-width: 900px) {
   .account-entry {
