@@ -1,0 +1,2800 @@
+{
+  "datasetId": "showcase-v1",
+  "datasetVersion": "1.0.0",
+  "product": "chalk",
+  "anchorDate": "2026-08-29",
+  "counts": {
+    "total": 76,
+    "built": 67,
+    "pendingProductCapture": 9
+  },
+  "assets": [
+    {
+      "assetKey": "chalk/catalog/organization-scene",
+      "contentHash": "sha256:4e9338f46acc1aaeca7f166795cf3e96507fa715d8601bbfc9e21ca511b61599",
+      "mimeType": "image/png",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "organization-scene",
+      "title": "chalk fictional showcase organization",
+      "relationships": {
+        "organizationKey": "chalk-showcase-episode-network"
+      },
+      "source": {
+        "kind": "builtin-imagegen",
+        "path": "assets/scenes/chalk.png",
+        "generatedOn": "2026-08-29",
+        "license": "OpenAI generated asset for Q9 Labs showcase use"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/catalog/organization-scene.png",
+      "storageKey": "showcase-v1/chalk/4e9338f46acc1aaeca7f166795cf3e96507fa715d8601bbfc9e21ca511b61599.png",
+      "fileSize": 2003606,
+      "dimensions": {
+        "width": 1536,
+        "height": 1024
+      }
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-001/transcript",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Compass Checkout Critique transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-1",
+        "episodeKey": "chalk-episode-001"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-001/transcript.pdf"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-001/whiteboard",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Compass Checkout Critique whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-1",
+        "episodeKey": "chalk-episode-001"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-001/whiteboard.svg"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-001/recording",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Compass Checkout Critique recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-1",
+        "episodeKey": "chalk-episode-001",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-001/transcript"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-001/recording.wav"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-002/transcript",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Bilingual Fractions Workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-1",
+        "episodeKey": "chalk-episode-002"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-002/transcript.pdf"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-002/whiteboard",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Bilingual Fractions Workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-1",
+        "episodeKey": "chalk-episode-002"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-002/whiteboard.svg"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-002/recording",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Bilingual Fractions Workshop recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-1",
+        "episodeKey": "chalk-episode-002",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-002/transcript"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-002/recording.wav"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-003/transcript",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Retail Service Recovery Consultation transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-1",
+        "episodeKey": "chalk-episode-003"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-003/transcript.pdf"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-003/whiteboard",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Retail Service Recovery Consultation whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-1",
+        "episodeKey": "chalk-episode-003"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-003/whiteboard.svg"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-003/recording",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Retail Service Recovery Consultation recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-1",
+        "episodeKey": "chalk-episode-003",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-003/transcript"
+      },
+      "source": {
+        "kind": "product-capture-required",
+        "license": "Chalk product capture"
+      },
+      "status": "pending-product-capture",
+      "expectedCapturePath": "assets/product-captures/chalk/episodes/chalk-episode-003/recording.wav"
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-004/transcript",
+      "contentHash": "sha256:4cd82ed7bb18125ed0e9290b73925ee1a98fc8c19e15b1429abd3a3833cfabe8",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "episodeKey": "chalk-episode-004"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-004/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/4cd82ed7bb18125ed0e9290b73925ee1a98fc8c19e15b1429abd3a3833cfabe8.pdf",
+      "fileSize": 11946,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-004/whiteboard",
+      "contentHash": "sha256:67c15ae58a7a1898ccc64af7858db08aafc3ffa4cbf34a112810068f45466b01",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "episodeKey": "chalk-episode-004"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-004/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/67c15ae58a7a1898ccc64af7858db08aafc3ffa4cbf34a112810068f45466b01.svg",
+      "fileSize": 2718
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-004/recording",
+      "contentHash": "sha256:72d6602b0e15f91ec6e47a3c4b05c8158fa2e22d030183945c749415251a0195",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Mosaic Research Room Studio: artifact workshop recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "episodeKey": "chalk-episode-004",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-004/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-004/recording.wav",
+      "storageKey": "showcase-v1/chalk/72d6602b0e15f91ec6e47a3c4b05c8158fa2e22d030183945c749415251a0195.wav",
+      "fileSize": 515684,
+      "duration": 11.693,
+      "transcript": "Episode recording summary for Mosaic Research Room Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.846,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Mosaic Research Room Studio: artifact workshop."
+        },
+        {
+          "start": 5.846,
+          "end": 11.693,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.6405,
+        0.8063,
+        0.3225,
+        0.5636,
+        0.4754,
+        0.5835,
+        0.3627,
+        0.4847,
+        0.4718,
+        0.461,
+        0.4026,
+        0.4555,
+        0.4206,
+        0.4653,
+        0.4017,
+        0.0,
+        0.7107,
+        0.3181,
+        0.55,
+        0.1067,
+        0.4106,
+        0.2945,
+        0.4795,
+        0.0525,
+        0.0,
+        0.0,
+        0.5239,
+        0.6501,
+        0.5325,
+        0.569,
+        0.2384,
+        0.3777,
+        0.4677,
+        0.6309,
+        0.49,
+        0.5308,
+        0.102,
+        0.1207,
+        0.4797,
+        0.4988,
+        0.3643,
+        0.7947,
+        0.4084,
+        0.4113,
+        0.5874,
+        0.5879,
+        0.351,
+        0.5366,
+        0.2348,
+        0.5559,
+        0.2236,
+        0.6418,
+        0.5767,
+        0.4723,
+        0.4791,
+        0.3522,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-005/transcript",
+      "contentHash": "sha256:9bd50f8ad248aded63202c29d3dfdc907a1884d0864213f5f81877f51f29dbab",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
+        "episodeKey": "chalk-episode-005"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-005/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/9bd50f8ad248aded63202c29d3dfdc907a1884d0864213f5f81877f51f29dbab.pdf",
+      "fileSize": 12147,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-005/whiteboard",
+      "contentHash": "sha256:58cd84e8612ef8a3bfd0bef188327335dd5ab62de2215cc33cab7ff95134ee75",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
+        "episodeKey": "chalk-episode-005"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-005/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/58cd84e8612ef8a3bfd0bef188327335dd5ab62de2215cc33cab7ff95134ee75.svg",
+      "fileSize": 2730
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-005/recording",
+      "contentHash": "sha256:b547ee74d082767390e0e420767d3e24abb1871633b9d968c7f2138d53c7ed2d",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Atlas Design Faculty Review Room: decision review recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
+        "episodeKey": "chalk-episode-005",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-005/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-005/recording.wav",
+      "storageKey": "showcase-v1/chalk/b547ee74d082767390e0e420767d3e24abb1871633b9d968c7f2138d53c7ed2d.wav",
+      "fileSize": 519394,
+      "duration": 11.777,
+      "transcript": "Episode recording summary for Atlas Design Faculty Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.888,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Atlas Design Faculty Review Room: decision review."
+        },
+        {
+          "start": 5.888,
+          "end": 11.777,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.8063,
+        0.7612,
+        0.3225,
+        0.5633,
+        0.5699,
+        0.5414,
+        0.3533,
+        0.674,
+        0.2798,
+        0.5949,
+        0.3966,
+        0.3361,
+        0.3939,
+        0.4593,
+        0.4184,
+        0.3573,
+        0.1154,
+        0.0,
+        0.3798,
+        0.649,
+        0.5567,
+        0.373,
+        0.4243,
+        0.3134,
+        0.0,
+        0.0,
+        0.539,
+        0.6411,
+        0.5051,
+        0.5354,
+        0.2384,
+        0.4017,
+        0.4661,
+        0.5962,
+        0.5142,
+        0.5858,
+        0.102,
+        0.0,
+        0.4792,
+        0.3565,
+        0.4668,
+        0.8067,
+        0.4293,
+        0.403,
+        0.5533,
+        0.4935,
+        0.542,
+        0.5731,
+        0.447,
+        0.5536,
+        0.1801,
+        0.5997,
+        0.6413,
+        0.3964,
+        0.4817,
+        0.3565,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-006/transcript",
+      "contentHash": "sha256:9ed7be91bbddca086202935eb51d99667804e67154103cc3ba7f7731c4589950",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "North Hall Advisory Workshop: guided practice transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-1",
+        "episodeKey": "chalk-episode-006"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-006/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/9ed7be91bbddca086202935eb51d99667804e67154103cc3ba7f7731c4589950.pdf",
+      "fileSize": 11912,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-006/whiteboard",
+      "contentHash": "sha256:c5a05f3dac6f094caefda86b1ab793d0757d3ae168b0773bcf26b7196d7f40fb",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "North Hall Advisory Workshop: guided practice whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-1",
+        "episodeKey": "chalk-episode-006"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-006/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/c5a05f3dac6f094caefda86b1ab793d0757d3ae168b0773bcf26b7196d7f40fb.svg",
+      "fileSize": 2716
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-006/recording",
+      "contentHash": "sha256:2fddd214ba51b7068253fc241a4e3e939aae8f7b5d913d1b6d536b793d32a4ae",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "North Hall Advisory Workshop: guided practice recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-1",
+        "episodeKey": "chalk-episode-006",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-006/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-006/recording.wav",
+      "storageKey": "showcase-v1/chalk/2fddd214ba51b7068253fc241a4e3e939aae8f7b5d913d1b6d536b793d32a4ae.wav",
+      "fileSize": 511552,
+      "duration": 11.599,
+      "transcript": "Episode recording summary for North Hall Advisory Workshop: guided practice. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.8,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for North Hall Advisory Workshop: guided practice."
+        },
+        {
+          "start": 5.8,
+          "end": 11.599,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.4622,
+        0.8063,
+        0.3225,
+        0.5636,
+        0.8779,
+        0.331,
+        0.6388,
+        0.5409,
+        0.364,
+        0.6877,
+        0.376,
+        0.3165,
+        0.3943,
+        0.2969,
+        0.4801,
+        0.0525,
+        0.0,
+        0.701,
+        0.3914,
+        0.1929,
+        0.53,
+        0.1547,
+        0.4922,
+        0.0921,
+        0.0,
+        0.0905,
+        0.5378,
+        0.6426,
+        0.5012,
+        0.5292,
+        0.2402,
+        0.406,
+        0.4699,
+        0.6086,
+        0.5165,
+        0.5619,
+        0.102,
+        0.1209,
+        0.4791,
+        0.4594,
+        0.3857,
+        0.7796,
+        0.4318,
+        0.4033,
+        0.5576,
+        0.5424,
+        0.1337,
+        0.5786,
+        0.1524,
+        0.5544,
+        0.3208,
+        0.6447,
+        0.5544,
+        0.4794,
+        0.4821,
+        0.3576,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-007/transcript",
+      "contentHash": "sha256:333a1537011d30d6ff2b3583a5ea6609c3537635bc7ceafecf0908ee8f52f345",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Saffron Service School Consultation: client consultation transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-1",
+        "episodeKey": "chalk-episode-007"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-007/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/333a1537011d30d6ff2b3583a5ea6609c3537635bc7ceafecf0908ee8f52f345.pdf",
+      "fileSize": 11694,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-007/whiteboard",
+      "contentHash": "sha256:fd0da78af1b5cd4a897b690b6e1cb0b5b0d876ec311fabc06da1a0e13fb5c04e",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Saffron Service School Consultation: client consultation whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-1",
+        "episodeKey": "chalk-episode-007"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-007/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/fd0da78af1b5cd4a897b690b6e1cb0b5b0d876ec311fabc06da1a0e13fb5c04e.svg",
+      "fileSize": 2743
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-007/recording",
+      "contentHash": "sha256:4bfa6577ed0e155d2deda52c54a05e24546cc7d2eff9be6909d18bc71c763824",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Saffron Service School Consultation: client consultation recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-1",
+        "episodeKey": "chalk-episode-007",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-007/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-007/recording.wav",
+      "storageKey": "showcase-v1/chalk/4bfa6577ed0e155d2deda52c54a05e24546cc7d2eff9be6909d18bc71c763824.wav",
+      "fileSize": 540428,
+      "duration": 12.254,
+      "transcript": "Episode recording summary for Saffron Service School Consultation: client consultation. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 6.127,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Saffron Service School Consultation: client consultation."
+        },
+        {
+          "start": 6.127,
+          "end": 12.254,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.8063,
+        0.3989,
+        0.5648,
+        0.4488,
+        0.6132,
+        0.5475,
+        0.4749,
+        0.4767,
+        0.2384,
+        0.5009,
+        0.2979,
+        0.4937,
+        0.4411,
+        0.511,
+        0.433,
+        0.5529,
+        0.0,
+        0.1716,
+        0.6575,
+        0.2875,
+        0.4832,
+        0.5079,
+        0.3814,
+        0.524,
+        0.571,
+        0.1363,
+        0.0,
+        0.5317,
+        0.4926,
+        0.642,
+        0.5321,
+        0.3467,
+        0.4036,
+        0.4756,
+        0.601,
+        0.5204,
+        0.5661,
+        0.102,
+        0.1207,
+        0.4749,
+        0.4678,
+        0.3862,
+        0.7882,
+        0.4333,
+        0.3972,
+        0.5534,
+        0.5495,
+        0.0925,
+        0.5738,
+        0.5566,
+        0.28,
+        0.5411,
+        0.6437,
+        0.2636,
+        0.4803,
+        0.3571,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-008/transcript",
+      "contentHash": "sha256:a90fe803295e7bfb754f51423c7a279c49c7f2dc29feedc890811848d58222cc",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Cedar Collaboration Lab Studio: artifact workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-cedar-collaboration-lab",
+        "spaceKey": "chalk-space-cedar-collaboration-lab-studio-1",
+        "episodeKey": "chalk-episode-008"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-008/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/a90fe803295e7bfb754f51423c7a279c49c7f2dc29feedc890811848d58222cc.pdf",
+      "fileSize": 11911,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-008/whiteboard",
+      "contentHash": "sha256:96301e47dfe7739c11e7e86fba371550fc82edf6c405e24652b626a7d0b18663",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Cedar Collaboration Lab Studio: artifact workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-cedar-collaboration-lab",
+        "spaceKey": "chalk-space-cedar-collaboration-lab-studio-1",
+        "episodeKey": "chalk-episode-008"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-008/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/96301e47dfe7739c11e7e86fba371550fc82edf6c405e24652b626a7d0b18663.svg",
+      "fileSize": 2743
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-008/recording",
+      "contentHash": "sha256:d08a95305d35f9ea947cd78c5209e4a51c2a6779540d49b0382831f8b075414f",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Cedar Collaboration Lab Studio: artifact workshop recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-cedar-collaboration-lab",
+        "spaceKey": "chalk-space-cedar-collaboration-lab-studio-1",
+        "episodeKey": "chalk-episode-008",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-008/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-008/recording.wav",
+      "storageKey": "showcase-v1/chalk/d08a95305d35f9ea947cd78c5209e4a51c2a6779540d49b0382831f8b075414f.wav",
+      "fileSize": 525082,
+      "duration": 11.906,
+      "transcript": "Episode recording summary for Cedar Collaboration Lab Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.953,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Cedar Collaboration Lab Studio: artifact workshop."
+        },
+        {
+          "start": 5.953,
+          "end": 11.906,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.8063,
+        0.7057,
+        0.3225,
+        0.5648,
+        0.4715,
+        0.388,
+        0.5348,
+        0.4259,
+        0.5564,
+        0.5749,
+        0.6045,
+        0.4783,
+        0.4305,
+        0.3445,
+        0.467,
+        0.2245,
+        0.647,
+        0.7175,
+        0.5113,
+        0.5562,
+        0.2278,
+        0.3881,
+        0.2969,
+        0.5127,
+        0.0226,
+        0.0,
+        0.1961,
+        0.5302,
+        0.649,
+        0.5083,
+        0.526,
+        0.403,
+        0.3562,
+        0.6108,
+        0.5182,
+        0.5677,
+        0.4187,
+        0.0688,
+        0.4773,
+        0.1872,
+        0.4576,
+        0.7913,
+        0.4336,
+        0.3983,
+        0.5078,
+        0.5553,
+        0.5469,
+        0.5689,
+        0.442,
+        0.5416,
+        0.1871,
+        0.5977,
+        0.6425,
+        0.396,
+        0.4805,
+        0.3612,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-009/transcript",
+      "contentHash": "sha256:3bc002ac730046199aa082efe04f912bb35fcc15d1e2deacbb9e47534b51c419",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Compass Product Guild Review Room: decision review transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-2",
+        "episodeKey": "chalk-episode-009"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-009/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/3bc002ac730046199aa082efe04f912bb35fcc15d1e2deacbb9e47534b51c419.pdf",
+      "fileSize": 12245,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-009/whiteboard",
+      "contentHash": "sha256:4960ada7fdf78707a8e561215e614c2199f7b227ff9144aa423002c0720b4467",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Compass Product Guild Review Room: decision review whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-2",
+        "episodeKey": "chalk-episode-009"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-009/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/4960ada7fdf78707a8e561215e614c2199f7b227ff9144aa423002c0720b4467.svg",
+      "fileSize": 2745
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-009/recording",
+      "contentHash": "sha256:5d7e77956bd658052c948f9329cfbd1df7f1c8706cbfdf4780d9eef1d65e77ed",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Compass Product Guild Review Room: decision review recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-2",
+        "episodeKey": "chalk-episode-009",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-009/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-009/recording.wav",
+      "storageKey": "showcase-v1/chalk/5d7e77956bd658052c948f9329cfbd1df7f1c8706cbfdf4780d9eef1d65e77ed.wav",
+      "fileSize": 516808,
+      "duration": 11.718,
+      "transcript": "Episode recording summary for Compass Product Guild Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.859,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Compass Product Guild Review Room: decision review."
+        },
+        {
+          "start": 5.859,
+          "end": 11.718,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.6405,
+        0.8063,
+        0.3225,
+        0.5688,
+        0.7898,
+        0.5284,
+        0.4116,
+        0.6058,
+        0.6088,
+        0.1067,
+        0.6744,
+        0.2585,
+        0.3868,
+        0.476,
+        0.4141,
+        0.2578,
+        0.1008,
+        0.1078,
+        0.3777,
+        0.6471,
+        0.5591,
+        0.3226,
+        0.4221,
+        0.2624,
+        0.0,
+        0.0842,
+        0.5352,
+        0.6485,
+        0.5083,
+        0.5298,
+        0.2384,
+        0.4028,
+        0.4642,
+        0.598,
+        0.5216,
+        0.5735,
+        0.102,
+        0.1216,
+        0.4837,
+        0.4701,
+        0.3875,
+        0.7922,
+        0.4319,
+        0.4036,
+        0.554,
+        0.5483,
+        0.373,
+        0.5734,
+        0.2522,
+        0.5582,
+        0.2247,
+        0.6471,
+        0.5814,
+        0.416,
+        0.4818,
+        0.3604,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-010/transcript",
+      "contentHash": "sha256:ec2050b3b2202333e3ce08eda32979db48aba5060059507cfe3db6655f1641fb",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Rimal Learning Lab Workshop: guided practice transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-2",
+        "episodeKey": "chalk-episode-010"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-010/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/ec2050b3b2202333e3ce08eda32979db48aba5060059507cfe3db6655f1641fb.pdf",
+      "fileSize": 12163,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-010/whiteboard",
+      "contentHash": "sha256:baf4686faf64eac2d5cb7fbbdcce9e476bf43b9cb79bf6d4d53d14791d544490",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Rimal Learning Lab Workshop: guided practice whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-2",
+        "episodeKey": "chalk-episode-010"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-010/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/baf4686faf64eac2d5cb7fbbdcce9e476bf43b9cb79bf6d4d53d14791d544490.svg",
+      "fileSize": 2713
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-010/recording",
+      "contentHash": "sha256:3015ae8cfc834bc337e1277dc9010d07100e0171f0ba065c01549b7f99777837",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Rimal Learning Lab Workshop: guided practice recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-2",
+        "episodeKey": "chalk-episode-010",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-010/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-010/recording.wav",
+      "storageKey": "showcase-v1/chalk/3015ae8cfc834bc337e1277dc9010d07100e0171f0ba065c01549b7f99777837.wav",
+      "fileSize": 490774,
+      "duration": 11.128,
+      "transcript": "Episode recording summary for Rimal Learning Lab Workshop: guided practice. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.564,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Rimal Learning Lab Workshop: guided practice."
+        },
+        {
+          "start": 5.564,
+          "end": 11.128,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.3589,
+        0.8063,
+        0.3556,
+        0.5633,
+        0.6165,
+        0.4524,
+        0.4522,
+        0.451,
+        0.5971,
+        0.4503,
+        0.3889,
+        0.3227,
+        0.5144,
+        0.1383,
+        0.0,
+        0.7047,
+        0.6751,
+        0.4225,
+        0.5245,
+        0.5076,
+        0.5123,
+        0.4412,
+        0.0,
+        0.0,
+        0.523,
+        0.4232,
+        0.648,
+        0.5434,
+        0.5643,
+        0.2642,
+        0.3776,
+        0.4638,
+        0.6338,
+        0.4797,
+        0.536,
+        0.102,
+        0.1201,
+        0.4775,
+        0.506,
+        0.3705,
+        0.8094,
+        0.4017,
+        0.3045,
+        0.4326,
+        0.5801,
+        0.5843,
+        0.0,
+        0.5382,
+        0.5579,
+        0.4666,
+        0.5802,
+        0.6465,
+        0.3716,
+        0.4799,
+        0.4836,
+        0.3532,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-011/transcript",
+      "contentHash": "sha256:7d62d473d68db80622971ac82c89ec181eb9bf909f968d1806ab04c7fd52486f",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Juniper Customer Studio Consultation: client consultation transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-2",
+        "episodeKey": "chalk-episode-011"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-011/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/7d62d473d68db80622971ac82c89ec181eb9bf909f968d1806ab04c7fd52486f.pdf",
+      "fileSize": 11603,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-011/whiteboard",
+      "contentHash": "sha256:a8b80585cd2cf8559aadd7fa1accb55af235e865abd685b3f61c1a82e3cea41b",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Juniper Customer Studio Consultation: client consultation whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-2",
+        "episodeKey": "chalk-episode-011"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-011/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/a8b80585cd2cf8559aadd7fa1accb55af235e865abd685b3f61c1a82e3cea41b.svg",
+      "fileSize": 2740
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-011/recording",
+      "contentHash": "sha256:adaf7fedac636e34ac124b5bb8fbf35f1b176dda312c85805ddb972dcaedf0f8",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Juniper Customer Studio Consultation: client consultation recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-2",
+        "episodeKey": "chalk-episode-011",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-011/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-011/recording.wav",
+      "storageKey": "showcase-v1/chalk/adaf7fedac636e34ac124b5bb8fbf35f1b176dda312c85805ddb972dcaedf0f8.wav",
+      "fileSize": 550226,
+      "duration": 12.476,
+      "transcript": "Episode recording summary for Juniper Customer Studio Consultation: client consultation. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 6.238,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Juniper Customer Studio Consultation: client consultation."
+        },
+        {
+          "start": 6.238,
+          "end": 12.476,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3773,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.8063,
+        0.3556,
+        0.5767,
+        0.4858,
+        0.4566,
+        0.3764,
+        0.805,
+        0.5092,
+        0.3645,
+        0.4931,
+        0.4483,
+        0.5054,
+        0.4492,
+        0.4122,
+        0.5177,
+        0.5505,
+        0.1378,
+        0.0,
+        0.6121,
+        0.6534,
+        0.2057,
+        0.4794,
+        0.5089,
+        0.532,
+        0.2969,
+        0.5731,
+        0.0,
+        0.0,
+        0.5239,
+        0.6378,
+        0.5433,
+        0.5764,
+        0.2606,
+        0.3791,
+        0.6321,
+        0.5496,
+        0.5272,
+        0.3876,
+        0.0556,
+        0.4838,
+        0.4952,
+        0.3666,
+        0.7663,
+        0.3995,
+        0.4058,
+        0.5804,
+        0.5808,
+        0.1353,
+        0.5344,
+        0.5577,
+        0.453,
+        0.5658,
+        0.6454,
+        0.2156,
+        0.477,
+        0.3537,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-012/transcript",
+      "contentHash": "sha256:7cf6adc00948c70adc63859a8120ac97673d00e4d1f936793d60b3f64ce4329c",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "episodeKey": "chalk-episode-012"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-012/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/7cf6adc00948c70adc63859a8120ac97673d00e4d1f936793d60b3f64ce4329c.pdf",
+      "fileSize": 11896,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-012/whiteboard",
+      "contentHash": "sha256:1b2d7dcc0263b0bd63804ff292a8b31808fb0d55475b022448d7c39e13b5ac29",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "episodeKey": "chalk-episode-012"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-012/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/1b2d7dcc0263b0bd63804ff292a8b31808fb0d55475b022448d7c39e13b5ac29.svg",
+      "fileSize": 2723
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-012/recording",
+      "contentHash": "sha256:72d6602b0e15f91ec6e47a3c4b05c8158fa2e22d030183945c749415251a0195",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Mosaic Research Room Studio: artifact workshop recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "episodeKey": "chalk-episode-012",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-012/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-012/recording.wav",
+      "storageKey": "showcase-v1/chalk/72d6602b0e15f91ec6e47a3c4b05c8158fa2e22d030183945c749415251a0195.wav",
+      "fileSize": 515684,
+      "duration": 11.693,
+      "transcript": "Episode recording summary for Mosaic Research Room Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.846,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Mosaic Research Room Studio: artifact workshop."
+        },
+        {
+          "start": 5.846,
+          "end": 11.693,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.6405,
+        0.8063,
+        0.3225,
+        0.5636,
+        0.4754,
+        0.5835,
+        0.3627,
+        0.4847,
+        0.4718,
+        0.461,
+        0.4026,
+        0.4555,
+        0.4206,
+        0.4653,
+        0.4017,
+        0.0,
+        0.7107,
+        0.3181,
+        0.55,
+        0.1067,
+        0.4106,
+        0.2945,
+        0.4795,
+        0.0525,
+        0.0,
+        0.0,
+        0.5239,
+        0.6501,
+        0.5325,
+        0.569,
+        0.2384,
+        0.3777,
+        0.4677,
+        0.6309,
+        0.49,
+        0.5308,
+        0.102,
+        0.1207,
+        0.4797,
+        0.4988,
+        0.3643,
+        0.7947,
+        0.4084,
+        0.4113,
+        0.5874,
+        0.5879,
+        0.351,
+        0.5366,
+        0.2348,
+        0.5559,
+        0.2236,
+        0.6418,
+        0.5767,
+        0.4723,
+        0.4791,
+        0.3522,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-013/transcript",
+      "contentHash": "sha256:2362386ee9e16b3be0e3a9f7dac3055fa8c4ba00c7a8400dda8653195965a870",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
+        "episodeKey": "chalk-episode-013"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-013/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/2362386ee9e16b3be0e3a9f7dac3055fa8c4ba00c7a8400dda8653195965a870.pdf",
+      "fileSize": 12241,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-013/whiteboard",
+      "contentHash": "sha256:50ae4c32c181e77023112efcb3cb1d9a13e5c3418e336b20404ba67d4edbbae5",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
+        "episodeKey": "chalk-episode-013"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-013/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/50ae4c32c181e77023112efcb3cb1d9a13e5c3418e336b20404ba67d4edbbae5.svg",
+      "fileSize": 2743
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-013/recording",
+      "contentHash": "sha256:b547ee74d082767390e0e420767d3e24abb1871633b9d968c7f2138d53c7ed2d",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Atlas Design Faculty Review Room: decision review recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
+        "episodeKey": "chalk-episode-013",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-013/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-013/recording.wav",
+      "storageKey": "showcase-v1/chalk/b547ee74d082767390e0e420767d3e24abb1871633b9d968c7f2138d53c7ed2d.wav",
+      "fileSize": 519394,
+      "duration": 11.777,
+      "transcript": "Episode recording summary for Atlas Design Faculty Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.888,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Atlas Design Faculty Review Room: decision review."
+        },
+        {
+          "start": 5.888,
+          "end": 11.777,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.8063,
+        0.7612,
+        0.3225,
+        0.5633,
+        0.5699,
+        0.5414,
+        0.3533,
+        0.674,
+        0.2798,
+        0.5949,
+        0.3966,
+        0.3361,
+        0.3939,
+        0.4593,
+        0.4184,
+        0.3573,
+        0.1154,
+        0.0,
+        0.3798,
+        0.649,
+        0.5567,
+        0.373,
+        0.4243,
+        0.3134,
+        0.0,
+        0.0,
+        0.539,
+        0.6411,
+        0.5051,
+        0.5354,
+        0.2384,
+        0.4017,
+        0.4661,
+        0.5962,
+        0.5142,
+        0.5858,
+        0.102,
+        0.0,
+        0.4792,
+        0.3565,
+        0.4668,
+        0.8067,
+        0.4293,
+        0.403,
+        0.5533,
+        0.4935,
+        0.542,
+        0.5731,
+        0.447,
+        0.5536,
+        0.1801,
+        0.5997,
+        0.6413,
+        0.3964,
+        0.4817,
+        0.3565,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-014/transcript",
+      "contentHash": "sha256:ca7237374679e9d85b62d878a9053ebef487b716d422476598e5a0f58cea0d0e",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "North Hall Advisory Workshop: guided practice transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-2",
+        "episodeKey": "chalk-episode-014"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-014/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/ca7237374679e9d85b62d878a9053ebef487b716d422476598e5a0f58cea0d0e.pdf",
+      "fileSize": 11992,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-014/whiteboard",
+      "contentHash": "sha256:d028018295df8431f437948190e00ae62bbfeb03d087d86ab9920a91dfd94a71",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "North Hall Advisory Workshop: guided practice whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-2",
+        "episodeKey": "chalk-episode-014"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-014/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/d028018295df8431f437948190e00ae62bbfeb03d087d86ab9920a91dfd94a71.svg",
+      "fileSize": 2728
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-014/recording",
+      "contentHash": "sha256:2fddd214ba51b7068253fc241a4e3e939aae8f7b5d913d1b6d536b793d32a4ae",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "North Hall Advisory Workshop: guided practice recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-2",
+        "episodeKey": "chalk-episode-014",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-014/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-014/recording.wav",
+      "storageKey": "showcase-v1/chalk/2fddd214ba51b7068253fc241a4e3e939aae8f7b5d913d1b6d536b793d32a4ae.wav",
+      "fileSize": 511552,
+      "duration": 11.599,
+      "transcript": "Episode recording summary for North Hall Advisory Workshop: guided practice. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 5.8,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for North Hall Advisory Workshop: guided practice."
+        },
+        {
+          "start": 5.8,
+          "end": 11.599,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.4622,
+        0.8063,
+        0.3225,
+        0.5636,
+        0.8779,
+        0.331,
+        0.6388,
+        0.5409,
+        0.364,
+        0.6877,
+        0.376,
+        0.3165,
+        0.3943,
+        0.2969,
+        0.4801,
+        0.0525,
+        0.0,
+        0.701,
+        0.3914,
+        0.1929,
+        0.53,
+        0.1547,
+        0.4922,
+        0.0921,
+        0.0,
+        0.0905,
+        0.5378,
+        0.6426,
+        0.5012,
+        0.5292,
+        0.2402,
+        0.406,
+        0.4699,
+        0.6086,
+        0.5165,
+        0.5619,
+        0.102,
+        0.1209,
+        0.4791,
+        0.4594,
+        0.3857,
+        0.7796,
+        0.4318,
+        0.4033,
+        0.5576,
+        0.5424,
+        0.1337,
+        0.5786,
+        0.1524,
+        0.5544,
+        0.3208,
+        0.6447,
+        0.5544,
+        0.4794,
+        0.4821,
+        0.3576,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-015/transcript",
+      "contentHash": "sha256:6106a5ac39163e3e1df6225c747f726924bef342e06e85044de4adb6fbaac96d",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Saffron Service School Consultation: client consultation transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-2",
+        "episodeKey": "chalk-episode-015"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-015/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/6106a5ac39163e3e1df6225c747f726924bef342e06e85044de4adb6fbaac96d.pdf",
+      "fileSize": 11777,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-015/whiteboard",
+      "contentHash": "sha256:35b13a71c8662e553957b4c301e371a6274606878246d55c557098023198e7b9",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Saffron Service School Consultation: client consultation whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-2",
+        "episodeKey": "chalk-episode-015"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-015/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/35b13a71c8662e553957b4c301e371a6274606878246d55c557098023198e7b9.svg",
+      "fileSize": 2744
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-015/recording",
+      "contentHash": "sha256:4bfa6577ed0e155d2deda52c54a05e24546cc7d2eff9be6909d18bc71c763824",
+      "mimeType": "audio/wav",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-recording",
+      "title": "Saffron Service School Consultation: client consultation recording",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-2",
+        "episodeKey": "chalk-episode-015",
+        "transcriptAssetKey": "chalk/episodes/chalk-episode-015/transcript"
+      },
+      "source": {
+        "kind": "offline-synthetic-voice",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-015/recording.wav",
+      "storageKey": "showcase-v1/chalk/4bfa6577ed0e155d2deda52c54a05e24546cc7d2eff9be6909d18bc71c763824.wav",
+      "fileSize": 540428,
+      "duration": 12.254,
+      "transcript": "Episode recording summary for Saffron Service School Consultation: client consultation. Participants review evidence, make the recorded decision, and name the next owner.",
+      "speakers": [
+        "Synthetic narrator"
+      ],
+      "captions": [
+        {
+          "start": 0.0,
+          "end": 6.127,
+          "speaker": "Synthetic narrator",
+          "text": "Episode recording summary for Saffron Service School Consultation: client consultation."
+        },
+        {
+          "start": 6.127,
+          "end": 12.254,
+          "speaker": "Synthetic narrator",
+          "text": "Participants review evidence, make the recorded decision, and name the next owner."
+        }
+      ],
+      "waveform": [
+        0.6948,
+        0.3272,
+        0.4708,
+        0.3757,
+        0.7729,
+        0.5174,
+        0.8063,
+        0.3989,
+        0.5648,
+        0.4488,
+        0.6132,
+        0.5475,
+        0.4749,
+        0.4767,
+        0.2384,
+        0.5009,
+        0.2979,
+        0.4937,
+        0.4411,
+        0.511,
+        0.433,
+        0.5529,
+        0.0,
+        0.1716,
+        0.6575,
+        0.2875,
+        0.4832,
+        0.5079,
+        0.3814,
+        0.524,
+        0.571,
+        0.1363,
+        0.0,
+        0.5317,
+        0.4926,
+        0.642,
+        0.5321,
+        0.3467,
+        0.4036,
+        0.4756,
+        0.601,
+        0.5204,
+        0.5661,
+        0.102,
+        0.1207,
+        0.4749,
+        0.4678,
+        0.3862,
+        0.7882,
+        0.4333,
+        0.3972,
+        0.5534,
+        0.5495,
+        0.0925,
+        0.5738,
+        0.5566,
+        0.28,
+        0.5411,
+        0.6437,
+        0.2636,
+        0.4803,
+        0.3571,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-016/transcript",
+      "contentHash": "sha256:cc25e97894e30dde59cfbf0b4a10a22f0bb0c8f5cea015c6a6f37cd455d62d98",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Cedar Collaboration Lab Studio: artifact workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-cedar-collaboration-lab",
+        "spaceKey": "chalk-space-cedar-collaboration-lab-studio-2",
+        "episodeKey": "chalk-episode-016"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-016/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/cc25e97894e30dde59cfbf0b4a10a22f0bb0c8f5cea015c6a6f37cd455d62d98.pdf",
+      "fileSize": 11970,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-016/whiteboard",
+      "contentHash": "sha256:bafde8f877989e16e0463ce9c33d07081476c1cd90149cd2224bc2548edd0205",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Cedar Collaboration Lab Studio: artifact workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-cedar-collaboration-lab",
+        "spaceKey": "chalk-space-cedar-collaboration-lab-studio-2",
+        "episodeKey": "chalk-episode-016"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-016/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/bafde8f877989e16e0463ce9c33d07081476c1cd90149cd2224bc2548edd0205.svg",
+      "fileSize": 2730
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-017/transcript",
+      "contentHash": "sha256:55aeefa4c8e9fb2a55bde14b52c304633961aeccbec614ba8590eccab7bd07a0",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Compass Product Guild Review Room: decision review transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-3",
+        "episodeKey": "chalk-episode-017"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-017/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/55aeefa4c8e9fb2a55bde14b52c304633961aeccbec614ba8590eccab7bd07a0.pdf",
+      "fileSize": 12287,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-017/whiteboard",
+      "contentHash": "sha256:98c73415f23b288054ae6a51afb00551e1e663d81d3108d2aa05561a69ace39b",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Compass Product Guild Review Room: decision review whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-3",
+        "episodeKey": "chalk-episode-017"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-017/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/98c73415f23b288054ae6a51afb00551e1e663d81d3108d2aa05561a69ace39b.svg",
+      "fileSize": 2732
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-018/transcript",
+      "contentHash": "sha256:0339a0ae5cfcafe006b6224b2e32ad8f7d6fa789b417a67d925e63f021dd1959",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Rimal Learning Lab Workshop: guided practice transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-3",
+        "episodeKey": "chalk-episode-018"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-018/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/0339a0ae5cfcafe006b6224b2e32ad8f7d6fa789b417a67d925e63f021dd1959.pdf",
+      "fileSize": 12298,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-018/whiteboard",
+      "contentHash": "sha256:e687113a88531903cb0f1a6101e3b5d9152919c6e7ba23b02692797550535c15",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Rimal Learning Lab Workshop: guided practice whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-3",
+        "episodeKey": "chalk-episode-018"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-018/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/e687113a88531903cb0f1a6101e3b5d9152919c6e7ba23b02692797550535c15.svg",
+      "fileSize": 2720
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-019/transcript",
+      "contentHash": "sha256:160dd6c473e3465723e41fba15665a274c482cf7a232c3087a77e3db9ab9fa71",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Juniper Customer Studio Consultation: client consultation transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-3",
+        "episodeKey": "chalk-episode-019"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-019/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/160dd6c473e3465723e41fba15665a274c482cf7a232c3087a77e3db9ab9fa71.pdf",
+      "fileSize": 11748,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-019/whiteboard",
+      "contentHash": "sha256:fde27e8f9279198baa46f2af5f47ccb8ef37c6333716b5a7a52a2c0114834ee7",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Juniper Customer Studio Consultation: client consultation whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-3",
+        "episodeKey": "chalk-episode-019"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-019/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/fde27e8f9279198baa46f2af5f47ccb8ef37c6333716b5a7a52a2c0114834ee7.svg",
+      "fileSize": 2741
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-020/transcript",
+      "contentHash": "sha256:c6918b5b33d06f5650efe8c04c6fd95147e94475d09a43c8b35ed4d66842a56a",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "episodeKey": "chalk-episode-020"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-020/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/c6918b5b33d06f5650efe8c04c6fd95147e94475d09a43c8b35ed4d66842a56a.pdf",
+      "fileSize": 11994,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-020/whiteboard",
+      "contentHash": "sha256:dbf108d40316bfd3e11be4ad1c5b7723b147d2cf494e8d0274f10643e3e509ff",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "episodeKey": "chalk-episode-020"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-020/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/dbf108d40316bfd3e11be4ad1c5b7723b147d2cf494e8d0274f10643e3e509ff.svg",
+      "fileSize": 2731
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-021/transcript",
+      "contentHash": "sha256:a2707ee4640754459786c85a08af84406795d79cb097a90233c91e342a75521c",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
+        "episodeKey": "chalk-episode-021"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-021/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/a2707ee4640754459786c85a08af84406795d79cb097a90233c91e342a75521c.pdf",
+      "fileSize": 12200,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-021/whiteboard",
+      "contentHash": "sha256:9991cbd18e5adf9c0692ddd9a5d81e1cec4f993d33466804779d3365043ef6f1",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
+        "episodeKey": "chalk-episode-021"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-021/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/9991cbd18e5adf9c0692ddd9a5d81e1cec4f993d33466804779d3365043ef6f1.svg",
+      "fileSize": 2736
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-022/transcript",
+      "contentHash": "sha256:ac2fef3abc77035037d5c223f9e0b4b64082f80ee50cada2f97789d7ca418ec6",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "North Hall Advisory Workshop: guided practice transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-3",
+        "episodeKey": "chalk-episode-022"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-022/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/ac2fef3abc77035037d5c223f9e0b4b64082f80ee50cada2f97789d7ca418ec6.pdf",
+      "fileSize": 11960,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-022/whiteboard",
+      "contentHash": "sha256:5980d4c659b1c3ba89583c5f1ba18d3a36947c75b50a0242befba98d7113f30a",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "North Hall Advisory Workshop: guided practice whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-3",
+        "episodeKey": "chalk-episode-022"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-022/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/5980d4c659b1c3ba89583c5f1ba18d3a36947c75b50a0242befba98d7113f30a.svg",
+      "fileSize": 2728
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-023/transcript",
+      "contentHash": "sha256:62f3289fbc1ec400f414f664d7be321ce101dda0cef8aa8e64d6a50c87a38792",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Saffron Service School Consultation: client consultation transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-3",
+        "episodeKey": "chalk-episode-023"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-023/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/62f3289fbc1ec400f414f664d7be321ce101dda0cef8aa8e64d6a50c87a38792.pdf",
+      "fileSize": 11777,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-023/whiteboard",
+      "contentHash": "sha256:44bec1e5018f75a399ececa6b4c1680adb402ce316527de9e463950009cc3fc2",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Saffron Service School Consultation: client consultation whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-saffron-service-school",
+        "spaceKey": "chalk-space-saffron-service-school-consultations-3",
+        "episodeKey": "chalk-episode-023"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-023/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/44bec1e5018f75a399ececa6b4c1680adb402ce316527de9e463950009cc3fc2.svg",
+      "fileSize": 2738
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-024/transcript",
+      "contentHash": "sha256:ec46d9835abcbcb70250695fdc3a599f0ebd446f29f14621d342f6d667ab700d",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Cedar Collaboration Lab Studio: artifact workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-cedar-collaboration-lab",
+        "spaceKey": "chalk-space-cedar-collaboration-lab-studio-3",
+        "episodeKey": "chalk-episode-024"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-024/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/ec46d9835abcbcb70250695fdc3a599f0ebd446f29f14621d342f6d667ab700d.pdf",
+      "fileSize": 11940,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-024/whiteboard",
+      "contentHash": "sha256:9f1b4eec768aefa56ed8f8e95d0ca85a47bc71f3e6a669bddb89464c2110d72f",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Cedar Collaboration Lab Studio: artifact workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-cedar-collaboration-lab",
+        "spaceKey": "chalk-space-cedar-collaboration-lab-studio-3",
+        "episodeKey": "chalk-episode-024"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-024/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/9f1b4eec768aefa56ed8f8e95d0ca85a47bc71f3e6a669bddb89464c2110d72f.svg",
+      "fileSize": 2730
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-025/transcript",
+      "contentHash": "sha256:127893d3a5510df0edafd2e5c56bd0f7d37588ed10338675330472df4cad7e0a",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Compass Product Guild Review Room: decision review transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-4",
+        "episodeKey": "chalk-episode-025"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-025/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/127893d3a5510df0edafd2e5c56bd0f7d37588ed10338675330472df4cad7e0a.pdf",
+      "fileSize": 12321,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-025/whiteboard",
+      "contentHash": "sha256:0189c8561e7f6dd2561e9a9ee8e7648af38a83fd7e5480e434a6d35b74c509da",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Compass Product Guild Review Room: decision review whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-compass-product-guild",
+        "spaceKey": "chalk-space-compass-product-guild-reviews-4",
+        "episodeKey": "chalk-episode-025"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-025/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/0189c8561e7f6dd2561e9a9ee8e7648af38a83fd7e5480e434a6d35b74c509da.svg",
+      "fileSize": 2719
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-026/transcript",
+      "contentHash": "sha256:d13a9c7e87f2f2623ce6ed4ab557bae13a102a3609a9682af74c36eec594fd4b",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Rimal Learning Lab Workshop: guided practice transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-4",
+        "episodeKey": "chalk-episode-026"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-026/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/d13a9c7e87f2f2623ce6ed4ab557bae13a102a3609a9682af74c36eec594fd4b.pdf",
+      "fileSize": 12318,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-026/whiteboard",
+      "contentHash": "sha256:bff1dddbfbe092635b0f637d60d07f8a22c5bbf929b124ae60a07fe8f0d668b4",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Rimal Learning Lab Workshop: guided practice whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-rimal-learning-lab",
+        "spaceKey": "chalk-space-rimal-learning-lab-workshops-4",
+        "episodeKey": "chalk-episode-026"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-026/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/bff1dddbfbe092635b0f637d60d07f8a22c5bbf929b124ae60a07fe8f0d668b4.svg",
+      "fileSize": 2733
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-027/transcript",
+      "contentHash": "sha256:029023562951a4dd936255518446e770b8dd487946ea9917c502fbcbb9fea622",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "Juniper Customer Studio Consultation: client consultation transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-4",
+        "episodeKey": "chalk-episode-027"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-027/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/029023562951a4dd936255518446e770b8dd487946ea9917c502fbcbb9fea622.pdf",
+      "fileSize": 11645,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-027/whiteboard",
+      "contentHash": "sha256:f5433319c7f31aa67ff50d801c83227ea5a1042e7542d8aa161f29833b39ad69",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Juniper Customer Studio Consultation: client consultation whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-juniper-customer-studio",
+        "spaceKey": "chalk-space-juniper-customer-studio-consultations-4",
+        "episodeKey": "chalk-episode-027"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-027/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/f5433319c7f31aa67ff50d801c83227ea5a1042e7542d8aa161f29833b39ad69.svg",
+      "fileSize": 2752
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-028/transcript",
+      "contentHash": "sha256:6c58b5f56c4fe92b24d4247efaaa12b0aaf2857b0e636466791ac0ec711377ad",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-en",
+      "category": "episode-transcript",
+      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "episodeKey": "chalk-episode-028"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-028/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/6c58b5f56c4fe92b24d4247efaaa12b0aaf2857b0e636466791ac0ec711377ad.pdf",
+      "fileSize": 12111,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-028/whiteboard",
+      "contentHash": "sha256:290a7b868d9b28ca618fbb34c7a7d785ba05a0073fcf3879db2f189695efa240",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "episodeKey": "chalk-episode-028"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-028/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/290a7b868d9b28ca618fbb34c7a7d785ba05a0073fcf3879db2f189695efa240.svg",
+      "fileSize": 2731
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-029/transcript",
+      "contentHash": "sha256:9be07ef69f2996515c67539c3c273d72ef438932b65d2fdca9f6949ecb1d0f5f",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "ar-SA",
+      "category": "episode-transcript",
+      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
+        "episodeKey": "chalk-episode-029"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-029/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/9be07ef69f2996515c67539c3c273d72ef438932b65d2fdca9f6949ecb1d0f5f.pdf",
+      "fileSize": 12290,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-029/whiteboard",
+      "contentHash": "sha256:c5f60016f672cbae02024a3a0eef13ca23f370cd95a6266daecbfa7cb308f53b",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-atlas-design-faculty",
+        "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
+        "episodeKey": "chalk-episode-029"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-029/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/c5f60016f672cbae02024a3a0eef13ca23f370cd95a6266daecbfa7cb308f53b.svg",
+      "fileSize": 2730
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-030/transcript",
+      "contentHash": "sha256:ef235452b879c58359c09ad514800c0c9f4528b332767c1baa6736acdfee5a69",
+      "mimeType": "application/pdf",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "en-US",
+      "category": "episode-transcript",
+      "title": "North Hall Advisory Workshop: guided practice transcript",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-4",
+        "episodeKey": "chalk-episode-030"
+      },
+      "source": {
+        "kind": "offline-template",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-030/transcript.pdf",
+      "storageKey": "showcase-v1/chalk/ef235452b879c58359c09ad514800c0c9f4528b332767c1baa6736acdfee5a69.pdf",
+      "fileSize": 11920,
+      "pageCount": 1
+    },
+    {
+      "assetKey": "chalk/episodes/chalk-episode-030/whiteboard",
+      "contentHash": "sha256:c16adc652e1e1480003c5d978855dbd789f1ccbcae530d4c0c02c965c9e019d4",
+      "mimeType": "image/svg+xml",
+      "datasetId": "showcase-v1",
+      "product": "chalk",
+      "locale": "und",
+      "category": "episode-whiteboard",
+      "title": "North Hall Advisory Workshop: guided practice whiteboard",
+      "relationships": {
+        "tenantKey": "chalk-tenant-north-hall-advisory",
+        "spaceKey": "chalk-space-north-hall-advisory-workshops-4",
+        "episodeKey": "chalk-episode-030"
+      },
+      "source": {
+        "kind": "programmatic-diagram",
+        "license": "Q9 Labs synthetic fixture"
+      },
+      "status": "built",
+      "localPath": "build/assets/chalk/episodes/chalk-episode-030/whiteboard.svg",
+      "storageKey": "showcase-v1/chalk/c16adc652e1e1480003c5d978855dbd789f1ccbcae530d4c0c02c965c9e019d4.svg",
+      "fileSize": 2728
+    }
+  ]
+}

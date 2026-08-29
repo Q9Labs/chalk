@@ -20,6 +20,7 @@
     "dev:stop": "node scripts/dev/cli.mjs stop",
     "dev:reset": "node scripts/dev/cli.mjs reset",
     "dev:smoke": "node scripts/dev/media-smoke.mjs .private/chalk-dev/manifest.json",
+    "seed:dataset": "cd apps/api && go run ./cmd/showcase-dataset",
     "mobile:connect": "bash .agents/skills/chalk-mobile-wireless-debug/scripts/connect-wireless-adb.sh",
     "mobile:launch": "bash .agents/skills/chalk-mobile-wireless-debug/scripts/launch-chalk-mobile-dev.sh",
     "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
