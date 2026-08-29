@@ -161,9 +161,10 @@ func run() error {
 		oauthStates = redisadapter.NewOAuthStateStore(redisClient)
 	}
 	authenticationService := authentication.NewService(authenticationRepository, passwords, googleProvider, oauthStates, authentication.Config{
-		RequireEmailVerification: cfg.Auth.EmailVerificationRequired,
-		OAuthStateTTL:            cfg.Auth.OAuthStateTTL,
-		SessionTTL:               cfg.Auth.SessionTTL,
+		RequireEmailVerification:          cfg.Auth.EmailVerificationRequired,
+		OAuthStateTTL:                     cfg.Auth.OAuthStateTTL,
+		SessionTTL:                        cfg.Auth.SessionTTL,
+		GoogleReauthenticationRedirectURL: cfg.GoogleOAuth.ReauthenticationRedirectURL,
 	})
 	recentAuthService := recentauth.NewService(authenticationService, recentauth.Config{
 		Secret:    cfg.Auth.RecentAuthSecret,

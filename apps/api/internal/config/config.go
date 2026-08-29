@@ -92,9 +92,10 @@ const (
 	EpisodeDiagnosticsModeLocalhost  = "localhost"
 	EpisodeDiagnosticsModeHosted     = "hosted"
 
-	GoogleOAuthClientID     = "CHALK_GOOGLE_OAUTH_CLIENT_ID"
-	GoogleOAuthClientSecret = "CHALK_GOOGLE_OAUTH_CLIENT_SECRET"
-	GoogleOAuthRedirectURL  = "CHALK_GOOGLE_OAUTH_REDIRECT_URL"
+	GoogleOAuthClientID                    = "CHALK_GOOGLE_OAUTH_CLIENT_ID"
+	GoogleOAuthClientSecret                = "CHALK_GOOGLE_OAUTH_CLIENT_SECRET"
+	GoogleOAuthRedirectURL                 = "CHALK_GOOGLE_OAUTH_REDIRECT_URL"
+	GoogleOAuthReauthenticationRedirectURL = "CHALK_GOOGLE_OAUTH_REAUTHENTICATION_REDIRECT_URL"
 
 	RedisURL = "CHALK_REDIS_URL"
 
@@ -290,9 +291,10 @@ type PublicInviteConfig struct {
 }
 
 type GoogleOAuthConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
+	ClientID                    string
+	ClientSecret                string
+	RedirectURL                 string
+	ReauthenticationRedirectURL string
 }
 
 type ResendConfig struct {
@@ -617,9 +619,10 @@ func Load() (Config, error) {
 		DeadlineScheduler:  DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
 		EpisodeDiagnostics: episodeDiagnostics,
 		GoogleOAuth: GoogleOAuthConfig{
-			ClientID:     envOrDefault(GoogleOAuthClientID, ""),
-			ClientSecret: envOrDefault(GoogleOAuthClientSecret, ""),
-			RedirectURL:  envOrDefault(GoogleOAuthRedirectURL, DefaultGoogleRedirectURL),
+			ClientID:                    envOrDefault(GoogleOAuthClientID, ""),
+			ClientSecret:                envOrDefault(GoogleOAuthClientSecret, ""),
+			RedirectURL:                 envOrDefault(GoogleOAuthRedirectURL, DefaultGoogleRedirectURL),
+			ReauthenticationRedirectURL: envOrDefault(GoogleOAuthReauthenticationRedirectURL, ""),
 		},
 		Observability: ObservabilityConfig{
 			Environment:          environment,

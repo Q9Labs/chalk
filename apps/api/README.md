@@ -69,7 +69,21 @@ Google sign-in activates only with a complete
 `CHALK_GOOGLE_OAUTH_CLIENT_ID`, `CHALK_GOOGLE_OAUTH_CLIENT_SECRET`, and
 `CHALK_GOOGLE_OAUTH_REDIRECT_URL` triplet. Generic local development may omit
 the triplet. Managed production requires it and requires the redirect URL to be
-`https://chalkmeet.com/api/auth/google/callback`.
+`https://chalkmeet.com/api/auth/google/callback`. Google reauthentication for
+sensitive Dashboard actions also uses
+`CHALK_GOOGLE_OAUTH_REAUTHENTICATION_REDIRECT_URL`. Managed production sets it
+to `https://chalkmeet.com/api/me/recent-auth/google/callback`; both exact URLs
+must be authorized on the Google OAuth client.
+
+### Browser origins
+
+API CORS is a deployment-wide exact-origin allowlist set by
+`CHALK_API_CORS_ALLOWED_ORIGINS`; it is not Tenant configuration. An origin
+includes its scheme and port, so allowing `http://localhost:3210` does not allow
+another localhost port. Add each trusted browser origin to the deployment list
+and restart the API. Customer API keys stay on a backend and must not be exposed
+to browser code; browser clients use short-lived AccessGrants issued by that
+backend.
 
 ### Production capabilities
 
