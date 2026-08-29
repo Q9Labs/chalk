@@ -40,6 +40,9 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare mobile workspace dependencies
+        run: pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies
+
       - name: Check mobile types
         run: pnpm --filter @q9labsai/chalk-mobile run check-types
 
