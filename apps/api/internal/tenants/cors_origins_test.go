@@ -12,12 +12,14 @@ func TestCORSOriginsCanonicalizesDeduplicatesAndSorts(t *testing.T) {
 		" HTTPS://Example.COM:443 ",
 		"http://localhost:3070",
 		"https://example.com",
-		"http://[::1]:8080",
+		"http://[0:0::1]:08080",
+		"http://127.1",
+		"https://app.example:0443",
 	})
 	if err != nil {
 		t.Fatalf("CORSOrigins returned an error: %v", err)
 	}
-	want := []string{"http://[::1]:8080", "http://localhost:3070", "https://example.com"}
+	want := []string{"http://127.0.0.1", "http://[::1]:8080", "http://localhost:3070", "https://app.example", "https://example.com"}
 	if !slices.Equal(origins, want) {
 		t.Fatalf("CORSOrigins = %#v, want %#v", origins, want)
 	}
@@ -33,6 +35,8 @@ func TestCORSOriginRejectsUnsafeOrInexactValues(t *testing.T) {
 		"https://example.com?query=1",
 		"https://user@example.com",
 		"https://bücher.example",
+		"https://example.com:65536",
+		"http://167772160",
 		"ftp://example.com",
 		"null",
 	}

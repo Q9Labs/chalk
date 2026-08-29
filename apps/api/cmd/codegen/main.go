@@ -397,6 +397,7 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 				"type":      "string",
 				"format":    "uri",
 				"maxLength": tenants.MaxCORSOriginBytes,
+				"pattern":   tenants.CORSOriginPattern,
 			},
 		}
 	}
@@ -527,6 +528,7 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 				"type":      "string",
 				"format":    "uri",
 				"maxLength": tenants.MaxCORSOriginBytes,
+				"pattern":   tenants.CORSOriginPattern,
 			},
 		}
 		return applyFieldConstraints(schema, schemaName, fieldName, request)
@@ -588,6 +590,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		if items, ok := schema["items"].(map[string]any); ok {
 			items["format"] = "uri"
 			items["maxLength"] = tenants.MaxCORSOriginBytes
+			items["pattern"] = tenants.CORSOriginPattern
 		}
 	}
 	if schemaName == "JourneyEventBatch" && fieldName == "events" {
