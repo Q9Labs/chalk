@@ -23,6 +23,7 @@ var (
 	apiErrorInvalidTenantName           = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_name", Message: "Invalid tenant name"}
 	apiErrorInvalidTenantRegion         = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_region", Message: "Invalid tenant region"}
 	apiErrorInvalidTenantField          = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_field", Message: "Invalid tenant field"}
+	apiErrorInvalidTenantCORSOrigin     = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_cors_origin", Message: "Use up to 32 exact HTTPS origins; HTTP is allowed only for localhost or loopback addresses"}
 	apiErrorTenantNotFound              = APIError{Status: http.StatusNotFound, Code: "tenant.not_found", Message: "Tenant not found"}
 	apiErrorRateLimited                 = APIError{Status: http.StatusTooManyRequests, Code: "request.rate_limited", Message: "Too many requests"}
 	apiErrorPayloadTooLarge             = APIError{Status: http.StatusRequestEntityTooLarge, Code: "request.payload_too_large", Message: "Request body is too large"}

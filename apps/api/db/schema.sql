@@ -49,6 +49,9 @@ create table tenants (
     --   "secret_access_key": string
     -- }
     storage_provider_config jsonb,
+    cors_allowed_origins text[] not null default '{}',
+    constraint tenants_cors_allowed_origins_count_check
+        check (cardinality(cors_allowed_origins) <= 32),
     logo_key text,
     website text,
     updated_at timestamptz not null default now(),

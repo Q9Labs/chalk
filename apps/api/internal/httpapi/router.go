@@ -109,12 +109,12 @@ type Options struct {
 
 func NewRouter(options Options) http.Handler {
 	r := chi.NewRouter()
-	r.Use(allowCORS(options.CORS))
-	if options.LocalSystemToken != "" {
-		r.Use(acceptLocalSystemToken(options.LocalSystemToken))
-	}
 	if len(options.Middleware) > 0 {
 		r.Use(options.Middleware...)
+	}
+	r.Use(allowCORS(options.CORS, options.RateLimit))
+	if options.LocalSystemToken != "" {
+		r.Use(acceptLocalSystemToken(options.LocalSystemToken))
 	}
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {

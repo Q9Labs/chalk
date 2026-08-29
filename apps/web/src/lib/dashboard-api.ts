@@ -132,6 +132,15 @@ export async function onboardTenant(input: { name: string; default_region: strin
   return { tenant: tenant as Tenant, access: response.access as TenantAccess };
 }
 
+export function updateTenantCORSAllowedOrigins(tenantID: string, corsAllowedOrigins: string[]): Promise<Tenant> {
+  return generatedRequest((client) =>
+    client.tenants.updateTenant({
+      params: { tenant_id: tenantID as GeneratedTenant["id"] },
+      payload: { cors_allowed_origins: corsAllowedOrigins },
+    }),
+  );
+}
+
 export function listSpaces(input: { tenantID: string; cursor?: string; pageSize?: number; archived?: boolean }): Promise<DashboardSpacePage> {
   return generatedRequest((client) => client.spaces.listSpaces({ params: { tenant_id: input.tenantID as GeneratedTenant["id"] }, query: { cursor: input.cursor, page_size: input.pageSize, archived: input.archived } }));
 }

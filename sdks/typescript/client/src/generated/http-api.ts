@@ -1843,6 +1843,7 @@ const tenantsGroup = HttpApiGroup.make("tenants")
       success: S.CreateTenantResponseSchema.pipe(HttpApiSchema.status(201)),
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidCorsOriginErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidRegionErrorSchema.pipe(HttpApiSchema.status(400)),
@@ -1921,6 +1922,7 @@ const tenantsGroup = HttpApiGroup.make("tenants")
       success: S.UpdateTenantResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidCorsOriginErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),

@@ -342,7 +342,7 @@ func runRouteTenantGetAuthorized(ctx context.Context) (ScenarioResult, error) {
 func runRouteTenantUpdateAuthorized(ctx context.Context) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
-	body := json.RawMessage(`{"name":"  Chalk Studio  ","default_region":"sg","website":null}`)
+	body := json.RawMessage(`{"name":"  Chalk Studio  ","default_region":"sg","cors_allowed_origins":["http://localhost:3070","https://app.chalkmeet.com"],"website":null}`)
 
 	return runRouteTrace(ctx, routeTraceConfig{
 		Name:     RouteTenantUpdateAuthorizedScenario,
@@ -1839,7 +1839,7 @@ func sessionUserFixture(now func() time.Time) authentication.SessionUser {
 }
 
 func tenantFixture(now func() time.Time) tenants.Tenant {
-	return tenants.Tenant{ID: tenantID(), Name: "Chalk Demo Workspace", DefaultRegion: stringPtr("us"), Website: stringPtr("https://chalkmeet.com"), CreatedAt: now(), UpdatedAt: now()}
+	return tenants.Tenant{ID: tenantID(), Name: "Chalk Demo Workspace", DefaultRegion: stringPtr("us"), CORSAllowedOrigins: []string{"https://app.chalkmeet.com"}, Website: stringPtr("https://chalkmeet.com"), CreatedAt: now(), UpdatedAt: now()}
 }
 
 func userFixture(now func() time.Time) users.User {
@@ -2011,7 +2011,17 @@ func createSessionInputFields(input authentication.CreateSessionInput) map[strin
 }
 
 func tenantUpdateInputFields(input tenants.UpdateTenantInput) map[string]any {
-	return map[string]any{"name": optionalStringField(input.Name), "default_region": optionalStringField(input.DefaultRegion), "default_media_plane": optionalStringField(input.DefaultMediaPlane), "logo_key": optionalStringField(input.LogoKey), "website": optionalStringField(input.Website)}
+	return map[string]any{
+		"name":                optionalStringField(input.Name),
+		"default_region":      optionalStringField(input.DefaultRegion),
+		"default_media_plane": optionalStringField(input.DefaultMediaPlane),
+		"cors_allowed_origins": map[string]any{
+			"set":   input.CORSAllowedOrigins.Set,
+			"count": len(input.CORSAllowedOrigins.Value),
+		},
+		"logo_key": optionalStringField(input.LogoKey),
+		"website":  optionalStringField(input.Website),
+	}
 }
 
 func optionalStringField(value utilities.OptionalString) map[string]any {
