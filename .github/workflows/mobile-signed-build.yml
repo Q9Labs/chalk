@@ -97,13 +97,6 @@ jobs:
           node-version: 25.6.1
           cache: pnpm
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
-        with:
-          ruby-version: 3.3.12
-          bundler-cache: true
-          working-directory: apps/mobile
-
       - name: Install 1Password CLI
         uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
 
@@ -112,7 +105,7 @@ jobs:
 
       - name: Install CocoaPods dependencies
         working-directory: apps/mobile
-        run: bundle exec pod install --project-directory=ios
+        run: pod install --project-directory=ios
 
       - name: Build and verify signed iOS archive
         env:
