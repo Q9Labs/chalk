@@ -16390,6 +16390,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             items: {
               format: "uri",
               maxLength: 2048,
+              pattern: "^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$",
               type: "string",
             },
             maxItems: 32,
@@ -18794,6 +18795,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             items: {
               format: "uri",
               maxLength: 2048,
+              pattern: "^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$",
               type: "string",
             },
             maxItems: 32,
@@ -19165,6 +19167,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             items: {
               format: "uri",
               maxLength: 2048,
+              pattern: "^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$",
               type: "string",
             },
             maxItems: 32,
