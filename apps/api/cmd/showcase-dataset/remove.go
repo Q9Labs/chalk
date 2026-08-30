@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -22,14 +23,17 @@ func removeDataset(ctx context.Context, value dataset, options options) (report,
 	if !exists {
 		return report{}, errors.New("chalk showcase registry does not exist; there is nothing to remove")
 	}
-	if registry.State != "applied" || registry.OrganizationID.String() != ids.OrganizationID {
-		return report{}, errors.New("chalk showcase registry is not the expected applied deterministic dataset")
+	if (registry.State != "applied" && registry.State != "removing") || registry.OrganizationID.String() != ids.OrganizationID {
+		return report{}, errors.New("chalk showcase registry is not the expected applied or removing deterministic dataset")
 	}
 	if err := registryMatchesDataset(value, registry); err != nil {
 		return report{}, err
 	}
 	if options.confirmOrganization != registry.OrganizationID.String() {
 		return report{}, fmt.Errorf("--confirm-organization must equal %s", registry.OrganizationID)
+	}
+	if err := beginRegistryRemoval(ctx, pool, options.organizationKey, uuid.MustParse(ids.OrganizationID)); err != nil {
+		return report{}, err
 	}
 	if err := deleteBuiltAssets(ctx, value, options.skipStorageDelete); err != nil {
 		return report{}, err

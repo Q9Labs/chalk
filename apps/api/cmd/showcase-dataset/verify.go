@@ -26,7 +26,7 @@ func verifyDataset(ctx context.Context, value dataset, options options) (report,
 		return report{}, errors.New("chalk showcase registry does not exist; apply must complete before verify")
 	}
 	if registry.State != "applied" || registry.OrganizationID.String() != ids.OrganizationID || !bytesEqual(registry.ManifestHash, value.ManifestHash[:]) || !bytesEqual(registry.AssetsHash, value.AssetsHash[:]) {
-		return report{}, errors.New("chalk showcase registry is not the expected applied deterministic dataset")
+		return report{}, fmt.Errorf("chalk showcase registry is %s, not the expected applied deterministic dataset", registry.State)
 	}
 	if err := registryMatchesDataset(value, registry); err != nil {
 		return report{}, err

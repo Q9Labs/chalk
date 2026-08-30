@@ -151,9 +151,33 @@ func deleteBuiltAssets(ctx context.Context, value dataset, skip bool) error {
 			continue
 		}
 		for _, key := range assetObjectKeys(value, ids, item) {
-			if err := store.DeleteObject(ctx, key); err != nil && !errors.Is(err, objectstorage.ErrObjectNotFound) {
-				return fmt.Errorf("delete %s: %w", item.AssetKey, err)
+			if err := deleteAssetWithRetry(ctx, store, item.AssetKey, key); err != nil {
+				return err
 			}
+		}
+	}
+	return nil
+}
+
+func deleteAssetWithRetry(ctx context.Context, store objectstorage.Store, assetKey, objectKey string) error {
+	const maxAttempts = 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := store.DeleteObject(ctx, objectKey)
+		if err == nil || errors.Is(err, objectstorage.ErrObjectNotFound) {
+			return nil
+		}
+		if !errors.Is(err, objectstorage.ErrProviderFailed) || attempt == maxAttempts {
+			return fmt.Errorf("delete %s: %w", assetKey, err)
+		}
+		delay := time.Duration(attempt) * time.Second
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return fmt.Errorf("delete %s: %w", assetKey, ctx.Err())
+		case <-timer.C:
 		}
 	}
 	return nil

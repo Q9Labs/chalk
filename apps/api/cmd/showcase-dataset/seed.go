@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -50,6 +51,9 @@ func applyDataset(ctx context.Context, value dataset, options options) (report, 
 		return report{}, err
 	}
 	if exists {
+		if registry.State == "removing" {
+			return report{}, errors.New("chalk showcase removal is in progress; retry remove before applying this organization")
+		}
 		if registry.OrganizationID.String() != ids.OrganizationID || registry.OwnerUserID != ownerID || registry.State != "applied" || !bytesEqual(registry.ManifestHash, value.ManifestHash[:]) || !bytesEqual(registry.AssetsHash, value.AssetsHash[:]) {
 			return report{}, fmt.Errorf("existing Chalk showcase registry for %s does not match this deterministic apply", options.organizationKey)
 		}
@@ -507,7 +511,6 @@ func seedEpisodeControl(ctx context.Context, tx pgx.Tx, value dataset, ids datas
 	`, seed.TenantID, seed.SpaceID, seed.EpisodeID, endIndex, finalEncoded, finalDigest[:], len(finalWire)); err != nil {
 		return fmt.Errorf("insert Episode control state %s: %w", seed.Item.ExternalKey, err)
 	}
-	joinBytes := 0
 	intentBytes := 0
 	eventBytes := 0
 	for index, participant := range joined {
@@ -522,7 +525,6 @@ func seedEpisodeControl(ctx context.Context, tx pgx.Tx, value dataset, ids datas
 			return fmt.Errorf("encode join event %s: %w", seed.Item.ExternalKey, marshalErr)
 		}
 		payloadSize := len(encodedPayload)
-		joinBytes += payloadSize
 		intentBytes += payloadSize
 		// The reducer sorts participant entries by id when calculating each digest.
 		_, _, digest, snapshotErr := snapshotForEpisode(value, ids, seed.Item, append([]snapshotParticipant{}, joined[:index+1]...), "active", index+1)
@@ -543,7 +545,18 @@ func seedEpisodeControl(ctx context.Context, tx pgx.Tx, value dataset, ids datas
 		`, seed.TenantID, seed.SpaceID, seed.EpisodeID, intentID, requestKey, fingerprint[:], participant.ParticipantID, encodedPayload); err != nil {
 			return fmt.Errorf("insert participant join intent %s: %w", seed.Item.ExternalKey, err)
 		}
-		eventSize := payloadSize + 64
+		eventSize, err := lifecycleEventBytes(
+			"participant_joined",
+			index,
+			index+1,
+			payload,
+			eventID,
+			intentID,
+			digest,
+		)
+		if err != nil {
+			return fmt.Errorf("encode participant join event %s: %w", seed.Item.ExternalKey, err)
+		}
 		eventBytes += eventSize
 		if _, err := tx.Exec(ctx, `
 			insert into sync_control_events (
@@ -563,7 +576,7 @@ func seedEpisodeControl(ctx context.Context, tx pgx.Tx, value dataset, ids datas
 			return fmt.Errorf("apply participant join intent %s: %w", seed.Item.ExternalKey, err)
 		}
 	}
-	endPayload := map[string]string{"reason": "ended_by_participant"}
+	endPayload := map[string]any{"reason": "ended_by_participant"}
 	encodedEnd, err := json.Marshal(endPayload)
 	if err != nil {
 		return fmt.Errorf("encode Episode end event %s: %w", seed.Item.ExternalKey, err)
@@ -581,7 +594,18 @@ func seedEpisodeControl(ctx context.Context, tx pgx.Tx, value dataset, ids datas
 	`, seed.TenantID, seed.SpaceID, seed.EpisodeID, endIntentID, endRequestKey, endFingerprint[:], encodedEnd); err != nil {
 		return fmt.Errorf("insert Episode end intent %s: %w", seed.Item.ExternalKey, err)
 	}
-	endSize := len(encodedEnd) + 64
+	endSize, err := lifecycleEventBytes(
+		"episode_ended",
+		endIndex-1,
+		endIndex,
+		endPayload,
+		endEventID,
+		endIntentID,
+		finalDigest,
+	)
+	if err != nil {
+		return fmt.Errorf("encode Episode end event %s: %w", seed.Item.ExternalKey, err)
+	}
 	eventBytes += endSize
 	intentBytes += len(encodedEnd)
 	if _, err := tx.Exec(ctx, `
@@ -611,10 +635,28 @@ func seedEpisodeControl(ctx context.Context, tx pgx.Tx, value dataset, ids datas
 			lifecycle_intent_bytes = $5,
 			updated_at = now()
 		where tenant_id = $6 and episode_id = $7
-	`, len(joined), joinBytes, endIndex, eventBytes, intentBytes, seed.TenantID, seed.EpisodeID); err != nil {
+	`, 0, 0, endIndex, eventBytes, intentBytes, seed.TenantID, seed.EpisodeID); err != nil {
 		return fmt.Errorf("update Episode control counters %s: %w", seed.Item.ExternalKey, err)
 	}
 	return nil
+}
+
+func lifecycleEventBytes(name string, baseRevision, revision int, payload map[string]any, eventID, intentID uuid.UUID, digest [32]byte) (int, error) {
+	encoded, err := json.Marshal(map[string]any{
+		"name":                   name,
+		"base_revision":          baseRevision,
+		"revision":               revision,
+		"payload":                payload,
+		"event_id":               eventID.String(),
+		"command_id":             nil,
+		"lifecycle_intent_id":    intentID.String(),
+		"schema_version":         1,
+		"resulting_state_digest": hex.EncodeToString(digest[:]),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return len(encoded), nil
 }
 
 func seedWhiteboard(ctx context.Context, tx pgx.Tx, seed episodeSeed) error {

@@ -145,6 +145,45 @@ func markRegistryApplied(ctx context.Context, tx pgx.Tx, organizationKey string)
 	return nil
 }
 
+func beginRegistryRemoval(ctx context.Context, pool *pgxpool.Pool, organizationKey string, organizationID uuid.UUID) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin Chalk showcase removal reservation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var storedOrganizationID uuid.UUID
+	var state string
+	if err := tx.QueryRow(ctx, `
+		select organization_id, state
+		from showcase_dataset_registries
+		where dataset_id = $1 and product = $2 and organization_key = $3
+		for update
+	`, showcaseDatasetID, showcaseProduct, organizationKey).Scan(&storedOrganizationID, &state); err != nil {
+		return fmt.Errorf("lock Chalk showcase registry for removal: %w", err)
+	}
+	if storedOrganizationID != organizationID {
+		return errors.New("chalk showcase registry organization does not match the deterministic dataset")
+	}
+	if state == "removing" {
+		return nil
+	}
+	if state != "applied" {
+		return fmt.Errorf("chalk showcase registry is %s; only an applied dataset can start removal", state)
+	}
+	if _, err := tx.Exec(ctx, `
+		update showcase_dataset_registries
+		set state = 'removing', updated_at = now()
+		where dataset_id = $1 and product = $2 and organization_key = $3 and state = 'applied'
+	`, showcaseDatasetID, showcaseProduct, organizationKey); err != nil {
+		return fmt.Errorf("mark Chalk showcase registry removing: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit Chalk showcase removal reservation: %w", err)
+	}
+	return nil
+}
+
 func ensureOwner(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID) error {
 	var exists bool
 	if err := pool.QueryRow(ctx, `select exists(select 1 from users where id = $1)`, ownerID).Scan(&exists); err != nil {

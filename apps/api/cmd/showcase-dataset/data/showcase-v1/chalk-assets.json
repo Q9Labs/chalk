@@ -227,10 +227,10 @@
       "product": "chalk",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "episodeKey": "chalk-episode-004"
       },
       "source": {
@@ -251,10 +251,10 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "episodeKey": "chalk-episode-004"
       },
       "source": {
@@ -274,10 +274,10 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Mosaic Research Room Studio: artifact workshop recording",
+      "title": "Mosaic Research Space Studio: artifact workshop recording",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "episodeKey": "chalk-episode-004",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-004/transcript"
       },
@@ -290,7 +290,7 @@
       "storageKey": "showcase-v1/chalk/72d6602b0e15f91ec6e47a3c4b05c8158fa2e22d030183945c749415251a0195.wav",
       "fileSize": 515684,
       "duration": 11.693,
-      "transcript": "Episode recording summary for Mosaic Research Room Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
+      "transcript": "Episode recording summary for Mosaic Research Space Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
       "speakers": [
         "Synthetic narrator"
       ],
@@ -299,7 +299,7 @@
           "start": 0.0,
           "end": 5.846,
           "speaker": "Synthetic narrator",
-          "text": "Episode recording summary for Mosaic Research Room Studio: artifact workshop."
+          "text": "Episode recording summary for Mosaic Research Space Studio: artifact workshop."
         },
         {
           "start": 5.846,
@@ -383,7 +383,7 @@
       "product": "chalk",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
@@ -407,7 +407,7 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
@@ -430,7 +430,7 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Atlas Design Faculty Review Room: decision review recording",
+      "title": "Atlas Design Faculty Review Space: decision review recording",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
@@ -446,7 +446,7 @@
       "storageKey": "showcase-v1/chalk/b547ee74d082767390e0e420767d3e24abb1871633b9d968c7f2138d53c7ed2d.wav",
       "fileSize": 519394,
       "duration": 11.777,
-      "transcript": "Episode recording summary for Atlas Design Faculty Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "transcript": "Episode recording summary for Atlas Design Faculty Review Space: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
       "speakers": [
         "Synthetic narrator"
       ],
@@ -455,7 +455,7 @@
           "start": 0.0,
           "end": 5.888,
           "speaker": "Synthetic narrator",
-          "text": "Episode recording summary for Atlas Design Faculty Review Room: decision review."
+          "text": "Episode recording summary for Atlas Design Faculty Review Space: decision review."
         },
         {
           "start": 5.888,
@@ -1007,7 +1007,7 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-transcript",
-      "title": "Compass Product Guild Review Room: decision review transcript",
+      "title": "Compass Product Guild Review Space: decision review transcript",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
@@ -1031,7 +1031,7 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Compass Product Guild Review Room: decision review whiteboard",
+      "title": "Compass Product Guild Review Space: decision review whiteboard",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
@@ -1054,7 +1054,7 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Compass Product Guild Review Room: decision review recording",
+      "title": "Compass Product Guild Review Space: decision review recording",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
@@ -1070,7 +1070,7 @@
       "storageKey": "showcase-v1/chalk/5d7e77956bd658052c948f9329cfbd1df7f1c8706cbfdf4780d9eef1d65e77ed.wav",
       "fileSize": 516808,
       "duration": 11.718,
-      "transcript": "Episode recording summary for Compass Product Guild Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "transcript": "Episode recording summary for Compass Product Guild Review Space: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
       "speakers": [
         "Synthetic narrator"
       ],
@@ -1079,7 +1079,7 @@
           "start": 0.0,
           "end": 5.859,
           "speaker": "Synthetic narrator",
-          "text": "Episode recording summary for Compass Product Guild Review Room: decision review."
+          "text": "Episode recording summary for Compass Product Guild Review Space: decision review."
         },
         {
           "start": 5.859,
@@ -1475,10 +1475,10 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "episodeKey": "chalk-episode-012"
       },
       "source": {
@@ -1499,10 +1499,10 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "episodeKey": "chalk-episode-012"
       },
       "source": {
@@ -1522,10 +1522,10 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Mosaic Research Room Studio: artifact workshop recording",
+      "title": "Mosaic Research Space Studio: artifact workshop recording",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "episodeKey": "chalk-episode-012",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-012/transcript"
       },
@@ -1538,7 +1538,7 @@
       "storageKey": "showcase-v1/chalk/72d6602b0e15f91ec6e47a3c4b05c8158fa2e22d030183945c749415251a0195.wav",
       "fileSize": 515684,
       "duration": 11.693,
-      "transcript": "Episode recording summary for Mosaic Research Room Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
+      "transcript": "Episode recording summary for Mosaic Research Space Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
       "speakers": [
         "Synthetic narrator"
       ],
@@ -1547,7 +1547,7 @@
           "start": 0.0,
           "end": 5.846,
           "speaker": "Synthetic narrator",
-          "text": "Episode recording summary for Mosaic Research Room Studio: artifact workshop."
+          "text": "Episode recording summary for Mosaic Research Space Studio: artifact workshop."
         },
         {
           "start": 5.846,
@@ -1631,7 +1631,7 @@
       "product": "chalk",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
@@ -1655,7 +1655,7 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
@@ -1678,7 +1678,7 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Atlas Design Faculty Review Room: decision review recording",
+      "title": "Atlas Design Faculty Review Space: decision review recording",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
@@ -1694,7 +1694,7 @@
       "storageKey": "showcase-v1/chalk/b547ee74d082767390e0e420767d3e24abb1871633b9d968c7f2138d53c7ed2d.wav",
       "fileSize": 519394,
       "duration": 11.777,
-      "transcript": "Episode recording summary for Atlas Design Faculty Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "transcript": "Episode recording summary for Atlas Design Faculty Review Space: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
       "speakers": [
         "Synthetic narrator"
       ],
@@ -1703,7 +1703,7 @@
           "start": 0.0,
           "end": 5.888,
           "speaker": "Synthetic narrator",
-          "text": "Episode recording summary for Atlas Design Faculty Review Room: decision review."
+          "text": "Episode recording summary for Atlas Design Faculty Review Space: decision review."
         },
         {
           "start": 5.888,
@@ -2146,7 +2146,7 @@
       "product": "chalk",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Compass Product Guild Review Room: decision review transcript",
+      "title": "Compass Product Guild Review Space: decision review transcript",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
@@ -2170,7 +2170,7 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Compass Product Guild Review Room: decision review whiteboard",
+      "title": "Compass Product Guild Review Space: decision review whiteboard",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
@@ -2287,10 +2287,10 @@
       "product": "chalk",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "episodeKey": "chalk-episode-020"
       },
       "source": {
@@ -2311,10 +2311,10 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "episodeKey": "chalk-episode-020"
       },
       "source": {
@@ -2334,7 +2334,7 @@
       "product": "chalk",
       "locale": "en-US",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
@@ -2358,7 +2358,7 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
@@ -2522,7 +2522,7 @@
       "product": "chalk",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Compass Product Guild Review Room: decision review transcript",
+      "title": "Compass Product Guild Review Space: decision review transcript",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
@@ -2546,7 +2546,7 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Compass Product Guild Review Room: decision review whiteboard",
+      "title": "Compass Product Guild Review Space: decision review whiteboard",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
@@ -2663,10 +2663,10 @@
       "product": "chalk",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "episodeKey": "chalk-episode-028"
       },
       "source": {
@@ -2687,10 +2687,10 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "episodeKey": "chalk-episode-028"
       },
       "source": {
@@ -2710,7 +2710,7 @@
       "product": "chalk",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
@@ -2734,7 +2734,7 @@
       "product": "chalk",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",

@@ -80,9 +80,9 @@
         "kind": "new-showcase-only"
       },
       {
-        "externalKey": "chalk-tenant-mosaic-research-room",
+        "externalKey": "chalk-tenant-mosaic-research-space",
         "organizationKey": "chalk-showcase-episode-network",
-        "displayName": "Mosaic Research Room",
+        "displayName": "Mosaic Research Space",
         "kind": "new-showcase-only"
       },
       {
@@ -133,17 +133,17 @@
         "visibility": "tenant-members"
       },
       {
-        "externalKey": "chalk-space-mosaic-research-room-studio-1",
+        "externalKey": "chalk-space-mosaic-research-space-studio-1",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "name": "Mosaic Research Room Studio",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "name": "Mosaic Research Space Studio",
         "visibility": "tenant-members"
       },
       {
         "externalKey": "chalk-space-atlas-design-faculty-reviews-1",
         "organizationKey": "chalk-showcase-episode-network",
         "tenantKey": "chalk-tenant-atlas-design-faculty",
-        "name": "Atlas Design Faculty Review Room",
+        "name": "Atlas Design Faculty Review Space",
         "visibility": "tenant-members"
       },
       {
@@ -171,7 +171,7 @@
         "externalKey": "chalk-space-compass-product-guild-reviews-2",
         "organizationKey": "chalk-showcase-episode-network",
         "tenantKey": "chalk-tenant-compass-product-guild",
-        "name": "Compass Product Guild Review Room",
+        "name": "Compass Product Guild Review Space",
         "visibility": "tenant-members"
       },
       {
@@ -189,17 +189,17 @@
         "visibility": "tenant-members"
       },
       {
-        "externalKey": "chalk-space-mosaic-research-room-studio-2",
+        "externalKey": "chalk-space-mosaic-research-space-studio-2",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "name": "Mosaic Research Room Studio",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "name": "Mosaic Research Space Studio",
         "visibility": "tenant-members"
       },
       {
         "externalKey": "chalk-space-atlas-design-faculty-reviews-2",
         "organizationKey": "chalk-showcase-episode-network",
         "tenantKey": "chalk-tenant-atlas-design-faculty",
-        "name": "Atlas Design Faculty Review Room",
+        "name": "Atlas Design Faculty Review Space",
         "visibility": "invited-only"
       },
       {
@@ -227,7 +227,7 @@
         "externalKey": "chalk-space-compass-product-guild-reviews-3",
         "organizationKey": "chalk-showcase-episode-network",
         "tenantKey": "chalk-tenant-compass-product-guild",
-        "name": "Compass Product Guild Review Room",
+        "name": "Compass Product Guild Review Space",
         "visibility": "tenant-members"
       },
       {
@@ -245,17 +245,17 @@
         "visibility": "invited-only"
       },
       {
-        "externalKey": "chalk-space-mosaic-research-room-studio-3",
+        "externalKey": "chalk-space-mosaic-research-space-studio-3",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "name": "Mosaic Research Room Studio",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "name": "Mosaic Research Space Studio",
         "visibility": "tenant-members"
       },
       {
         "externalKey": "chalk-space-atlas-design-faculty-reviews-3",
         "organizationKey": "chalk-showcase-episode-network",
         "tenantKey": "chalk-tenant-atlas-design-faculty",
-        "name": "Atlas Design Faculty Review Room",
+        "name": "Atlas Design Faculty Review Space",
         "visibility": "tenant-members"
       },
       {
@@ -283,7 +283,7 @@
         "externalKey": "chalk-space-compass-product-guild-reviews-4",
         "organizationKey": "chalk-showcase-episode-network",
         "tenantKey": "chalk-tenant-compass-product-guild",
-        "name": "Compass Product Guild Review Room",
+        "name": "Compass Product Guild Review Space",
         "visibility": "invited-only"
       },
       {
@@ -301,17 +301,17 @@
         "visibility": "tenant-members"
       },
       {
-        "externalKey": "chalk-space-mosaic-research-room-studio-4",
+        "externalKey": "chalk-space-mosaic-research-space-studio-4",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "name": "Mosaic Research Room Studio",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "name": "Mosaic Research Space Studio",
         "visibility": "tenant-members"
       },
       {
         "externalKey": "chalk-space-atlas-design-faculty-reviews-4",
         "organizationKey": "chalk-showcase-episode-network",
         "tenantKey": "chalk-tenant-atlas-design-faculty",
-        "name": "Atlas Design Faculty Review Room",
+        "name": "Atlas Design Faculty Review Space",
         "visibility": "tenant-members"
       },
       {
@@ -353,7 +353,7 @@
       {
         "externalKey": "chalk-user-person-salma-walid-ansari",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Salma Walid Ansari",
         "displayNameAr": "سلمى وليد الأنصاري",
         "role": "guest",
@@ -425,7 +425,7 @@
       {
         "externalKey": "chalk-user-person-faisal-noura-habib",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Faisal Noura Habib",
         "displayNameAr": "فيصل نورة حبيب",
         "role": "guest",
@@ -497,7 +497,7 @@
       {
         "externalKey": "chalk-user-person-tariq-ibrahim-khoury",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Tariq Ibrahim Khoury",
         "displayNameAr": "طارق إبراهيم خوري",
         "role": "guest",
@@ -569,7 +569,7 @@
       {
         "externalKey": "chalk-user-person-lama-bilal-bakri",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Lama Bilal Bakri",
         "displayNameAr": "لمى بلال البكري",
         "role": "guest",
@@ -641,7 +641,7 @@
       {
         "externalKey": "chalk-user-person-salma-yasmin-hamdan",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Salma Yasmin Hamdan",
         "displayNameAr": "سلمى ياسمين حمدان",
         "role": "guest",
@@ -713,7 +713,7 @@
       {
         "externalKey": "chalk-user-person-faisal-rania-masri",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Faisal Rania Masri",
         "displayNameAr": "فيصل رانيا المصري",
         "role": "guest",
@@ -785,7 +785,7 @@
       {
         "externalKey": "chalk-user-person-tariq-jana-sharif",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Tariq Jana Sharif",
         "displayNameAr": "طارق جنى الشريف",
         "role": "guest",
@@ -857,7 +857,7 @@
       {
         "externalKey": "chalk-user-person-lama-dalia-karam",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Lama Dalia Karam",
         "displayNameAr": "لمى داليا كرم",
         "role": "guest",
@@ -929,7 +929,7 @@
       {
         "externalKey": "chalk-user-person-salma-yousef-rahman",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Salma Yousef Rahman",
         "displayNameAr": "سلمى يوسف الرحمن",
         "role": "guest",
@@ -1001,7 +1001,7 @@
       {
         "externalKey": "chalk-user-person-faisal-rashed-zahran",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Faisal Rashed Zahran",
         "displayNameAr": "فيصل راشد زهران",
         "role": "guest",
@@ -1073,7 +1073,7 @@
       {
         "externalKey": "chalk-user-person-tariq-karim-fakhri",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Tariq Karim Fakhri",
         "displayNameAr": "طارق كريم فخري",
         "role": "guest",
@@ -1145,7 +1145,7 @@
       {
         "externalKey": "chalk-user-person-lama-eman-salem",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Lama Eman Salem",
         "displayNameAr": "لمى إيمان سالم",
         "role": "guest",
@@ -1217,7 +1217,7 @@
       {
         "externalKey": "chalk-user-person-salma-abdullah-azzam",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Salma Abdullah Azzam",
         "displayNameAr": "سلمى عبدالله عزام",
         "role": "guest",
@@ -1289,7 +1289,7 @@
       {
         "externalKey": "chalk-user-person-faisal-saad-haddad",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Faisal Saad Haddad",
         "displayNameAr": "فيصل سعد حداد",
         "role": "guest",
@@ -1361,7 +1361,7 @@
       {
         "externalKey": "chalk-user-person-tariq-kawthar-mahfouz",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Tariq Kawthar Mahfouz",
         "displayNameAr": "طارق كوثر محفوظ",
         "role": "guest",
@@ -1433,7 +1433,7 @@
       {
         "externalKey": "chalk-user-person-lama-fadi-barakat",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Lama Fadi Barakat",
         "displayNameAr": "لمى فادي بركات",
         "role": "guest",
@@ -1505,7 +1505,7 @@
       {
         "externalKey": "chalk-user-person-salma-adnan-hariri",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Salma Adnan Hariri",
         "displayNameAr": "سلمى عدنان الحريري",
         "role": "guest",
@@ -1577,7 +1577,7 @@
       {
         "externalKey": "chalk-user-person-faisal-sahar-nassar",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Faisal Sahar Nassar",
         "displayNameAr": "فيصل سحر نصار",
         "role": "guest",
@@ -1649,7 +1649,7 @@
       {
         "externalKey": "chalk-user-person-tariq-lina-sultan",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Tariq Lina Sultan",
         "displayNameAr": "طارق لينا سلطان",
         "role": "guest",
@@ -1721,7 +1721,7 @@
       {
         "externalKey": "chalk-user-person-lama-ghassan-khatib",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Lama Ghassan Khatib",
         "displayNameAr": "لمى غسان الخطيب",
         "role": "guest",
@@ -1793,7 +1793,7 @@
       {
         "externalKey": "chalk-user-person-salma-ahmad-rifai",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Salma Ahmad Rifai",
         "displayNameAr": "سلمى أحمد الرفاعي",
         "role": "guest",
@@ -1865,7 +1865,7 @@
       {
         "externalKey": "chalk-user-person-faisal-saleh-alami",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Faisal Saleh Alami",
         "displayNameAr": "فيصل صالح العلمي",
         "role": "guest",
@@ -1937,7 +1937,7 @@
       {
         "externalKey": "chalk-user-person-tariq-malik-ghanem",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "displayNameEn": "Tariq Malik Ghanem",
         "displayNameAr": "طارق مالك غانم",
         "role": "guest",
@@ -1969,7 +1969,7 @@
       {
         "externalKey": "chalk-agent-04",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "name": "Consultation Agent",
         "permission": "observe-and-suggest"
       },
@@ -2025,7 +2025,7 @@
       {
         "externalKey": "chalk-agent-12",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "name": "Decision Agent",
         "permission": "observe-and-suggest"
       },
@@ -2081,7 +2081,7 @@
       {
         "externalKey": "chalk-agent-20",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "name": "Artifact Agent",
         "permission": "observe-and-suggest"
       },
@@ -2137,7 +2137,7 @@
       {
         "externalKey": "chalk-agent-28",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "name": "Tutor Agent",
         "permission": "observe-and-suggest"
       },
@@ -2193,7 +2193,7 @@
       {
         "externalKey": "chalk-agent-36",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
         "name": "Insight Agent",
         "permission": "observe-and-suggest"
       },
@@ -2392,10 +2392,10 @@
       {
         "externalKey": "chalk-episode-004",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "agentKey": "chalk-agent-28",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -2409,22 +2409,22 @@
           {
             "authorKey": "chalk-user-person-lama-bilal-bakri",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 4."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 4."
           },
           {
             "authorKey": "chalk-user-person-salma-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 4."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 4."
           },
           {
             "authorKey": "chalk-user-person-faisal-rania-masri",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 4."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 4."
           },
           {
             "authorKey": "chalk-user-person-tariq-jana-sharif",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 4."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 4."
           }
         ],
         "reactions": [
@@ -2449,7 +2449,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
         "agentKey": "chalk-agent-37",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -2463,22 +2463,22 @@
           {
             "authorKey": "chalk-user-person-samar-aref-sabbagh",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 5."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 5."
           },
           {
             "authorKey": "chalk-user-person-hadi-walid-ansari",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 5."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 5."
           },
           {
             "authorKey": "chalk-user-person-alya-rania-masri",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 5."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 5."
           },
           {
             "authorKey": "chalk-user-person-layan-jana-sharif",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 5."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 5."
           }
         ],
         "reactions": [
@@ -2665,7 +2665,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
         "agentKey": "chalk-agent-25",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -2679,22 +2679,22 @@
           {
             "authorKey": "chalk-user-person-noor-ghassan-khatib",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 9."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 9."
           },
           {
             "authorKey": "chalk-user-person-adel-ahmad-rifai",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 9."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 9."
           },
           {
             "authorKey": "chalk-user-person-omar-saleh-alami",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 9."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 9."
           },
           {
             "authorKey": "chalk-user-person-farah-mona-mansour",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 9."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 9."
           }
         ],
         "reactions": [
@@ -2824,10 +2824,10 @@
       {
         "externalKey": "chalk-episode-012",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "agentKey": "chalk-agent-12",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -2841,22 +2841,22 @@
           {
             "authorKey": "chalk-user-person-lama-eman-salem",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 12."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 12."
           },
           {
             "authorKey": "chalk-user-person-salma-abdullah-azzam",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 12."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 12."
           },
           {
             "authorKey": "chalk-user-person-faisal-saad-haddad",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 12."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 12."
           },
           {
             "authorKey": "chalk-user-person-tariq-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 12."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 12."
           }
         ],
         "reactions": [
@@ -2881,7 +2881,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
         "agentKey": "chalk-agent-21",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -2895,22 +2895,22 @@
           {
             "authorKey": "chalk-user-person-samar-dalia-karam",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 13."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 13."
           },
           {
             "authorKey": "chalk-user-person-hadi-yousef-rahman",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 13."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 13."
           },
           {
             "authorKey": "chalk-user-person-alya-saad-haddad",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 13."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 13."
           },
           {
             "authorKey": "chalk-user-person-layan-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 13."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 13."
           }
         ],
         "reactions": [
@@ -3097,7 +3097,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
         "agentKey": "chalk-agent-09",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -3111,22 +3111,22 @@
           {
             "authorKey": "chalk-user-person-noor-hussein-darwish",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 17."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 17."
           },
           {
             "authorKey": "chalk-user-person-adel-anas-jaber",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 17."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 17."
           },
           {
             "authorKey": "chalk-user-person-omar-tala-qassem",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 17."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 17."
           },
           {
             "authorKey": "chalk-user-person-farah-noura-habib",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 17."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 17."
           }
         ],
         "reactions": [
@@ -3256,10 +3256,10 @@
       {
         "externalKey": "chalk-episode-020",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "agentKey": "chalk-agent-36",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -3273,22 +3273,22 @@
           {
             "authorKey": "chalk-user-person-lama-ghassan-khatib",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 20."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 20."
           },
           {
             "authorKey": "chalk-user-person-salma-ahmad-rifai",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 20."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 20."
           },
           {
             "authorKey": "chalk-user-person-faisal-saleh-alami",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 20."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 20."
           },
           {
             "authorKey": "chalk-user-person-tariq-malik-ghanem",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 20."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 20."
           }
         ],
         "reactions": [
@@ -3313,7 +3313,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
         "agentKey": "chalk-agent-05",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -3327,22 +3327,22 @@
           {
             "authorKey": "chalk-user-person-samar-fadi-barakat",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 21."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 21."
           },
           {
             "authorKey": "chalk-user-person-hadi-adnan-hariri",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 21."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 21."
           },
           {
             "authorKey": "chalk-user-person-samar-anas-jaber",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 21."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 21."
           },
           {
             "authorKey": "chalk-user-person-hadi-tala-qassem",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 21."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 21."
           }
         ],
         "reactions": [
@@ -3529,7 +3529,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
         "agentKey": "chalk-agent-33",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -3543,22 +3543,22 @@
           {
             "authorKey": "chalk-user-person-adel-abdullah-azzam",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 25."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 25."
           },
           {
             "authorKey": "chalk-user-person-omar-saad-haddad",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 25."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 25."
           },
           {
             "authorKey": "chalk-user-person-farah-lina-sultan",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 25."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 25."
           },
           {
             "authorKey": "chalk-user-person-noor-fadi-barakat",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 25."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 25."
           }
         ],
         "reactions": [
@@ -3688,10 +3688,10 @@
       {
         "externalKey": "chalk-episode-028",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "agentKey": "chalk-agent-20",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -3705,22 +3705,22 @@
           {
             "authorKey": "chalk-user-person-salma-yasmin-hamdan",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 28."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 28."
           },
           {
             "authorKey": "chalk-user-person-faisal-rania-masri",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 28."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 28."
           },
           {
             "authorKey": "chalk-user-person-tariq-jana-sharif",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 28."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 28."
           },
           {
             "authorKey": "chalk-user-person-lama-dalia-karam",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 28."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 28."
           }
         ],
         "reactions": [
@@ -3745,7 +3745,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
         "agentKey": "chalk-agent-29",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -3759,22 +3759,22 @@
           {
             "authorKey": "chalk-user-person-alya-rania-masri",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 29."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 29."
           },
           {
             "authorKey": "chalk-user-person-layan-jana-sharif",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 29."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 29."
           },
           {
             "authorKey": "chalk-user-person-samar-bilal-bakri",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 29."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 29."
           },
           {
             "authorKey": "chalk-user-person-hadi-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 29."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 29."
           }
         ],
         "reactions": [
@@ -4012,10 +4012,10 @@
       {
         "externalKey": "chalk-episode-034",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "agentKey": "chalk-agent-28",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4029,22 +4029,22 @@
           {
             "authorKey": "chalk-user-person-tariq-karim-fakhri",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 34."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 34."
           },
           {
             "authorKey": "chalk-user-person-lama-eman-salem",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 34."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 34."
           },
           {
             "authorKey": "chalk-user-person-salma-abdullah-azzam",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 34."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 34."
           },
           {
             "authorKey": "chalk-user-person-faisal-saad-haddad",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 34."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 34."
           }
         ],
         "reactions": [
@@ -4069,7 +4069,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
         "agentKey": "chalk-agent-37",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4083,22 +4083,22 @@
           {
             "authorKey": "chalk-user-person-samar-dalia-karam",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 35."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 35."
           },
           {
             "authorKey": "chalk-user-person-hadi-yousef-rahman",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 35."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 35."
           },
           {
             "authorKey": "chalk-user-person-alya-saad-haddad",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 35."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 35."
           },
           {
             "authorKey": "chalk-user-person-layan-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 35."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 35."
           }
         ],
         "reactions": [
@@ -4285,7 +4285,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
         "agentKey": "chalk-agent-25",
-        "title": "Compass Product Guild Review Room: client consultation",
+        "title": "Compass Product Guild Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4299,22 +4299,22 @@
           {
             "authorKey": "chalk-user-person-farah-nabil-tawfiq",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 39."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 39."
           },
           {
             "authorKey": "chalk-user-person-noor-hussein-darwish",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 39."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 39."
           },
           {
             "authorKey": "chalk-user-person-adel-anas-jaber",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 39."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 39."
           },
           {
             "authorKey": "chalk-user-person-omar-tala-qassem",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 39."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 39."
           }
         ],
         "reactions": [
@@ -4444,10 +4444,10 @@
       {
         "externalKey": "chalk-episode-042",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "agentKey": "chalk-agent-12",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4461,22 +4461,22 @@
           {
             "authorKey": "chalk-user-person-tariq-lina-sultan",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 42."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 42."
           },
           {
             "authorKey": "chalk-user-person-lama-ghassan-khatib",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 42."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 42."
           },
           {
             "authorKey": "chalk-user-person-salma-ahmad-rifai",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 42."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 42."
           },
           {
             "authorKey": "chalk-user-person-faisal-saleh-alami",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 42."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 42."
           }
         ],
         "reactions": [
@@ -4501,7 +4501,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
         "agentKey": "chalk-agent-21",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4515,22 +4515,22 @@
           {
             "authorKey": "chalk-user-person-samar-fadi-barakat",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 43."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 43."
           },
           {
             "authorKey": "chalk-user-person-hadi-adnan-hariri",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 43."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 43."
           },
           {
             "authorKey": "chalk-user-person-samar-anas-jaber",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 43."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 43."
           },
           {
             "authorKey": "chalk-user-person-hadi-tala-qassem",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 43."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 43."
           }
         ],
         "reactions": [
@@ -4717,7 +4717,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
         "agentKey": "chalk-agent-09",
-        "title": "Compass Product Guild Review Room: client consultation",
+        "title": "Compass Product Guild Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4731,22 +4731,22 @@
           {
             "authorKey": "chalk-user-person-noor-eman-salem",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 47."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 47."
           },
           {
             "authorKey": "chalk-user-person-adel-abdullah-azzam",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 47."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 47."
           },
           {
             "authorKey": "chalk-user-person-omar-saad-haddad",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 47."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 47."
           },
           {
             "authorKey": "chalk-user-person-farah-lina-sultan",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 47."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 47."
           }
         ],
         "reactions": [
@@ -4876,10 +4876,10 @@
       {
         "externalKey": "chalk-episode-050",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "agentKey": "chalk-agent-36",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4893,22 +4893,22 @@
           {
             "authorKey": "chalk-user-person-lama-bilal-bakri",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 50."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 50."
           },
           {
             "authorKey": "chalk-user-person-salma-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 50."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 50."
           },
           {
             "authorKey": "chalk-user-person-faisal-rania-masri",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 50."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 50."
           },
           {
             "authorKey": "chalk-user-person-tariq-jana-sharif",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 50."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 50."
           }
         ],
         "reactions": [
@@ -4933,7 +4933,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
         "agentKey": "chalk-agent-05",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -4947,22 +4947,22 @@
           {
             "authorKey": "chalk-user-person-alya-rania-masri",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 51."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 51."
           },
           {
             "authorKey": "chalk-user-person-layan-jana-sharif",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 51."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 51."
           },
           {
             "authorKey": "chalk-user-person-samar-bilal-bakri",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 51."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 51."
           },
           {
             "authorKey": "chalk-user-person-hadi-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 51."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 51."
           }
         ],
         "reactions": [
@@ -5149,7 +5149,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
         "agentKey": "chalk-agent-33",
-        "title": "Compass Product Guild Review Room: client consultation",
+        "title": "Compass Product Guild Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -5163,22 +5163,22 @@
           {
             "authorKey": "chalk-user-person-noor-ghassan-khatib",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 55."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 55."
           },
           {
             "authorKey": "chalk-user-person-adel-ahmad-rifai",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 55."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 55."
           },
           {
             "authorKey": "chalk-user-person-omar-saleh-alami",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 55."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 55."
           },
           {
             "authorKey": "chalk-user-person-farah-mona-mansour",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 55."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 55."
           }
         ],
         "reactions": [
@@ -5308,10 +5308,10 @@
       {
         "externalKey": "chalk-episode-058",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "agentKey": "chalk-agent-20",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -5325,22 +5325,22 @@
           {
             "authorKey": "chalk-user-person-lama-eman-salem",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 58."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 58."
           },
           {
             "authorKey": "chalk-user-person-salma-abdullah-azzam",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 58."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 58."
           },
           {
             "authorKey": "chalk-user-person-faisal-saad-haddad",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 58."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 58."
           },
           {
             "authorKey": "chalk-user-person-tariq-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 58."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 58."
           }
         ],
         "reactions": [
@@ -5365,7 +5365,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
         "agentKey": "chalk-agent-29",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -5379,22 +5379,22 @@
           {
             "authorKey": "chalk-user-person-alya-saad-haddad",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 59."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 59."
           },
           {
             "authorKey": "chalk-user-person-layan-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 59."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 59."
           },
           {
             "authorKey": "chalk-user-person-samar-eman-salem",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 59."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 59."
           },
           {
             "authorKey": "chalk-user-person-hadi-abdullah-azzam",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 59."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 59."
           }
         ],
         "reactions": [
@@ -5632,10 +5632,10 @@
       {
         "externalKey": "chalk-episode-064",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "agentKey": "chalk-agent-28",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -5649,22 +5649,22 @@
           {
             "authorKey": "chalk-user-person-faisal-sahar-nassar",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 64."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 64."
           },
           {
             "authorKey": "chalk-user-person-tariq-lina-sultan",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 64."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 64."
           },
           {
             "authorKey": "chalk-user-person-lama-ghassan-khatib",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 64."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 64."
           },
           {
             "authorKey": "chalk-user-person-salma-ahmad-rifai",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 64."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 64."
           }
         ],
         "reactions": [
@@ -5689,7 +5689,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
         "agentKey": "chalk-agent-37",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -5703,22 +5703,22 @@
           {
             "authorKey": "chalk-user-person-samar-fadi-barakat",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 65."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 65."
           },
           {
             "authorKey": "chalk-user-person-hadi-adnan-hariri",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 65."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 65."
           },
           {
             "authorKey": "chalk-user-person-samar-anas-jaber",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 65."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 65."
           },
           {
             "authorKey": "chalk-user-person-hadi-tala-qassem",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 65."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 65."
           }
         ],
         "reactions": [
@@ -5905,7 +5905,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
         "agentKey": "chalk-agent-25",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -5919,22 +5919,22 @@
           {
             "authorKey": "chalk-user-person-omar-walid-ansari",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 69."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 69."
           },
           {
             "authorKey": "chalk-user-person-noor-eman-salem",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 69."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 69."
           },
           {
             "authorKey": "chalk-user-person-adel-abdullah-azzam",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 69."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 69."
           },
           {
             "authorKey": "chalk-user-person-omar-saad-haddad",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 69."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 69."
           }
         ],
         "reactions": [
@@ -6064,10 +6064,10 @@
       {
         "externalKey": "chalk-episode-072",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "agentKey": "chalk-agent-12",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6081,22 +6081,22 @@
           {
             "authorKey": "chalk-user-person-tariq-ibrahim-khoury",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 72."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 72."
           },
           {
             "authorKey": "chalk-user-person-lama-bilal-bakri",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 72."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 72."
           },
           {
             "authorKey": "chalk-user-person-salma-yasmin-hamdan",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 72."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 72."
           },
           {
             "authorKey": "chalk-user-person-faisal-rania-masri",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 72."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 72."
           }
         ],
         "reactions": [
@@ -6121,7 +6121,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
         "agentKey": "chalk-agent-21",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6135,22 +6135,22 @@
           {
             "authorKey": "chalk-user-person-alya-rania-masri",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 73."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 73."
           },
           {
             "authorKey": "chalk-user-person-layan-jana-sharif",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 73."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 73."
           },
           {
             "authorKey": "chalk-user-person-samar-bilal-bakri",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 73."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 73."
           },
           {
             "authorKey": "chalk-user-person-hadi-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 73."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 73."
           }
         ],
         "reactions": [
@@ -6337,7 +6337,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
         "agentKey": "chalk-agent-09",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6351,22 +6351,22 @@
           {
             "authorKey": "chalk-user-person-farah-malik-ghanem",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 77."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 77."
           },
           {
             "authorKey": "chalk-user-person-noor-ghassan-khatib",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 77."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 77."
           },
           {
             "authorKey": "chalk-user-person-adel-ahmad-rifai",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 77."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 77."
           },
           {
             "authorKey": "chalk-user-person-omar-saleh-alami",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 77."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 77."
           }
         ],
         "reactions": [
@@ -6496,10 +6496,10 @@
       {
         "externalKey": "chalk-episode-080",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "agentKey": "chalk-agent-36",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6513,22 +6513,22 @@
           {
             "authorKey": "chalk-user-person-tariq-karim-fakhri",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 80."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 80."
           },
           {
             "authorKey": "chalk-user-person-lama-eman-salem",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 80."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 80."
           },
           {
             "authorKey": "chalk-user-person-salma-abdullah-azzam",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 80."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 80."
           },
           {
             "authorKey": "chalk-user-person-faisal-saad-haddad",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 80."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 80."
           }
         ],
         "reactions": [
@@ -6553,7 +6553,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
         "agentKey": "chalk-agent-05",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6567,22 +6567,22 @@
           {
             "authorKey": "chalk-user-person-alya-saad-haddad",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 81."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 81."
           },
           {
             "authorKey": "chalk-user-person-layan-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 81."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 81."
           },
           {
             "authorKey": "chalk-user-person-samar-eman-salem",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 81."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 81."
           },
           {
             "authorKey": "chalk-user-person-hadi-abdullah-azzam",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 81."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 81."
           }
         ],
         "reactions": [
@@ -6769,7 +6769,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
         "agentKey": "chalk-agent-33",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6783,22 +6783,22 @@
           {
             "authorKey": "chalk-user-person-farah-nabil-tawfiq",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 85."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 85."
           },
           {
             "authorKey": "chalk-user-person-noor-hussein-darwish",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 85."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 85."
           },
           {
             "authorKey": "chalk-user-person-adel-anas-jaber",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 85."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 85."
           },
           {
             "authorKey": "chalk-user-person-omar-tala-qassem",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 85."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 85."
           }
         ],
         "reactions": [
@@ -6928,10 +6928,10 @@
       {
         "externalKey": "chalk-episode-088",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "agentKey": "chalk-agent-20",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6945,22 +6945,22 @@
           {
             "authorKey": "chalk-user-person-tariq-lina-sultan",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 88."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 88."
           },
           {
             "authorKey": "chalk-user-person-lama-ghassan-khatib",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 88."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 88."
           },
           {
             "authorKey": "chalk-user-person-salma-ahmad-rifai",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 88."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 88."
           },
           {
             "authorKey": "chalk-user-person-faisal-saleh-alami",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 88."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 88."
           }
         ],
         "reactions": [
@@ -6985,7 +6985,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
         "agentKey": "chalk-agent-29",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -6999,22 +6999,22 @@
           {
             "authorKey": "chalk-user-person-samar-anas-jaber",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 89."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 89."
           },
           {
             "authorKey": "chalk-user-person-hadi-tala-qassem",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 89."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 89."
           },
           {
             "authorKey": "chalk-user-person-alya-noura-habib",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 89."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 89."
           },
           {
             "authorKey": "chalk-user-person-layan-ibrahim-khoury",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 89."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 89."
           }
         ],
         "reactions": [
@@ -7252,10 +7252,10 @@
       {
         "externalKey": "chalk-episode-094",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "agentKey": "chalk-agent-28",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -7269,22 +7269,22 @@
           {
             "authorKey": "chalk-user-person-faisal-noura-habib",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 94."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 94."
           },
           {
             "authorKey": "chalk-user-person-tariq-ibrahim-khoury",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 94."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 94."
           },
           {
             "authorKey": "chalk-user-person-lama-bilal-bakri",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 94."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 94."
           },
           {
             "authorKey": "chalk-user-person-salma-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 94."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 94."
           }
         ],
         "reactions": [
@@ -7309,7 +7309,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
         "agentKey": "chalk-agent-37",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -7323,22 +7323,22 @@
           {
             "authorKey": "chalk-user-person-alya-rania-masri",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 95."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 95."
           },
           {
             "authorKey": "chalk-user-person-layan-jana-sharif",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 95."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 95."
           },
           {
             "authorKey": "chalk-user-person-samar-bilal-bakri",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 95."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 95."
           },
           {
             "authorKey": "chalk-user-person-hadi-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 95."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 95."
           }
         ],
         "reactions": [
@@ -7525,7 +7525,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
         "agentKey": "chalk-agent-25",
-        "title": "Compass Product Guild Review Room: client consultation",
+        "title": "Compass Product Guild Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -7539,22 +7539,22 @@
           {
             "authorKey": "chalk-user-person-omar-sahar-nassar",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 99."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 99."
           },
           {
             "authorKey": "chalk-user-person-farah-malik-ghanem",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 99."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 99."
           },
           {
             "authorKey": "chalk-user-person-noor-ghassan-khatib",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 99."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 99."
           },
           {
             "authorKey": "chalk-user-person-adel-ahmad-rifai",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 99."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 99."
           }
         ],
         "reactions": [
@@ -7684,10 +7684,10 @@
       {
         "externalKey": "chalk-episode-102",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "agentKey": "chalk-agent-12",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -7701,22 +7701,22 @@
           {
             "authorKey": "chalk-user-person-faisal-rashed-zahran",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 102."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 102."
           },
           {
             "authorKey": "chalk-user-person-tariq-karim-fakhri",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 102."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 102."
           },
           {
             "authorKey": "chalk-user-person-lama-eman-salem",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 102."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 102."
           },
           {
             "authorKey": "chalk-user-person-salma-abdullah-azzam",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 102."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 102."
           }
         ],
         "reactions": [
@@ -7741,7 +7741,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
         "agentKey": "chalk-agent-21",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -7755,22 +7755,22 @@
           {
             "authorKey": "chalk-user-person-alya-saad-haddad",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 103."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 103."
           },
           {
             "authorKey": "chalk-user-person-layan-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 103."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 103."
           },
           {
             "authorKey": "chalk-user-person-samar-eman-salem",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 103."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 103."
           },
           {
             "authorKey": "chalk-user-person-hadi-abdullah-azzam",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 103."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 103."
           }
         ],
         "reactions": [
@@ -7957,7 +7957,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
         "agentKey": "chalk-agent-09",
-        "title": "Compass Product Guild Review Room: client consultation",
+        "title": "Compass Product Guild Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -7971,22 +7971,22 @@
           {
             "authorKey": "chalk-user-person-omar-samira-hakim",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 107."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 107."
           },
           {
             "authorKey": "chalk-user-person-farah-nabil-tawfiq",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 107."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 107."
           },
           {
             "authorKey": "chalk-user-person-noor-hussein-darwish",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 107."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 107."
           },
           {
             "authorKey": "chalk-user-person-adel-anas-jaber",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 107."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 107."
           }
         ],
         "reactions": [
@@ -8116,10 +8116,10 @@
       {
         "externalKey": "chalk-episode-110",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "agentKey": "chalk-agent-36",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -8133,22 +8133,22 @@
           {
             "authorKey": "chalk-user-person-faisal-sahar-nassar",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 110."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 110."
           },
           {
             "authorKey": "chalk-user-person-tariq-lina-sultan",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 110."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 110."
           },
           {
             "authorKey": "chalk-user-person-lama-ghassan-khatib",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 110."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 110."
           },
           {
             "authorKey": "chalk-user-person-salma-ahmad-rifai",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 110."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 110."
           }
         ],
         "reactions": [
@@ -8173,7 +8173,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
         "agentKey": "chalk-agent-05",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -8187,22 +8187,22 @@
           {
             "authorKey": "chalk-user-person-samar-anas-jaber",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 111."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 111."
           },
           {
             "authorKey": "chalk-user-person-hadi-tala-qassem",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 111."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 111."
           },
           {
             "authorKey": "chalk-user-person-alya-noura-habib",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 111."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 111."
           },
           {
             "authorKey": "chalk-user-person-layan-ibrahim-khoury",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 111."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 111."
           }
         ],
         "reactions": [
@@ -8389,7 +8389,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
         "agentKey": "chalk-agent-33",
-        "title": "Compass Product Guild Review Room: client consultation",
+        "title": "Compass Product Guild Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -8403,22 +8403,22 @@
           {
             "authorKey": "chalk-user-person-omar-walid-ansari",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 115."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 115."
           },
           {
             "authorKey": "chalk-user-person-noor-eman-salem",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 115."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 115."
           },
           {
             "authorKey": "chalk-user-person-adel-abdullah-azzam",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 115."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 115."
           },
           {
             "authorKey": "chalk-user-person-omar-saad-haddad",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 115."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 115."
           }
         ],
         "reactions": [
@@ -8548,10 +8548,10 @@
       {
         "externalKey": "chalk-episode-118",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "agentKey": "chalk-agent-20",
-        "title": "Mosaic Research Room Studio: guided practice",
+        "title": "Mosaic Research Space Studio: guided practice",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -8565,22 +8565,22 @@
           {
             "authorKey": "chalk-user-person-tariq-ibrahim-khoury",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 118."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 118."
           },
           {
             "authorKey": "chalk-user-person-lama-bilal-bakri",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 118."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 118."
           },
           {
             "authorKey": "chalk-user-person-salma-yasmin-hamdan",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 118."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 118."
           },
           {
             "authorKey": "chalk-user-person-faisal-rania-masri",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 118."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 118."
           }
         ],
         "reactions": [
@@ -8605,7 +8605,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
         "agentKey": "chalk-agent-29",
-        "title": "Atlas Design Faculty Review Room: client consultation",
+        "title": "Atlas Design Faculty Review Space: client consultation",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -8619,22 +8619,22 @@
           {
             "authorKey": "chalk-user-person-samar-bilal-bakri",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 119."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 119."
           },
           {
             "authorKey": "chalk-user-person-hadi-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 119."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 119."
           },
           {
             "authorKey": "chalk-user-person-alya-rashed-zahran",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 119."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 119."
           },
           {
             "authorKey": "chalk-user-person-layan-karim-fakhri",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 119."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 119."
           }
         ],
         "reactions": [
@@ -8872,10 +8872,10 @@
       {
         "externalKey": "chalk-episode-124",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "agentKey": "chalk-agent-28",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -8889,22 +8889,22 @@
           {
             "authorKey": "chalk-user-person-salma-yousef-rahman",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 124."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 124."
           },
           {
             "authorKey": "chalk-user-person-faisal-rashed-zahran",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 124."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 124."
           },
           {
             "authorKey": "chalk-user-person-tariq-karim-fakhri",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 124."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 124."
           },
           {
             "authorKey": "chalk-user-person-lama-eman-salem",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 124."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 124."
           }
         ],
         "reactions": [
@@ -8929,7 +8929,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
         "agentKey": "chalk-agent-37",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -8943,22 +8943,22 @@
           {
             "authorKey": "chalk-user-person-alya-saad-haddad",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 125."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 125."
           },
           {
             "authorKey": "chalk-user-person-layan-kawthar-mahfouz",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 125."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 125."
           },
           {
             "authorKey": "chalk-user-person-samar-eman-salem",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 125."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 125."
           },
           {
             "authorKey": "chalk-user-person-hadi-abdullah-azzam",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 125."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 125."
           }
         ],
         "reactions": [
@@ -9145,7 +9145,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
         "agentKey": "chalk-agent-25",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -9159,22 +9159,22 @@
           {
             "authorKey": "chalk-user-person-adel-ali-bahri",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 129."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 129."
           },
           {
             "authorKey": "chalk-user-person-omar-samira-hakim",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 129."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 129."
           },
           {
             "authorKey": "chalk-user-person-farah-nabil-tawfiq",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 129."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 129."
           },
           {
             "authorKey": "chalk-user-person-noor-hussein-darwish",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 129."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 129."
           }
         ],
         "reactions": [
@@ -9304,10 +9304,10 @@
       {
         "externalKey": "chalk-episode-132",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "agentKey": "chalk-agent-12",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -9321,22 +9321,22 @@
           {
             "authorKey": "chalk-user-person-salma-adnan-hariri",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 132."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 132."
           },
           {
             "authorKey": "chalk-user-person-faisal-sahar-nassar",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 132."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 132."
           },
           {
             "authorKey": "chalk-user-person-tariq-lina-sultan",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 132."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 132."
           },
           {
             "authorKey": "chalk-user-person-lama-ghassan-khatib",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 132."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 132."
           }
         ],
         "reactions": [
@@ -9361,7 +9361,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
         "agentKey": "chalk-agent-21",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -9375,22 +9375,22 @@
           {
             "authorKey": "chalk-user-person-samar-anas-jaber",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 133."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 133."
           },
           {
             "authorKey": "chalk-user-person-hadi-tala-qassem",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 133."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 133."
           },
           {
             "authorKey": "chalk-user-person-alya-noura-habib",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 133."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 133."
           },
           {
             "authorKey": "chalk-user-person-layan-ibrahim-khoury",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 133."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 133."
           }
         ],
         "reactions": [
@@ -9577,7 +9577,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
         "agentKey": "chalk-agent-09",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -9591,22 +9591,22 @@
           {
             "authorKey": "chalk-user-person-adel-aref-sabbagh",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 137."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 137."
           },
           {
             "authorKey": "chalk-user-person-omar-walid-ansari",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 137."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 137."
           },
           {
             "authorKey": "chalk-user-person-noor-eman-salem",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 137."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 137."
           },
           {
             "authorKey": "chalk-user-person-adel-abdullah-azzam",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 137."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 137."
           }
         ],
         "reactions": [
@@ -9736,10 +9736,10 @@
       {
         "externalKey": "chalk-episode-140",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "agentKey": "chalk-agent-36",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -9753,22 +9753,22 @@
           {
             "authorKey": "chalk-user-person-faisal-noura-habib",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 140."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 140."
           },
           {
             "authorKey": "chalk-user-person-tariq-ibrahim-khoury",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 140."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 140."
           },
           {
             "authorKey": "chalk-user-person-lama-bilal-bakri",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 140."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 140."
           },
           {
             "authorKey": "chalk-user-person-salma-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 140."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 140."
           }
         ],
         "reactions": [
@@ -9793,7 +9793,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
         "agentKey": "chalk-agent-05",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -9807,22 +9807,22 @@
           {
             "authorKey": "chalk-user-person-samar-bilal-bakri",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 141."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 141."
           },
           {
             "authorKey": "chalk-user-person-hadi-yasmin-hamdan",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 141."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 141."
           },
           {
             "authorKey": "chalk-user-person-alya-rashed-zahran",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 141."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 141."
           },
           {
             "authorKey": "chalk-user-person-layan-karim-fakhri",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 141."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 141."
           }
         ],
         "reactions": [
@@ -10009,7 +10009,7 @@
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
         "agentKey": "chalk-agent-33",
-        "title": "Compass Product Guild Review Room: decision review",
+        "title": "Compass Product Guild Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -10023,22 +10023,22 @@
           {
             "authorKey": "chalk-user-person-omar-sahar-nassar",
             "locale": "ar-SA",
-            "text": "Question for Compass Product Guild Review Room, tied to episode outcome 145."
+            "text": "Question for Compass Product Guild Review Space, tied to episode outcome 145."
           },
           {
             "authorKey": "chalk-user-person-farah-malik-ghanem",
             "locale": "en-US",
-            "text": "Evidence for Compass Product Guild Review Room, tied to episode outcome 145."
+            "text": "Evidence for Compass Product Guild Review Space, tied to episode outcome 145."
           },
           {
             "authorKey": "chalk-user-person-noor-ghassan-khatib",
             "locale": "ar-en",
-            "text": "Decision for Compass Product Guild Review Room, tied to episode outcome 145."
+            "text": "Decision for Compass Product Guild Review Space, tied to episode outcome 145."
           },
           {
             "authorKey": "chalk-user-person-adel-ahmad-rifai",
             "locale": "en-US",
-            "text": "Next step for Compass Product Guild Review Room, tied to episode outcome 145."
+            "text": "Next step for Compass Product Guild Review Space, tied to episode outcome 145."
           }
         ],
         "reactions": [
@@ -10168,10 +10168,10 @@
       {
         "externalKey": "chalk-episode-148",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "agentKey": "chalk-agent-20",
-        "title": "Mosaic Research Room Studio: artifact workshop",
+        "title": "Mosaic Research Space Studio: artifact workshop",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -10185,22 +10185,22 @@
           {
             "authorKey": "chalk-user-person-faisal-rashed-zahran",
             "locale": "ar-SA",
-            "text": "Question for Mosaic Research Room Studio, tied to episode outcome 148."
+            "text": "Question for Mosaic Research Space Studio, tied to episode outcome 148."
           },
           {
             "authorKey": "chalk-user-person-tariq-karim-fakhri",
             "locale": "en-US",
-            "text": "Evidence for Mosaic Research Room Studio, tied to episode outcome 148."
+            "text": "Evidence for Mosaic Research Space Studio, tied to episode outcome 148."
           },
           {
             "authorKey": "chalk-user-person-lama-eman-salem",
             "locale": "ar-en",
-            "text": "Decision for Mosaic Research Room Studio, tied to episode outcome 148."
+            "text": "Decision for Mosaic Research Space Studio, tied to episode outcome 148."
           },
           {
             "authorKey": "chalk-user-person-salma-abdullah-azzam",
             "locale": "en-US",
-            "text": "Next step for Mosaic Research Room Studio, tied to episode outcome 148."
+            "text": "Next step for Mosaic Research Space Studio, tied to episode outcome 148."
           }
         ],
         "reactions": [
@@ -10225,7 +10225,7 @@
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
         "agentKey": "chalk-agent-29",
-        "title": "Atlas Design Faculty Review Room: decision review",
+        "title": "Atlas Design Faculty Review Space: decision review",
         "flagship": false,
         "artifactSource": "validated-fixture",
         "participantKeys": [
@@ -10239,22 +10239,22 @@
           {
             "authorKey": "chalk-user-person-samar-eman-salem",
             "locale": "ar-SA",
-            "text": "Question for Atlas Design Faculty Review Room, tied to episode outcome 149."
+            "text": "Question for Atlas Design Faculty Review Space, tied to episode outcome 149."
           },
           {
             "authorKey": "chalk-user-person-hadi-abdullah-azzam",
             "locale": "en-US",
-            "text": "Evidence for Atlas Design Faculty Review Room, tied to episode outcome 149."
+            "text": "Evidence for Atlas Design Faculty Review Space, tied to episode outcome 149."
           },
           {
             "authorKey": "chalk-user-person-alya-sahar-nassar",
             "locale": "ar-en",
-            "text": "Decision for Atlas Design Faculty Review Room, tied to episode outcome 149."
+            "text": "Decision for Atlas Design Faculty Review Space, tied to episode outcome 149."
           },
           {
             "authorKey": "chalk-user-person-layan-lina-sultan",
             "locale": "en-US",
-            "text": "Next step for Atlas Design Faculty Review Room, tied to episode outcome 149."
+            "text": "Next step for Atlas Design Faculty Review Space, tied to episode outcome 149."
           }
         ],
         "reactions": [
@@ -10365,8 +10365,8 @@
       {
         "externalKey": "chalk-artifacts-chalk-episode-004",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "episodeKey": "chalk-episode-004",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-004/transcript",
         "whiteboardAssetKey": "chalk/episodes/chalk-episode-004/whiteboard",
@@ -10453,8 +10453,8 @@
       {
         "externalKey": "chalk-artifacts-chalk-episode-012",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "episodeKey": "chalk-episode-012",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-012/transcript",
         "whiteboardAssetKey": "chalk/episodes/chalk-episode-012/whiteboard",
@@ -10541,8 +10541,8 @@
       {
         "externalKey": "chalk-artifacts-chalk-episode-020",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "episodeKey": "chalk-episode-020",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-020/transcript",
         "whiteboardAssetKey": "chalk/episodes/chalk-episode-020/whiteboard",
@@ -10629,8 +10629,8 @@
       {
         "externalKey": "chalk-artifacts-chalk-episode-028",
         "organizationKey": "chalk-showcase-episode-network",
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "episodeKey": "chalk-episode-028",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-028/transcript",
         "whiteboardAssetKey": "chalk/episodes/chalk-episode-028/whiteboard",
@@ -10851,11 +10851,11 @@
       "mimeType": "application/pdf",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
-      "body": "ar-SA: Question for Mosaic Research Room Studio, tied to episode outcome 4.\nen-US: Evidence for Mosaic Research Room Studio, tied to episode outcome 4.\nar-en: Decision for Mosaic Research Room Studio, tied to episode outcome 4.\nen-US: Next step for Mosaic Research Room Studio, tied to episode outcome 4.",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
+      "body": "ar-SA: Question for Mosaic Research Space Studio, tied to episode outcome 4.\nen-US: Evidence for Mosaic Research Space Studio, tied to episode outcome 4.\nar-en: Decision for Mosaic Research Space Studio, tied to episode outcome 4.\nen-US: Next step for Mosaic Research Space Studio, tied to episode outcome 4.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "episodeKey": "chalk-episode-004"
       },
       "source": {
@@ -10869,11 +10869,11 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
-      "body": "Decision map for Mosaic Research Room Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
+      "body": "Decision map for Mosaic Research Space Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "episodeKey": "chalk-episode-004"
       },
       "source": {
@@ -10887,11 +10887,11 @@
       "mimeType": "audio/wav",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Mosaic Research Room Studio: artifact workshop recording",
-      "body": "Episode recording summary for Mosaic Research Room Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
+      "title": "Mosaic Research Space Studio: artifact workshop recording",
+      "body": "Episode recording summary for Mosaic Research Space Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-1",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-1",
         "episodeKey": "chalk-episode-004",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-004/transcript"
       },
@@ -10906,8 +10906,8 @@
       "mimeType": "application/pdf",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
-      "body": "ar-SA: Question for Atlas Design Faculty Review Room, tied to episode outcome 5.\nen-US: Evidence for Atlas Design Faculty Review Room, tied to episode outcome 5.\nar-en: Decision for Atlas Design Faculty Review Room, tied to episode outcome 5.\nen-US: Next step for Atlas Design Faculty Review Room, tied to episode outcome 5.",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
+      "body": "ar-SA: Question for Atlas Design Faculty Review Space, tied to episode outcome 5.\nen-US: Evidence for Atlas Design Faculty Review Space, tied to episode outcome 5.\nar-en: Decision for Atlas Design Faculty Review Space, tied to episode outcome 5.\nen-US: Next step for Atlas Design Faculty Review Space, tied to episode outcome 5.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
@@ -10924,8 +10924,8 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
-      "body": "Decision map for Atlas Design Faculty Review Room: decision review: question, evidence, options, decision, owner, and next review.",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
+      "body": "Decision map for Atlas Design Faculty Review Space: decision review: question, evidence, options, decision, owner, and next review.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
@@ -10942,8 +10942,8 @@
       "mimeType": "audio/wav",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Atlas Design Faculty Review Room: decision review recording",
-      "body": "Episode recording summary for Atlas Design Faculty Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "title": "Atlas Design Faculty Review Space: decision review recording",
+      "body": "Episode recording summary for Atlas Design Faculty Review Space: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-1",
@@ -11126,8 +11126,8 @@
       "mimeType": "application/pdf",
       "locale": "en-US",
       "category": "episode-transcript",
-      "title": "Compass Product Guild Review Room: decision review transcript",
-      "body": "ar-SA: Question for Compass Product Guild Review Room, tied to episode outcome 9.\nen-US: Evidence for Compass Product Guild Review Room, tied to episode outcome 9.\nar-en: Decision for Compass Product Guild Review Room, tied to episode outcome 9.\nen-US: Next step for Compass Product Guild Review Room, tied to episode outcome 9.",
+      "title": "Compass Product Guild Review Space: decision review transcript",
+      "body": "ar-SA: Question for Compass Product Guild Review Space, tied to episode outcome 9.\nen-US: Evidence for Compass Product Guild Review Space, tied to episode outcome 9.\nar-en: Decision for Compass Product Guild Review Space, tied to episode outcome 9.\nen-US: Next step for Compass Product Guild Review Space, tied to episode outcome 9.",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
@@ -11144,8 +11144,8 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Compass Product Guild Review Room: decision review whiteboard",
-      "body": "Decision map for Compass Product Guild Review Room: decision review: question, evidence, options, decision, owner, and next review.",
+      "title": "Compass Product Guild Review Space: decision review whiteboard",
+      "body": "Decision map for Compass Product Guild Review Space: decision review: question, evidence, options, decision, owner, and next review.",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
@@ -11162,8 +11162,8 @@
       "mimeType": "audio/wav",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Compass Product Guild Review Room: decision review recording",
-      "body": "Episode recording summary for Compass Product Guild Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "title": "Compass Product Guild Review Space: decision review recording",
+      "body": "Episode recording summary for Compass Product Guild Review Space: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-2",
@@ -11291,11 +11291,11 @@
       "mimeType": "application/pdf",
       "locale": "en-US",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
-      "body": "ar-SA: Question for Mosaic Research Room Studio, tied to episode outcome 12.\nen-US: Evidence for Mosaic Research Room Studio, tied to episode outcome 12.\nar-en: Decision for Mosaic Research Room Studio, tied to episode outcome 12.\nen-US: Next step for Mosaic Research Room Studio, tied to episode outcome 12.",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
+      "body": "ar-SA: Question for Mosaic Research Space Studio, tied to episode outcome 12.\nen-US: Evidence for Mosaic Research Space Studio, tied to episode outcome 12.\nar-en: Decision for Mosaic Research Space Studio, tied to episode outcome 12.\nen-US: Next step for Mosaic Research Space Studio, tied to episode outcome 12.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "episodeKey": "chalk-episode-012"
       },
       "source": {
@@ -11309,11 +11309,11 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
-      "body": "Decision map for Mosaic Research Room Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
+      "body": "Decision map for Mosaic Research Space Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "episodeKey": "chalk-episode-012"
       },
       "source": {
@@ -11327,11 +11327,11 @@
       "mimeType": "audio/wav",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Mosaic Research Room Studio: artifact workshop recording",
-      "body": "Episode recording summary for Mosaic Research Room Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
+      "title": "Mosaic Research Space Studio: artifact workshop recording",
+      "body": "Episode recording summary for Mosaic Research Space Studio: artifact workshop. Participants review evidence, make the recorded decision, and name the next owner.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-2",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-2",
         "episodeKey": "chalk-episode-012",
         "transcriptAssetKey": "chalk/episodes/chalk-episode-012/transcript"
       },
@@ -11346,8 +11346,8 @@
       "mimeType": "application/pdf",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
-      "body": "ar-SA: Question for Atlas Design Faculty Review Room, tied to episode outcome 13.\nen-US: Evidence for Atlas Design Faculty Review Room, tied to episode outcome 13.\nar-en: Decision for Atlas Design Faculty Review Room, tied to episode outcome 13.\nen-US: Next step for Atlas Design Faculty Review Room, tied to episode outcome 13.",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
+      "body": "ar-SA: Question for Atlas Design Faculty Review Space, tied to episode outcome 13.\nen-US: Evidence for Atlas Design Faculty Review Space, tied to episode outcome 13.\nar-en: Decision for Atlas Design Faculty Review Space, tied to episode outcome 13.\nen-US: Next step for Atlas Design Faculty Review Space, tied to episode outcome 13.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
@@ -11364,8 +11364,8 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
-      "body": "Decision map for Atlas Design Faculty Review Room: decision review: question, evidence, options, decision, owner, and next review.",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
+      "body": "Decision map for Atlas Design Faculty Review Space: decision review: question, evidence, options, decision, owner, and next review.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
@@ -11382,8 +11382,8 @@
       "mimeType": "audio/wav",
       "locale": "en-US",
       "category": "episode-recording",
-      "title": "Atlas Design Faculty Review Room: decision review recording",
-      "body": "Episode recording summary for Atlas Design Faculty Review Room: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
+      "title": "Atlas Design Faculty Review Space: decision review recording",
+      "body": "Episode recording summary for Atlas Design Faculty Review Space: decision review. Participants review evidence, make the recorded decision, and name the next owner.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-2",
@@ -11547,8 +11547,8 @@
       "mimeType": "application/pdf",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Compass Product Guild Review Room: decision review transcript",
-      "body": "ar-SA: Question for Compass Product Guild Review Room, tied to episode outcome 17.\nen-US: Evidence for Compass Product Guild Review Room, tied to episode outcome 17.\nar-en: Decision for Compass Product Guild Review Room, tied to episode outcome 17.\nen-US: Next step for Compass Product Guild Review Room, tied to episode outcome 17.",
+      "title": "Compass Product Guild Review Space: decision review transcript",
+      "body": "ar-SA: Question for Compass Product Guild Review Space, tied to episode outcome 17.\nen-US: Evidence for Compass Product Guild Review Space, tied to episode outcome 17.\nar-en: Decision for Compass Product Guild Review Space, tied to episode outcome 17.\nen-US: Next step for Compass Product Guild Review Space, tied to episode outcome 17.",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
@@ -11565,8 +11565,8 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Compass Product Guild Review Room: decision review whiteboard",
-      "body": "Decision map for Compass Product Guild Review Room: decision review: question, evidence, options, decision, owner, and next review.",
+      "title": "Compass Product Guild Review Space: decision review whiteboard",
+      "body": "Decision map for Compass Product Guild Review Space: decision review: question, evidence, options, decision, owner, and next review.",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-3",
@@ -11655,11 +11655,11 @@
       "mimeType": "application/pdf",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
-      "body": "ar-SA: Question for Mosaic Research Room Studio, tied to episode outcome 20.\nen-US: Evidence for Mosaic Research Room Studio, tied to episode outcome 20.\nar-en: Decision for Mosaic Research Room Studio, tied to episode outcome 20.\nen-US: Next step for Mosaic Research Room Studio, tied to episode outcome 20.",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
+      "body": "ar-SA: Question for Mosaic Research Space Studio, tied to episode outcome 20.\nen-US: Evidence for Mosaic Research Space Studio, tied to episode outcome 20.\nar-en: Decision for Mosaic Research Space Studio, tied to episode outcome 20.\nen-US: Next step for Mosaic Research Space Studio, tied to episode outcome 20.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "episodeKey": "chalk-episode-020"
       },
       "source": {
@@ -11673,11 +11673,11 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
-      "body": "Decision map for Mosaic Research Room Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
+      "body": "Decision map for Mosaic Research Space Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-3",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-3",
         "episodeKey": "chalk-episode-020"
       },
       "source": {
@@ -11691,8 +11691,8 @@
       "mimeType": "application/pdf",
       "locale": "en-US",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
-      "body": "ar-SA: Question for Atlas Design Faculty Review Room, tied to episode outcome 21.\nen-US: Evidence for Atlas Design Faculty Review Room, tied to episode outcome 21.\nar-en: Decision for Atlas Design Faculty Review Room, tied to episode outcome 21.\nen-US: Next step for Atlas Design Faculty Review Room, tied to episode outcome 21.",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
+      "body": "ar-SA: Question for Atlas Design Faculty Review Space, tied to episode outcome 21.\nen-US: Evidence for Atlas Design Faculty Review Space, tied to episode outcome 21.\nar-en: Decision for Atlas Design Faculty Review Space, tied to episode outcome 21.\nen-US: Next step for Atlas Design Faculty Review Space, tied to episode outcome 21.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
@@ -11709,8 +11709,8 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
-      "body": "Decision map for Atlas Design Faculty Review Room: decision review: question, evidence, options, decision, owner, and next review.",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
+      "body": "Decision map for Atlas Design Faculty Review Space: decision review: question, evidence, options, decision, owner, and next review.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-3",
@@ -11835,8 +11835,8 @@
       "mimeType": "application/pdf",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Compass Product Guild Review Room: decision review transcript",
-      "body": "ar-SA: Question for Compass Product Guild Review Room, tied to episode outcome 25.\nen-US: Evidence for Compass Product Guild Review Room, tied to episode outcome 25.\nar-en: Decision for Compass Product Guild Review Room, tied to episode outcome 25.\nen-US: Next step for Compass Product Guild Review Room, tied to episode outcome 25.",
+      "title": "Compass Product Guild Review Space: decision review transcript",
+      "body": "ar-SA: Question for Compass Product Guild Review Space, tied to episode outcome 25.\nen-US: Evidence for Compass Product Guild Review Space, tied to episode outcome 25.\nar-en: Decision for Compass Product Guild Review Space, tied to episode outcome 25.\nen-US: Next step for Compass Product Guild Review Space, tied to episode outcome 25.",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
@@ -11853,8 +11853,8 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Compass Product Guild Review Room: decision review whiteboard",
-      "body": "Decision map for Compass Product Guild Review Room: decision review: question, evidence, options, decision, owner, and next review.",
+      "title": "Compass Product Guild Review Space: decision review whiteboard",
+      "body": "Decision map for Compass Product Guild Review Space: decision review: question, evidence, options, decision, owner, and next review.",
       "relationships": {
         "tenantKey": "chalk-tenant-compass-product-guild",
         "spaceKey": "chalk-space-compass-product-guild-reviews-4",
@@ -11943,11 +11943,11 @@
       "mimeType": "application/pdf",
       "locale": "ar-en",
       "category": "episode-transcript",
-      "title": "Mosaic Research Room Studio: artifact workshop transcript",
-      "body": "ar-SA: Question for Mosaic Research Room Studio, tied to episode outcome 28.\nen-US: Evidence for Mosaic Research Room Studio, tied to episode outcome 28.\nar-en: Decision for Mosaic Research Room Studio, tied to episode outcome 28.\nen-US: Next step for Mosaic Research Room Studio, tied to episode outcome 28.",
+      "title": "Mosaic Research Space Studio: artifact workshop transcript",
+      "body": "ar-SA: Question for Mosaic Research Space Studio, tied to episode outcome 28.\nen-US: Evidence for Mosaic Research Space Studio, tied to episode outcome 28.\nar-en: Decision for Mosaic Research Space Studio, tied to episode outcome 28.\nen-US: Next step for Mosaic Research Space Studio, tied to episode outcome 28.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "episodeKey": "chalk-episode-028"
       },
       "source": {
@@ -11961,11 +11961,11 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Mosaic Research Room Studio: artifact workshop whiteboard",
-      "body": "Decision map for Mosaic Research Room Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
+      "title": "Mosaic Research Space Studio: artifact workshop whiteboard",
+      "body": "Decision map for Mosaic Research Space Studio: artifact workshop: question, evidence, options, decision, owner, and next review.",
       "relationships": {
-        "tenantKey": "chalk-tenant-mosaic-research-room",
-        "spaceKey": "chalk-space-mosaic-research-room-studio-4",
+        "tenantKey": "chalk-tenant-mosaic-research-space",
+        "spaceKey": "chalk-space-mosaic-research-space-studio-4",
         "episodeKey": "chalk-episode-028"
       },
       "source": {
@@ -11979,8 +11979,8 @@
       "mimeType": "application/pdf",
       "locale": "ar-SA",
       "category": "episode-transcript",
-      "title": "Atlas Design Faculty Review Room: decision review transcript",
-      "body": "ar-SA: Question for Atlas Design Faculty Review Room, tied to episode outcome 29.\nen-US: Evidence for Atlas Design Faculty Review Room, tied to episode outcome 29.\nar-en: Decision for Atlas Design Faculty Review Room, tied to episode outcome 29.\nen-US: Next step for Atlas Design Faculty Review Room, tied to episode outcome 29.",
+      "title": "Atlas Design Faculty Review Space: decision review transcript",
+      "body": "ar-SA: Question for Atlas Design Faculty Review Space, tied to episode outcome 29.\nen-US: Evidence for Atlas Design Faculty Review Space, tied to episode outcome 29.\nar-en: Decision for Atlas Design Faculty Review Space, tied to episode outcome 29.\nen-US: Next step for Atlas Design Faculty Review Space, tied to episode outcome 29.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",
@@ -11997,8 +11997,8 @@
       "mimeType": "image/svg+xml",
       "locale": "und",
       "category": "episode-whiteboard",
-      "title": "Atlas Design Faculty Review Room: decision review whiteboard",
-      "body": "Decision map for Atlas Design Faculty Review Room: decision review: question, evidence, options, decision, owner, and next review.",
+      "title": "Atlas Design Faculty Review Space: decision review whiteboard",
+      "body": "Decision map for Atlas Design Faculty Review Space: decision review: question, evidence, options, decision, owner, and next review.",
       "relationships": {
         "tenantKey": "chalk-tenant-atlas-design-faculty",
         "spaceKey": "chalk-space-atlas-design-faculty-reviews-4",

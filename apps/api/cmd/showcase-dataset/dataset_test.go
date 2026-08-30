@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestEmbeddedDatasetPreservesPendingCaptureSlots(t *testing.T) {
@@ -86,5 +89,89 @@ func TestPlanDoesNotOpenDatabase(t *testing.T) {
 	result := planDataset(value, options{environment: "current", organizationKey: value.Manifest.Records.Organizations[0].ExternalKey})
 	if result.Status != "planned" || result.Counts["pendingAssets"] != 9 {
 		t.Fatalf("unexpected plan result: %+v", result)
+	}
+}
+
+func TestDestructiveCommandsRequireExplicitConfirmation(t *testing.T) {
+	organizationKey := "chalk-showcase-episode-network"
+	if _, err := parseOptions([]string{
+		"apply",
+		"--environment", "local",
+		"--organization-key", organizationKey,
+		"--create-organization",
+		"--database-url", "postgres://example.invalid/chalk",
+		"--owner-user-id", "owner",
+	}); err == nil || !strings.Contains(err.Error(), "--confirm-production") {
+		t.Fatalf("apply without confirmation error = %v", err)
+	}
+	if _, err := parseOptions([]string{
+		"remove",
+		"--environment", "local",
+		"--organization-key", organizationKey,
+		"--confirm-organization", "organization-id",
+		"--database-url", "postgres://example.invalid/chalk",
+	}); err == nil || !strings.Contains(err.Error(), "--confirm-production") {
+		t.Fatalf("remove without confirmation error = %v", err)
+	}
+	if _, err := parseOptions([]string{
+		"apply",
+		"--environment", "local",
+		"--organization-key", organizationKey,
+		"--create-organization",
+		"--database-url", "postgres://example.invalid/chalk",
+		"--owner-user-id", "owner",
+		"--confirm-production",
+	}); err != nil {
+		t.Fatalf("confirmed local apply parse error = %v", err)
+	}
+}
+
+func TestLifecycleEventBytesUseTheStoredEventEnvelope(t *testing.T) {
+	joinPayload := map[string]any{
+		"participant_id":     uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		"display_name":       "Noor Eman Salem",
+		"role":               "owner",
+		"admission_revision": 1,
+	}
+	digest := [32]byte{1}
+	joinBytes, err := json.Marshal(joinPayload)
+	if err != nil {
+		t.Fatalf("encode join payload: %v", err)
+	}
+	got, err := lifecycleEventBytes(
+		"participant_joined",
+		0,
+		1,
+		joinPayload,
+		uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000003"),
+		digest,
+	)
+	if err != nil {
+		t.Fatalf("encode stored join event: %v", err)
+	}
+	if got-len(joinBytes) != 311 {
+		t.Fatalf("stored join event overhead = %d, want 311", got-len(joinBytes))
+	}
+
+	endPayload := map[string]any{"reason": "ended_by_participant"}
+	endBytes, err := json.Marshal(endPayload)
+	if err != nil {
+		t.Fatalf("encode end payload: %v", err)
+	}
+	got, err = lifecycleEventBytes(
+		"episode_ended",
+		5,
+		6,
+		endPayload,
+		uuid.MustParse("00000000-0000-0000-0000-000000000004"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000005"),
+		digest,
+	)
+	if err != nil {
+		t.Fatalf("encode stored end event: %v", err)
+	}
+	if got-len(endBytes) != 306 {
+		t.Fatalf("stored end event overhead = %d, want 306", got-len(endBytes))
 	}
 }

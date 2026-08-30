@@ -93,8 +93,8 @@ func parseOptions(args []string) (options, error) {
 		if value.ownerUserID == "" {
 			return options{}, errors.New("apply requires --owner-user-id or CHALK_SHOWCASE_OWNER_USER_ID")
 		}
-		if value.environment == "production" && !value.confirmProduction {
-			return options{}, errors.New("production apply requires --confirm-production")
+		if !value.confirmProduction {
+			return options{}, errors.New("apply requires --confirm-production; --environment is informational and cannot authorize a destructive write")
 		}
 		if value.skipAssetUpload && value.environment != "local" {
 			return options{}, errors.New("--skip-asset-upload is only allowed for local applies")
@@ -109,8 +109,8 @@ func parseOptions(args []string) (options, error) {
 		if value.confirmOrganization == "" {
 			return options{}, errors.New("remove requires --confirm-organization")
 		}
-		if value.environment == "production" && !value.confirmProduction {
-			return options{}, errors.New("production remove requires --confirm-production")
+		if !value.confirmProduction {
+			return options{}, errors.New("remove requires --confirm-production; --environment is informational and cannot authorize a destructive write")
 		}
 	}
 	if command == "verify" && value.organizationID != "" && value.confirmOrganization != "" {

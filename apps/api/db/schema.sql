@@ -76,7 +76,7 @@ create table showcase_dataset_registries (
     organization_key text not null,
     organization_id uuid not null,
     owner_user_id uuid not null references users(id),
-    state text not null check (state in ('applying', 'applied')),
+    state text not null,
     manifest_sha256 bytea not null check (octet_length(manifest_sha256) = 32),
     assets_sha256 bytea not null check (octet_length(assets_sha256) = 32),
     counts jsonb not null check (jsonb_typeof(counts) = 'object'),
@@ -88,7 +88,9 @@ create table showcase_dataset_registries (
     check (length(dataset_id) between 1 and 128),
     check (length(product) between 1 and 128),
     check (length(dataset_version) between 1 and 64),
-    check (length(organization_key) between 1 and 256)
+    check (length(organization_key) between 1 and 256),
+    constraint showcase_dataset_registries_state_check
+        check (state in ('applying', 'applied', 'removing'))
 );
 create index showcase_dataset_registries_owner_idx
     on showcase_dataset_registries(owner_user_id, created_at desc);

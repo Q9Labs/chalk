@@ -19,8 +19,8 @@ import (
 var embeddedShowcaseFiles embed.FS
 
 const (
-	expectedManifestHash = "40bbfbabcb4e45f053b9ef370620126504fed0d13b1038ab4e20f384bd9d9dc7"
-	expectedAssetsHash   = "fddcde6056d7c86eb7554f41779cdec6e462082529fc415a4ce52ea43d87bca9"
+	expectedManifestHash = "53cceacd082068128a580ca5a70553796ac005a691618f63bd666afade05ac6b"
+	expectedAssetsHash   = "9e6ed3fe3e0822d9cef990abab7081eecbe10d8314203adcfd0c22c1ac33fe47"
 )
 
 func loadDataset(options options) (dataset, error) {
