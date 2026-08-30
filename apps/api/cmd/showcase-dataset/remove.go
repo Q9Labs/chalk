@@ -105,6 +105,7 @@ func deleteShowcaseRows(ctx context.Context, tx pgx.Tx, ids datasetIDs) error {
 		{"recording reservations", `delete from recording_reservations where tenant_id = any($1::uuid[])`, []any{tenantIDs}},
 		{"recordings", `delete from recordings where tenant_id = any($1::uuid[])`, []any{tenantIDs}},
 		{"audit logs", `delete from audit_logs where tenant_id = any($1::uuid[])`, []any{tenantIDs}},
+		{"episode diagnostics", `delete from episode_diagnostics where tenant_id = any($1::uuid[])`, []any{tenantIDs}},
 		{"episode create requests", `delete from episode_create_requests where tenant_id = any($1::uuid[])`, []any{tenantIDs}},
 		{"participants", `delete from participants where tenant_id = any($1::uuid[])`, []any{tenantIDs}},
 		{"episodes", `delete from episodes where tenant_id = any($1::uuid[])`, []any{tenantIDs}},

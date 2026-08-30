@@ -99,7 +99,8 @@ func applyDataset(ctx context.Context, value dataset, options options) (report, 
 	if err := seedSpaces(ctx, tx, value, ids, ownerID); err != nil {
 		return report{}, err
 	}
-	seeds, err := seedEpisodes(ctx, tx, value, ids, ownerID)
+	applyClock := time.Now().UTC()
+	seeds, err := seedEpisodes(ctx, tx, value, ids, ownerID, applyClock)
 	if err != nil {
 		return report{}, err
 	}
@@ -313,12 +314,30 @@ func seedSpaces(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs, o
 	return nil
 }
 
-func seedEpisodes(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs, ownerID uuid.UUID) ([]episodeSeed, error) {
+const (
+	episodeRetentionPeriod = 7 * 24 * time.Hour
+	episodeRuntimeLead     = 6 * 24 * time.Hour
+	episodeRuntimeStep     = 30 * time.Minute
+	episodeDuration        = 45 * time.Minute
+	episodeDeadline        = 24 * time.Hour
+)
+
+func episodeRuntimeTimes(applyClock time.Time, recordIndex int) (startedAt, endedAt, deadlineAt time.Time) {
+	startedAt = applyClock.UTC().Add(-episodeRuntimeLead).Add(time.Duration(recordIndex) * episodeRuntimeStep)
+	endedAt = startedAt.Add(episodeDuration)
+	deadlineAt = startedAt.Add(episodeDeadline)
+	return startedAt, endedAt, deadlineAt
+}
+
+func seedEpisodes(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs, ownerID uuid.UUID, applyClock time.Time) ([]episodeSeed, error) {
 	seeds := make([]episodeSeed, 0, len(value.Manifest.Records.Episodes))
-	for _, item := range value.Manifest.Records.Episodes {
+	for recordIndex, item := range value.Manifest.Records.Episodes {
 		tenantID := uuid.MustParse(ids.TenantIDs[item.TenantKey])
 		spaceID := uuid.MustParse(ids.SpaceIDs[item.SpaceKey])
 		episodeID := uuid.MustParse(ids.EpisodeIDs[item.ExternalKey])
+		startedAt, endedAt, deadlineAt := episodeRuntimeTimes(applyClock, recordIndex)
+		runtimeItem := item
+		runtimeItem.OccurredAt = startedAt
 		participants := make([]seedParticipant, 0, len(item.ParticipantKeys)+1)
 		for _, userKey := range item.ParticipantKeys {
 			userValue := value.UserByKey[userKey]
@@ -343,29 +362,9 @@ func seedEpisodes(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs,
 			Role:          "observer",
 			Capabilities:  roleCapabilities()["observer"],
 		})
-		artifactMetadata := buildArtifactMetadata(value, ids, item)
-		reactionMetadata := buildReactionMetadata(value, ids, item)
-		metadata, err := json.Marshal(map[string]any{
-			"showcaseDatasetId":      showcaseDatasetID,
-			"datasetVersion":         showcaseDatasetVersion,
-			"externalKey":            item.ExternalKey,
-			"organizationKey":        item.OrganizationKey,
-			"tenantKey":              item.TenantKey,
-			"spaceKey":               item.SpaceKey,
-			"agentKey":               item.AgentKey,
-			"agentParticipantId":     participantID(ids, item.ExternalKey, item.AgentKey).String(),
-			"agentPermission":        agentValue.Permission,
-			"flagship":               item.Flagship,
-			"artifactSource":         item.ArtifactSource,
-			"outcome":                item.Outcome,
-			"reactionHistory":        reactionMetadata,
-			"chatLineCount":          len(item.Chat),
-			"pendingArtifactCapture": item.Flagship,
-			"pendingArtifactCount":   boolInt(item.Flagship, 3),
-			"availableArtifactRefs":  artifactMetadata,
-			"nativeWhiteboard":       true,
-			"nativeParticipantCount": len(participants),
-		})
+		artifactMetadata := buildArtifactMetadata(value, ids, runtimeItem)
+		reactionMetadata := buildReactionMetadata(value, ids, runtimeItem)
+		metadata, err := buildEpisodeMetadata(ids, runtimeItem, item, agentValue, artifactMetadata, reactionMetadata)
 		if err != nil {
 			return nil, fmt.Errorf("encode Episode metadata %s: %w", item.ExternalKey, err)
 		}
@@ -379,8 +378,6 @@ func seedEpisodes(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs,
 		if err != nil {
 			return nil, fmt.Errorf("encode Episode config %s: %w", item.ExternalKey, err)
 		}
-		endedAt := item.OccurredAt.Add(45 * time.Minute)
-		deadlineAt := item.OccurredAt.Add(24 * time.Hour)
 		if _, err := tx.Exec(ctx, `
 			insert into episodes (
 				id, status, metadata, space_id, tenant_id, created_by_user_id,
@@ -388,7 +385,7 @@ func seedEpisodes(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs,
 				deadline_at, deadline_generation
 			)
 			values ($1, 'ended', $2::jsonb, $3, $4, $5, $6, $7, $8::jsonb, 'explicit', $9, 1)
-		`, episodeID, metadata, spaceID, tenantID, ownerID, item.OccurredAt, endedAt, configSnapshot, deadlineAt); err != nil {
+		`, episodeID, metadata, spaceID, tenantID, ownerID, startedAt, endedAt, configSnapshot, deadlineAt); err != nil {
 			return nil, fmt.Errorf("insert Episode %s: %w", item.ExternalKey, err)
 		}
 		for _, participant := range participants {
@@ -409,11 +406,11 @@ func seedEpisodes(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs,
 				values ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, 1, 'left', $10, $11, $12)
 			`, participant.ParticipantID, participant.DisplayName, participantMetadata, participant.Capabilities,
 				tenantID, spaceID, episodeID, participant.AccountID, participant.IdentityID, participant.Role,
-				item.OccurredAt, endedAt); err != nil {
+				startedAt, endedAt); err != nil {
 				return nil, fmt.Errorf("insert participant %s: %w", participant.IdentityKey, err)
 			}
 		}
-		seed := episodeSeed{Item: item, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Participants: participants}
+		seed := episodeSeed{Item: runtimeItem, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Participants: participants}
 		if err := seedEpisodeControl(ctx, tx, value, ids, seed); err != nil {
 			return nil, err
 		}
@@ -423,6 +420,31 @@ func seedEpisodes(ctx context.Context, tx pgx.Tx, value dataset, ids datasetIDs,
 		seeds = append(seeds, seed)
 	}
 	return seeds, nil
+}
+
+func buildEpisodeMetadata(ids datasetIDs, runtimeItem, manifestItem episode, agentValue agent, artifactMetadata map[string]any, reactionMetadata []map[string]any) ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"showcaseDatasetId":      showcaseDatasetID,
+		"datasetVersion":         showcaseDatasetVersion,
+		"externalKey":            runtimeItem.ExternalKey,
+		"organizationKey":        runtimeItem.OrganizationKey,
+		"tenantKey":              runtimeItem.TenantKey,
+		"spaceKey":               runtimeItem.SpaceKey,
+		"agentKey":               runtimeItem.AgentKey,
+		"agentParticipantId":     participantID(ids, runtimeItem.ExternalKey, runtimeItem.AgentKey).String(),
+		"agentPermission":        agentValue.Permission,
+		"flagship":               runtimeItem.Flagship,
+		"artifactSource":         runtimeItem.ArtifactSource,
+		"outcome":                runtimeItem.Outcome,
+		"occurredAt":             manifestItem.OccurredAt,
+		"reactionHistory":        reactionMetadata,
+		"chatLineCount":          len(runtimeItem.Chat),
+		"pendingArtifactCapture": runtimeItem.Flagship,
+		"pendingArtifactCount":   boolInt(runtimeItem.Flagship, 3),
+		"availableArtifactRefs":  artifactMetadata,
+		"nativeWhiteboard":       true,
+		"nativeParticipantCount": len(runtimeItem.ParticipantKeys) + 1,
+	})
 }
 
 func buildArtifactMetadata(value dataset, ids datasetIDs, item episode) map[string]any {

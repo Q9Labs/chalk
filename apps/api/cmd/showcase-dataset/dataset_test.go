@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -48,6 +49,48 @@ func TestDeterministicIDsAndControlSnapshots(t *testing.T) {
 	}
 	if ids.OrganizationID != buildIDs(value).OrganizationID {
 		t.Fatal("organization id is not deterministic")
+	}
+}
+
+func TestEpisodeRuntimeTimesStayInRetentionWindowAndPreserveManifestOccurrence(t *testing.T) {
+	value, err := loadDataset(options{})
+	if err != nil {
+		t.Fatalf("load embedded dataset: %v", err)
+	}
+	ids := buildIDs(value)
+	applyClock := time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC)
+	cutoff := applyClock.Add(-episodeRetentionPeriod)
+	var previousEndedAt time.Time
+
+	for index, item := range value.Manifest.Records.Episodes {
+		startedAt, endedAt, deadlineAt := episodeRuntimeTimes(applyClock, index)
+		if !endedAt.After(cutoff) || !endedAt.Before(applyClock) {
+			t.Fatalf("Episode %s ended_at = %s, want after %s and before %s", item.ExternalKey, endedAt, cutoff, applyClock)
+		}
+		if !startedAt.Before(endedAt) || !deadlineAt.Equal(startedAt.Add(episodeDeadline)) {
+			t.Fatalf("Episode %s runtime timestamps are inconsistent", item.ExternalKey)
+		}
+		if !previousEndedAt.IsZero() && !endedAt.After(previousEndedAt) {
+			t.Fatalf("Episode %s ended_at = %s is not after prior record %s", item.ExternalKey, endedAt, previousEndedAt)
+		}
+		previousEndedAt = endedAt
+
+		runtimeItem := item
+		runtimeItem.OccurredAt = startedAt
+		agentValue := value.AgentByKey[item.AgentKey]
+		metadata, err := buildEpisodeMetadata(ids, runtimeItem, item, agentValue, buildArtifactMetadata(value, ids, runtimeItem), buildReactionMetadata(value, ids, runtimeItem))
+		if err != nil {
+			t.Fatalf("encode Episode %s metadata: %v", item.ExternalKey, err)
+		}
+		var nativeMetadata struct {
+			OccurredAt time.Time `json:"occurredAt"`
+		}
+		if err := json.Unmarshal(metadata, &nativeMetadata); err != nil {
+			t.Fatalf("decode Episode %s metadata: %v", item.ExternalKey, err)
+		}
+		if !nativeMetadata.OccurredAt.Equal(item.OccurredAt) {
+			t.Fatalf("Episode %s metadata occurredAt = %s, want manifest value %s", item.ExternalKey, nativeMetadata.OccurredAt, item.OccurredAt)
+		}
 	}
 }
 
