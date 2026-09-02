@@ -820,6 +820,7 @@ create table space_public_arrivals (
     participant_id uuid,
     participant_generation bigint,
     provider text,
+    provider_episode_ref text,
     provider_subject text,
     expires_at timestamptz not null,
     terminal_reason text,
@@ -850,6 +851,7 @@ create table space_public_arrivals (
     check (participant_generation is null or participant_generation > 0),
     check ((provider is null) = (provider_subject is null)),
     check (provider is null or octet_length(provider) between 1 and 128),
+    check (provider_episode_ref is null or octet_length(provider_episode_ref) between 1 and 256),
     check (provider_subject is null or octet_length(provider_subject) between 1 and 256),
     check (
         (state in ('pending', 'rejected', 'unavailable')

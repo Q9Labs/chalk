@@ -60,6 +60,10 @@ type participantResponse struct {
 	ID            string `json:"id"`
 }
 
+type participantTokenResponse struct {
+	Token string `json:"token"`
+}
+
 type apiEnvelope struct {
 	Result json.RawMessage `json:"result"`
 	Data   json.RawMessage `json:"data"`
@@ -172,8 +176,29 @@ func (p Plane) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput)
 	}, nil
 }
 
-func (p Plane) ResumeJoin(context.Context, mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
-	return mediaplane.Join{}, mediaplane.ErrUnsupportedOperation
+func (p Plane) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	if p.client == nil {
+		return mediaplane.Join{}, mediaplane.ErrPlaneUnavailable
+	}
+	if input.Provider != mediaplane.ProviderCloudflareRTK {
+		return mediaplane.Join{}, mediaplane.ErrInvalidProvider
+	}
+
+	var output participantTokenResponse
+	if err := p.do(ctx, http.MethodPost, p.participantTokenPath(input.Episode.Ref, input.ConnectionRef), nil, &output); err != nil {
+		return mediaplane.Join{}, err
+	}
+	token := strings.TrimSpace(output.Token)
+	if token == "" {
+		return mediaplane.Join{}, fmt.Errorf("refresh rtk participant token: %w", mediaplane.ErrProviderFailed)
+	}
+
+	return mediaplane.Join{
+		Provider:       mediaplane.ProviderCloudflareRTK,
+		ParticipantRef: input.ConnectionRef,
+		ClientPayload:  map[string]any{"token": token},
+		Metadata:       providerMetadata(p.appID),
+	}, nil
 }
 
 func (p Plane) RemoveParticipant(ctx context.Context, input mediaplane.RemoveParticipantInput) error {
@@ -232,6 +257,10 @@ func (p Plane) participantsPath(meetingID string) string {
 
 func (p Plane) participantPath(meetingID, participantID string) string {
 	return fmt.Sprintf("%s/%s", p.participantsPath(meetingID), url.PathEscape(participantID))
+}
+
+func (p Plane) participantTokenPath(episodeRef, participantID string) string {
+	return fmt.Sprintf("%s/token", p.participantPath(episodeRef, participantID))
 }
 
 func (p Plane) kickAllPath(meetingID string) string {

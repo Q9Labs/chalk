@@ -1,6 +1,6 @@
 import React, { useId, useMemo, useState, type KeyboardEvent } from "react";
 import { Badge, Button, IconButton, Input } from "@q9labsai/chalk-ui";
-import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useAdmissionControl, useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -122,7 +122,7 @@ const ParticipantsPanelSurface = React.memo(
     const rows = (
       <div className={listSpacingClassName}>
         {filteredParticipants.length === 0 ? (
-          <div className={cn("p-8 text-center text-sm", emptyTextClassName)}>No participants found</div>
+          <div className={cn("p-8 text-center text-sm", emptyTextClassName)}>{searchQuery ? "No Participants match your search" : "No Participants are in this Space yet"}</div>
         ) : (
           filteredParticipants.map((participant) => (
             <ParticipantRow
@@ -292,6 +292,7 @@ export const ClassicParticipantsPanel = React.memo((props: ParticipantsPanelProp
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
+  const admissionControl = useAdmissionControl();
   const canMuteOthers = useCan("muteOthers");
   const canStopVideoOthers = useCan("stopVideoOthers");
   const canRequestMedia = useCan("requestMediaOthers");
@@ -332,7 +333,7 @@ export const ClassicParticipantsPanel = React.memo((props: ParticipantsPanelProp
       participants={participants}
       canManageParticipants={canMuteOthers || canStopVideoOthers || canRequestMedia || canRemoveParticipants}
       canManageAdmission={canManageAdmission}
-      admissionCount={canManageAdmission ? participantsSlice.admissionQueue.length : 0}
+      admissionCount={canManageAdmission ? participantsSlice.admissionQueue.length + (admissionControl?.requests.length ?? 0) : 0}
       onMuteParticipant={canMuteOthers ? (id) => void client.participants.mute(id) : undefined}
       onRequestUnmute={canRequestMedia ? (props.onRequestUnmute ?? ((id) => client.participants.requestMedia(id, "microphone"))) : undefined}
       onStopParticipantCamera={canStopVideoOthers ? (id) => void client.participants.stopVideo(id) : undefined}
