@@ -6,6 +6,9 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 build_script="$script_dir/build-signed-android.sh"
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/chalk-android-signing-test.XXXXXX")
 fake_bin="$test_dir/bin"
+isolated_repo="$test_dir/repo"
+isolated_mobile="$isolated_repo/apps/mobile"
+isolated_script="$isolated_mobile/scripts/release/build-signed-android.sh"
 fixture_keystore="$test_dir/fixture.jks"
 fixture_cert_pem="$test_dir/fixture-cert.pem"
 fixture_cert_der="$test_dir/fixture-cert.der"
@@ -14,6 +17,7 @@ fixture_store_password="fixture-store-password"
 fixture_key_password="fixture-key-password"
 keytool_log="$test_dir/keytool.log"
 build_marker="$test_dir/build.marker"
+gradle_log="$test_dir/gradle.log"
 system_path=$PATH
 
 cleanup() {
@@ -22,7 +26,10 @@ cleanup() {
 
 trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$fake_bin"
+mkdir -p "$fake_bin" "$isolated_mobile/android" "$isolated_mobile/scripts/release" "$isolated_repo/release"
+cp "$build_script" "$isolated_script"
+chmod 755 "$isolated_script"
+printf '%s\n' '{}' > "$isolated_repo/release/manifest.json"
 printf '%s\n' 'fixture-keystore' > "$fixture_keystore"
 openssl req -x509 -newkey rsa:2048 -nodes \
   -keyout "$test_dir/fixture-cert.key" \
@@ -93,6 +100,12 @@ case "$filter" in
   .android.certificate_sha256)
     printf '%s\n' "$EXPECTED_CERTIFICATE_SHA256"
     ;;
+  .android.version_name)
+    printf '%s\n' fixture
+    ;;
+  .android.version_code)
+    printf '%s\n' 1
+    ;;
   *)
     exit 1
     ;;
@@ -130,11 +143,42 @@ cat > "$fake_bin/pnpm" <<'FAKE_PNPM'
 set -euo pipefail
 
 printf '%s\n' reached > "$BUILD_MARKER"
-exit 42
+exit 0
 FAKE_PNPM
+
+cat > "$isolated_mobile/android/gradlew" <<'FAKE_GRADLEW'
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+printf '%s\n' "$@" > "$GRADLE_LOG"
+build_dir=''
+has_test_task=false
+has_bundle_task=false
+for argument in "$@"; do
+  case "$argument" in
+    -Pchalk.androidBuildDirectory=*)
+      build_dir=${argument#*=}
+      ;;
+    :app:testDebugUnitTest)
+      has_test_task=true
+      ;;
+    :app:bundleRelease)
+      has_bundle_task=true
+      ;;
+    testDebugUnitTest|bundleRelease)
+      exit 23
+      ;;
+  esac
+done
+[[ -n "$build_dir" && "$has_test_task" == true && "$has_bundle_task" == true ]]
+mkdir -p "$build_dir/outputs/bundle/release"
+printf '%s\n' fixture-bundle > "$build_dir/outputs/bundle/release/app-release.aab"
+FAKE_GRADLEW
 
 chmod 700 "$fake_bin"
 chmod 700 "$fake_bin"/*
+chmod 755 "$isolated_mobile/android/gradlew"
 
 run_case() {
   local case_name=$1
@@ -143,7 +187,7 @@ run_case() {
   local case_log="$test_dir/$case_name.log"
   local status=0
 
-  rm -f -- "$build_marker" "$keytool_log" "$case_log"
+  rm -f -- "$build_marker" "$keytool_log" "$gradle_log" "$case_log"
   EXPECTED_KEYSTORE_SHA256=$expected_keystore \
     EXPECTED_CERTIFICATE_SHA256=$expected_certificate \
     FIXTURE_ALIAS=$fixture_alias \
@@ -153,10 +197,11 @@ run_case() {
     FIXTURE_STORE_PASSWORD=$fixture_store_password \
     KEYTOOL_LOG=$keytool_log \
     BUILD_MARKER=$build_marker \
+    GRADLE_LOG=$gradle_log \
     PATH="$fake_bin:$system_path" \
     RUNNER_TEMP="$test_dir" \
     SIGNED_OUTPUT_DIR="$test_dir/output" \
-    bash "$build_script" > "$case_log" 2>&1 || status=$?
+    bash "$isolated_script" > "$case_log" 2>&1 || status=$?
 
   printf '%s\n' "$status"
 }
@@ -183,11 +228,18 @@ assert_log_contains() {
 }
 
 matching_status=$(run_case matching "$expected_keystore_sha256" "$expected_certificate_sha256")
-[[ "$matching_status" != 0 ]] || {
-  printf 'Matching identity unexpectedly reached a successful build.\n' >&2
+[[ "$matching_status" == 0 ]] || {
+  printf 'Matching identity did not complete the isolated build.\n' >&2
   exit 1
 }
 assert_file_exists "$build_marker"
+assert_file_exists "$gradle_log"
+assert_log_contains ':app:testDebugUnitTest' "$gradle_log"
+assert_log_contains ':app:bundleRelease' "$gradle_log"
+if grep -Fxq -- 'testDebugUnitTest' "$gradle_log" || grep -Fxq -- 'bundleRelease' "$gradle_log"; then
+  printf 'Gradle received an unqualified task.\n' >&2
+  exit 1
+fi
 assert_log_contains '-exportcert' "$keytool_log"
 assert_log_contains '-storepass:file' "$keytool_log"
 assert_log_contains 'store.password' "$keytool_log"
@@ -200,6 +252,7 @@ mismatched_certificate_status=$(run_case mismatched-certificate "$expected_keyst
   exit 1
 }
 assert_file_absent "$build_marker"
+assert_file_absent "$gradle_log"
 
 mismatched_keystore_status=$(run_case mismatched-keystore 00 "$expected_certificate_sha256")
 [[ "$mismatched_keystore_status" != 0 ]] || {
@@ -207,5 +260,6 @@ mismatched_keystore_status=$(run_case mismatched-keystore 00 "$expected_certific
   exit 1
 }
 assert_file_absent "$build_marker"
+assert_file_absent "$gradle_log"
 
 printf '%s\n' 'Android signing preflight regression tests passed.'
