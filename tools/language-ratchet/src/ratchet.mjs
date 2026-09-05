@@ -143,7 +143,19 @@ function isLockfile(relativePath) {
 
 const REFERENCE_FILENAMES = new Set(["CHANGELOG.md", "GLOSSARY.md", "checklist.md"]);
 const VENDORED_DIRECTORIES = new Set(["node_modules", "dist", "vendor", "sqlc"]);
-const PROVIDER_VOCABULARY_ADAPTERS = new Set(["sdks/typescript/client/src/media/rtk.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.test.ts"]);
+const PROVIDER_VOCABULARY_ADAPTERS = new Set([
+  "sdks/typescript/client/src/media/rtk.ts",
+  "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts",
+  "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.test.ts",
+  // These Cloudflare wire adapters and their proofs preserve vendor field names.
+  "sdks/typescript/client/src/media/remote-track-response.ts",
+  "sdks/typescript/client/src/media/remote-track-response.test.ts",
+  "apps/api/internal/adapters/cloudflare/sfu/adapter.go",
+  "apps/api/internal/adapters/cloudflare/sfu/adapter_observation_test.go",
+  "apps/api/internal/httpapi/sfu_signaling.go",
+  "apps/api/internal/httpapi/sfu_signaling_observation_test.go",
+  "apps/api/internal/traceharness/scenario_sfu_observability.go",
+]);
 
 function exclusionContext(relativePath) {
   const parts = relativePath.split("/");

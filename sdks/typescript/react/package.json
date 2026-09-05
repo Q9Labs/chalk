@@ -58,6 +58,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
+    "test": "pnpm exec vitest run",
     "build": "rm -rf ./dist && NODE_ENV=production tsup ./src/index.ts ./src/components/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external motion --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-client --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-ui/assets --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external modern-screenshot --external sonner --external tailwind-merge && pnpm run build:fix-use-client && pnpm run build:types",
     "build:fix-use-client": "node -e \"const fs=require('fs');const files=['./dist/index.js','./dist/components/index.js','./dist/components/ui/index.js','./dist/utils/index.js'];for(const f of files){if(!fs.existsSync(f))continue;let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);}\"",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",

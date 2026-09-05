@@ -6,6 +6,7 @@ import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, 
 
 import { Theme } from "../../ui/theme";
 import { formatChatTimestamp } from "./space-progressive-surface-helpers";
+import { SpaceChatAttachment } from "./SpaceChatAttachment";
 import { InitialsAvatar } from "./SpaceSurfacePrimitives";
 import type { SpaceController } from "./space-progressive-surface-types";
 
@@ -31,7 +32,7 @@ export function SpaceChatSheet({ controller }: { readonly controller: SpaceContr
           const sequence = viewableItems.at(-1)?.item.sequence;
           if (sequence) controller.markChatMessageVisible(sequence);
         }}
-        renderItem={({ item }) => <ChatMessage isLocal={item.senderId === localParticipantId} message={item} onOpenAttachment={controller.openChatAttachment} />}
+        renderItem={({ item }) => <ChatMessage isLocal={item.senderId === localParticipantId} message={item} onOpenAttachment={controller.openChatAttachment} resolveAttachmentUrl={controller.resolveChatAttachmentUrl} />}
         showsVerticalScrollIndicator={false}
       />
       {controller.chat.pendingMessages.map((message) => (
@@ -97,7 +98,17 @@ export function SpaceChatSheet({ controller }: { readonly controller: SpaceContr
   );
 }
 
-function ChatMessage({ isLocal, message, onOpenAttachment }: { readonly isLocal: boolean; readonly message: SpaceController["chat"]["messages"][number]; readonly onOpenAttachment: (attachmentId: string) => void }): React.JSX.Element {
+function ChatMessage({
+  isLocal,
+  message,
+  onOpenAttachment,
+  resolveAttachmentUrl,
+}: {
+  readonly isLocal: boolean;
+  readonly message: SpaceController["chat"]["messages"][number];
+  readonly onOpenAttachment: (attachmentId: string) => void;
+  readonly resolveAttachmentUrl: (attachmentId: string) => Promise<string | null>;
+}): React.JSX.Element {
   const timestamp = formatChatTimestamp(message.timestamp);
   return (
     <View style={[styles.messageRow, isLocal && styles.messageRowLocal]}>
@@ -107,11 +118,7 @@ function ChatMessage({ isLocal, message, onOpenAttachment }: { readonly isLocal:
         <View style={[styles.bubble, isLocal ? styles.localBubble : styles.remoteBubble]}>
           {message.text ? <Text style={[styles.messageText, isLocal && styles.localMessageText]}>{message.text}</Text> : null}
           {message.attachments.map((attachment) => (
-            <Pressable accessibilityRole="link" key={attachment.attachmentId} onPress={() => onOpenAttachment(attachment.attachmentId)} style={({ pressed }) => [styles.attachmentLink, pressed && styles.pressed]}>
-              <Text numberOfLines={1} style={[styles.attachment, isLocal && styles.localMessageText]}>
-                {attachment.fileName}
-              </Text>
-            </Pressable>
+            <SpaceChatAttachment attachment={attachment} isLocal={isLocal} key={attachment.attachmentId} onOpen={onOpenAttachment} resolveUrl={resolveAttachmentUrl} />
           ))}
         </View>
         <Text style={[styles.timestamp, isLocal && styles.timestampLocal]}>{timestamp}</Text>
@@ -150,8 +157,6 @@ const styles = StyleSheet.create({
   localBubble: { backgroundColor: Theme.colors.ink, borderColor: Theme.colors.ink, borderTopRightRadius: 5 },
   messageText: { color: Theme.colors.ink, fontSize: 17, lineHeight: 24 },
   localMessageText: { color: Theme.colors.surface },
-  attachmentLink: { justifyContent: "center", marginTop: 4, maxWidth: "100%", minHeight: 32 },
-  attachment: { color: Theme.colors.information, fontSize: 14 },
   timestamp: { color: Theme.colors.ink3, fontSize: 12, marginTop: 5, paddingHorizontal: 4 },
   timestampLocal: { textAlign: "right" },
   readBy: { color: Theme.colors.ink3, fontSize: 11, marginTop: 3, paddingHorizontal: 4 },

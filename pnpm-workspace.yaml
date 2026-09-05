@@ -16,11 +16,12 @@ overrides:
   "@babel/core": ^7.29.7
   "@tanstack/start-server-core": 1.169.16
   "@vitest/browser": ^4.1.10
-  "@xmldom/xmldom": ^0.8.13
+  "@xmldom/xmldom": ^0.8.15
+  browserslist: ^4.28.7
   defu: ^6.1.7
   dompurify: ^3.4.13
   esbuild@<0.28.1: ^0.28.1
-  fast-uri: ^3.1.5
+  fast-uri: ^3.1.6
   h3: ^2.0.1-rc.18
   h3-v2: npm:h3@^2.0.1-rc.20
   image-size: 2.0.2
@@ -41,6 +42,7 @@ overrides:
   sharp: ^0.35.0
   shell-quote: ^1.9.0
   tar: ^7.5.21
+  toml: ^4.2.0
   turbo: ^2.9.14
   undici: ^7.29.0
   uuid: ^14.0.0

@@ -274,6 +274,50 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("keeps successful tracks from a partial pull and retries only the missing publication", async () => {
+    const harness = await startedCameraAndScreenRemoteHarness();
+    harness.transport.omittedRemoteTrackNames.add("camera-a");
+
+    await harness.client.refreshRemotePublications();
+    const healthy = harness.client.getSnapshot().remoteTracks[0];
+    expect(healthy).toMatchObject({ participantId: "participant-3", source: "screen", publicationId: "presenter-connection|screen-b", track: { readyState: "live" } });
+
+    await harness.client.refreshRemotePublications();
+    expect(harness.transport.addInputs.at(-1)?.tracks.map((track) => track.trackName)).toEqual(["camera-a"]);
+    expect(harness.client.getSnapshot().remoteTracks).toEqual([healthy]);
+
+    harness.transport.omittedRemoteTrackNames.clear();
+    await harness.client.refreshRemotePublications();
+    expect(harness.client.getSnapshot().remoteTracks).toHaveLength(2);
+    expect(harness.client.getSnapshot().remoteTracks).toContain(healthy);
+    await expectNoAdditionalRemotePull(harness);
+    harness.client.stop();
+  });
+
+  it("matches reordered remote responses by provider identity instead of array position", async () => {
+    const harness = await startedCameraAndScreenRemoteHarness();
+    harness.transport.reverseRemoteTracks = true;
+    await harness.client.refreshRemotePublications();
+    expect(harness.client.getSnapshot().remoteTracks.find((track) => track.participantId === "participant-2")?.track.id).toContain("camera-a");
+    expect(harness.client.getSnapshot().remoteTracks.find((track) => track.participantId === "participant-3")?.track.id).toContain("screen-b");
+    harness.client.stop();
+  });
+
+  it("keeps polling an empty partial pull but respects stale and removed publication snapshots", async () => {
+    const harness = await startedRemoteHarness("remote-connection|camera-a");
+    harness.transport.omittedRemoteTrackNames.add("camera-a");
+    await harness.client.refreshRemotePublications();
+    await harness.client.refreshRemotePublications();
+    expect(remotePullCount(harness)).toBe(2);
+    harness.transport.snapshot = publicationSnapshot(1, 0, "remote-connection|stale-camera");
+    await expectNoAdditionalRemotePull(harness);
+    harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+    await harness.client.refreshRemotePublications();
+    await expectNoAdditionalRemotePull(harness);
+    expect(harness.client.getSnapshot().remoteTracks).toEqual([]);
+    harness.client.stop();
+  });
+
   it("recovers a failed remote pull on one fresh media connection", async () => {
     const { harness, onError, replaceMediaConnection } = await startedReplaceableHarness();
     harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
@@ -564,6 +608,15 @@ async function startedReplaceableHarness() {
   return { harness, onError, replaceMediaConnection };
 }
 
+async function startedCameraAndScreenRemoteHarness() {
+  const harness = await startedRemoteHarness("remote-connection|camera-a");
+  harness.transport.snapshot = {
+    ...harness.transport.snapshot,
+    publications: [...harness.transport.snapshot.publications, { participantId: "participant-3", source: "screen", publicationId: "presenter-connection|screen-b" }],
+  };
+  return harness;
+}
+
 async function expectNoAdditionalRemotePull(harness: ReturnType<typeof createHarness>): Promise<void> {
   const count = remotePullCount(harness);
   await harness.client.refreshRemotePublications();
@@ -634,6 +687,8 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   failNextLocalPublish = false;
   failNextStaleLocalPublish = false;
   failNextRemotePull = false;
+  readonly omittedRemoteTrackNames = new Set<string>();
+  reverseRemoteTracks = false;
   failRemotePullCount = 0;
   failRenegotiation = false;
   immediateRenegotiation = false;
@@ -662,7 +717,8 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         this.failNextRemotePull = false;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
       }
-      const tracks = input.tracks.map((track, index) => ({ ...track, mid: `remote-${index}` }));
+      const tracks = input.tracks.filter((track) => !this.omittedRemoteTrackNames.has(track.trackName)).map((track, index) => ({ ...track, mid: `remote-${index}` }));
+      if (this.reverseRemoteTracks) tracks.reverse();
       tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${index}`, track.trackName.includes("microphone") ? "audio" : "video")));
       const requiresImmediateRenegotiation = this.immediateRenegotiation || this.#peer()?.connectionState !== "connected";
       return {

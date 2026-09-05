@@ -129,6 +129,7 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
           throw new Error("File transfer is unavailable in the local Space fixture.");
         },
         url: (attachment) => `https://example.invalid/chat/${attachment.attachmentId}`,
+        resolveUrl: async (attachment) => `https://example.invalid/chat/${attachment.attachmentId}`,
       },
       send: async (input) => sendMessage(input),
       loadOlder: async () => {

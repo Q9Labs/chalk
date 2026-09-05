@@ -7,6 +7,7 @@ import type { WhiteboardCollaborationEvent } from "../collab/engine";
 import { WhiteboardCanvas } from "../react/WhiteboardCanvas";
 import type { ChalkEmbeddedWhiteboardHostEnvelope } from "./protocol";
 import { ChalkEmbeddedWhiteboardRendererBridge } from "./renderer-bridge";
+import { applyEmbeddedWhiteboardViewport } from "./renderer-viewport";
 
 declare global {
   interface Window {
@@ -16,6 +17,7 @@ declare global {
 
 window.EXCALIDRAW_ASSET_PATH = "./";
 
+const rendererRoot = requireRendererRoot();
 const bridge = new ChalkEmbeddedWhiteboardRendererBridge();
 
 type Configuration = {
@@ -29,6 +31,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
   const [configuration, setConfiguration] = useState<Configuration | null>(null);
   const [closed, setClosed] = useState(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  const viewportRef = useRef<Extract<ChalkEmbeddedWhiteboardHostEnvelope, { readonly type: "set_viewport" }>["payload"] | null>(null);
   const collaboration = useMemo(() => createCollaborationBridge(bridge), []);
 
   useEffect(() => {
@@ -39,6 +42,10 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
           return;
         case "set_capabilities":
           setConfiguration((current) => (current ? { ...current, ...requireCapabilities(message.payload) } : current));
+          return;
+        case "set_viewport":
+          viewportRef.current = requireViewport(message.payload);
+          applyCurrentViewport(apiRef.current, viewportRef.current);
           return;
         case "prepare_close": {
           const reason = requireReason(message.payload);
@@ -66,6 +73,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
       localParticipantColor={configuration.localParticipantColor}
       onExcalidrawApiReady={(api) => {
         apiRef.current = api;
+        applyCurrentViewport(api, viewportRef.current);
       }}
       onLoadError={(error) => {
         bridge.post({ type: "error", payload: { code: "renderer_load_failed", message: error.message.slice(0, 256), recoverable: false } });
@@ -186,9 +194,42 @@ function requireCapabilities(value: unknown): Pick<Configuration, "canDraw" | "c
   return { canDraw: value.canDraw, canClear: value.canClear };
 }
 
+function requireViewport(value: unknown): Extract<ChalkEmbeddedWhiteboardHostEnvelope, { readonly type: "set_viewport" }>["payload"] {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("width" in value) ||
+    !("height" in value) ||
+    !("scale" in value) ||
+    typeof value.width !== "number" ||
+    typeof value.height !== "number" ||
+    typeof value.scale !== "number" ||
+    !Number.isFinite(value.width) ||
+    value.width <= 0 ||
+    !Number.isFinite(value.height) ||
+    value.height <= 0 ||
+    !Number.isFinite(value.scale) ||
+    value.scale <= 0
+  ) {
+    throw new Error("embedded whiteboard viewport is invalid");
+  }
+  return { width: value.width, height: value.height, scale: value.scale };
+}
+
+function applyCurrentViewport(api: ExcalidrawImperativeAPI | null, viewport: Extract<ChalkEmbeddedWhiteboardHostEnvelope, { readonly type: "set_viewport" }>["payload"] | null): void {
+  if (!api || !viewport) return;
+  applyEmbeddedWhiteboardViewport(api, rendererRoot, viewport);
+}
+
 function requireReason(value: unknown): string {
   if (!isRecord(value) || typeof value.reason !== "string" || value.reason.length === 0) throw new Error("embedded whiteboard close reason is invalid");
   return value.reason;
+}
+
+function requireRendererRoot(): HTMLElement {
+  const root = document.getElementById("root");
+  if (!root) throw new Error("embedded whiteboard root is missing");
+  return root;
 }
 
 function blobToDataURL(blob: Blob): Promise<string> {
@@ -204,9 +245,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const root = document.getElementById("root");
-if (!root) throw new Error("embedded whiteboard root is missing");
-createRoot(root).render(
+createRoot(rendererRoot).render(
   <StrictMode>
     <EmbeddedWhiteboardRenderer />
   </StrictMode>,

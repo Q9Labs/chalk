@@ -211,7 +211,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
                 {screenshotUrl ? (
                   <img src={screenshotUrl} alt="Screenshot preview" className="max-h-36 w-full rounded-md border border-[var(--chalk-app-line)] object-cover" />
                 ) : (
-                  <p className="rounded-md border border-dashed border-[var(--chalk-app-line)] px-3 py-3 text-xs text-[var(--chalk-app-text-muted)]">{preparing ? "Capturing a safe screenshot…" : screenshotFailure ? `Screenshot unavailable (${screenshotFailure}).` : "No screenshot attached."}</p>
+                  <p className="rounded-md border border-dashed border-[var(--chalk-app-line)] px-3 py-3 text-xs text-[var(--chalk-app-text-muted)]">{preparing ? "Preparing screenshot…" : screenshotFailure ? "Screenshot unavailable. You can still send feedback." : "No screenshot attached."}</p>
                 )}
               </div>
 

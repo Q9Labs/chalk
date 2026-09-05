@@ -36,7 +36,7 @@ export function EntranceDeviceControls({
   disabled = false,
 }: EntranceDeviceControlsProps): React.JSX.Element {
   const [openControl, setOpenControl] = useState<DeviceControl | null>(null);
-  const hasMicrophoneDevices = audioInputDevices.length > 0 || audioOutputDevices.length > 0;
+  const hasMicrophoneDevices = audioInputDevices.length > 0;
   const hasCameraDevices = videoInputDevices.length > 0;
 
   const toggleSelector = (control: DeviceControl) => {
@@ -49,6 +49,8 @@ export function EntranceDeviceControls({
         {audioInputDevices.length > 0 ? <DevicePicker kind="microphone" devices={audioInputDevices} selectedDeviceId={selectedAudioInput} onChange={onAudioInputChange} label="Microphone input" disabled={disabled} /> : null}
         {audioOutputDevices.length > 0 ? <DevicePicker kind="audio-output" devices={audioOutputDevices} selectedDeviceId={selectedAudioOutput} onChange={onAudioOutputChange} label="Audio output" disabled={disabled} /> : null}
       </DeviceControlRow>
+
+      {!hasMicrophoneDevices && audioOutputDevices.length > 0 ? <DevicePicker kind="microphone" devices={audioOutputDevices} selectedDeviceId={selectedAudioOutput} onChange={onAudioOutputChange} label="Audio output" disabled={disabled} /> : null}
 
       <DeviceControlRow kind="camera" label="Camera" enabled={camera} disabled={disabled} hasDevices={hasCameraDevices} selectorOpen={openControl === "camera"} onChange={onCameraChange} onToggleSelector={() => toggleSelector("camera")}>
         {videoInputDevices.length > 0 ? <DevicePicker kind="camera" devices={videoInputDevices} selectedDeviceId={selectedVideoInput} onChange={onVideoInputChange} label="Camera input" disabled={disabled} /> : null}

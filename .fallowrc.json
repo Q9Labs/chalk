@@ -32,6 +32,7 @@
     "tools/contract-fixture-proof/src/emitters/*.mjs",
     "tools/contract-fixture-proof/src/typespec-proof/tsp-index.mjs",
     "tools/contract-fixture-proof/test/*.mjs",
+    "tools/sdk-web-consumer-e2e/consumer/styles.css",
     "scratchpad/perf-harness/analyze.mjs",
     "scratchpad/perf-harness/dev-stack.mjs",
     "scratchpad/perf-harness/run.mjs",
