@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+proof="${1:?Sync database proof is required}"
+require_standby="${2:-true}"
+case "$require_standby" in
+  true|false) ;;
+  *) echo "CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY must be true or false" >&2; exit 1 ;;
+esac
+
+jq -e --argjson require_standby "$require_standby" '
+  .schema_version == 1 and
+  .provider == "planetscale-postgresql" and
+  .postgresql_major == 18 and
+  .connection_mode == "direct" and
+  .role_query_supported == true and
+  .pg_stat_replication_visible == true and
+  (if $require_standby then
+    .synchronous_standby_names_configured == true and .synchronous_standbys >= 1
+   else
+    .require_synchronous_standby == false and
+    .writable_primary == true and
+    .fsync == "on" and .full_page_writes == "on" and .data_checksums == "on" and
+    (.synchronous_commit == "on" or .synchronous_commit == "remote_apply")
+   end) and
+  (.evidence_id | type == "string" and length > 0) and
+  (.verified_at | type == "string" and length > 0)
+' "$proof" >/dev/null

@@ -98,6 +98,11 @@ snapshots cannot overwrite newer truth.
 Production boot refuses Memory, the development verifier, an incompatible
 migration, a non-writable database, and a missing required synchronous standby.
 The exact launch topology and WAL-lag ceiling remain deployment inputs.
+`CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY` defaults to `true`. Set it to `false`
+only for an approved single-node deployment without automatic failover. This
+keeps PostgreSQL 18, writable-primary, migration, fsync, full-page-write,
+checksum, synchronous-commit, authentication, and provider-bridge checks enabled.
+Readiness reports the standby requirement as `not_required` in this mode.
 
 Production protocol-v1 admission verifies API-issued Ed25519 JWTs locally. Set
 `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`, and
