@@ -130,6 +130,7 @@ const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.post("addCloudflareSFUTracks", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/tracks", {
       params: S.AddCloudflareSFUTracksPathParamsSchema,
+      query: S.AddCloudflareSFUTracksQueryParamsSchema,
       payload: S.AddCloudflareSFUTracksRequestBodySchema,
       success: S.AddCloudflareSFUTracksResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [

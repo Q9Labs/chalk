@@ -63,6 +63,16 @@ describe("Cloudflare SFU HTTP signaling", () => {
     await transport.listPublications();
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe("Bearer legacy-token");
   });
+  it("opts into partial replies without changing the strict legacy request body", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ tracks: [] }), { status: 200 }));
+    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
+    const input = { connectionId: "connection-1", tracks: [] };
+    await transport.addTracks(input);
+    await transport.addTracks({ ...input, allowPartialRemoteTracks: true });
+    expect(String(fetch.mock.calls[0]?.[0])).toMatch(/\/tracks$/);
+    expect(String(fetch.mock.calls[1]?.[0])).toMatch(/\/tracks\?allow_partial_remote_tracks=true$/);
+    expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
+  });
   it("marks expired provider connections as retryable connection failures", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response("connection expired", { status: 410 }));
     const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
@@ -280,6 +290,7 @@ describe("Cloudflare SFU client", () => {
 
     await harness.client.refreshRemotePublications();
     const healthy = harness.client.getSnapshot().remoteTracks[0];
+    expect(harness.transport.addInputs.at(-1)).toMatchObject({ allowPartialRemoteTracks: true });
     expect(healthy).toMatchObject({ participantId: "participant-3", source: "screen", publicationId: "presenter-connection|screen-b", track: { readyState: "live" } });
 
     await harness.client.refreshRemotePublications();

@@ -1,12 +1,50 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestPartialSFUTracksResponseRequiresClientOptIn(t *testing.T) {
+	providerErr := errors.New("one remote feed is missing")
+	response := mediaplane.TracksResponse{Tracks: []mediaplane.Track{remoteObservationTrack("screen-connection", "screen")}}
+	for _, allowPartial := range []bool{false, true} {
+		got, err := partialSFUTracksResponse(sfuTracksEndpointRequest{AllowPartialRemoteTracks: allowPartial}, response, providerErr)
+		if allowPartial {
+			if err != nil || len(got.Tracks) != 1 {
+				t.Fatalf("opted-in response = %#v, error = %v", got, err)
+			}
+		} else if !errors.Is(err, providerErr) || len(got.Tracks) != 0 || got.SessionDescription != nil {
+			t.Fatalf("legacy client received a partial response: %#v, error = %v", got, err)
+		}
+	}
+}
+
+func TestSFUTracksDecoderRequiresExplicitPartialReplyQuery(t *testing.T) {
+	for _, value := range []string{"", "false", "true", "invalid"} {
+		t.Run(value, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/tracks?allow_partial_remote_tracks="+value, strings.NewReader(`{"connection_id":"receiver","tracks":[]}`))
+			route := chi.NewRouteContext()
+			for _, name := range []string{"tenant_id", "space_id", "episode_id", "participant_id"} {
+				route.URLParams.Add(name, "11111111-1111-4111-8111-111111111111")
+			}
+			request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, route))
+			decoded, err := decodeSFUTracksRequest(request)
+			if err != nil || decoded.AllowPartialRemoteTracks != (value == "true") {
+				t.Fatalf("query %q: opted in = %t, error = %v", value, decoded.AllowPartialRemoteTracks, err)
+			}
+		})
+	}
+}
 
 func TestRemoteTrackObservationUsesOnlyRequestedMissingIdentities(t *testing.T) {
 	request := sfuTracksEndpointRequest{

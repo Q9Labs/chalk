@@ -502,7 +502,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       connection.addEventListener("track", onTrack);
       try {
         this.#requireGeneration(generation);
-        const response = await this.#requireTransport().addTracks({ connectionId, tracks: requested });
+        const response = await this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true });
         this.#requireGeneration(generation);
         const responseTracks = response.tracks ?? [];
         const matched = matchRemotePullTracks(publications, responseTracks);

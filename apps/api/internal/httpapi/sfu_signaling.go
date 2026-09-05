@@ -40,11 +40,12 @@ type sfuCloseTrackRequest struct {
 }
 
 type sfuTracksEndpointRequest struct {
-	TenantID      utilities.ID
-	SpaceID       utilities.ID
-	EpisodeID     utilities.ID
-	ParticipantID utilities.ID
-	Body          sfuTracksRequest
+	AllowPartialRemoteTracks bool
+	TenantID                 utilities.ID
+	SpaceID                  utilities.ID
+	EpisodeID                utilities.ID
+	ParticipantID            utilities.ID
+	Body                     sfuTracksRequest
 }
 
 type sfuRenegotiateEndpointRequest struct {
@@ -120,7 +121,7 @@ func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tena
 	).
 		Auth(APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantSpaceEpisodeParticipantParameters()...).
+		Parameters(append(tenantSpaceEpisodeParticipantParameters(), APIParameterContract{Name: "allow_partial_remote_tracks", In: "query", Type: "boolean"})...).
 		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
@@ -152,7 +153,7 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 					return mediaplane.TracksResponse{}, errors.Join(err, observationErr)
 				}
 				logRemoteTrackResponse(ctx, response, observation, true)
-				return response, nil
+				return partialSFUTracksResponse(request, response, err)
 			}
 			return mediaplane.TracksResponse{}, err
 		}
@@ -161,7 +162,7 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 			if observed {
 				logRemoteTrackResponse(ctx, response, observation, true)
 			}
-			return response, nil
+			return partialSFUTracksResponse(request, response, err)
 		}
 		return mediaplane.TracksResponse{}, err
 	}
@@ -198,6 +199,13 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 func remoteTrackObserver(publications mediapublications.Registry) (mediapublications.RemoteTrackObserver, bool) {
 	observer, ok := publications.(mediapublications.RemoteTrackObserver)
 	return observer, ok
+}
+
+func partialSFUTracksResponse(request sfuTracksEndpointRequest, response mediaplane.TracksResponse, providerErr error) (mediaplane.TracksResponse, error) {
+	if !request.AllowPartialRemoteTracks {
+		return mediaplane.TracksResponse{}, providerErr
+	}
+	return response, nil
 }
 
 func remoteTrackPartialObservation(request sfuTracksEndpointRequest, response mediaplane.TracksResponse) (mediapublications.RemoteTrackObservationInput, bool) {
@@ -450,7 +458,7 @@ func decodeSFUTracksRequest(request *http.Request) (sfuTracksEndpointRequest, er
 	if err != nil {
 		return sfuTracksEndpointRequest{}, err
 	}
-	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
+	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body, AllowPartialRemoteTracks: request.URL.Query().Get("allow_partial_remote_tracks") == "true"}, nil
 }
 
 func decodeSFURenegotiateRequest(request *http.Request) (sfuRenegotiateEndpointRequest, error) {

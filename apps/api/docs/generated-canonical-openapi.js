@@ -9874,6 +9874,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               $ref: "#/components/schemas/ParticipantId",
             },
           },
+          {
+            in: "query",
+            name: "allow_partial_remote_tracks",
+            required: false,
+            schema: {
+              type: "boolean",
+            },
+          },
         ],
         requestBody: {
           content: {

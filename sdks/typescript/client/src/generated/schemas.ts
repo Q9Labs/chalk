@@ -1476,6 +1476,11 @@ export const AddCloudflareSFUTracksPathParamsSchema = Schema.Struct({
 });
 export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPathParamsSchema.Type;
 
+export const AddCloudflareSFUTracksQueryParamsSchema = Schema.Struct({
+  allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
+});
+export type AddCloudflareSFUTracksQueryParams = typeof AddCloudflareSFUTracksQueryParamsSchema.Type;
+
 export const AddCloudflareSFUTracksRequestBodySchema = CloudflareSFUTracksRequestSchema;
 export type AddCloudflareSFUTracksRequestBody = typeof AddCloudflareSFUTracksRequestBodySchema.Type;
 
