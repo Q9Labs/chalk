@@ -95,7 +95,7 @@ chmod 700 "$gradle_build_dir"
   cd "$mobile_root/android"
   ./gradlew --no-daemon \
     -Pchalk.androidBuildDirectory="$gradle_build_dir" \
-    testDebugUnitTest bundleRelease
+    :app:testDebugUnitTest :app:bundleRelease
 )
 
 built_bundle="$gradle_build_dir/outputs/bundle/release/app-release.aab"
