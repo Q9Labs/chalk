@@ -289,18 +289,11 @@ if ! is_excluded cloudflare-tunnel-token || ! input_is_absent "${secret_root}/cl
 fi
 
 secure_regular_file "${sync_proof}"
-jq -e '
-  .schema_version == 1 and
-  .provider == "planetscale-postgresql" and
-  .postgresql_major == 18 and
-  .connection_mode == "direct" and
-  .role_query_supported == true and
-  .pg_stat_replication_visible == true and
-  .synchronous_standby_names_configured == true and
-  .synchronous_standbys >= 1 and
-  (.evidence_id | type == "string" and length > 0) and
-  (.verified_at | type == "string" and length > 0)
-' "${sync_proof}" >/dev/null || fail "PlanetScale does not have an accepted Sync production-probe proof"
+require_standby=true
+if [[ "$sync_available" == true ]] && grep -q '^CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY=' "$sync_env"; then
+  require_standby="$(env_value "$sync_env" CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY)" || fail "invalid synchronous standby setting"
+fi
+bash "${managed_root}/scripts/validate-sync-proof" "$sync_proof" "$require_standby" || fail "PlanetScale does not have an accepted Sync production-probe proof"
 
 [[ -f "${manifest}" && ! -L "${manifest}" ]] || fail "release manifest is not a regular file"
 image_pattern='^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$'

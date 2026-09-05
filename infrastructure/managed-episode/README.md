@@ -245,10 +245,10 @@ the local failure signal. Wiring that failure to the IAM-authenticated health
 publisher and bounded instance-replacement controller remains an infrastructure
 deployment responsibility.
 
-## Launch blocker: PlanetScale Sync probe
+## PlanetScale Sync production policy
 
-Production Sync currently refuses to boot unless PostgreSQL 18 reports safe
-durability settings, a configured synchronous standby, at least one visible
+Production Sync defaults to requiring PostgreSQL 18 safe durability settings,
+a configured synchronous standby, at least one visible
 `sync` or `quorum` row in `pg_stat_replication`, and WAL lag within the configured
 ceiling. It executes those observations through the runtime role at boot and on
 readiness. PlanetScale compatibility is not established merely by selecting an
@@ -256,10 +256,18 @@ HA branch, and PgBouncer is not used for this proof path.
 
 The validator therefore requires an external, direct-connection proof matching
 [`contracts/planetscale-sync-proof.example.json`](contracts/planetscale-sync-proof.example.json)
-and rejects the checked-in unverified example. Production remains blocked until
-PlanetScale exposes the exact settings and catalog visibility to the Sync
-runtime role and the real application probe passes. These artifacts do not
-disable or bypass that check.
+and rejects the checked-in unverified example. The real application probe must
+also pass against the current database; a saved proof is not live health evidence.
+
+For an explicitly approved single-node deployment, set
+`CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY=false` in `sync.env`. The proof must then
+declare `require_synchronous_standby: false`, `writable_primary: true`, `fsync`,
+`full_page_writes`, and `data_checksums` as `on`, and `synchronous_commit` as `on`
+or `remote_apply`. Record the actual standby observations, including zero
+standbys. The default remains HA; invalid setting values fail validation.
+Single-node mode accepts the absence of replica failover but retains all other
+production boot and readiness checks. Recovery must use a release that supports
+this setting; older releases still require a synchronous standby.
 
 The runtime shapes follow the current official [Podman Quadlet
 contract](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html)
