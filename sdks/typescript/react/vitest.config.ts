@@ -1,0 +1,22 @@
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "vitest/config";
+
+const sources = [
+  ["@q9labsai/chalk-client/telemetry", "../client/src/telemetry/index.ts"],
+  ["@q9labsai/chalk-client/effect", "../client/src/effect.ts"],
+  ["@q9labsai/chalk-client", "../client/src/index.ts"],
+  ["@q9labsai/diagnostics-contracts", "../../../packages/diagnostics-contracts/src/index.ts"],
+  ["@q9labsai/chalk-ui/reactions", "../../../packages/ui/src/reactions.ts"],
+  ["@q9labsai/chalk-ui/assets", "../../../packages/ui/src/assets.ts"],
+  ["@q9labsai/chalk-ui/button", "../../../packages/ui/src/button.tsx"],
+  ["@q9labsai/chalk-ui", "../../../packages/ui/src/index.ts"],
+  ["@q9labsai/chalk-assets", "../../../packages/assets/src/index.ts"],
+  ["@q9labsai/chalk-whiteboard/react", "../../../packages/whiteboard/src/react/index.ts"],
+  ["@q9labsai/chalk-whiteboard", "../../../packages/whiteboard/src/index.ts"],
+  ["@q9labsai/facehash/react", "../../../packages/facehash/src/react.ts"],
+  ["@q9labsai/facehash", "../../../packages/facehash/src/index.ts"],
+] as const;
+
+export default defineConfig({
+  resolve: { alias: sources.map(([find, source]) => ({ find, replacement: fileURLToPath(new URL(source, import.meta.url)) })) },
+});

@@ -1,10 +1,11 @@
 import { ChalkWhiteboardController, type ChalkEmbeddedWhiteboardTransport, type ChalkEmbeddedWhiteboardViewport } from "@q9labsai/chalk-whiteboard/embedded";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import WebView, { type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
 
 import { useNativeTheme } from "../ui/native-theme";
 import { isEmbeddedWhiteboardNavigationAllowed, rendererURLWithContext, resolveEmbeddedWhiteboardRendererURL } from "../whiteboard/embedded-whiteboard-assets";
+import { createEmbeddedWhiteboardViewport } from "../whiteboard/embedded-whiteboard-viewport";
 
 export interface EmbeddedWhiteboardProps {
   readonly transport: ChalkEmbeddedWhiteboardTransport;
@@ -51,7 +52,11 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [compatibilityNotice, setCompatibilityNotice] = useState<string | null>(null);
-  const { width, height, scale } = useWindowDimensions();
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const { scale } = useWindowDimensions();
+  const viewport = useMemo<ChalkEmbeddedWhiteboardViewport | null>(() => createEmbeddedWhiteboardViewport(layout.width, layout.height, scale), [layout.height, layout.width, scale]);
+  const latestViewportRef = useRef(viewport);
+  latestViewportRef.current = viewport;
   onMetricRef.current = onMetric;
   onErrorRef.current = onError;
   onUserExportRef.current = onUserExport;
@@ -106,6 +111,7 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
       onUserExport: handleControllerUserExport,
     });
     controller.start();
+    if (latestViewportRef.current) controller.setViewport(latestViewportRef.current);
     controllerRef.current = controller;
     return () => {
       if (controllerRef.current === controller) controllerRef.current = null;
@@ -117,10 +123,13 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     controllerRef.current?.setCapabilities({ canDraw, canClear });
   }, [canClear, canDraw]);
 
-  const viewport = useMemo<ChalkEmbeddedWhiteboardViewport>(() => ({ width, height, scale }), [height, scale, width]);
   useEffect(() => {
-    controllerRef.current?.setViewport(viewport);
+    if (viewport) controllerRef.current?.setViewport(viewport);
   }, [viewport]);
+  const handleLayout = useCallback((event: LayoutChangeEvent): void => {
+    const next = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height };
+    setLayout((current) => (current.width === next.width && current.height === next.height ? current : next));
+  }, []);
 
   const sourceURL = rendererURL ? rendererURLWithContext(rendererURL, { journeyId, rendererGeneration }) : null;
   const handleMessage = (event: WebViewMessageEvent): void => {
@@ -168,7 +177,7 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
   }
 
   return (
-    <View style={[styles.container, style]} testID={testID}>
+    <View onLayout={handleLayout} style={[styles.container, style]} testID={testID}>
       <WebView
         key={rendererGeneration}
         ref={webViewRef}

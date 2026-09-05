@@ -14,6 +14,7 @@ export type EffectChatController = {
   readonly files: {
     readonly upload: (file: ChatUploadFile) => ClientEffect<ChatAttachment>;
     readonly url: (attachment: ChatAttachment) => string;
+    readonly resolveUrl: (attachment: ChatAttachment) => ClientEffect<string>;
   };
   readonly send: (input: ChatSendInput) => ClientEffect<ChatMessage>;
   readonly loadOlder: () => ClientEffect<ChalkChatPageResult>;
@@ -59,7 +60,7 @@ export function effectClientFromCore(core: SpaceClientCore, dispose: () => Effec
       send: core.controllers.chat.send,
       loadOlder: core.controllers.chat.loadOlder,
       markRead: core.controllers.chat.markRead,
-      files: { upload: core.controllers.chat.upload, url: core.controllers.chat.url },
+      files: { upload: core.controllers.chat.upload, url: core.controllers.chat.url, resolveUrl: core.controllers.chat.resolveUrl },
     },
     participants: core.controllers.participants,
     reactions: core.controllers.reactions,

@@ -3,11 +3,11 @@ import type { ConnectionMediaDevices } from "./dependencies";
 export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices): ConnectionMediaDevices {
   return {
     async getUserMedia(constraints) {
-      if (!mediaDevices?.getUserMedia) throw new TypeError("Browser media capture is unavailable");
+      if (!mediaDevices?.getUserMedia) throw new DOMException("Browser media capture is unavailable", "NotSupportedError");
       return mediaDevices.getUserMedia(constraints);
     },
     async getDisplayMedia(constraints) {
-      if (!mediaDevices?.getDisplayMedia) throw new TypeError("Browser display capture is unavailable");
+      if (!mediaDevices?.getDisplayMedia) throw new DOMException("Browser display capture is unavailable", "NotSupportedError");
       return mediaDevices.getDisplayMedia(constraints);
     },
     async enumerateDevices() {

@@ -51,12 +51,16 @@ try {
       "esbuild@0.28.1",
       "typescript@5.9.3",
       "ws@8.18.3",
+      "tailwindcss@4.2.2",
+      "@tailwindcss/cli@4.2.2",
+      "tw-animate-css@1.4.0",
     ],
     consumerDirectory,
   );
   await assertPackedInstall(consumerDirectory, archiveDirectory, { clientArchive, reactArchive, diagnosticsArchive, supportingArchives });
   await run("pnpm", ["exec", "tsc", "--project", "tsconfig.json"], consumerDirectory);
   await run(process.execPath, ["build.mjs"], consumerDirectory);
+  await run("pnpm", ["exec", "tailwindcss", "--input", "styles.css", "--output", "dist/bundle.css"], consumerDirectory);
 
   serverProcess = spawn(process.execPath, ["server.mjs"], {
     cwd: consumerDirectory,
@@ -120,13 +124,20 @@ async function verifyDirectedRequests(alice, bob) {
 }
 
 async function verifyCollaborations(alice, bob) {
-  const chatMessage = await invoke(alice, "sendChatMessage", { text: "Hello from the packed SDK" });
-  if (chatMessage.text !== "Hello from the packed SDK") throw new TypeError("Packed SDK chat action returned the wrong message");
+  const text = "Hello from the packed SDK: 👍 ❤️ 😂 😮 😢 🎉";
+  const chatMessage = await invoke(alice, "sendChatMessage", { text });
+  if (chatMessage.text !== text) throw new TypeError("Packed SDK chat action returned the wrong message");
   await waitFor(bob, (snapshot, expected) => snapshot.chat.messages.some((message) => message.clientMessageId === expected && message.participantId === "alice"), chatMessage.clientMessageId);
+  await bob.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await bob.getByRole("button", { name: "Chat", exact: true }).click();
+  await bob.getByText(text, { exact: true }).waitFor({ state: "visible" });
 
-  const reaction = await invoke(bob, "sendReaction", "🎉");
-  if (reaction.reaction !== "🎉") throw new TypeError("Packed SDK reaction action returned the wrong reaction");
-  await waitFor(alice, (snapshot, expected) => snapshot.reactions.some((item) => item.eventId === expected.eventId), reaction);
+  for (const emoji of ["👍", "❤️", "😂", "😮", "😢", "🎉"]) {
+    const reaction = await invoke(bob, "sendReaction", emoji);
+    if (reaction.reaction !== emoji) throw new TypeError("Packed SDK reaction action returned the wrong reaction");
+    await waitFor(alice, (snapshot, expected) => snapshot.reactions.some((item) => item.eventId === expected.eventId && item.reaction === expected.reaction), reaction);
+    await alice.getByText(emoji, { exact: true }).first().waitFor({ state: "visible" });
+  }
 }
 
 async function verifyPairJoined(alice, bob) {

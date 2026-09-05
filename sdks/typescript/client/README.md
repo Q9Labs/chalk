@@ -123,7 +123,7 @@ await client.chat.send({ text: "Hello" });
 await client.chat.loadOlder();
 await client.chat.markRead("message-id");
 const attachment = await client.chat.files.upload(file);
-const url = client.chat.files.url(attachment);
+const url = await client.chat.files.resolveUrl(attachment);
 
 await client.participants.assignRole("participant-id", "collaborator");
 await client.participants.mute("participant-id");

@@ -1,5 +1,5 @@
 import type { ChatAttachment, ChatReadReceipt } from "@q9labsai/chalk-client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { Tick01Icon, TickDouble01Icon, FileTextIcon, Download01Icon } from "../../utils/icons";
@@ -7,6 +7,7 @@ import { getParticipantColor } from "../../utils/colorGenerator";
 import { ChalkBadge, ChalkButton, ChalkChrome, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicMessageBubble } from "./ClassicMessageBubble";
+import { useChatAttachmentPreviews } from "./use-chat-attachment-previews";
 
 export interface MessageBubbleProps {
   content: string;
@@ -60,7 +61,7 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
     onResolveAttachmentUrl,
     className,
   }) => {
-    const [resolvedAttachmentUrls, setResolvedAttachmentUrls] = useState<Record<string, string>>({});
+    const { resolvedUrls, failedAttachmentIds, markFailed, retry } = useChatAttachmentPreviews(attachments, onResolveAttachmentUrl);
 
     const formatTime = (value: string) => {
       return new Intl.DateTimeFormat("en-US", {
@@ -72,37 +73,6 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
 
     const senderColors = useMemo(() => getParticipantColor(senderName), [senderName]);
 
-    useEffect(() => {
-      if (!onResolveAttachmentUrl) return;
-
-      const pendingImages = attachments.filter((attachment) => attachment.mimeType.startsWith("image/") && !resolvedAttachmentUrls[attachment.attachmentId]);
-      if (pendingImages.length === 0) return;
-
-      let cancelled = false;
-      void Promise.all(
-        pendingImages.map(async (attachment) => {
-          try {
-            const url = await onResolveAttachmentUrl(attachment.attachmentId);
-            return [attachment.attachmentId, url] as const;
-          } catch {
-            return null;
-          }
-        }),
-      ).then((entries) => {
-        if (cancelled) return;
-        const nextEntries = entries.filter((entry): entry is readonly [string, string] => entry !== null);
-        if (nextEntries.length === 0) return;
-        setResolvedAttachmentUrls((current) => ({
-          ...current,
-          ...Object.fromEntries(nextEntries),
-        }));
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    }, [attachments, onResolveAttachmentUrl, resolvedAttachmentUrls]);
-
     const handleAttachmentClick = async (attachment: ChatAttachment) => {
       if (!onResolveAttachmentUrl) return;
       const popup = window.open("about:blank", "_blank");
@@ -112,6 +82,7 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
         if (popup) popup.location.href = url;
       } catch {
         popup?.close();
+        markFailed(attachment.attachmentId, "open");
       }
     };
 
@@ -138,7 +109,27 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
         <div className={cn("flex flex-col gap-2 mt-2", isLocal ? "items-end" : "items-start")}>
           {attachments.map((file) => {
             const isImage = file.mimeType.startsWith("image/");
-            const imageUrl = resolvedAttachmentUrls[file.attachmentId];
+            const imageUrl = resolvedUrls.get(file.attachmentId);
+            const previewFailed = failedAttachmentIds.has(file.attachmentId);
+
+            if (previewFailed) {
+              return (
+                <div key={file.attachmentId} role="status" className="max-w-full rounded-xl border border-[var(--chalk-line)] p-3 text-left sm:max-w-sm">
+                  <p className="truncate text-sm font-medium">{file.fileName}</p>
+                  <p className="mt-1 text-xs">{isImage ? "Preview" : "Attachment"} could not be loaded.</p>
+                  <button
+                    type="button"
+                    className="mt-1 min-h-11 rounded-md px-2 text-xs font-semibold underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    onClick={() => {
+                      retry(file.attachmentId);
+                      if (!isImage) void handleAttachmentClick(file);
+                    }}
+                  >
+                    {isImage ? "Retry preview" : "Retry"}
+                  </button>
+                </div>
+              );
+            }
 
             if (isImage && imageUrl) {
               return (
@@ -153,7 +144,7 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
                   aria-label={`Download ${file.fileName}`}
                 >
                   <ChalkChrome className="absolute inset-0 h-full w-full" filled fill={isLocal ? "var(--chalk-accent)" : "var(--chalk-surface)"} part="attachment-preview" />
-                  <img src={imageUrl} alt={file.fileName} className="w-full h-auto object-cover transition-transform group-hover:scale-105" style={{ maxHeight: "240px" }} />
+                  <img src={imageUrl} alt={file.fileName} className="w-full h-auto object-cover transition-transform group-hover:scale-105" style={{ maxHeight: "240px" }} onError={() => markFailed(file.attachmentId, "render")} />
                   <div className="absolute inset-0 flex items-center justify-center bg-[var(--chalk-text)] opacity-0 transition-opacity group-hover:opacity-100">
                     <Download01Icon className="w-8 h-8 text-[var(--chalk-accent-text)]" />
                   </div>
@@ -177,7 +168,7 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{file.fileName}</p>
-                  <p className={cn("text-[11px]", isLocal ? "text-[var(--chalk-accent-text)]" : "text-[var(--chalk-muted-text)]")}>{formatFileSize(file.byteLength)}</p>
+                  <p className={cn("text-[11px]", isLocal ? "text-[var(--chalk-accent-text)]" : "text-[var(--chalk-muted-text)]")}>{isImage && onResolveAttachmentUrl ? "Loading preview…" : formatFileSize(file.byteLength)}</p>
                 </div>
               </ChalkButton>
             );

@@ -19,6 +19,7 @@ interface MoreAction {
   readonly icon?: SpaceIcon;
   readonly symbol?: string;
   readonly wash?: string;
+  readonly unavailableReason?: string;
   readonly onPress: () => void;
 }
 
@@ -77,12 +78,13 @@ export function SpaceMoreSheet({ controller, onOpenSettings, onOpenFeedback }: {
       : []),
     ...(controller.canParticipants ? [{ id: "people", label: "People", icon: UserGroupIcon, onPress: () => controller.openPanel("participants") }] : []),
     ...(controller.canChat ? [{ id: "chat", label: "Chat", icon: Chat01Icon, onPress: () => controller.openPanel("chat") }] : []),
-    ...(controller.canScreenShare
+    ...(controller.canScreenShare || controller.screenShare.isLocalSharing || controller.screenShareUnavailableReason
       ? [
           {
             id: "screen-share",
             label: controller.screenShare.isLocalSharing ? "Stop sharing" : "Present screen",
             icon: ComputerScreenShareIcon,
+            unavailableReason: controller.screenShare.isLocalSharing ? undefined : (controller.screenShareUnavailableReason ?? undefined),
             onPress: () => {
               close();
               controller.toggleScreenShare();
@@ -123,11 +125,23 @@ export function SpaceMoreSheet({ controller, onOpenSettings, onOpenFeedback }: {
           <Text style={styles.title}>More</Text>
           <ScrollView contentContainerStyle={styles.actionGrid} showsVerticalScrollIndicator={false}>
             {actions.map((action) => (
-              <Pressable accessibilityLabel={action.label} accessibilityRole="button" key={action.id} onPress={action.onPress} style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}>
+              <Pressable
+                accessibilityLabel={action.label}
+                accessibilityHint={action.unavailableReason}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: Boolean(action.unavailableReason) }}
+                disabled={Boolean(action.unavailableReason)}
+                key={action.id}
+                onPress={action.onPress}
+                style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+              >
                 <IconTile icon={action.icon} symbol={action.symbol} wash={action.wash ?? Theme.colors.surfaceMuted} />
-                <Text numberOfLines={2} style={styles.actionLabel}>
-                  {action.label}
-                </Text>
+                <View style={styles.actionCopy}>
+                  <Text numberOfLines={2} style={styles.actionLabel}>
+                    {action.label}
+                  </Text>
+                  {action.unavailableReason ? <Text style={styles.actionDetail}>{action.unavailableReason}</Text> : null}
+                </View>
               </Pressable>
             ))}
           </ScrollView>
@@ -168,6 +182,8 @@ const styles = StyleSheet.create({
   actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: Theme.spacing.md, padding: Theme.spacing.lg, paddingBottom: Theme.spacing.md },
   action: { alignItems: "center", backgroundColor: Theme.colors.surfaceMuted, borderColor: Theme.colors.line, borderRadius: Theme.radius.md, borderWidth: 1, flexDirection: "row", gap: Theme.spacing.md, minHeight: 76, paddingHorizontal: Theme.spacing.md, width: "47.8%" },
   actionLabel: { color: Theme.colors.ink, flex: 1, fontSize: 15, fontWeight: "600", lineHeight: 20 },
+  actionCopy: { flex: 1, gap: Theme.spacing.xs },
+  actionDetail: { color: Theme.colors.ink2, fontSize: 12, lineHeight: 17 },
   actionPressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
   leaveButton: { alignItems: "center", borderColor: Theme.colors.dangerBackground, borderRadius: Theme.radius.md, borderWidth: 1, flexDirection: "row", gap: Theme.spacing.sm, justifyContent: "center", marginHorizontal: Theme.spacing.lg, minHeight: 52, paddingHorizontal: Theme.spacing.lg },
   leaveText: { color: Theme.colors.error, fontSize: 16, fontWeight: "700" },

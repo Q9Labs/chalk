@@ -90,6 +90,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
           return attachment;
         },
         url: (attachment: ChatAttachment) => `preview://attachment/${attachment.attachmentId}`,
+        resolveUrl: async (attachment: ChatAttachment) => `preview://attachment/${attachment.attachmentId}`,
       },
       send: async (input: ChatSendInput) => {
         const message = createPreviewChatMessage(snapshot, input);

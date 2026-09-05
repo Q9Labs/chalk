@@ -12,6 +12,7 @@ import { ClassicChatPanel } from "./ClassicChatPanel";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
+import { describeChatUploadFile } from "./chat-upload-file";
 
 export type { ChatMessage } from "./chat-types";
 
@@ -391,7 +392,7 @@ const ChalkChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => 
       onResolveAttachmentUrl={async (attachmentId) => {
         const attachment = [...chat.messages, ...chat.pendingSends].flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
         if (!attachment) throw new Error("The chat attachment is no longer available.");
-        return client.chat.files.url(attachment);
+        return client.chat.files.resolveUrl(attachment);
       }}
       onMarkRead={(sequence) => {
         const message = chat.messages.find((candidate) => candidate.sequence === sequence);
@@ -409,8 +410,3 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
 });
 
 ChatPanel.displayName = "ChatPanel";
-
-function describeChatUploadFile(file: ChatUploadFile): { readonly fileName: string; readonly mimeType: string; readonly byteLength: number } {
-  if ("bytes" in file) return { fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };
-  return { fileName: file.name, mimeType: file.type, byteLength: file.size };
-}

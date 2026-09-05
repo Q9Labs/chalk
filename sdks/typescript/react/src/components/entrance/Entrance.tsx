@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { describeMediaCaptureError } from "@q9labsai/chalk-client";
 import type React from "react";
 
 import type { ChalkTheme } from "../../theme";
@@ -126,8 +127,8 @@ export function Entrance({
           return stream;
         });
       })
-      .catch(() => {
-        if (!cancelled) setPreviewError("Preview is unavailable. You can still enter with devices disabled.");
+      .catch((cause: unknown) => {
+        if (!cancelled) setPreviewError(describeMediaCaptureError(cause).message);
       });
 
     return () => {

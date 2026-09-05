@@ -50,12 +50,15 @@ var (
 type providerFailureStage string
 
 type providerFailure struct {
-	operation    string
-	stage        providerFailureStage
-	statusCode   int
-	statusClass  string
-	providerCode string
-	details      providerFailureDetails
+	operation           string
+	stage               providerFailureStage
+	statusCode          int
+	statusClass         string
+	providerCode        string
+	details             providerFailureDetails
+	missingRemoteTracks []mediaplane.RemoteTrackIdentity
+	exactRemoteAbsence  bool
+	partialRemoteTracks bool
 }
 
 func (e providerFailure) Error() string {
@@ -146,6 +149,7 @@ type addTracksResponse struct {
 	SessionDescription             *mediaplane.SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks                         []addTrackResult               `json:"tracks"`
 	RequiresImmediateRenegotiation bool                           `json:"requiresImmediateRenegotiation"`
+	requestedTracks                []providerTrack
 	requestedLocalTracks           []providerTrack
 }
 
@@ -273,10 +277,10 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 		SessionDescription: input.SessionDescription,
 		Tracks:             tracks,
 	}
-	response := addTracksResponse{requestedLocalTracks: localTracks}
+	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
 	err := a.request(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
 	if err != nil {
-		return mediaplane.TracksResponse{}, err
+		return response.toMediaPlane(), err
 	}
 	return response.toMediaPlane(), nil
 }
@@ -428,6 +432,10 @@ func (r *addTracksResponse) providerError(operation string) error {
 		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
 	}
 
+	tracks := r.normalizedTracks()
+	partialRemoteTracks := r.partialRemoteTrackResponse(tracks)
+	exactRemoteAbsence := partialRemoteTracks && exactRemoteTrackAbsenceBatch(tracks)
+
 	type localTrackIdentity struct {
 		mid       string
 		trackName string
@@ -438,9 +446,15 @@ func (r *addTracksResponse) providerError(operation string) error {
 	}
 
 	seen := make(map[localTrackIdentity]struct{}, len(requested))
-	for _, track := range r.Tracks {
+	for _, track := range tracks {
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+			failure := newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+			if exactRemoteAbsence {
+				failure.exactRemoteAbsence = true
+				failure.missingRemoteTracks = missingRemoteTrackIdentities(tracks)
+			}
+			failure.partialRemoteTracks = partialRemoteTracks
+			return failure
 		}
 		if track.SessionID != "" || track.Location == "remote" {
 			continue
@@ -462,9 +476,65 @@ func (r *addTracksResponse) providerError(operation string) error {
 	return nil
 }
 
+func (r addTracksResponse) partialRemoteTrackResponse(tracks []addTrackResult) bool {
+	if len(r.requestedTracks) == 0 || len(r.requestedLocalTracks) != 0 {
+		return false
+	}
+
+	requested := make(map[mediaplane.RemoteTrackIdentity]struct{}, len(r.requestedTracks))
+	for _, track := range r.requestedTracks {
+		identity := mediaplane.RemoteTrackIdentity{ConnectionID: strings.TrimSpace(track.SessionID), TrackName: strings.TrimSpace(track.TrackName)}
+		if strings.TrimSpace(track.Location) != "remote" || identity.ConnectionID == "" || identity.TrackName == "" {
+			return false
+		}
+		if _, duplicate := requested[identity]; duplicate {
+			return false
+		}
+		requested[identity] = struct{}{}
+	}
+
+	failed := 0
+	seen := make(map[mediaplane.RemoteTrackIdentity]struct{}, len(tracks))
+	for _, track := range tracks {
+		identity := mediaplane.RemoteTrackIdentity{ConnectionID: strings.TrimSpace(track.SessionID), TrackName: strings.TrimSpace(track.TrackName)}
+		if strings.TrimSpace(track.Location) != "remote" || identity.ConnectionID == "" || identity.TrackName == "" {
+			return false
+		}
+		if _, requestedHere := requested[identity]; !requestedHere {
+			return false
+		}
+		if _, duplicate := seen[identity]; duplicate {
+			return false
+		}
+		seen[identity] = struct{}{}
+		if addTrackResultFailed(track) {
+			if !transientRemoteTrackFailure(track) {
+				return false
+			}
+			failed++
+		}
+	}
+	return failed > 0
+}
+
+func transientRemoteTrackFailure(track addTrackResult) bool {
+	switch normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription)) {
+	case "track_not_found", "provider_internal", "timeout", "unknown":
+		return true
+	case "provider_rejected":
+		return strings.Contains(strings.ToLower(track.ErrorDescription), "internal")
+	default:
+		return false
+	}
+}
+
 func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
-	tracks := make([]mediaplane.Track, 0, len(r.Tracks))
-	for _, track := range r.Tracks {
+	providerTracks := r.normalizedTracks()
+	tracks := make([]mediaplane.Track, 0, len(providerTracks))
+	for _, track := range providerTracks {
+		if addTrackResultFailed(track) {
+			continue
+		}
 		tracks = append(tracks, mediaplane.Track{
 			Location:  track.Location,
 			Mid:       track.Mid,
@@ -478,6 +548,38 @@ func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
 		Tracks:                         tracks,
 		RequiresImmediateRenegotiation: r.RequiresImmediateRenegotiation,
 	}
+}
+
+func (r addTracksResponse) normalizedTracks() []addTrackResult {
+	requestedRemote := make(map[mediaplane.RemoteTrackIdentity]struct{}, len(r.requestedTracks))
+	for _, track := range r.requestedTracks {
+		if strings.TrimSpace(track.Location) != "remote" {
+			continue
+		}
+		identity := mediaplane.RemoteTrackIdentity{ConnectionID: strings.TrimSpace(track.SessionID), TrackName: strings.TrimSpace(track.TrackName)}
+		if identity.ConnectionID != "" && identity.TrackName != "" {
+			requestedRemote[identity] = struct{}{}
+		}
+	}
+
+	tracks := make([]addTrackResult, 0, len(r.Tracks))
+	for _, track := range r.Tracks {
+		track.Location = strings.TrimSpace(track.Location)
+		track.SessionID = strings.TrimSpace(track.SessionID)
+		track.TrackName = strings.TrimSpace(track.TrackName)
+		identity := mediaplane.RemoteTrackIdentity{ConnectionID: track.SessionID, TrackName: track.TrackName}
+		if track.Location == "" {
+			if _, requested := requestedRemote[identity]; requested {
+				track.Location = "remote"
+			}
+		}
+		tracks = append(tracks, track)
+	}
+	return tracks
+}
+
+func addTrackResultFailed(track addTrackResult) bool {
+	return strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != ""
 }
 
 func closedTrackAbsent(code string) bool {
@@ -542,6 +644,50 @@ func failedAddTrackCount(tracks []addTrackResult) int {
 		}
 	}
 	return count
+}
+
+func missingRemoteTrackIdentities(tracks []addTrackResult) []mediaplane.RemoteTrackIdentity {
+	identities := make([]mediaplane.RemoteTrackIdentity, 0, len(tracks))
+	seen := make(map[mediaplane.RemoteTrackIdentity]struct{}, len(tracks))
+	for _, track := range tracks {
+		if strings.TrimSpace(track.Location) != "remote" || !addTrackResultFailed(track) {
+			continue
+		}
+		if normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription)) != "track_not_found" {
+			continue
+		}
+
+		connectionID := strings.TrimSpace(track.SessionID)
+		trackName := strings.TrimSpace(track.TrackName)
+		if connectionID == "" || trackName == "" {
+			continue
+		}
+
+		identity := mediaplane.RemoteTrackIdentity{ConnectionID: connectionID, TrackName: trackName}
+		if _, exists := seen[identity]; exists {
+			continue
+		}
+		seen[identity] = struct{}{}
+		identities = append(identities, identity)
+	}
+	if len(identities) == 0 {
+		return nil
+	}
+	return identities
+}
+
+func exactRemoteTrackAbsenceBatch(tracks []addTrackResult) bool {
+	failed := 0
+	for _, track := range tracks {
+		if !addTrackResultFailed(track) {
+			continue
+		}
+		failed++
+		if strings.TrimSpace(track.Location) != "remote" || strings.TrimSpace(track.SessionID) == "" || strings.TrimSpace(track.TrackName) == "" || normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription)) != "track_not_found" {
+			return false
+		}
+	}
+	return failed > 0
 }
 
 func failedCloseTrackCount(tracks []closeTrackResult) int {

@@ -21,8 +21,8 @@ class PromiseSpaceClient implements SpaceClient {
     this.feedback = this.#core.feedback;
     this.media = toPromiseController(this.#runtime, controllers.media);
     const chat = toPromiseController(this.#runtime, controllers.chat);
-    const { upload, url, ...chatCommands } = chat;
-    this.chat = { ...chatCommands, files: { upload, url } };
+    const { upload, url, resolveUrl, ...chatCommands } = chat;
+    this.chat = { ...chatCommands, files: { upload, url, resolveUrl } };
     this.participants = toPromiseController(this.#runtime, controllers.participants);
     this.reactions = toPromiseController(this.#runtime, controllers.reactions);
     this.whiteboard = toPromiseController(this.#runtime, controllers.whiteboard);

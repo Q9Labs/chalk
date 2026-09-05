@@ -6,6 +6,8 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
 const maxProviderMessageRunes = 240
@@ -57,6 +59,8 @@ func newProviderResponseFailure(operation string, stage providerFailureStage, st
 func providerMessageCode(message string) string {
 	normalized := strings.ToLower(strings.Join(strings.Fields(message), " "))
 	switch {
+	case isTrackNotFoundDescription(message):
+		return "track_not_found"
 	case strings.Contains(normalized, "not connected"), strings.Contains(normalized, "not ready"):
 		return "connection_not_connected"
 	case strings.Contains(normalized, "not found"), strings.Contains(normalized, "no longer exists"), strings.Contains(normalized, "expired"):
@@ -64,6 +68,36 @@ func providerMessageCode(message string) string {
 	default:
 		return ""
 	}
+}
+
+func (e providerFailure) MissingRemoteTracks() []mediaplane.RemoteTrackIdentity {
+	if len(e.missingRemoteTracks) == 0 {
+		return nil
+	}
+	return append([]mediaplane.RemoteTrackIdentity(nil), e.missingRemoteTracks...)
+}
+
+func (e providerFailure) ExactRemoteTrackAbsence() bool {
+	return e.exactRemoteAbsence
+}
+
+func (e providerFailure) PartialRemoteTrackResponse() bool {
+	return e.partialRemoteTracks
+}
+
+func isTrackNotFoundDescription(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	const prefix = "track not found"
+	if message == prefix {
+		return true
+	}
+	for _, suffix := range []string{" ", ":", ".", "-", "[", "("} {
+		if strings.HasPrefix(message, prefix+suffix) {
+			return true
+		}
+	}
+	message = strings.TrimRight(message, ".")
+	return strings.Contains(message, " track ") && strings.Contains(message, " is connected and ") && strings.HasSuffix(message, " for this track")
 }
 
 func enrichProviderFailure(err error, body any, responseBytes int) error {

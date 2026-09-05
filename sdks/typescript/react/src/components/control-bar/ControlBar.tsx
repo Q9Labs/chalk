@@ -71,6 +71,8 @@ interface ControlBarSurfaceProps {
   buttons?: ControlBarButtonName[];
 
   isMuted?: boolean;
+  microphonePending?: boolean;
+  cameraPending?: boolean;
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
   isRecording?: boolean;
@@ -176,6 +178,8 @@ function FloatingControlBarButton({ icon, label, onClick, active = false, danger
 const ControlBarSurface = React.memo(
   ({
     isMuted = false,
+    microphonePending = false,
+    cameraPending = false,
     isVideoEnabled = true,
     isScreenSharing = false,
     isRecording = false,
@@ -550,6 +554,7 @@ const ControlBarSurface = React.memo(
               {buttonsToRender.includes("mic") ? (
                 <DevicePopover
                   type="mic"
+                  busy={microphonePending}
                   appearance="floating"
                   isActive={!isMuted}
                   onToggle={onToggleMute ?? (() => {})}
@@ -564,7 +569,18 @@ const ControlBarSurface = React.memo(
                 />
               ) : null}
               {buttonsToRender.includes("video") ? (
-                <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
+                <DevicePopover
+                  type="video"
+                  busy={cameraPending}
+                  appearance="floating"
+                  isActive={isVideoEnabled}
+                  onToggle={onToggleVideo ?? (() => {})}
+                  devices={effectiveVideoInputDevices}
+                  selectedDeviceId={selectedVideoInput}
+                  onDeviceChange={onVideoInputChange ?? (() => {})}
+                  orientation="up"
+                  haptic="medium"
+                />
               ) : null}
               <div className="pointer-events-none -ml-2 grid min-w-0 grid-cols-[0fr] -translate-x-1.5 opacity-0 transition-[grid-template-columns,margin,opacity,transform] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[grid-template-columns,opacity,transform] group-hover:pointer-events-auto group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:ml-0 group-focus-within:grid-cols-[1fr] group-focus-within:translate-x-0 group-focus-within:opacity-100 motion-reduce:transition-none">
                 <div className="-my-2 flex min-w-0 items-center gap-2 overflow-hidden py-2">{buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}</div>
@@ -614,8 +630,8 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCan("drawWhiteboard");
-  const microphoneEnabled = media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting";
-  const cameraEnabled = media.local.camera.state === "enabled" || media.local.camera.state === "requesting";
+  const microphoneEnabled = media.local.microphone.state === "enabled";
+  const cameraEnabled = media.local.camera.state === "enabled";
   const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
   const measuredEpisodeDuration = useEpisodeDuration();
   const episodeDuration = props.duration ?? measuredEpisodeDuration;
@@ -658,11 +674,18 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
 
   return (
     <>
+      {media.local.microphone.state === "requesting" || media.local.camera.state === "requesting" ? (
+        <span role="status" className="sr-only">
+          Updating camera or microphone.
+        </span>
+      ) : null}
       <ControlBarSurface
         {...props}
         buttons={buttons}
         duration={episodeDuration}
         isMuted={!microphoneEnabled}
+        microphonePending={media.local.microphone.state === "requesting"}
+        cameraPending={media.local.camera.state === "requesting"}
         isVideoEnabled={cameraEnabled}
         isScreenSharing={screenSharing}
         isChatOpen={props.activePanel === "chat"}

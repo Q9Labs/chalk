@@ -17,6 +17,7 @@ export type ChatControllerEffects = {
   readonly markRead: (messageId: string) => ClientEffect<ChatReadReceipt | null>;
   readonly upload: (file: ChatUploadFile) => ClientEffect<ChatAttachment>;
   readonly url: (attachment: ChatAttachment) => string;
+  readonly resolveUrl: (attachment: ChatAttachment) => ClientEffect<string>;
   readonly dispose: () => void;
 };
 export class ChatControllerService extends Context.Service<ChatControllerService, ChatControllerEffects>()("@chalk/client/ChatController") {}
@@ -237,6 +238,12 @@ class ChatControllerRuntime implements ChatControllerEffects {
   };
 
   url = (attachment: ChatAttachment): string => `${this.#apiBaseUrl}/v1/chat/attachments/${encodeURIComponent(attachment.attachmentId)}/download`;
+  resolveUrl = (attachment: ChatAttachment): ClientEffect<string> =>
+    Effect.suspend(() => {
+      if (!this.#transport) return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file download is unavailable" }));
+      return this.#connection.runPortCommand(() => foreign(() => this.#transport!.getDownloadUrl(attachment.attachmentId)).pipe(Effect.map((descriptor) => descriptor.downloadUrl))).pipe(Effect.mapError(normalizeClientError));
+    });
+
   dispose(): void {
     this.#unsubscribeConnection?.();
     this.#unsubscribeConnection = null;

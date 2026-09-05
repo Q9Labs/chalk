@@ -6,7 +6,7 @@ interface MediaDevice {
   kind: MediaDeviceKind;
   groupId?: string;
 }
-import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, ArrowDown01Icon, Tick01Icon, VolumeHighIcon } from "../../utils/icons";
+import { Loading01Icon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, ArrowDown01Icon, Tick01Icon, VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { ControlBarButton } from "../atomic";
 import type { HapticInput } from "../../internal/useHaptics";
@@ -31,12 +31,30 @@ export interface DevicePopoverProps {
   orientation?: "up" | "down";
   className?: string;
   disabled?: boolean;
+  busy?: boolean;
   haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
   appearance?: "default" | "floating";
 }
 
-const ChalkDevicePopover = ({ type, isActive, onToggle, devices, selectedDeviceId, onDeviceChange, secondaryDevices, selectedSecondaryDeviceId, onSecondaryDeviceChange, orientation = "up", className, disabled = false, haptic = "soft", size = "md", appearance = "default" }: DevicePopoverProps) => {
+const ChalkDevicePopover = ({
+  type,
+  isActive,
+  onToggle,
+  devices,
+  selectedDeviceId,
+  onDeviceChange,
+  secondaryDevices,
+  selectedSecondaryDeviceId,
+  onSecondaryDeviceChange,
+  orientation = "up",
+  className,
+  disabled = false,
+  busy = false,
+  haptic = "soft",
+  size = "md",
+  appearance = "default",
+}: DevicePopoverProps) => {
   const skin = useSkin();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -96,11 +114,11 @@ const ChalkDevicePopover = ({ type, isActive, onToggle, devices, selectedDeviceI
     <div data-chalk-skin={skin} className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
       <ControlBarButton
-        icon={icon}
-        label={label}
+        icon={busy ? <Loading01Icon className="motion-safe:animate-spin" /> : icon}
+        label={busy ? `Updating ${isMic ? "microphone" : "camera"}` : label}
         onClick={onToggle}
         active={isActive}
-        disabled={disabled}
+        disabled={disabled || busy}
         haptic={haptic}
         size={size}
         className={cn(

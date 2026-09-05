@@ -72,6 +72,10 @@ export type ErrorCode =
   | "environment.unsupported"
   | "episode.ended"
   | "media.permission_denied"
+  | "media.device_not_found"
+  | "media.device_busy"
+  | "media.device_constraint_invalid"
+  | "media.capture_failed"
   | "media.request_invalid"
   | "participant.invalid"
   | "reaction.invalid"
@@ -212,8 +216,8 @@ export type MediaRequestKind = "microphone" | "camera";
 export type ChatUploadFile = { readonly name: string; readonly type: string; readonly size: number; readonly arrayBuffer: () => Promise<ArrayBuffer> } | { readonly fileName: string; readonly mimeType: string; readonly bytes: ArrayBuffer };
 
 export type MediaController = PromiseController<Omit<MediaControllerEffects, "configure" | "dispose">>;
-export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, "upload" | "url">>;
-export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "dispose">> & { readonly files: ChatFilesController };
+export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, "upload" | "url" | "resolveUrl">>;
+export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "resolveUrl" | "dispose">> & { readonly files: ChatFilesController };
 export type ParticipantsController = PromiseController<Omit<ParticipantsControllerEffects, "dispose">>;
 export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
 export type WhiteboardController = PromiseController<Omit<WhiteboardControllerEffects, "dispose">>;

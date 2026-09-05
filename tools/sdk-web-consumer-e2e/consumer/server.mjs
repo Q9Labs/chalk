@@ -43,6 +43,7 @@ let chatSequence = 0;
 const httpRoutes = new Map([
   ["GET /", serveHTML],
   ["GET /bundle.js", serveBundle],
+  ["GET /bundle.css", serveStyles],
   ["GET /test/login", logIn],
   ["POST /api/chalk/access", issueAccess],
   ["GET /test/state", serveState],
@@ -67,6 +68,10 @@ function serveHTML(_request, response) {
 
 async function serveBundle(_request, response) {
   send(response, 200, await readFile(resolve("dist/bundle.js")), "text/javascript; charset=utf-8");
+}
+
+async function serveStyles(_request, response) {
+  send(response, 200, await readFile(resolve("dist/bundle.css")), "text/css; charset=utf-8");
 }
 
 function logIn(_request, response, url) {
@@ -455,7 +460,7 @@ function send(response, status, body, contentType) {
 }
 
 function html() {
-  return '<!doctype html><html><head><meta charset="utf-8"><title>Packed Chalk consumer</title></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Packed Chalk consumer</title><link rel="stylesheet" href="/bundle.css"></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>';
 }
 
 function shutdown() {

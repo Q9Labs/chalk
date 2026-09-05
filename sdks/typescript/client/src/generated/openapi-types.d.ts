@@ -9124,7 +9124,9 @@ export interface operations {
   };
   addCloudflareSFUTracks: {
     parameters: {
-      query?: never;
+      query?: {
+        allow_partial_remote_tracks?: boolean;
+      };
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
