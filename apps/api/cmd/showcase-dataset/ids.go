@@ -132,8 +132,7 @@ func snapshotForEpisode(value dataset, ids datasetIDs, item episode, participant
 	if err != nil {
 		return nil, nil, [32]byte{}, err
 	}
-	digestInput := make([]byte, 0, len("chalk-sync-state-v1")+4+len(canonical))
-	digestInput = append(digestInput, "chalk-sync-state-v1"...)
+	digestInput := []byte("chalk-sync-state-v1")
 	version := make([]byte, 4)
 	binary.BigEndian.PutUint32(version, 1)
 	digestInput = append(digestInput, version...)

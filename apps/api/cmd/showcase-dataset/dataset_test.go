@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -49,6 +50,14 @@ func TestDeterministicIDsAndControlSnapshots(t *testing.T) {
 	}
 	if ids.OrganizationID != buildIDs(value).OrganizationID {
 		t.Fatal("organization id is not deterministic")
+	}
+	canonical, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("encode canonical snapshot: %v", err)
+	}
+	wantDigest := sha256.Sum256([]byte("chalk-sync-state-v1\x00\x00\x00\x01" + string(canonical)))
+	if digest != wantDigest {
+		t.Fatal("snapshot digest does not match the versioned canonical wire format")
 	}
 }
 
