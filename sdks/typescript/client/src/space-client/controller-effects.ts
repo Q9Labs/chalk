@@ -73,7 +73,7 @@ function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
-  return "bytes" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
+  return "fileName" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
 }
 
 export type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, MediaRequestKind, Reaction };
