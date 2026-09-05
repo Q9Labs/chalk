@@ -183,9 +183,13 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhase do
     root = Path.expand("../../../../..", __DIR__)
     script = Path.join(root, "sdks/typescript/client/scripts/sync-breaker-v1-wire-sdk.mjs")
 
+    pnpm =
+      System.get_env("CHALK_SYNC_PNPM_EXECUTABLE") || System.find_executable("pnpm") ||
+        raise "pnpm executable is required for the wire SDK phase"
+
     {output, 0} =
       System.cmd(
-        "pnpm",
+        pnpm,
         ["exec", "tsx", script, Integer.to_string(seed)],
         cd: root,
         env: [

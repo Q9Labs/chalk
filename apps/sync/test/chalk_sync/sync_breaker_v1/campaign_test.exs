@@ -3,7 +3,8 @@ defmodule ChalkSync.SyncBreakerV1.CampaignTest do
 
   alias ChalkSync.SyncBreakerV1.Campaign
 
-  @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL")
+  @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
+                  System.get_env("CHALK_DATABASE_URL")
 
   if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
 
