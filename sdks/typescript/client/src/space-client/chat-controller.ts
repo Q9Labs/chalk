@@ -451,7 +451,7 @@ function validateUpload(file: ChatUploadFile, bytes: ArrayBuffer, clientAttachme
   return upload;
 }
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
-  return "bytes" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
+  return "fileName" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
 }
 function catchUpRequest(latestSequence: string | null, ports: ConnectionPorts): { readonly kind: "initial" | "newer"; readonly input: { readonly limit: number; readonly afterSequence?: string } } | null {
   const extension = ports.sync.getCollaborationExtensionState();
