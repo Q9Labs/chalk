@@ -1,0 +1,77 @@
+{
+  "datasetId": "showcase-v1",
+  "datasetVersion": "1.0.0",
+  "algorithm": "sha256",
+  "products": {
+    "ava": {
+      "manifest": {
+        "path": "exports/showcase-v1/ava.json",
+        "contentHash": "sha256:f076df74528a37757216be619df0c3eb7915856db55f42cf3672cb7efb3425dd"
+      },
+      "assets": {
+        "path": "exports/showcase-v1/ava-assets.json",
+        "contentHash": "sha256:3e310361062225e209475ff35996ab51d05b44a7c26961aa5316979759fc41b2"
+      }
+    },
+    "nura": {
+      "manifest": {
+        "path": "exports/showcase-v1/nura.json",
+        "contentHash": "sha256:a252bd1ac2a34bc54dc26513a208c5d1b2d151cc0b4df3624ecf86e9982a6bb2"
+      },
+      "assets": {
+        "path": "exports/showcase-v1/nura-assets.json",
+        "contentHash": "sha256:e1f83ef88cd44d0ffcd3467af21717316085a07feecd0794ba751ab0e5fa2e9d"
+      }
+    },
+    "track": {
+      "manifest": {
+        "path": "exports/showcase-v1/track.json",
+        "contentHash": "sha256:3e3b8abf1f5f564536d4fdb6a1242795cddfa6deaf94b53c97644066f49ae3f9"
+      },
+      "assets": {
+        "path": "exports/showcase-v1/track-assets.json",
+        "contentHash": "sha256:998dc132963870223e798490630a33a140ba7cc6e9e950b37e10b9ccad48d7ae"
+      }
+    },
+    "flow": {
+      "manifest": {
+        "path": "exports/showcase-v1/flow.json",
+        "contentHash": "sha256:b8b5b089b5ad2b836cdc5ff16a5ed375773691c05b244c87565a1a2c115f05b6"
+      },
+      "assets": {
+        "path": "exports/showcase-v1/flow-assets.json",
+        "contentHash": "sha256:9804439d416991bf40350d3e88339303fdfb486d40f12354b94479d756d62751"
+      }
+    },
+    "chalk": {
+      "manifest": {
+        "path": "exports/showcase-v1/chalk.json",
+        "contentHash": "sha256:53cceacd082068128a580ca5a70553796ac005a691618f63bd666afade05ac6b"
+      },
+      "assets": {
+        "path": "exports/showcase-v1/chalk-assets.json",
+        "contentHash": "sha256:9e6ed3fe3e0822d9cef990abab7081eecbe10d8314203adcfd0c22c1ac33fe47"
+      }
+    },
+    "kaadr": {
+      "manifest": {
+        "path": "exports/showcase-v1/kaadr.json",
+        "contentHash": "sha256:a552c8e92d4cf002829fed006b2896ae8982c0e83984cac1f9128a2450b8a277"
+      },
+      "assets": {
+        "path": "exports/showcase-v1/kaadr-assets.json",
+        "contentHash": "sha256:6c1e8087c40020eacb274b7eb8bcc00e9b354ce04805182e323935ca88f466f8"
+      }
+    },
+    "edli": {
+      "manifest": {
+        "path": "exports/showcase-v1/edli.json",
+        "contentHash": "sha256:8eccc7481fd36bc0e72b47747efe51fa795eaf306074da389e65f059b5cddbf0"
+      },
+      "assets": {
+        "path": "exports/showcase-v1/edli-assets.json",
+        "contentHash": "sha256:37ef556fbd383cfe4190eed52fbaaec3f9f17776c1d5a84f2930bcbf8a481ffb"
+      }
+    }
+  }
+}
