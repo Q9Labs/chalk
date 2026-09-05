@@ -31,6 +31,7 @@ command -v op >/dev/null
 command -v jq >/dev/null
 command -v keytool >/dev/null
 command -v jarsigner >/dev/null
+command -v openssl >/dev/null
 
 chmod 700 "$temp_dir"
 vault=$(jq -er '.vault' "$manifest")
@@ -68,6 +69,12 @@ export CHALK_APP_VARIANT=production
 expected_keystore_sha256=$(jq -er '.android.keystore_sha256' "$manifest")
 expected_certificate_sha256=$(jq -er '.android.certificate_sha256' "$manifest")
 actual_keystore_sha256=$(shasum -a 256 "$temp_dir/upload.jks" | sed 's/ .*//')
+actual_certificate_sha256=$(keytool -exportcert \
+  -keystore "$temp_dir/upload.jks" \
+  -storepass:file "$temp_dir/store.password" \
+  -alias "$(cat "$temp_dir/key.alias")" 2>/dev/null |
+  openssl x509 -inform DER -noout -fingerprint -sha256 |
+  sed 's/.*=//')
 
 normalize_fingerprint() {
   printf '%s' "$1" | tr -d ':' | tr '[:lower:]' '[:upper:]'
