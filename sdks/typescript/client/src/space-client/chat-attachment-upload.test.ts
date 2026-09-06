@@ -27,6 +27,7 @@ describe("SpaceClient Chat attachment uploads", () => {
       await expect(client.chat.files.upload(file)).resolves.toEqual(attachment);
       expect(initiateUpload).toHaveBeenCalledWith(expect.objectContaining({ fileName: "note.txt", mimeType: "text/plain", byteLength: 5, sha256: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" }));
       expect(fetch).toHaveBeenCalledWith("https://storage.example/upload", { method: "PUT", headers: { "content-type": "text/plain" }, body: bytes });
+      expect(fetch.mock.contexts).toEqual([undefined]);
       expect(finalizeUpload).toHaveBeenCalledWith("upload-1");
       expect(browserFile.bytes).not.toHaveBeenCalled();
     } finally {

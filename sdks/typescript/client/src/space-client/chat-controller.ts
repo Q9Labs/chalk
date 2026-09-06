@@ -178,6 +178,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   };
 
   upload = (file: ChatUploadFile): ClientEffect<ChatAttachment> => {
+    const fetch = this.#fetch;
     const prepareOperation = this.#diagnostics?.startOperation("chat.attachment.prepare");
     return Effect.suspend(() => {
       if (!this.#transport) {
@@ -198,7 +199,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
                       prepareOperation?.succeed();
                     }).pipe(
                       Effect.andThen(
-                        foreign(() => this.#fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
+                        foreign(() => fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
                           Effect.flatMap((response) => {
                             const commitOperation = this.#diagnostics?.startOperation("chat.attachment.commit");
                             if (!response.ok) {

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { WebSocketServer } from "ws";
+import { createChatFileRoutes } from "./chat-files.mjs";
 
 const tenantAPIKey = process.env.CHALK_API_KEY;
 if (!tenantAPIKey || !/^chalk_sk_[^.]+\.[A-Za-z0-9_-]+$/u.test(tenantAPIKey)) throw new TypeError("A canonical CHALK_API_KEY is required by the fixture backend");
@@ -41,6 +42,7 @@ let revision = 0;
 let chatSequence = 0;
 
 const httpRoutes = new Map([
+  ...createChatFileRoutes({ readJSON, sendJSON, send }),
   ["GET /", serveHTML],
   ["GET /bundle.js", serveBundle],
   ["GET /bundle.css", serveStyles],
@@ -267,7 +269,7 @@ function sendChat(socket, actor, request) {
     participantId: actor,
     displayName: actor,
     text: String(request.payload?.text),
-    attachments: [],
+    attachments: request.payload.attachments,
     createdAt: new Date().toISOString(),
   };
   chatMessages.push(message);

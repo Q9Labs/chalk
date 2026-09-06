@@ -1,4 +1,4 @@
-import { createSpaceClient, type AccessGrant, type SpaceClient, type SpaceSnapshot } from "@q9labsai/chalk-client";
+import { createChalkChatFileHttpTransport, createSpaceClient, type AccessGrant, type SpaceClient, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { createRoot } from "react-dom/client";
@@ -46,6 +46,7 @@ const createFixtureSpaceClient: typeof createSpaceClient = (options) =>
       mediaDevices: fixtureMediaDevices,
       createMediaClient: (input) => bindFixtureMediaClient(new FixtureMediaClient(`${socketBaseURL}/media`, input)),
       createSyncClient: (input) => bindFixtureSyncClient(new FixtureSyncClient(`${socketBaseURL}/sync`, input)),
+      createChatFileTransport: (input) => createChalkChatFileHttpTransport({ baseUrl: location.origin, token: input.token }),
     },
   });
 

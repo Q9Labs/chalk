@@ -100,6 +100,7 @@ async function runChromiumMatrix(browser, baseURL, secretMarker) {
   try {
     await verifyPairJoined(alice.page, bob.page);
     await verifyCollaborations(alice.page, bob.page);
+    await verifyImageAttachment(alice.page, bob.page);
     await verifyDirectedRequests(alice.page, bob.page);
     await verifyScreenShare(alice.page, bob.page);
     await verifyRecovery(alice.page, bob.page, baseURL);
@@ -138,6 +139,21 @@ async function verifyCollaborations(alice, bob) {
     await waitFor(alice, (snapshot, expected) => snapshot.reactions.some((item) => item.eventId === expected.eventId && item.reaction === expected.reaction), reaction);
     await alice.getByText(emoji, { exact: true }).first().waitFor({ state: "visible" });
   }
+}
+
+async function verifyImageAttachment(sender, receiver, fileName = "packed-upload.png") {
+  await sender.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await sender.getByRole("button", { name: "Chat", exact: true }).click();
+  const chooserReady = sender.waitForEvent("filechooser");
+  await sender.getByRole("button", { name: "Attach files", exact: true }).click();
+  const chooser = await chooserReady;
+  await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: await readFile(join(repositoryDirectory, "apps/web/public/brand/chalk/chalk-icon-192.png")) });
+  await sender.locator('[aria-label="Attachments"]').waitFor({ state: "visible" });
+  await sender.getByPlaceholder("Type a message...").fill("Image from the packed SDK");
+  await sender.getByRole("button", { name: "Send message", exact: true }).click();
+  await receiver.getByRole("img", { name: fileName, exact: true }).waitFor({ state: "visible" });
+  await receiver.waitForFunction((expected) => [...document.images].some((image) => image.alt === expected && image.complete && image.naturalWidth > 0), fileName);
+  await sender.getByRole("button", { name: "Close chat", exact: true }).click();
 }
 
 async function verifyPairJoined(alice, bob) {
@@ -250,6 +266,7 @@ async function runLaunchSmoke(browser, browserName, baseURL) {
     await invoke(participant.page, "setMicrophoneEnabled", true);
     await invoke(participant.page, "startScreenShare");
     await invoke(participant.page, "stopScreenShare");
+    await verifyImageAttachment(participant.page, participant.page, `${browserName}-upload.png`);
     await invoke(participant.page, "leave");
     await invoke(participant.page, "dispose");
     await waitForClean(participant.page);
