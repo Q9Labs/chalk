@@ -7,25 +7,16 @@ middleware, and domain packages under `internal/*`. Follow
 routes under one `/v1` boundary while operational routes like `/healthz` stay
 unversioned. Existing domains include identity, tenancy, Spaces, Episode
 lifecycle, recordings, transcripts, integrations, audit logs, and webhooks.
-Vocabulary follows the repo-root `GLOSSARY.md`; read it before naming anything.
 
-## Working Here
+## Development
 
-- Always read `docs/code-standards.md` before writing Go here.
-- Always read `docs/route-workflow.md` before adding a new route.
-- Always read `docs/database-workflow.md` when doing database work.
+- Consult the relevant sections of `docs/code-standards.md` when writing Go here.
+- Read `docs/route-workflow.md` before adding a new route.
+- Read `docs/database-workflow.md` when doing database work.
 - Run the gate before committing: `scripts/gate.sh`.
-- Commit once the gate passes; stage only your scope (`git add -p`).
-- After committing, run an auto code review of the commit (`codex review
---commit <sha>`) per `~/.codex/auto-code-review.md`. It is slow — wait for it
-  to exit and relay its findings.
-- Wire the change into the Execution Trace Harness so Hasan can run and inspect
-  it, following `docs/execution-trace-harness.md`. This is part of the debrief —
-  it's how he traces and understands the change.
-- Debrief Hasan on the change per `~/.codex/debrief.md`, including how to run the
-  new trace.
+- Add a trace-harness scenario when it helps test or explain the change.
 
-## Media Plane Providers
+## Media plane providers
 
 - `internal/mediaplaneproviders` owns adapter-independent resolution contracts,
   errors, and telemetry types.
@@ -34,7 +25,7 @@ Vocabulary follows the repo-root `GLOSSARY.md`; read it before naming anything.
   adapter package; HTTP, public-invite, and observability code depend only on
   inward contracts.
 
-## API Contracts And SDK Codegen
+## API and SDK
 
 - Public `/v1` API routes should use the endpoint contract pattern so
   `cmd/codegen` can include them in `../../contract/generated/openapi.json` and downstream SDK
@@ -48,7 +39,7 @@ Vocabulary follows the repo-root `GLOSSARY.md`; read it before naming anything.
   collections. Use the generated OpenAPI/SDK artifacts and their drift check for
   current contract coverage instead of recording route-specific gap lists here.
 
-## Observability Contract
+## Observability
 
 - Read `../../docs/observability.md` before adding or changing API behavior.
 - Propagate the incoming journey ID and W3C trace context through service,

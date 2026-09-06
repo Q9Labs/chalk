@@ -159,7 +159,7 @@ node scripts/deploy/verify-web-deploy.mjs \
   --production
 ```
 
-Also verify that live `origin/master` still equals `RELEASE_SHA`. For a UI release, hand over the existing recording and durable screenshot paths for the exact feature build; do not record the same flow again unless deployment changed its behavior.
+Also verify that live `origin/master` still equals `RELEASE_SHA`. When UI evidence is useful or requested, reuse existing recordings/screenshots for the exact feature build. Record again only if deployment changed the behavior; a recording is not required for every UI release.
 
 ## Stop Conditions
 
@@ -183,7 +183,7 @@ Report only the evidence Hasan needs:
 - Registry proof for SDK packages.
 - Staging deployment URL and production URL for web.
 - Production verifier result and exact live SHA.
-- Recording link and durable screenshots when the release changed UI.
+- Relevant UI evidence when collected or requested.
 - Any requested target that was not shipped.
 
 Clean the temporary worktree and stop only the processes created for this release. Preserve unrelated shared worktree changes and processes.
