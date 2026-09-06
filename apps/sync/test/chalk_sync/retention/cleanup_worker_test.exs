@@ -53,6 +53,36 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     refute checkpointed?(connection, fixture)
   end
 
+  test "verifies history using the millisecond deadline from a microsecond timestamp", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = seed_ended_episode_with_deadline(connection, ~U[2026-07-03 00:00:00.123090Z])
+    cleanup_fixture(connection, fixture)
+
+    assert {:ok, %Result{episodes: 1, event_rows: 2}} = run_cleanup(connection)
+    assert checkpointed?(connection, fixture)
+    assert [0, 0] = history_counts(connection, fixture)
+  end
+
+  test "still rejects a corrupt digest when the deadline has microsecond precision", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = seed_ended_episode_with_deadline(connection, ~U[2026-07-03 00:00:00.123090Z])
+    cleanup_fixture(connection, fixture)
+
+    Postgrex.query!(
+      connection,
+      "update sync_control_events set resulting_state_digest = decode(repeat('01', 32), 'hex') where tenant_id = $1 and episode_id = $2 and revision = 1",
+      episode_ids(fixture)
+    )
+
+    assert {:error, {:invalid_history, :event_digest_mismatch}} = run_cleanup(connection)
+    assert [2, 1] = history_counts(connection, fixture)
+    refute checkpointed?(connection, fixture)
+  end
+
   test "defers a middle-sequence Episode until the earlier chat prefix is cleaned", %{
     connections: connections
   } do
@@ -162,6 +192,37 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
 
     age_ended_episode(connection, fixture, age_seconds)
 
+    fixture
+  end
+
+  defp seed_ended_episode_with_deadline(connection, deadline) do
+    fixture =
+      SyncPostgres.seed_episode(connection, 1, %{
+        deadline_at_ms: DateTime.to_unix(deadline, :millisecond),
+        deadline_generation: 2
+      })
+
+    Postgrex.query!(
+      connection,
+      "update episodes set deadline_at = $3, deadline_generation = 2 where tenant_id = $1 and id = $2",
+      episode_ids(fixture) ++ [deadline]
+    )
+
+    assert {:ok, %{external_operation_id: operation_id}} =
+             Postgres.begin_operation(
+               hd(fixture.identities),
+               operation("retention_deadline_episode_end", :end_episode, %{})
+             )
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               operation_id,
+               {:applied, :episode_ended, %{"reason" => "ended_by_participant"}}
+             )
+
+    synchronize_event_counters(connection, fixture)
+    age_ended_episode(connection, fixture, @retention_seconds + 1)
     fixture
   end
 
