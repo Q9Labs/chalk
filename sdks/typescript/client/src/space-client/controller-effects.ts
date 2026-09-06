@@ -48,6 +48,7 @@ export const makeControllerEffectsLayer = (input: Parameters<typeof makeControll
 
 /** Standalone native upload effect for custom native controller assembly. */
 export function uploadFileEffect(file: ChatUploadFile, input: { readonly connection: ConnectionLifecycleCapability; readonly chatFiles: ChalkChatFileTransport | null; readonly fetch: typeof globalThis.fetch }): ClientEffect<ChatAttachment> {
+  const { fetch } = input;
   if (!input.chatFiles) return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file upload is unavailable" }));
   return bytesFor(file).pipe(
     Effect.flatMap((bytes) => {
@@ -58,7 +59,7 @@ export function uploadFileEffect(file: ChatUploadFile, input: { readonly connect
       return input.connection.runPortCommand(() =>
         foreign(() => input.chatFiles!.initiateUpload({ clientAttachmentId, fileName, mimeType: mimeType as ChatAttachment["mimeType"], byteLength: bytes.byteLength, sha256: digest })).pipe(
           Effect.flatMap((upload) =>
-            foreign(() => input.fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
+            foreign(() => fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
               Effect.flatMap((response) => (response.ok ? foreign(() => input.chatFiles!.finalizeUpload(upload.uploadId)) : Effect.fail(new SpaceClientError({ code: "command.rejected", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}` })))),
             ),
           ),
