@@ -2,8 +2,7 @@ import type React from "react";
 
 import type { WhiteboardCollaborationEvent } from "@q9labsai/chalk-whiteboard";
 import type { WhiteboardFileTransfer, WhiteboardWireElement } from "@q9labsai/chalk-whiteboard";
-import { WhiteboardView, type WhiteboardViewProps } from "../../../../../sdks/typescript/react/src/components/whiteboard-view/WhiteboardView";
-import type { SpaceViewWhiteboard } from "../../../../../sdks/typescript/react/src/components/space-view/SpaceView";
+import { WhiteboardView, type SpaceViewWhiteboard, type WhiteboardViewProps } from "@q9labsai/chalk-react/preview";
 
 type WhiteboardCollab = NonNullable<WhiteboardViewProps["collab"]>;
 type WhiteboardSubmitInput = Parameters<WhiteboardCollab["submitUpdate"]>[0];

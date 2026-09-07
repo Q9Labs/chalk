@@ -6,8 +6,7 @@
  */
 
 import type { Capability } from "@q9labsai/chalk-client";
-import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../../../../../sdks/typescript/react/src/components/theme";
-import type { SpaceViewFeatures } from "../../../../../sdks/typescript/react/src/components/space-view/SpaceView";
+import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type SpaceViewFeatures, type ThemePalette, type ThemeSkin, type ThemeTexture } from "@q9labsai/chalk-react/preview";
 
 const PREVIEW_VIEWS = ["entrance", "space"] as const;
 export type PreviewView = (typeof PREVIEW_VIEWS)[number];

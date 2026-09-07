@@ -22,6 +22,7 @@ import (
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
+	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -263,7 +264,7 @@ func run() error {
 		}
 		episodeCredentials = verifier
 	}
-	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+	mediaPlaneRegistry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
 		ProcessConfig:   cfg.CloudflareRealtime,
 		DefaultProvider: cfg.DefaultMediaPlane,
 		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),

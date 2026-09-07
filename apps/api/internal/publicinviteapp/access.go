@@ -10,7 +10,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -401,4 +400,3 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 }
 
 var _ publicinvites.Access = accessPort{}
-var _ mediaplaneproviders.Resolver = (*mediaplaneproviders.Registry)(nil)

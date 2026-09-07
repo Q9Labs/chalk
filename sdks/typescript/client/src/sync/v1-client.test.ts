@@ -124,6 +124,29 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("stopped");
   });
 
+  it("settles a target stopped during persistence and preserves it for restart", async () => {
+    const store = new BlockingPutStore();
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      pendingStore: store,
+      webSocket: { connect: () => new TestSocket() },
+    });
+
+    const target = client.setHandRaised(true, { commandId: commandIds[0] });
+    const stopped = expect(target).rejects.toMatchObject({ code: "client_stopped" });
+    client.stop();
+    store.completePuts();
+    await stopped;
+
+    expect(client.getSnapshot().pendingCommandCount).toBe(1);
+    expect(await store.load()).toHaveLength(1);
+
+    const restarted = await liveClient({ pendingStore: store });
+    expect(restarted.socket.frames().at(-1)).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_hand_raised" });
+    restarted.client.stop();
+  });
+
   it("uses browser-legal application close codes for client-initiated restarts", async () => {
     const transportSocket = new TestSocket();
     const transportClient = new V1SyncClient({
@@ -1700,6 +1723,19 @@ class BlockingLoadStore extends InMemoryV1PendingTargetStore {
   completeLoad(): void {
     this.#completeLoad?.();
     this.#completeLoad = undefined;
+  }
+}
+
+class BlockingPutStore extends InMemoryV1PendingTargetStore {
+  readonly #putWaiters: Array<() => void> = [];
+
+  override async put(pending: V1PendingTarget): Promise<void> {
+    await new Promise<void>((resolve) => this.#putWaiters.push(resolve));
+    await super.put(pending);
+  }
+
+  completePuts(): void {
+    for (const resolve of this.#putWaiters.splice(0)) resolve();
   }
 }
 

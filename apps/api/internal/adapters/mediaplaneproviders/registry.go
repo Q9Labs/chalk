@@ -13,66 +13,21 @@ import (
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 )
 
-const (
-	SpaceProviderCloudflareRTK = string(spaces.MediaPlaneProviderCloudflareRTK)
-	SpaceProviderCloudflareSFU = string(spaces.MediaPlaneProviderCloudflareSFU)
-	ModeChalkManaged           = "chalk_managed"
-	ModeTenantManaged          = "tenant_managed"
-	ModeDisabled               = "disabled"
-	ModeUnknown                = "unknown"
-
-	ConfigurationSourceDeploymentDefault   = "deployment_default"
-	ConfigurationSourceTenantChalkManaged  = "tenant_chalk_managed"
-	ConfigurationSourceTenantManaged       = "tenant_managed"
-	ConfigurationSourceDisabled            = "disabled"
-	ConfigurationSourceTenantConfiguration = "tenant_configuration"
-	ConfigurationSourceNone                = "none"
-
-	ResolutionOutcomeResolved     = "resolved"
-	ResolutionOutcomeDisabled     = "disabled"
-	ResolutionOutcomeUnconfigured = "unconfigured"
-	ResolutionOutcomeError        = "error"
-)
-
-var (
-	ErrUnknownProvider       = errors.New("unknown media plane provider")
-	ErrInvalidMode           = errors.New("invalid media plane mode")
-	ErrMissingProviderConfig = errors.New("missing media plane provider config")
-	ErrInvalidProviderConfig = errors.New("invalid media plane provider config")
-	ErrAdapterUnavailable    = errors.New("media plane adapter unavailable")
-)
-
-type Resolver interface {
-	Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error)
-}
-
-type Resolution struct {
-	Provider            spaces.MediaPlaneProvider
-	ConfigurationSource string
-	Mode                string
-	Outcome             string
-	FailureClass        string
-	Duration            time.Duration
-}
-
-type Telemetry interface {
-	RecordResolution(context.Context, Resolution)
-}
-
 type Config struct {
 	ProcessConfig   runtimeconfig.CloudflareRealtimeConfig
 	DefaultProvider spaces.MediaPlaneProvider
-	Telemetry       Telemetry
+	Telemetry       providercontracts.Telemetry
 }
 
 type Registry struct {
 	processConfig   runtimeconfig.CloudflareRealtimeConfig
 	defaultProvider spaces.MediaPlaneProvider
-	telemetry       Telemetry
+	telemetry       providercontracts.Telemetry
 }
 
 type providerConfig struct {
@@ -110,9 +65,9 @@ func NewRegistry(config Config) Registry {
 
 func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spaces.Space) (service *mediaplane.Service, err error) {
 	startedAt := time.Now()
-	resolution := Resolution{
-		ConfigurationSource: ConfigurationSourceNone,
-		Mode:                ModeUnknown,
+	resolution := providercontracts.Resolution{
+		ConfigurationSource: providercontracts.ConfigurationSourceNone,
+		Mode:                providercontracts.ModeUnknown,
 	}
 	defer func() {
 		resolution.Duration = time.Since(startedAt)
@@ -133,12 +88,12 @@ func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spac
 
 	providerConfig, err := parseProviderConfig(tenant.MediaPlaneProviderConfig)
 	if err != nil {
-		if errors.Is(err, ErrMissingProviderConfig) {
+		if errors.Is(err, providercontracts.ErrMissingProviderConfig) {
 			if providerName != r.defaultProvider {
-				return nil, fmt.Errorf("%w: no process config for provider %s", ErrAdapterUnavailable, providerName)
+				return nil, fmt.Errorf("%w: no process config for provider %s", providercontracts.ErrAdapterUnavailable, providerName)
 			}
-			resolution.ConfigurationSource = ConfigurationSourceDeploymentDefault
-			resolution.Mode = ModeChalkManaged
+			resolution.ConfigurationSource = providercontracts.ConfigurationSourceDeploymentDefault
+			resolution.Mode = providercontracts.ModeChalkManaged
 			provider, providerErr := providerForName(providerName)
 			if providerErr != nil {
 				return nil, providerErr
@@ -148,11 +103,11 @@ func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spac
 		return nil, err
 	}
 	if providerConfig.Enabled != nil && !*providerConfig.Enabled {
-		resolution.ConfigurationSource = ConfigurationSourceDisabled
-		resolution.Mode = ModeDisabled
+		resolution.ConfigurationSource = providercontracts.ConfigurationSourceDisabled
+		resolution.Mode = providercontracts.ModeDisabled
 		return nil, nil
 	}
-	resolution.ConfigurationSource = ConfigurationSourceTenantConfiguration
+	resolution.ConfigurationSource = providercontracts.ConfigurationSourceTenantConfiguration
 
 	provider, err := providerForName(providerName)
 	if err != nil {
@@ -161,55 +116,55 @@ func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spac
 	if configuredProvider := strings.TrimSpace(providerConfig.Provider); configuredProvider != "" {
 		parsedProvider, parseErr := spaces.ParseMediaPlaneProvider(configuredProvider)
 		if parseErr != nil {
-			return nil, fmt.Errorf("%w: provider %s", ErrInvalidProviderConfig, configuredProvider)
+			return nil, fmt.Errorf("%w: provider %s", providercontracts.ErrInvalidProviderConfig, configuredProvider)
 		}
 		if parsedProvider != providerName {
-			return nil, fmt.Errorf("%w: provider does not match space", ErrInvalidProviderConfig)
+			return nil, fmt.Errorf("%w: provider does not match space", providercontracts.ErrInvalidProviderConfig)
 		}
 	}
 
 	mode := strings.TrimSpace(providerConfig.Mode)
 	resolution.Mode = mode
 	switch mode {
-	case ModeChalkManaged:
-		resolution.ConfigurationSource = ConfigurationSourceTenantChalkManaged
+	case providercontracts.ModeChalkManaged:
+		resolution.ConfigurationSource = providercontracts.ConfigurationSourceTenantChalkManaged
 		return r.newService(provider, r.processConfig)
-	case ModeTenantManaged:
-		resolution.ConfigurationSource = ConfigurationSourceTenantManaged
+	case providercontracts.ModeTenantManaged:
+		resolution.ConfigurationSource = providercontracts.ConfigurationSourceTenantManaged
 		providerConfig, err := r.tenantManagedConfig(providerName, providerConfig)
 		if err != nil {
 			return nil, err
 		}
 		return r.newService(provider, providerConfig)
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrInvalidMode, mode)
+		return nil, fmt.Errorf("%w: %s", providercontracts.ErrInvalidMode, mode)
 	}
 }
 
 func resolutionResult(service *mediaplane.Service, err error, source string) (string, string) {
 	if err != nil {
-		return ResolutionOutcomeError, failureClass(err)
+		return providercontracts.ResolutionOutcomeError, failureClass(err)
 	}
-	if source == ConfigurationSourceDisabled {
-		return ResolutionOutcomeDisabled, "none"
+	if source == providercontracts.ConfigurationSourceDisabled {
+		return providercontracts.ResolutionOutcomeDisabled, "none"
 	}
 	if service == nil {
-		return ResolutionOutcomeUnconfigured, "none"
+		return providercontracts.ResolutionOutcomeUnconfigured, "none"
 	}
-	return ResolutionOutcomeResolved, "none"
+	return providercontracts.ResolutionOutcomeResolved, "none"
 }
 
 func failureClass(err error) string {
 	switch {
-	case errors.Is(err, ErrUnknownProvider):
+	case errors.Is(err, providercontracts.ErrUnknownProvider):
 		return "unknown_provider"
-	case errors.Is(err, ErrInvalidMode):
+	case errors.Is(err, providercontracts.ErrInvalidMode):
 		return "invalid_mode"
-	case errors.Is(err, ErrMissingProviderConfig):
+	case errors.Is(err, providercontracts.ErrMissingProviderConfig):
 		return "missing_provider_config"
-	case errors.Is(err, ErrInvalidProviderConfig):
+	case errors.Is(err, providercontracts.ErrInvalidProviderConfig):
 		return "invalid_provider_config"
-	case errors.Is(err, ErrAdapterUnavailable):
+	case errors.Is(err, providercontracts.ErrAdapterUnavailable):
 		return "adapter_unavailable"
 	default:
 		return "unknown"
@@ -229,7 +184,7 @@ func selectedProvider(tenant tenants.Tenant, space spaces.Space) (spaces.MediaPl
 func parseSelectedProvider(value string) (spaces.MediaPlaneProvider, error) {
 	provider, err := spaces.ParseMediaPlaneProvider(value)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrUnknownProvider, strings.TrimSpace(value))
+		return "", fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, strings.TrimSpace(value))
 	}
 	return provider, nil
 }
@@ -237,12 +192,12 @@ func parseSelectedProvider(value string) (spaces.MediaPlaneProvider, error) {
 func parseProviderConfig(raw json.RawMessage) (providerConfig, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return providerConfig{}, ErrMissingProviderConfig
+		return providerConfig{}, providercontracts.ErrMissingProviderConfig
 	}
 
 	var config providerConfig
 	if err := json.Unmarshal(trimmed, &config); err != nil {
-		return providerConfig{}, fmt.Errorf("%w: %v", ErrInvalidProviderConfig, err)
+		return providerConfig{}, fmt.Errorf("%w: %v", providercontracts.ErrInvalidProviderConfig, err)
 	}
 	return config, nil
 }
@@ -254,13 +209,13 @@ func providerForName(name spaces.MediaPlaneProvider) (mediaplane.Provider, error
 	case spaces.MediaPlaneProviderCloudflareSFU:
 		return mediaplane.ProviderCloudflareSFU, nil
 	default:
-		return "", fmt.Errorf("%w: %s", ErrUnknownProvider, name)
+		return "", fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, name)
 	}
 }
 
 func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, providerConfig providerConfig) (runtimeconfig.CloudflareRealtimeConfig, error) {
 	if providerConfig.Cloudflare == nil {
-		return runtimeconfig.CloudflareRealtimeConfig{}, ErrMissingProviderConfig
+		return runtimeconfig.CloudflareRealtimeConfig{}, providercontracts.ErrMissingProviderConfig
 	}
 
 	resolved := runtimeconfig.CloudflareRealtimeConfig{}
@@ -270,7 +225,7 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 	resolved.APIToken = providerConfig.Cloudflare.APIToken
 	if providerName == spaces.MediaPlaneProviderCloudflareRTK {
 		if providerConfig.Cloudflare.RTK == nil {
-			return runtimeconfig.CloudflareRealtimeConfig{}, ErrMissingProviderConfig
+			return runtimeconfig.CloudflareRealtimeConfig{}, providercontracts.ErrMissingProviderConfig
 		}
 		resolved.RTKAppID = providerConfig.Cloudflare.RTK.AppID
 		resolved.RTKPresetFacilitator = providerConfig.Cloudflare.RTK.HostPreset
@@ -279,14 +234,14 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 	}
 	if providerName == spaces.MediaPlaneProviderCloudflareSFU {
 		if providerConfig.Cloudflare.SFU == nil {
-			return runtimeconfig.CloudflareRealtimeConfig{}, ErrMissingProviderConfig
+			return runtimeconfig.CloudflareRealtimeConfig{}, providercontracts.ErrMissingProviderConfig
 		}
 		resolved.RealtimeAppID = providerConfig.Cloudflare.SFU.AppID
 		resolved.RealtimeAppSecret = providerConfig.Cloudflare.SFU.AppSecret
 		return resolved, nil
 	}
 
-	return runtimeconfig.CloudflareRealtimeConfig{}, fmt.Errorf("%w: %s", ErrUnknownProvider, providerName)
+	return runtimeconfig.CloudflareRealtimeConfig{}, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, providerName)
 }
 
 func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig) (*mediaplane.Service, error) {
@@ -295,19 +250,21 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 	case mediaplane.ProviderCloudflareRTK:
 		configured, err := rtkadapter.NewPlane(providerConfig)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrAdapterUnavailable, err)
+			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
 		}
 		plane = configured
 	case mediaplane.ProviderCloudflareSFU:
 		configured, err := sfuadapter.NewAdapter(providerConfig)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrAdapterUnavailable, err)
+			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
 		}
 		plane = configured
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnknownProvider, provider)
+		return nil, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, provider)
 	}
 
 	service := mediaplane.NewServiceForProvider(provider, plane)
 	return &service, nil
 }
+
+var _ providercontracts.Resolver = Registry{}

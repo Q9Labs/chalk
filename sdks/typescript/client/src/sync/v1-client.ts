@@ -1,11 +1,15 @@
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
-import type { ClientMediaPlane, MediaPlaneResult } from "../media/plane";
+import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
-import { chatMessageFromFrame, chatReadReceiptFromFrame, reactionFromFrame } from "../collaboration/wire";
 import { syncTelemetryCorrelation } from "../telemetry/sync";
-import { canonicalJsonBytesFromUnknown } from "./canonical";
 import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
-import { InMemoryV1PendingTargetStore, compareV1PendingTargets } from "./v1-persistence";
+import { V1CollaborationState } from "./v1-collaboration-state";
+import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
+import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred, type V1Deferred as Deferred } from "./v1-deferred";
+import { V1SyncError } from "./v1-error";
+import { frameSignature } from "./v1-frame-signature";
+import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
+import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError } from "./v1-reducer";
 import type {
   V1AdmissionPolicy,
@@ -14,12 +18,9 @@ import type {
   V1ControlState,
   V1DirectedRequest,
   V1DirectedRequestResult,
-  V1LiveTargetResult,
   V1MediaPublication,
   V1MediaSource,
-  V1OperationName,
   V1PendingTarget,
-  V1PendingTargetStore,
   V1Presence,
   V1Projection,
   V1CollaborationEvent,
@@ -33,79 +34,30 @@ import type {
 } from "./v1-types";
 
 const encoder = new TextEncoder();
-const MAX_IN_FLIGHT = 256;
-const MAX_PENDING_BYTES = 1024 * 1024;
-const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
-const MAX_RETRIES = 3;
-const MAX_LIVE_SERVER_RETRIES = 16;
-const LIVE_TARGET_RETRY_BUDGET_MS = 15_000;
-const MAX_LIVE_TARGET_RETRY_DELAY_MS = 1_000;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
-const OPERATION_PENDING_POLL_INTERVAL_MS = 1_000;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
-const MAX_COLLABORATION_REQUESTS_IN_FLIGHT = 64;
 
-type CommandDeferred = Deferred<V1CommandResult> & { readonly frame: SyncV1ClientFrame; retries: number; readonly durableTarget: boolean; readonly createdAt: number };
-type LiveTargetClientFrame = Extract<SyncV1ClientFrame, { readonly type: "live_target" }>;
-type SuccessfulLiveTargetResult = Omit<V1LiveTargetResult, "outcome"> & { readonly outcome: "confirmed" | "satisfied" };
-type LiveDeferred = Deferred<V1SelfMediaTargetResult> & {
-  readonly frame: LiveTargetClientFrame;
-  readonly createdAt: number;
-  serverRetries: number;
-  localRetries: number;
-  localInFlight: boolean;
-  readonly source: V1MediaSource;
-  readonly enabled: boolean;
-  serverResult?: SuccessfulLiveTargetResult;
-  serverResultSignature?: string;
-};
 type RequestDeferred = Deferred<V1DirectedRequestResult> & { readonly frame: SyncV1ClientFrame };
-type ReactionDeferred = Deferred<ChalkReactionEvent>;
-type ChatSendDeferred = Deferred<ChalkChatMessage>;
-type ChatPageDeferred = Deferred<ChalkChatPageResult>;
-type ChatReadDeferred = Deferred<ChalkChatReadReceipt>;
-type Deferred<T> = { readonly resolve: (value: T) => void; readonly reject: (error: Error) => void; settled: boolean };
 type Recovery = { readonly id: string; readonly head: { readonly revision: number; readonly state_schema_version: number; readonly state_digest: string }; replayEvents: number; replayBytes: number; controlComplete: boolean };
 type CommandOptions = { readonly commandId?: string };
 type RequestOptions = { readonly requestId?: string };
 
-export class V1SyncError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-  ) {
-    super(message);
-    this.name = "V1SyncError";
-  }
-}
+export { V1SyncError } from "./v1-error";
 
 export class V1SyncClient implements V1CollaborationClient {
   readonly #options: V1SyncClientOptions;
-  readonly #store: V1PendingTargetStore;
+  readonly #commandScheduler: V1CommandScheduler;
   readonly #listeners = new Set<(snapshot: V1EpisodeSnapshot) => void>();
   readonly #requestListeners = new Set<(request: V1DirectedRequest) => void>();
-  readonly #collaborationListeners = new Set<(event: V1CollaborationEvent) => void>();
-  readonly #pendingTargets = new Map<string, V1PendingTarget>();
-  readonly #reservedCommandIds = new Set<string>();
-  readonly #commands = new Map<string, CommandDeferred>();
-  readonly #acknowledgements = new Map<string, Extract<V1CommandResult, { readonly outcome: "committed" | "satisfied" }>>();
-  readonly #pendingRemovals = new Map<string, V1PendingTarget>();
+  readonly #collaborationState: V1CollaborationState;
   readonly #controlHeads = new Map<number, string>();
   readonly #controlEvents = new Map<number, string>();
-  readonly #liveTargets = new Map<string, LiveDeferred>();
+  readonly #liveTargets: V1LiveTargetCoordinator;
   readonly #requests = new Map<string, RequestDeferred>();
-  readonly #reactions = new Map<string, ReactionDeferred>();
-  readonly #chatSends = new Map<string, ChatSendDeferred>();
-  readonly #chatPages = new Map<string, ChatPageDeferred>();
-  readonly #chatReads = new Map<string, ChatReadDeferred>();
-  readonly #commandRetryTimers = new Map<string, unknown>();
-  readonly #liveRetryTimers = new Map<string, unknown>();
-  readonly #liveDeadlineTimers = new Map<string, unknown>();
-  readonly #pendingRemovalRetryTimers = new Map<string, unknown>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
   #phase: V1EpisodeSnapshot["connection"] = { phase: "idle" };
@@ -132,27 +84,44 @@ export class V1SyncClient implements V1CollaborationClient {
   #unsubscribeRemoteMedia: (() => void) | undefined;
   #localPublications: readonly V1MediaPublication[] = [];
   #remotePublications: readonly V1MediaPublication[] = [];
-  #collaboration: V1CollaborationExtensionState;
-  #participantCollaborationCapabilities: Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>> = {};
-  #chatAfterSequence: string | null;
-  #requestedCollaborationVersion: 0 | 1;
-  readonly #localMedia: Record<V1MediaSource, "unknown" | "requesting" | "enabled" | "disabled" | "failed"> = { microphone: "unknown", camera: "unknown", screen: "unknown" };
 
   constructor(options: V1SyncClientOptions) {
     assertV1Url(options.url);
     this.#options = options;
-    this.#store = options.pendingStore ?? new InMemoryV1PendingTargetStore();
-    const cursor = options.collaboration === false ? { afterSequence: null, retainedFloorSequence: null } : (options.collaboration?.chatCursor ?? { afterSequence: null, retainedFloorSequence: null });
-    this.#chatAfterSequence = cursor.afterSequence;
-    this.#requestedCollaborationVersion = options.collaboration === false ? 0 : 1;
-    this.#collaboration = {
-      negotiated: false,
-      version: null,
-      capabilities: [],
-      chatHeadSequence: null,
-      retainedFloorSequence: cursor.retainedFloorSequence,
-      readReceipts: [],
-    };
+    this.#commandScheduler = new V1CommandScheduler({
+      store: options.pendingStore ?? new InMemoryV1PendingTargetStore(),
+      ids: options.ids,
+      maxPendingCommands: options.maxPendingCommands,
+      maxPendingBytes: options.maxPendingBytes,
+      maxPendingAgeMs: options.maxPendingAgeMs,
+      maxOperationPendingAgeMs: options.maxOperationPendingAgeMs,
+      retryDelayMs: options.retryDelayMs,
+      clock: () => this.#clock(),
+      isStarted: () => this.#started,
+      sendIfLive: (frame) => this.#sendIfLive(frame),
+      stateChanged: () => this.#emit(),
+      ackHeadIsProven: (ack) => this.#ackHeadIsProven(ack),
+    });
+    this.#liveTargets = new V1LiveTargetCoordinator({
+      mediaPlane: options.mediaPlane,
+      requestIds: options.requestIds,
+      retryDelayMs: options.retryDelayMs,
+      clock: () => this.#clock(),
+      participantId: () => this.#participantId,
+      isLive: () => this.#phase.phase === "live",
+      requestIdInUse: (requestId) => this.#requests.has(requestId),
+      assertCapacity: () => this.#assertCapacity(),
+      sendIfLive: (frame) => this.#sendIfLive(frame),
+      stateChanged: () => this.#emit(),
+    });
+    this.#collaborationState = new V1CollaborationState({
+      request: options.collaboration,
+      requestIds: options.requestIds,
+      maxPendingRequests: options.maxPendingCollaborationRequests,
+      isLive: () => this.#phase.phase === "live",
+      send: (frame) => this.#send(frame),
+      stateChanged: () => this.#emit(),
+    });
   }
 
   async start(): Promise<void> {
@@ -161,7 +130,7 @@ export class V1SyncClient implements V1CollaborationClient {
     const startupGeneration = ++this.#startupGeneration;
     let stored: readonly V1PendingTarget[];
     try {
-      stored = await this.#store.load();
+      stored = await this.#commandScheduler.load();
     } catch (error) {
       if (startupGeneration === this.#startupGeneration) {
         this.#started = false;
@@ -169,26 +138,7 @@ export class V1SyncClient implements V1CollaborationClient {
       throw error;
     }
     if (!this.#started || startupGeneration !== this.#startupGeneration) return;
-    const storedCommandIds = new Set(stored.map((pending) => pending.commandId));
-    for (const commandId of this.#pendingTargets.keys()) {
-      if (storedCommandIds.has(commandId) || this.#commands.has(commandId)) continue;
-      this.#pendingTargets.delete(commandId);
-    }
-    for (const commandId of this.#pendingRemovals.keys()) {
-      if (storedCommandIds.has(commandId)) continue;
-      this.#pendingRemovals.delete(commandId);
-      this.#clearPendingRemovalRetryTimer(commandId);
-    }
-    for (const pending of [...stored].sort(compareV1PendingTargets)) {
-      if (this.#pendingRemovals.has(pending.commandId)) {
-        void this.#removePersistedTarget(pending.commandId, pending);
-      } else if (this.#commands.has(pending.commandId)) {
-        this.#pendingTargets.set(pending.commandId, pending);
-      } else {
-        this.#pendingTargets.delete(pending.commandId);
-        this.#restorePending(pending);
-      }
-    }
+    this.#commandScheduler.reconcileStored(stored);
     this.#subscribeMediaPlane(this.#options.mediaPlane);
     this.#unsubscribeLifecycle = this.#options.lifecycle?.subscribe((event) => this.#handleLifecycle(event));
     this.#connect();
@@ -201,27 +151,21 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#unsubscribeLifecycle = undefined;
     this.#clearReconnect();
     this.#clearHeartbeat();
-    this.#clearRetryTimers();
-    this.#clearPendingRemovalRetryTimers();
+    this.#commandScheduler.stop("client_stopped");
     this.#unsubscribeMediaPlane();
     this.#socket?.close(1000, "client stopped");
     this.#socket = null;
     this.#phase = { phase: "stopped" };
     this.#rejectEphemeral("client_stopped");
-    this.#rejectCollaboration("client_stopped");
-    this.#collaboration = { ...this.#collaboration, negotiated: false, version: null, capabilities: [], readReceipts: [] };
-    this.#participantCollaborationCapabilities = {};
+    this.#collaborationState.disconnect("client_stopped");
     this.#localPublications = [];
     this.#remotePublications = [];
-    for (const source of ["microphone", "camera", "screen"] as const) this.#localMedia[source] = "unknown";
-    for (const deferred of this.#commands.values()) rejectDeferred(deferred, new V1SyncError("client_stopped", "client_stopped"));
-    this.#commands.clear();
-    this.#acknowledgements.clear();
+    this.#liveTargets.resetLocalMedia();
     this.#emit();
   }
 
   getSnapshot(): V1EpisodeSnapshot {
-    const pendingCommands = [...this.#pendingTargets.values()].sort(compareV1PendingTargets).map((pending) => pending.command);
+    const pendingCommands = this.#commandScheduler.pendingCommands;
     const optimisticControl = this.#control && this.#participantId ? optimisticV1Control(this.#control, this.#participantId, pendingCommands) : this.#control;
     return {
       connection: { ...this.#phase },
@@ -232,8 +176,8 @@ export class V1SyncClient implements V1CollaborationClient {
       media: copyProjection(this.#media),
       presence: copyProjection(this.#presence),
       mediaPlane: { local: this.#localPublications.map(copyPublication), remote: this.#remotePublications.map(copyPublication) },
-      localMedia: { ...this.#localMedia },
-      pendingCommandCount: this.#pendingTargets.size,
+      localMedia: this.#liveTargets.getLocalMedia(),
+      pendingCommandCount: this.#commandScheduler.pendingCount,
     };
   }
 
@@ -249,70 +193,31 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   getCollaborationExtensionState(): V1CollaborationExtensionState {
-    return { ...this.#collaboration, capabilities: [...this.#collaboration.capabilities], readReceipts: this.#collaboration.readReceipts.map((receipt) => ({ ...receipt })) };
+    return this.#collaborationState.getState();
   }
 
   getParticipantCollaborationCapabilities(): Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>> {
-    return Object.fromEntries(Object.entries(this.#participantCollaborationCapabilities).map(([participantId, capabilities]) => [participantId, [...capabilities]]));
+    return this.#collaborationState.getParticipantCapabilities();
   }
 
   subscribeCollaboration(listener: (event: V1CollaborationEvent) => void): () => void {
-    this.#collaborationListeners.add(listener);
-    return () => this.#collaborationListeners.delete(listener);
+    return this.#collaborationState.subscribe(listener);
   }
 
   sendReaction(reaction: ChalkReaction): Promise<ChalkReactionEvent> {
-    this.#assertCollaborationReady("sendReaction");
-    this.#assertCollaborationCapacity();
-    const operationId = this.#nextCollaborationRequestId();
-    const frame = { type: "reaction_send", operation_id: operationId, reaction } as const;
-    encodeV1ClientFrame(frame);
-    const promise = new Promise<ChalkReactionEvent>((resolve, reject) => this.#reactions.set(operationId, { resolve, reject, settled: false }));
-    this.#send(frame);
-    return promise;
+    return this.#collaborationState.sendReaction(reaction);
   }
 
   sendChatMessage(input: ChalkSendChatMessageInput): Promise<ChalkChatMessage> {
-    this.#assertCollaborationReady("sendChat");
-    this.#assertCollaborationCapacity();
-    const clientMessageId = input.clientMessageId ?? this.#nextCollaborationRequestId();
-    this.#assertCollaborationRequestIdAvailable(clientMessageId);
-    const attachments = input.attachments ?? [];
-    const frame = { type: "chat_send", client_message_id: clientMessageId, text: input.text, attachment_ids: attachments.map((attachment) => attachment.attachmentId) } as const;
-    encodeV1ClientFrame(frame);
-    const promise = new Promise<ChalkChatMessage>((resolve, reject) => this.#chatSends.set(clientMessageId, { resolve, reject, settled: false }));
-    this.#send(frame);
-    return promise;
+    return this.#collaborationState.sendChatMessage(input);
   }
 
   markChatRead(sequence: string): Promise<ChalkChatReadReceipt> {
-    this.#assertCollaborationReady();
-    if (this.#collaboration.version !== 1) throw new V1SyncError("durable chat read receipts require collaboration_v1", "collaboration_unavailable");
-    this.#assertCollaborationCapacity();
-    const requestId = this.#nextCollaborationRequestId();
-    const frame = { type: "chat_read_set", request_id: requestId, sequence } as const;
-    encodeV1ClientFrame(frame);
-    const promise = new Promise<ChalkChatReadReceipt>((resolve, reject) => this.#chatReads.set(requestId, { resolve, reject, settled: false }));
-    this.#send(frame);
-    return promise;
+    return this.#collaborationState.markChatRead(sequence);
   }
 
   readChatPage(input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }): Promise<ChalkChatPageResult> {
-    this.#assertCollaborationReady();
-    this.#assertCollaborationCapacity();
-    if (input.beforeSequence !== undefined && input.afterSequence !== undefined) throw new V1SyncError("a chat page cannot declare both cursors", "invalid_payload");
-    const requestId = this.#nextCollaborationRequestId();
-    const frame = {
-      type: "chat_page_request",
-      request_id: requestId,
-      direction: input.afterSequence === undefined ? ("older" as const) : ("newer" as const),
-      cursor_sequence: input.afterSequence ?? input.beforeSequence ?? null,
-      limit: input.limit,
-    } as const;
-    encodeV1ClientFrame(frame);
-    const promise = new Promise<ChalkChatPageResult>((resolve, reject) => this.#chatPages.set(requestId, { resolve, reject, settled: false }));
-    this.#send(frame);
-    return promise;
+    return this.#collaborationState.readChatPage(input);
   }
 
   setHandRaised(raised: boolean, options?: CommandOptions): Promise<V1CommandResult> {
@@ -332,49 +237,49 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   admit(admissionRequestId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("admit_participant", { admission_request_id: admissionRequestId }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "admit_participant", payload: { admission_request_id: admissionRequestId } }), options);
   }
 
   deny(admissionRequestId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("deny_admission", { admission_request_id: admissionRequestId }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "deny_admission", payload: { admission_request_id: admissionRequestId } }), options);
   }
 
   muteParticipant(participantId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("mute_participant", { participant_id: participantId }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "mute_participant", payload: { participant_id: participantId } }), options);
   }
 
   stopParticipantCamera(participantId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("stop_participant_camera", { participant_id: participantId }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "stop_participant_camera", payload: { participant_id: participantId } }), options);
   }
 
   stopParticipantScreenShare(participantId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("stop_participant_screen_share", { participant_id: participantId }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "stop_participant_screen_share", payload: { participant_id: participantId } }), options);
   }
 
   removeParticipant(participantId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("remove_participant", { participant_id: participantId }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "remove_participant", payload: { participant_id: participantId } }), options);
   }
 
   startRecording(options?: CommandOptions & { readonly recordingId?: string }): Promise<{ readonly recordingId: string; readonly result: V1CommandResult }> {
     const recordingId = options?.recordingId ?? this.#nextRequestId();
-    return this.#sendOperation("start_recording", { recording_id: recordingId }, options).then((result) => ({ recordingId, result }));
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "start_recording", payload: { recording_id: recordingId } }), options).then((result) => ({ recordingId, result }));
   }
 
   stopRecording(recordingId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("stop_recording", { recording_id: recordingId }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "stop_recording", payload: { recording_id: recordingId } }), options);
   }
 
   leave(options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("participant_leave", {}, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "participant_leave", payload: {} }), options);
   }
 
   endEpisode(options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("end_episode", {}, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "end_episode", payload: {} }), options);
   }
 
   extendEpisode(minutes: number, options?: CommandOptions): Promise<V1CommandResult> {
     if (!Number.isSafeInteger(minutes) || minutes < 1) throw new V1SyncError("episode extension must be a positive whole number of minutes", "invalid_payload");
-    return this.#sendOperation("extend_episode", { extension_seconds: minutes * 60 }, options);
+    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "extend_episode", payload: { extension_seconds: minutes * 60 } }), options);
   }
 
   setMicrophoneEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
@@ -398,70 +303,15 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   async #sendTarget(command: V1TargetCommand, options?: CommandOptions): Promise<V1CommandResult> {
-    this.#assertCapacity();
-    const commandId = options?.commandId ?? this.#nextCommandId();
-    if (this.#commands.has(commandId) || this.#pendingTargets.has(commandId) || this.#pendingRemovals.has(commandId) || this.#reservedCommandIds.has(commandId)) throw new V1SyncError("command ID is already pending", "command_id_conflict");
-    const frame = { type: "command", command_id: commandId, name: command.name, payload: command.payload } as SyncV1ClientFrame;
-    encodeV1ClientFrame(frame);
-    const pending = { commandId, command, createdAt: this.#now(), bytes: encoder.encode(JSON.stringify(frame)).byteLength };
-    if (this.#pendingBytes() + pending.bytes > (this.#options.maxPendingBytes ?? MAX_PENDING_BYTES)) throw new V1SyncError("pending target byte capacity exceeded", "capacity");
-    this.#reservedCommandIds.add(commandId);
-    try {
-      await this.#store.put(pending);
-      this.#pendingTargets.set(commandId, pending);
-      const promise = this.#registerCommand(commandId, frame, true, pending.createdAt);
-      this.#sendIfLive(frame);
-      this.#emit();
-      return promise;
-    } finally {
-      this.#reservedCommandIds.delete(commandId);
-    }
+    return this.#commandScheduler.sendTarget(command, this.#liveTargets.pendingCount + this.#requests.size, options);
   }
 
-  #sendOperation(name: V1OperationName, payload: Readonly<Record<string, string | number>>, options?: CommandOptions): Promise<V1CommandResult> {
-    this.#assertCapacity();
-    const commandId = options?.commandId ?? this.#nextCommandId();
-    if (this.#commands.has(commandId) || this.#pendingTargets.has(commandId) || this.#pendingRemovals.has(commandId) || this.#reservedCommandIds.has(commandId)) throw new V1SyncError("command ID is already pending", "command_id_conflict");
-    const frame = { type: "operation", command_id: commandId, name, payload } as SyncV1ClientFrame;
-    encodeV1ClientFrame(frame);
-    const promise = this.#registerCommand(commandId, frame, false, this.#now());
-    this.#sendIfLive(frame);
-    return promise;
+  #sendOperation(createFrame: V1OperationFrameFactory, options?: CommandOptions): Promise<V1CommandResult> {
+    return this.#commandScheduler.sendOperation(createFrame, this.#liveTargets.pendingCount + this.#requests.size, options);
   }
 
   #sendLiveTarget(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    this.#assertCapacity();
-    if (this.#phase.phase !== "live" || !this.#participantId) return Promise.reject(new V1SyncError("self-media targets require a live participant", "not_live"));
-    if (!this.#options.mediaPlane) return Promise.reject(new V1SyncError("a client MediaPlane adapter is required for self-media targets", "media_plane_unavailable"));
-    const operationId = options?.requestId ?? this.#nextRequestId();
-    if (this.#liveTargets.has(operationId) || this.#requests.has(operationId)) throw new V1SyncError("request ID is already pending", "request_id_conflict");
-    const frame: LiveTargetClientFrame = { type: "live_target", operation_id: operationId, name, enabled };
-    encodeV1ClientFrame(frame);
-    let deferred!: LiveDeferred;
-    const promise = new Promise<V1SelfMediaTargetResult>((resolve, reject) => {
-      deferred = {
-        resolve,
-        reject,
-        settled: false,
-        frame,
-        createdAt: this.#now(),
-        serverRetries: 0,
-        localRetries: 0,
-        localInFlight: false,
-        source,
-        enabled,
-      };
-      this.#liveTargets.set(operationId, deferred);
-    });
-    const deadlineTimer = this.#clock().setTimeout(() => {
-      this.#liveDeadlineTimers.delete(operationId);
-      if (this.#liveTargets.get(operationId) === deferred) this.#failLiveTarget(operationId, deferred, new V1SyncError("self-media target confirmation timed out", "retry_exhausted"));
-    }, LIVE_TARGET_RETRY_BUDGET_MS);
-    this.#liveDeadlineTimers.set(operationId, deadlineTimer);
-    this.#localMedia[source] = "requesting";
-    this.#sendIfLive(frame);
-    this.#emit();
-    return promise;
+    return this.#liveTargets.send(name, source, enabled, options);
   }
 
   #sendDirectedRequest(name: "request_unmute" | "request_start_camera", participantId: string, options?: RequestOptions): Promise<V1DirectedRequestResult> {
@@ -474,11 +324,6 @@ export class V1SyncClient implements V1CollaborationClient {
     const promise = new Promise<V1DirectedRequestResult>((resolve, reject) => this.#requests.set(requestId, { resolve, reject, settled: false, frame }));
     this.#send(frame);
     return promise;
-  }
-
-  #registerCommand(commandId: string, frame: SyncV1ClientFrame, durableTarget: boolean, createdAt: number): Promise<V1CommandResult> {
-    if (this.#commands.has(commandId)) throw new V1SyncError("command ID is already pending", "command_id_conflict");
-    return new Promise((resolve, reject) => this.#commands.set(commandId, { resolve, reject, settled: false, frame, retries: 0, durableTarget, createdAt }));
   }
 
   #connect(): void {
@@ -518,14 +363,11 @@ export class V1SyncClient implements V1CollaborationClient {
         },
         ...(this.#options.telemetry ? syncTelemetryCorrelation(this.#options.telemetry) : {}),
       } as const;
-      if (this.#requestedCollaborationVersion === 0) {
+      const collaborationExtension = this.#collaborationState.helloExtension;
+      if (!collaborationExtension) {
         this.#send(hello);
       } else {
-        const chat_cursor = {
-          after_sequence: this.#chatAfterSequence,
-          retained_floor_sequence: this.#collaboration.retainedFloorSequence,
-        };
-        this.#send({ ...hello, extensions: [{ name: "collaboration_v1", chat_cursor }] });
+        this.#send({ ...hello, extensions: [collaborationExtension] });
       }
       this.#emit();
     } catch {
@@ -569,8 +411,8 @@ export class V1SyncClient implements V1CollaborationClient {
           this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
           this.#rememberControlEvent(frame);
         }
-        await this.#settleTerminalLifecycleCommands(frame);
-        await this.#settleProvenCommands();
+        await this.#commandScheduler.settleTerminalLifecycle(frame, this.#participantId);
+        await this.#commandScheduler.settleProven();
         {
           const control = this.#requireControl();
           this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
@@ -579,14 +421,14 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "ack":
         this.#requireLive();
-        await this.#ack(frame);
+        await this.#commandScheduler.acknowledge(frame);
         return;
       case "retryable_error":
         this.#requireLive();
-        this.#retryCommand(frame.command_id, frame.code);
+        this.#commandScheduler.retry(frame.command_id, frame.code);
         return;
       case "live_target_result":
-        this.#liveTargetResult(frame);
+        this.#liveTargets.receive(frame);
         return;
       case "directed_request_result":
         this.#requestResult(frame);
@@ -595,43 +437,28 @@ export class V1SyncClient implements V1CollaborationClient {
         this.#directedRequest(frame);
         return;
       case "reaction":
-        this.#requireLive();
-        this.#requireCollaborationNegotiated();
-        this.#emitCollaboration({ type: "reaction", reaction: reactionFromFrame(frame) });
+        this.#collaborationState.reaction(frame);
         return;
       case "reaction_result":
-        this.#reactionResult(frame);
+        this.#collaborationState.reactionResult(frame);
         return;
       case "chat_message":
-        this.#requireCollaborationNegotiated();
-        this.#observeChatMessage(frame);
+        this.#collaborationState.chatMessage(frame);
         return;
       case "chat_send_result":
-        this.#chatSendResult(frame);
+        this.#collaborationState.chatSendResult(frame);
         return;
       case "chat_page":
-        this.#chatPageResult(frame);
+        this.#collaborationState.chatPage(frame);
         return;
       case "chat_head":
-        this.#requireCollaborationNegotiated();
-        this.#collaboration = {
-          ...this.#collaboration,
-          chatHeadSequence: frame.head_sequence,
-          retainedFloorSequence: frame.retained_floor_sequence,
-        };
-        this.#emit();
+        this.#collaborationState.chatHead(frame);
         return;
       case "chat_read_receipt":
-        this.#requireLive();
-        this.#requireCollaborationVersion(1);
-        {
-          const receipt = chatReadReceiptFromFrame(frame);
-          this.#rememberChatReadReceipt(receipt);
-          this.#emitCollaboration({ type: "chat_read_receipt", receipt });
-        }
+        this.#collaborationState.chatReadReceipt(frame);
         return;
       case "chat_read_result":
-        this.#chatReadResult(frame);
+        this.#collaborationState.chatReadResult(frame);
         return;
       case "error":
         throw new V1ReplicaError(frame.code);
@@ -644,29 +471,12 @@ export class V1SyncClient implements V1CollaborationClient {
 
   async #welcome(frame: Extract<SyncV1ServerFrame, { readonly type: "welcome" }>): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
-    if ("extensions" in frame) {
-      const extension = frame.extensions[0];
-      const version = 1;
-      if (this.#requestedCollaborationVersion !== version) throw new V1ReplicaError("collaboration welcome version does not match the requested extension");
-      this.#collaboration = {
-        negotiated: true,
-        version,
-        capabilities: [...extension.capabilities],
-        chatHeadSequence: extension.chat_head_sequence,
-        retainedFloorSequence: extension.retained_floor_sequence,
-        readReceipts: "read_receipts" in extension ? extension.read_receipts.map(chatReadReceiptFromWire) : [],
-      };
-      this.#participantCollaborationCapabilities = copyCollaborationCapabilities(extension.participant_capabilities);
-    } else {
-      this.#requestedCollaborationVersion = 0;
-      this.#collaboration = { ...this.#collaboration, negotiated: false, version: null, capabilities: [], readReceipts: [] };
-      this.#participantCollaborationCapabilities = {};
-    }
+    this.#collaborationState.acceptWelcome(frame);
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
     this.#updateLocalMediaStates();
     if (frame.mode === "terminal") {
-      await this.#settleTerminalRecoveryCommands(frame);
+      await this.#commandScheduler.settleTerminalRecovery(frame);
       this.#phase = { phase: "terminal", terminalReason: frame.reason };
       this.#socket?.close(1000, "terminal recovery");
       this.#emit();
@@ -735,223 +545,6 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
   }
 
-  async #ack(frame: V1CommandResult): Promise<void> {
-    const deferred = this.#commands.get(frame.command_id);
-    if (!deferred) return;
-    if (frame.outcome === "rejected" || frame.outcome === "command_id_conflict") {
-      await this.#finishCommand(frame.command_id, frame);
-      return;
-    }
-    if (isTerminalLifecycleOperation(deferred.frame)) {
-      await this.#finishCommand(frame.command_id, frame);
-      return;
-    }
-    if (!this.#ackHeadIsProven(frame)) {
-      const previous = this.#acknowledgements.get(frame.command_id);
-      if (previous && JSON.stringify(previous) !== JSON.stringify(frame)) throw new V1ReplicaError("conflicting duplicate command ACK");
-      this.#acknowledgements.set(frame.command_id, frame);
-      return;
-    }
-    await this.#finishCommand(frame.command_id, frame);
-  }
-
-  async #settleProvenCommands(): Promise<void> {
-    for (const commandId of this.#commands.keys()) {
-      const ack = this.#acknowledgements.get(commandId);
-      if (ack && this.#ackHeadIsProven(ack)) await this.#finishCommand(commandId, ack);
-    }
-  }
-
-  async #settleTerminalLifecycleCommands(frame: Extract<SyncV1ServerFrame, { readonly type: "event" }>): Promise<void> {
-    const operationName = frame.name === "episode_ended" ? "end_episode" : frame.name === "participant_left" && frame.payload.participant_id === this.#participantId ? "participant_leave" : null;
-    if (!operationName) return;
-    for (const [commandId, deferred] of this.#commands) {
-      if (deferred.frame.type !== "operation" || deferred.frame.name !== operationName) continue;
-      await this.#finishCommand(commandId, {
-        type: "ack",
-        command_id: commandId,
-        delivery: "duplicate",
-        outcome: "satisfied",
-        revision: frame.revision,
-        state_digest: frame.resulting_state_digest,
-      });
-    }
-  }
-
-  async #settleTerminalRecoveryCommands(frame: Extract<SyncV1ServerFrame, { readonly type: "welcome"; readonly mode: "terminal" }>): Promise<void> {
-    const satisfiedOperations = new Set<V1OperationName>();
-    if (frame.reason === "episode_ended") {
-      satisfiedOperations.add("end_episode");
-      satisfiedOperations.add("participant_leave");
-    } else if (frame.reason === "participant_inactive") {
-      satisfiedOperations.add("participant_leave");
-    }
-    for (const [commandId, deferred] of this.#commands) {
-      if (deferred.frame.type !== "operation" || !satisfiedOperations.has(deferred.frame.name)) continue;
-      await this.#finishCommand(commandId, {
-        type: "ack",
-        command_id: commandId,
-        delivery: "duplicate",
-        outcome: "satisfied",
-        revision: frame.head.revision,
-        state_digest: frame.head.state_digest,
-      });
-    }
-  }
-
-  #retryCommand(commandId: string, code: Extract<SyncV1ServerFrame, { readonly type: "retryable_error" }>["code"]): void {
-    const deferred = this.#commands.get(commandId);
-    if (!deferred || this.#commandRetryTimers.has(commandId)) return;
-    if (code === "external_operation_pending") {
-      this.#pollPendingOperation(commandId, deferred);
-      return;
-    }
-    if (deferred.retries >= MAX_RETRIES) {
-      rejectDeferred(deferred, new V1SyncError(code, "retry_exhausted"));
-      if (!deferred.durableTarget) this.#commands.delete(commandId);
-      return;
-    }
-    deferred.retries += 1;
-    const timer = this.#clock().setTimeout(() => {
-      this.#commandRetryTimers.delete(commandId);
-      if (this.#commands.get(commandId) === deferred) this.#sendIfLive(deferred.frame);
-    }, this.#options.retryDelayMs ?? 100);
-    this.#commandRetryTimers.set(commandId, timer);
-  }
-
-  #pollPendingOperation(commandId: string, deferred: CommandDeferred): void {
-    const remainingAge = (this.#options.maxOperationPendingAgeMs ?? MAX_PENDING_AGE_MS) - (this.#now() - deferred.createdAt);
-    if (remainingAge <= 0) {
-      this.#expirePendingOperation(commandId, deferred);
-      return;
-    }
-    const timer = this.#clock().setTimeout(
-      () => {
-        this.#commandRetryTimers.delete(commandId);
-        if (this.#commands.get(commandId) !== deferred) return;
-        if (this.#now() - deferred.createdAt >= (this.#options.maxOperationPendingAgeMs ?? MAX_PENDING_AGE_MS)) {
-          this.#expirePendingOperation(commandId, deferred);
-          return;
-        }
-        this.#sendIfLive(deferred.frame);
-      },
-      Math.min(OPERATION_PENDING_POLL_INTERVAL_MS, remainingAge),
-    );
-    this.#commandRetryTimers.set(commandId, timer);
-  }
-
-  #expirePendingOperation(commandId: string, deferred: CommandDeferred): void {
-    if (this.#commands.get(commandId) !== deferred) return;
-    this.#commands.delete(commandId);
-    this.#acknowledgements.delete(commandId);
-    this.#clearCommandRetryTimer(commandId);
-    let pending: V1PendingTarget | undefined;
-    if (deferred.durableTarget) {
-      pending = this.#pendingTargets.get(commandId);
-      this.#pendingTargets.delete(commandId);
-      if (pending) this.#pendingRemovals.set(commandId, pending);
-    }
-    rejectDeferred(deferred, new V1SyncError("external operation remained pending beyond its maximum age", "operation_pending_timeout"));
-    this.#emit();
-    if (pending) void this.#removePersistedTarget(commandId, pending);
-  }
-
-  #liveTargetResult(frame: V1LiveTargetResult): void {
-    this.#requireLive();
-    const deferred = this.#liveTargets.get(frame.operation_id);
-    if (!deferred || deferred.frame.name !== frame.name) return;
-    if (deferred.serverResultSignature) {
-      if (deferred.serverResultSignature !== frameSignature(frame)) throw new V1ReplicaError("conflicting duplicate live-target result");
-      return;
-    }
-    if (frame.outcome === "retryable_failure") {
-      this.#retryLiveServer(frame.operation_id, deferred, frame.error_code ?? frame.outcome);
-      return;
-    }
-    if (frame.outcome !== "confirmed" && frame.outcome !== "satisfied") {
-      this.#failLiveTarget(frame.operation_id, deferred, new V1SyncError(frame.error_code ?? frame.outcome, frame.outcome));
-      return;
-    }
-    deferred.serverResult = { ...frame, outcome: frame.outcome } as SuccessfulLiveTargetResult;
-    deferred.serverResultSignature = frameSignature(frame);
-    this.#clearLiveRetryTimer(frame.operation_id);
-    this.#clearLiveDeadlineTimer(frame.operation_id);
-    this.#executeLocalMediaTarget(frame.operation_id, deferred);
-  }
-
-  #retryLiveServer(operationId: string, deferred: LiveDeferred, errorCode: string): void {
-    if (this.#liveRetryTimers.has(operationId)) return;
-    const remainingBudget = LIVE_TARGET_RETRY_BUDGET_MS - (this.#now() - deferred.createdAt);
-    if (deferred.serverRetries >= MAX_LIVE_SERVER_RETRIES || remainingBudget <= 0) {
-      this.#failLiveTarget(operationId, deferred, new V1SyncError(errorCode, "retry_exhausted"));
-      return;
-    }
-    deferred.serverRetries += 1;
-    const baseDelay = this.#options.retryDelayMs ?? 100;
-    const delay = Math.min(remainingBudget, MAX_LIVE_TARGET_RETRY_DELAY_MS, baseDelay * 2 ** Math.min(deferred.serverRetries - 1, 4));
-    this.#scheduleLiveRetry(operationId, () => this.#sendIfLive(deferred.frame), delay);
-  }
-
-  #executeLocalMediaTarget(operationId: string, deferred: LiveDeferred): void {
-    const mediaPlane = this.#options.mediaPlane;
-    const participantId = this.#participantId;
-    if (!mediaPlane || !participantId || deferred.localInFlight || this.#liveTargets.get(operationId) !== deferred) return;
-    deferred.localInFlight = true;
-    let result: Promise<MediaPlaneResult>;
-    try {
-      result = mediaPlane.setLocalPublicationTarget({ operationId, participantId, source: deferred.source, enabled: deferred.enabled });
-    } catch {
-      this.#localMediaResult(operationId, deferred, { outcome: "ambiguous", errorCode: "media_plane_exception" });
-      return;
-    }
-    void result
-      .then((outcome) => this.#localMediaResult(operationId, deferred, validMediaPlaneResult(outcome) ? outcome : { outcome: "ambiguous", errorCode: "invalid_media_plane_result" }))
-      .catch(() => this.#localMediaResult(operationId, deferred, { outcome: "ambiguous", errorCode: "media_plane_exception" }));
-  }
-
-  #localMediaResult(operationId: string, deferred: LiveDeferred, result: MediaPlaneResult): void {
-    if (this.#liveTargets.get(operationId) !== deferred) return;
-    deferred.localInFlight = false;
-    if (result.outcome === "retryable_failure") {
-      if (deferred.localRetries >= MAX_RETRIES) {
-        this.#failLiveTarget(operationId, deferred, new V1SyncError(result.errorCode ?? result.outcome, "retry_exhausted"));
-        return;
-      }
-      deferred.localRetries += 1;
-      this.#scheduleLiveRetry(operationId, () => this.#executeLocalMediaTarget(operationId, deferred));
-      return;
-    }
-    if (result.outcome !== "confirmed" && result.outcome !== "satisfied") {
-      this.#failLiveTarget(operationId, deferred, new V1SyncError(result.errorCode ?? result.outcome, result.outcome));
-      return;
-    }
-    const serverResult = deferred.serverResult;
-    if (!serverResult) throw new V1ReplicaError("local MediaPlane completed before server authorization");
-    this.#liveTargets.delete(operationId);
-    this.#clearLiveRetryTimer(operationId);
-    this.#clearLiveDeadlineTimer(operationId);
-    this.#localMedia[deferred.source] = deferred.enabled ? "enabled" : "disabled";
-    resolveDeferred(deferred, { operationId, name: deferred.frame.name, serverOutcome: serverResult.outcome, mediaPlaneOutcome: result.outcome });
-    this.#emit();
-  }
-
-  #scheduleLiveRetry(operationId: string, retry: () => void, delay = this.#options.retryDelayMs ?? 100): void {
-    const timer = this.#clock().setTimeout(() => {
-      this.#liveRetryTimers.delete(operationId);
-      retry();
-    }, delay);
-    this.#liveRetryTimers.set(operationId, timer);
-  }
-
-  #failLiveTarget(operationId: string, deferred: LiveDeferred, error: V1SyncError): void {
-    this.#liveTargets.delete(operationId);
-    this.#clearLiveRetryTimer(operationId);
-    this.#clearLiveDeadlineTimer(operationId);
-    this.#localMedia[deferred.source] = "failed";
-    rejectDeferred(deferred, error);
-    this.#emit();
-  }
-
   #requestResult(frame: V1DirectedRequestResult): void {
     this.#requireLive();
     const deferred = this.#requests.get(frame.request_id);
@@ -967,139 +560,14 @@ export class V1SyncClient implements V1CollaborationClient {
     for (const listener of this.#requestListeners) listener(frame);
   }
 
-  #reactionResult(frame: Extract<SyncV1ServerFrame, { readonly type: "reaction_result" }>): void {
-    this.#requireLive();
-    this.#requireCollaborationNegotiated();
-    const deferred = this.#reactions.get(frame.operation_id);
-    if (!deferred) return;
-    this.#reactions.delete(frame.operation_id);
-    if (frame.outcome === "accepted") {
-      resolveDeferred(deferred, reactionFromFrame(frame.reaction));
-    } else {
-      rejectDeferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
-    }
-  }
-
-  #chatSendResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_send_result" }>): void {
-    this.#requireLive();
-    this.#requireCollaborationNegotiated();
-    const deferred = this.#chatSends.get(frame.client_message_id);
-    if (!deferred) return;
-    this.#chatSends.delete(frame.client_message_id);
-    if (frame.outcome === "accepted") {
-      this.#assertChatMessageVersion(frame.message);
-      const message = chatMessageFromFrame(frame.message);
-      this.#rememberChatSequence(message.sequence);
-      resolveDeferred(deferred, message);
-    } else {
-      rejectDeferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
-    }
-  }
-
-  #chatPageResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_page" }>): void {
-    this.#requireCollaborationNegotiated();
-    const deferred = this.#chatPages.get(frame.request_id);
-    if (!deferred) return;
-    this.#chatPages.delete(frame.request_id);
-    if (frame.outcome === "cursor_reset") {
-      this.#collaboration = { ...this.#collaboration, retainedFloorSequence: frame.retained_floor_sequence };
-      const result = { status: "cursor_reset", retainedFloorSequence: frame.retained_floor_sequence } as const;
-      this.#emitCollaboration({ type: "chat_cursor_reset", retainedFloorSequence: frame.retained_floor_sequence });
-      resolveDeferred(deferred, result);
-      return;
-    }
-    this.#collaboration = {
-      ...this.#collaboration,
-      chatHeadSequence: frame.head_sequence,
-      retainedFloorSequence: frame.retained_floor_sequence,
-    };
-    for (const message of frame.messages) {
-      this.#assertChatMessageVersion(message);
-      this.#observeChatMessage(message);
-    }
-    resolveDeferred(deferred, { status: "loaded", count: frame.messages.length, hasOlder: frame.has_more });
-  }
-
-  #observeChatMessage(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>): void {
-    this.#assertChatMessageVersion(frame);
-    const message = chatMessageFromFrame(frame);
-    this.#rememberChatSequence(message.sequence);
-    this.#emitCollaboration({ type: "chat_message", message });
-  }
-
-  #chatReadResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_read_result" }>): void {
-    this.#requireLive();
-    this.#requireCollaborationVersion(1);
-    const deferred = this.#chatReads.get(frame.request_id);
-    if (!deferred) return;
-    this.#chatReads.delete(frame.request_id);
-    if (frame.outcome === "accepted") {
-      const receipt = chatReadReceiptFromFrame(frame);
-      this.#rememberChatReadReceipt(receipt);
-      resolveDeferred(deferred, receipt);
-    } else {
-      rejectDeferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
-    }
-  }
-
-  #assertChatMessageVersion(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>): void {
-    const version = this.#collaboration.version;
-    if (version === 1 && !("attachments" in frame)) throw new V1ReplicaError("collaboration_v1 received a chat message without attachments");
-  }
-
-  #rememberChatReadReceipt(receipt: ChalkChatReadReceipt): void {
-    const existing = this.#collaboration.readReceipts.find((candidate) => candidate.participantId === receipt.participantId && candidate.participantGeneration === receipt.participantGeneration);
-    if (existing && compareUnsignedDecimals(existing.readThroughSequence, receipt.readThroughSequence) >= 0) return;
-    this.#collaboration = {
-      ...this.#collaboration,
-      readReceipts: [...this.#collaboration.readReceipts.filter((candidate) => candidate.participantId !== receipt.participantId || candidate.participantGeneration !== receipt.participantGeneration), receipt],
-    };
-  }
-
-  #rememberChatSequence(sequence: string): void {
-    if (this.#chatAfterSequence === null || compareUnsignedDecimals(sequence, this.#chatAfterSequence) > 0) this.#chatAfterSequence = sequence;
-    if (this.#collaboration.chatHeadSequence === null || compareUnsignedDecimals(sequence, this.#collaboration.chatHeadSequence) > 0) {
-      this.#collaboration = { ...this.#collaboration, chatHeadSequence: sequence };
-    }
-  }
-
-  #emitCollaboration(event: V1CollaborationEvent): void {
-    for (const listener of this.#collaborationListeners) listener(event);
-  }
-
-  async #finishCommand(commandId: string, result: V1CommandResult): Promise<void> {
-    const deferred = this.#commands.get(commandId);
-    if (!deferred) return;
-    this.#commands.delete(commandId);
-    this.#clearCommandRetryTimer(commandId);
-    this.#acknowledgements.delete(commandId);
-    let pending: V1PendingTarget | undefined;
-    if (deferred.durableTarget) {
-      pending = this.#pendingTargets.get(commandId);
-      this.#pendingTargets.delete(commandId);
-      if (pending) this.#pendingRemovals.set(commandId, pending);
-    }
-    if (result.outcome === "rejected" || result.outcome === "command_id_conflict") rejectDeferred(deferred, new V1SyncError(result.reason, result.outcome));
-    else resolveDeferred(deferred, result);
-    this.#emit();
-    if (pending) void this.#removePersistedTarget(commandId, pending);
-  }
-
   #enterLiveIfReady(): void {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;
     this.#recovery = null;
     this.#phase = { phase: "live" };
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
-    for (const pending of this.#commands.values()) {
-      pending.retries = 0;
-      this.#send(pending.frame);
-    }
-    for (const pending of this.#liveTargets.values()) {
-      pending.serverRetries = 0;
-      if (pending.serverResult) this.#executeLocalMediaTarget(pending.frame.operation_id, pending);
-      else this.#send(pending.frame);
-    }
+    this.#commandScheduler.enterLive();
+    this.#liveTargets.enterLive();
     this.#startHeartbeat();
     this.#emit();
   }
@@ -1108,39 +576,6 @@ export class V1SyncClient implements V1CollaborationClient {
     const recovery = this.#requireRecovery();
     const control = this.#requireControl();
     this.#send({ type: "recovery_ack", recovery_id: recovery.id, revision: control.revision, state_digest: control.stateDigest });
-  }
-
-  #restorePending(pending: V1PendingTarget): void {
-    if (this.#pendingTargets.size + this.#pendingRemovals.size >= this.#maxPending() || this.#now() - pending.createdAt > (this.#options.maxPendingAgeMs ?? MAX_PENDING_AGE_MS) || this.#pendingBytes() + pending.bytes > (this.#options.maxPendingBytes ?? MAX_PENDING_BYTES)) {
-      void this.#removePersistedTarget(pending.commandId, pending);
-      return;
-    }
-    const frame = { type: "command", command_id: pending.commandId, name: pending.command.name, payload: pending.command.payload } as SyncV1ClientFrame;
-    encodeV1ClientFrame(frame);
-    this.#pendingTargets.set(pending.commandId, pending);
-    this.#commands.set(pending.commandId, { resolve: () => undefined, reject: () => undefined, settled: true, frame, retries: 0, durableTarget: true, createdAt: pending.createdAt });
-  }
-
-  async #removePersistedTarget(commandId: string, pending: V1PendingTarget): Promise<void> {
-    this.#pendingRemovals.set(commandId, pending);
-    try {
-      await this.#store.remove(commandId);
-      if (this.#pendingRemovals.get(commandId) !== pending) return;
-      this.#pendingRemovals.delete(commandId);
-      this.#clearPendingRemovalRetryTimer(commandId);
-    } catch {
-      if (this.#pendingRemovals.get(commandId) !== pending) return;
-      this.#schedulePendingRemovalRetry(commandId, pending);
-    }
-  }
-
-  #schedulePendingRemovalRetry(commandId: string, pending: V1PendingTarget): void {
-    if (!this.#started || this.#pendingRemovalRetryTimers.has(commandId)) return;
-    const timer = this.#clock().setTimeout(() => {
-      this.#pendingRemovalRetryTimers.delete(commandId);
-      void this.#removePersistedTarget(commandId, pending);
-    }, this.#options.retryDelayMs ?? 100);
-    this.#pendingRemovalRetryTimers.set(commandId, timer);
   }
 
   #ackHeadIsProven(ack: Extract<V1CommandResult, { readonly outcome: "committed" | "satisfied" }>): boolean {
@@ -1169,13 +604,12 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket = null;
     this.#recovery = null;
     this.#clearHeartbeat();
-    this.#clearRetryTimers();
+    this.#liveTargets.disconnect("disconnected_before_delivery");
+    this.#commandScheduler.disconnect();
     this.#media = null;
     this.#presence = null;
     this.#rejectRequests("disconnected_before_delivery");
-    this.#rejectCollaboration("disconnected_before_delivery");
-    this.#collaboration = { ...this.#collaboration, negotiated: false, version: null, capabilities: [], readReceipts: [] };
-    this.#participantCollaborationCapabilities = {};
+    this.#collaborationState.disconnect("disconnected_before_delivery");
     if (!this.#started || !this.#transportAvailable || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
@@ -1206,19 +640,7 @@ export class V1SyncClient implements V1CollaborationClient {
 
   #rejectEphemeral(code: string): void {
     this.#rejectRequests(code);
-    for (const deferred of this.#liveTargets.values()) rejectDeferred(deferred, new V1SyncError(code, code));
-    this.#liveTargets.clear();
-  }
-
-  #rejectCollaboration(code: string): void {
-    for (const deferred of this.#reactions.values()) rejectDeferred(deferred, new V1SyncError(code, code));
-    for (const deferred of this.#chatSends.values()) rejectDeferred(deferred, new V1SyncError(code, code));
-    for (const deferred of this.#chatPages.values()) rejectDeferred(deferred, new V1SyncError(code, code));
-    for (const deferred of this.#chatReads.values()) rejectDeferred(deferred, new V1SyncError(code, code));
-    this.#reactions.clear();
-    this.#chatSends.clear();
-    this.#chatPages.clear();
-    this.#chatReads.clear();
+    this.#liveTargets.disconnect(code);
   }
 
   #rejectRequests(code: string): void {
@@ -1238,15 +660,6 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#phase.phase !== "live") throw new V1ReplicaError("live frame arrived before four-stream recovery completed");
   }
 
-  #requireCollaborationNegotiated(): void {
-    if (!this.#collaboration.negotiated) throw new V1ReplicaError("collaboration frame arrived without a negotiated extension");
-  }
-
-  #requireCollaborationVersion(version: 1): void {
-    this.#requireCollaborationNegotiated();
-    if (this.#collaboration.version !== version) throw new V1ReplicaError(`collaboration_v1 frame arrived on a different extension version`);
-  }
-
   #requireControl(): V1ControlState {
     if (!this.#control) throw new V1ReplicaError("control replica is unavailable");
     return this.#control;
@@ -1258,40 +671,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   #assertCapacity(): void {
-    if (this.#commands.size + this.#pendingRemovals.size + this.#reservedCommandIds.size + this.#liveTargets.size + this.#requests.size >= this.#maxPending()) throw new V1SyncError("in-flight request capacity exceeded", "capacity");
-  }
-
-  #assertCollaborationReady(capability?: ChalkSyncV1CollaborationCapability): void {
-    if (!this.#collaboration.negotiated) throw new V1SyncError("collaboration is unavailable", "collaboration_unavailable");
-    if (this.#phase.phase !== "live") throw new V1SyncError("collaboration requires a live connection", "not_live");
-    if (capability && !this.#collaboration.capabilities.includes(capability)) throw new V1SyncError("collaboration capability denied", "capability_denied");
-  }
-
-  #assertCollaborationCapacity(): void {
-    const maximum = Math.min(this.#options.maxPendingCollaborationRequests ?? MAX_COLLABORATION_REQUESTS_IN_FLIGHT, MAX_COLLABORATION_REQUESTS_IN_FLIGHT);
-    if (this.#reactions.size + this.#chatSends.size + this.#chatPages.size + this.#chatReads.size >= maximum) throw new V1SyncError("collaboration in-flight capacity exceeded", "capacity");
-  }
-
-  #assertCollaborationRequestIdAvailable(id: string): void {
-    if (this.#reactions.has(id) || this.#chatSends.has(id) || this.#chatPages.has(id) || this.#chatReads.has(id)) throw new V1SyncError("collaboration request ID is already pending", "request_id_conflict");
-  }
-
-  #nextCollaborationRequestId(): string {
-    const id = this.#nextRequestId();
-    this.#assertCollaborationRequestIdAvailable(id);
-    return id;
-  }
-
-  #maxPending(): number {
-    return Math.min(this.#options.maxPendingCommands ?? MAX_IN_FLIGHT, MAX_IN_FLIGHT);
-  }
-
-  #pendingBytes(): number {
-    return [...this.#pendingTargets.values(), ...this.#pendingRemovals.values()].reduce((total, pending) => total + pending.bytes, 0);
-  }
-
-  #nextCommandId(): string {
-    return this.#options.ids?.next() ?? crypto.randomUUID();
+    this.#commandScheduler.assertCapacity(this.#liveTargets.pendingCount + this.#requests.size);
   }
 
   #nextRequestId(): string {
@@ -1350,53 +730,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   #updateLocalMediaStates(): void {
-    if (!this.#participantId) return;
-    for (const source of ["microphone", "camera", "screen"] as const) {
-      const publication = this.#localPublications.find((candidate) => candidate.source === source && candidate.participantId === this.#participantId);
-      this.#localMedia[source] = publication?.enabled ? "enabled" : "disabled";
-    }
-  }
-
-  #clearRetryTimers(): void {
-    for (const timer of this.#commandRetryTimers.values()) this.#clock().clearTimeout(timer);
-    for (const timer of this.#liveRetryTimers.values()) this.#clock().clearTimeout(timer);
-    for (const timer of this.#liveDeadlineTimers.values()) this.#clock().clearTimeout(timer);
-    this.#commandRetryTimers.clear();
-    this.#liveRetryTimers.clear();
-    this.#liveDeadlineTimers.clear();
-  }
-
-  #clearPendingRemovalRetryTimers(): void {
-    for (const timer of this.#pendingRemovalRetryTimers.values()) this.#clock().clearTimeout(timer);
-    this.#pendingRemovalRetryTimers.clear();
-  }
-
-  #clearPendingRemovalRetryTimer(commandId: string): void {
-    const timer = this.#pendingRemovalRetryTimers.get(commandId);
-    if (timer === undefined) return;
-    this.#clock().clearTimeout(timer);
-    this.#pendingRemovalRetryTimers.delete(commandId);
-  }
-
-  #clearLiveRetryTimer(operationId: string): void {
-    const timer = this.#liveRetryTimers.get(operationId);
-    if (timer === undefined) return;
-    this.#clock().clearTimeout(timer);
-    this.#liveRetryTimers.delete(operationId);
-  }
-
-  #clearLiveDeadlineTimer(operationId: string): void {
-    const timer = this.#liveDeadlineTimers.get(operationId);
-    if (timer === undefined) return;
-    this.#clock().clearTimeout(timer);
-    this.#liveDeadlineTimers.delete(operationId);
-  }
-
-  #clearCommandRetryTimer(commandId: string): void {
-    const timer = this.#commandRetryTimers.get(commandId);
-    if (timer === undefined) return;
-    this.#clock().clearTimeout(timer);
-    this.#commandRetryTimers.delete(commandId);
+    this.#liveTargets.updateFromPublications(this.#localPublications);
   }
 
   #startHeartbeat(): void {
@@ -1457,45 +791,11 @@ function copyProjection<T>(projection: V1Projection<T> | null): V1Projection<T> 
   return projection && { ...projection, items: projection.items.map((item) => ({ ...item })) };
 }
 
-function frameSignature(frame: unknown): string {
-  return new TextDecoder().decode(canonicalJsonBytesFromUnknown(frame));
-}
-
-function copyCollaborationCapabilities(capabilities: Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>>): Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>> {
-  return Object.fromEntries(Object.entries(capabilities).map(([participantId, values]) => [participantId, [...values]]));
-}
-
-function chatReadReceiptFromWire(receipt: { readonly participant_id: string; readonly participant_generation: number; readonly sequence: string; readonly read_at: string }): ChalkChatReadReceipt {
-  return {
-    participantId: receipt.participant_id,
-    participantGeneration: receipt.participant_generation,
-    readThroughSequence: receipt.sequence,
-    readAt: receipt.read_at,
-  };
-}
-
-function compareUnsignedDecimals(left: string, right: string): number {
-  if (left.length !== right.length) return left.length - right.length;
-  return left.localeCompare(right);
-}
-
 function rememberBoundedEvidence(evidence: Map<number, string>, sequence: number, signature: string, capacity: number): void {
   evidence.set(sequence, signature);
   if (evidence.size <= capacity) return;
   const oldest = evidence.keys().next().value;
   if (oldest !== undefined) evidence.delete(oldest);
-}
-
-function resolveDeferred<T>(deferred: Deferred<T>, value: T): void {
-  if (deferred.settled) return;
-  deferred.settled = true;
-  deferred.resolve(value);
-}
-
-function rejectDeferred<T>(deferred: Deferred<T>, error: Error): void {
-  if (deferred.settled) return;
-  deferred.settled = true;
-  deferred.reject(error);
 }
 
 function copyPublication(publication: V1MediaPublication): V1MediaPublication {
@@ -1511,14 +811,6 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
     (publication.publicationId === null || typeof publication.publicationId === "string") &&
     publication.enabled === (publication.publicationId !== null)
   );
-}
-
-function validMediaPlaneResult(result: MediaPlaneResult): boolean {
-  return (result.outcome === "confirmed" || result.outcome === "satisfied" || result.outcome === "retryable_failure" || result.outcome === "terminal_failure" || result.outcome === "ambiguous") && (result.errorCode === null || typeof result.errorCode === "string");
-}
-
-function isTerminalLifecycleOperation(frame: SyncV1ClientFrame): boolean {
-  return frame.type === "operation" && (frame.name === "participant_leave" || frame.name === "end_episode");
 }
 
 function assertV1Url(value: string): void {

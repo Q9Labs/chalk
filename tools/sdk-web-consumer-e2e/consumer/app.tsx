@@ -1,6 +1,7 @@
 import { createChalkChatFileHttpTransport, createSpaceClient, type AccessGrant, type SpaceClient, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
+import type { PreviewClientCommand } from "@q9labsai/chalk-react/preview";
 import { createRoot } from "react-dom/client";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
@@ -26,6 +27,7 @@ type Harness = {
   readonly snapshot: () => ReturnType<typeof publicSnapshot>;
   readonly resources: typeof resourceCounts;
   readonly accessRequests: () => number;
+  readonly previewCommandContract?: PreviewClientCommand;
 };
 
 declare global {

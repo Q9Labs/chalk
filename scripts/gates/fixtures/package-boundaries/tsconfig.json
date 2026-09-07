@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@q9labsai/chalk-assets": ["packages/assets/src/index.ts"],
+      "@q9labsai/chalk-react/preview": ["sdks/typescript/react/src/test-support/index.ts"]
+    }
+  }
+}

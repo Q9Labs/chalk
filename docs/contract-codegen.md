@@ -304,8 +304,10 @@ shared packages instead of assuming every publishable package is under
 - Generated output never silently widens a known field to `unknown`.
 - Contract-breaking changes require an explicit contract-version decision and
   generated compatibility report.
-- Integration routes currently mounted outside endpoint contracts must enter
-  the source contract before the Go reflection generator is removed.
+- `PreviewRouteContracts` is the Go export inventory. Keep it and runtime mount
+  helpers sourced from the same endpoint collections, and use generated
+  artifacts and drift checks for current route coverage instead of static gap
+  lists.
 
 ## Verification
 
@@ -316,8 +318,7 @@ The implementation is complete when all of the following are observed:
 - Repeated generation produces byte-identical output.
 - OpenAPI describes the complete mounted `/v1` route inventory.
 - A Go conformance test compares the live Chi route inventory and generated
-  operation descriptors, including integration routes that are currently
-  mounted manually.
+  operation descriptors.
 - TypeScript and Effect generated code passes strict type checking.
 - Effect schemas decode representative successes, headers, and every tagged
   error family.

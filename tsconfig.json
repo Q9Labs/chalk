@@ -38,6 +38,7 @@
       "@q9labsai/chalk-client": ["./sdks/typescript/client/src/index.ts"],
       "@q9labsai/chalk-react": ["./sdks/typescript/react/src/index.ts"],
       "@q9labsai/chalk-react/components": ["./sdks/typescript/react/src/components/index.ts"],
+      "@q9labsai/chalk-react/preview": ["./sdks/typescript/react/src/test-support/index.ts"],
       "@q9labsai/chalk-react/ui": ["./sdks/typescript/react/src/components/ui/index.ts"],
       "@q9labsai/chalk-react/utils": ["./sdks/typescript/react/src/utils/index.ts"],
       "@q9labsai/chalk-react-native": ["./sdks/typescript/react-native/src/index.ts"],

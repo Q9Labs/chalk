@@ -25,6 +25,15 @@ Vocabulary follows the repo-root `GLOSSARY.md`; read it before naming anything.
 - Debrief Hasan on the change per `~/.codex/debrief.md`, including how to run the
   new trace.
 
+## Media Plane Providers
+
+- `internal/mediaplaneproviders` owns adapter-independent resolution contracts,
+  errors, and telemetry types.
+- `internal/adapters/mediaplaneproviders` owns configuration selection and
+  concrete provider construction. Runtime composition may depend on that
+  adapter package; HTTP, public-invite, and observability code depend only on
+  inward contracts.
+
 ## API Contracts And SDK Codegen
 
 - Public `/v1` API routes should use the endpoint contract pattern so
@@ -35,9 +44,9 @@ Vocabulary follows the repo-root `GLOSSARY.md`; read it before naming anything.
   in sync. This includes OpenAPI types, Effect schemas, and the generated
   Effect `HttpApi` definition. The root gate runs
   `pnpm run check:sdk-generated` as a non-mutating drift check.
-- Known gap: `internal/httpapi/integrations.go` still mounts integration routes
-  manually, so those routes are absent from generated OpenAPI and SDK artifacts
-  until they are migrated to endpoint contracts.
+- Keep runtime mounting and `PreviewRouteContracts` sourced from the same endpoint
+  collections. Use the generated OpenAPI/SDK artifacts and their drift check for
+  current contract coverage instead of recording route-specific gap lists here.
 
 ## Observability Contract
 

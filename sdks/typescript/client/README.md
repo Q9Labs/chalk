@@ -189,3 +189,15 @@ and request bodies stay out of telemetry.
 The default entry is Promise-based. Effect applications can use the
 `@q9labsai/chalk-client/effect` entry for the same `SpaceClient` shape as an
 Effect program.
+
+## Sync v1 maintenance
+
+- `V1SyncClient` owns the race-sensitive socket generation, connection phases,
+  reconnect and heartbeat flow, recovery/revision evidence, projections, and
+  snapshots.
+- `V1CollaborationState` owns negotiated collaboration state, cursors,
+  receipts, listeners, and chat/reaction deferreds.
+- `V1CommandScheduler` owns durable command persistence and reconciliation,
+  capacity, retries, timers, and settlement.
+- `V1LiveTargetCoordinator` owns self-media target authorization, adapter
+  execution, retries, deadlines, and local target state.
