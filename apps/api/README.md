@@ -18,7 +18,9 @@ For the endpoint design and implementation loop, see
 
 ## Gate
 
-Learn about the gate by running:
+Shell commands below run from the repository root unless a block changes directory.
+
+Inspect the API gate with:
 
 ```bash
 apps/api/scripts/gate.sh describe
@@ -29,27 +31,7 @@ apps/api/scripts/gate.sh describe
 Config is env-only. Secret managers or platform-specific config systems should
 inject environment variables before the API starts.
 
-The API follows twelve-factor app principles where they help portability:
-config in the environment, logs to stdout/stderr, explicit backing services,
-disposable processes with graceful shutdown, and no runtime mutation of source
-or generated files. The config package is the source of truth for supported
-environment variables and defaults.
-
-Read the code for more details. Starting at `apps/api/internal/config/config.go`.
-
-### Tenant CORS
-
-Tenant-scoped routes use the Tenant's `cors_allowed_origins` in addition to
-the deployment's exact `CHALK_API_CORS_ALLOWED_ORIGINS` entries. This keeps the
-first-party Dashboard available while each Tenant controls its customer app
-origins. A deployment wildcard applies only to routes without a Tenant ID and
-cannot bypass a Tenant allowlist.
-
-Set the list with `PATCH /v1/tenants/{tenant_id}`. Each entry must be an exact
-origin with no path, query, credentials, or wildcard. Hosted origins must use
-HTTPS. HTTP is accepted only for `localhost` or an IP loopback address, and
-each port is a separate origin. The list accepts at most 32 entries; an empty
-list denies customer cross-origin browser requests.
+[`internal/config/config.go`](internal/config/config.go) owns supported environment variables, defaults, and startup validation.
 
 Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
 load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
@@ -83,21 +65,7 @@ Google sign-in activates only with a complete
 `CHALK_GOOGLE_OAUTH_CLIENT_ID`, `CHALK_GOOGLE_OAUTH_CLIENT_SECRET`, and
 `CHALK_GOOGLE_OAUTH_REDIRECT_URL` triplet. Generic local development may omit
 the triplet. Managed production requires it and requires the redirect URL to be
-`https://chalkmeet.com/api/auth/google/callback`. Google reauthentication for
-sensitive Dashboard actions also uses
-`CHALK_GOOGLE_OAUTH_REAUTHENTICATION_REDIRECT_URL`. Managed production sets it
-to `https://chalkmeet.com/api/me/recent-auth/google/callback`; both exact URLs
-must be authorized on the Google OAuth client.
-
-### Browser origins
-
-API CORS is a deployment-wide exact-origin allowlist set by
-`CHALK_API_CORS_ALLOWED_ORIGINS`; it is not Tenant configuration. An origin
-includes its scheme and port, so allowing `http://localhost:3210` does not allow
-another localhost port. Add each trusted browser origin to the deployment list
-and restart the API. Customer API keys stay on a backend and must not be exposed
-to browser code; browser clients use short-lived AccessGrants issued by that
-backend.
+`https://chalkmeet.com/api/auth/google/callback`.
 
 ### Production capabilities
 
@@ -294,29 +262,15 @@ startup/shutdown budgets.
 
 ## Execution Trace Harness
 
-The API includes a local Execution Trace Harness for reviewing one full
-application flow, or the full scenario catalog, as a readable timeline. It runs
-scripted scenarios through the real HTTP router and service layer with traced
-local test doubles at external boundaries.
+The local harness exercises the real router and services with traced test doubles at external boundaries. It explains flows; it does not prove live provider behavior or operational observability.
 
 ```bash
-go run ./cmd/trace
-go run ./cmd/trace -scenario all -style tree -color always
+cd apps/api
+go run ./cmd/trace -scenario all -style tree
 go run ./cmd/trace -scenario tenant-create -format json
-go run ./cmd/trace -color always
 ```
 
-By default, `go run ./cmd/trace` runs every registered scenario. The
-`tenant-create` scenario shows request entry, authentication,
-principal attachment, service input normalization, repository work, simulated
-database transaction/query/result mapping, and the final HTTP response. Trace
-text output uses color automatically when stdout is a terminal, and accepts
-`-color auto`, `-color always`, or `-color never`. Trace output is local
-developer tooling; do not commit raw traces that contain customer data,
-production identifiers, secrets, or private operational detail.
-
-For agent guidance on adding scenarios after API work, see
-[`docs/execution-trace-harness.md`](docs/execution-trace-harness.md).
+See [the harness guide](docs/execution-trace-harness.md) for scenarios and output options. Keep raw traces with private data out of Git.
 
 ## Local Observability And Performance
 
@@ -363,6 +317,7 @@ between `0` and `1`.
 Local profiling hooks remain opt-in and are intended for short diagnostic runs:
 
 ```bash
+cd apps/api
 CHALK_API_OPERATION_LOGS=1 CHALK_API_PROFILER=1 CHALK_API_REQUEST_LOGS=all go run ./cmd
 ```
 
@@ -370,13 +325,3 @@ CHALK_API_OPERATION_LOGS=1 CHALK_API_PROFILER=1 CHALK_API_REQUEST_LOGS=all go ru
 local profiling, it also defaults request logs to `all` unless
 `CHALK_API_REQUEST_LOGS` is explicitly set. `CHALK_API_PROFILER=1` mounts Go
 profiling handlers under `/debug/pprof`; do not expose it publicly.
-
-## gopls MCP
-
-`gopls MCP` is semantic assistance for Codex work. It is useful for
-workspace shape, symbol search, references, package API summaries, and fast
-diagnostics. The shell gate remains the source of truth.
-
-```bash
-codex mcp get gopls_chalk_api
-```
