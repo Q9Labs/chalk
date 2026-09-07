@@ -256,6 +256,7 @@ const ControlBarSurface = React.memo(
 
             <ChalkPanel className="order-3 shrink-0 rounded-none p-1" seed="control-compact-interactions">
               <ChalkControlGroup aria-label="Interaction controls" className="gap-1">
+                {buttonsToRender.includes("screenshare") ? renderButton("screenshare") : null}
                 {buttonsToRender.includes("handraise") && onToggleHandRaise ? (
                   <Tooltip content={isHandRaised ? "Lower hand" : "Raise hand"} position="top">
                     <ChalkIconButton

@@ -298,6 +298,7 @@ const ControlBarSurface = React.memo(
 
             {/* Group 2: Interactions */}
             <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
+              {buttonsToRender.includes("screenshare") ? renderButton("screenshare") : null}
               {buttonsToRender.includes("handraise") && onToggleHandRaise && (
                 <Tooltip content={isHandRaised ? "Lower hand" : "Raise hand"} position="top">
                   <button

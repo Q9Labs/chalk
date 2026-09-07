@@ -818,7 +818,7 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 	var grant PublicAccessGrant
 	switch arrival.State {
 	case ArrivalAdmitted:
-		grant, err = r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
 	case ArrivalPending:
 		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
 		if err == nil {
@@ -919,7 +919,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		}
 		result := r.arrivalResult(space, arrival)
 		if arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
 			if refreshErr != nil {
 				return PublicSpaceArrival{}, refreshErr
 			}
@@ -1014,7 +1014,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 	}
 	if accountAuthorized || space.AdmissionMode == AdmissionOpen {
 		if arrivalResult.Arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival})
+			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival})
 			if refreshErr != nil {
 				return PublicSpaceArrival{}, refreshErr
 			}

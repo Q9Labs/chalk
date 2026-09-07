@@ -35,10 +35,16 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
   const [submitError, setSubmitError] = useState<string | undefined>();
   const [submitted, setSubmitted] = useState(false);
   const openedRef = useRef(false);
+  const preparationRef = useRef(0);
+  const primaryText = skin === "classic" ? "!text-white" : "!text-[var(--chalk-accent-text)]";
 
   const prepareFeedback = useCallback(
     async (includeScreenshot: boolean): Promise<void> => {
+      const generation = ++preparationRef.current;
       setPreparing(true);
+      setPrepared(null);
+      setScreenshotUrl(undefined);
+      setScreenshotFailure(undefined);
       setPrepareError(undefined);
       try {
         const evidence = collectBrowserFeedbackEvidence();
@@ -47,15 +53,17 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
           evidence,
           screenshot_provider: () => (includeScreenshot ? captureFeedbackScreenshot(captureRootRef.current) : { state: "removed" }),
         });
+        if (generation !== preparationRef.current) return;
         setPrepared(next);
         setScreenshotUrl(next.screenshot ? `data:${next.screenshot.mime_type};base64,${next.screenshot.data_base64}` : undefined);
         setScreenshotFailure(next.evidence.screenshot.state === "captured" || next.evidence.screenshot.state === "partial" ? undefined : next.evidence.screenshot.failure_code);
       } catch (cause) {
+        if (generation !== preparationRef.current) return;
         setPrepared(null);
         setScreenshotUrl(undefined);
         setPrepareError(cause instanceof Error ? cause.message : "Feedback evidence is unavailable. You can still send this message.");
       } finally {
-        setPreparing(false);
+        if (generation === preparationRef.current) setPreparing(false);
       }
     },
     [captureRootRef, client, source],
@@ -64,6 +72,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
   useEffect(() => {
     if (!isOpen) {
       openedRef.current = false;
+      preparationRef.current += 1;
       return;
     }
     if (openedRef.current) return;
@@ -148,7 +157,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
               <p role="status" className="text-sm leading-6 text-[var(--chalk-app-text)]">
                 Thanks. Chalk received your feedback.
               </p>
-              <ChalkButton type="button" variant="solid" tone="accent" className="w-full !text-[var(--chalk-app-control-active-text)]" onClick={onClose}>
+              <ChalkButton type="button" variant="solid" tone="accent" className={cn("w-full", primaryText)} onClick={onClose}>
                 Done
               </ChalkButton>
             </div>
@@ -203,7 +212,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
                       <RefreshIcon size={14} />
                       Refresh
                     </ChalkButton>
-                    <ChalkButton type="button" variant="outline" disabled={preparing || !screenshotUrl} onClick={() => void prepareFeedback(false)} className="!h-8 !rounded-[7px] !px-2.5 !text-xs">
+                    <ChalkButton type="button" variant="outline" disabled={submitting || (!preparing && !screenshotUrl)} onClick={() => void prepareFeedback(false)} className="!h-8 !rounded-[7px] !px-2.5 !text-xs">
                       Remove
                     </ChalkButton>
                   </div>
@@ -221,7 +230,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
                   {submitError}
                 </p>
               ) : null}
-              <ChalkButton type="submit" variant="solid" tone="accent" loading={submitting} disabled={preparing || !message.trim()} className="w-full !text-[var(--chalk-app-control-active-text)]">
+              <ChalkButton type="submit" variant="solid" tone="accent" loading={submitting} disabled={!message.trim()} className={cn("w-full", primaryText)}>
                 Send feedback
               </ChalkButton>
             </form>

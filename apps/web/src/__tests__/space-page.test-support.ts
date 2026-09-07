@@ -4,22 +4,28 @@ import { vi } from "vitest";
 function MockEntrance({
   defaultDisplayName = "",
   joining = false,
+  defaults,
   error,
   onJoin,
 }: {
   readonly defaultDisplayName?: string;
+  readonly defaults?: { readonly microphone?: boolean; readonly camera?: boolean };
   readonly joining?: boolean;
   readonly error?: string;
   readonly onJoin: (settings: { readonly displayName: string; readonly microphone: boolean; readonly camera: boolean }) => void | Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState(defaultDisplayName);
+  const [microphone, setMicrophone] = useState(defaults?.microphone ?? true);
+  const [camera, setCamera] = useState(defaults?.camera ?? true);
   return createElement(
     "main",
     null,
     createElement("label", { htmlFor: "mock-entrance-name" }, "Your name"),
     createElement("input", { id: "mock-entrance-name", "aria-label": "Your name", value: displayName, onChange: (event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value) }),
+    createElement("button", { onClick: () => setMicrophone(!microphone) }, `Microphone ${microphone ? "On" : "Off"}`),
+    createElement("button", { onClick: () => setCamera(!camera) }, `Camera ${camera ? "On" : "Off"}`),
     error ? createElement("p", { role: "alert" }, error) : null,
-    createElement("button", { type: "button", onClick: () => void onJoin({ displayName: displayName.trim(), microphone: true, camera: true }), disabled: joining || !displayName.trim() }, joining ? "Joining…" : "Continue"),
+    createElement("button", { type: "button", onClick: () => void onJoin({ displayName: displayName.trim(), microphone, camera }), disabled: joining || !displayName.trim() }, joining ? "Joining…" : "Continue"),
   );
 }
 

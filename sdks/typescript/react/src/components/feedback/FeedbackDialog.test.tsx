@@ -12,9 +12,17 @@ vi.mock("../../utils/feedback", () => ({
 }));
 
 describe("Feedback without a screenshot", () => {
-  it.each(["removed", "unavailable"] as const)("submits text when the screenshot is %s", async (state) => {
+  it.each(["removed", "unavailable", "pending", "removed_pending"] as const)("submits text when the screenshot is %s", async (state) => {
     vi.mocked(captureFeedbackScreenshot).mockResolvedValue(state === "removed" ? { state: "captured", mime_type: "image/png", width: 1, height: 1, captured_at: new Date().toISOString(), data_base64: "iVBORw0KGgo=" } : { state: "unavailable", failure_code: "unsupported" });
+    let completeCapture: ((value: Awaited<ReturnType<typeof captureFeedbackScreenshot>>) => void) | undefined;
+    if (state === "pending" || state === "removed_pending")
+      vi.mocked(captureFeedbackScreenshot).mockReturnValue(
+        new Promise((resolve) => {
+          completeCapture = resolve;
+        }),
+      );
     const client = createPreviewClient();
+    const directSend = vi.spyOn(client.feedback, "send");
     const prepare = client.feedback.prepare;
     const sent = vi.fn();
     vi.spyOn(client.feedback, "prepare").mockImplementation(async (input) => {
@@ -32,10 +40,14 @@ describe("Feedback without a screenshot", () => {
     const root = createRoot(container);
     try {
       await act(async () => root.render(<FeedbackDialog isOpen onClose={() => undefined} client={client} captureRootRef={{ current: null }} />));
-      if (state === "removed") {
+      if (state === "removed" || state === "removed_pending") {
         const remove = [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Remove");
         expect(remove?.disabled).toBe(false);
         await act(async () => remove?.click());
+        if (state === "removed_pending") {
+          await act(async () => completeCapture?.({ state: "captured", mime_type: "image/png", width: 1, height: 1, captured_at: new Date().toISOString(), data_base64: "iVBORw0KGgo=" }));
+          expect(container.querySelector('img[alt="Screenshot preview"]')).toBeNull();
+        }
       }
       const textarea = container.querySelector("textarea");
       if (!textarea) throw new Error("Feedback message input is missing");
@@ -48,7 +60,8 @@ describe("Feedback without a screenshot", () => {
       if (!(submit instanceof HTMLButtonElement)) throw new Error("Feedback submit button is missing");
       expect(submit.disabled).toBe(false);
       await act(async () => submit.click());
-      expect(sent).toHaveBeenCalledWith(expect.objectContaining({ message: "The image did not load." }), state);
+      if (state === "pending") expect(directSend).toHaveBeenCalledWith(expect.objectContaining({ message: "The image did not load." }));
+      else expect(sent).toHaveBeenCalledWith(expect.objectContaining({ message: "The image did not load." }), state === "removed_pending" ? "removed" : state);
     } finally {
       await act(async () => root.unmount());
       container.remove();

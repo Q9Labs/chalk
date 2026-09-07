@@ -191,7 +191,17 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   if (pending) return <SpaceArrival displayName={displayName} error={error} pending preparing={preparing} onCancel={cancel} onDisplayNameChange={setDisplayName} onEnter={() => start()} />;
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Entrance spaceName={slug ?? "Space"} defaultDisplayName={displayName} defaults={{ microphone: true, camera: true }} joining={preparing} error={error ?? undefined} onJoin={start} />
+      <Entrance
+        spaceName={slug ?? "Space"}
+        defaultDisplayName={displayName}
+        defaults={entranceSettings ?? undefined}
+        selectedAudioInput={entranceSettings?.audioInputDeviceId}
+        selectedVideoInput={entranceSettings?.videoInputDeviceId}
+        selectedAudioOutput={entranceSettings?.audioOutputDeviceId}
+        joining={preparing}
+        error={error ?? undefined}
+        onJoin={start}
+      />
     </main>
   );
 }
@@ -279,14 +289,14 @@ function descriptionFromMetadata(metadata: unknown): string | undefined {
 }
 
 async function resolveTenantID(): Promise<string> {
+  let hint: string | undefined;
   try {
-    const hint = globalThis.localStorage?.getItem("chalk.tenant-hint")?.trim();
-    if (hint) return hint;
+    hint = globalThis.localStorage?.getItem("chalk.tenant-hint")?.trim();
   } catch {
     // Storage is an optimization; the account list remains authoritative.
   }
   const tenants = await listAllAccountTenants();
-  const tenantID = tenants[0]?.tenant.id ?? "";
+  const tenantID = (tenants.find((item) => item.tenant.id === hint) ?? tenants[0])?.tenant.id ?? "";
   if (tenantID) {
     try {
       globalThis.localStorage?.setItem("chalk.tenant-hint", tenantID);

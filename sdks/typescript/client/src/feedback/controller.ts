@@ -113,10 +113,18 @@ function defaultEvidenceInput(): FeedbackEvidenceInput {
 
 async function resolveScreenshot(provider: FeedbackPrepareInput["screenshot_provider"]): Promise<FeedbackScreenshotCapture | FeedbackScreenshotUnavailable> {
   if (!provider) return { state: "unavailable", failure_code: "unsupported" };
+  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
   try {
-    return await provider();
+    return await Promise.race([
+      provider(),
+      new Promise<FeedbackScreenshotUnavailable>((resolve) => {
+        timeout = globalThis.setTimeout(() => resolve({ state: "unavailable", failure_code: "capture_failed" }), 5_000);
+      }),
+    ]);
   } catch {
     return { state: "unavailable", failure_code: "capture_failed" };
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
 }
 
