@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, UserAdd01Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
 import { ChalkBadge, ChalkButton, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { useSkin } from "../skin-context";
+import { useCombinedAdmissionRequests } from "./admission-requests";
 import { ClassicAdmissionPanel } from "./ClassicAdmissionPanel";
 
 export interface AdmissionParticipant {
@@ -23,7 +23,8 @@ export interface AdmissionPanelProps {
 }
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
-  readonly participants: AdmissionParticipant[];
+  readonly participants: readonly AdmissionParticipant[];
+  readonly error?: string;
   readonly onAdmit: (id: string) => void;
   readonly onDeny: (id: string) => void;
   readonly onAdmitAll?: () => void;
@@ -45,7 +46,7 @@ function getWaitingLabel(date?: Date): string {
  * one 56px row per waiting person with a decisive Admit and a quiet Deny, and bulk actions only
  * once there is more than one request. Standalone use wraps the same section in a panel.
  */
-const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
+const AdmissionPanelSurface = React.memo(({ participants, error, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -82,6 +83,12 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           ) : null}
         </div>
       </header>
+
+      {error ? (
+        <p role="alert" className="px-1 py-2 text-[13px] text-[var(--chalk-app-danger)]">
+          {error}
+        </p>
+      ) : null}
 
       {pending === 0 ? (
         <p role="status" className="flex min-h-11 items-center gap-2.5 px-1 text-[13px] text-[var(--chalk-app-text-muted)]">
@@ -132,22 +139,21 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
 AdmissionPanelSurface.displayName = "AdmissionPanelSurface";
 
 function ChalkAdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
-  const client = useSpaceClient();
-  const participantsSlice = useParticipants();
-  const canManageAdmission = useCan("manageAdmission");
-  const participants = canManageAdmission ? participantsSlice.admissionQueue.map((request) => ({ id: request.requestId, displayName: request.displayName })) : [];
+  const { requests, loading, error, admit, deny } = useCombinedAdmissionRequests();
 
   return (
     <AdmissionPanelSurface
       {...props}
-      participants={participants}
-      onAdmit={(requestId) => void client.participants.admit(requestId)}
-      onDeny={(requestId) => void client.participants.deny(requestId)}
+      participants={requests}
+      loading={Boolean(props.loading) || loading}
+      error={error}
+      onAdmit={(requestId) => void admit(requestId)}
+      onDeny={(requestId) => void deny(requestId)}
       onAdmitAll={() => {
-        for (const participant of participants) void client.participants.admit(participant.id);
+        for (const participant of requests) void admit(participant.id);
       }}
       onDenyAll={() => {
-        for (const participant of participants) void client.participants.deny(participant.id);
+        for (const participant of requests) void deny(participant.id);
       }}
     />
   );

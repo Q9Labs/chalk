@@ -129,21 +129,21 @@ const createSpacePublicArrival = `-- name: CreateSpacePublicArrival :one
 insert into space_public_arrivals (
     arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
     invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
-    credential_family, provider, provider_subject, idempotency_key, idempotency_fingerprint, state, expires_at
+    credential_family, provider, provider_episode_ref, provider_subject, idempotency_key, idempotency_fingerprint, state, expires_at
 )
 values (
     $1, $2, $3,
     $4, $5, $6,
     $7, $8, $9, $10,
-    $11, $12, $13,
-    $14, $15,
-    $16, $17
+    $11, $12, $13, $14,
+    $15, $16,
+    $17, $18
 )
 on conflict (tenant_id, space_id, idempotency_key) do nothing
 returning arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 `
 
@@ -160,6 +160,7 @@ type CreateSpacePublicArrivalParams struct {
 	AccountID              pgtype.UUID        `json:"account_id"`
 	CredentialFamily       pgtype.Text        `json:"credential_family"`
 	Provider               pgtype.Text        `json:"provider"`
+	ProviderEpisodeRef     pgtype.Text        `json:"provider_episode_ref"`
 	ProviderSubject        pgtype.Text        `json:"provider_subject"`
 	IdempotencyKey         string             `json:"idempotency_key"`
 	IdempotencyFingerprint []byte             `json:"idempotency_fingerprint"`
@@ -181,6 +182,7 @@ func (q *Queries) CreateSpacePublicArrival(ctx context.Context, arg CreateSpaceP
 		arg.AccountID,
 		arg.CredentialFamily,
 		arg.Provider,
+		arg.ProviderEpisodeRef,
 		arg.ProviderSubject,
 		arg.IdempotencyKey,
 		arg.IdempotencyFingerprint,
@@ -207,6 +209,7 @@ func (q *Queries) CreateSpacePublicArrival(ctx context.Context, arg CreateSpaceP
 		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.Provider,
+		&i.ProviderEpisodeRef,
 		&i.ProviderSubject,
 		&i.ExpiresAt,
 		&i.TerminalReason,
@@ -345,7 +348,7 @@ const getSpacePublicArrival = `-- name: GetSpacePublicArrival :one
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where arrival_handle = $1
@@ -373,6 +376,7 @@ func (q *Queries) GetSpacePublicArrival(ctx context.Context, arrivalHandle pgtyp
 		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.Provider,
+		&i.ProviderEpisodeRef,
 		&i.ProviderSubject,
 		&i.ExpiresAt,
 		&i.TerminalReason,
@@ -387,7 +391,7 @@ const getSpacePublicArrivalByIdempotency = `-- name: GetSpacePublicArrivalByIdem
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where tenant_id = $1
@@ -423,6 +427,7 @@ func (q *Queries) GetSpacePublicArrivalByIdempotency(ctx context.Context, arg Ge
 		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.Provider,
+		&i.ProviderEpisodeRef,
 		&i.ProviderSubject,
 		&i.ExpiresAt,
 		&i.TerminalReason,
@@ -437,7 +442,7 @@ const getSpacePublicArrivalForCredential = `-- name: GetSpacePublicArrivalForCre
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where arrival_handle = $1
@@ -471,6 +476,7 @@ func (q *Queries) GetSpacePublicArrivalForCredential(ctx context.Context, arg Ge
 		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.Provider,
+		&i.ProviderEpisodeRef,
 		&i.ProviderSubject,
 		&i.ExpiresAt,
 		&i.TerminalReason,
@@ -755,7 +761,7 @@ const lockSpacePublicArrival = `-- name: LockSpacePublicArrival :one
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where arrival_handle = $1
@@ -784,6 +790,7 @@ func (q *Queries) LockSpacePublicArrival(ctx context.Context, arrivalHandle pgty
 		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.Provider,
+		&i.ProviderEpisodeRef,
 		&i.ProviderSubject,
 		&i.ExpiresAt,
 		&i.TerminalReason,
@@ -798,7 +805,7 @@ const lockSpacePublicArrivalByIdempotency = `-- name: LockSpacePublicArrivalById
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where tenant_id = $1
@@ -835,6 +842,7 @@ func (q *Queries) LockSpacePublicArrivalByIdempotency(ctx context.Context, arg L
 		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.Provider,
+		&i.ProviderEpisodeRef,
 		&i.ProviderSubject,
 		&i.ExpiresAt,
 		&i.TerminalReason,
@@ -1137,14 +1145,15 @@ set state = $1,
     participant_id = $4,
     participant_generation = $5,
     provider = $6,
-    provider_subject = $7,
+    provider_episode_ref = $7,
+    provider_subject = $8,
     terminal_at = case when $1::text in ('rejected', 'left', 'unavailable') then now() else terminal_at end,
     updated_at = now()
-where tenant_id = $8 and arrival_handle = $9
+where tenant_id = $9 and arrival_handle = $10
 returning arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 `
 
@@ -1155,6 +1164,7 @@ type UpdateSpacePublicArrivalStateParams struct {
 	ParticipantID         pgtype.UUID `json:"participant_id"`
 	ParticipantGeneration pgtype.Int8 `json:"participant_generation"`
 	Provider              pgtype.Text `json:"provider"`
+	ProviderEpisodeRef    pgtype.Text `json:"provider_episode_ref"`
 	ProviderSubject       pgtype.Text `json:"provider_subject"`
 	TenantID              pgtype.UUID `json:"tenant_id"`
 	ArrivalHandle         pgtype.UUID `json:"arrival_handle"`
@@ -1168,6 +1178,7 @@ func (q *Queries) UpdateSpacePublicArrivalState(ctx context.Context, arg UpdateS
 		arg.ParticipantID,
 		arg.ParticipantGeneration,
 		arg.Provider,
+		arg.ProviderEpisodeRef,
 		arg.ProviderSubject,
 		arg.TenantID,
 		arg.ArrivalHandle,
@@ -1192,6 +1203,7 @@ func (q *Queries) UpdateSpacePublicArrivalState(ctx context.Context, arg UpdateS
 		&i.ParticipantID,
 		&i.ParticipantGeneration,
 		&i.Provider,
+		&i.ProviderEpisodeRef,
 		&i.ProviderSubject,
 		&i.ExpiresAt,
 		&i.TerminalReason,

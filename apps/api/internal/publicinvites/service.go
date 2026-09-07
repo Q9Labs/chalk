@@ -374,6 +374,9 @@ func (s Service) UpdateArrivalState(ctx context.Context, input UpdateArrivalStat
 	if err := validateProviderBinding(input.Provider, input.ProviderSubject, accessState); err != nil {
 		return Arrival{}, err
 	}
+	if err := validateProviderEpisodeRef(input.ProviderEpisodeRef, accessState); err != nil {
+		return Arrival{}, err
+	}
 	return s.repository.UpdateArrivalState(ctx, input)
 }
 
@@ -739,6 +742,7 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 		ParticipantID:         grant.ParticipantID,
 		ParticipantGeneration: grant.ParticipantGeneration,
 		Provider:              grant.Provider,
+		ProviderEpisodeRef:    grant.ProviderEpisodeRef,
 		ProviderSubject:       grant.ProviderSubject,
 	}); err != nil {
 		return AdmissionRequest{}, err
@@ -818,7 +822,7 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 	var grant PublicAccessGrant
 	switch arrival.State {
 	case ArrivalAdmitted:
-		grant, err = r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+		grant, err = r.restoreAdmittedAccess(ctx, arrival)
 	case ArrivalPending:
 		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
 		if err == nil {
@@ -830,6 +834,7 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 				ParticipantID:         grant.ParticipantID,
 				ParticipantGeneration: grant.ParticipantGeneration,
 				Provider:              grant.Provider,
+				ProviderEpisodeRef:    grant.ProviderEpisodeRef,
 				ProviderSubject:       grant.ProviderSubject,
 			})
 		}
@@ -919,12 +924,9 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		}
 		result := r.arrivalResult(space, arrival)
 		if arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
-			if refreshErr != nil {
-				return PublicSpaceArrival{}, refreshErr
-			}
-			if err := validateAccessGrant(grant, arrival); err != nil {
-				return PublicSpaceArrival{}, err
+			grant, restoreErr := r.restoreAdmittedAccess(ctx, arrival)
+			if restoreErr != nil {
+				return PublicSpaceArrival{}, restoreErr
 			}
 			result.Access = &grant
 		} else if (arrival.IdentityMode == IdentityAccount || space.AdmissionMode == AdmissionOpen) && arrival.State == ArrivalPending {
@@ -943,6 +945,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 				ParticipantID:         grant.ParticipantID,
 				ParticipantGeneration: grant.ParticipantGeneration,
 				Provider:              grant.Provider,
+				ProviderEpisodeRef:    grant.ProviderEpisodeRef,
 				ProviderSubject:       grant.ProviderSubject,
 			})
 			if updateErr != nil {
@@ -1014,12 +1017,9 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 	}
 	if accountAuthorized || space.AdmissionMode == AdmissionOpen {
 		if arrivalResult.Arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival})
-			if refreshErr != nil {
-				return PublicSpaceArrival{}, refreshErr
-			}
-			if err := validateAccessGrant(grant, arrivalResult.Arrival); err != nil {
-				return PublicSpaceArrival{}, err
+			grant, restoreErr := r.restoreAdmittedAccess(ctx, arrivalResult.Arrival)
+			if restoreErr != nil {
+				return PublicSpaceArrival{}, restoreErr
 			}
 			result := r.arrivalResult(space, arrivalResult.Arrival)
 			result.Access = &grant
@@ -1044,6 +1044,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 			ParticipantID:         grant.ParticipantID,
 			ParticipantGeneration: grant.ParticipantGeneration,
 			Provider:              grant.Provider,
+			ProviderEpisodeRef:    grant.ProviderEpisodeRef,
 			ProviderSubject:       grant.ProviderSubject,
 		})
 		if updateErr != nil {
@@ -1146,22 +1147,35 @@ func (r Runtime) RefreshAccess(ctx context.Context, input PublicInviteRefreshInp
 	}
 	if input.ReplaceMediaConnection {
 		if _, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
-			TenantID:                arrival.TenantID,
-			ArrivalHandle:           arrival.ArrivalHandle,
-			State:                   ArrivalAdmitted,
-			EpisodeID:               grant.EpisodeID,
-			ParticipantID:           grant.ParticipantID,
-			ParticipantGeneration:   grant.ParticipantGeneration,
-			Provider:                grant.Provider,
-			ProviderSubject:         grant.ProviderSubject,
-			MatchProviderBinding:    true,
-			ExpectedProvider:        arrival.Provider,
-			ExpectedProviderSubject: arrival.ProviderSubject,
+			TenantID:                   arrival.TenantID,
+			ArrivalHandle:              arrival.ArrivalHandle,
+			State:                      ArrivalAdmitted,
+			EpisodeID:                  grant.EpisodeID,
+			ParticipantID:              grant.ParticipantID,
+			ParticipantGeneration:      grant.ParticipantGeneration,
+			Provider:                   grant.Provider,
+			ProviderEpisodeRef:         grant.ProviderEpisodeRef,
+			ProviderSubject:            grant.ProviderSubject,
+			MatchProviderBinding:       true,
+			ExpectedProvider:           arrival.Provider,
+			ExpectedProviderEpisodeRef: arrival.ProviderEpisodeRef,
+			ExpectedProviderSubject:    arrival.ProviderSubject,
 		}); err != nil {
 			_ = r.access.DiscardPublicAccess(ctx, grant)
 			return PublicAccessGrant{}, err
 		}
 		r.discardSupersededPublicAccess(ctx, arrival, grant)
+	}
+	return grant, nil
+}
+
+func (r Runtime) restoreAdmittedAccess(ctx context.Context, arrival Arrival) (PublicAccessGrant, error) {
+	grant, err := r.access.RestorePublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+	if err != nil {
+		return PublicAccessGrant{}, err
+	}
+	if err := validateAccessGrant(grant, arrival); err != nil {
+		return PublicAccessGrant{}, err
 	}
 	return grant, nil
 }
@@ -1172,6 +1186,7 @@ func (r Runtime) discardSupersededPublicAccess(ctx context.Context, arrival Arri
 	}
 	previous := grant
 	previous.Provider = arrival.Provider
+	previous.ProviderEpisodeRef = arrival.ProviderEpisodeRef
 	previous.ProviderSubject = arrival.ProviderSubject
 	_ = r.access.DiscardPublicAccess(ctx, previous)
 }
@@ -1200,6 +1215,7 @@ func (r Runtime) Leave(ctx context.Context, input PublicInviteLeaveInput) error 
 		ParticipantID:         arrival.ParticipantID,
 		ParticipantGeneration: arrival.ParticipantGeneration,
 		Provider:              arrival.Provider,
+		ProviderEpisodeRef:    arrival.ProviderEpisodeRef,
 		ProviderSubject:       arrival.ProviderSubject,
 	})
 	return err
@@ -1285,6 +1301,9 @@ func validateAccessGrant(grant PublicAccessGrant, arrival Arrival) error {
 		return ErrArrivalUnavailable
 	}
 	if err := validateProviderBinding(grant.Provider, grant.ProviderSubject, true); err != nil {
+		return err
+	}
+	if err := validateProviderEpisodeRef(grant.ProviderEpisodeRef, true); err != nil {
 		return err
 	}
 	if err := validateClientPayload(grant); err != nil {

@@ -1,6 +1,13 @@
 import { createElement, useState, type ChangeEvent, type ReactNode } from "react";
 import { vi } from "vitest";
 
+import type { DashboardPublicAdmissionRequestPage } from "../lib/dashboard-api";
+
+type SpaceListingPage = {
+  readonly spaces: Array<{ readonly slug: string; readonly admission_policy: unknown; readonly metadata: unknown }>;
+  readonly pagination: { readonly page_size: number; readonly next_cursor: string | null; readonly has_more: boolean };
+};
+
 function MockEntrance({
   defaultDisplayName = "",
   joining = false,
@@ -27,7 +34,8 @@ const spacePageTestMocks = vi.hoisted(() => {
   const holder: { chalkProps?: Record<string, unknown> } = {};
   const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn(), recordRtcSummary: vi.fn() };
   const telemetry = { configureApiBaseURL: vi.fn() };
-  const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } } };
+  let canManageAdmission = true;
+  const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } }, self: { can: (capability: string) => capability === "manageAdmission" && canManageAdmission } };
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), media: {}, leave: vi.fn(async () => undefined), dispose: vi.fn() };
   const finish = vi.fn(async (_options?: { readonly keepalive?: boolean }) => undefined);
   const publicClient = {
@@ -55,6 +63,9 @@ const spacePageTestMocks = vi.hoisted(() => {
     holder,
     journey,
     telemetry,
+    setCanManageAdmission: (allowed: boolean) => {
+      canManageAdmission = allowed;
+    },
     client,
     publicClient,
     prepared,
@@ -69,7 +80,10 @@ const spacePageTestMocks = vi.hoisted(() => {
       return null;
     }),
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
-    listSpaces: vi.fn(async () => ({ spaces: [], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
+    listSpaces: vi.fn(async (): Promise<SpaceListingPage> => knockSpaceListing()),
+    listSpacePublicAdmissionRequests: vi.fn(async (): Promise<DashboardPublicAdmissionRequestPage> => ({ requests: [] })),
+    approveSpacePublicAdmissionRequest: vi.fn(async () => undefined),
+    denySpacePublicAdmissionRequest: vi.fn(async () => undefined),
     joinDashboardSpace: vi.fn(),
   };
 });
@@ -80,7 +94,13 @@ vi.mock("../lib/chalk-access", () => ({
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
 }));
-vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
+vi.mock("../lib/dashboard-api", () => ({
+  listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants,
+  listSpaces: getSpacePageTestMocks().listSpaces,
+  listSpacePublicAdmissionRequests: getSpacePageTestMocks().listSpacePublicAdmissionRequests,
+  approveSpacePublicAdmissionRequest: getSpacePageTestMocks().approveSpacePublicAdmissionRequest,
+  denySpacePublicAdmissionRequest: getSpacePageTestMocks().denySpacePublicAdmissionRequest,
+}));
 vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
@@ -107,6 +127,7 @@ export const spacePageTestArrival = {
 export function resetSpacePageTestMocks(): void {
   window.history.replaceState({}, "", "/space");
   spacePageTestMocks.holder.chalkProps = undefined;
+  spacePageTestMocks.setCanManageAdmission(true);
   spacePageTestMocks.publicClient.createPublicSpace.mockReset();
   spacePageTestMocks.publicClient.arriveBySpacePublicInvite.mockReset().mockResolvedValue(spacePageTestArrival);
   spacePageTestMocks.publicClient.getSpacePublicInviteArrival.mockReset().mockResolvedValue(spacePageTestArrival);
@@ -125,6 +146,15 @@ export function resetSpacePageTestMocks(): void {
     retry: vi.fn(),
   });
   spacePageTestMocks.Chalk.mockClear();
+  spacePageTestMocks.joinDashboardSpace.mockReset();
+  spacePageTestMocks.listSpaces.mockReset().mockResolvedValue(knockSpaceListing());
+  spacePageTestMocks.listSpacePublicAdmissionRequests.mockReset().mockResolvedValue({ requests: [] });
+  spacePageTestMocks.approveSpacePublicAdmissionRequest.mockReset().mockResolvedValue(undefined);
+  spacePageTestMocks.denySpacePublicAdmissionRequest.mockReset().mockResolvedValue(undefined);
+}
+
+function knockSpaceListing(): SpaceListingPage {
+  return { spaces: [{ slug: "design-lab", admission_policy: { mode: "knock" }, metadata: null }], pagination: { page_size: 100, next_cursor: null, has_more: false } };
 }
 
 function makeRelease(cleanup: () => Promise<void>): ReturnType<typeof vi.fn> {

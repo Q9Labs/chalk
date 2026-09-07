@@ -116,7 +116,7 @@ const ParticipantsPanelSurface = React.memo(
     const rows = (
       <div className={listSpacingClassName}>
         {filteredParticipants.length === 0 ? (
-          <ChalkEmptyState className="p-8 text-sm text-[var(--chalk-app-text-muted)]" title="No participants found" />
+          <ChalkEmptyState className="p-8 text-sm text-[var(--chalk-app-text-muted)]" title={searchQuery ? "No Participants match your search" : "No Participants are in this Space yet"} />
         ) : (
           filteredParticipants.map((participant) => (
             <ParticipantRow

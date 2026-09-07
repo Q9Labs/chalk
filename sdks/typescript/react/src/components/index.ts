@@ -1,5 +1,6 @@
 export { Chalk } from "./chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./chalk/Chalk";
+export type { ChalkAdmissionControl, ChalkAdmissionRequest } from "../bindings/admission-control";
 export { FeedbackDialog } from "./feedback/FeedbackDialog";
 export type { FeedbackDialogProps } from "./feedback/FeedbackDialog";
 export * from "./chalk-ui";

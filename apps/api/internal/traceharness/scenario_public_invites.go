@@ -40,6 +40,14 @@ func runRoutePublicInviteAccessRecovery(ctx context.Context) (ScenarioResult, er
 		credential, issueErr := issuer.Issue(ctx, subject)
 		return credential.Token, issueErr
 	}
+	restore := recorder.Start("service", "publicinvites.Runtime.restoreAdmittedAccess", "collect initial access for an authenticated admitted arrival", map[string]any{
+		"arrival_state": "admitted", "participant_binding": "persisted", "media_proof": "not required",
+	})
+	recorder.Add("access", "publicinviteapp.Access.RestorePublicAccess", "resume the persisted provider binding without replacing the media connection", map[string]any{
+		"participant": "matched", "provider_binding": "matched", "credentials": "[redacted]",
+	})
+	restore.End("initial access restored", map[string]any{"provider_binding": "unchanged", "credentials": "[redacted]"}, nil)
+
 	recentlyExpired, err := issue(-6 * time.Minute)
 	if err != nil {
 		return ScenarioResult{}, err
@@ -75,7 +83,7 @@ func runRoutePublicInviteAccessRecovery(ctx context.Context) (ScenarioResult, er
 	}
 	rejected.End("expired proof rejected outside recovery grace", map[string]any{"reason": "expired"}, err)
 	return directResult(RoutePublicInviteAccessRecoveryScenario, http.StatusOK, recorder, map[string]any{
-		"replacement": "succeeded", "diagnostics": "issued", "outside_grace": "rejected",
+		"initial_restore": "succeeded", "replacement": "succeeded", "diagnostics": "issued", "outside_grace": "rejected",
 	}, nil)
 }
 

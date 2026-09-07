@@ -799,6 +799,7 @@ type SpacePublicArrival struct {
 	ParticipantID          pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration  pgtype.Int8        `json:"participant_generation"`
 	Provider               pgtype.Text        `json:"provider"`
+	ProviderEpisodeRef     pgtype.Text        `json:"provider_episode_ref"`
 	ProviderSubject        pgtype.Text        `json:"provider_subject"`
 	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
 	TerminalReason         pgtype.Text        `json:"terminal_reason"`

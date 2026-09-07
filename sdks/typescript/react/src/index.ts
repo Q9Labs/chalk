@@ -1,5 +1,6 @@
 export { ChalkProvider } from "./bindings/context";
 export type { ChalkProviderProps } from "./bindings/context";
+export type { ChalkAdmissionControl, ChalkAdmissionRequest } from "./bindings/admission-control";
 export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
 export { Chalk } from "./components/chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";

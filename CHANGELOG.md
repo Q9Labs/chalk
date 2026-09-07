@@ -12,6 +12,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored approved public-invite arrivals without weakening proof-gated access refresh, and kept new admission requests live in both owner Waiting surfaces.
+
 ## [4.1.15] - 2026-08-25
 
 ### Fixed

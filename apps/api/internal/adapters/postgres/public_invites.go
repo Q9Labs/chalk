@@ -236,6 +236,7 @@ func (r PublicInviteRepository) CreateArrival(ctx context.Context, arrival publi
 			AccountID:              uuid(arrival.AccountID),
 			CredentialFamily:       textValue(arrival.CredentialFamily),
 			Provider:               textValue(arrival.Provider),
+			ProviderEpisodeRef:     textValue(arrival.ProviderEpisodeRef),
 			ProviderSubject:        textValue(arrival.ProviderSubject),
 			IdempotencyKey:         arrival.IdempotencyKey,
 			IdempotencyFingerprint: append([]byte(nil), arrival.IdempotencyFingerprint[:]...),
@@ -326,7 +327,7 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 		row, err := queries.UpdateSpacePublicArrivalState(ctx, sqlc.UpdateSpacePublicArrivalStateParams{
 			State: stateString(input.State), TerminalReason: textValue(input.Reason), EpisodeID: uuid(input.EpisodeID),
 			ParticipantID: uuid(input.ParticipantID), ParticipantGeneration: nullableInt8(input.ParticipantGeneration),
-			Provider: textValue(input.Provider), ProviderSubject: textValue(input.ProviderSubject),
+			Provider: textValue(input.Provider), ProviderEpisodeRef: textValue(input.ProviderEpisodeRef), ProviderSubject: textValue(input.ProviderSubject),
 			TenantID: uuid(input.TenantID), ArrivalHandle: uuid(input.ArrivalHandle),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -342,7 +343,7 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 }
 
 func matchesExpectedProviderBinding(current sqlc.SpacePublicArrival, input publicinvites.UpdateArrivalStateInput) bool {
-	return !input.MatchProviderBinding || (current.Provider.String == input.ExpectedProvider && current.ProviderSubject.String == input.ExpectedProviderSubject)
+	return !input.MatchProviderBinding || (current.Provider.String == input.ExpectedProvider && current.ProviderEpisodeRef.String == input.ExpectedProviderEpisodeRef && current.ProviderSubject.String == input.ExpectedProviderSubject)
 }
 
 func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
@@ -749,7 +750,7 @@ func mapPublicArrival(row sqlc.SpacePublicArrival) publicinvites.Arrival {
 		InviteHandle: append([]byte(nil), row.InviteHandle...), InviteGeneration: uint64(row.InviteGeneration), InviteStateEpoch: uint64(row.InviteStateEpoch), IdentityMode: publicinvites.IdentityMode(row.IdentityMode), DisplayName: row.DisplayName,
 		GuestCredentialHash: append([]byte(nil), row.GuestCredentialHash...), AccountID: nullableID(row.AccountID), CredentialFamily: publicInviteNullableString(row.CredentialFamily), IdempotencyKey: row.IdempotencyKey,
 		IdempotencyFingerprint: fingerprint, State: publicinvites.ArrivalState(row.State), EpisodeID: nullableID(row.EpisodeID), ParticipantID: nullableID(row.ParticipantID), ParticipantGeneration: participantGeneration,
-		Provider: publicInviteNullableString(row.Provider), ProviderSubject: publicInviteNullableString(row.ProviderSubject),
+		Provider: publicInviteNullableString(row.Provider), ProviderEpisodeRef: publicInviteNullableString(row.ProviderEpisodeRef), ProviderSubject: publicInviteNullableString(row.ProviderSubject),
 		ExpiresAt: timestamp(row.ExpiresAt), TerminalReason: publicInviteNullableString(row.TerminalReason), CreatedAt: timestamp(row.CreatedAt), UpdatedAt: timestamp(row.UpdatedAt), TerminalAt: nullableTimestamp(row.TerminalAt),
 	}
 }

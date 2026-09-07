@@ -38,10 +38,17 @@ func TestDiscardSupersededPublicAccessKeepsCurrentProviderBinding(t *testing.T) 
 type discardRecordingAccess struct {
 	discardCalls int
 	discarded    PublicAccessGrant
+	restoreCalls int
+	restoreGrant PublicAccessGrant
 }
 
 func (*discardRecordingAccess) GrantPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error) {
 	return PublicAccessGrant{}, errors.New("unexpected GrantPublicAccess call")
+}
+
+func (a *discardRecordingAccess) RestorePublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error) {
+	a.restoreCalls++
+	return a.restoreGrant, nil
 }
 
 func (*discardRecordingAccess) RefreshPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error) {

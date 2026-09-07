@@ -35,6 +35,35 @@ func TestRefreshReplacementIssuesDiagnostics(t *testing.T) {
 	}
 }
 
+func TestRestoreUsesExactPersistedParticipantBinding(t *testing.T) {
+	fixture := newAccessFixture(t)
+	fixture.result.Participant.Generation++
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = access.RestorePublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if !errors.Is(err, publicinviteapp.ErrAccessUnavailable) {
+		t.Fatalf("restore error = %v, want %v", err, publicinviteapp.ErrAccessUnavailable)
+	}
+	if fixture.plane.resumeCalls != 0 {
+		t.Fatalf("resume calls = %d, want none", fixture.plane.resumeCalls)
+	}
+
+	fixture.result.Participant.Generation--
+	access, err = publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := access.RestorePublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixture.plane.resumeCalls != 1 || fixture.plane.resumedEpisodeRef != fixture.arrival.ProviderEpisodeRef || grant.ProviderEpisodeRef != fixture.arrival.ProviderEpisodeRef {
+		t.Fatalf("restore = calls %d, resumed Episode %q, granted Episode %q; want one resume in %q", fixture.plane.resumeCalls, fixture.plane.resumedEpisodeRef, grant.ProviderEpisodeRef, fixture.arrival.ProviderEpisodeRef)
+	}
+}
+
 func TestRefreshReplacementRejectsMissingOrStaleProof(t *testing.T) {
 	fixture := newAccessFixture(t)
 	access, err := publicinviteapp.NewAccessPort(fixture.config())
@@ -110,7 +139,7 @@ func newAccessFixture(t *testing.T) *accessFixture {
 	result := episodes.PublicJoinResult{Episode: episodes.Episode{ID: episode, TenantID: tenant, SpaceID: space}, Participant: episodes.Participant{ID: participant, TenantID: tenant, SpaceID: space, EpisodeID: episode, Generation: 7}}
 	return &accessFixture{
 		tenant: tenant, space: space, episode: episode, participant: participant,
-		arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: publicinvites.PublicProviderCloudflareRTK, ProviderSubject: "old-provider", IdentityMode: publicinvites.IdentityGuest, DisplayName: "Trace Guest", State: publicinvites.ArrivalAdmitted},
+		arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: publicinvites.PublicProviderCloudflareRTK, ProviderEpisodeRef: "persisted-episode-ref", ProviderSubject: "old-provider", IdentityMode: publicinvites.IdentityGuest, DisplayName: "Trace Guest", State: publicinvites.ArrivalAdmitted},
 		result:  result, plane: &mediaPlaneStub{}, recovery: &proofVerifierStub{subject: proofSubject},
 	}
 }
@@ -192,6 +221,8 @@ func (failingDiagnosticsIssuer) Issue(context.Context, accessgrants.DiagnosticsS
 
 type mediaPlaneStub struct {
 	createCalls           int
+	resumeCalls           int
+	resumedEpisodeRef     string
 	removeCalls           int
 	removedParticipantRef string
 }
@@ -202,6 +233,11 @@ func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.Ensur
 func (p *mediaPlaneStub) CreateJoin(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	p.createCalls++
 	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareRTK, ParticipantRef: "new-provider", ClientPayload: map[string]any{"token": "provider-token"}}, nil
+}
+func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	p.resumeCalls++
+	p.resumedEpisodeRef = input.Episode.Ref
+	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"token": "provider-token"}}, nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {

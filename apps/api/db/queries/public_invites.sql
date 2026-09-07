@@ -79,13 +79,13 @@ returning tenant_id, space_id, handle, generation, state_epoch, enabled, public_
 insert into space_public_arrivals (
     arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
     invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
-    credential_family, provider, provider_subject, idempotency_key, idempotency_fingerprint, state, expires_at
+    credential_family, provider, provider_episode_ref, provider_subject, idempotency_key, idempotency_fingerprint, state, expires_at
 )
 values (
     sqlc.arg(arrival_handle), sqlc.arg(tenant_id), sqlc.arg(space_id),
     sqlc.arg(invite_handle), sqlc.arg(invite_generation), sqlc.arg(invite_state_epoch),
     sqlc.arg(identity_mode), sqlc.arg(display_name), sqlc.narg(guest_credential_hash), sqlc.narg(account_id),
-    sqlc.narg(credential_family), sqlc.narg(provider), sqlc.narg(provider_subject),
+    sqlc.narg(credential_family), sqlc.narg(provider), sqlc.narg(provider_episode_ref), sqlc.narg(provider_subject),
     sqlc.arg(idempotency_key), sqlc.arg(idempotency_fingerprint),
     sqlc.arg(state), sqlc.arg(expires_at)
 )
@@ -93,14 +93,14 @@ on conflict (tenant_id, space_id, idempotency_key) do nothing
 returning arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at;
 
 -- name: GetSpacePublicArrival :one
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where arrival_handle = sqlc.arg(arrival_handle);
@@ -109,7 +109,7 @@ where arrival_handle = sqlc.arg(arrival_handle);
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where arrival_handle = sqlc.arg(arrival_handle)
@@ -119,7 +119,7 @@ for update;
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where tenant_id = sqlc.arg(tenant_id)
@@ -130,7 +130,7 @@ where tenant_id = sqlc.arg(tenant_id)
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where tenant_id = sqlc.arg(tenant_id)
@@ -142,7 +142,7 @@ for update;
 select arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at
 from space_public_arrivals
 where arrival_handle = sqlc.arg(arrival_handle)
@@ -156,6 +156,7 @@ set state = sqlc.arg(state),
     participant_id = sqlc.narg(participant_id),
     participant_generation = sqlc.narg(participant_generation),
     provider = sqlc.narg(provider),
+    provider_episode_ref = sqlc.narg(provider_episode_ref),
     provider_subject = sqlc.narg(provider_subject),
     terminal_at = case when sqlc.arg(state)::text in ('rejected', 'left', 'unavailable') then now() else terminal_at end,
     updated_at = now()
@@ -163,7 +164,7 @@ where tenant_id = sqlc.arg(tenant_id) and arrival_handle = sqlc.arg(arrival_hand
 returning arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        invite_state_epoch, identity_mode, display_name, guest_credential_hash, account_id,
        credential_family, idempotency_key, idempotency_fingerprint, state,
-       episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
+       episode_id, participant_id, participant_generation, provider, provider_episode_ref, provider_subject, expires_at,
        terminal_reason, created_at, updated_at, terminal_at;
 
 -- name: ListPendingSpacePublicAdmissionRequests :many

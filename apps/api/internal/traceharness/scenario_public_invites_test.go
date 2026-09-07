@@ -31,4 +31,7 @@ func TestPublicInviteAccessRecoveryScenario(t *testing.T) {
 	if !strings.Contains(string(result.Body), `"diagnostics":"issued"`) {
 		t.Fatalf("body = %s, want diagnostics proof", result.Body)
 	}
+	if !strings.Contains(string(result.Body), `"initial_restore":"succeeded"`) {
+		t.Fatalf("body = %s, want admitted-arrival restore proof", result.Body)
+	}
 }
