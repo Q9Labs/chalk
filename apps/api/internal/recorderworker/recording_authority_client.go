@@ -178,8 +178,13 @@ func (c *ControlPlaneClient) FinalizeRecordingObject(ctx context.Context, input 
 	expiresAt, expiryErr := parseRequiredTime(response.ExpiresAt)
 	uploadExpiresAt, uploadExpiryErr := parseRequiredTime(response.Upload.ExpiresAt)
 	uploadURL, urlErr := validateRecordingUploadURL(response.Upload.URL)
-	if expiryErr != nil || uploadExpiryErr != nil || urlErr != nil || response.AllocationID != input.AllocationID || strings.TrimSpace(response.UploadToken) == "" || response.Upload.Method != http.MethodPut || !expiresAt.Equal(uploadExpiresAt) || !expiresAt.After(time.Now().UTC()) {
+	if expiryErr != nil || uploadExpiryErr != nil || urlErr != nil || response.AllocationID != input.AllocationID || strings.TrimSpace(response.UploadToken) == "" || response.Upload.Method != http.MethodPut || !uploadExpiresAt.After(time.Now().UTC()) || !expiresAt.After(time.Now().UTC()) {
 		return recordingobjects.AllocationResult{}, ProtocolError{Err: errors.New("recording object finalization response")}
+	}
+	// Allocation and storage grants have independent signing clocks. Uploads
+	// must stop at whichever deadline arrives first.
+	if uploadExpiresAt.After(expiresAt) {
+		uploadExpiresAt = expiresAt
 	}
 	return recordingobjects.AllocationResult{AllocationID: response.AllocationID, UploadToken: response.UploadToken, ExpiresAt: expiresAt, UploadURL: objectstorage.SignedURL{Method: response.Upload.Method, URL: uploadURL.String(), ExpiresAt: uploadExpiresAt, SignedHeader: cloneUploadHeaders(response.Upload.SignedHeaders)}}, nil
 }
@@ -244,7 +249,7 @@ func (c *ControlPlaneClient) CommitRecordingObject(ctx context.Context, input re
 	if response.AllocationID != input.AllocationID || response.SequenceNumber < 0 || response.AllocationVersion <= 0 {
 		return recordingobjects.Bundle{}, ProtocolError{Err: errors.New("recording object commit allocation authority")}
 	}
-	if response.ObjectVersion == "" || response.ObjectETag == "" || objectstorage.ValidateKey(response.ObjectKey) != nil {
+	if response.ObjectETag == "" || objectstorage.ValidateKey(response.ObjectKey) != nil {
 		return recordingobjects.Bundle{}, ProtocolError{Err: errors.New("recording object commit provider facts")}
 	}
 	allocation := recordingobjects.Allocation{ID: response.AllocationID, AllocationVersion: response.AllocationVersion, Authority: input.Authority, SequenceNumber: response.SequenceNumber, ObjectKey: response.ObjectKey, ObjectVersion: response.ObjectVersion, ObjectETag: response.ObjectETag, ObjectChecksumSHA256: objectChecksum, ManifestDigest: manifestDigest, CommittedAt: &committedAt, State: "committed"}

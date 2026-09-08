@@ -53,7 +53,8 @@ insert into episodes (
         'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
         'linger_window_seconds', spaces.linger_window_seconds,
-        'artifact_policy', sqlc.arg(artifact_policy)::jsonb
+        'artifact_policy', sqlc.arg(artifact_policy)::jsonb,
+        'media_plane_binding', sqlc.arg(media_plane_binding)::jsonb
     )
 from spaces
 where

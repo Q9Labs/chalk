@@ -9,7 +9,7 @@ type Assert<TCondition extends true> = TCondition;
 type Equal<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <T>() => T extends TRight ? 1 : 2 ? true : false;
 
 type PublicHooks = Extract<keyof typeof bindings, `use${string}`>;
-type ExpectedHooks = "useSpaceClient" | "useConnection" | "useSelf" | "useParticipants" | "useMedia" | "useChat" | "useReactions" | "useWhiteboard" | "useCan";
+type ExpectedHooks = "useSpaceClient" | "useConnection" | "useSelf" | "useParticipants" | "useMedia" | "useChat" | "useReactions" | "useRecording" | "useWhiteboard" | "useCan";
 type ExpectedLayout = "focus" | "grid" | "presentation";
 type ExpectedSkin = "classic" | "chalk";
 type ExpectedAppearanceKeys = "skin" | "palette" | "texture";
@@ -31,6 +31,7 @@ type ExpectedChalkProps =
   | "layout"
   | "onLayoutChange"
   | "onOpenDiagnostics"
+  | "feedbackSource"
   | "diagnosticReference"
   | "onSendFeedback"
   | "onJoined"

@@ -109,21 +109,27 @@ with expired_terminal as (
       and j.state in ('pending', 'retryable', 'leased')
       and exists (select 1 from projected p where p.id = j.transcript_id)
 ), candidate as (
-    select id from artifact_jobs
-    where artifact_kind = 'transcription_chunk'
+    select artifact_jobs.id, source.lease_expires_at as source_deadline
+    from artifact_jobs
+    join recording_transcription_sources source
+      on source.recording_id = artifact_jobs.recording_id
+     and source.status = 'leased'
+     and source.lease_transcript_id = artifact_jobs.transcript_id
+     and source.lease_expires_at > $4::timestamptz
+    where artifact_jobs.artifact_kind = 'transcription_chunk'
       and (
-        (state in ('pending', 'retryable') and available_at <= $4::timestamptz)
-        or (state = 'leased' and lease_expires_at <= $4::timestamptz and attempt_count < attempt_limit)
+        (artifact_jobs.state in ('pending', 'retryable') and artifact_jobs.available_at <= $4::timestamptz)
+        or (artifact_jobs.state = 'leased' and artifact_jobs.lease_expires_at <= $4::timestamptz and artifact_jobs.attempt_count < artifact_jobs.attempt_limit)
       )
       and not exists (select 1 from expired_terminal e where e.id = artifact_jobs.id)
-    order by priority desc, available_at asc, created_at asc, id asc
-    for update skip locked
+    order by artifact_jobs.priority desc, artifact_jobs.available_at asc, artifact_jobs.created_at asc, artifact_jobs.id asc
+    for update of artifact_jobs skip locked
     limit 1
 )
 update artifact_jobs jobs
 set state = 'leased', attempt_count = jobs.attempt_count + 1,
     lease_token_hash = $1, lease_owner = $2,
-    lease_expires_at = $3, updated_at = now()
+    lease_expires_at = least($3::timestamptz, candidate.source_deadline), updated_at = now()
 from candidate
 where jobs.id = candidate.id and jobs.attempt_count < jobs.attempt_limit
 returning jobs.id, jobs.idempotency_key, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.transcript_id, jobs.chunk_id, jobs.artifact_kind, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token_hash, jobs.lease_owner, jobs.lease_expires_at, jobs.error_code, jobs.error_detail, jobs.journey_id, jobs.traceparent, jobs.tracestate, jobs.terminal_at, jobs.updated_at, jobs.created_at
@@ -281,6 +287,16 @@ set state = 'completed', lease_token_hash = null, lease_owner = null,
 where id = $1 and state = 'leased' and attempt_count = $2
   and lease_owner = $3 and lease_token_hash = $4
   and lease_expires_at > $5::timestamptz
+  and (
+      artifact_kind <> 'transcription_chunk'
+      or exists (
+          select 1 from recording_transcription_sources source
+          where source.recording_id = artifact_jobs.recording_id
+            and source.status = 'leased'
+            and source.lease_transcript_id = artifact_jobs.transcript_id
+            and source.lease_expires_at > $5::timestamptz
+      )
+  )
 returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 
@@ -606,10 +622,30 @@ func (q *Queries) GetTranscriptionChunkJob(ctx context.Context, transcriptID pgt
 
 const heartbeatArtifactJob = `-- name: HeartbeatArtifactJob :one
 update artifact_jobs
-set lease_expires_at = $1, updated_at = now()
+set lease_expires_at = case
+        when artifact_kind = 'transcription_chunk' then least(
+            $1::timestamptz,
+            (select source.lease_expires_at from recording_transcription_sources source
+             where source.recording_id = artifact_jobs.recording_id
+               and source.status = 'leased'
+               and source.lease_transcript_id = artifact_jobs.transcript_id)
+        )
+        else $1::timestamptz
+    end,
+    updated_at = now()
 where id = $2 and state = 'leased' and attempt_count = $3
   and lease_owner = $4 and lease_token_hash = $5
   and lease_expires_at > $6::timestamptz
+  and (
+      artifact_kind <> 'transcription_chunk'
+      or exists (
+          select 1 from recording_transcription_sources source
+          where source.recording_id = artifact_jobs.recording_id
+            and source.status = 'leased'
+            and source.lease_transcript_id = artifact_jobs.transcript_id
+            and source.lease_expires_at > $6::timestamptz
+      )
+  )
 returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -189,6 +190,7 @@ type EpisodeConfigSnapshot struct {
 	MaximumEpisodeDurationSeconds int32                    `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32                    `json:"linger_window_seconds"`
 	ArtifactPolicy                *artifactpolicy.Document `json:"artifact_policy,omitempty"`
+	MediaPlaneBinding             *mediaplane.Binding      `json:"media_plane_binding,omitempty"`
 }
 
 type CreateEpisodeInput struct {

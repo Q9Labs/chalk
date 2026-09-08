@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -15,10 +16,39 @@ import (
 func main() {
 	dir := flag.String("dir", "", "directory containing capture-bundle.json")
 	fixture := flag.Bool("fixture", false, "render a deterministic local fixture")
+	runMode := flag.Bool("run", false, "run the server-authorized recording render worker")
+	environment := flag.String("environment", os.Getenv("CHALK_RECORDER_ENVIRONMENT"), "recording KMS environment name")
+	controlPlaneURL := flag.String("control-plane-url", os.Getenv("CHALK_RECORDER_CONTROL_PLANE_URL"), "private recorder control-plane URL")
+	workerCertificate := flag.String("worker-cert", os.Getenv("CHALK_RECORDER_WORKER_CERT"), "worker mTLS certificate")
+	workerKey := flag.String("worker-key", os.Getenv("CHALK_RECORDER_WORKER_KEY"), "worker mTLS private key")
+	serverCA := flag.String("server-ca", os.Getenv("CHALK_RECORDER_SERVER_CA"), "control-plane server CA")
+	serverName := flag.String("server-name", os.Getenv("CHALK_RECORDER_SERVER_NAME"), "control-plane TLS server name")
+	workRoot := flag.String("work-root", os.Getenv("CHALK_RECORDING_RENDER_WORK_ROOT"), "absolute parent directory for ephemeral render attempts")
+	nodePath := flag.String("node", os.Getenv("CHALK_RECORDING_NODE_PATH"), "absolute Node.js executable path")
+	rendererScript := flag.String("renderer-script", os.Getenv("CHALK_RECORDING_RENDERER_SCRIPT"), "absolute recording renderer CLI path")
+	uiBuildSHA256 := flag.String("ui-build-sha256", os.Getenv("CHALK_RECORDING_UI_BUILD_SHA256"), "deployed recording UI tree SHA-256")
+	ffmpegPath := flag.String("ffmpeg", os.Getenv("CHALK_RECORDING_FFMPEG_PATH"), "absolute FFmpeg executable path")
+	ffprobePath := flag.String("ffprobe", os.Getenv("CHALK_RECORDING_FFPROBE_PATH"), "absolute FFprobe executable path")
+	encoder := flag.String("encoder", os.Getenv("CHALK_RECORDING_VIDEO_ENCODER"), "explicit video encoder: libx264, h264_videotoolbox, or h264_nvenc")
+	frameConcurrency := flag.Int("frame-concurrency", 1, "parallel browser pages per recording (1-8)")
 	flag.Parse()
-	if !*fixture {
-		fmt.Fprintln(os.Stderr, "recorder-render: only --fixture is available; GPU render provider is intentionally unimplemented")
+	if *fixture == *runMode {
+		fmt.Fprintln(os.Stderr, "recorder-render: exactly one of --fixture or --run is required")
 		os.Exit(2)
+	}
+	if *runMode {
+		if err := runWorker(renderWorkerConfig{
+			Environment: *environment, ControlPlaneURL: *controlPlaneURL, WorkerCertificate: *workerCertificate, WorkerKey: *workerKey,
+			ServerCA: *serverCA, ServerName: *serverName, WorkRoot: *workRoot, NodePath: *nodePath, RendererScript: *rendererScript,
+			UIBuildSHA256: *uiBuildSHA256, FFmpegPath: *ffmpegPath, FFprobePath: *ffprobePath, Encoder: *encoder, FrameConcurrency: *frameConcurrency,
+		}); err != nil {
+			if !errors.Is(err, recorderworker.ErrReadinessFailure) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+				return
+			}
+			fmt.Fprintln(os.Stderr, "recorder-render:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if *dir == "" {
 		fmt.Fprintln(os.Stderr, "recorder-render: --dir is required")

@@ -1,5 +1,5 @@
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { AnimatedHugeiconsIcon as HugeiconsIcon } from "@q9labsai/chalk-react/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DOCS_GROUPS, DOCS_PAGES } from "../../docs/manifest";

@@ -8,8 +8,10 @@ import type { ChatControllerEffects } from "./chat-controller";
 import type { MediaControllerEffects } from "./media-controller";
 import type { ParticipantsControllerEffects } from "./participants-controller";
 import type { ReactionsControllerEffects } from "./reactions-controller";
+import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
 import type { PromiseController } from "./promise-facade";
+import type { FeedbackController } from "../feedback/types";
 
 export type AccessReason = "join" | "refresh" | "retry";
 
@@ -185,6 +187,14 @@ export type Reaction = ChalkReaction;
 export type ActiveReaction = ChalkReactionEvent;
 export type ReactionsSlice = { readonly active: readonly ActiveReaction[] };
 
+export type Recording = {
+  readonly recordingId: string;
+  readonly status: "starting" | "recording" | "stopping" | "stopped" | "failed";
+  readonly failureCode: string | null;
+};
+
+export type RecordingSlice = { readonly current: Recording | null };
+
 export type WhiteboardSlice = {
   readonly open: boolean;
   readonly engine: {
@@ -203,6 +213,7 @@ export type SpaceSnapshot = {
   readonly media: MediaSlice;
   readonly chat: ChatSlice;
   readonly reactions: ReactionsSlice;
+  readonly recording: RecordingSlice;
   readonly whiteboard: WhiteboardSlice;
 };
 
@@ -215,6 +226,7 @@ export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, 
 export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "dispose">> & { readonly files: ChatFilesController };
 export type ParticipantsController = PromiseController<Omit<ParticipantsControllerEffects, "dispose">>;
 export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
+export type RecordingController = PromiseController<Omit<RecordingControllerEffects, "dispose">>;
 export type WhiteboardController = PromiseController<Omit<WhiteboardControllerEffects, "dispose">>;
 
 export type ClientEventMap = {
@@ -230,10 +242,12 @@ export type ClientEventName = keyof ClientEventMap;
 export type ClientEventHandler<TEvent extends ClientEventName> = (event: ClientEventMap[TEvent]) => void;
 
 export type SpaceClient = {
+  readonly feedback: FeedbackController;
   readonly media: MediaController;
   readonly chat: ChatController;
   readonly participants: ParticipantsController;
   readonly reactions: ReactionsController;
+  readonly recording: RecordingController;
   readonly whiteboard: WhiteboardController;
   readonly join: (options?: JoinOptions) => Promise<void>;
   readonly leave: () => Promise<void>;

@@ -18,6 +18,7 @@ const (
 type CleanupJob struct {
 	ID                 utilities.ID
 	TenantID           utilities.ID
+	RecordingID        utilities.ID
 	TranscriptID       utilities.ID
 	ObjectKey          string
 	ObjectKind         string
@@ -35,6 +36,7 @@ type CleanupJob struct {
 
 type CleanupEnqueueInput struct {
 	TenantID     utilities.ID
+	RecordingID  utilities.ID
 	TranscriptID utilities.ID
 	ObjectKey    string
 	ObjectKind   string
@@ -72,14 +74,17 @@ type CleanupRepository interface {
 	RecoverExpiredCleanup(context.Context, time.Time, time.Time) ([]CleanupJob, error)
 }
 
-// Recording source deletion remains recorder-owned. These jobs only cover
-// transcript-selected final and temporary artifact keys.
-
 func (s Service) EnqueueCleanup(ctx context.Context, input CleanupEnqueueInput) (CleanupJob, error) {
 	if s.cleanup == nil {
 		return CleanupJob{}, ErrArtifactRepository
 	}
-	if input.TenantID.IsZero() || input.TranscriptID.IsZero() || input.ObjectKey == "" || input.DueAt.IsZero() || input.DueAt.After(time.Now().Add(24*time.Hour)) {
+	if input.TenantID.IsZero() || input.RecordingID.IsZero() || input.ObjectKey == "" || input.DueAt.IsZero() || input.DueAt.After(time.Now().Add(24*time.Hour)) {
+		return CleanupJob{}, ErrInvalidArtifact
+	}
+	if (input.ObjectKind == "final_artifact" || input.ObjectKind == "temp_result") && input.TranscriptID.IsZero() {
+		return CleanupJob{}, ErrInvalidArtifact
+	}
+	if input.ObjectKind != "final_artifact" && input.ObjectKind != "temp_result" && input.ObjectKind != "source_manifest" && input.ObjectKind != "source_chunk" {
 		return CleanupJob{}, ErrInvalidArtifact
 	}
 	return s.cleanup.EnqueueCleanup(ctx, input)

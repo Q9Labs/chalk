@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -97,7 +96,7 @@ func (r TranscriptRepository) CompleteFinalizer(ctx context.Context, input trans
 	if err != nil {
 		return transcripts.Transcript{}, err
 	}
-	dueAt := input.Now.Add(time.Hour)
+	dueAt := input.Now
 	for _, artifact := range finalizerPreviousCleanupArtifacts(tenantID, transcriptID, input.Attempt) {
 		if err := enqueueCleanupTx(ctx, q, row, artifact.key, artifact.kind, dueAt); err != nil {
 			return transcripts.Transcript{}, err
@@ -105,6 +104,18 @@ func (r TranscriptRepository) CompleteFinalizer(ctx context.Context, input trans
 	}
 	for _, artifact := range finalizerCleanupArtifacts(tenantID, transcriptID, chunks, jobs) {
 		if err := enqueueCleanupTx(ctx, q, row, artifact.key, artifact.kind, dueAt); err != nil {
+			return transcripts.Transcript{}, err
+		}
+	}
+	source, err := q.ReleaseRecordingTranscriptionSource(ctx, sqlc.ReleaseRecordingTranscriptionSourceParams{
+		RecordingID: row.RecordingID, TenantID: row.TenantID, TranscriptID: row.ID,
+		Now: pgtype.Timestamptz{Time: dueAt, Valid: true},
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return transcripts.Transcript{}, err
+	}
+	if err == nil {
+		if err := enqueueRecordingTranscriptionSourceCleanupTx(ctx, q, source, dueAt); err != nil {
 			return transcripts.Transcript{}, err
 		}
 	}
@@ -151,8 +162,6 @@ func finalizerPreviousCleanupArtifacts(tenantID, transcriptID utilities.ID, atte
 	return artifacts
 }
 
-// Recorder-owned source chunks are retained by the recording lifecycle. Only
-// dispatcher-generated result artifacts become eligible after finalization.
 func finalizerCleanupArtifacts(tenantID, transcriptID utilities.ID, chunks []sqlc.TranscriptChunk, jobs []sqlc.ArtifactJob) []finalizerCleanupArtifact {
 	chunksByID := make(map[string]sqlc.TranscriptChunk, len(chunks))
 	for _, chunk := range chunks {

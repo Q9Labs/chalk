@@ -80,28 +80,38 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     [effectiveAudioOutputDeviceId],
   );
 
-  // Filter to remote participants with valid audio tracks
-  const remoteWithAudio = effectiveParticipants.filter((p) => {
-    if (p.isLocal) return false;
-    if (!p.audioTrack) return false;
-    try {
-      return p.audioTrack.readyState === "live";
-    } catch {
-      // Track may have been disposed
-      return false;
-    }
-  });
+  // Filter to remote participants with valid audio tracks. Memoized so the
+  // attach/volume effects below do not tear down and rebuild on every render.
+  const remoteWithAudio = useMemo(
+    () =>
+      effectiveParticipants.filter((p) => {
+        if (p.isLocal) return false;
+        if (!p.audioTrack) return false;
+        try {
+          return p.audioTrack.readyState === "live";
+        } catch {
+          // Track may have been disposed
+          return false;
+        }
+      }),
+    [effectiveParticipants],
+  );
 
   // Filter to remote participants with valid screen share audio tracks
-  const remoteWithScreenShareAudio = effectiveParticipants.filter((p) => {
-    if (p.isLocal) return false;
-    if (!p.screenShareAudioTrack) return false;
-    try {
-      return p.screenShareAudioTrack.readyState === "live";
-    } catch {
-      return false;
-    }
-  });
+  const remoteWithScreenShareAudio = useMemo(
+    () =>
+      effectiveParticipants.filter((p) => {
+        if (p.isLocal) return false;
+        if (!p.screenShareAudioTrack) return false;
+        try {
+          return p.screenShareAudioTrack.readyState === "live";
+        } catch {
+          // Track may have been disposed
+          return false;
+        }
+      }),
+    [effectiveParticipants],
+  );
 
   const unlockEvents = useMemo(() => ["pointerdown", "touchend", "click", "keydown"] as const, []);
 

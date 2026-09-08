@@ -27,13 +27,13 @@ where jobs.id = $1
   and jobs.fencing_generation = $6
   and jobs.lease_token = $7
   and jobs.lease_owner = $8
-  and jobs.lease_expires_at = $9
+  and jobs.lease_expires_at >= $9
   and jobs.lease_expires_at > clock_timestamp()
   and authority.capture_epoch = $10
   and authority.envelope_digest = $11
   and authority.lease_token = $7
   and authority.lease_owner = $8
-  and authority.lease_expires_at = $9
+  and $9::timestamptz > clock_timestamp()
 `
 
 type AuthorizeRecordingJobLeaseParams struct {
@@ -106,13 +106,13 @@ with committed as (
             and jobs.fencing_generation = $13
             and jobs.lease_token = $17
             and jobs.lease_owner = $18
-            and jobs.lease_expires_at = $19
+            and jobs.lease_expires_at >= $19
             and jobs.lease_expires_at > clock_timestamp()
             and authority.capture_epoch = $14
             and authority.envelope_digest = $15
             and authority.lease_token = $17
             and authority.lease_owner = $18
-            and authority.lease_expires_at = $19
+            and $19::timestamptz > clock_timestamp()
       )
     returning id, tenant_id, episode_id, recording_id, job_id, object_handle,
         reservation_request_id, allocation_version,
@@ -311,13 +311,13 @@ where recording_bundle_allocations.id = $12
         and jobs.fencing_generation = $19
         and jobs.lease_token = $23
         and jobs.lease_owner = $24
-        and jobs.lease_expires_at = $25
+        and jobs.lease_expires_at >= $25
         and jobs.lease_expires_at > clock_timestamp()
         and authority.capture_epoch = $20
         and authority.envelope_digest = $21
         and authority.lease_token = $23
         and authority.lease_owner = $24
-        and authority.lease_expires_at = $25
+        and $25::timestamptz > clock_timestamp()
   )
 returning id, tenant_id, episode_id, recording_id, job_id, object_handle,
     reservation_request_id, allocation_version,
@@ -607,13 +607,13 @@ where recording_data_keys.recording_id = $1
   and jobs.state = 'leased'
   and jobs.lease_token = $9
   and jobs.lease_owner = $10
-  and jobs.lease_expires_at = $11
+  and jobs.lease_expires_at >= $11
   and jobs.lease_expires_at > clock_timestamp()
   and authority.capture_epoch = $2
   and authority.envelope_digest = $8
   and authority.lease_token = $9
   and authority.lease_owner = $10
-  and authority.lease_expires_at = $11
+  and $11::timestamptz > clock_timestamp()
 `
 
 type GetRecordingDataKeyParams struct {
@@ -805,13 +805,13 @@ with authorized as (
       and jobs.fencing_generation = $6
       and jobs.lease_token = $13
       and jobs.lease_owner = $14
-      and jobs.lease_expires_at = $15
+      and jobs.lease_expires_at >= $15
       and jobs.lease_expires_at > clock_timestamp()
       and authority.capture_epoch = $2
       and authority.envelope_digest = $9
       and authority.lease_token = $13
       and authority.lease_owner = $14
-      and authority.lease_expires_at = $15
+      and $15::timestamptz > clock_timestamp()
 )
 insert into recording_data_keys (
     recording_id, capture_epoch, tenant_id, episode_id, job_id,
@@ -885,7 +885,7 @@ func (q *Queries) InsertRecordingDataKey(ctx context.Context, arg InsertRecordin
 
 const reserveRecordingBundleAllocation = `-- name: ReserveRecordingBundleAllocation :one
 with authorized_job as (
-    select jobs.id
+    select jobs.recording_id
     from recording_jobs jobs
     join recording_job_attempt_authorities authority
       on authority.job_id = jobs.id
@@ -900,18 +900,18 @@ with authorized_job as (
       and jobs.fencing_generation = $6
       and jobs.lease_token = $7
       and jobs.lease_owner = $8
-      and jobs.lease_expires_at = $9
+      and jobs.lease_expires_at >= $9
       and jobs.lease_expires_at > clock_timestamp()
       and authority.capture_epoch = $10
       and authority.envelope_digest = $11
       and authority.lease_token = $7
       and authority.lease_owner = $8
-      and authority.lease_expires_at = $9
+      and $9::timestamptz > clock_timestamp()
     for update of jobs
 ), locked_recording as (
     select recordings.id
     from recordings
-    join authorized_job on authorized_job.id = recordings.id
+    join authorized_job on authorized_job.recording_id = recordings.id
     where recordings.id = $4
       and recordings.tenant_id = $2
     for update of recordings
@@ -950,12 +950,12 @@ with authorized_job as (
         media_start_millis, media_end_millis, object_key, upload_token_hash, expected_byte_size,
         expected_checksum, content_type, expires_at, encryption_context_digest, state
     )
-    select $12, $2, $3, locked_recording.id,
+    select $12::uuid, $2, $3, locked_recording.id,
         $1, $13, $14, next_values.allocation_version,
         $5, $6, $10, $11,
         next_values.sequence_number, 'unknown', null, 0, 0, 0, 0,
-        format('recordings/%s/capture/%s/bundles/%s/%s.bundle', $4::text, $10::text, next_values.sequence_number::text, $12::text),
-        decode(md5('reserved:' || $12::text), 'hex'), 0, decode(repeat('00', 32), 'hex'),
+        format('recordings/%s/capture/%s/bundles/%s/%s.bundle', $4::text, $10::text, next_values.sequence_number::text, $12::uuid::text),
+        sha256(convert_to('reserved:' || $12::uuid::text, 'UTF8')), 0, decode(repeat('00', 32), 'hex'),
         'application/octet-stream', clock_timestamp() + interval '30 minutes', $15, 'reserved'
     from locked_recording, next_values
     on conflict (job_id, attempt_count, reservation_request_id) do nothing

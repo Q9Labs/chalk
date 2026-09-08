@@ -4,6 +4,7 @@ import "github.com/go-chi/chi/v5"
 
 func mountV1Routes(r chi.Router, options Options) {
 	r.Route("/v1", func(r chi.Router) {
+		mountFeedbackRoutes(r, options)
 		mountPublicAuthRoutes(r, options)
 		mountStatusRoutes(r, options)
 		mountJourneyRoutes(r, options)
@@ -43,6 +44,7 @@ func mountAuthenticatedSessionRoutes(r chi.Router, options Options) {
 		r.Use(requireSessionAuthentication(options.Authentication))
 		mountMeRoutes(r, options.Authentication, options.RecentAuth, options.RateLimit)
 		mountAccountTenantRoutes(r, options.AccountTenants, options.RateLimit)
+		mountFeedbackAccountRoutes(r, options)
 		if options.LocalTelemetry {
 			mountLocalJourneyQueryRoutes(r, options.Journeys, options.RateLimit)
 		}

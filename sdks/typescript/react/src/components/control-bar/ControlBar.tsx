@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Tooltip } from "@q9labsai/chalk-ui";
-import { useCan, useChat, useMedia, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useChat, useMedia, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { cn } from "../../utils/cn";
 import {
@@ -30,7 +30,7 @@ import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkIconButton, ChalkPanel } from "../chalk-ui";
 import { useSkin } from "../skin-context";
-import { ClassicControlBar } from "./ClassicControlBar";
+import { ClassicControlBar, ClassicControlBarSurface } from "./ClassicControlBar";
 
 interface MediaDevice {
   deviceId: string;
@@ -61,9 +61,9 @@ function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined,
   return selectedDeviceId ? [{ deviceId: selectedDeviceId, label: fallbackLabel, kind }] : [];
 }
 
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "more" | "info" | "thumbsup" | "leave";
+export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "feedback" | "more" | "info" | "thumbsup" | "leave";
 
-interface ControlBarSurfaceProps {
+export interface ControlBarSurfaceProps {
   position?: "bottom" | "top";
   placement?: "inline" | "floating";
   density?: "comfortable" | "compact";
@@ -74,6 +74,7 @@ interface ControlBarSurfaceProps {
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
   isRecording?: boolean;
+  isRecordingPending?: boolean;
   isChatOpen?: boolean;
   isParticipantsOpen?: boolean;
   isTranscriptionEnabled?: boolean;
@@ -105,12 +106,17 @@ interface ControlBarSurfaceProps {
   onOpenReactions?: () => void;
   onOpenSettings?: () => void;
   onOpenDiagnostics?: () => void;
+  onOpenFeedback?: () => void;
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
   onLeft?: () => void;
 
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
+  expanded?: boolean;
+  detectDevices?: boolean;
+  /** Render the requested controls as inert display state without commands. */
+  displayOnly?: boolean;
   className?: string;
 }
 
@@ -129,6 +135,7 @@ export interface ControlBarProps {
   readonly onOpenReactions?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onOpenDiagnostics?: () => void;
+  readonly onOpenFeedback?: () => void;
   readonly onOpenMore?: () => void;
   readonly onOpenInfo?: () => void;
   readonly onLeaveRequest?: () => void;
@@ -139,7 +146,7 @@ export interface ControlBarProps {
   readonly className?: string;
 }
 
-const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "thumbsup", "pip", "settings"];
+const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "thumbsup", "pip", "settings"];
 
 const formatDuration = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
@@ -152,11 +159,30 @@ const formatDuration = (seconds: number) => {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 };
 
-function FloatingControlBarButton({ icon, label, onClick, active = false, danger = false, badge, seed }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick?: () => void; readonly active?: boolean; readonly danger?: boolean; readonly badge?: number; readonly seed: string }) {
+function FloatingControlBarButton({
+  icon,
+  label,
+  onClick,
+  active = false,
+  danger = false,
+  disabled = false,
+  badge,
+  seed,
+}: {
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  readonly onClick?: () => void;
+  readonly active?: boolean;
+  readonly danger?: boolean;
+  readonly disabled?: boolean;
+  readonly badge?: number;
+  readonly seed: string;
+}) {
   return (
     <Tooltip content={label} position="top">
       <ChalkIconButton
         onClick={onClick}
+        disabled={disabled}
         aria-label={label}
         aria-pressed={active}
         seed={seed}
@@ -171,12 +197,13 @@ function FloatingControlBarButton({ icon, label, onClick, active = false, danger
   );
 }
 
-const ControlBarSurface = React.memo(
+export const ControlBarSurface = React.memo(
   ({
     isMuted = false,
     isVideoEnabled = true,
     isScreenSharing = false,
     isRecording = false,
+    isRecordingPending = false,
     isChatOpen = false,
     isParticipantsOpen = false,
     isTranscriptionEnabled = false,
@@ -212,11 +239,15 @@ const ControlBarSurface = React.memo(
     onOpenReactions,
     onOpenSettings,
     onOpenDiagnostics,
+    onOpenFeedback,
     onOpenMore,
     onOpenInfo,
     onLeft,
     participantColorSeed,
     participantGradientPreference,
+    expanded = false,
+    detectDevices = true,
+    displayOnly = false,
 
     className,
   }: ControlBarSurfaceProps) => {
@@ -225,7 +256,7 @@ const ControlBarSurface = React.memo(
     const buttonsToRender = buttons ?? DEFAULT_BUTTONS;
 
     useEffect(() => {
-      if (placement !== "floating" || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
+      if (!detectDevices || placement !== "floating" || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
       let cancelled = false;
       const syncDevices = async () => {
         try {
@@ -247,7 +278,7 @@ const ControlBarSurface = React.memo(
         cancelled = true;
         navigator.mediaDevices.removeEventListener?.("devicechange", syncDevices);
       };
-    }, [density, placement]);
+    }, [density, detectDevices, placement]);
 
     const effectiveAudioInputDevices = withSelectedDeviceFallback(mergeDevices(audioInputDevices, detectedDevices.audioinput), selectedAudioInput, "Current microphone", "audioinput");
     const effectiveAudioOutputDevices = withSelectedDeviceFallback(mergeDevices(audioOutputDevices, detectedDevices.audiooutput), selectedAudioOutput, "Current speaker", "audiooutput");
@@ -255,7 +286,7 @@ const ControlBarSurface = React.memo(
 
     const showLeave = buttonsToRender.includes("leave");
     const mediaButtons = buttonsToRender.filter((b) => b === "mic" || b === "video" || b === "screenshare" || b === "record" || b === "whiteboard" || b === "handraise");
-    const interactionButtons = buttonsToRender.filter((b) => b === "participants" || b === "chat" || b === "transcription" || b === "thumbsup" || b === "pip" || b === "reactions" || b === "settings" || b === "diagnostics" || b === "more" || b === "info");
+    const interactionButtons = buttonsToRender.filter((b) => b === "participants" || b === "chat" || b === "transcription" || b === "thumbsup" || b === "pip" || b === "reactions" || b === "settings" || b === "diagnostics" || b === "feedback" || b === "more" || b === "info");
 
     const renderButton = (type: ControlBarButtonName) => {
       switch (type) {
@@ -289,7 +320,19 @@ const ControlBarSurface = React.memo(
           );
         case "record":
           if (!onToggleRecording) return null;
-          return <ControlBarButton key="record" icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop Recording" : "Record"} onClick={onToggleRecording} active={isRecording} seed="control-record" showLabel={showLabels} data-tour="controls-record" />;
+          return (
+            <ControlBarButton
+              key="record"
+              icon={<CircleIcon className={isRecording ? "fill-current" : ""} />}
+              label={isRecordingPending ? (isRecording ? "Stopping…" : "Starting…") : isRecording ? "Stop Recording" : "Record"}
+              onClick={onToggleRecording}
+              active={isRecording}
+              disabled={isRecordingPending}
+              seed="control-record"
+              showLabel={showLabels}
+              data-tour="controls-record"
+            />
+          );
         case "chat":
           if (!onToggleChat) return null;
           return (
@@ -344,6 +387,9 @@ const ControlBarSurface = React.memo(
             return null;
           }
           return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} seed="control-diagnostics" showLabel={showLabels} />;
+        case "feedback":
+          if (!onOpenFeedback) return null;
+          return <ControlBarButton key="feedback" icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} seed="control-feedback" showLabel={showLabels} />;
         case "more":
           if (!onOpenMore) return null;
           return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} seed="control-more" showLabel={showLabels} />;
@@ -462,6 +508,11 @@ const ControlBarSurface = React.memo(
 
             <ChalkPanel className="order-2 shrink-0 rounded-none p-1" seed="control-compact-more-leave">
               <ChalkControlGroup aria-label="More and leave controls" className="gap-1">
+                {buttonsToRender.includes("feedback") && onOpenFeedback ? (
+                  <ChalkIconButton aria-label="Feedback" onClick={onOpenFeedback} seed="control-compact-feedback" size="lg">
+                    <Message01Icon className="h-5 w-5" />
+                  </ChalkIconButton>
+                ) : null}
                 {buttonsToRender.includes("more") && onOpenMore ? (
                   <Tooltip content="More options" position="top">
                     <ChalkIconButton aria-label="More options" onClick={onOpenMore} seed="control-compact-more" size="lg">
@@ -491,24 +542,34 @@ const ControlBarSurface = React.memo(
           case "screenshare":
             return <FloatingControlBarButton key={type} icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />} label={isScreenSharing ? "Stop share" : "Share"} onClick={onToggleScreenShare} active={isScreenSharing} seed="control-floating-screenshare" />;
           case "whiteboard":
-            if (!onToggleWhiteboard) return null;
+            if (!onToggleWhiteboard && !displayOnly) return null;
             return <FloatingControlBarButton key={type} icon={<Edit02Icon />} label="Board" onClick={onToggleWhiteboard} active={isWhiteboardOpen} seed="control-floating-whiteboard" />;
           case "handraise":
             if (!onToggleHandRaise) return null;
             return <FloatingControlBarButton key={type} icon={<HandIcon />} label={isHandRaised ? "Lower" : "Raise"} onClick={onToggleHandRaise} active={isHandRaised} seed="control-floating-handraise" />;
           case "participants":
-            if (!onToggleParticipants) return null;
+            if (!onToggleParticipants && !displayOnly) return null;
             return <FloatingControlBarButton key={type} icon={<UserGroupIcon />} label="Participants" onClick={onToggleParticipants} active={isParticipantsOpen} seed="control-floating-participants" />;
           case "chat":
-            if (!onToggleChat) return null;
+            if (!onToggleChat && !displayOnly) return null;
             return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} seed="control-floating-chat" />;
           case "reactions":
           case "thumbsup":
-            if (!onOpenReactions) return null;
+            if (!onOpenReactions && !displayOnly) return null;
             return <FloatingControlBarButton key={type} icon={<SmileIcon />} label="React" onClick={onOpenReactions} seed="control-floating-reactions" />;
           case "record":
-            if (!onToggleRecording) return null;
-            return <FloatingControlBarButton key={type} icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop" : "Record"} onClick={onToggleRecording} active={isRecording} seed="control-floating-record" />;
+            if (!onToggleRecording && !displayOnly) return null;
+            return (
+              <FloatingControlBarButton
+                key={type}
+                icon={<CircleIcon className={isRecording ? "fill-current" : ""} />}
+                label={isRecordingPending ? (isRecording ? "Stopping…" : "Starting…") : isRecording ? "Stop" : "Record"}
+                onClick={onToggleRecording}
+                active={isRecording}
+                disabled={isRecordingPending}
+                seed="control-floating-record"
+              />
+            );
           case "transcription":
             if (!onToggleTranscription) return null;
             return <FloatingControlBarButton key={type} icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} seed="control-floating-transcription" />;
@@ -519,6 +580,8 @@ const ControlBarSurface = React.memo(
             return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} seed="control-floating-settings" />;
           case "diagnostics":
             return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} seed="control-floating-diagnostics" /> : null;
+          case "feedback":
+            return onOpenFeedback ? <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} seed="control-floating-feedback" /> : null;
           case "more":
             if (!onOpenMore) return null;
             return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} seed="control-floating-more" />;
@@ -553,7 +616,15 @@ const ControlBarSurface = React.memo(
               {buttonsToRender.includes("video") ? (
                 <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
               ) : null}
-              <div className="pointer-events-none -ml-2 grid min-w-0 grid-cols-[0fr] -translate-x-1.5 opacity-0 transition-[grid-template-columns,margin,opacity,transform] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[grid-template-columns,opacity,transform] group-hover:pointer-events-auto group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:ml-0 group-focus-within:grid-cols-[1fr] group-focus-within:translate-x-0 group-focus-within:opacity-100 motion-reduce:transition-none">
+              <div
+                className={cn(
+                  "pointer-events-none grid min-w-0 transition-[grid-template-columns,margin,opacity,transform] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                  !displayOnly && "will-change-[grid-template-columns,opacity,transform]",
+                  expanded
+                    ? "pointer-events-auto ml-0 grid-cols-[1fr] translate-x-0 opacity-100"
+                    : "-ml-2 grid-cols-[0fr] -translate-x-1.5 opacity-0 group-hover:pointer-events-auto group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:ml-0 group-focus-within:grid-cols-[1fr] group-focus-within:translate-x-0 group-focus-within:opacity-100",
+                )}
+              >
                 <div className="-my-2 flex min-w-0 items-center gap-2 overflow-hidden py-2">{buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}</div>
               </div>
               {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger seed="control-floating-leave" /> : null}
@@ -590,20 +661,33 @@ export function ControlBar(props: ControlBarProps): React.JSX.Element {
   return skin === "classic" ? <ClassicControlBar {...props} /> : <ChalkControlBar {...props} />;
 }
 
+/** State-driven controls presentation without device, permission or Space hooks. */
+export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
+  const skin = useSkin();
+  const surfaceProps: ControlBarSurfaceProps = props.displayOnly ? { ...props, detectDevices: false } : props;
+  return skin === "classic" ? <ClassicControlBarSurface {...surfaceProps} /> : <ControlBarSurface {...surfaceProps} />;
+}
+
 ControlBar.displayName = "ControlBar";
+ControlBarPresentation.displayName = "ControlBarPresentation";
 
 function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
   const media = useMedia();
   const chat = useChat();
+  const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCan("drawWhiteboard");
+  const canManageRecording = useCan("manageRecording");
   const microphoneEnabled = media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting";
   const cameraEnabled = media.local.camera.state === "enabled" || media.local.camera.state === "requesting";
   const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
+  const recordingStatus = recording.current?.status;
+  const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
+  const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
   const measuredEpisodeDuration = useEpisodeDuration();
   const episodeDuration = props.duration ?? measuredEpisodeDuration;
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -637,6 +721,7 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
     if (button === "reactions" || button === "thumbsup") return canSendReaction;
     if (button === "handraise") return canRaiseHand;
     if (button === "whiteboard") return canDrawWhiteboard;
+    if (button === "record") return canManageRecording;
     return true;
   });
   const audioInputDevices = media.devices.microphones.map((device) => ({ ...device, kind: "audioinput" as const }));
@@ -652,6 +737,8 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
         isMuted={!microphoneEnabled}
         isVideoEnabled={cameraEnabled}
         isScreenSharing={screenSharing}
+        isRecording={isRecording}
+        isRecordingPending={isRecordingPending}
         isChatOpen={props.activePanel === "chat"}
         isParticipantsOpen={props.activePanel === "participants"}
         isHandRaised={self.handRaised}
@@ -668,6 +755,7 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
         onAudioOutputChange={(deviceId) => void run(() => client.media.selectSpeaker(deviceId))}
         onVideoInputChange={(deviceId) => void run(() => client.media.selectCamera(deviceId))}
         onToggleScreenShare={() => void run(() => client.media.setScreenShareEnabled(!screenSharing))}
+        onToggleRecording={() => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start()))}
         onToggleChat={props.onToggleChat}
         onToggleParticipants={props.onToggleParticipants}
         onToggleHandRaise={() => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand()))}
@@ -675,6 +763,7 @@ function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
         onOpenReactions={props.onOpenReactions}
         onOpenSettings={props.onOpenSettings}
         onOpenDiagnostics={props.onOpenDiagnostics}
+        onOpenFeedback={props.onOpenFeedback}
         onOpenMore={props.onOpenMore}
         onOpenInfo={props.onOpenInfo}
         onLeft={leave}

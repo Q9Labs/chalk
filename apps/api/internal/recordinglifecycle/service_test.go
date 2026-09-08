@@ -46,7 +46,7 @@ func TestServicePublishesCompleteWorkerAuthority(t *testing.T) {
 		AttemptCount: 2, FencingGeneration: 4, CaptureEpoch: 7, EnvelopeDigest: digest[:], LeaseOwner: "worker-1",
 		LeaseToken: "lease-token", LeaseExpiresAt: now.Add(time.Minute),
 	}
-	readyAt := now.Add(2 * time.Second)
+	readyAt := now
 	if _, err := service.PublishReady(context.Background(), recordinglifecycle.ReadyInput{Authority: authority, RequestKey: "capture_ready_00000001", ReadyAt: readyAt, NoPublisher: true}); err != nil {
 		t.Fatalf("publish ready: %v", err)
 	}
@@ -76,5 +76,12 @@ func TestServiceRejectsExpiredLeaseAndInvalidRequestKey(t *testing.T) {
 	_, err = service.PublishReady(context.Background(), recordinglifecycle.ReadyInput{Authority: authority, RequestKey: "contains/slash", ReadyAt: now})
 	if !errors.Is(err, recordinglifecycle.ErrInvalidRequest) {
 		t.Fatalf("invalid request key error = %v, want invalid request", err)
+	}
+	if _, err := service.PublishReady(context.Background(), recordinglifecycle.ReadyInput{Authority: authority, RequestKey: "capture_ready_00000002", ReadyAt: now.Add(time.Second)}); err != nil {
+		t.Fatalf("ready origin within clock skew: %v", err)
+	}
+	_, err = service.PublishReady(context.Background(), recordinglifecycle.ReadyInput{Authority: authority, RequestKey: "capture_ready_00000003", ReadyAt: now.Add(time.Minute)})
+	if !errors.Is(err, recordinglifecycle.ErrInvalidRequest) {
+		t.Fatalf("ready origin beyond clock skew error = %v, want invalid request", err)
 	}
 }

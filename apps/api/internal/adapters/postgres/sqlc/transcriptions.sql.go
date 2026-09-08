@@ -81,41 +81,41 @@ func (q *Queries) AcceptTranscriptionChunkResult(ctx context.Context, arg Accept
 	return i, err
 }
 
-const createRequestedTranscription = `-- name: CreateRequestedTranscription :one
+const createRenderCommittedTranscription = `-- name: CreateRenderCommittedTranscription :one
 insert into transcriptions (
     id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
     languages, metadata, source_manifest_key, source_manifest_sha256,
-    source_manifest_size, source_manifest_content_type, generation
+    source_manifest_size, source_manifest_content_type, source_expires_at, generation
 ) select
     $1, recordings.tenant_id, recordings.id, recordings.space_id,
     recordings.episode_id, $2, null, null,
     $3, $4, $5,
     $6, $7,
-    $8, $9
+    $8, $9, $10
 from recordings
-where recordings.tenant_id = $10
-  and recordings.id = $11
-  and recordings.status = 'completed'
+where recordings.tenant_id = $11
+  and recordings.id = $12
 on conflict (recording_id) do nothing
-returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at
+returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
 `
 
-type CreateRequestedTranscriptionParams struct {
-	ID                        pgtype.UUID `json:"id"`
-	Status                    string      `json:"status"`
-	Languages                 []string    `json:"languages"`
-	Metadata                  []byte      `json:"metadata"`
-	SourceManifestKey         pgtype.Text `json:"source_manifest_key"`
-	SourceManifestSha256      []byte      `json:"source_manifest_sha256"`
-	SourceManifestSize        pgtype.Int8 `json:"source_manifest_size"`
-	SourceManifestContentType pgtype.Text `json:"source_manifest_content_type"`
-	Generation                int64       `json:"generation"`
-	TenantID                  pgtype.UUID `json:"tenant_id"`
-	RecordingID               pgtype.UUID `json:"recording_id"`
+type CreateRenderCommittedTranscriptionParams struct {
+	ID                        pgtype.UUID        `json:"id"`
+	Status                    string             `json:"status"`
+	Languages                 []string           `json:"languages"`
+	Metadata                  []byte             `json:"metadata"`
+	SourceManifestKey         pgtype.Text        `json:"source_manifest_key"`
+	SourceManifestSha256      []byte             `json:"source_manifest_sha256"`
+	SourceManifestSize        pgtype.Int8        `json:"source_manifest_size"`
+	SourceManifestContentType pgtype.Text        `json:"source_manifest_content_type"`
+	SourceExpiresAt           pgtype.Timestamptz `json:"source_expires_at"`
+	Generation                int64              `json:"generation"`
+	TenantID                  pgtype.UUID        `json:"tenant_id"`
+	RecordingID               pgtype.UUID        `json:"recording_id"`
 }
 
-func (q *Queries) CreateRequestedTranscription(ctx context.Context, arg CreateRequestedTranscriptionParams) (Transcription, error) {
-	row := q.db.QueryRow(ctx, createRequestedTranscription,
+func (q *Queries) CreateRenderCommittedTranscription(ctx context.Context, arg CreateRenderCommittedTranscriptionParams) (Transcription, error) {
+	row := q.db.QueryRow(ctx, createRenderCommittedTranscription,
 		arg.ID,
 		arg.Status,
 		arg.Languages,
@@ -124,6 +124,7 @@ func (q *Queries) CreateRequestedTranscription(ctx context.Context, arg CreateRe
 		arg.SourceManifestSha256,
 		arg.SourceManifestSize,
 		arg.SourceManifestContentType,
+		arg.SourceExpiresAt,
 		arg.Generation,
 		arg.TenantID,
 		arg.RecordingID,
@@ -153,6 +154,86 @@ func (q *Queries) CreateRequestedTranscription(ctx context.Context, arg CreateRe
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
+	)
+	return i, err
+}
+
+const createRequestedTranscription = `-- name: CreateRequestedTranscription :one
+insert into transcriptions (
+    id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
+    languages, metadata, source_manifest_key, source_manifest_sha256,
+    source_manifest_size, source_manifest_content_type, source_expires_at, generation
+) select
+    $1, recordings.tenant_id, recordings.id, recordings.space_id,
+    recordings.episode_id, $2, null, null,
+    $3, $4, $5,
+    $6, $7,
+    $8, $9, $10
+from recordings
+where recordings.tenant_id = $11
+  and recordings.id = $12
+  and recordings.status = 'completed'
+on conflict (recording_id) do nothing
+returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
+`
+
+type CreateRequestedTranscriptionParams struct {
+	ID                        pgtype.UUID        `json:"id"`
+	Status                    string             `json:"status"`
+	Languages                 []string           `json:"languages"`
+	Metadata                  []byte             `json:"metadata"`
+	SourceManifestKey         pgtype.Text        `json:"source_manifest_key"`
+	SourceManifestSha256      []byte             `json:"source_manifest_sha256"`
+	SourceManifestSize        pgtype.Int8        `json:"source_manifest_size"`
+	SourceManifestContentType pgtype.Text        `json:"source_manifest_content_type"`
+	SourceExpiresAt           pgtype.Timestamptz `json:"source_expires_at"`
+	Generation                int64              `json:"generation"`
+	TenantID                  pgtype.UUID        `json:"tenant_id"`
+	RecordingID               pgtype.UUID        `json:"recording_id"`
+}
+
+func (q *Queries) CreateRequestedTranscription(ctx context.Context, arg CreateRequestedTranscriptionParams) (Transcription, error) {
+	row := q.db.QueryRow(ctx, createRequestedTranscription,
+		arg.ID,
+		arg.Status,
+		arg.Languages,
+		arg.Metadata,
+		arg.SourceManifestKey,
+		arg.SourceManifestSha256,
+		arg.SourceManifestSize,
+		arg.SourceManifestContentType,
+		arg.SourceExpiresAt,
+		arg.Generation,
+		arg.TenantID,
+		arg.RecordingID,
+	)
+	var i Transcription
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RecordingID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.Status,
+		&i.Provider,
+		&i.Model,
+		&i.Languages,
+		&i.Metadata,
+		&i.ArtifactKey,
+		&i.ArtifactSha256,
+		&i.ArtifactSize,
+		&i.ArtifactContentType,
+		&i.SourceManifestKey,
+		&i.SourceManifestSha256,
+		&i.SourceManifestSize,
+		&i.SourceManifestContentType,
+		&i.Generation,
+		&i.CompletedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -235,20 +316,20 @@ const createTranscription = `-- name: CreateTranscription :one
 insert into transcriptions (
     id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
     languages, metadata, source_manifest_key, source_manifest_sha256,
-    source_manifest_size, source_manifest_content_type, generation
+    source_manifest_size, source_manifest_content_type, source_expires_at, generation
 ) select
     $1, recordings.tenant_id, recordings.id, recordings.space_id,
     recordings.episode_id, $2, $3, $4,
     $5, $6, $7,
     $8, $9,
-    $10, $11
+    $10, null, $11
 from recordings
 where recordings.tenant_id = $12
   and recordings.id = $13
   and recordings.space_id = $14
   and recordings.episode_id = $15
   and recordings.status = 'completed'
-returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at
+returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
 `
 
 type CreateTranscriptionParams struct {
@@ -312,6 +393,7 @@ func (q *Queries) CreateTranscription(ctx context.Context, arg CreateTranscripti
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -416,7 +498,7 @@ with cancelled as (
 update transcriptions
 set status = 'deleted', deleted_at = now(), updated_at = now()
 where transcriptions.tenant_id = $1 and transcriptions.id = $2
-returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at
+returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
 `
 
 type DeleteTenantTranscriptionParams struct {
@@ -451,6 +533,7 @@ func (q *Queries) DeleteTenantTranscription(ctx context.Context, arg DeleteTenan
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -465,7 +548,7 @@ set status = 'complete',
 where t.id = $8 and t.status in ('preparing', 'transcribing', 'verifying')
   and exists (select 1 from transcript_chunks c where c.transcript_id = t.id)
   and not exists (select 1 from artifact_jobs j where j.transcript_id = t.id and j.artifact_kind = 'transcription_chunk' and j.state <> 'completed')
-returning t.id, t.tenant_id, t.recording_id, t.space_id, t.episode_id, t.status, t.provider, t.model, t.languages, t.metadata, t.artifact_key, t.artifact_sha256, t.artifact_size, t.artifact_content_type, t.source_manifest_key, t.source_manifest_sha256, t.source_manifest_size, t.source_manifest_content_type, t.generation, t.completed_at, t.deleted_at, t.updated_at, t.created_at
+returning t.id, t.tenant_id, t.recording_id, t.space_id, t.episode_id, t.status, t.provider, t.model, t.languages, t.metadata, t.artifact_key, t.artifact_sha256, t.artifact_size, t.artifact_content_type, t.source_manifest_key, t.source_manifest_sha256, t.source_manifest_size, t.source_manifest_content_type, t.generation, t.completed_at, t.deleted_at, t.updated_at, t.created_at, t.source_expires_at
 `
 
 type FinalizeTranscriptionParams struct {
@@ -515,6 +598,7 @@ func (q *Queries) FinalizeTranscription(ctx context.Context, arg FinalizeTranscr
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -614,7 +698,7 @@ func (q *Queries) GetCompletedRecordingTranscriptionMode(ctx context.Context, ar
 }
 
 const getTenantTranscription = `-- name: GetTenantTranscription :one
-select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at from transcriptions
+select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at from transcriptions
 where tenant_id = $1 and id = $2
 `
 
@@ -650,12 +734,13 @@ func (q *Queries) GetTenantTranscription(ctx context.Context, arg GetTenantTrans
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
 
 const getTenantTranscriptionByRecording = `-- name: GetTenantTranscriptionByRecording :one
-select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at from transcriptions
+select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at from transcriptions
 where tenant_id = $1 and recording_id = $2
 `
 
@@ -691,6 +776,7 @@ func (q *Queries) GetTenantTranscriptionByRecording(ctx context.Context, arg Get
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -758,7 +844,7 @@ func (q *Queries) GetTranscriptChunkResult(ctx context.Context, arg GetTranscrip
 }
 
 const listTenantTranscriptions = `-- name: ListTenantTranscriptions :many
-select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at from transcriptions
+select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at from transcriptions
 where tenant_id = $1
   and ($2::uuid is null or recording_id = $2::uuid)
   and (not $3::boolean or (created_at, id) < ($4::timestamptz, $5::uuid))
@@ -815,6 +901,7 @@ func (q *Queries) ListTenantTranscriptions(ctx context.Context, arg ListTenantTr
 			&i.DeletedAt,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.SourceExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -876,7 +963,7 @@ func (q *Queries) ListTranscriptChunks(ctx context.Context, arg ListTranscriptCh
 }
 
 const lockTenantTranscriptionForUpdate = `-- name: LockTenantTranscriptionForUpdate :one
-select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at from transcriptions
+select id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at from transcriptions
 where tenant_id = $1 and id = $2
 for update
 `
@@ -913,6 +1000,7 @@ func (q *Queries) LockTenantTranscriptionForUpdate(ctx context.Context, arg Lock
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -922,7 +1010,7 @@ update transcriptions
 set status = 'transcribing', updated_at = now()
 where tenant_id = $1 and id = $2
   and status in ('preparing', 'retryable_failure', 'transcribing')
-returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at
+returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
 `
 
 type MarkTranscriptionTranscribingParams struct {
@@ -957,6 +1045,7 @@ func (q *Queries) MarkTranscriptionTranscribing(ctx context.Context, arg MarkTra
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -966,7 +1055,7 @@ update transcriptions
 set status = 'verifying', updated_at = now()
 where tenant_id = $1 and id = $2
   and status in ('preparing', 'transcribing', 'retryable_failure', 'verifying')
-returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at
+returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
 `
 
 type MarkTranscriptionVerifyingParams struct {
@@ -1001,6 +1090,7 @@ func (q *Queries) MarkTranscriptionVerifying(ctx context.Context, arg MarkTransc
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -1019,7 +1109,7 @@ update transcriptions set
     deleted_at = case when $19::boolean then $20::timestamptz else deleted_at end,
     updated_at = now()
 where tenant_id = $21 and id = $22
-returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at
+returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
 `
 
 type UpdateTenantTranscriptionParams struct {
@@ -1097,6 +1187,7 @@ func (q *Queries) UpdateTenantTranscription(ctx context.Context, arg UpdateTenan
 		&i.DeletedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }

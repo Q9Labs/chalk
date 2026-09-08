@@ -304,7 +304,7 @@ variable "capture_node_size" {
 }
 
 variable "render_node_size" {
-  description = "DigitalOcean TOR1 RTX 4000 GPU size selected after staging qualification."
+  description = "DigitalOcean TOR1 RTX 4000 Ada GPU size selected for staging qualification."
   type        = string
-  default     = "gpu-4000-20gb"
+  default     = "gpu-4000adax1-20gb"
 }

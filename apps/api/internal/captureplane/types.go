@@ -239,7 +239,7 @@ type CloseCaptureConnectionResult struct {
 }
 
 // CapturePlane is the provider-neutral signaling port used by recorder
-// workers. Cloudflare SFU and mediasoup adapters implement this interface.
+// workers. Provider adapters implement this interface.
 type CapturePlane interface {
 	CreateCaptureConnection(context.Context, CreateCaptureConnectionInput) (CreateCaptureConnectionResult, error)
 	PullCaptureTracks(context.Context, PullCaptureTracksInput) (PullCaptureTracksResult, error)
@@ -247,6 +247,12 @@ type CapturePlane interface {
 	InspectCaptureConnection(context.Context, InspectCaptureConnectionInput) (InspectCaptureConnectionResult, error)
 	CloseCaptureTracks(context.Context, CloseCaptureTracksInput) (CloseCaptureTracksResult, error)
 	CloseCaptureConnection(context.Context, CloseCaptureConnectionInput) (CloseCaptureConnectionResult, error)
+}
+
+// Resolver selects the CapturePlane bound to an Episode. Implementations must
+// derive the selection from durable Chalk authority, never from worker input.
+type Resolver interface {
+	Resolve(context.Context, CaptureIdentity) (CapturePlane, error)
 }
 
 func (k OperationKind) String() string { return string(k) }

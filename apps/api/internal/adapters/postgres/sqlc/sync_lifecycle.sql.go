@@ -280,26 +280,28 @@ insert into episodes (
         'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
         'linger_window_seconds', spaces.linger_window_seconds,
-        'artifact_policy', $6::jsonb
+        'artifact_policy', $6::jsonb,
+        'media_plane_binding', $7::jsonb
     )
 from spaces
 where
-    spaces.tenant_id = $7
-    and spaces.id = $8
+    spaces.tenant_id = $8
+    and spaces.id = $9
     and spaces.archived_at is null
 for update
 returning id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
 `
 
 type CreateLifecycleEpisodeParams struct {
-	ID              pgtype.UUID        `json:"id"`
-	Metadata        []byte             `json:"metadata"`
-	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
-	StartedAt       pgtype.Timestamptz `json:"started_at"`
-	DeadlineAt      pgtype.Timestamptz `json:"deadline_at"`
-	ArtifactPolicy  []byte             `json:"artifact_policy"`
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	SpaceID         pgtype.UUID        `json:"space_id"`
+	ID                pgtype.UUID        `json:"id"`
+	Metadata          []byte             `json:"metadata"`
+	CreatedByUserID   pgtype.UUID        `json:"created_by_user_id"`
+	StartedAt         pgtype.Timestamptz `json:"started_at"`
+	DeadlineAt        pgtype.Timestamptz `json:"deadline_at"`
+	ArtifactPolicy    []byte             `json:"artifact_policy"`
+	MediaPlaneBinding []byte             `json:"media_plane_binding"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	SpaceID           pgtype.UUID        `json:"space_id"`
 }
 
 func (q *Queries) CreateLifecycleEpisode(ctx context.Context, arg CreateLifecycleEpisodeParams) (Episode, error) {
@@ -310,6 +312,7 @@ func (q *Queries) CreateLifecycleEpisode(ctx context.Context, arg CreateLifecycl
 		arg.StartedAt,
 		arg.DeadlineAt,
 		arg.ArtifactPolicy,
+		arg.MediaPlaneBinding,
 		arg.TenantID,
 		arg.SpaceID,
 	)

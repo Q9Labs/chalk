@@ -55,12 +55,14 @@ export interface TranscriptionProvider {
   transcribe(request: ProviderRequest): Promise<ProviderResult>;
 }
 
-export type TrackClass = "microphone" | "screen-share" | "system-audio" | "unknown";
+export type TrackClass = "microphone";
 
 export interface ManifestIdentity {
-  kind: "participant" | "shared" | "unknown";
-  participantId?: string;
-  trackEpoch?: string;
+  kind: "participant";
+  participantRef: string;
+  participantGeneration: number;
+  trackId: string;
+  trackEpoch: string;
 }
 
 export interface SpeakerTurn {
@@ -68,17 +70,25 @@ export interface SpeakerTurn {
   endMs: number;
   identity: ManifestIdentity;
   trackClass: TrackClass;
-  displayNameSnapshot?: string;
+  displayNameSnapshot: string;
   overlap: boolean;
 }
 
 export interface SpeakerTurnManifest {
-  schemaVersion: string;
+  schemaVersion: "recording-transcription-source.v1";
+  tenantId: string;
+  recordingId: string;
+  episodeId: string;
+  captureEpoch: number;
+  durationMs: number;
+  timebase: "recording_relative_ms";
+  presentationSha256: string;
   turns: SpeakerTurn[];
 }
 
 export interface ChunkAssignment {
   chunkId: string;
+  inputObjectKey: string;
   inputUrl: string;
   inputUrlExpiresAt: string;
   inputContentType: string;
@@ -86,8 +96,17 @@ export interface ChunkAssignment {
   inputSha256: string;
   episodeStartMs: number;
   episodeEndMs: number;
+  sourceStartMs: number;
+  sourceEndMs: number;
+  chunkIndex: number;
+  generation: number;
+  allocationId: string;
+  objectVersion: string;
+  objectEtag: string;
   sourceIdentity: ManifestIdentity;
   sourceTrackClass: TrackClass;
+  displayNameSnapshot: string;
+  overlap: boolean;
 }
 
 export interface ManifestAssignment {
@@ -100,7 +119,11 @@ export interface ManifestAssignment {
 
 export interface TranscriptionAssignment {
   jobId: string;
+  tenantId: string;
   episodeId: string;
+  recordingId: string;
+  presentationSha256: string;
+  sourceExpiresAt: string;
   attempt: number;
   leaseToken: string;
   leaseExpiresAt: string;

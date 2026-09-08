@@ -22,6 +22,8 @@ import {
   unregisterEpisodeDiagnosticSyncClient,
 } from "./episode-diagnostic-registry";
 import { registerEpisodeDiagnosticTrack, unregisterEpisodeDiagnosticTrack } from "./episode-diagnostic-render-registry";
+import { createFeedbackController } from "../feedback/controller";
+import type { FeedbackController, FeedbackSource } from "../feedback/types";
 
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type DiagnosticRemoteTrack = { readonly track: MediaStreamTrack; readonly source: "camera" | "screen" };
@@ -42,6 +44,7 @@ export type SpaceClientPlatform = {
   readonly telemetry?: JourneyTelemetryContext;
   readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void;
+  readonly feedbackSource?: FeedbackSource;
 };
 
 const syncClientsByDependencies = new WeakMap<ConnectionDependencies, Set<ConnectionSyncClient>>();
@@ -110,7 +113,16 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
       if (episodeDiagnostics) registerEpisodeDiagnosticConnection(lifecycle, episodeDiagnostics);
       const controllers = yield* makeControllerEffects({ apiBaseUrl, connection: lifecycle, store, mediaDeviceSelection: selection, featureFactories: dependencies, fetch: platform.fetch, episodeDiagnostics });
       return yield* Effect.acquireRelease(
-        Effect.sync(() => new SpaceClientCore(lifecycle, selection, store, controllers, episodeDiagnostics, dependencies, syncClientsByDependencies.get(dependencies))),
+        Effect.sync(
+          () =>
+            new SpaceClientCore(lifecycle, selection, store, controllers, episodeDiagnostics, dependencies, syncClientsByDependencies.get(dependencies), {
+              apiBaseUrl,
+              fetch: platform.fetch,
+              createId: platform.randomUUID ?? dependencies.createId ?? lifecycle.createId,
+              source: platform.feedbackSource ?? "embedded",
+              telemetry: platform.telemetry,
+            }),
+        ),
         (core) => Effect.sync(() => core.dispose()),
       );
     }),
@@ -118,6 +130,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
 
 export class SpaceClientCore {
   readonly controllers: ControllerEffects;
+  readonly feedback: FeedbackController;
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
   readonly #episodeDiagnostics: EpisodeDiagnosticRuntime | undefined;
@@ -141,6 +154,7 @@ export class SpaceClientCore {
     episodeDiagnostics?: EpisodeDiagnosticRuntime,
     episodeDiagnosticDependencies?: ConnectionDependencies,
     episodeDiagnosticSyncClients?: ReadonlySet<ConnectionSyncClient>,
+    feedback?: Readonly<{ apiBaseUrl: string; fetch?: typeof globalThis.fetch; createId: () => string; source: FeedbackSource; telemetry?: JourneyTelemetryContext }>,
   ) {
     this.#connection = connection;
     this.#store = store;
@@ -148,6 +162,22 @@ export class SpaceClientCore {
     this.#episodeDiagnostics = episodeDiagnostics;
     this.#episodeDiagnosticDependencies = episodeDiagnosticDependencies;
     this.#episodeDiagnosticSyncClients = episodeDiagnosticSyncClients;
+    this.feedback = createFeedbackController({
+      apiBaseUrl: feedback?.apiBaseUrl ?? "https://api.chalkmeet.com",
+      fetch: feedback?.fetch,
+      createId: feedback?.createId ?? connection.createId,
+      now: connection.nowUnsafe,
+      source: feedback?.source ?? "embedded",
+      telemetry: feedback?.telemetry,
+      diagnosticContext: () => episodeDiagnostics?.activeContext(),
+      connection: connection.getSnapshot,
+      diagnosticCredential: () => episodeDiagnostics?.feedbackCredentialUnsafe() ?? null,
+      diagnosticAvailability: () => episodeDiagnostics?.feedbackAvailabilityUnsafe() ?? "unavailable",
+      diagnosticSnapshot: () => {
+        const inspected = episodeDiagnostics?.inspect();
+        return { dropped: inspected?.dropped ?? 0, events: inspected?.ring ?? [] };
+      },
+    });
     this.#store.updateConnection(connection.getSnapshot());
     this.#previous = this.#store.getSnapshot();
     this.#unsubscribeStore = this.#store.subscribe(() => this.#publishStore());
@@ -219,6 +249,7 @@ export class SpaceClientCore {
     this.#unsubscribeStore?.();
     this.#unsubscribeConnection = null;
     this.#unsubscribeStore = null;
+    this.feedback.dispose();
     this.#disposeDiagnostics();
     this.#clearHandlers();
   }

@@ -55,6 +55,8 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly stopParticipantCamera: (participantId: string) => Promise<V1CommandResult>;
   readonly stopParticipantScreenShare: (participantId: string) => Promise<V1CommandResult>;
   readonly removeParticipant: (participantId: string) => Promise<V1CommandResult>;
+  readonly startRecording: () => Promise<{ readonly recordingId: string; readonly result: V1CommandResult }>;
+  readonly stopRecording: (recordingId: string) => Promise<V1CommandResult>;
   readonly endEpisode: () => Promise<V1CommandResult>;
   readonly extendEpisode: (minutes: number) => Promise<V1CommandResult>;
   readonly onDirectedRequest: (listener: (request: V1DirectedRequest) => void) => () => void;

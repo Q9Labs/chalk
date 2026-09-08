@@ -13,6 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -41,6 +43,14 @@ type recorderWorkerServiceStub struct {
 
 type recorderCapturePlanServiceStub struct {
 	wait func(context.Context, captureplan.WaitInput) (captureplan.Plan, error)
+}
+
+type recorderFleetWorkerServiceStub struct {
+	record func(context.Context, recorderfleetauthority.WorkerObservation) (recorderfleet.NodeObservation, error)
+}
+
+func (s recorderFleetWorkerServiceStub) RecordWorkerObservation(ctx context.Context, observation recorderfleetauthority.WorkerObservation) (recorderfleet.NodeObservation, error) {
+	return s.record(ctx, observation)
 }
 
 func (s recorderCapturePlanServiceStub) Wait(ctx context.Context, input captureplan.WaitInput) (captureplan.Plan, error) {
@@ -107,7 +117,18 @@ func recorderWorkerJobFixture(t *testing.T, kind recordingpipeline.JobKind) reco
 	t.Helper()
 	now := time.Date(2026, 7, 13, 5, 0, 0, 0, time.UTC)
 	job := recordingpipeline.Job{ID: mustRecorderWorkerID(t, workerTestJob), TenantID: mustRecorderWorkerID(t, workerTestTenant), EpisodeID: mustRecorderWorkerID(t, workerTestEpisode), RecordingID: mustRecorderWorkerID(t, workerTestRecord), Kind: kind, State: recordingpipeline.JobStateLeased, AttemptCount: 1, AttemptLimit: 5, FencingGeneration: 2, CaptureEpoch: 1, LeaseExpiresAt: ptrTime(now.Add(30 * time.Minute)), AvailableAt: now, UpdatedAt: now, CreatedAt: now}
-	authority, err := recordingpipeline.NewRecorderJobAuthority(job, recordingpipeline.ClaimFacts{SpaceID: mustRecorderWorkerID(t, workerTestTenant), PolicySnapshotVersion: recordingpipeline.SupportedPolicySnapshotVersion, HardDeadline: now.Add(2 * time.Hour), CaptureEpoch: 1}, mustRecorderWorkerID(t, workerTestClaim), now)
+	claimFacts := recordingpipeline.ClaimFacts{SpaceID: mustRecorderWorkerID(t, workerTestTenant), PolicySnapshotVersion: recordingpipeline.SupportedPolicySnapshotVersion, HardDeadline: now.Add(2 * time.Hour), CaptureEpoch: 1}
+	if kind == recordingpipeline.JobKindRender {
+		readyAt := now.Add(-time.Minute)
+		claimFacts.CaptureReadyAt = &readyAt
+		claimFacts.CaptureKeyHandle = mustRecorderWorkerID(t, "10000000-0000-4000-8000-000000000001")
+		claimFacts.PresentationHandle = mustRecorderWorkerID(t, "10000000-0000-4000-8000-000000000002")
+		claimFacts.PresentationSchemaVersion = "recording_presentation.v1"
+		claimFacts.PresentationProfileVersion = "composite_720p_v1"
+		claimFacts.PresentationSHA256 = make([]byte, 32)
+		claimFacts.PresentationDurationMillis = 1_000
+	}
+	authority, err := recordingpipeline.NewRecorderJobAuthority(job, claimFacts, mustRecorderWorkerID(t, workerTestClaim), now)
 	if err != nil {
 		t.Fatalf("build worker authority: %v", err)
 	}
@@ -240,7 +261,7 @@ func TestRecorderWorkerLeaseEndpointsUseFencingAndProgressShape(t *testing.T) {
 	complete := `{"job_id":"` + workerTestJob + `","attempt_count":1,"fencing_generation":2,"lease_token":"lease","lease_for_seconds":60,"capture_epoch":1,"envelope_digest":"` + workerTestDigest + `"}`
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/complete", complete))
-	if response.Code != http.StatusOK {
+	if response.Code != http.StatusForbidden {
 		t.Fatalf("complete status=%d body=%s", response.Code, response.Body.String())
 	}
 }
@@ -277,7 +298,7 @@ func TestRecorderWorkerBundleArtifactAndPoolHealthReporting(t *testing.T) {
 	artifact := `{"tenant_id":"` + workerTestTenant + `","recording_id":"` + workerTestRecord + `","render_job_id":"` + workerTestJob + `","object_key":"recordings/final.mp4","content_type":"video/mp4","byte_size":4,"checksum":"` + checksum + `","duration_millis":10000,"attempt_count":1,"fencing_generation":2,"lease_token":"lease","capture_epoch":1,"envelope_digest":"` + workerTestDigest + `"}`
 	response = httptest.NewRecorder()
 	renderRouter.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/artifacts", artifact))
-	if response.Code != http.StatusCreated || artifactInput.LeaseOwner != workerTestID || artifactInput.Duration != 10*time.Second {
+	if response.Code != http.StatusNotFound || !artifactInput.RenderJobID.IsZero() {
 		t.Fatalf("artifact status=%d input=%#v body=%s", response.Code, artifactInput, response.Body.String())
 	}
 
@@ -349,6 +370,43 @@ func TestPrivateWorkerRouterMountsRecorderWorkerRoutesWhenConfigured(t *testing.
 	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/claim", `{"claim_request_id":"`+workerTestClaim+`"}`))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPrivateWorkerRouterPersistsFleetNodeObservation(t *testing.T) {
+	workerID := mustRecorderWorkerID(t, workerTestID)
+	observedAt := time.Date(2026, time.September, 6, 20, 0, 0, 0, time.UTC)
+	var recorded recorderfleetauthority.WorkerObservation
+	legacyCalled := false
+	handler := NewPrivateWorkerRouter(nil, Options{
+		Capabilities: CapabilityStatus{Recording: true},
+		RecorderWorker: recorderWorkerServiceStub{health: func(_ context.Context, input recordingpipeline.PoolHealth) (recordingpipeline.PoolHealth, error) {
+			legacyCalled = true
+			return input, nil
+		}},
+		RecorderFleetWorker: recorderFleetWorkerServiceStub{record: func(_ context.Context, observation recorderfleetauthority.WorkerObservation) (recorderfleet.NodeObservation, error) {
+			recorded = observation
+			return recorderfleet.NodeObservation{
+				Identity: recorderfleet.NodeIdentity{
+					ProviderID: "provider-7", WorkerID: observation.Identity.WorkerID.String(),
+					Role: observation.Identity.Role, BootGeneration: 7,
+				},
+				Ready: observation.Ready, AdmissionOpen: observation.AdmissionOpen,
+				ReadyCapacity: observation.ReadyCapacity, ObservedAt: observation.ObservedAt,
+			}, nil
+		}},
+		RecorderWorkerVerifier: recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{
+			WorkerID: workerID, Role: workeridentity.RoleCapture,
+		}},
+	})
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":4,"reason":"ready","observed_at":"2026-09-06T20:00:00Z"}`))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if legacyCalled || recorded.Identity.WorkerID != workerID || recorded.Identity.Role != workeridentity.RoleCapture || !recorded.Ready || !recorded.AdmissionOpen || recorded.ReadyCapacity != 4 || !recorded.ObservedAt.Equal(observedAt) {
+		t.Fatalf("legacy=%t observation=%#v", legacyCalled, recorded)
 	}
 }
 

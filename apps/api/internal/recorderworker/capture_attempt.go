@@ -28,7 +28,9 @@ const (
 	defaultCaptureInitialPlanWait = 10 * time.Second
 	defaultCapturePlanWait        = 2 * time.Second
 	defaultCaptureRTPDeadline     = 250 * time.Millisecond
-	defaultCaptureCloseTimeout    = 5 * time.Second
+	defaultCaptureCloseTimeout    = 15 * time.Second
+	captureVideoReorderWindow     = uint64(16)
+	captureKeyFrameRequestSpacing = time.Second
 	captureBundleContentType      = "application/vnd.chalk.recording-bundle+json"
 )
 
@@ -217,6 +219,7 @@ type CapturePeer interface {
 	recordercapture.PeerPort
 	Epoch() captureplane.CaptureEpoch
 	WaitForTrack(context.Context, captureplane.ProviderReference) (CaptureMediaTrack, error)
+	RequestKeyFrame(captureplane.ProviderReference) error
 	Error() error
 	Close() error
 }
@@ -355,7 +358,7 @@ func (f *PionCaptureAttemptFactory) NewCaptureAttempt(ctx context.Context, claim
 		_ = peer.Close()
 		return nil, fmt.Errorf("create capture coordinator: %w", err)
 	}
-	return &PionCaptureAttempt{
+	attempt := &PionCaptureAttempt{
 		authority:   authority,
 		lease:       authority.Lease,
 		peer:        peer,
@@ -366,7 +369,9 @@ func (f *PionCaptureAttemptFactory) NewCaptureAttempt(ctx context.Context, claim
 		bundles:     f.bundles,
 		lifecycle:   f.lifecycle,
 		config:      f.config,
-	}, nil
+		ready:       authority.CaptureReadyAt != nil,
+	}
+	return attempt, nil
 }
 
 // PionCaptureAttempt runs one server-issued epoch from plan bootstrap to
@@ -472,21 +477,18 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		return a.finishSuccess(runCtx, writer, plan)
 	}
 	if len(snapshot.Tracks) == 0 {
-		if err := a.emitReady(runCtx, true); err != nil {
+		readyAt := a.config.Now().UTC()
+		if err := a.emitReadyAt(runCtx, true, readyAt); err != nil {
 			return a.finishFailure(err, writer)
 		}
+		writer.setOrigin(readyAt)
 	}
 	readers, err := a.bindTracks(runCtx, snapshot.Tracks)
 	if err != nil {
 		return a.finishFailure(err, writer)
 	}
-	for _, track := range readers {
-		writer.setTrack(track)
-	}
-	if len(readers) > 0 {
-		if err := writer.setLayout(runCtx, plan, a.config.Now()); err != nil {
-			return a.finishFailure(err, writer)
-		}
+	if err := writer.reconcileTracks(runCtx, plan, readers, a.config.Now()); err != nil {
+		return a.finishFailure(err, writer)
 	}
 
 	events := make(chan captureRuntimeEvent, 256)
@@ -522,7 +524,12 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel()
 				return a.finishFailure(event.err, writer)
 			}
-			updatedReaders, err := a.applyPlan(runCtx, writer, event.plan, event.snapshot, readers, readerCancels, events)
+			snapshot, err := a.coordinator.Reconcile(runCtx, event.plan)
+			if err != nil {
+				cancel()
+				return a.finishFailure(err, writer)
+			}
+			updatedReaders, err := a.applyPlan(runCtx, writer, event.plan, snapshot, readers, readerCancels, events)
 			if err != nil {
 				cancel()
 				return a.finishFailure(err, writer)
@@ -551,6 +558,12 @@ func (a *PionCaptureAttempt) initialPlan(ctx context.Context) (captureplan.Plan,
 }
 
 func (a *PionCaptureAttempt) planLoop(ctx context.Context, output chan<- capturePlanEvent) {
+	snapshot, err := a.coordinator.Snapshot()
+	if err != nil {
+		sendCapturePlanEvent(ctx, output, capturePlanEvent{err: err})
+		return
+	}
+	afterRevision := snapshot.PlanRevision
 	for {
 		if err := ctx.Err(); err != nil {
 			return
@@ -558,20 +571,13 @@ func (a *PionCaptureAttempt) planLoop(ctx context.Context, output chan<- capture
 		a.mu.Lock()
 		lease := a.lease
 		a.mu.Unlock()
-		snapshot, err := a.coordinator.Snapshot()
-		if err != nil {
-			if sendCapturePlanEvent(ctx, output, capturePlanEvent{err: err}) != nil {
-				return
-			}
-			return
-		}
 		authority := captureplan.PlanAuthority{
 			PlanHandle: a.authority.PlanHandle, TenantID: a.authority.TenantID, SpaceID: a.authority.SpaceID,
 			EpisodeID: a.authority.EpisodeID, RecordingID: a.authority.RecordingID, JobID: a.authority.JobID,
 			AttemptCount: a.authority.AttemptCount, FencingGeneration: a.authority.FencingGeneration,
 			CaptureEpoch: a.authority.CaptureEpoch, EnvelopeDigest: a.authority.EnvelopeDigest,
 		}
-		input := captureplan.NewWaitInput(authority, captureplan.WorkerLease{Owner: lease.Owner, Token: lease.Token, ExpiresAt: lease.ExpiresAt}, snapshot.PlanRevision, a.config.PlanWait)
+		input := captureplan.NewWaitInput(authority, captureplan.WorkerLease{Owner: lease.Owner, Token: lease.Token, ExpiresAt: lease.ExpiresAt}, afterRevision, a.config.PlanWait)
 		plan, err := a.plans.WaitForPlan(ctx, input)
 		if err != nil {
 			if errors.Is(err, ErrNoChange) || errors.Is(err, captureplan.ErrNoChange) || errors.Is(err, captureplan.ErrWaitTimeout) {
@@ -582,23 +588,18 @@ func (a *PionCaptureAttempt) planLoop(ctx context.Context, output chan<- capture
 			}
 			return
 		}
-		updated, err := a.coordinator.Reconcile(ctx, plan)
-		if err != nil {
-			if sendCapturePlanEvent(ctx, output, capturePlanEvent{err: err}) != nil {
-				return
-			}
+		// The packet consumer applies each plan before the next one can retire
+		// its tracks. Polling must not mutate the peer ahead of that consumer.
+		if sendCapturePlanEvent(ctx, output, capturePlanEvent{plan: plan}) != nil {
 			return
 		}
-		if sendCapturePlanEvent(ctx, output, capturePlanEvent{plan: plan, snapshot: updated}) != nil {
-			return
-		}
+		afterRevision = plan.Revision()
 	}
 }
 
 type capturePlanEvent struct {
-	plan     captureplan.Plan
-	snapshot recordercapture.Snapshot
-	err      error
+	plan captureplan.Plan
+	err  error
 }
 
 func sendCapturePlanEvent(ctx context.Context, output chan<- capturePlanEvent, event capturePlanEvent) error {
@@ -626,6 +627,14 @@ func (a *PionCaptureAttempt) bindTracks(ctx context.Context, tracks []capturepla
 		if identity.MID != expected.MID || identity.TrackReference != expected.TrackReference || identity.OwnerReference != expected.OwnerReference {
 			return nil, fmt.Errorf("%w: capture MID %s identity changed", ErrInvalidCaptureAttempt, expected.MID)
 		}
+		if err := validateCaptureCodec(expected.Kind, track.Codec()); err != nil {
+			return nil, fmt.Errorf("capture MID %s: %w", expected.MID, err)
+		}
+		if expected.Kind == captureplane.TrackKindVideo {
+			if err := a.peer.RequestKeyFrame(expected.MID); err != nil {
+				return nil, fmt.Errorf("request keyframe for capture MID %s: %w", expected.MID, err)
+			}
+		}
 		bound[string(expected.MID)] = track
 	}
 	return bound, nil
@@ -636,21 +645,20 @@ func (a *PionCaptureAttempt) applyPlan(ctx context.Context, writer *captureBundl
 	if err != nil {
 		return nil, err
 	}
-	if err := writer.reconcileTracks(ctx, plan, snapshot.Tracks, a.config.Now()); err != nil {
+	if err := writer.reconcileTracks(ctx, plan, next, a.config.Now()); err != nil {
 		return nil, err
 	}
-	for _, track := range next {
-		writer.setTrack(track)
-	}
-	for mid := range previous {
-		if _, ok := next[mid]; !ok {
+	for mid, previousTrack := range previous {
+		nextTrack, ok := next[mid]
+		if !ok || !sameCaptureBinding(previousTrack, nextTrack) {
 			if cancel := readerCancels[mid]; cancel != nil {
 				cancel()
 			}
+			delete(readerCancels, mid)
 		}
 	}
 	for mid, track := range next {
-		if _, ok := previous[mid]; ok {
+		if previousTrack, ok := previous[mid]; ok && sameCaptureBinding(previousTrack, track) {
 			continue
 		}
 		cancel, err := startCaptureReader(ctx, a.peer, mid, track, a.config.RTPReadDeadline, events)
@@ -658,11 +666,6 @@ func (a *PionCaptureAttempt) applyPlan(ctx context.Context, writer *captureBundl
 			return nil, err
 		}
 		readerCancels[mid] = cancel
-	}
-	for mid := range previous {
-		if _, ok := next[mid]; !ok {
-			delete(readerCancels, mid)
-		}
 	}
 	return next, nil
 }
@@ -672,14 +675,19 @@ func (a *PionCaptureAttempt) consumePacket(ctx context.Context, writer *captureB
 		return fmt.Errorf("%w: empty RTP event", ErrInvalidCaptureAttempt)
 	}
 	if !a.ready {
-		if err := a.emitReady(ctx, false); err != nil {
+		if err := a.emitReadyAt(ctx, false, event.at); err != nil {
 			return err
 		}
+		writer.setOrigin(event.at)
 	}
 	return writer.addPacket(ctx, event.track, event.packet, event.at)
 }
 
 func (a *PionCaptureAttempt) emitReady(ctx context.Context, noPublisher bool) error {
+	return a.emitReadyAt(ctx, noPublisher, a.config.Now().UTC())
+}
+
+func (a *PionCaptureAttempt) emitReadyAt(ctx context.Context, noPublisher bool, readyAt time.Time) error {
 	a.mu.Lock()
 	if a.ready {
 		a.mu.Unlock()
@@ -690,7 +698,7 @@ func (a *PionCaptureAttempt) emitReady(ctx context.Context, noPublisher bool) er
 		TenantID: a.authority.TenantID.String(), SpaceID: a.authority.SpaceID.String(), EpisodeID: a.authority.EpisodeID.String(), RecordingID: a.authority.RecordingID.String(), JobID: a.authority.JobID.String(),
 		CaptureEpoch: uint64(a.authority.CaptureEpoch), Attempt: a.authority.AttemptCount, FencingGeneration: a.authority.FencingGeneration,
 		EnvelopeDigest: hex.EncodeToString(a.authority.EnvelopeDigest), LeaseOwner: a.lease.Owner, LeaseToken: a.lease.Token, LeaseExpiresAt: a.lease.ExpiresAt,
-		At: a.config.Now().UTC(), IdempotencyKey: key, NoPublisher: noPublisher,
+		At: readyAt.UTC(), IdempotencyKey: key, NoPublisher: noPublisher,
 	}
 	a.mu.Unlock()
 	if err := a.lifecycle.Ready(ctx, event); err != nil {
@@ -703,13 +711,35 @@ func (a *PionCaptureAttempt) emitReady(ctx context.Context, noPublisher bool) er
 	return nil
 }
 
+func validateCaptureCodec(kind captureplane.TrackKind, codec string) error {
+	codec = strings.ToLower(strings.TrimSpace(codec))
+	if kind == captureplane.TrackKindAudio && codec == "opus" {
+		return nil
+	}
+	if kind == captureplane.TrackKindVideo && (codec == "vp8" || codec == "h264") {
+		return nil
+	}
+	return fmt.Errorf("%w: unsupported %s codec %q", ErrInvalidCaptureAttempt, kind, codec)
+}
+
+func sameCaptureBinding(left, right CaptureMediaTrack) bool {
+	if left == nil || right == nil || left.Codec() != right.Codec() || left.RID() != right.RID() {
+		return false
+	}
+	return left.CaptureTrack() == right.CaptureTrack()
+}
+
 func (a *PionCaptureAttempt) finishSuccess(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan) error {
 	var result error
 	if writer != nil {
 		result = writer.close(recordingbundle.CloseReasonFinalStop, a.config.Now())
 	}
 	closeCtx, cancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
-	providerErr := a.coordinator.Close(closeCtx, false)
+	// A planned stop is terminal for this capture epoch. Active publishers may
+	// still have tracks when an Episode ends, and the provider contract requires
+	// force for that close. Cleanup uses the same value so a retry preserves the
+	// durable signaling command fingerprint.
+	providerErr := a.coordinator.Close(closeCtx, true)
 	cancel()
 	peerErr := a.peer.Close()
 	if result = errors.Join(result, providerErr, peerErr); result != nil {
@@ -794,8 +824,10 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 		return nil, ErrInvalidCaptureAttempt
 	}
 	readerCtx, cancel := context.WithCancel(ctx)
+	video := track.CaptureTrack().Kind == captureplane.TrackKindVideo
 	go func() {
 		defer cancel()
+		var lossFeedback captureVideoLossFeedback
 		for {
 			if err := readerCtx.Err(); err != nil {
 				return
@@ -820,12 +852,67 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 				sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, err: errors.New("capture RTP reader returned nil packet")})
 				return
 			}
-			if err := sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, packet: packet, at: time.Now().UTC()}); err != nil {
+			receivedAt := time.Now()
+			if video && lossFeedback.Observe(packet.SSRC, packet.SequenceNumber, receivedAt) {
+				if err := peer.RequestKeyFrame(captureplane.ProviderReference(mid)); err != nil {
+					sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, err: fmt.Errorf("request keyframe after RTP loss for capture MID %s: %w", mid, err)})
+					return
+				}
+			}
+			if err := sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, packet: packet, at: receivedAt.UTC()}); err != nil {
 				return
 			}
 		}
 	}()
 	return cancel, nil
+}
+
+type captureVideoLossFeedback struct {
+	sequence         rtpSequenceExtender
+	ssrc             uint32
+	initialized      bool
+	next             uint64
+	highest          uint64
+	received         map[uint64]struct{}
+	lastKeyFrameTime time.Time
+	pending          bool
+}
+
+func (f *captureVideoLossFeedback) Observe(ssrc uint32, sequence uint16, now time.Time) bool {
+	if !f.initialized || f.ssrc != ssrc {
+		*f = captureVideoLossFeedback{ssrc: ssrc, initialized: true}
+		extended := f.sequence.Extend(sequence)
+		f.next = extended + 1
+		f.highest = extended
+		return false
+	}
+	extended := f.sequence.Extend(sequence)
+	if extended < f.next {
+		return false
+	}
+	if f.received == nil {
+		f.received = make(map[uint64]struct{}, captureVideoReorderWindow)
+	}
+	f.received[extended] = struct{}{}
+	f.highest = max(f.highest, extended)
+	for {
+		if _, ok := f.received[f.next]; !ok {
+			break
+		}
+		delete(f.received, f.next)
+		f.next++
+	}
+	if f.next <= f.highest && f.highest-f.next >= captureVideoReorderWindow {
+		f.next = f.highest + 1
+		clear(f.received)
+		f.pending = true
+	}
+	if !f.pending || (!f.lastKeyFrameTime.IsZero() && now.Before(f.lastKeyFrameTime.Add(captureKeyFrameRequestSpacing))) {
+		return false
+	}
+	f.pending = false
+	f.lastKeyFrameTime = now
+	return true
 }
 
 func sendCaptureRuntimeEvent(ctx context.Context, events chan<- captureRuntimeEvent, event captureRuntimeEvent) error {
@@ -834,8 +921,6 @@ func sendCaptureRuntimeEvent(ctx context.Context, events chan<- captureRuntimeEv
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	default:
-		return ErrCaptureEventQueueFull
 	}
 }
 
@@ -891,24 +976,32 @@ func (e *rtpSequenceExtender) Extend(sequence uint16) uint64 {
 type captureTrackClock struct {
 	sequence rtpSequenceExtender
 	baseTS   uint32
+	baseMS   int64
 	started  bool
 }
 
-func (c *captureTrackClock) mediaMilliseconds(packet *rtp.Packet, codec captureplane.TrackKind) int64 {
+func (c *captureTrackClock) normalize(packet *rtp.Packet, kind captureplane.TrackKind, firstPacketMS int64) (int64, uint32) {
+	rate := captureClockRate(kind)
 	if !c.started {
 		c.started = true
 		c.baseTS = packet.Timestamp
-		return 0
+		c.baseMS = firstPacketMS
+		return c.baseMS, uint32(c.baseMS * rate / 1_000)
 	}
 	delta := int64(int32(packet.Timestamp - c.baseTS))
 	if delta < 0 {
 		delta = 0
 	}
-	rate := int64(90_000)
-	if codec == captureplane.TrackKindAudio {
-		rate = 48_000
+	media := c.baseMS + delta*1_000/rate
+	timestamp := uint32(c.baseMS*rate/1_000) + uint32(delta)
+	return media, timestamp
+}
+
+func captureClockRate(kind captureplane.TrackKind) int64 {
+	if kind == captureplane.TrackKindAudio {
+		return 48_000
 	}
-	return delta * 1_000 / rate
+	return 90_000
 }
 
 // captureBundleWriter is the runtime's bounded handoff from RTP to the
@@ -920,25 +1013,29 @@ type captureBundleWriter struct {
 	assembler      *recordingbundle.Assembler
 	reservation    BundleReservation
 	reserveOrdinal uint64
-	startedAt      time.Time
+	origin         time.Time
 	pendingGaps    []recordingbundle.Gap
 	active         map[string]recordingbundle.TrackIdentity
+	bindings       map[string]captureplane.PulledCaptureTrack
 	layout         recordingbundle.LayoutTimelineEvent
 	hasLayout      bool
 	clocks         map[string]*captureTrackClock
 	lastMono       int64
 	lastMedia      int64
+	terminalGap    bool
 }
 
 func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
-	return &captureBundleWriter{attempt: attempt, startedAt: attempt.config.Now(), active: make(map[string]recordingbundle.TrackIdentity), clocks: make(map[string]*captureTrackClock)}
+	writer := &captureBundleWriter{attempt: attempt, active: make(map[string]recordingbundle.TrackIdentity), bindings: make(map[string]captureplane.PulledCaptureTrack), clocks: make(map[string]*captureTrackClock)}
+	if attempt.authority.CaptureReadyAt != nil {
+		writer.origin = attempt.authority.CaptureReadyAt.UTC()
+	}
+	return writer
 }
 
-func (w *captureBundleWriter) setTrack(track CaptureMediaTrack) {
-	identity := track.CaptureTrack()
-	w.active[string(identity.MID)] = recordingbundle.TrackIdentity{TrackID: identity.TrackReference.String(), Epoch: uint64(w.attempt.authority.CaptureEpoch), MID: identity.MID.String(), Codec: track.Codec(), Layer: identity.RequestedLayer.String()}
-	if _, ok := w.clocks[string(identity.MID)]; !ok {
-		w.clocks[string(identity.MID)] = &captureTrackClock{}
+func (w *captureBundleWriter) setOrigin(origin time.Time) {
+	if w.origin.IsZero() {
+		w.origin = origin.UTC()
 	}
 }
 
@@ -947,27 +1044,114 @@ func (w *captureBundleWriter) setLayout(ctx context.Context, plan captureplan.Pl
 	if w.hasLayout && w.layout.Layout != string(plan.LayoutProfile()) {
 		kind = recordingbundle.LayoutEventChanged
 	}
-	w.layout = recordingbundle.LayoutTimelineEvent{MonotonicMilliseconds: w.relative(now), MediaMilliseconds: w.lastMedia, Kind: kind, Revision: uint64(plan.Revision()), Layout: string(plan.LayoutProfile())}
-	w.hasLayout = true
+	mono, media := w.controlEventClocks(now)
+	layout := recordingbundle.LayoutTimelineEvent{MonotonicMilliseconds: mono, MediaMilliseconds: media, Kind: kind, Revision: uint64(plan.Revision()), Layout: string(plan.LayoutProfile())}
 	if w.assembler != nil {
-		if err := w.assembler.AddLayoutEvent(w.layout); err != nil {
+		if err := w.appendControlEvent(ctx, mono, media, func(assembler *recordingbundle.Assembler) error {
+			return assembler.AddLayoutEvent(layout)
+		}); err != nil {
 			return err
 		}
-		if w.assembler.Closed() {
-			return w.persist(ctx)
+		w.layout = layout
+		w.hasLayout = true
+		return nil
+	}
+	w.layout = layout
+	w.hasLayout = true
+	return nil
+}
+
+func (w *captureBundleWriter) controlEventClocks(now time.Time) (int64, int64) {
+	relative := w.relative(now)
+	return max(relative, w.lastMono), max(relative, w.lastMedia)
+}
+
+func (w *captureBundleWriter) advanceClocks(monotonic, media int64) {
+	w.lastMono = max(w.lastMono, monotonic)
+	w.lastMedia = max(w.lastMedia, media)
+}
+
+func (w *captureBundleWriter) appendControlEvent(ctx context.Context, monotonic, media int64, appendEvent func(*recordingbundle.Assembler) error) error {
+	err := appendEvent(w.assembler)
+	if errors.Is(err, recordingbundle.ErrDurationLimit) {
+		if err := w.closeCurrentBundle(ctx, recordingbundle.CloseReasonExplicit); err != nil {
+			return err
 		}
+		if err := w.appendGapUntil(ctx, monotonic, media, false); err != nil {
+			return err
+		}
+		err = appendEvent(w.assembler)
+	}
+	if err != nil {
+		return err
+	}
+	w.advanceClocks(monotonic, media)
+	if w.assembler.Closed() {
+		return w.persist(ctx)
 	}
 	return nil
+}
+
+func (w *captureBundleWriter) closeCurrentBundle(ctx context.Context, reason recordingbundle.CloseReason) error {
+	if w.assembler == nil {
+		return nil
+	}
+	if !w.assembler.Closed() {
+		if err := w.assembler.Close(reason, w.lastMono, w.lastMedia); err != nil {
+			return err
+		}
+	}
+	return w.persist(ctx)
+}
+
+func (w *captureBundleWriter) appendGapUntil(ctx context.Context, endMono, endMedia int64, terminal bool) error {
+	// Bundle-start track and layout snapshots are appended after the pending gap.
+	// Stay below cadence so those snapshots cannot close the assembler before
+	// every active state snapshot has been rebased onto the gap endpoint.
+	const maximumGapDuration = recordingbundle.TargetBundleDurationMilliseconds - 1
+	if endMono < w.lastMono || endMedia < w.lastMedia {
+		return fmt.Errorf("%w: gap target", recordingbundle.ErrNonMonotonicTime)
+	}
+	if !terminal && endMono == w.lastMono && endMedia == w.lastMedia {
+		return w.ensureAssembler(ctx)
+	}
+	for {
+		nextMono := min(endMono, w.lastMono+maximumGapDuration)
+		nextMedia := min(endMedia, w.lastMedia+maximumGapDuration)
+		final := nextMono == endMono && nextMedia == endMedia
+		reason := "no_rtp"
+		if terminal {
+			reason = "terminal_read"
+		}
+		w.pendingGaps = append(w.pendingGaps, recordingbundle.Gap{
+			StartMonotonicMilliseconds: w.lastMono,
+			EndMonotonicMilliseconds:   nextMono,
+			StartMediaMilliseconds:     w.lastMedia,
+			EndMediaMilliseconds:       nextMedia,
+			Reason:                     reason,
+			Terminal:                   terminal && final,
+		})
+		w.advanceClocks(nextMono, nextMedia)
+		if err := w.ensureAssembler(ctx); err != nil {
+			return err
+		}
+		if final {
+			return nil
+		}
+		if err := w.closeCurrentBundle(ctx, recordingbundle.CloseReasonExplicit); err != nil {
+			return err
+		}
+	}
 }
 
 func (w *captureBundleWriter) relative(now time.Time) int64 {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	if now.Before(w.startedAt) {
+	if w.origin.IsZero() || now.Before(w.origin) {
 		return 0
 	}
-	return now.Sub(w.startedAt).Milliseconds()
+	return now.Sub(w.origin).Milliseconds()
 }
 
 func (w *captureBundleWriter) ensureAssembler(ctx context.Context) error {
@@ -1037,7 +1221,11 @@ func (w *captureBundleWriter) ensureAssembler(ctx context.Context) error {
 		}
 	}
 	if w.hasLayout {
-		if err := w.assembler.AddLayoutEvent(w.layout); err != nil {
+		snapshot := w.layout
+		snapshot.Kind = recordingbundle.LayoutEventSnapshot
+		snapshot.MonotonicMilliseconds = w.lastMono
+		snapshot.MediaMilliseconds = w.lastMedia
+		if err := w.assembler.AddLayoutEvent(snapshot); err != nil {
 			return err
 		}
 	}
@@ -1045,27 +1233,40 @@ func (w *captureBundleWriter) ensureAssembler(ctx context.Context) error {
 }
 
 func (w *captureBundleWriter) addPacket(ctx context.Context, track CaptureMediaTrack, packet *rtp.Packet, at time.Time) error {
+	identity := track.CaptureTrack()
+	mid := string(identity.MID)
+	activeBinding, active := w.bindings[mid]
+	if !active || activeBinding != identity {
+		// A reader cancellation may leave already-queued packets behind. They
+		// belong to the prior binding and must not be relabeled as replacement
+		// media that reused the same MID.
+		return nil
+	}
+	bundleTrack := w.active[mid]
+	clockKey := trackClockKey(bundleTrack)
+	clock := w.clocks[clockKey]
+	if clock == nil {
+		clock = &captureTrackClock{}
+		w.clocks[clockKey] = clock
+	}
+	arrivalMono := w.relative(at)
+	media, normalizedTimestamp := clock.normalize(packet, identity.Kind, arrivalMono)
+	mono := max(arrivalMono, w.lastMono)
+	if mono > w.lastMono {
+		w.lastMono = mono
+	}
+	if media > w.lastMedia {
+		w.lastMedia = media
+	}
 	if err := w.ensureAssembler(ctx); err != nil {
 		return err
 	}
-	identity := track.CaptureTrack()
-	clock := w.clocks[string(identity.MID)]
-	if clock == nil {
-		clock = &captureTrackClock{}
-		w.clocks[string(identity.MID)] = clock
-	}
-	mono := w.relative(at)
-	if mono < w.lastMono {
-		mono = w.lastMono
-	}
-	media := clock.mediaMilliseconds(packet, identity.Kind)
-	if media < w.lastMedia {
-		media = w.lastMedia
-	}
-	w.lastMono, w.lastMedia = mono, media
-	input := recordingbundle.MediaPacket{Track: w.active[string(identity.MID)], Packet: recordingbundle.RTPPacket{SequenceNumber: packet.SequenceNumber, ExtendedSequenceNumber: clock.sequence.Extend(packet.SequenceNumber), Timestamp: packet.Timestamp, SSRC: packet.SSRC, PayloadType: packet.PayloadType, Marker: packet.Marker, Payload: packet.Payload}, MonotonicMilliseconds: mono, MediaMilliseconds: media}
+	input := recordingbundle.MediaPacket{Track: bundleTrack, Packet: recordingbundle.RTPPacket{SequenceNumber: packet.SequenceNumber, ExtendedSequenceNumber: clock.sequence.Extend(packet.SequenceNumber), Timestamp: normalizedTimestamp, SSRC: packet.SSRC, PayloadType: packet.PayloadType, Marker: packet.Marker, Payload: packet.Payload}, MonotonicMilliseconds: mono, MediaMilliseconds: media}
 	err := w.assembler.AddPacket(input)
 	if err == nil {
+		if w.assembler.Closed() {
+			return w.persist(ctx)
+		}
 		return nil
 	}
 	if !errors.Is(err, recordingbundle.ErrAssemblerClosed) && !errors.Is(err, recordingbundle.ErrDurationLimit) {
@@ -1077,15 +1278,27 @@ func (w *captureBundleWriter) addPacket(ctx context.Context, track CaptureMediaT
 	return w.addPacket(ctx, track, packet, at)
 }
 
-func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan captureplan.Plan, tracks []captureplane.PulledCaptureTrack, now time.Time) error {
+func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan captureplan.Plan, tracks map[string]CaptureMediaTrack, now time.Time) error {
+	if plan.Authority().CaptureEpoch != w.attempt.authority.CaptureEpoch {
+		return fmt.Errorf("%w: capture plan epoch mismatch", ErrInvalidCaptureAttempt)
+	}
 	previousActive := w.active
 	next := make(map[string]recordingbundle.TrackIdentity, len(tracks))
-	for _, track := range tracks {
-		identity := recordingbundle.TrackIdentity{TrackID: track.TrackReference.String(), Epoch: uint64(w.attempt.authority.CaptureEpoch), MID: track.MID.String(), Codec: "", Layer: track.RequestedLayer.String()}
-		if existing, ok := w.active[track.MID.String()]; ok {
-			identity.Codec = existing.Codec
+	nextBindings := make(map[string]captureplane.PulledCaptureTrack, len(tracks))
+	planEpoch, err := recordingbundle.ComposeTrackEpoch(uint64(plan.Authority().CaptureEpoch), uint64(plan.Revision()))
+	if err != nil {
+		return fmt.Errorf("%w: compose track epoch: %v", ErrInvalidCaptureAttempt, err)
+	}
+	for mid, mediaTrack := range tracks {
+		track := mediaTrack.CaptureTrack()
+		epoch := planEpoch
+		if existingBinding, ok := w.bindings[mid]; ok && existingBinding == track {
+			if existing, active := w.active[mid]; active && existing.Codec == mediaTrack.Codec() {
+				epoch = existing.Epoch
+			}
 		}
-		next[track.MID.String()] = identity
+		next[mid] = recordingbundle.TrackIdentity{TrackID: track.TrackReference.String(), Epoch: epoch, MID: track.MID.String(), Codec: mediaTrack.Codec(), Layer: track.RequestedLayer.String()}
+		nextBindings[mid] = track
 	}
 	changed := len(next) != len(w.active)
 	if !changed {
@@ -1097,6 +1310,7 @@ func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan capturep
 		}
 	}
 	if changed && w.assembler != nil {
+		eventMono, eventMedia := w.controlEventClocks(now)
 		keys := make([]string, 0, len(w.active))
 		for key := range w.active {
 			keys = append(keys, key)
@@ -1112,13 +1326,13 @@ func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan capturep
 			if stillActive {
 				kind = recordingbundle.TrackEventReplaced
 			}
-			if err := w.assembler.AddTrackEvent(recordingbundle.TrackTimelineEvent{Kind: kind, Track: previous, MonotonicMilliseconds: w.lastMono, MediaMilliseconds: w.lastMedia, Reason: "plan_track_set_change"}); err != nil {
+			event := recordingbundle.TrackTimelineEvent{Kind: kind, Track: previous, MonotonicMilliseconds: eventMono, MediaMilliseconds: eventMedia, Reason: "plan_track_set_change"}
+			if err := w.appendControlEvent(ctx, eventMono, eventMedia, func(assembler *recordingbundle.Assembler) error {
+				return assembler.AddTrackEvent(event)
+			}); err != nil {
 				return err
 			}
-			if w.assembler.Closed() {
-				if err := w.persist(ctx); err != nil {
-					return err
-				}
+			if w.assembler == nil {
 				break
 			}
 		}
@@ -1134,12 +1348,9 @@ func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan capturep
 		}
 	}
 	w.active = next
-	for _, track := range tracks {
-		if _, ok := w.clocks[track.MID.String()]; !ok {
-			w.clocks[track.MID.String()] = &captureTrackClock{}
-		}
-	}
+	w.bindings = nextBindings
 	if changed && w.assembler != nil {
+		eventMono, eventMedia := w.controlEventClocks(now)
 		keys := make([]string, 0, len(w.active))
 		for key := range w.active {
 			keys = append(keys, key)
@@ -1149,13 +1360,13 @@ func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan capturep
 			if _, existed := previousActive[key]; existed {
 				continue
 			}
-			if err := w.assembler.AddTrackEvent(recordingbundle.TrackTimelineEvent{Kind: recordingbundle.TrackEventAdded, Track: w.active[key], MonotonicMilliseconds: w.lastMono, MediaMilliseconds: w.lastMedia, Reason: "plan_track_added"}); err != nil {
+			event := recordingbundle.TrackTimelineEvent{Kind: recordingbundle.TrackEventAdded, Track: w.active[key], MonotonicMilliseconds: eventMono, MediaMilliseconds: eventMedia, Reason: "plan_track_added"}
+			if err := w.appendControlEvent(ctx, eventMono, eventMedia, func(assembler *recordingbundle.Assembler) error {
+				return assembler.AddTrackEvent(event)
+			}); err != nil {
 				return err
 			}
-			if w.assembler.Closed() {
-				if err := w.persist(ctx); err != nil {
-					return err
-				}
+			if w.assembler == nil {
 				break
 			}
 		}
@@ -1168,30 +1379,58 @@ func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan capturep
 	return nil
 }
 
+func trackClockKey(track recordingbundle.TrackIdentity) string {
+	return fmt.Sprintf("%s\x00%d\x00%s", track.TrackID, track.Epoch, track.MID)
+}
+
 func (w *captureBundleWriter) addTerminalGap(now time.Time) error {
 	storageCtx, cancel := context.WithTimeout(context.Background(), w.attempt.config.CloseTimeout)
 	defer cancel()
-	if w.assembler == nil {
-		if len(w.active) == 0 {
-			return nil
-		}
-		if err := w.ensureAssembler(storageCtx); err != nil {
-			return err
-		}
+	return w.addTerminalGapWithContext(storageCtx, now)
+}
+
+func (w *captureBundleWriter) addTerminalGapWithContext(ctx context.Context, now time.Time) error {
+	if w.terminalGap || w.origin.IsZero() {
+		return nil
 	}
 	endMono := w.relative(now)
 	if endMono < w.lastMono {
 		endMono = w.lastMono
 	}
-	return w.assembler.AddTerminalReadGap(recordingbundle.Gap{StartMonotonicMilliseconds: w.lastMono, EndMonotonicMilliseconds: endMono, StartMediaMilliseconds: w.lastMedia, EndMediaMilliseconds: w.lastMedia, Reason: "terminal_read", Terminal: true})
+	endMedia := w.relative(now)
+	if endMedia < w.lastMedia {
+		endMedia = w.lastMedia
+	}
+	if endMono == 0 && endMedia == 0 && w.lastMono == 0 && w.lastMedia == 0 {
+		// A capture that starts and stops within one clock millisecond still needs
+		// a positive recording-relative duration for completion and replay.
+		endMono, endMedia = 1, 1
+	}
+	if w.assembler != nil {
+		if err := w.closeCurrentBundle(ctx, recordingbundle.CloseReasonExplicit); err != nil {
+			return err
+		}
+	}
+	if err := w.appendGapUntil(ctx, endMono, endMedia, true); err != nil {
+		return err
+	}
+	w.terminalGap = true
+	return nil
 }
 
 func (w *captureBundleWriter) close(reason recordingbundle.CloseReason, now time.Time) error {
 	storageCtx, cancel := context.WithTimeout(context.Background(), w.attempt.config.CloseTimeout)
 	defer cancel()
+	if err := w.addTerminalGapWithContext(storageCtx, now); err != nil {
+		return err
+	}
 	if w.assembler != nil {
 		if !w.assembler.Closed() {
-			if err := w.assembler.Close(reason, w.relative(now), w.lastMedia); err != nil && !errors.Is(err, recordingbundle.ErrEmptyBundle) {
+			endMono, endMedia := w.controlEventClocks(now)
+			if w.terminalGap {
+				endMono, endMedia = w.lastMono, w.lastMedia
+			}
+			if err := w.assembler.Close(reason, endMono, endMedia); err != nil && !errors.Is(err, recordingbundle.ErrEmptyBundle) {
 				return err
 			}
 		}
@@ -1205,7 +1444,11 @@ func (w *captureBundleWriter) close(reason recordingbundle.CloseReason, now time
 		if err := w.ensureAssembler(storageCtx); err != nil {
 			return err
 		}
-		if err := w.assembler.Close(reason, w.relative(now), w.lastMedia); err != nil {
+		endMono, endMedia := w.controlEventClocks(now)
+		if w.terminalGap {
+			endMono, endMedia = w.lastMono, w.lastMedia
+		}
+		if err := w.assembler.Close(reason, endMono, endMedia); err != nil {
 			return err
 		}
 		if err := w.persist(storageCtx); err != nil {

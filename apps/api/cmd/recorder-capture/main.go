@@ -30,6 +30,10 @@ func main() {
 	}
 	if !*fixture {
 		if err := runWorker(*environment, *controlPlaneURL, *workerCertificate, *workerKey, *serverCA, *serverName); err != nil {
+			if errors.Is(err, recorderworker.ErrReadinessFailure) {
+				fmt.Fprintln(os.Stderr, "recorder-capture:", err)
+				os.Exit(1)
+			}
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return
 			}

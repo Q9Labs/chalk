@@ -32,9 +32,12 @@
 
     // Path aliases for monorepo
     "paths": {
+      "@q9labsai/recording-presentation": ["./packages/recording-presentation/src/index.ts"],
       "@q9labsai/facehash": ["./packages/facehash/src/index.ts"],
       "@q9labsai/facehash/react": ["./packages/facehash/src/react.ts"],
       "@q9labsai/facehash/react-native": ["./packages/facehash/src/index.native.ts"],
+      "@q9labsai/chalk-whiteboard": ["./packages/whiteboard/src/index.ts"],
+      "@q9labsai/chalk-whiteboard/react": ["./packages/whiteboard/src/react/index.ts"],
       "@q9labsai/chalk-client": ["./sdks/typescript/client/src/index.ts"],
       "@q9labsai/chalk-react": ["./sdks/typescript/react/src/index.ts"],
       "@q9labsai/chalk-react/components": ["./sdks/typescript/react/src/components/index.ts"],

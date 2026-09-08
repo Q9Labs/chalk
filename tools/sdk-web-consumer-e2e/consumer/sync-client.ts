@@ -115,6 +115,12 @@ export class FixtureSyncClient {
   stopParticipantCamera = (participantId: string) => this.#command("stop_participant_camera", { participant_id: participantId });
   stopParticipantScreenShare = (participantId: string) => this.#command("stop_participant_screen_share", { participant_id: participantId });
   removeParticipant = (participantId: string) => this.#command("remove_participant", { participant_id: participantId });
+  async startRecording(): Promise<{ readonly recordingId: string; readonly result: V1CommandResult }> {
+    const recordingId = crypto.randomUUID();
+    const result = await this.#command("start_recording", { recording_id: recordingId });
+    return { recordingId, result };
+  }
+  stopRecording = (recordingId: string) => this.#command("stop_recording", { recording_id: recordingId });
   endEpisode = () => this.#command("end_episode", {});
   extendEpisode = (minutes: number) => this.#command("extend_episode", { minutes });
 
@@ -258,6 +264,8 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
     stopParticipantCamera: client.stopParticipantCamera,
     stopParticipantScreenShare: client.stopParticipantScreenShare,
     removeParticipant: client.removeParticipant,
+    startRecording: client.startRecording.bind(client),
+    stopRecording: client.stopRecording,
     endEpisode: client.endEpisode,
     extendEpisode: client.extendEpisode,
     getCollaborationExtensionState: client.getCollaborationExtensionState,

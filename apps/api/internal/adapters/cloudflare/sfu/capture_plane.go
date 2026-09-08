@@ -301,16 +301,25 @@ func captureProviderError(err error) error {
 	class := captureplane.ProviderFailureProtocol
 	retryable := false
 	switch {
-	case failure.statusCode == http.StatusUnauthorized || failure.statusCode == http.StatusForbidden:
+	case failure.statusCode == http.StatusUnauthorized,
+		failure.statusCode == http.StatusForbidden,
+		failure.providerCode == "unauthorized":
 		class = captureplane.ProviderFailureUnauthorized
-	case failure.statusCode == http.StatusNotFound || failure.statusCode == http.StatusGone:
+	case failure.statusCode == http.StatusNotFound,
+		failure.statusCode == http.StatusGone,
+		failure.providerCode == "connection_not_found",
+		failure.providerCode == "track_not_found":
 		class = captureplane.ProviderFailureNotFound
-	case failure.providerCode == "connection_not_found":
-		class = captureplane.ProviderFailureNotFound
-	case failure.statusCode == http.StatusTooManyRequests:
+	case failure.statusCode == http.StatusTooManyRequests || failure.providerCode == "rate_limited":
 		class = captureplane.ProviderFailureRateLimited
 		retryable = true
-	case failure.stage == failureStageTransport || failure.statusCode >= 500 || failure.providerCode == "plane_unavailable":
+	case failure.stage == failureStageTransport,
+		failure.statusCode >= 500,
+		failure.providerCode == "plane_unavailable",
+		failure.providerCode == "provider_internal",
+		failure.providerCode == "timeout",
+		failure.providerCode == "transport_error",
+		failure.providerCode == "connection_not_connected":
 		class = captureplane.ProviderFailureUnavailable
 		retryable = true
 	}
@@ -485,17 +494,17 @@ func validateCapturePullResponse(response captureTracksResponse, tracks []captur
 	seen := make(map[captureTrackKey]struct{}, len(response.Tracks))
 	seenMIDs := make(map[string]struct{}, len(response.Tracks))
 	for _, result := range response.Tracks {
-		key := captureTrackKey{owner: strings.TrimSpace(result.ConnectionReference), track: strings.TrimSpace(result.TrackName)}
+		key := captureTrackKey{owner: result.ConnectionReference, track: result.TrackName}
 		if result.Location != "" && result.Location != "remote" {
 			return captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
-		if _, ok := requested[key]; !ok || key.owner == "" || key.track == "" || strings.TrimSpace(result.Mid) == "" {
+		mid := strings.TrimSpace(result.Mid)
+		if _, ok := requested[key]; !ok || key.owner == "" || key.track == "" || result.Mid != mid || mid == "" {
 			return captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
 		if _, duplicate := seen[key]; duplicate {
 			return captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
-		mid := strings.TrimSpace(result.Mid)
 		if _, duplicate := seenMIDs[mid]; duplicate {
 			return captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
@@ -582,10 +591,10 @@ func (a Adapter) InspectCaptureConnection(ctx context.Context, input captureplan
 		if !ok {
 			return captureplane.InspectCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
-		if owner := strings.TrimSpace(result.ConnectionReference); owner != "" && owner != track.OwnerReference.String() {
+		if result.Location != "remote" || result.ConnectionReference != track.OwnerReference.String() {
 			return captureplane.InspectCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
-		if name := strings.TrimSpace(result.TrackName); name != "" && name != track.TrackReference.String() {
+		if result.TrackName != track.TrackReference.String() {
 			return captureplane.InspectCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
 		observed = append(observed, captureplane.ObservedCaptureTrack{PulledCaptureTrack: track, Active: result.Status == "active"})
@@ -617,10 +626,13 @@ func (a Adapter) inspectCaptureConnection(ctx context.Context, connection captur
 	}
 	for index := range response.Tracks {
 		response.Tracks[index].Status = strings.ToLower(strings.TrimSpace(response.Tracks[index].Status))
+		if response.Tracks[index].Location != "remote" || response.Tracks[index].ConnectionReference == "" || response.Tracks[index].TrackName == "" {
+			return captureInspectResponse{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
+		}
 		if response.Tracks[index].Status != "active" && response.Tracks[index].Status != "inactive" && response.Tracks[index].Status != "waiting" {
 			return captureInspectResponse{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
-		if strings.TrimSpace(response.Tracks[index].Mid) == "" {
+		if strings.TrimSpace(response.Tracks[index].Mid) == "" || strings.TrimSpace(response.Tracks[index].Mid) != response.Tracks[index].Mid {
 			return captureInspectResponse{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
 	}

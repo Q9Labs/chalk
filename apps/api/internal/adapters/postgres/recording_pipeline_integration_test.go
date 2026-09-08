@@ -1,15 +1,22 @@
 package postgres_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -18,7 +25,13 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
+	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
+	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
+	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -47,6 +60,12 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	if err := resetRecordingJobAuthorities(ctx, pool); err != nil {
 		t.Fatalf("reset recorder authorities: %v", err)
+	}
+	if err := resetRecordingPresentations(ctx, pool); err != nil {
+		t.Fatalf("reset recording presentations: %v", err)
+	}
+	if err := cleanupRecordingSyncLifecycle(ctx, pool, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be001")); err != nil {
+		t.Fatalf("reset recording Sync lifecycle: %v", err)
 	}
 	_, _ = pool.Exec(ctx, `delete from recording_artifacts where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`)
 	_, _ = pool.Exec(ctx, `delete from recording_bundles where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`)
@@ -78,7 +97,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if _, err := pool.Exec(ctx, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, 'recorder integration', $2, 'recorder-integration', 'cf_sfu') on conflict do nothing`, spaceID.Bytes(), tenantID.Bytes()); err != nil {
 		t.Fatalf("seed space fixture: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb) on conflict do nothing`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
+	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0,"artifact_policy":{"schema_version":"episode_config.v2","recording":{"mode":"manual","profile":"composite_720p_v1","retention_seconds":0},"transcription":{"mode":"on_demand","retention_seconds":0,"source_window_seconds":86400,"provider_policy_version":"integration"}}}'::jsonb) on conflict do nothing`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
 		t.Fatalf("seed recorder fixture: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb) on conflict do nothing`, otherEpisodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
@@ -103,12 +122,18 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		if err := resetRecordingJobAuthorities(ctx, pool); err != nil {
 			t.Errorf("clean recorder authorities: %v", err)
 		}
+		if err := resetRecordingPresentations(ctx, pool); err != nil {
+			t.Errorf("clean recording presentations: %v", err)
+		}
 		_, _ = pool.Exec(ctx, `delete from recording_jobs where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from recording_pipelines where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from recording_reservations where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from recordings where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from provider_operation_observations where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from provider_operation_observation_heads where tenant_id = $1`, tenantID.Bytes())
+		if err := cleanupRecordingSyncLifecycle(ctx, pool, tenantID); err != nil {
+			t.Errorf("clean recording Sync lifecycle: %v", err)
+		}
 		_, _ = pool.Exec(ctx, `delete from sync_episode_control where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from participants where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from episodes where tenant_id = $1`, tenantID.Bytes())
@@ -118,7 +143,24 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		_, _ = pool.Exec(ctx, `update recording_capacity set reserved_episodes = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0 where id = 1`)
 	}()
 
+	presentationProfile, err := recordingpresentation.NewComposite720PProfile(strings.Repeat("a", sha256.Size*2))
+	if err != nil {
+		t.Fatalf("build recording presentation profile: %v", err)
+	}
 	repository := postgres.NewRecordingPipelineRepositoryWithPool(pool)
+	repository, err = repository.WithRecordingPresentationProfile(presentationProfile)
+	if err != nil {
+		t.Fatalf("configure recording presentation profile: %v", err)
+	}
+	presentationObjects := newRecordingPresentationObjectStore()
+	presentationFreezer, err := recordingpresentation.NewFreezer(
+		postgres.NewRecordingPresentationCompletionSourceRepository(sqlc.New(pool)),
+		presentationObjects,
+	)
+	if err != nil {
+		t.Fatalf("configure recording presentation freezer: %v", err)
+	}
+	repository = repository.WithRecordingPresentationFreezer(presentationFreezer)
 	input := recordingpipeline.ReservationInput{
 		TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 		RecordingID:    mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be00b"),
@@ -135,6 +177,11 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	if reservation.PolicySnapshotVersion != recordingpipeline.SupportedPolicySnapshotVersion {
 		t.Fatalf("reservation policy snapshot version = %q", reservation.PolicySnapshotVersion)
+	}
+	// Simulate two earlier capture claims so the live claim exercises a third
+	// capture epoch while retaining historical committed input.
+	if _, err := pool.Exec(ctx, `update recording_pipelines set capture_epoch = 2 where recording_id = $1`, reservation.RecordingID.Bytes()); err != nil {
+		t.Fatalf("seed historical capture epochs: %v", err)
 	}
 
 	replay, err := repository.Reserve(ctx, input, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be005"))
@@ -194,6 +241,56 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		t.Fatalf("concurrent claim replay errors: first=%v second=%v", first.err, second.err)
 	}
 	job := first.job
+	if job.Authority == nil || job.LeaseExpiresAt == nil || !job.Authority.LeaseExpiresAt.Equal(*job.LeaseExpiresAt) {
+		t.Fatal("capture claim authority must use the exact persisted lease expiry")
+	}
+	keyAuthority := recordingkeys.Authority{
+		TenantID: tenantID.String(), EpisodeID: episodeID.String(), RecordingID: reservation.RecordingID.String(), JobID: job.ID.String(),
+		KeyHandle: job.Authority.Envelope.KeyHandle, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration,
+		CaptureEpoch: job.Authority.Envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest,
+		LeaseToken: job.Authority.LeaseToken, LeaseOwner: job.Authority.LeaseOwner, LeaseExpiresAt: job.Authority.LeaseExpiresAt,
+	}
+	keyContext := keyAuthority.Context("integration")
+	if err := postgres.NewRecordingKeyRepository(sqlc.New(pool)).Save(ctx, recordingkeys.Record{
+		Authority: keyAuthority, CiphertextBlob: []byte("encrypted-integration-capture-key"),
+		EncryptionContext: keyContext, ContextDigest: keyContext.Digest(), CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("persist capture data key: %v", err)
+	}
+	historicalEnvelopeDigest := bytes.Repeat([]byte{0x31}, sha256.Size)
+	unreferencedEnvelopeDigest := bytes.Repeat([]byte{0x32}, sha256.Size)
+	historicalKeyHandle := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be031")
+	unreferencedKeyHandle := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be032")
+	historicalKeyAuthority := keyAuthority
+	historicalKeyAuthority.KeyHandle = historicalKeyHandle.String()
+	historicalKeyAuthority.CaptureEpoch = 1
+	historicalKeyAuthority.EnvelopeDigest = historicalEnvelopeDigest
+	historicalKeyContext := historicalKeyAuthority.Context("integration")
+	unreferencedKeyAuthority := keyAuthority
+	unreferencedKeyAuthority.KeyHandle = unreferencedKeyHandle.String()
+	unreferencedKeyAuthority.CaptureEpoch = 2
+	unreferencedKeyAuthority.EnvelopeDigest = unreferencedEnvelopeDigest
+	unreferencedKeyContext := unreferencedKeyAuthority.Context("integration")
+	for _, key := range []struct {
+		authority recordingkeys.Authority
+		context   recordingkeys.EncryptionContext
+		blob      string
+	}{
+		{authority: historicalKeyAuthority, context: historicalKeyContext, blob: "encrypted-integration-historical-key"},
+		{authority: unreferencedKeyAuthority, context: unreferencedKeyContext, blob: "encrypted-integration-unreferenced-key"},
+	} {
+		if _, err := pool.Exec(ctx, `
+			insert into recording_data_keys (
+				recording_id, capture_epoch, tenant_id, episode_id, job_id, attempt_count,
+				fencing_generation, key_handle, environment, envelope_digest,
+				encryption_context_digest, ciphertext_blob
+			) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			reservation.RecordingID.Bytes(), key.authority.CaptureEpoch, tenantID.Bytes(), episodeID.Bytes(), job.ID.Bytes(), job.AttemptCount,
+			job.FencingGeneration, mustID(t, key.authority.KeyHandle).Bytes(), key.context.Environment, key.authority.EnvelopeDigest, key.context.Digest(), []byte(key.blob),
+		); err != nil {
+			t.Fatalf("persist capture epoch %d fixture key: %v", key.authority.CaptureEpoch, err)
+		}
+	}
 	publicationRegistry := mediapublications.NewService(postgres.NewProviderOperationRepositoryWithPool(pool))
 	if _, err := publicationRegistry.RecordPublishedTracks(ctx, mediapublications.RecordInput{
 		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 7,
@@ -220,11 +317,77 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		LeaseToken: "lease-capture", LeaseOwner: "capture-test", LeaseFor: 2 * time.Minute,
 		CaptureEpoch: job.Authority.Envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest,
 	})
-	if err != nil || renewedJob.LeaseExpiresAt == nil || !renewedJob.LeaseExpiresAt.After(job.Authority.LeaseExpiresAt) {
+	if err != nil || renewedJob.CaptureEpoch != job.CaptureEpoch || renewedJob.LeaseExpiresAt == nil || !renewedJob.LeaseExpiresAt.After(job.Authority.LeaseExpiresAt) {
 		t.Fatalf("renew capture lease: job=%#v error=%v", renewedJob, err)
 	}
+	t.Run("reserve bundle after heartbeat", func(t *testing.T) {
+		transaction, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer transaction.Rollback(ctx)
+		objects := postgres.NewRecordingObjectRepository(sqlc.New(transaction))
+		input := recordingobjects.ReserveInput{
+			AllocationID: "6a9b6a12-7457-4fe9-a58b-8b234d0be021", ReservationRequestID: "6a9b6a12-7457-4fe9-a58b-8b234d0be022", EncryptionContextDigest: bytes.Repeat([]byte{1}, 32),
+			Authority: recordingobjects.Authority{
+				TenantID: tenantID.String(), EpisodeID: episodeID.String(), RecordingID: reservation.RecordingID.String(), JobID: job.ID.String(), ObjectHandle: job.Authority.Envelope.ObjectHandle,
+				AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration, CaptureEpoch: job.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest,
+				LeaseOwner: "capture-test", LeaseToken: "lease-capture", LeaseExpiresAt: *renewedJob.LeaseExpiresAt,
+			},
+		}
+		allocation, err := objects.ReserveAllocation(ctx, input)
+		if err != nil || allocation.ID != input.AllocationID || allocation.SequenceNumber != 0 || allocation.State != "reserved" {
+			t.Fatalf("reserve actual bundle allocation: %+v, %v", allocation, err)
+		}
+		if err := objects.Authorize(ctx, input.Authority); err != nil {
+			t.Fatalf("renewed object authority: %v", err)
+		}
+		expired := input.Authority
+		expired.LeaseExpiresAt = time.Now().Add(-time.Second)
+		if err := objects.Authorize(ctx, expired); !errors.Is(err, recordingobjects.ErrAuthorityMismatch) {
+			t.Fatalf("expired object authority: %v", err)
+		}
+		overlong := input.Authority
+		overlong.LeaseExpiresAt = overlong.LeaseExpiresAt.Add(time.Minute)
+		if err := objects.Authorize(ctx, overlong); !errors.Is(err, recordingobjects.ErrAuthorityMismatch) {
+			t.Fatalf("object authority beyond database horizon: %v", err)
+		}
+	})
 	capturePlanInput.LeaseExpiresAt = *renewedJob.LeaseExpiresAt
+	startOperationID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0bea01")
+	startFingerprint := sha256.Sum256([]byte("recording pipeline integration start"))
+	if _, err := pool.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload) values($1, $2, $3, $4, 'recording_pipeline_start', $5, 'start_recording', $6, '{}'::jsonb)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), startOperationID.Bytes(), startFingerprint[:], reservation.RecordingID.Bytes()); err != nil {
+		t.Fatalf("seed recording start operation: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `insert into sync_recordings(tenant_id, space_id, episode_id, recording_id, status, generation, start_external_operation_id) values($1, $2, $3, $4, 'starting', 1, $5)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), reservation.RecordingID.Bytes(), startOperationID.Bytes()); err != nil {
+		t.Fatalf("seed Sync recording: %v", err)
+	}
+	readyAt := time.Now().UTC().Truncate(time.Microsecond)
+	lifecycleService, err := recordinglifecycle.NewService(postgres.NewRecordingLifecycleRepositoryWithPool(pool), time.Now)
+	if err != nil {
+		t.Fatalf("configure recording lifecycle service: %v", err)
+	}
+	readyInput := recordinglifecycle.ReadyInput{
+		Authority: recordinglifecycle.Authority{
+			TenantID: tenantID.String(), SpaceID: spaceID.String(), EpisodeID: episodeID.String(), RecordingID: reservation.RecordingID.String(), JobID: job.ID.String(),
+			AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration,
+			CaptureEpoch: job.Authority.Envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest,
+			LeaseOwner: "capture-test", LeaseToken: "lease-capture", LeaseExpiresAt: *renewedJob.LeaseExpiresAt,
+		},
+		RequestKey: "capture_ready_" + reservation.RecordingID.String() + "_1", ReadyAt: readyAt,
+	}
+	readyPublication, err := lifecycleService.PublishReady(ctx, readyInput)
+	if err != nil {
+		t.Fatalf("publish recording capture ready: %v", err)
+	}
+	if replay, err := lifecycleService.PublishReady(ctx, readyInput); err != nil || replay.ExternalOperationID != readyPublication.ExternalOperationID {
+		t.Fatalf("replay recording capture ready: publication=%#v error=%v", replay, err)
+	}
 	updatedFoldedState := `{"control_revision":5,"status":"active","participants":[{"participant_id":"` + participantID.String() + `","display_name":"Renamed Participant","admission_revision":4}]}`
+	displayNamePayload := `{"participant_id":"` + participantID.String() + `","display_name":"Renamed Participant"}`
+	if _, err := pool.Exec(ctx, `insert into sync_control_events(tenant_id, space_id, episode_id, event_id, base_revision, revision, event_name, payload, actor_participant_id, actor_generation, command_id, event_schema_version, resulting_state_digest, encoded_bytes) values($1, $2, $3, $4, 4, 5, 'participant_display_name_changed', $5::jsonb, $6, 7, 'rename_fixture_1', 1, decode(repeat('11', 32), 'hex'), octet_length($5::text))`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0bea02").Bytes(), displayNamePayload, participantID.Bytes()); err != nil {
+		t.Fatalf("append capture display-name event: %v", err)
+	}
 	if _, err := pool.Exec(ctx, `update sync_episode_control set control_revision = 5, folded_state = $4::text::jsonb, snapshot_bytes = octet_length($4::text), updated_at = now() where tenant_id = $1 and space_id = $2 and episode_id = $3`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), updatedFoldedState); err != nil {
 		t.Fatalf("advance capture folded state: %v", err)
 	}
@@ -279,7 +442,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err := <-blockedPlanResult; !errors.Is(err, captureplan.ErrPlanAuthorityMismatch) {
 		t.Fatalf("post-lock expired plan lease error = %v, want %v", err, captureplan.ErrPlanAuthorityMismatch)
 	}
-	renewedLeaseExpiresAt := time.Now().UTC().Add(2 * time.Minute)
+	renewedLeaseExpiresAt := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Microsecond)
 	if _, err := pool.Exec(ctx, `update recording_jobs set lease_expires_at = $2 where id = $1`, job.ID.Bytes(), renewedLeaseExpiresAt); err != nil {
 		t.Fatalf("restore capture lease after plan lock: %v", err)
 	}
@@ -338,6 +501,20 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	renegotiateCaptureCommand.Input.RenegotiateCaptureConnection.NegotiationID = "negotiation-1"
 	if _, err := captureSignalingService.Execute(ctx, capturesignaling.ExecuteRequest{Command: renegotiateCaptureCommand}); err != nil {
 		t.Fatalf("renegotiate capture connection: %v", err)
+	}
+	pullCaptureCommand := capturesignaling.Command{
+		SignalingHandle: signalingHandle, Authority: signalingAuthority, Lease: signalingLease,
+		Identity: capturesignaling.CommandIdentity{Operation: captureplane.OperationPullCaptureTracks, PlanRevision: 1, IdempotencyKey: "capture-pull-answer"},
+		Input: capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{
+			Connection: "provider-capture-connection",
+			Tracks:     []captureplane.CaptureTrack{{OwnerReference: "publisher-connection", TrackReference: "published-audio", ParticipantID: participantID, ParticipantGeneration: 1, Source: captureplane.TrackSourceMicrophone, Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}},
+		}},
+	}
+	if _, err := captureSignalingService.Execute(ctx, capturesignaling.ExecuteRequest{Command: pullCaptureCommand}); err != nil {
+		t.Fatalf("persist pull with remote answer: %v", err)
+	}
+	if replay, err := captureSignalingService.Execute(ctx, capturesignaling.ExecuteRequest{Command: pullCaptureCommand}); err != nil || !replay.Replayed {
+		t.Fatalf("replay pull with remote answer: replay=%v error=%v", replay.Replayed, err)
 	}
 	replayedCapture, err := captureSignalingService.Execute(ctx, capturesignaling.ExecuteRequest{Command: createCaptureCommand})
 	if err != nil || !replayedCapture.Replayed || captureProvider.createCalls != 1 || captureProvider.renegotiateCalls != 1 {
@@ -427,7 +604,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err := <-blockedClaimResult; !errors.Is(err, capturesignaling.ErrStaleAuthority) {
 		t.Fatalf("post-lock expired signaling lease error = %v, want %v", err, capturesignaling.ErrStaleAuthority)
 	}
-	renewedLeaseExpiresAt = time.Now().UTC().Add(2 * time.Minute)
+	renewedLeaseExpiresAt = time.Now().UTC().Add(2 * time.Minute).Truncate(time.Microsecond)
 	if _, err := pool.Exec(ctx, `update recording_jobs set lease_expires_at = $2 where id = $1`, job.ID.Bytes(), renewedLeaseExpiresAt); err != nil {
 		t.Fatalf("restore capture lease after connection lock: %v", err)
 	}
@@ -567,10 +744,83 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if bundle.SequenceNumber != 0 {
 		t.Fatalf("bundle sequence = %d", bundle.SequenceNumber)
 	}
-	if _, err := repository.CompleteCapture(ctx, recordingpipeline.LeaseInput{JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration, LeaseToken: "lease-capture", LeaseOwner: "capture-test", LeaseFor: time.Minute, CaptureEpoch: job.Authority.Envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be008")); err != nil {
-		t.Fatalf("complete capture: %v", err)
+	insertCaptureObject := func(allocationID, reservationRequestID, objectKey string, sequence, epoch int64, envelopeDigest, encryptionContextDigest []byte) {
+		t.Helper()
+		checksum := bytes.Repeat([]byte{byte(sequence + 0x41)}, sha256.Size)
+		startMillis := sequence * 300
+		endMillis := startMillis + 400
+		if _, err := pool.Exec(ctx, `
+			insert into recording_bundle_allocations (
+				id, tenant_id, episode_id, recording_id, job_id, object_handle,
+				reservation_request_id, allocation_version, attempt_count, fencing_generation,
+				capture_epoch, envelope_digest, sequence_number, codec,
+				monotonic_start_millis, monotonic_end_millis, media_start_millis, media_end_millis,
+				object_key, upload_token_hash, expected_byte_size, expected_checksum, content_type,
+				expires_at, encryption_context_digest, state, object_version, object_etag,
+				object_checksum, manifest_digest, committed_at
+			) values (
+				$1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, 'opus',
+				$13, $14, $13, $14, $15, $16, 128, $17,
+				'application/vnd.chalk.recording-bundle+json', $18, $19, 'committed',
+				$20, $21, $17, $22, clock_timestamp()
+			)`,
+			mustID(t, allocationID).Bytes(), tenantID.Bytes(), episodeID.Bytes(), reservation.RecordingID.Bytes(), job.ID.Bytes(), mustID(t, job.Authority.Envelope.ObjectHandle).Bytes(),
+			mustID(t, reservationRequestID).Bytes(), job.AttemptCount, job.FencingGeneration, epoch, envelopeDigest, sequence,
+			startMillis, endMillis, objectKey, bytes.Repeat([]byte{byte(sequence + 0x51)}, sha256.Size), checksum,
+			job.Authority.LeaseExpiresAt, encryptionContextDigest, fmt.Sprintf("capture-v%d", epoch), fmt.Sprintf("capture-etag-%d", epoch), bytes.Repeat([]byte{byte(sequence + 0x61)}, sha256.Size),
+		); err != nil {
+			t.Fatalf("insert committed capture epoch %d sequence %d: %v", epoch, sequence, err)
+		}
 	}
-	render, err := repository.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be011"), Kind: recordingpipeline.JobKindRender, Owner: "render-test", LeaseToken: "lease-render", LeaseFor: time.Minute})
+	insertCaptureObject("6a9b6a12-7457-4fe9-a58b-8b234d0be033", "6a9b6a12-7457-4fe9-a58b-8b234d0be035", "recordings/capture/epoch-1.bundle", 0, 1, historicalEnvelopeDigest, historicalKeyContext.Digest())
+	insertCaptureObject("6a9b6a12-7457-4fe9-a58b-8b234d0be034", "6a9b6a12-7457-4fe9-a58b-8b234d0be036", "recordings/capture/epoch-3.bundle", 2, job.Authority.Envelope.CaptureEpoch, job.Authority.EnvelopeDigest, keyContext.Digest())
+	completionLease := recordingpipeline.LeaseInput{JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration, LeaseToken: "lease-capture", LeaseOwner: "capture-test", LeaseFor: time.Minute, CaptureEpoch: job.Authority.Envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest}
+	completedCapture, err := repository.CompleteCapture(ctx, completionLease, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be008"))
+	if err != nil || completedCapture.State != recordingpipeline.JobStateSucceeded {
+		t.Fatalf("complete capture state=%s: %v", completedCapture.State, err)
+	}
+	// A lost response must replay without rebuilding the presentation or
+	// allocating another render job. An unusable freezer proves this boundary.
+	replayRepository := repository.WithRecordingPresentationFreezer(recordingpresentation.Freezer{})
+	replayedCompletion, err := replayRepository.CompleteCapture(ctx, completionLease, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be098"))
+	if err != nil || replayedCompletion.ID != completedCapture.ID || replayedCompletion.State != recordingpipeline.JobStateSucceeded || replayedCompletion.TerminalAt == nil || completedCapture.TerminalAt == nil || !replayedCompletion.TerminalAt.Equal(*completedCapture.TerminalAt) {
+		t.Fatalf("completion replay state=%s: %v", replayedCompletion.State, err)
+	}
+	for _, changed := range []string{"worker", "token", "attempt", "generation", "epoch", "digest"} {
+		t.Run("reject completed capture replay "+changed, func(t *testing.T) {
+			stale := completionLease
+			switch changed {
+			case "worker":
+				stale.LeaseOwner = "different-worker"
+			case "token":
+				stale.LeaseToken = "different-token"
+			case "attempt":
+				stale.AttemptCount++
+			case "generation":
+				stale.FencingGeneration++
+			case "epoch":
+				stale.CaptureEpoch++
+			case "digest":
+				stale.EnvelopeDigest = bytes.Repeat([]byte{0xff}, 32)
+			}
+			if _, err := replayRepository.CompleteCapture(ctx, stale, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be098")); err == nil {
+				t.Fatal("changed completion authority accepted")
+			}
+		})
+	}
+	var renderJobs int
+	if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='render'`, reservation.RecordingID.Bytes()).Scan(&renderJobs); err != nil || renderJobs != 1 {
+		t.Fatalf("render jobs after replay=%d: %v", renderJobs, err)
+	}
+	var presentationObjectKey, assetManifestObjectKey string
+	var presentationDurationMillis int64
+	if err := pool.QueryRow(ctx, `select presentation_object_key, asset_manifest_object_key, duration_millis from recording_presentations where tenant_id = $1 and recording_id = $2`, tenantID.Bytes(), reservation.RecordingID.Bytes()).Scan(&presentationObjectKey, &assetManifestObjectKey, &presentationDurationMillis); err != nil {
+		t.Fatalf("read frozen recording presentation: %v", err)
+	}
+	if presentationDurationMillis != bundle.MediaEndMillis || !presentationObjects.Contains(presentationObjectKey) || !presentationObjects.Contains(assetManifestObjectKey) {
+		t.Fatalf("frozen recording presentation duration=%d timeline=%q manifest=%q", presentationDurationMillis, presentationObjectKey, assetManifestObjectKey)
+	}
+	render, err := repository.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be011"), Kind: recordingpipeline.JobKindRender, Owner: "render-test", LeaseToken: "lease-render", LeaseFor: 5 * time.Minute})
 	if err != nil {
 		t.Fatalf("claim render: %v", err)
 	}
@@ -581,6 +831,187 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	expectedRenderDeadline := captureCompletedAt.UTC().Add(recordingpipeline.MaximumRenderDuration).Format(time.RFC3339Nano)
 	if render.Authority == nil || render.Authority.Envelope.HardDeadline != expectedRenderDeadline {
 		t.Fatalf("render hard deadline = %v, want %s", render.Authority, expectedRenderDeadline)
+	}
+	renderInputHandle := mustID(t, render.Authority.Envelope.RenderInputHandle)
+	renderKeyHandle := mustID(t, render.Authority.Envelope.KeyHandle)
+	renderObjectHandle := mustID(t, render.Authority.Envelope.ObjectHandle)
+	presentationDigest, err := hex.DecodeString(render.Authority.Envelope.PresentationSHA256)
+	if err != nil || len(presentationDigest) != sha256.Size {
+		t.Fatalf("decode render presentation digest: %v", err)
+	}
+	renderAuthority := recordingrender.Authority{
+		TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RecordingID: reservation.RecordingID, JobID: render.ID,
+		RenderInputHandle: renderInputHandle, KeyHandle: renderKeyHandle, ObjectHandle: renderObjectHandle,
+		AttemptCount: render.AttemptCount, FencingGeneration: render.FencingGeneration, CaptureEpoch: render.Authority.Envelope.CaptureEpoch,
+		EnvelopeDigest: render.Authority.EnvelopeDigest, LeaseToken: render.Authority.LeaseToken,
+		LeaseOwner: render.Authority.LeaseOwner, LeaseExpiresAt: render.Authority.LeaseExpiresAt,
+	}
+	originalRenderAuthority := renderAuthority
+	renewedRender, err := repository.Heartbeat(ctx, recordingpipeline.LeaseInput{
+		JobID: render.ID, AttemptCount: render.AttemptCount, FencingGeneration: render.FencingGeneration,
+		LeaseToken: render.Authority.LeaseToken, LeaseOwner: render.Authority.LeaseOwner,
+		CaptureEpoch: render.Authority.Envelope.CaptureEpoch, EnvelopeDigest: render.Authority.EnvelopeDigest,
+		LeaseFor: recordingpipeline.MaximumRenderDuration + time.Hour,
+	})
+	if err != nil || renewedRender.LeaseExpiresAt == nil || !renewedRender.LeaseExpiresAt.Equal(captureCompletedAt.Add(recordingpipeline.MaximumRenderDuration)) {
+		t.Fatalf("render heartbeat must stop at immutable deadline: expiry=%v err=%v", renewedRender.LeaseExpiresAt, err)
+	}
+	renderAuthority.LeaseExpiresAt = *renewedRender.LeaseExpiresAt
+	renderRepository := postgres.NewRecordingRenderRepositoryWithPool(pool, false)
+	storedRenderInput, err := renderRepository.ResolveInput(ctx, renderAuthority)
+	if err != nil {
+		t.Fatalf("resolve recording input under renewed lease: %v", err)
+	}
+	if len(storedRenderInput.Capture) != 2 || storedRenderInput.Capture[0].SequenceNumber != 0 || storedRenderInput.Capture[0].CaptureEpoch != 1 || storedRenderInput.Capture[0].KeyHandle != historicalKeyHandle ||
+		storedRenderInput.Capture[1].SequenceNumber != 2 || storedRenderInput.Capture[1].CaptureEpoch != renderAuthority.CaptureEpoch || storedRenderInput.Capture[1].KeyHandle != renderAuthority.KeyHandle {
+		t.Fatalf("multi-epoch render capture input = %#v", storedRenderInput.Capture)
+	}
+	historicalKey, err := renderRepository.GetCaptureKey(ctx, recordingrender.AccessKeyInput{Authority: renderAuthority, CaptureEpoch: 1})
+	if err != nil || historicalKey.KeyHandle != historicalKeyHandle || historicalKey.Context.CaptureEpoch != 1 || historicalKey.Context.JobID != job.ID.String() {
+		t.Fatalf("historical render key = %#v error=%v", historicalKey, err)
+	}
+	currentKey, err := renderRepository.GetCaptureKey(ctx, recordingrender.AccessKeyInput{Authority: renderAuthority, CaptureEpoch: renderAuthority.CaptureEpoch})
+	if err != nil || currentKey.KeyHandle != renderAuthority.KeyHandle || currentKey.Context.CaptureEpoch != renderAuthority.CaptureEpoch {
+		t.Fatalf("current render key = %#v error=%v", currentKey, err)
+	}
+	if _, err := renderRepository.GetCaptureKey(ctx, recordingrender.AccessKeyInput{Authority: renderAuthority, CaptureEpoch: 2}); !errors.Is(err, recordingrender.ErrKeyNotFound) {
+		t.Fatalf("unreferenced capture key error = %v, want %v", err, recordingrender.ErrKeyNotFound)
+	}
+	if _, err := renderRepository.GetCaptureKey(ctx, recordingrender.AccessKeyInput{Authority: originalRenderAuthority, CaptureEpoch: 1}); !errors.Is(err, recordingrender.ErrKeyNotFound) {
+		t.Fatalf("historical key under stale render lease error = %v, want %v", err, recordingrender.ErrKeyNotFound)
+	}
+	if _, err := renderRepository.ResolveInput(ctx, originalRenderAuthority); !errors.Is(err, recordingrender.ErrLeaseStale) {
+		t.Fatalf("old recording input lease after renewal error = %v", err)
+	}
+	casAllocation, err := renderRepository.ReserveObject(ctx, recordingrender.ReserveObjectInput{
+		Authority: renderAuthority, Purpose: recordingrender.PurposeTranscriptionManifest,
+		ReservationRequestID: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be028"),
+	}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be027"), "recordings/render/finalize-cas.json", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("reserve render object for finalization CAS: %v", err)
+	}
+	casChecksum := bytes.Repeat([]byte{0x27}, sha256.Size)
+	casFirst := casAllocation
+	casFirst.ExpectedContentType = "application/json"
+	casFirst.ExpectedByteSize = 127
+	casFirst.ExpectedSHA256 = casChecksum
+	casFirst.UploadTokenHash = bytes.Repeat([]byte{0x28}, sha256.Size)
+	casFirst.UploadExpiresAt = &renderAuthority.LeaseExpiresAt
+	if _, err := renderRepository.FinalizeObject(ctx, casFirst); err != nil {
+		t.Fatalf("finalize render object for CAS: %v", err)
+	}
+	casConflicting := casAllocation
+	casConflicting.ExpectedContentType = "application/json"
+	casConflicting.ExpectedByteSize = 128
+	casConflicting.ExpectedSHA256 = bytes.Repeat([]byte{0x29}, sha256.Size)
+	casConflicting.UploadTokenHash = bytes.Repeat([]byte{0x2a}, sha256.Size)
+	casConflicting.UploadExpiresAt = &renderAuthority.LeaseExpiresAt
+	if _, err := renderRepository.FinalizeObject(ctx, casConflicting); err == nil {
+		t.Fatal("conflicting stale render finalization unexpectedly overwrote allocated facts")
+	}
+	casMatching := casFirst
+	casMatching.UploadTokenHash = bytes.Repeat([]byte{0x2b}, sha256.Size)
+	if _, err := renderRepository.FinalizeObject(ctx, casMatching); err != nil {
+		t.Fatalf("matching render finalization token reissue: %v", err)
+	}
+	casStored, err := renderRepository.GetObjectAllocation(ctx, renderAuthority, casAllocation.ID)
+	if err != nil {
+		t.Fatalf("read render finalization CAS result: %v", err)
+	}
+	if casStored.ExpectedContentType != casFirst.ExpectedContentType || casStored.ExpectedByteSize != casFirst.ExpectedByteSize || !bytes.Equal(casStored.ExpectedSHA256, casFirst.ExpectedSHA256) || !bytes.Equal(casStored.UploadTokenHash, casMatching.UploadTokenHash) {
+		t.Fatalf("render finalization CAS result = content_type %q size %d checksum %x token %x", casStored.ExpectedContentType, casStored.ExpectedByteSize, casStored.ExpectedSHA256, casStored.UploadTokenHash)
+	}
+	commitObject := func(allocationValue, requestValue, key string, purpose recordingrender.ObjectPurpose, contentType string, size int64, digestByte byte, duration *int64) recordingrender.CommitObjectReference {
+		t.Helper()
+		allocationID := mustID(t, allocationValue)
+		allocation, reserveErr := renderRepository.ReserveObject(ctx, recordingrender.ReserveObjectInput{
+			Authority: renderAuthority, Purpose: purpose, ReservationRequestID: mustID(t, requestValue),
+		}, allocationID, key, time.Now().UTC())
+		if reserveErr != nil {
+			t.Fatalf("reserve %s render object: %v", purpose, reserveErr)
+		}
+		checksum := make([]byte, sha256.Size)
+		for index := range checksum {
+			checksum[index] = digestByte
+		}
+		uploadHash := sha256.Sum256([]byte(allocationValue))
+		uploadExpiresAt := renderAuthority.LeaseExpiresAt
+		allocation.ExpectedContentType = contentType
+		allocation.ExpectedByteSize = size
+		allocation.ExpectedSHA256 = checksum
+		allocation.ExpectedDurationMillis = duration
+		allocation.UploadTokenHash = uploadHash[:]
+		allocation.UploadExpiresAt = &uploadExpiresAt
+		allocation, finalizeErr := renderRepository.FinalizeObject(ctx, allocation)
+		if finalizeErr != nil {
+			t.Fatalf("finalize %s render object: %v", purpose, finalizeErr)
+		}
+		committed, commitErr := renderRepository.CommitObject(ctx, allocation, objectstorage.ObjectFacts{Object: objectstorage.Object{
+			Key: key, ETag: "immutable-" + allocationValue, ChecksumSHA256: base64.StdEncoding.EncodeToString(checksum), ContentType: contentType, Size: size,
+		}}, time.Now().UTC())
+		if commitErr != nil {
+			t.Fatalf("commit %s render object: %v", purpose, commitErr)
+		}
+		return recordingrender.CommitObjectReference{AllocationID: committed.AllocationID, Purpose: committed.Purpose, Object: committed.Object, DurationMillis: committed.DurationMillis}
+	}
+	duration := render.Authority.Envelope.PresentationDurationMillis
+	video := commitObject("6a9b6a12-7457-4fe9-a58b-8b234d0be020", "6a9b6a12-7457-4fe9-a58b-8b234d0be021", "recordings/render/video.mp4", recordingrender.PurposeRecordingVideo, "video/mp4", 128, 0x21, &duration)
+	manifest := commitObject("6a9b6a12-7457-4fe9-a58b-8b234d0be022", "6a9b6a12-7457-4fe9-a58b-8b234d0be023", "recordings/render/transcription.json", recordingrender.PurposeTranscriptionManifest, "application/json", 128, 0x22, nil)
+	chunkDuration := duration
+	if chunkDuration > 15*60*1000 {
+		chunkDuration = 15 * 60 * 1000
+	}
+	audio := commitObject("6a9b6a12-7457-4fe9-a58b-8b234d0be024", "6a9b6a12-7457-4fe9-a58b-8b234d0be025", "recordings/render/audio.flac", recordingrender.PurposeTranscriptionAudio, "audio/flac", 128, 0x23, &chunkDuration)
+	ffprobeDigest := sha256.Sum256([]byte("recording render integration ffprobe facts"))
+	commitInput := recordingrender.CommitInput{
+		Authority: renderAuthority, PresentationSHA256: presentationDigest, DurationMillis: duration, Video: video, FFprobeFactsDigest: ffprobeDigest[:],
+		TranscriptionSource: &recordingrender.TranscriptionSource{
+			SchemaVersion: recordingrender.TranscriptionSourceSchemaVersion, PresentationSHA256: presentationDigest, Manifest: manifest,
+			Chunks: []recordingrender.TranscriptionChunk{{
+				ChunkID: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be026"), Index: 0, Generation: render.FencingGeneration,
+				StartMillis: 0, EndMillis: chunkDuration, SourceStartMillis: 0, SourceEndMillis: chunkDuration,
+				ParticipantRef: "participant-integration", ParticipantGeneration: 1, DisplayNameSnapshot: "Participant",
+				TrackID: "microphone-integration", TrackEpoch: "track-epoch-integration", IdentityKind: "participant", TrackClass: "microphone", Object: audio,
+			}},
+		},
+	}
+	commitInput.CommitDigest, err = recordingrender.CommitDigest(commitInput)
+	if err != nil || commitInput.Validate() != nil {
+		t.Fatalf("build recording render commit: digest=%v validation=%v", err, commitInput.Validate())
+	}
+	if _, err := renderRepository.Commit(ctx, commitInput, time.Now().UTC()); !errors.Is(err, recordingrender.ErrTranscriptionUnavailable) {
+		t.Fatalf("on-demand source with disabled runtime error = %v, want %v", err, recordingrender.ErrTranscriptionUnavailable)
+	}
+	var sourceCount, renderCommitCount int
+	if err := pool.QueryRow(ctx, `select (select count(*) from recording_transcription_sources where recording_id = $1), (select count(*) from recording_render_commits where recording_id = $1)`, reservation.RecordingID.Bytes()).Scan(&sourceCount, &renderCommitCount); err != nil {
+		t.Fatalf("inspect disabled-runtime render rollback: %v", err)
+	}
+	if sourceCount != 0 || renderCommitCount != 0 {
+		t.Fatalf("disabled transcription runtime left committed state: sources=%d render_commits=%d", sourceCount, renderCommitCount)
+	}
+	commitTransaction, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin render timestamp regression transaction: %v", err)
+	}
+	committedAt := time.Now().UTC().Add(-time.Second).Truncate(time.Microsecond)
+	uuidValue := func(value utilities.ID) pgtype.UUID { return pgtype.UUID{Bytes: value.Bytes(), Valid: true} }
+	committedArtifact, err := sqlc.New(commitTransaction).CompleteRecordingRender(ctx, sqlc.CompleteRecordingRenderParams{
+		RenderJobID: uuidValue(commitInput.Authority.JobID), TenantID: uuidValue(commitInput.Authority.TenantID), RecordingID: uuidValue(commitInput.Authority.RecordingID),
+		AttemptCount: int32(commitInput.Authority.AttemptCount), FencingGeneration: commitInput.Authority.FencingGeneration, CaptureEpoch: commitInput.Authority.CaptureEpoch,
+		RenderInputHandle: uuidValue(commitInput.Authority.RenderInputHandle), CommitDigest: commitInput.CommitDigest, PresentationSha256: commitInput.PresentationSHA256,
+		DurationMillis: commitInput.DurationMillis, VideoAllocationID: uuidValue(commitInput.Video.AllocationID), FfprobeFactsDigest: commitInput.FFprobeFactsDigest,
+		TranscriptionJobIds: []pgtype.UUID{}, CommittedAt: pgtype.Timestamptz{Time: committedAt, Valid: true},
+	})
+	if err != nil {
+		_ = commitTransaction.Rollback(ctx)
+		t.Fatalf("complete render timestamp regression transaction: %v", err)
+	}
+	if !committedArtifact.CreatedAt.Valid || !committedArtifact.CommittedAt.Valid || !committedArtifact.CreatedAt.Time.Equal(committedAt) || !committedArtifact.CommittedAt.Time.Equal(committedAt) {
+		_ = commitTransaction.Rollback(ctx)
+		t.Fatalf("render artifact timestamps = created %v committed %v; want %v", committedArtifact.CreatedAt, committedArtifact.CommittedAt, committedAt)
+	}
+	if err := commitTransaction.Rollback(ctx); err != nil {
+		t.Fatalf("roll back render timestamp regression transaction: %v", err)
 	}
 	artifactInput := recordingpipeline.ArtifactInput{
 		TenantID: tenantID, RecordingID: reservation.RecordingID, RenderJobID: render.ID,
@@ -743,6 +1174,35 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if reservedParticipants != 1 {
 		t.Fatalf("reserved participants after no-show expiry = %d, want 1 retained for retry", reservedParticipants)
 	}
+	terminalBeforeStop, err := repository.GetPipeline(ctx, tenantID, noShow.RecordingID)
+	if err != nil || terminalBeforeStop.State != recordingpipeline.StateTerminalFailure {
+		t.Fatalf("expired pipeline before stop: %+v, %v", terminalBeforeStop, err)
+	}
+	terminalAfterStop, err := repository.RequestStop(ctx, tenantID, episodeID, noShow.RecordingID, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be01f"))
+	if err != nil || terminalAfterStop.State != terminalBeforeStop.State || terminalAfterStop.StopRequestedAt == nil {
+		t.Fatalf("terminal recording must acknowledge stop without reviving it: %+v, %v", terminalAfterStop, err)
+	}
+
+	if recovered, err := repository.RecoverExpired(ctx); err != nil || len(recovered) != 1 || recovered[0].RecordingID != noShow.RecordingID || recovered[0].State != recordingpipeline.JobStateTerminalFailure {
+		t.Fatalf("only the expired no-show may recover; live capture keeps its shutdown opportunity: %+v, %v", recovered, err)
+	}
+	failedRetry, err := repository.Fail(ctx, recordingpipeline.FailureInput{
+		LeaseInput: recordingpipeline.LeaseInput{JobID: retryJob.ID, AttemptCount: retryJob.AttemptCount, FencingGeneration: retryJob.FencingGeneration, LeaseToken: retryJob.Authority.LeaseToken, LeaseOwner: retryJob.Authority.LeaseOwner, CaptureEpoch: retryJob.Authority.Envelope.CaptureEpoch, EnvelopeDigest: retryJob.Authority.EnvelopeDigest},
+		ErrorCode:  "capture_shutdown_failed", ErrorDetail: "qualification fixture", AvailableAt: time.Now(),
+	})
+	if err != nil || failedRetry.State != recordingpipeline.JobStatePending {
+		t.Fatalf("fail stopped capture attempt: %+v, %v", failedRetry, err)
+	}
+	stoppedRecovery, err := repository.RecoverExpired(ctx)
+	if err != nil || len(stoppedRecovery) != 1 || stoppedRecovery[0].State != recordingpipeline.JobStateTerminalFailure || (stoppedRecovery[0].ErrorCode == nil || *stoppedRecovery[0].ErrorCode != "capture_stopped_before_completion") {
+		t.Fatalf("stopped pending capture cannot be retried: %+v, %v", stoppedRecovery, err)
+	}
+	if err := pool.QueryRow(ctx, `select reserved_participants from recording_capacity where id = 1`).Scan(&reservedParticipants); err != nil || reservedParticipants != 0 {
+		t.Fatalf("stopped capture capacity was not released: participants=%d, %v", reservedParticipants, err)
+	}
+	if recovered, err := repository.RecoverExpired(ctx); err != nil || len(recovered) != 0 {
+		t.Fatalf("stopped capture release must be idempotent: %+v, %v", recovered, err)
+	}
 }
 
 type blockingRecordingClaimQuerier struct {
@@ -827,6 +1287,17 @@ func resetRecordingJobAuthorities(ctx context.Context, pool *pgxpool.Pool) error
 		return err
 	}
 	defer transaction.Rollback(ctx)
+	for _, table := range []string{"recording_render_commits", "recording_render_object_allocations", "recording_render_inputs", "recording_bundle_allocations", "recording_data_keys"} {
+		if _, err := transaction.Exec(ctx, `alter table `+table+` disable trigger user`); err != nil {
+			return err
+		}
+		if _, err := transaction.Exec(ctx, `delete from `+table); err != nil {
+			return err
+		}
+		if _, err := transaction.Exec(ctx, `alter table `+table+` enable trigger user`); err != nil {
+			return err
+		}
+	}
 	if _, err := transaction.Exec(ctx, `alter table recording_job_attempt_authorities disable trigger user`); err != nil {
 		return err
 	}
@@ -837,6 +1308,107 @@ func resetRecordingJobAuthorities(ctx context.Context, pool *pgxpool.Pool) error
 		return err
 	}
 	return transaction.Commit(ctx)
+}
+
+func resetRecordingPresentations(ctx context.Context, pool *pgxpool.Pool) error {
+	transaction, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
+	for _, table := range []string{
+		"recording_presentation_reactions",
+		"recording_presentation_assets",
+		"recording_presentations",
+		"recording_presentation_sources",
+		"recording_presentation_baselines",
+	} {
+		if _, err := transaction.Exec(ctx, `alter table `+table+` disable trigger user`); err != nil {
+			return err
+		}
+		if _, err := transaction.Exec(ctx, `delete from `+table); err != nil {
+			return err
+		}
+		if _, err := transaction.Exec(ctx, `alter table `+table+` enable trigger user`); err != nil {
+			return err
+		}
+	}
+	return transaction.Commit(ctx)
+}
+
+func cleanupRecordingSyncLifecycle(ctx context.Context, pool *pgxpool.Pool, tenantID utilities.ID) error {
+	transaction, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
+	if _, err := transaction.Exec(ctx, `delete from observability_journey_events where journey_id in (select journey_id from sync_external_operations where tenant_id = $1 and journey_id is not null)`, tenantID.Bytes()); err != nil {
+		return err
+	}
+	for _, table := range []string{"sync_control_events", "sync_recordings", "sync_external_operations"} {
+		if _, err := transaction.Exec(ctx, `delete from `+table+` where tenant_id = $1`, tenantID.Bytes()); err != nil {
+			return err
+		}
+	}
+	return transaction.Commit(ctx)
+}
+
+type recordingPresentationStoredObject struct {
+	body   []byte
+	object objectstorage.Object
+}
+
+type recordingPresentationObjectStore struct {
+	mu      sync.Mutex
+	objects map[string]recordingPresentationStoredObject
+}
+
+func newRecordingPresentationObjectStore() *recordingPresentationObjectStore {
+	return &recordingPresentationObjectStore{objects: make(map[string]recordingPresentationStoredObject)}
+}
+
+func (store *recordingPresentationObjectStore) PutObject(_ context.Context, input objectstorage.PutObjectInput) (objectstorage.Object, error) {
+	body, err := io.ReadAll(input.Body)
+	if err != nil {
+		return objectstorage.Object{}, err
+	}
+	if int64(len(body)) != input.ContentLength {
+		return objectstorage.Object{}, objectstorage.ErrInvalidObjectSize
+	}
+	digest := sha256.Sum256(body)
+	object := objectstorage.Object{
+		Key: input.Key, ETag: fmt.Sprintf(`"%x"`, digest[:8]),
+		ContentType: input.ContentType, Size: input.ContentLength,
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if input.IfNoneMatch {
+		if _, exists := store.objects[input.Key]; exists {
+			return objectstorage.Object{}, objectstorage.ErrObjectAlreadyExists
+		}
+	}
+	store.objects[input.Key] = recordingPresentationStoredObject{body: append([]byte(nil), body...), object: object}
+	return object, nil
+}
+
+func (store *recordingPresentationObjectStore) GetObject(_ context.Context, key string) (objectstorage.ObjectReader, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	stored, exists := store.objects[key]
+	if !exists {
+		return objectstorage.ObjectReader{}, objectstorage.ErrObjectNotFound
+	}
+	return objectstorage.ObjectReader{
+		Object: stored.object,
+		Body:   io.NopCloser(bytes.NewReader(stored.body)),
+	}, nil
+}
+
+func (store *recordingPresentationObjectStore) Contains(key string) bool {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	_, exists := store.objects[key]
+	return exists
 }
 
 func resetRecordingCapturePlans(ctx context.Context, pool *pgxpool.Pool) error {
@@ -896,6 +1468,10 @@ type recordingCapturePlaneFixture struct {
 	closeCalls       int
 }
 
+func (p *recordingCapturePlaneFixture) Resolve(context.Context, captureplane.CaptureIdentity) (captureplane.CapturePlane, error) {
+	return p, nil
+}
+
 func (p *recordingCapturePlaneFixture) CreateCaptureConnection(_ context.Context, input captureplane.CreateCaptureConnectionInput) (captureplane.CreateCaptureConnectionResult, error) {
 	p.createCalls++
 	return captureplane.CreateCaptureConnectionResult{
@@ -907,8 +1483,12 @@ func (p *recordingCapturePlaneFixture) CreateCaptureConnection(_ context.Context
 	}, nil
 }
 
-func (p *recordingCapturePlaneFixture) PullCaptureTracks(context.Context, captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, error) {
-	return captureplane.PullCaptureTracksResult{}, errors.New("unexpected pull capture tracks")
+func (p *recordingCapturePlaneFixture) PullCaptureTracks(_ context.Context, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, error) {
+	return captureplane.PullCaptureTracksResult{
+		Connection:  captureplane.CaptureConnection{ConnectionReference: input.Connection, CaptureEpoch: input.Metadata.CaptureEpoch, PlanRevision: input.Metadata.PlanRevision},
+		Tracks:      []captureplane.PulledCaptureTrack{{CaptureTrack: input.Tracks[0], MID: "0"}},
+		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationRemoteAnswer, Description: &captureplane.Description{Type: "answer", SDP: "v=0\r\n"}},
+	}, nil
 }
 
 func (p *recordingCapturePlaneFixture) RenegotiateCaptureConnection(_ context.Context, input captureplane.RenegotiateCaptureConnectionInput) (captureplane.RenegotiateCaptureConnectionResult, error) {

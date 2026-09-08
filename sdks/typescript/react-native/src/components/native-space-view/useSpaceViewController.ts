@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Linking } from "react-native";
 
 import { useSpaceClient } from "../../context/space-client-context";
-import { useChat as useSpaceChat, useMedia as useSpaceMedia, useParticipants as useSpaceParticipants, useReactions as useSpaceReactions, useSelf, useWhiteboard } from "../../hooks/space-hooks";
+import { useChat as useSpaceChat, useMedia as useSpaceMedia, useParticipants as useSpaceParticipants, useReactions as useSpaceReactions, useSelf, useWhiteboard, useRecording, useConnection } from "../../hooks/space-hooks";
 import { getNativeJourneyContext } from "../../telemetry";
 import type { NativeChatMessage, NativeParticipant, NativeReaction } from "../../ui/native-types";
 import { isIosSimulator } from "../../utils/ios-simulator";
@@ -29,6 +29,9 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
   const chatSlice = useSpaceChat();
   const reactionSlice = useSpaceReactions();
   const whiteboardSlice = useWhiteboard();
+  const recording = useRecording().current;
+  const connection = useConnection();
+
   const journeyContext = getNativeJourneyContext(client);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
@@ -298,6 +301,10 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
   }, [chat, chatAttachments, chatDraft, client.chat.files, run]);
 
   return {
+    recording,
+    canManageRecording: self.can("manageRecording"),
+    canToggleRecording: connection.status === "live" && recording?.status !== "starting" && recording?.status !== "stopping",
+    toggleRecording: () => void run(() => (recording?.status === "recording" ? client.recording.stop() : client.recording.start())),
     simulatorMediaDisabled: isIosSimulator(),
     spaceName: spaceName || "Space",
     panel: spacePanels.panel,

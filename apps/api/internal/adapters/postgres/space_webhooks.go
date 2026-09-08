@@ -139,6 +139,10 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 		MaximumEpisodeDurationSeconds:    optionalInt32(input.MaximumEpisodeDurationSeconds),
 		LingerWindowSecondsSet:           input.LingerWindowSeconds.Set,
 		LingerWindowSeconds:              optionalInt32(input.LingerWindowSeconds),
+		RecordingPolicySet:               input.RecordingPolicy.Set,
+		RecordingPolicy:                  optionalRecordingPolicy(input.RecordingPolicy),
+		TranscriptionPolicySet:           input.TranscriptionPolicy.Set,
+		TranscriptionPolicy:              optionalTranscriptionPolicy(input.TranscriptionPolicy),
 	})
 	if err != nil {
 		return spaces.Space{}, err
@@ -291,6 +295,12 @@ func spaceChangedFields(before spaces.Space, input spaces.UpdateSpaceInput) []st
 	}
 	if input.LingerWindowSeconds.Set && input.LingerWindowSeconds.Value != nil && *input.LingerWindowSeconds.Value != before.LingerWindowSeconds {
 		result = append(result, "linger_window_seconds")
+	}
+	if input.RecordingPolicy.Set && input.RecordingPolicy.Value != nil && *input.RecordingPolicy.Value != before.RecordingPolicy {
+		result = append(result, "recording_policy")
+	}
+	if input.TranscriptionPolicy.Set && input.TranscriptionPolicy.Value != nil && *input.TranscriptionPolicy.Value != before.TranscriptionPolicy {
+		result = append(result, "transcription_policy")
 	}
 	slices.Sort(result)
 	return result

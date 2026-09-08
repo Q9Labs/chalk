@@ -7,8 +7,20 @@ function row(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function exactRow(value: unknown, label: string, keys: readonly string[]): Record<string, unknown> {
+  const valueRow = row(value, label);
+  const expected = new Set(keys);
+  if (Object.keys(valueRow).length !== expected.size || Object.keys(valueRow).some((key) => !expected.has(key))) throw new AssignmentError(`${label} fields are invalid`);
+  return valueRow;
+}
+
 function text(value: unknown, label: string, max = 512): string {
   if (typeof value !== "string" || value.length === 0 || value.length > max) throw new AssignmentError(`${label} is invalid`);
+  return value;
+}
+
+function optionalText(value: unknown, label: string, max = 512): string {
+  if (typeof value !== "string" || value.length > max) throw new AssignmentError(`${label} is invalid`);
   return value;
 }
 
@@ -21,6 +33,18 @@ function integer(value: unknown, label: string): number {
   const number = nonnegative(value, label);
   if (!Number.isInteger(number)) throw new AssignmentError(`${label} is invalid`);
   return number;
+}
+
+function positiveInteger(value: unknown, label: string): number {
+  const number = integer(value, label);
+  if (number < 1 || !Number.isSafeInteger(number)) throw new AssignmentError(`${label} is invalid`);
+  return number;
+}
+
+function checksum(value: unknown, label: string): string {
+  const digest = text(value, label, 64).toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(digest)) throw new AssignmentError(`${label} is invalid`);
+  return digest;
 }
 
 function expiringUrl(value: unknown, label: string, maxTtlMs: number): string {
@@ -47,80 +71,188 @@ function expiringUrl(value: unknown, label: string, maxTtlMs: number): string {
   return url.toString();
 }
 
-function isoDate(value: unknown, label: string): string {
+function isoTimestamp(value: unknown, label: string): string {
   const date = text(value, label, 64);
   const timestamp = Date.parse(date);
-  if (!Number.isFinite(timestamp) || timestamp < Date.now() - 60_000) throw new AssignmentError(`${label} is invalid or expired`);
+  if (!Number.isFinite(timestamp)) throw new AssignmentError(`${label} is invalid`);
   return date;
 }
 
-export function validateSpeakerTurnManifest(value: unknown): SpeakerTurnManifest {
-  const manifest = row(value, "manifest");
-  const schemaVersion = text(manifest.schemaVersion, "manifest schema", 128);
-  const turnsRaw = manifest.turns;
-  if (!Array.isArray(turnsRaw) || turnsRaw.length > 100_000) throw new AssignmentError("manifest turns are invalid");
-  const turns = turnsRaw.map((item, index) => {
-    const turn = row(item, `manifest turn ${index}`);
-    const startMs = nonnegative(turn.startMs, "manifest turn start");
-    const endMs = nonnegative(turn.endMs, "manifest turn end");
-    if (!Number.isInteger(startMs) || !Number.isInteger(endMs)) throw new AssignmentError("manifest turn timing is invalid");
-    if (endMs <= startMs) throw new AssignmentError("manifest turn timing is invalid");
-    const identity = row(turn.identity, "manifest identity");
-    const kind = identity.kind;
-    if (kind !== "participant" && kind !== "shared" && kind !== "unknown") throw new AssignmentError("manifest identity is invalid");
-    const participantId = identity.participantId === undefined ? undefined : text(identity.participantId, "manifest participant", 256);
-    const trackEpoch = identity.trackEpoch === undefined ? undefined : text(identity.trackEpoch, "manifest track epoch", 256);
-    if (kind === "participant" && (!participantId || !trackEpoch)) throw new AssignmentError("participant identity is incomplete");
-    if (kind !== "participant" && (participantId !== undefined || trackEpoch !== undefined)) throw new AssignmentError("shared or unknown identity may not carry participant authority");
-    const trackClass = turn.trackClass;
-    if (trackClass !== "microphone" && trackClass !== "screen-share" && trackClass !== "system-audio" && trackClass !== "unknown") throw new AssignmentError("manifest track class is invalid");
-    const displayNameSnapshot = turn.displayNameSnapshot === undefined ? undefined : text(turn.displayNameSnapshot, "display name", 256);
-    if (displayNameSnapshot && (kind !== "participant" || trackClass !== "microphone")) throw new AssignmentError("display name is not valid for this track");
-    if (typeof turn.overlap !== "boolean") throw new AssignmentError("manifest overlap is invalid");
-    return {
-      startMs,
-      endMs,
-      identity: {
-        kind: kind as "participant" | "shared" | "unknown",
-        ...(participantId === undefined ? {} : { participantId }),
-        ...(trackEpoch === undefined ? {} : { trackEpoch }),
-      },
-      trackClass: trackClass as "microphone" | "screen-share" | "system-audio" | "unknown",
-      ...(displayNameSnapshot === undefined ? {} : { displayNameSnapshot }),
-      overlap: turn.overlap,
-    };
+function isoDate(value: unknown, label: string): string {
+  const date = isoTimestamp(value, label);
+  if (Date.parse(date) < Date.now() - 60_000) throw new AssignmentError(`${label} is expired`);
+  return date;
+}
+
+export function validateSpeakerTurnManifest(value: unknown, assignment: TranscriptionAssignment): SpeakerTurnManifest {
+  const manifest = exactRow(value, "manifest", ["schema_version", "tenant_id", "recording_id", "episode_id", "capture_epoch", "duration_ms", "timebase", "presentation_sha256", "producer", "chunk_policy", "chunks"]);
+  if (manifest.schema_version !== "recording-transcription-source.v1") throw new AssignmentError("manifest schema is invalid");
+  const tenantId = text(manifest.tenant_id, "manifest tenant ID");
+  const recordingId = text(manifest.recording_id, "manifest recording ID");
+  const episodeId = text(manifest.episode_id, "manifest episode ID");
+  const captureEpoch = positiveInteger(manifest.capture_epoch, "manifest capture epoch");
+  const durationMs = positiveInteger(manifest.duration_ms, "manifest duration");
+  if (manifest.timebase !== "recording_relative_ms") throw new AssignmentError("manifest timebase is invalid");
+  const presentationSha256 = checksum(manifest.presentation_sha256, "manifest presentation checksum");
+
+  const producer = exactRow(manifest.producer, "manifest producer", ["render_job_id", "attempt_count", "fencing_generation", "envelope_sha256"]);
+  text(producer.render_job_id, "manifest render job ID");
+  positiveInteger(producer.attempt_count, "manifest render attempt");
+  positiveInteger(producer.fencing_generation, "manifest fencing generation");
+  checksum(producer.envelope_sha256, "manifest envelope checksum");
+
+  const policy = exactRow(manifest.chunk_policy, "manifest chunk policy", ["version", "max_duration_ms", "context_ms", "codec", "sample_rate_hz", "channels"]);
+  text(policy.version, "manifest chunk policy version", 128);
+  const maxDurationMs = positiveInteger(policy.max_duration_ms, "manifest maximum chunk duration");
+  if (maxDurationMs > 15 * 60_000 || nonnegative(policy.context_ms, "manifest chunk context") > maxDurationMs || policy.codec !== "flac" || policy.sample_rate_hz !== 16_000 || policy.channels !== 1) {
+    throw new AssignmentError("manifest chunk policy is invalid");
+  }
+
+  const chunksRaw = manifest.chunks;
+  if (!Array.isArray(chunksRaw) || chunksRaw.length === 0 || chunksRaw.length > 10_000) throw new AssignmentError("manifest chunks are invalid");
+  const chunkIDs = new Set<string>();
+  const allocationIDs = new Set<string>();
+  const chunks = chunksRaw.map((item, index) => {
+    const chunk = exactRow(item, `manifest chunk ${index}`, [
+      "chunk_id",
+      "chunk_index",
+      "generation",
+      "participant_ref",
+      "participant_generation",
+      "display_name_snapshot",
+      "identity_kind",
+      "track_id",
+      "track_epoch",
+      "track_class",
+      "start_ms",
+      "end_ms",
+      "source_start_ms",
+      "source_end_ms",
+      "overlap",
+      "storage",
+    ]);
+    const chunkId = text(chunk.chunk_id, "manifest chunk ID");
+    if (chunkIDs.has(chunkId)) throw new AssignmentError("manifest chunk IDs are duplicated");
+    chunkIDs.add(chunkId);
+    const chunkIndex = integer(chunk.chunk_index, "manifest chunk index");
+    if (chunkIndex !== index) throw new AssignmentError("manifest chunk order is invalid");
+    const generation = positiveInteger(chunk.generation, "manifest chunk generation");
+    const participantRef = text(chunk.participant_ref, "manifest participant reference", 128);
+    const participantGeneration = positiveInteger(chunk.participant_generation, "manifest participant generation");
+    const displayNameSnapshot = text(chunk.display_name_snapshot, "manifest display name", 256);
+    if (chunk.identity_kind !== "participant" || chunk.track_class !== "microphone") throw new AssignmentError("manifest speaker authority is invalid");
+    const trackId = text(chunk.track_id, "manifest track ID", 256);
+    const trackEpoch = text(chunk.track_epoch, "manifest track epoch", 128);
+    const startMs = integer(chunk.start_ms, "manifest chunk start");
+    const endMs = integer(chunk.end_ms, "manifest chunk end");
+    const sourceStartMs = integer(chunk.source_start_ms, "manifest source start");
+    const sourceEndMs = integer(chunk.source_end_ms, "manifest source end");
+    if (endMs <= startMs || endMs > durationMs || sourceEndMs <= sourceStartMs || sourceEndMs - sourceStartMs !== endMs - startMs || endMs - startMs > maxDurationMs) throw new AssignmentError("manifest chunk timing is invalid");
+    if (typeof chunk.overlap !== "boolean") throw new AssignmentError("manifest overlap is invalid");
+    const storage = exactRow(chunk.storage, "manifest chunk storage", ["allocation_id", "object_key", "object_version", "etag", "content_type", "byte_size", "sha256"]);
+    const allocationId = text(storage.allocation_id, "manifest allocation ID");
+    if (allocationIDs.has(allocationId)) throw new AssignmentError("manifest allocation IDs are duplicated");
+    allocationIDs.add(allocationId);
+    const objectKey = text(storage.object_key, "manifest object key", 1_024);
+    const objectVersion = optionalText(storage.object_version, "manifest object version", 256);
+    const objectEtag = text(storage.etag, "manifest object ETag", 256);
+    if (storage.content_type !== "audio/flac") throw new AssignmentError("manifest source content type is invalid");
+    const byteSize = positiveInteger(storage.byte_size, "manifest source size");
+    const sha256 = checksum(storage.sha256, "manifest source checksum");
+    return { chunkId, chunkIndex, generation, participantRef, participantGeneration, displayNameSnapshot, trackId, trackEpoch, startMs, endMs, sourceStartMs, sourceEndMs, overlap: chunk.overlap, allocationId, objectKey, objectVersion, objectEtag, byteSize, sha256 };
   });
-  return { schemaVersion, turns };
+
+  if (tenantId !== assignment.tenantId || recordingId !== assignment.recordingId || episodeId !== assignment.episodeId || presentationSha256 !== assignment.presentationSha256.toLowerCase()) {
+    throw new AssignmentError("manifest source authority does not match the assignment");
+  }
+  const selected = chunks.find((chunk) => chunk.chunkId === assignment.chunk.chunkId);
+  if (
+    !selected ||
+    selected.chunkIndex !== assignment.chunk.chunkIndex ||
+    selected.generation !== assignment.chunk.generation ||
+    selected.startMs !== assignment.chunk.episodeStartMs ||
+    selected.endMs !== assignment.chunk.episodeEndMs ||
+    selected.sourceStartMs !== assignment.chunk.sourceStartMs ||
+    selected.sourceEndMs !== assignment.chunk.sourceEndMs ||
+    selected.participantRef !== assignment.chunk.sourceIdentity.participantRef ||
+    selected.participantGeneration !== assignment.chunk.sourceIdentity.participantGeneration ||
+    selected.trackId !== assignment.chunk.sourceIdentity.trackId ||
+    selected.trackEpoch !== assignment.chunk.sourceIdentity.trackEpoch ||
+    selected.displayNameSnapshot !== assignment.chunk.displayNameSnapshot ||
+    selected.overlap !== assignment.chunk.overlap ||
+    selected.allocationId !== assignment.chunk.allocationId ||
+    selected.objectKey !== assignment.chunk.inputObjectKey ||
+    selected.objectVersion !== assignment.chunk.objectVersion ||
+    selected.objectEtag !== assignment.chunk.objectEtag ||
+    selected.byteSize !== assignment.chunk.inputSizeBytes ||
+    selected.sha256 !== assignment.chunk.inputSha256.toLowerCase() ||
+    assignment.chunk.inputContentType !== "audio/flac" ||
+    assignment.chunk.sourceTrackClass !== "microphone"
+  ) {
+    throw new AssignmentError("manifest chunk authority does not match the assignment");
+  }
+  return {
+    schemaVersion: "recording-transcription-source.v1",
+    tenantId,
+    recordingId,
+    episodeId,
+    captureEpoch,
+    durationMs,
+    timebase: "recording_relative_ms",
+    presentationSha256,
+    turns: chunks.map((chunk) => ({
+      startMs: chunk.startMs,
+      endMs: chunk.endMs,
+      identity: { kind: "participant", participantRef: chunk.participantRef, participantGeneration: chunk.participantGeneration, trackId: chunk.trackId, trackEpoch: chunk.trackEpoch },
+      trackClass: "microphone",
+      displayNameSnapshot: chunk.displayNameSnapshot,
+      overlap: chunk.overlap,
+    })),
+  };
 }
 
 export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_000): TranscriptionAssignment {
   const assignment = row(value, "assignment");
   const chunkRow = row(assignment.chunk, "chunk");
+  const tenantId = text(assignment.tenantId, "tenant ID");
   const inputUrl = expiringUrl(chunkRow.inputUrl, "chunk input URL", configuredMaxTtlMs);
   const outputPutUrl = expiringUrl(assignment.outputPutUrl, "result upload URL", configuredMaxTtlMs);
   const inputUrlExpiresAt = isoDate(chunkRow.inputUrlExpiresAt, "chunk input expiry");
   const outputPutUrlExpiresAt = isoDate(assignment.outputPutUrlExpiresAt, "result upload expiry");
   const inputContentType = text(chunkRow.inputContentType, "chunk content type", 128);
-  if (!inputContentType.startsWith("audio/")) throw new AssignmentError("chunk content type must be audio");
+  if (inputContentType !== "audio/flac") throw new AssignmentError("chunk content type is invalid");
   const inputSizeBytes = integer(chunkRow.inputSizeBytes, "chunk size");
   if (inputSizeBytes === 0) throw new AssignmentError("chunk size is invalid");
+  const inputObjectKey = text(chunkRow.inputObjectKey, "chunk object key", 1_024);
   const episodeStartMs = nonnegative(chunkRow.episodeStartMs, "chunk episode start");
   const episodeEndMs = nonnegative(chunkRow.episodeEndMs, "chunk episode end");
   if (!Number.isInteger(episodeStartMs) || !Number.isInteger(episodeEndMs)) throw new AssignmentError("chunk episode timing is invalid");
   if (episodeEndMs <= episodeStartMs) throw new AssignmentError("chunk episode timing is invalid");
+  const sourceStartMs = integer(chunkRow.sourceStartMs ?? chunkRow.source_start_ms, "chunk source start");
+  const sourceEndMs = integer(chunkRow.sourceEndMs ?? chunkRow.source_end_ms, "chunk source end");
+  if (sourceEndMs <= sourceStartMs || sourceEndMs - sourceStartMs !== episodeEndMs - episodeStartMs) throw new AssignmentError("chunk source timing is invalid");
+  const chunkIndex = integer(chunkRow.chunkIndex ?? chunkRow.chunk_index, "chunk index");
+  const generation = positiveInteger(chunkRow.generation, "chunk generation");
+  const allocationId = text(chunkRow.allocationId ?? chunkRow.allocation_id, "chunk allocation ID");
+  const objectVersion = optionalText(chunkRow.objectVersion ?? chunkRow.object_version, "chunk object version", 256);
+  const objectEtag = text(chunkRow.objectEtag ?? chunkRow.object_etag, "chunk object ETag", 256);
   const sourceIdentityRow = row(chunkRow.sourceIdentity ?? chunkRow.source_identity, "chunk source identity");
   const sourceKind = sourceIdentityRow.kind;
-  if (sourceKind !== "participant" && sourceKind !== "shared" && sourceKind !== "unknown") throw new AssignmentError("chunk source identity is invalid");
-  const sourceParticipantId = sourceIdentityRow.participantId ?? sourceIdentityRow.participant_id;
+  if (sourceKind !== "participant") throw new AssignmentError("chunk source identity is invalid");
+  const sourceParticipantRef = text(sourceIdentityRow.participantRef ?? sourceIdentityRow.participant_ref, "chunk participant reference", 128);
+  const sourceParticipantGeneration = positiveInteger(sourceIdentityRow.participantGeneration ?? sourceIdentityRow.participant_generation, "chunk participant generation");
+  const sourceTrackId = text(sourceIdentityRow.trackId ?? sourceIdentityRow.track_id, "chunk track ID", 256);
   const sourceTrackEpoch = sourceIdentityRow.trackEpoch ?? sourceIdentityRow.track_epoch;
-  if (sourceKind === "participant" && (!sourceParticipantId || !sourceTrackEpoch)) throw new AssignmentError("chunk participant identity is incomplete");
-  if (sourceKind !== "participant" && (sourceParticipantId !== undefined || sourceTrackEpoch !== undefined)) throw new AssignmentError("chunk source identity is invalid");
+  if (!sourceTrackEpoch) throw new AssignmentError("chunk participant identity is incomplete");
   const sourceTrackClass = chunkRow.sourceTrackClass ?? chunkRow.source_track_class;
-  if (sourceTrackClass !== "microphone" && sourceTrackClass !== "screen-share" && sourceTrackClass !== "system-audio" && sourceTrackClass !== "unknown") throw new AssignmentError("chunk source track class is invalid");
+  if (sourceTrackClass !== "microphone") throw new AssignmentError("chunk source track class is invalid");
+  const displayNameSnapshot = text(chunkRow.displayNameSnapshot ?? chunkRow.display_name_snapshot, "chunk display name", 256);
+  if (typeof chunkRow.overlap !== "boolean") throw new AssignmentError("chunk overlap is invalid");
   const inputSha256 = text(chunkRow.inputSha256, "chunk checksum", 128);
   if (!/^[a-f0-9]{64}$/i.test(inputSha256)) throw new AssignmentError("chunk checksum is invalid");
   const chunk: ChunkAssignment = {
     chunkId: text(chunkRow.chunkId, "chunk ID"),
+    inputObjectKey,
     inputUrl,
     inputUrlExpiresAt,
     inputContentType,
@@ -128,12 +260,23 @@ export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_
     inputSha256,
     episodeStartMs,
     episodeEndMs,
+    sourceStartMs,
+    sourceEndMs,
+    chunkIndex,
+    generation,
+    allocationId,
+    objectVersion,
+    objectEtag,
     sourceIdentity: {
-      kind: sourceKind,
-      ...(sourceParticipantId === undefined ? {} : { participantId: text(sourceParticipantId, "chunk participant", 256) }),
-      ...(sourceTrackEpoch === undefined ? {} : { trackEpoch: text(sourceTrackEpoch, "chunk track epoch", 256) }),
+      kind: "participant",
+      participantRef: sourceParticipantRef,
+      participantGeneration: sourceParticipantGeneration,
+      trackId: sourceTrackId,
+      trackEpoch: text(sourceTrackEpoch, "chunk track epoch", 128),
     },
-    sourceTrackClass,
+    sourceTrackClass: "microphone",
+    displayNameSnapshot,
+    overlap: chunkRow.overlap,
   };
   const manifestRow = row(assignment.manifest ?? assignment.speakerTurnManifest, "manifest authority");
   const manifestUrl = expiringUrl(manifestRow.inputUrl ?? manifestRow.input_url, "manifest input URL", configuredMaxTtlMs);
@@ -148,7 +291,11 @@ export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_
   if (outputContentType !== "application/json") throw new AssignmentError("result content type is invalid");
   return {
     jobId: text(assignment.jobId, "job ID"),
+    tenantId,
     episodeId: text(assignment.episodeId, "episode ID"),
+    recordingId: text(assignment.recordingId ?? assignment.recording_id, "recording ID"),
+    presentationSha256: checksum(assignment.presentationSha256 ?? assignment.presentation_sha256, "presentation checksum"),
+    sourceExpiresAt: isoTimestamp(assignment.sourceExpiresAt ?? assignment.source_expires_at, "source expiry"),
     attempt: integer(assignment.attempt, "attempt"),
     leaseToken: text(assignment.leaseToken, "lease token", 2_048),
     leaseExpiresAt: isoDate(assignment.leaseExpiresAt, "lease expiry"),

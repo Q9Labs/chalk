@@ -184,8 +184,9 @@ func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, inp
 	if err := json.Unmarshal(source.EpisodeFoldedState, &folded); err != nil {
 		return captureplan.Plan{}, fmt.Errorf("decode capture plan folded state: %w", captureplan.ErrInvalidPlan)
 	}
-	if folded.ControlRevision != source.EpisodeControlRevision || folded.Status != "active" {
-		return captureplan.Plan{}, fmt.Errorf("capture plan folded state is not active: %w", captureplan.ErrInvalidPlan)
+	stoppedEpisode := folded.Status == "ended" && source.StopRequestedAt.Valid
+	if folded.ControlRevision != source.EpisodeControlRevision || (folded.Status != "active" && !stoppedEpisode) {
+		return captureplan.Plan{}, fmt.Errorf("capture plan folded state is neither active nor durably stopped: %w", captureplan.ErrInvalidPlan)
 	}
 	var persistedParticipants []persistedCapturePlanParticipant
 	if err := strictCapturePlanJSON(source.EpisodeParticipants, &persistedParticipants); err != nil {

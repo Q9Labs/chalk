@@ -8,14 +8,14 @@ import type { DispatcherDependencies } from "./dispatcher.js";
 import type { DispatcherContext, DispatcherEvent, DispatcherLogger, FinalizeAssignment, JourneyContext, NormalizedTranscriptDocument } from "./types.js";
 
 export async function runFinalizeDispatcher(event: DispatcherEvent = {}, context: DispatcherContext, dependencies: DispatcherDependencies, maxClaims?: number): Promise<{ claimed: number; completed: number; failed: number }> {
-  const claimFinalize = dependencies.control.claimFinalize;
+  const claimFinalize = dependencies.control.claimFinalize?.bind(dependencies.control);
   const completeFinalize = dependencies.control.completeFinalize;
-  const retryFinalize = dependencies.control.retryFinalize;
+  const retryFinalize = dependencies.control.retryFinalize?.bind(dependencies.control);
   if (!claimFinalize || !completeFinalize || !retryFinalize) return { claimed: 0, completed: 0, failed: 0 };
   const logger = dependencies.logger ?? { info: () => undefined, warn: () => undefined };
   const now = dependencies.now ?? Date.now;
   const journey: JourneyContext = {
-    journeyId: event.journeyId ?? randomUUID(),
+    journeyId: event.journeyId || randomUUID(),
     ...(event.traceparent === undefined ? {} : { traceparent: event.traceparent }),
     ...(event.tracestate === undefined ? {} : { tracestate: event.tracestate }),
   };

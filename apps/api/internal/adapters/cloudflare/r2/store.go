@@ -212,6 +212,8 @@ func (s Store) CreateDownloadURL(ctx context.Context, input objectstorage.Create
 	request, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket:                     aws.String(s.bucket),
 		Key:                        aws.String(input.Key),
+		VersionId:                  stringPtr(input.VersionID),
+		IfMatch:                    stringPtr(input.IfMatch),
 		ResponseContentDisposition: stringPtr(input.ContentDisposition),
 	}, presignExpires(input.ExpiresIn))
 	if err != nil {

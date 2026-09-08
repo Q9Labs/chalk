@@ -53,6 +53,11 @@ type Options struct {
 	RecorderRecordingKeys      RecorderRecordingKeyService
 	RecorderRecordingObjects   RecorderRecordingObjectService
 	RecorderRecordingLifecycle RecorderRecordingLifecycleService
+	RecorderRenderAuthority    RecorderRenderAuthorityService
+	RecorderFleetController    RecorderFleetControllerService
+	RecorderFleetWorker        RecorderFleetWorkerService
+	RecorderFleetVerifier      RecorderFleetControllerVerifier
+	RecorderFleetEnvironment   string
 	RecorderWorkerVerifier     RecorderWorkerVerifier
 	RecorderWorkerReadiness    ReadinessChecker
 	Authentication             AuthenticationService
@@ -105,6 +110,7 @@ type Options struct {
 	ChatParticipants           ChatParticipantVerifier
 	WhiteboardFiles            WhiteboardFileService
 	WhiteboardParticipants     WhiteboardParticipantVerifier
+	Feedback                   FeedbackHTTPOptions
 	PublicInvites              PublicInviteService
 	PublicInviteAudits         PublicInviteAuditWriter
 	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
@@ -131,6 +137,7 @@ func NewRouter(options Options) http.Handler {
 
 	mountWorkerRoutes(r, options)
 	mountEpisodeDiagnosticsRoutes(r, options)
+	mountFeedbackOperatorRoutes(r, options.Feedback)
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
@@ -170,7 +177,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 func handleReady(checker ReadinessChecker, recorderWorkerReadiness ReadinessChecker, capabilities CapabilityStatus) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if checker == nil {
-			writeReadinessError(w, capabilities)
+			writeReadinessError(w, capabilities, "postgres")
 			return
 		}
 
@@ -178,11 +185,11 @@ func handleReady(checker ReadinessChecker, recorderWorkerReadiness ReadinessChec
 		defer cancel()
 
 		if err := checker.Check(ctx); err != nil {
-			writeReadinessError(w, capabilities)
+			writeReadinessError(w, capabilities, "postgres")
 			return
 		}
 		if capabilities.Recording && (recorderWorkerReadiness == nil || recorderWorkerReadiness.Check(ctx) != nil) {
-			writeReadinessError(w, capabilities)
+			writeReadinessError(w, capabilities, "recorder_pool")
 			return
 		}
 
@@ -196,14 +203,14 @@ func handleReady(checker ReadinessChecker, recorderWorkerReadiness ReadinessChec
 	}
 }
 
-func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus) {
+func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus, dependency string) {
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 		"error": map[string]string{
 			"code":    "service_unavailable",
 			"message": "Service is not ready",
 		},
 		"dependencies": map[string]string{
-			"postgres": "unavailable",
+			dependency: "unavailable",
 		},
 		"capabilities": capabilityReadiness(capabilities),
 	})

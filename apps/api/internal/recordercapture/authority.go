@@ -51,6 +51,7 @@ type AttemptAuthority struct {
 	FencingGeneration int64
 	CaptureEpoch      captureplane.CaptureEpoch
 	HardDeadline      time.Time
+	CaptureReadyAt    *time.Time
 }
 
 // NewAttemptAuthority validates the envelope, its digest, and the current
@@ -122,6 +123,15 @@ func NewAttemptAuthorityAt(envelope recordingpipeline.RecorderJobEnvelope, envel
 	if err != nil || hardDeadline.IsZero() || !hardDeadline.After(now.UTC()) || hardDeadline.UTC().Format(time.RFC3339Nano) != validatedEnvelope.HardDeadline {
 		return AttemptAuthority{}, fmt.Errorf("%w: hard deadline", ErrInvalidAuthority)
 	}
+	var captureReadyAt *time.Time
+	if validatedEnvelope.CaptureReadyAt != nil {
+		parsed, parseErr := time.Parse(time.RFC3339Nano, *validatedEnvelope.CaptureReadyAt)
+		if parseErr != nil || parsed.IsZero() {
+			return AttemptAuthority{}, fmt.Errorf("%w: capture ready origin", ErrInvalidAuthority)
+		}
+		parsed = parsed.UTC()
+		captureReadyAt = &parsed
+	}
 	validatedEnvelope.VideoCodecs = append([]string(nil), validatedEnvelope.VideoCodecs...)
 
 	return AttemptAuthority{
@@ -139,6 +149,7 @@ func NewAttemptAuthorityAt(envelope recordingpipeline.RecorderJobEnvelope, envel
 		FencingGeneration: validatedEnvelope.FencingGeneration,
 		CaptureEpoch:      captureplane.CaptureEpoch(validatedEnvelope.CaptureEpoch),
 		HardDeadline:      hardDeadline.UTC(),
+		CaptureReadyAt:    captureReadyAt,
 	}, nil
 }
 

@@ -11,15 +11,6 @@ func (s Service) Request(ctx context.Context, input RequestInput) (Transcript, J
 	if s.artifacts == nil {
 		return Transcript{}, Job{}, ErrArtifactRepository
 	}
-	if len(input.Chunks) == 0 {
-		if sourceRepository, ok := s.repository.(SourceRepository); ok {
-			source, err := sourceRepository.LoadSource(ctx, input.TenantID, input.RecordingID)
-			if err != nil {
-				return Transcript{}, Job{}, err
-			}
-			input.ManifestKey, input.ManifestSHA256, input.ManifestSize, input.ManifestContentType, input.Chunks = source.ManifestKey, source.ManifestSHA256, source.ManifestSize, source.ManifestContentType, source.Chunks
-		}
-	}
 	if err := prepareRequestInput(&input); err != nil {
 		return Transcript{}, Job{}, err
 	}

@@ -2,6 +2,7 @@ package recordingpipeline
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -163,6 +164,12 @@ func (s Service) Claim(ctx context.Context, input ClaimInput) (Job, error) {
 	}
 	if input.LeaseFor <= 0 || input.LeaseToken == "" || input.Owner == "" {
 		return Job{}, ErrInvalidLease
+	}
+	if _, err := s.repository.RecoverExpired(ctx); err != nil {
+		return Job{}, fmt.Errorf("recover recording jobs before claim: %w", err)
+	}
+	if _, err := s.repository.ExpireReservations(ctx, s.now().UTC()); err != nil {
+		return Job{}, fmt.Errorf("expire recording reservations before claim: %w", err)
 	}
 	return s.repository.Claim(ctx, input)
 }

@@ -58,7 +58,14 @@ func TestTranscriptRequestEnforcesFrozenEpisodeTranscriptionPolicy(t *testing.T)
 
 	for _, mode := range []string{"on_demand", "automatic"} {
 		recordingID := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, mode, false)
-		transcript, job, err := repository.Request(ctx, transcriptPolicyRequestInput(t, tenantID, recordingID, "allowed-"+mode))
+		insertTranscriptSourceFixture(t, ctx, connection, tenantID, recordingID)
+		input := transcriptPolicyRequestInput(t, tenantID, recordingID, "allowed-"+mode)
+		if mode == "automatic" {
+			// Omitting a language requests provider detection and must persist an
+			// empty array rather than a SQL NULL.
+			input.Languages = nil
+		}
+		transcript, job, err := repository.Request(ctx, input)
 		if err != nil {
 			t.Fatalf("%s request: %v", mode, err)
 		}
@@ -80,7 +87,7 @@ func TestTranscriptRequestEnforcesFrozenEpisodeTranscriptionPolicy(t *testing.T)
 	const replayKey = "disabled-replay-0001"
 	if _, err := connection.Exec(ctx, `
 insert into transcriptions (id, tenant_id, recording_id, space_id, episode_id, status, languages)
-select $1, tenant_id, id, space_id, episode_id, 'preparing', '{}'::text[]
+select $1, tenant_id, id, space_id, episode_id, 'preparing', array['en']::text[]
 from recordings where tenant_id = $2 and id = $3`, replayTranscriptID.Bytes(), tenantID.Bytes(), replayRecording.Bytes()); err != nil {
 		t.Fatalf("seed replay transcript: %v", err)
 	}
@@ -146,22 +153,35 @@ func transcriptPolicySnapshot(mode string, legacy bool) string {
 
 func transcriptPolicyRequestInput(t *testing.T, tenantID, recordingID utilities.ID, key string) transcripts.RequestInput {
 	t.Helper()
-	chunkID := mustTenantPolicyTestID(t)
 	return transcripts.RequestInput{
-		TenantID:            tenantID,
-		RecordingID:         recordingID,
-		IdempotencyKey:      key,
-		ManifestKey:         "manifest.json",
-		ManifestSHA256:      make([]byte, 32),
-		ManifestSize:        1,
-		ManifestContentType: "application/json",
-		Languages:           []string{"en"},
-		Chunks: []transcripts.ChunkInput{{
-			ID: chunkID, Index: 0, Generation: 1, StartMS: 0, EndMS: 1000,
-			IdentityKind: "unknown", TrackClass: "microphone", StorageKey: "source.wav",
-			Checksum: make([]byte, 32), Size: 1, ContentType: "audio/wav",
-		}},
-		AttemptLimit: 4,
+		TenantID: tenantID, RecordingID: recordingID, IdempotencyKey: key,
+		Languages: []string{"en"}, AttemptLimit: 4,
+	}
+}
+
+func insertTranscriptSourceFixture(t *testing.T, ctx context.Context, connection *pgxpool.Conn, tenantID, recordingID utilities.ID) {
+	t.Helper()
+	chunkID := mustTenantPolicyTestID(t)
+	digest := make([]byte, 32)
+	if _, err := connection.Exec(ctx, `
+insert into recording_transcription_sources (
+    recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size,
+    manifest_content_type, schema_version, committed_at, generation,
+    commit_digest, presentation_sha256, status, expires_at
+) values ($1, $2, $3, $4, 1, 'application/json', 1, now(), 1, $4, $4, 'ready', now() + interval '1 hour')`,
+		recordingID.Bytes(), tenantID.Bytes(), "transcription/source/"+recordingID.String()+"/manifest.json", digest); err != nil {
+		t.Fatalf("insert transcription source: %v", err)
+	}
+	if _, err := connection.Exec(ctx, `
+insert into recording_transcription_source_chunks (
+    id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms,
+    source_start_ms, source_end_ms, participant_ref, participant_generation,
+    track_id, track_epoch, identity_kind, track_class, display_name_snapshot,
+    overlap, storage_key, checksum, size, content_type
+) values ($1, $2, $3, 0, 1, 0, 1000, 0, 1000, 'participant-1', 1,
+    'track-1', '1', 'participant', 'microphone', 'Speaker', false, $4, $5, 1, 'audio/flac')`,
+		chunkID.Bytes(), recordingID.Bytes(), tenantID.Bytes(), "transcription/source/"+recordingID.String()+"/chunk-0.flac", digest); err != nil {
+		t.Fatalf("insert transcription source chunk: %v", err)
 	}
 }
 
@@ -184,6 +204,8 @@ func cleanupTranscriptPolicyFixture(t *testing.T, ctx context.Context, connectio
 	for _, statement := range []string{
 		`delete from artifact_jobs where tenant_id = $1`,
 		`delete from transcript_chunks where tenant_id = $1`,
+		`delete from recording_transcription_source_chunks where tenant_id = $1`,
+		`delete from recording_transcription_sources where tenant_id = $1`,
 		`delete from transcriptions where tenant_id = $1`,
 		`delete from recordings where tenant_id = $1`,
 		`delete from episodes where tenant_id = $1`,

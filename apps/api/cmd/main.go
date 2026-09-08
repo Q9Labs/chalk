@@ -32,13 +32,16 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
+	"github.com/q9labs/chalk/apps/api/internal/captureproviders"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/feedback"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -56,6 +59,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 	"github.com/q9labs/chalk/apps/api/internal/recordingorchestrator"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
+	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	statusdomain "github.com/q9labs/chalk/apps/api/internal/status"
@@ -188,7 +193,8 @@ func run() error {
 	membershipService := memberships.NewService(membershipRepository)
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
 	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
-	episodeRepository := postgres.NewEpisodeLifecycleRepository(pool)
+	episodeMediaBindingResolver := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})
+	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
 	var syncTokenRefresh httpapi.SyncTokenRefreshIssuer
@@ -238,10 +244,18 @@ func run() error {
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
 	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries)
-	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
+	if cfg.Capabilities.Recording {
+		profile, err := recordingpresentation.NewComposite720PProfile(cfg.RecordingUIBuildSHA256)
+		if err != nil {
+			return fmt.Errorf("configure recording UI build: %w", err)
+		}
+		recordingPipelineRepository, err = recordingPipelineRepository.WithRecordingPresentationProfile(profile)
+		if err != nil {
+			return fmt.Errorf("configure recording presentation profile: %w", err)
+		}
+	}
 	recordingCapturePlanRepository := postgres.NewRecordingCapturePlanRepositoryWithTransactor(pool, diagnostics.Queries)
 	recordingCapturePlanService := captureplan.NewService(recordingCapturePlanRepository)
-	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	var managedSFU sfuadapter.Adapter
 	if cfg.DefaultMediaPlane == spaces.MediaPlaneProviderCloudflareSFU || cfg.ProviderBridge.Enabled {
 		managedSFU, err = sfuadapter.NewAdapter(cfg.CloudflareRealtime)
@@ -250,10 +264,16 @@ func run() error {
 		}
 	}
 	var recorderWorkerVerifier httpapi.RecorderWorkerVerifier
+	var recorderFleetController httpapi.RecorderFleetControllerService
+	var recorderFleetWorker httpapi.RecorderFleetWorkerService
+	var recorderFleetVerifier httpapi.RecorderFleetControllerVerifier
 	var recorderCaptureSignaling httpapi.RecorderCaptureSignalingService
 	var recorderRecordingKeys httpapi.RecorderRecordingKeyService
 	var recorderRecordingObjects httpapi.RecorderRecordingObjectService
 	var recorderRecordingLifecycle httpapi.RecorderRecordingLifecycleService
+	var recorderRenderAuthority httpapi.RecorderRenderAuthorityService
+	var recordingKMS recordingkeys.KMS
+	var recordingDispatcherWake recordingrender.DispatcherWake
 	if cfg.Capabilities.Recording {
 		if !cfg.ProviderBridge.Enabled {
 			return errors.New("recording worker boundary requires the private provider bridge configuration")
@@ -262,9 +282,26 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure recorder worker identity: %w", err)
 		}
-		recorderWorkerVerifier = verifier
+		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier)
+		if err != nil {
+			return err
+		}
+		recorderWorkerVerifier = fleet.workerVerifier
+		recorderFleetController = fleet.service
+		recorderFleetWorker = fleet.service
+		recorderFleetVerifier = fleet.controllerVerifier
+		managedBinding, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderCloudflareSFU), mediaplane.BindingSourceDeploymentDefault, cfg.CloudflareRealtime.RealtimeAppID)
+		if err != nil {
+			return fmt.Errorf("configure recording application identity: %w", err)
+		}
+		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(operationQueries), captureproviders.Registration{
+			Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: managedSFU,
+		})
+		if err != nil {
+			return fmt.Errorf("configure recording provider registry: %w", err)
+		}
 		captureSignalingRepository := postgres.NewRecordingCaptureSignalingRepositoryWithTransactor(pool, diagnostics.Queries)
-		captureSignalingService, err := capturesignaling.NewService(captureSignalingRepository, managedSFU, capturesignaling.Options{})
+		captureSignalingService, err := capturesignaling.NewService(captureSignalingRepository, captureProviderRegistry, capturesignaling.Options{})
 		if err != nil {
 			return fmt.Errorf("configure recorder capture signaling: %w", err)
 		}
@@ -317,6 +354,8 @@ func run() error {
 	var whiteboardFileService httpapi.WhiteboardFileService
 	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
 	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
+	feedbackRepository := postgres.NewFeedbackRepository(operationQueries)
+	var feedbackObjects feedback.ObjectStore
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
@@ -324,6 +363,7 @@ func run() error {
 		}
 		storage := objectstorage.NewService(store)
 		recordingStorage = &storage
+		feedbackObjects = feedback.NewObjectStorageAdapter(storage)
 		recordingDownloads = storage
 		recordingObjects = storage
 		transcriptionStorage = &storage
@@ -352,10 +392,16 @@ func run() error {
 		if recordingStorage == nil {
 			return errors.New("recording authority requires configured R2 object storage")
 		}
+		presentationFreezer, err := recordingpresentation.NewFreezer(postgres.NewRecordingPresentationCompletionSourceRepository(operationQueries), *recordingStorage)
+		if err != nil {
+			return fmt.Errorf("configure recording presentation freezer: %w", err)
+		}
+		recordingPipelineRepository = recordingPipelineRepository.WithRecordingPresentationFreezer(presentationFreezer)
 		kmsStore, err := recordingkms.NewStore(context.Background(), recordingkms.Config{KeyID: cfg.RecordingKMS.KeyID, Region: cfg.RecordingKMS.Region, RequestTimeout: cfg.RecordingKMS.RequestTimeout})
 		if err != nil {
 			return fmt.Errorf("configure recording KMS: %w", err)
 		}
+		recordingKMS = kmsStore
 		keyService, err := recordingkeys.NewService(kmsStore, postgres.NewRecordingKeyRepository(operationQueries), recordingkeys.Config{Environment: cfg.Observability.Environment, KeyID: cfg.RecordingKMS.KeyID})
 		if err != nil {
 			return fmt.Errorf("configure recording key authority: %w", err)
@@ -372,6 +418,9 @@ func run() error {
 		}
 		recorderRecordingLifecycle = lifecycleService
 	}
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
+	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
+	feedbackService := feedback.NewService(feedbackRepository, feedbackObjects).WithTelemetry(observability.NewFeedbackTelemetry(logger))
 	var integrationService httpapi.IntegrationService
 	if cfg.Capabilities.Integrations {
 		integrationCatalog, err := integrations.DefaultCatalog()
@@ -420,6 +469,9 @@ func run() error {
 			return fmt.Errorf("configure transcription dispatcher wake: %w", err)
 		}
 		transcriptService = transcriptService.WithDispatcherWaker(waker)
+		recordingDispatcherWake = func(ctx context.Context, jobID utilities.ID) {
+			waker.Wake(ctx, transcripts.DispatcherWakeInput{JobID: jobID})
+		}
 		authority := transcriptionObjectAuthority{storage: *transcriptionStorage}
 		transcriptionAuthority = &authority
 		nonces := redisadapter.NewWorkloadNonceStore(redisClient)
@@ -433,6 +485,15 @@ func run() error {
 		transcriptArtifacts = transcriptService
 		transcriptWorker = transcriptService
 		workloadAuthorizer = authorizer
+	}
+	if cfg.Capabilities.Recording {
+		renderService, err := recordingrender.NewService(*recordingStorage, recordingKMS, postgres.NewRecordingRenderRepositoryWithPool(pool, cfg.Capabilities.Transcription), recordingrender.Config{
+			KeyID: cfg.RecordingKMS.KeyID, Wake: recordingDispatcherWake,
+		})
+		if err != nil {
+			return fmt.Errorf("configure recording render authority: %w", err)
+		}
+		recorderRenderAuthority = renderService
 	}
 	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), cfg, tenantService)
 	if err != nil {
@@ -554,6 +615,11 @@ func run() error {
 		RecorderRecordingKeys:      recorderRecordingKeys,
 		RecorderRecordingObjects:   recorderRecordingObjects,
 		RecorderRecordingLifecycle: recorderRecordingLifecycle,
+		RecorderRenderAuthority:    recorderRenderAuthority,
+		RecorderFleetController:    recorderFleetController,
+		RecorderFleetWorker:        recorderFleetWorker,
+		RecorderFleetVerifier:      recorderFleetVerifier,
+		RecorderFleetEnvironment:   cfg.Observability.Environment,
 		RecorderWorkerVerifier:     recorderWorkerVerifier,
 		RecorderWorkerReadiness:    httpapi.NewRecorderWorkerReadiness(recorderHealthService),
 		Recordings:                 recordingService,
@@ -590,6 +656,7 @@ func run() error {
 		PublicInvites:          publicInviteService,
 		PublicInviteAudits:     auditLogService,
 		EpisodeDiagnostics:     episodeDiagnosticsHTTPOptions,
+		Feedback:               httpapi.FeedbackHTTPOptions{Service: feedbackService, ParticipantVerifier: episodeDiagnosticsHTTPOptions.ParticipantVerifier, Operator: episodeDiagnosticsHTTPOptions, Audit: httpapi.NewFeedbackAuditWriter(auditLogService)},
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	diagnostics.ApplyHTTP(&routerOptions)
@@ -906,6 +973,14 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 		options.RecorderWorker = nil
 		options.RecorderCapturePlans = nil
 		options.RecorderCaptureSignaling = nil
+		options.RecorderRecordingKeys = nil
+		options.RecorderRecordingObjects = nil
+		options.RecorderRecordingLifecycle = nil
+		options.RecorderRenderAuthority = nil
+		options.RecorderFleetController = nil
+		options.RecorderFleetWorker = nil
+		options.RecorderFleetVerifier = nil
+		options.RecorderFleetEnvironment = ""
 		options.RecorderWorkerVerifier = nil
 		options.RecorderWorkerReadiness = nil
 	}

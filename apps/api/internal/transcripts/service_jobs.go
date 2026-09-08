@@ -23,6 +23,7 @@ type RequestInput struct {
 	JourneyID           utilities.ID
 	Traceparent         string
 	Tracestate          string
+	Now                 time.Time
 }
 
 type Job struct {
@@ -56,6 +57,7 @@ type Assignment struct {
 	Job          Job
 	LeaseToken   string
 	Chunk        *ChunkInput
+	Source       *SourceInput
 	Transcript   Transcript
 	ChunkGETURL  string
 	ResultPUTURL string

@@ -233,9 +233,6 @@ func (r RecordingCaptureSignalingRepository) ClaimCommand(ctx context.Context, r
 		if first.ID != command.ID {
 			return capturesignaling.ClaimResult{CurrentProjection: projection}, nil
 		}
-		if first.NotBefore.Valid && first.NotBefore.Time.After(now) {
-			return capturesignaling.ClaimResult{NotBefore: first.NotBefore.Time.UTC(), CurrentProjection: projection}, nil
-		}
 		executionID, err := utilities.NewID()
 		if err != nil {
 			return capturesignaling.ClaimResult{}, fmt.Errorf("generate recording capture execution token: %w", err)
@@ -248,7 +245,7 @@ func (r RecordingCaptureSignalingRepository) ClaimCommand(ctx context.Context, r
 			ExecutionToken: uuid(executionID), ExecutionExpiresAt: timestamptzValue(expiresAt), CommandID: command.ID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return capturesignaling.ClaimResult{CurrentProjection: projection}, nil
+			return capturesignaling.ClaimResult{NotBefore: timestamp(first.NotBefore), CurrentProjection: projection}, nil
 		}
 		if err != nil {
 			return capturesignaling.ClaimResult{}, fmt.Errorf("claim recording capture command: %w", err)

@@ -214,6 +214,35 @@ export type PublicAdmissionRequestPage = {
 export type UpdateSpacePublicInviteInput = { readonly enabled: boolean };
 export type ListPublicAdmissionRequestsInput = { readonly state?: "pending" };
 
+export type Recording = {
+  readonly created_at: string;
+  readonly episode_id: string;
+  readonly id: string;
+  readonly metadata: unknown;
+  readonly space_id: string;
+  readonly status: "pending" | "processing" | "completed" | "failed";
+  readonly storage_key: string | null;
+  readonly storage_provider: "r2";
+  readonly tenant_id: string;
+  readonly updated_at: string;
+};
+
+export type RecordingDownloadURL = {
+  readonly expires_at: string;
+  readonly method: string;
+  readonly signed_at: string;
+  readonly signed_headers: Readonly<Record<string, readonly string[]>>;
+  readonly url: string;
+};
+
+export type RecordingList = {
+  readonly pagination: { readonly has_more: boolean; readonly next_cursor: string | null; readonly page_size: number };
+  readonly recordings: readonly Recording[];
+};
+
+export type ListRecordingsInput = { readonly cursor?: string; readonly episodeId?: string; readonly pageSize?: number };
+export type CreateRecordingDownloadURLInput = { readonly expiresInSeconds: number };
+
 export type ChalkServerClient = {
   readonly spaces: {
     archive(spaceId: string): Promise<Space>;
@@ -236,6 +265,11 @@ export type ChalkServerClient = {
     list(input?: ListAPIKeysInput): Promise<APIKeyList>;
     rotate(apiKeyId: string, input?: RotateAPIKeyInput): Promise<APIKeyWithSecret>;
     revoke(apiKeyId: string): Promise<void>;
+  };
+  readonly recordings: {
+    list(input?: ListRecordingsInput): Promise<RecordingList>;
+    get(recordingId: string): Promise<Recording>;
+    createDownloadURL(recordingId: string, input: CreateRecordingDownloadURLInput): Promise<RecordingDownloadURL>;
   };
   readonly publicInvites: {
     get(spaceId: string): Promise<SpacePublicInvite>;

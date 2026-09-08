@@ -220,9 +220,9 @@ function validateCue(cue: NormalizedCue, chunk: FinalizeChunkAssignment, maxText
   )
     throw new AssignmentError("finalize cue bounds are invalid");
   if (typeof cue.text !== "string" || cue.text.length === 0 || cue.text.length > maxTextChars) throw new AssignmentError("finalize cue text is invalid");
-  if (cue.trackClass !== "microphone" && cue.trackClass !== "screen-share" && cue.trackClass !== "system-audio" && cue.trackClass !== "unknown") throw new AssignmentError("finalize cue track class is invalid");
+  if (cue.trackClass !== "microphone") throw new AssignmentError("finalize cue track class is invalid");
   validateIdentity(cue.identity);
-  if (cue.displayNameSnapshot !== undefined) boundedText(cue.displayNameSnapshot, "finalize display name", 256);
+  boundedText(cue.displayNameSnapshot, "finalize display name", 256);
   if (typeof cue.overlap !== "boolean") throw new AssignmentError("finalize cue overlap is invalid");
   if (cue.provider !== "deepinfra" && cue.provider !== "cloudflare") throw new AssignmentError("finalize cue provider is invalid");
   boundedText(cue.model, "finalize cue model");
@@ -235,10 +235,18 @@ function validateCue(cue: NormalizedCue, chunk: FinalizeChunkAssignment, maxText
 }
 
 function validateIdentity(value: ManifestIdentity): void {
-  if (!value || typeof value !== "object" || Array.isArray(value) || (value.kind !== "participant" && value.kind !== "shared" && value.kind !== "unknown")) throw new AssignmentError("finalize cue identity is invalid");
-  if (value.kind === "participant") {
-    if (typeof value.participantId !== "string" || value.participantId.length === 0 || typeof value.trackEpoch !== "string" || value.trackEpoch.length === 0) throw new AssignmentError("finalize participant identity is incomplete");
-  } else if (value.participantId !== undefined || value.trackEpoch !== undefined) throw new AssignmentError("finalize shared identity is invalid");
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.kind !== "participant") throw new AssignmentError("finalize cue identity is invalid");
+  if (
+    typeof value.participantRef !== "string" ||
+    value.participantRef.length === 0 ||
+    !Number.isSafeInteger(value.participantGeneration) ||
+    value.participantGeneration < 1 ||
+    typeof value.trackId !== "string" ||
+    value.trackId.length === 0 ||
+    typeof value.trackEpoch !== "string" ||
+    value.trackEpoch.length === 0
+  )
+    throw new AssignmentError("finalize participant identity is incomplete");
 }
 
 function validateQuality(value: unknown): void {
@@ -264,5 +272,5 @@ function compareCues(left: NormalizedCue & { readonly chunkId: string }, right: 
 }
 
 function identityKey(value: ManifestIdentity): string {
-  return `${value.kind}\u0000${value.participantId ?? ""}\u0000${value.trackEpoch ?? ""}`;
+  return `${value.kind}\u0000${value.participantRef}\u0000${value.participantGeneration}\u0000${value.trackId}\u0000${value.trackEpoch}`;
 }

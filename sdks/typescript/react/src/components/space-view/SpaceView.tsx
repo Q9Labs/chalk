@@ -3,12 +3,11 @@
 import type { ChatUploadFile, Reaction } from "@q9labsai/chalk-client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useCan, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
-import { cn } from "../../utils/cn";
 import { AudioOutput } from "../audio-output/AudioOutput";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ChatPanel } from "../composite/ChatPanel";
@@ -21,16 +20,15 @@ import { LeaveDialog } from "../leave-dialog/LeaveDialog";
 import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { ReconnectingOverlay, type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
-import { SpaceHeader } from "../space-header/SpaceHeader";
 import { SpaceInfoDialog, type SpaceInfoDialogProps } from "../space-info-dialog/SpaceInfoDialog";
 import { TranscriptPanel } from "../transcript-panel/TranscriptPanel";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { SkinProvider } from "../skin-context";
 import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
-import { ChalkPanel } from "../chalk-ui";
 import { ClassicSpaceView } from "./ClassicSpaceView";
 import { SpaceDrawer } from "./SpaceDrawer";
+import { SpacePresentation } from "./SpacePresentation";
 import { SpaceStage } from "./SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import { useContentLayoutSwitch } from "./useContentLayoutSwitch";
@@ -42,6 +40,7 @@ export interface SpaceViewFeatures {
   readonly participants?: boolean;
   readonly admission?: boolean;
   readonly screenShare?: boolean;
+  readonly recording?: boolean;
   readonly whiteboard?: boolean;
   readonly reactions?: boolean;
   readonly handRaise?: boolean;
@@ -87,6 +86,7 @@ export interface SpaceViewProps {
   readonly commandError?: string;
   readonly onDismissCommandError?: () => void;
   readonly onOpenDiagnostics?: () => void;
+  readonly onOpenFeedback?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
@@ -131,6 +131,7 @@ function ChalkSpaceView({
   commandError: externalCommandError,
   onDismissCommandError,
   onOpenDiagnostics,
+  onOpenFeedback,
   onOpenSettings,
   onToggleWhiteboard,
   whiteboard,
@@ -144,11 +145,13 @@ function ChalkSpaceView({
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
+  const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
   const canSendChat = useCan("sendChat");
   const canSendReaction = useCan("sendReaction");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const canManageAdmission = useCan("manageAdmission");
+  const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus" | "presentation">("focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
@@ -173,12 +176,14 @@ function ChalkSpaceView({
     "mic",
     "video",
     ...(feature("screenShare") && canPublishScreen ? ["screenshare" as const] : []),
+    ...(feature("recording") && canManageRecording ? ["record" as const] : []),
     ...(feature("participants") ? ["participants" as const] : []),
     ...(feature("chat") && canSendChat ? ["chat" as const] : []),
     ...(feature("handRaise") ? ["handraise" as const] : []),
     ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
     ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
+    ...(onOpenFeedback ? ["feedback" as const] : []),
     "leave",
   ];
 
@@ -263,110 +268,117 @@ function ChalkSpaceView({
   return (
     <SkinProvider skin={skin}>
       <ParticipantVolumeProvider>
-        <main
-          data-chalk
-          data-chalk-theme={getThemeMode(palette)}
-          data-chalk-palette={palette}
-          data-chalk-texture={texture}
-          data-chalk-skin={skin}
-          className={cn("chalk-root chalk-textured-surface relative h-full min-h-0 overflow-hidden bg-[var(--chalk-app-canvas)] text-[var(--chalk-app-text)]", className)}
-        >
-          <section className="chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-chrome)]">
-            <AudioOutput />
-            <SpaceHeader spaceName={spaceName} logoUrl={logoUrl} duration={episodeDuration} layout={layout} onLayoutChange={updateLayout} onInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined} onSettings={feature("settings") ? openSettings : undefined} className="relative z-20" />
-
-            <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
-              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pt-1 sm:px-4 lg:px-5">
-                <section className="min-h-0 min-w-0 flex-1 overflow-hidden" aria-label="Space stage">
-                  <ChalkPanel filled={stageBackground} className={cn("h-full min-h-0 p-0", stageBackground ? "bg-[var(--chalk-app-stage)]" : "bg-transparent", skin === "classic" ? "rounded-[10px] border-0 shadow-none" : "rounded-none")} contentClassName="h-full min-h-0" seed="space-stage-shell">
-                    <SpaceStage tiles={tiles} layout={layout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />
-                  </ChalkPanel>
-                </section>
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
-                  <div className="pointer-events-auto hidden md:block">
-                    <ControlBar
-                      placement="floating"
-                      density="comfortable"
-                      duration={episodeDuration}
-                      buttons={buttons}
-                      activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
-                      onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
-                      onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
-                      onToggleWhiteboard={onToggleWhiteboard}
-                      onOpenReactions={() => setReactionPickerOpen((current) => !current)}
-                      onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
-                      onOpenDiagnostics={onOpenDiagnostics}
-                      onOpenSettings={openSettings}
-                      onCommandError={setCommandError}
-                      onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
-                    />{" "}
-                  </div>
-                  <div className="pointer-events-auto md:hidden">
-                    <ControlBar
-                      placement="floating"
-                      density="compact"
-                      duration={episodeDuration}
-                      buttons={buttons}
-                      activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
-                      onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
-                      onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
-                      onToggleWhiteboard={onToggleWhiteboard}
-                      onOpenReactions={() => setReactionPickerOpen((current) => !current)}
-                      onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
-                      onOpenDiagnostics={onOpenDiagnostics}
-                      onOpenSettings={openSettings}
-                      onCommandError={setCommandError}
-                      onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
-                    />{" "}
-                  </div>
+        <SpacePresentation
+          skin={skin}
+          palette={palette}
+          texture={texture}
+          stageBackground={stageBackground}
+          header={{
+            spaceName,
+            logoUrl,
+            duration: episodeDuration,
+            isRecording: recording.current?.status === "recording",
+            layout,
+            onLayoutChange: updateLayout,
+            onInfo: infoDialog ? () => infoDialog.onOpenChange(true) : undefined,
+            onSettings: feature("settings") ? openSettings : undefined,
+          }}
+          stage={<SpaceStage tiles={tiles} layout={layout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />}
+          controls={
+            <ControlBar
+              placement="floating"
+              density="comfortable"
+              duration={episodeDuration}
+              buttons={buttons}
+              activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+              onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
+              onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
+              onToggleWhiteboard={onToggleWhiteboard}
+              onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+              onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
+              onOpenDiagnostics={onOpenDiagnostics}
+              onOpenFeedback={onOpenFeedback}
+              onOpenSettings={openSettings}
+              onCommandError={setCommandError}
+              onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
+            />
+          }
+          compactControls={
+            <ControlBar
+              placement="floating"
+              density="compact"
+              duration={episodeDuration}
+              buttons={buttons}
+              activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+              onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
+              onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
+              onToggleWhiteboard={onToggleWhiteboard}
+              onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+              onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
+              onOpenDiagnostics={onOpenDiagnostics}
+              onOpenFeedback={onOpenFeedback}
+              onOpenSettings={openSettings}
+              onCommandError={setCommandError}
+              onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
+            />
+          }
+          stageOverlay={
+            <>
+              {feature("reactions") ? <ReactionsOverlay /> : null}
+              {feature("reactions") && canSendReaction ? (
+                <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
+                  <ReactionPicker
+                    isOpen={isReactionPickerOpen}
+                    onClose={() => setReactionPickerOpen(false)}
+                    allowedReactions={[...DEFAULT_REACTIONS]}
+                    onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction)).finally(() => setReactionPickerOpen(false))}
+                    size="compact"
+                  />
                 </div>
-
-                {feature("reactions") ? <ReactionsOverlay /> : null}
-                {feature("reactions") && canSendReaction ? (
-                  <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
-                    <ReactionPicker
-                      isOpen={isReactionPickerOpen}
-                      onClose={() => setReactionPickerOpen(false)}
-                      allowedReactions={[...DEFAULT_REACTIONS]}
-                      onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction)).finally(() => setReactionPickerOpen(false))}
-                      size="compact"
-                    />
-                  </div>
-                ) : null}
-              </div>
-
-              <SpaceDrawer state={drawer.state} onClose={() => setActivePanel(null)}>
-                {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-                {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
-                {drawer.panel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
-                {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
-                {drawer.panel === "settings" && feature("settings") && !settingsDialogIsControlled ? (settingsContent ?? <SettingsPanel className="w-full border-0 shadow-none" onClose={() => setActivePanel(null)} />) : null}
-              </SpaceDrawer>
-            </div>
-
-            {settingsDialogIsControlled ? settingsContent : null}
-            {overlay}
-            <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" palette={palette} texture={texture} />
-            {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
-            {infoDialog ? <SpaceInfoDialog {...infoDialog} duration={episodeDuration} isOpen={infoDialog.isOpen} onClose={() => infoDialog.onOpenChange(false)} /> : null}
-            {inviteDialog ? <InviteDialog {...inviteDialog} inviteLink={inviteDialog.inviteLink || inviteLink || ""} isOpen={inviteDialog.isOpen} onClose={() => inviteDialog.onOpenChange(false)} /> : null}
-            {onLeft ? (
-              <LeaveDialog
-                isOpen={isLeaveDialogOpen}
-                onClose={() => setLeaveDialogOpen(false)}
-                onConfirm={() => void leaveSpace()}
-                onEndEpisode={onEndEpisode ? () => void endEpisode() : undefined}
-                canEndEpisode={Boolean(onEndEpisode)}
-                leavePending={leavePending}
-                leaveError={leaveError}
-                endEpisodePending={endEpisodePending}
-                endEpisodeError={endEpisodeError}
-                palette={palette}
-                texture={texture}
-              />
-            ) : null}
-          </section>
-        </main>
+              ) : null}
+            </>
+          }
+          sidebar={
+            <SpaceDrawer state={drawer.state} onClose={() => setActivePanel(null)}>
+              {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+              {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
+              {drawer.panel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
+              {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
+              {drawer.panel === "settings" && feature("settings") && !settingsDialogIsControlled ? (settingsContent ?? <SettingsPanel className="w-full border-0 shadow-none" onClose={() => setActivePanel(null)} />) : null}
+            </SpaceDrawer>
+          }
+          mediaOutput={<AudioOutput />}
+          overlays={
+            <>
+              {settingsDialogIsControlled ? settingsContent : null}
+              {overlay}
+              <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" palette={palette} texture={texture} />
+              {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
+            </>
+          }
+          dialogs={
+            <>
+              {infoDialog ? <SpaceInfoDialog {...infoDialog} duration={episodeDuration} isOpen={infoDialog.isOpen} onClose={() => infoDialog.onOpenChange(false)} /> : null}
+              {inviteDialog ? <InviteDialog {...inviteDialog} inviteLink={inviteDialog.inviteLink || inviteLink || ""} isOpen={inviteDialog.isOpen} onClose={() => inviteDialog.onOpenChange(false)} /> : null}
+              {onLeft ? (
+                <LeaveDialog
+                  isOpen={isLeaveDialogOpen}
+                  onClose={() => setLeaveDialogOpen(false)}
+                  onConfirm={() => void leaveSpace()}
+                  onEndEpisode={onEndEpisode ? () => void endEpisode() : undefined}
+                  canEndEpisode={Boolean(onEndEpisode)}
+                  leavePending={leavePending}
+                  leaveError={leaveError}
+                  endEpisodePending={endEpisodePending}
+                  endEpisodeError={endEpisodeError}
+                  palette={palette}
+                  texture={texture}
+                />
+              ) : null}
+            </>
+          }
+          className={className}
+        />
       </ParticipantVolumeProvider>
     </SkinProvider>
   );

@@ -7,16 +7,13 @@ export const WHITEBOARD_ITEM_ID = "whiteboard";
 export const screenShareItemId = (participantId: string): string => `screen-share:${participantId}`;
 
 /** Everything on the stage is an item: participants, one item per live screen share, and the whiteboard when open. */
-export type StageItem =
-  | { readonly kind: "participant"; readonly id: string; readonly participant: Participant }
-  | { readonly kind: "screen-share"; readonly id: string; readonly participant: Participant; readonly track: MediaStreamTrack }
-  | { readonly kind: "whiteboard"; readonly id: typeof WHITEBOARD_ITEM_ID };
+export type StageItem = { readonly kind: "participant"; readonly id: string; readonly participant: Participant } | { readonly kind: "screen-share"; readonly id: string; readonly participant: Participant } | { readonly kind: "whiteboard"; readonly id: typeof WHITEBOARD_ITEM_ID };
 
 export function buildStageItems(participants: readonly Participant[], whiteboardOpen: boolean): StageItem[] {
   const items: StageItem[] = participants.map((participant) => ({ kind: "participant", id: participant.id, participant }));
   for (const participant of participants) {
     if (participant.isScreenSharing && participant.screenShareTrack) {
-      items.push({ kind: "screen-share", id: screenShareItemId(participant.id), participant, track: participant.screenShareTrack });
+      items.push({ kind: "screen-share", id: screenShareItemId(participant.id), participant });
     }
   }
   if (whiteboardOpen) items.push({ kind: "whiteboard", id: WHITEBOARD_ITEM_ID });

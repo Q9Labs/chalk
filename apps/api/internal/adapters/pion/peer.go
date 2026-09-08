@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
@@ -32,6 +33,8 @@ var (
 	ErrStaleNegotiation      = errors.New("pion negotiation is stale")
 	ErrNegotiationPending    = errors.New("pion negotiation is already pending")
 	ErrTrackBinding          = errors.New("pion track binding failed")
+	ErrTrackNotBound         = errors.New("pion capture track is not bound")
+	ErrKeyFrameRequest       = errors.New("pion keyframe request failed")
 )
 
 // Config creates one peer connection for one capture epoch. API is optional;
@@ -54,6 +57,7 @@ type Peer struct {
 	registered       bool
 	registeredTracks []captureplane.PulledCaptureTrack
 	expected         map[string]captureplane.PulledCaptureTrack
+	knownMIDs        map[string]struct{}
 
 	tracks        map[string]*MediaTrack
 	bindingErr    error
@@ -162,7 +166,11 @@ func NewPeer(config Config) (*Peer, error) {
 	}
 	api := config.API
 	if api == nil {
-		api = webrtc.NewAPI()
+		var err error
+		api, err = newRecorderAPI()
+		if err != nil {
+			return nil, err
+		}
 	}
 	pc, err := api.NewPeerConnection(config.Configuration)
 	if err != nil {
@@ -170,11 +178,12 @@ func NewPeer(config Config) (*Peer, error) {
 	}
 
 	peer := &Peer{
-		epoch:    config.CaptureEpoch,
-		pc:       pc,
-		expected: make(map[string]captureplane.PulledCaptureTrack),
-		tracks:   make(map[string]*MediaTrack),
-		notify:   make(chan struct{}),
+		epoch:     config.CaptureEpoch,
+		pc:        pc,
+		expected:  make(map[string]captureplane.PulledCaptureTrack),
+		knownMIDs: make(map[string]struct{}),
+		tracks:    make(map[string]*MediaTrack),
+		notify:    make(chan struct{}),
 	}
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		peer.stateMu.Lock()
@@ -255,9 +264,9 @@ func (p *Peer) Error() error {
 	return errors.Join(p.bindingErr, p.terminalErr)
 }
 
-// RegisterTracks reconciles expected tracks by MID before the next SDP
-// operation. Re-registering an identical track is idempotent; an existing MID
-// may only receive a layer-policy update, never a new publication identity.
+// RegisterTracks replaces the current expected track set before the next SDP
+// operation. A provider may reuse a MID for a replacement publication; in that
+// case the old remote binding is removed so WaitForTrack cannot return it.
 func (p *Peer) RegisterTracks(tracks []captureplane.PulledCaptureTrack) error {
 	if p == nil {
 		return ErrPeerClosed
@@ -284,39 +293,23 @@ func (p *Peer) RegisterTracks(tracks []captureplane.PulledCaptureTrack) error {
 
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
-	if p.expected == nil {
-		p.expected = make(map[string]captureplane.PulledCaptureTrack, len(tracks))
-	}
-	postReconcileCount := len(p.expected)
+	next := make(map[string]captureplane.PulledCaptureTrack, len(tracks))
 	for _, track := range tracks {
 		mid := string(track.MID)
-		existing, exists := p.expected[mid]
-		if exists && !sameTrackIdentity(existing, track) {
-			return fmt.Errorf("%w: %s", ErrTrackIdentityMutation, mid)
-		}
-		if !exists {
-			postReconcileCount++
+		next[mid] = track
+		p.knownMIDs[mid] = struct{}{}
+	}
+	for mid, bound := range p.tracks {
+		expected, active := next[mid]
+		if !active || !sameTrackIdentity(bound.identity, expected) {
+			delete(p.tracks, mid)
 		}
 	}
-	if postReconcileCount > maxMediaTracks {
-		return fmt.Errorf("%w: maximum %d tracks", captureplane.ErrInvalidTrack, maxMediaTracks)
-	}
-	for _, track := range tracks {
-		mid := string(track.MID)
-		_, exists := p.expected[mid]
-		p.expected[mid] = track
-		if exists {
-			for index := range p.registeredTracks {
-				if p.registeredTracks[index].MID == track.MID {
-					p.registeredTracks[index] = track
-					break
-				}
-			}
-			continue
-		}
-		p.registeredTracks = append(p.registeredTracks, track)
-	}
+	p.expected = next
+	p.registeredTracks = append(p.registeredTracks[:0], tracks...)
+	sort.Slice(p.registeredTracks, func(i, j int) bool { return p.registeredTracks[i].MID < p.registeredTracks[j].MID })
 	p.registered = true
+	p.signalLocked()
 	return nil
 }
 
@@ -556,6 +549,32 @@ func (p *Peer) WaitForTrack(ctx context.Context, mid captureplane.ProviderRefere
 	}
 }
 
+// RequestKeyFrame sends a PLI for the currently bound video track. Capture
+// calls this when a source is first bound or replaced so retained RTP does not
+// depend on an arbitrary pre-capture reference frame.
+func (p *Peer) RequestKeyFrame(mid captureplane.ProviderReference) error {
+	if p == nil {
+		return ErrPeerClosed
+	}
+	p.stateMu.RLock()
+	track := p.tracks[string(mid)]
+	closed := p.closed
+	p.stateMu.RUnlock()
+	if closed {
+		return ErrPeerClosed
+	}
+	if track == nil || track.remote == nil {
+		return fmt.Errorf("%w: %s", ErrTrackNotBound, mid)
+	}
+	if track.identity.Kind != captureplane.TrackKindVideo {
+		return nil
+	}
+	if err := p.pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.remote.SSRC())}}); err != nil {
+		return fmt.Errorf("%w: %w", ErrKeyFrameRequest, err)
+	}
+	return nil
+}
+
 // Close closes this epoch's sole PeerConnection. It is idempotent.
 func (p *Peer) Close() error {
 	if p == nil {
@@ -642,7 +661,7 @@ func (p *Peer) validateTransceiverMIDs() error {
 		if mid == "" {
 			continue
 		}
-		if _, ok := p.expected[mid]; !ok {
+		if _, ok := p.knownMIDs[mid]; !ok {
 			return fmt.Errorf("%w: %s", ErrUnknownMID, mid)
 		}
 	}
@@ -660,12 +679,13 @@ func (p *Peer) bindTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceive
 	mid := strings.TrimSpace(receiver.RTPTransceiver().Mid())
 	identity, ok := p.expected[mid]
 	if !ok {
+		// OnTrack can race a provider-confirmed removal. A MID that was
+		// previously registered but is no longer active is stale media, not a
+		// terminal protocol violation for the replacement binding.
+		if _, known := p.knownMIDs[mid]; known {
+			return
+		}
 		p.bindingErr = errors.Join(p.bindingErr, fmt.Errorf("%w: %s", ErrUnknownMID, mid))
-		p.signalLocked()
-		return
-	}
-	if _, exists := p.tracks[mid]; exists {
-		p.bindingErr = errors.Join(p.bindingErr, fmt.Errorf("%w: %s", ErrDuplicateMID, mid))
 		p.signalLocked()
 		return
 	}
@@ -756,4 +776,43 @@ func sameTrackIdentity(left, right captureplane.PulledCaptureTrack) bool {
 		left.ParticipantGeneration == right.ParticipantGeneration &&
 		left.Source == right.Source &&
 		left.Kind == right.Kind
+}
+
+func newRecorderAPI() (*webrtc.API, error) {
+	mediaEngine := &webrtc.MediaEngine{}
+	if err := mediaEngine.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48_000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1"},
+		PayloadType:        111,
+	}, webrtc.RTPCodecTypeAudio); err != nil {
+		return nil, fmt.Errorf("register recorder Opus codec: %w", err)
+	}
+	feedback := []webrtc.RTCPFeedback{{Type: "goog-remb"}, {Type: "ccm", Parameter: "fir"}, {Type: "nack"}, {Type: "nack", Parameter: "pli"}}
+	codecs := []webrtc.RTPCodecParameters{
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90_000, RTCPFeedback: feedback}, PayloadType: 96},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=96"}, PayloadType: 97},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90_000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f", RTCPFeedback: feedback}, PayloadType: 102},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=102"}, PayloadType: 103},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90_000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=0;profile-level-id=42001f", RTCPFeedback: feedback}, PayloadType: 104},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=104"}, PayloadType: 105},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90_000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f", RTCPFeedback: feedback}, PayloadType: 106},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=106"}, PayloadType: 107},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90_000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=0;profile-level-id=42e01f", RTCPFeedback: feedback}, PayloadType: 108},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=108"}, PayloadType: 109},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90_000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f", RTCPFeedback: feedback}, PayloadType: 127},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=127"}, PayloadType: 125},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90_000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=0;profile-level-id=4d001f", RTCPFeedback: feedback}, PayloadType: 39},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=39"}, PayloadType: 40},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90_000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f", RTCPFeedback: feedback}, PayloadType: 112},
+		{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90_000, SDPFmtpLine: "apt=112"}, PayloadType: 113},
+	}
+	for _, codec := range codecs {
+		if err := mediaEngine.RegisterCodec(codec, webrtc.RTPCodecTypeVideo); err != nil {
+			return nil, fmt.Errorf("register recorder video codec: %w", err)
+		}
+	}
+	registry := &interceptor.Registry{}
+	if err := webrtc.RegisterDefaultInterceptors(mediaEngine, registry); err != nil {
+		return nil, fmt.Errorf("register recorder RTP interceptors: %w", err)
+	}
+	return webrtc.NewAPI(webrtc.WithMediaEngine(mediaEngine), webrtc.WithInterceptorRegistry(registry)), nil
 }

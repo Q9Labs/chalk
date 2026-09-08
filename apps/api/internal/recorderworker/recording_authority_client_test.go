@@ -18,6 +18,7 @@ import (
 
 func TestRecordingAuthorityClientUsesSeparateCredentialFreeUploader(t *testing.T) {
 	expiresAt := time.Now().UTC().Add(10 * time.Minute).Format(time.RFC3339Nano)
+	uploadExpiresAt := time.Now().UTC().Add(10*time.Minute + 500*time.Millisecond).Format(time.RFC3339Nano)
 	uploaded := make(chan []byte, 1)
 	uploadServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.TLS == nil || len(request.TLS.PeerCertificates) != 0 {
@@ -51,10 +52,10 @@ func TestRecordingAuthorityClientUsesSeparateCredentialFreeUploader(t *testing.T
 			_ = json.NewEncoder(w).Encode(map[string]any{"allocation_id": recordingAuthorityClientAllocationID, "object_key": "recordings/" + recordingAuthorityClientRecordingID + "/capture/3/bundles/12/" + recordingAuthorityClientAllocationID + ".bundle", "sequence_number": 12, "allocation_version": 13})
 		case "/internal/v1/recorder/bundles/finalize":
 			assertRecordingAuthorityRequest(t, request, "allocation_id", recordingAuthorityClientAllocationID)
-			_ = json.NewEncoder(w).Encode(map[string]any{"allocation_id": recordingAuthorityClientAllocationID, "upload_token": "opaque-upload-token", "expires_at": expiresAt, "upload": map[string]any{"method": http.MethodPut, "url": uploadServer.URL + "/bundle", "expires_at": expiresAt, "signed_headers": map[string][]string{"Content-Type": {"application/vnd.chalk.recording-bundle+json"}, "If-None-Match": {"*"}}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"allocation_id": recordingAuthorityClientAllocationID, "upload_token": "opaque-upload-token", "expires_at": expiresAt, "upload": map[string]any{"method": http.MethodPut, "url": uploadServer.URL + "/bundle", "expires_at": uploadExpiresAt, "signed_headers": map[string][]string{"Content-Type": {"application/vnd.chalk.recording-bundle+json"}, "If-None-Match": {"*"}}}})
 		case "/internal/v1/recorder/bundles/commit":
 			assertRecordingAuthorityRequest(t, request, "upload_token", "opaque-upload-token")
-			_ = json.NewEncoder(w).Encode(map[string]any{"allocation_id": recordingAuthorityClientAllocationID, "object_key": "recordings/" + recordingAuthorityClientRecordingID + "/capture/3/bundles/12/" + recordingAuthorityClientAllocationID + ".bundle", "sequence_number": 12, "allocation_version": 13, "object_version": "r2-version", "object_etag": "etag", "object_checksum_sha256": strings.Repeat("ab", 32), "manifest_digest": "ef" + strings.Repeat("00", 31), "committed_at": time.Now().UTC().Format(time.RFC3339Nano)})
+			_ = json.NewEncoder(w).Encode(map[string]any{"allocation_id": recordingAuthorityClientAllocationID, "object_key": "recordings/" + recordingAuthorityClientRecordingID + "/capture/3/bundles/12/" + recordingAuthorityClientAllocationID + ".bundle", "sequence_number": 12, "allocation_version": 13, "object_version": "", "object_etag": "etag", "object_checksum_sha256": strings.Repeat("ab", 32), "manifest_digest": "ef" + strings.Repeat("00", 31), "committed_at": time.Now().UTC().Format(time.RFC3339Nano)})
 		default:
 			http.NotFound(w, request)
 		}
@@ -95,6 +96,9 @@ func TestRecordingAuthorityClientUsesSeparateCredentialFreeUploader(t *testing.T
 	if err != nil {
 		t.Fatalf("finalize object: %v", err)
 	}
+	if !finalized.UploadURL.ExpiresAt.Equal(finalized.ExpiresAt) {
+		t.Fatal("upload outlives allocation authority")
+	}
 	object := []byte{1, 2, 3, 4}
 	if err := client.UploadRecordingObject(context.Background(), finalized.UploadURL, object); err != nil {
 		t.Fatalf("upload object: %v", err)
@@ -111,7 +115,7 @@ func TestRecordingAuthorityClientUsesSeparateCredentialFreeUploader(t *testing.T
 		}
 		t.Fatalf("commit object: %v", err)
 	}
-	if committed.AllocationVersion != 13 || committed.ObjectVersion != "r2-version" || committed.SequenceNumber != 12 {
+	if committed.AllocationVersion != 13 || committed.ObjectVersion != "" || committed.SequenceNumber != 12 {
 		t.Fatalf("committed = %+v", committed)
 	}
 }

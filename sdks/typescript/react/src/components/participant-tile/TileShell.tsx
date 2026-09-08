@@ -17,6 +17,8 @@ export interface TileShellProps {
   readonly dataTour?: string;
   /** Off-screen tiles stay mounted but leave the accessibility tree and tab order. */
   readonly hidden?: boolean;
+  /** Stable content identity for deterministic Chalk chrome across projection seeks. */
+  readonly seed?: number | string;
   /** Lower-left chip: name plus status; omitted when null. Rendered inside a `min-w-0` flex row so a `truncate` name shrinks to the tile. */
   readonly chip?: ReactNode;
   /** Top-right slot (connection warning, pin marker). */
@@ -35,7 +37,7 @@ interface TileVars extends CSSProperties {
  * The shell is a `@container`, so the chip picks its size from the tile width (`@[240px]:` variants).
  * Speaking is shown in the chip and on the avatar, never as a frame.
  */
-export function TileShell({ label, accentColor, pinned = false, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
+export function TileShell({ label, accentColor, pinned = false, onClick, onDoubleClick, className, style, dataTour, hidden = false, seed, chip, corner, children }: TileShellProps): React.JSX.Element {
   const skin = useSkin();
   const vars: TileVars = {
     ...style,
@@ -76,13 +78,25 @@ export function TileShell({ label, accentColor, pinned = false, onClick, onDoubl
           {skin === "classic" ? (
             <div className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md bg-[rgba(12,14,18,0.62)] px-1.5 py-0.5 text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur-md @[240px]:gap-2 @[240px]:px-2 @[240px]:py-1">{chip}</div>
           ) : (
-            <ChalkPanel tone="neutral" filled className="inline-flex min-w-0 max-w-full items-center rounded-md" contentClassName="flex min-w-0 max-w-full items-center gap-1.5 px-1.5 py-0.5 @[240px]:gap-2 @[240px]:px-2 @[240px]:py-1">
+            <ChalkPanel tone="neutral" filled seed={childSeed(seed, "chip")} className="inline-flex min-w-0 max-w-full items-center rounded-md" contentClassName="flex min-w-0 max-w-full items-center gap-1.5 px-1.5 py-0.5 @[240px]:gap-2 @[240px]:px-2 @[240px]:py-1">
               {chip}
             </ChalkPanel>
           )}
         </div>
       ) : null}
-      <ChalkChrome className="pointer-events-none absolute inset-0 z-20 h-full w-full" focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))" radius={8} roughness={0.9} stroke="var(--chalk-app-line-strong, currentColor)" part="participant-tile" />
+      <ChalkChrome
+        className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+        focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))"
+        radius={8}
+        roughness={0.9}
+        seed={childSeed(seed, "frame")}
+        stroke="var(--chalk-app-line-strong, currentColor)"
+        part="participant-tile"
+      />
     </div>
   );
+}
+
+function childSeed(seed: number | string | undefined, part: string): string | undefined {
+  return seed === undefined ? undefined : `${seed}:${part}`;
 }

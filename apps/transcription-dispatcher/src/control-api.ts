@@ -235,7 +235,12 @@ function canonicalAssignment(value: unknown): unknown {
   const source = chunk as Record<string, unknown>;
   return {
     ...assignment,
+    jobId: assignment.jobId ?? assignment.job_id,
+    tenantId: assignment.tenantId ?? assignment.tenant_id,
     episodeId: assignment.episodeId ?? assignment.episode_id,
+    recordingId: assignment.recordingId ?? assignment.recording_id,
+    presentationSha256: assignment.presentationSha256 ?? assignment.presentation_sha256,
+    sourceExpiresAt: assignment.sourceExpiresAt ?? assignment.source_expires_at,
     leaseToken: assignment.leaseToken ?? assignment.lease_token,
     leaseExpiresAt: assignment.leaseExpiresAt ?? assignment.lease_expires_at,
     outputPutUrl: assignment.outputPutUrl ?? assignment.output_put_url ?? assignment.result_put_url,
@@ -245,6 +250,7 @@ function canonicalAssignment(value: unknown): unknown {
     chunk: {
       ...source,
       chunkId: source.chunkId ?? source.chunk_id,
+      inputObjectKey: source.inputObjectKey ?? source.input_object_key,
       inputUrl: source.inputUrl ?? source.input_url,
       inputUrlExpiresAt: source.inputUrlExpiresAt ?? source.input_url_expires_at,
       inputContentType: source.inputContentType ?? source.input_content_type,
@@ -252,8 +258,17 @@ function canonicalAssignment(value: unknown): unknown {
       inputSha256: source.inputSha256 ?? source.input_sha256,
       episodeStartMs: source.episodeStartMs ?? source.episode_start_ms,
       episodeEndMs: source.episodeEndMs ?? source.episode_end_ms,
+      sourceStartMs: source.sourceStartMs ?? source.source_start_ms,
+      sourceEndMs: source.sourceEndMs ?? source.source_end_ms,
+      chunkIndex: source.chunkIndex ?? source.chunk_index,
+      generation: source.generation,
+      allocationId: source.allocationId ?? source.allocation_id,
+      objectVersion: source.objectVersion ?? source.object_version,
+      objectEtag: source.objectEtag ?? source.object_etag,
       sourceIdentity: source.sourceIdentity ?? source.source_identity,
       sourceTrackClass: source.sourceTrackClass ?? source.source_track_class,
+      displayNameSnapshot: source.displayNameSnapshot ?? source.display_name_snapshot,
+      overlap: source.overlap,
     },
   };
 }

@@ -11,6 +11,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 )
 
@@ -47,13 +48,20 @@ func (w Waker) Wake(ctx context.Context, input transcripts.DispatcherWakeInput) 
 		w.logger.Error("transcription wake unavailable", "event", "transcription.wake_failed")
 		return
 	}
-	payload, err := json.Marshal(map[string]string{
+	journeyID := input.JourneyID
+	if journeyID.IsZero() {
+		journeyID, _ = observability.JourneyIDFromContext(ctx)
+	}
+	payloadValues := map[string]string{
 		"source":      "wake",
 		"jobId":       input.JobID.String(),
-		"journeyId":   input.JourneyID.String(),
 		"traceparent": input.Traceparent,
 		"tracestate":  input.Tracestate,
-	})
+	}
+	if !journeyID.IsZero() {
+		payloadValues["journeyId"] = journeyID.String()
+	}
+	payload, err := json.Marshal(payloadValues)
 	if err != nil {
 		w.logger.Error("transcription wake encoding failed", "event", "transcription.wake_failed")
 		return

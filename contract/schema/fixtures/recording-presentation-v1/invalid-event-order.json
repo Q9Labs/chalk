@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "recording_presentation.v1",
+  "recordingId": "recording",
+  "episodeId": "episode",
+  "clock": { "origin": "capture_ready", "timebase": "recording_relative_ms", "captureEpoch": 1, "originAuthorityId": "ready", "durationMs": 1000 },
+  "sourceCursors": { "episodeControlStartRevision": 0, "episodeControlEndRevision": 0, "chatStartSequence": 0, "chatEndSequence": 0, "whiteboardStartRevision": 0, "whiteboardEndRevision": 0, "capturePlanStartRevision": 0, "capturePlanEndRevision": 0 },
+  "initial": {
+    "elapsedMs": 0,
+    "profile": {
+      "name": "recording-space",
+      "version": "1",
+      "uiBuildSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "viewport": { "width": 1280, "height": 720, "deviceScaleFactor": 1 },
+      "locale": "en",
+      "timeZone": "UTC",
+      "fontAssetIds": [],
+      "theme": { "colorScheme": "light", "skin": "classic", "palette": "light", "texture": "none", "stageBackground": true, "generatedAvatars": true }
+    },
+    "space": { "id": "space", "name": "Shared Space" },
+    "view": { "layout": "grid", "sidebar": "chat" },
+    "participants": [],
+    "media": [],
+    "chat": { "retainedFloorSequence": null, "headSequence": 0, "messages": [] },
+    "sharedContent": { "kind": "none" },
+    "reactions": []
+  },
+  "events": [{ "atMs": 500, "sequence": 2, "kind": "active_speaker_changed", "participantId": null }],
+  "assets": []
+}

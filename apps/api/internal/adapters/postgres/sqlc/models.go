@@ -413,6 +413,49 @@ type EpisodeDiagnosticCursorHead struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type FeedbackReport struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	Category              string             `json:"category"`
+	Source                string             `json:"source"`
+	Message               string             `json:"message"`
+	SubmitterKind         string             `json:"submitter_kind"`
+	SubmitterID           string             `json:"submitter_id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	Environment           pgtype.Text        `json:"environment"`
+	Audience              pgtype.Text        `json:"audience"`
+	DiagnosticReference   pgtype.Text        `json:"diagnostic_reference"`
+	JourneyID             pgtype.UUID        `json:"journey_id"`
+	RootJourneyID         pgtype.UUID        `json:"root_journey_id"`
+	TraceID               pgtype.Text        `json:"trace_id"`
+	SpanID                pgtype.Text        `json:"span_id"`
+	RequestID             pgtype.Text        `json:"request_id"`
+	CommandID             pgtype.Text        `json:"command_id"`
+	SubmissionJourneyID   pgtype.UUID        `json:"submission_journey_id"`
+	SubmissionTraceID     pgtype.Text        `json:"submission_trace_id"`
+	SubmissionSpanID      pgtype.Text        `json:"submission_span_id"`
+	IdempotencyKey        string             `json:"idempotency_key"`
+	RequestDigest         []byte             `json:"request_digest"`
+	EvidenceObjectKey     string             `json:"evidence_object_key"`
+	EvidenceContentType   string             `json:"evidence_content_type"`
+	EvidenceSize          int64              `json:"evidence_size"`
+	EvidenceSha256        []byte             `json:"evidence_sha256"`
+	EvidenceSchemaVersion string             `json:"evidence_schema_version"`
+	ScreenshotObjectKey   pgtype.Text        `json:"screenshot_object_key"`
+	ScreenshotContentType pgtype.Text        `json:"screenshot_content_type"`
+	ScreenshotSize        pgtype.Int8        `json:"screenshot_size"`
+	ScreenshotSha256      []byte             `json:"screenshot_sha256"`
+	ScreenshotWidth       pgtype.Int4        `json:"screenshot_width"`
+	ScreenshotHeight      pgtype.Int4        `json:"screenshot_height"`
+	ScreenshotCapturedAt  pgtype.Timestamptz `json:"screenshot_captured_at"`
+	ScreenshotFailureCode pgtype.Text        `json:"screenshot_failure_code"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	SubmittedAt           pgtype.Timestamptz `json:"submitted_at"`
+}
+
 type Identity struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -740,6 +783,27 @@ type RecordingDataKey struct {
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecordingFleetNode struct {
+	Environment     string             `json:"environment"`
+	Role            string             `json:"role"`
+	ProviderID      string             `json:"provider_id"`
+	NodeName        string             `json:"node_name"`
+	Region          string             `json:"region"`
+	ReleaseID       string             `json:"release_id"`
+	ImageDigest     string             `json:"image_digest"`
+	BootGeneration  int64              `json:"boot_generation"`
+	InventoryDigest string             `json:"inventory_digest"`
+	WorkerID        pgtype.UUID        `json:"worker_id"`
+	State           string             `json:"state"`
+	Ready           bool               `json:"ready"`
+	AdmissionOpen   bool               `json:"admission_open"`
+	ReadyCapacity   int32              `json:"ready_capacity"`
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type RecordingJob struct {
 	ID                   pgtype.UUID        `json:"id"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
@@ -791,15 +855,192 @@ type RecordingPipeline struct {
 	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	// Immutable recording clock origin established by the first authoritative capture-ready callback.
+	CaptureReadyAt pgtype.Timestamptz `json:"capture_ready_at"`
 }
 
 type RecordingPoolHealth struct {
-	Role          string             `json:"role"`
-	AdmissionOpen bool               `json:"admission_open"`
-	ReadyCapacity int32              `json:"ready_capacity"`
-	Reason        string             `json:"reason"`
-	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Role           string             `json:"role"`
+	AdmissionOpen  bool               `json:"admission_open"`
+	ReadyCapacity  int32              `json:"ready_capacity"`
+	Reason         string             `json:"reason"`
+	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DemandRevision string             `json:"demand_revision"`
+}
+
+type RecordingPresentation struct {
+	PresentationHandle         pgtype.UUID        `json:"presentation_handle"`
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	SpaceID                    pgtype.UUID        `json:"space_id"`
+	EpisodeID                  pgtype.UUID        `json:"episode_id"`
+	RecordingID                pgtype.UUID        `json:"recording_id"`
+	CaptureEpoch               int64              `json:"capture_epoch"`
+	SchemaVersion              string             `json:"schema_version"`
+	ProfileVersion             string             `json:"profile_version"`
+	DurationMillis             int64              `json:"duration_millis"`
+	PresentationSha256         []byte             `json:"presentation_sha256"`
+	PresentationObjectKey      string             `json:"presentation_object_key"`
+	PresentationObjectVersion  string             `json:"presentation_object_version"`
+	PresentationObjectEtag     string             `json:"presentation_object_etag"`
+	PresentationContentType    string             `json:"presentation_content_type"`
+	PresentationByteSize       int64              `json:"presentation_byte_size"`
+	AssetManifestObjectKey     string             `json:"asset_manifest_object_key"`
+	AssetManifestObjectVersion string             `json:"asset_manifest_object_version"`
+	AssetManifestObjectEtag    string             `json:"asset_manifest_object_etag"`
+	AssetManifestContentType   string             `json:"asset_manifest_content_type"`
+	AssetManifestByteSize      int64              `json:"asset_manifest_byte_size"`
+	AssetManifestSha256        []byte             `json:"asset_manifest_sha256"`
+	FrozenAt                   pgtype.Timestamptz `json:"frozen_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingPresentationAsset struct {
+	PresentationHandle pgtype.UUID        `json:"presentation_handle"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	RecordingID        pgtype.UUID        `json:"recording_id"`
+	Ordinal            int16              `json:"ordinal"`
+	AssetID            string             `json:"asset_id"`
+	AssetKind          string             `json:"asset_kind"`
+	ObjectKey          string             `json:"object_key"`
+	ObjectVersion      string             `json:"object_version"`
+	ObjectEtag         string             `json:"object_etag"`
+	ContentType        string             `json:"content_type"`
+	ByteSize           int64              `json:"byte_size"`
+	Sha256             []byte             `json:"sha256"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingPresentationBaseline struct {
+	PresentationHandle        pgtype.UUID        `json:"presentation_handle"`
+	TenantID                  pgtype.UUID        `json:"tenant_id"`
+	SpaceID                   pgtype.UUID        `json:"space_id"`
+	EpisodeID                 pgtype.UUID        `json:"episode_id"`
+	RecordingID               pgtype.UUID        `json:"recording_id"`
+	SchemaVersion             string             `json:"schema_version"`
+	ProfileVersion            string             `json:"profile_version"`
+	Profile                   []byte             `json:"profile"`
+	SpaceName                 string             `json:"space_name"`
+	EpisodeControlRevision    int64              `json:"episode_control_revision"`
+	EpisodeFoldedState        []byte             `json:"episode_folded_state"`
+	ParticipantFacts          []byte             `json:"participant_facts"`
+	ChatHeadSequence          int64              `json:"chat_head_sequence"`
+	ChatRetainedFloorSequence pgtype.Int8        `json:"chat_retained_floor_sequence"`
+	WhiteboardSceneID         pgtype.UUID        `json:"whiteboard_scene_id"`
+	WhiteboardRevision        pgtype.Int8        `json:"whiteboard_revision"`
+	WhiteboardSnapshot        []byte             `json:"whiteboard_snapshot"`
+	BaselineAt                pgtype.Timestamptz `json:"baseline_at"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingPresentationReaction struct {
+	ReactionID            pgtype.UUID        `json:"reaction_id"`
+	PresentationHandle    pgtype.UUID        `json:"presentation_handle"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	ParticipantGeneration int64              `json:"participant_generation"`
+	DisplayName           string             `json:"display_name"`
+	Reaction              string             `json:"reaction"`
+	OccurredAt            pgtype.Timestamptz `json:"occurred_at"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingPresentationSource struct {
+	PresentationHandle          pgtype.UUID        `json:"presentation_handle"`
+	TenantID                    pgtype.UUID        `json:"tenant_id"`
+	SpaceID                     pgtype.UUID        `json:"space_id"`
+	EpisodeID                   pgtype.UUID        `json:"episode_id"`
+	RecordingID                 pgtype.UUID        `json:"recording_id"`
+	CaptureEpoch                int64              `json:"capture_epoch"`
+	CaptureReadyAt              pgtype.Timestamptz `json:"capture_ready_at"`
+	EpisodeControlStartRevision int64              `json:"episode_control_start_revision"`
+	EpisodeControlEvents        []byte             `json:"episode_control_events"`
+	EpisodeControlEndRevision   int64              `json:"episode_control_end_revision"`
+	ParticipantFacts            []byte             `json:"participant_facts"`
+	ChatStartSequence           int64              `json:"chat_start_sequence"`
+	ChatRetainedFloorSequence   pgtype.Int8        `json:"chat_retained_floor_sequence"`
+	InitialChatMessages         []byte             `json:"initial_chat_messages"`
+	WhiteboardStartRevision     int64              `json:"whiteboard_start_revision"`
+	WhiteboardEvents            []byte             `json:"whiteboard_events"`
+	WhiteboardEndRevision       int64              `json:"whiteboard_end_revision"`
+	CapturePlanStartRevision    int64              `json:"capture_plan_start_revision"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingRenderCommit struct {
+	RenderJobID           pgtype.UUID        `json:"render_job_id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	AttemptCount          int32              `json:"attempt_count"`
+	FencingGeneration     int64              `json:"fencing_generation"`
+	CaptureEpoch          int64              `json:"capture_epoch"`
+	RenderInputHandle     pgtype.UUID        `json:"render_input_handle"`
+	CommitDigest          []byte             `json:"commit_digest"`
+	PresentationSha256    []byte             `json:"presentation_sha256"`
+	DurationMillis        int64              `json:"duration_millis"`
+	VideoAllocationID     pgtype.UUID        `json:"video_allocation_id"`
+	FfprobeFactsDigest    []byte             `json:"ffprobe_facts_digest"`
+	TranscriptionSourceID pgtype.UUID        `json:"transcription_source_id"`
+	TranscriptionJobIds   []pgtype.UUID      `json:"transcription_job_ids"`
+	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
+}
+
+type RecordingRenderInput struct {
+	RenderInputHandle          pgtype.UUID        `json:"render_input_handle"`
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	SpaceID                    pgtype.UUID        `json:"space_id"`
+	EpisodeID                  pgtype.UUID        `json:"episode_id"`
+	RecordingID                pgtype.UUID        `json:"recording_id"`
+	RenderJobID                pgtype.UUID        `json:"render_job_id"`
+	AttemptCount               int32              `json:"attempt_count"`
+	FencingGeneration          int64              `json:"fencing_generation"`
+	CaptureEpoch               int64              `json:"capture_epoch"`
+	EnvelopeDigest             []byte             `json:"envelope_digest"`
+	KeyHandle                  pgtype.UUID        `json:"key_handle"`
+	ObjectHandle               pgtype.UUID        `json:"object_handle"`
+	PresentationHandle         pgtype.UUID        `json:"presentation_handle"`
+	PresentationSchemaVersion  string             `json:"presentation_schema_version"`
+	PresentationProfileVersion string             `json:"presentation_profile_version"`
+	PresentationSha256         []byte             `json:"presentation_sha256"`
+	PresentationDurationMillis int64              `json:"presentation_duration_millis"`
+	CaptureReadyAt             pgtype.Timestamptz `json:"capture_ready_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingRenderObjectAllocation struct {
+	ID                     pgtype.UUID        `json:"id"`
+	ReservationRequestID   pgtype.UUID        `json:"reservation_request_id"`
+	AllocationVersion      int64              `json:"allocation_version"`
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	EpisodeID              pgtype.UUID        `json:"episode_id"`
+	RecordingID            pgtype.UUID        `json:"recording_id"`
+	RenderJobID            pgtype.UUID        `json:"render_job_id"`
+	RenderInputHandle      pgtype.UUID        `json:"render_input_handle"`
+	ObjectHandle           pgtype.UUID        `json:"object_handle"`
+	AttemptCount           int32              `json:"attempt_count"`
+	FencingGeneration      int64              `json:"fencing_generation"`
+	CaptureEpoch           int64              `json:"capture_epoch"`
+	EnvelopeDigest         []byte             `json:"envelope_digest"`
+	Purpose                string             `json:"purpose"`
+	State                  string             `json:"state"`
+	ObjectKey              string             `json:"object_key"`
+	ExpectedContentType    pgtype.Text        `json:"expected_content_type"`
+	ExpectedByteSize       pgtype.Int8        `json:"expected_byte_size"`
+	ExpectedSha256         []byte             `json:"expected_sha256"`
+	ExpectedDurationMillis pgtype.Int8        `json:"expected_duration_millis"`
+	UploadTokenHash        []byte             `json:"upload_token_hash"`
+	UploadExpiresAt        pgtype.Timestamptz `json:"upload_expires_at"`
+	ObjectVersion          pgtype.Text        `json:"object_version"`
+	ObjectEtag             pgtype.Text        `json:"object_etag"`
+	ObjectContentType      pgtype.Text        `json:"object_content_type"`
+	ObjectByteSize         pgtype.Int8        `json:"object_byte_size"`
+	ObjectSha256           []byte             `json:"object_sha256"`
+	CommittedAt            pgtype.Timestamptz `json:"committed_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecordingReservation struct {
@@ -822,32 +1063,54 @@ type RecordingReservation struct {
 }
 
 type RecordingTranscriptionSource struct {
-	RecordingID         pgtype.UUID        `json:"recording_id"`
-	TenantID            pgtype.UUID        `json:"tenant_id"`
-	ManifestKey         string             `json:"manifest_key"`
-	ManifestSha256      []byte             `json:"manifest_sha256"`
-	ManifestSize        int64              `json:"manifest_size"`
-	ManifestContentType string             `json:"manifest_content_type"`
-	SchemaVersion       int32              `json:"schema_version"`
-	CommittedAt         pgtype.Timestamptz `json:"committed_at"`
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	ManifestKey           string             `json:"manifest_key"`
+	ManifestSha256        []byte             `json:"manifest_sha256"`
+	ManifestSize          int64              `json:"manifest_size"`
+	ManifestContentType   string             `json:"manifest_content_type"`
+	SchemaVersion         int32              `json:"schema_version"`
+	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
+	Generation            int64              `json:"generation"`
+	CommitDigest          []byte             `json:"commit_digest"`
+	PresentationSha256    []byte             `json:"presentation_sha256"`
+	ManifestAllocationID  pgtype.UUID        `json:"manifest_allocation_id"`
+	ManifestObjectVersion pgtype.Text        `json:"manifest_object_version"`
+	ManifestEtag          pgtype.Text        `json:"manifest_etag"`
+	Status                string             `json:"status"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	LeaseTranscriptID     pgtype.UUID        `json:"lease_transcript_id"`
+	LeaseExpiresAt        pgtype.Timestamptz `json:"lease_expires_at"`
+	CleanupDueAt          pgtype.Timestamptz `json:"cleanup_due_at"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }
 
 type RecordingTranscriptionSourceChunk struct {
-	ID             pgtype.UUID `json:"id"`
-	RecordingID    pgtype.UUID `json:"recording_id"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	ChunkIndex     int32       `json:"chunk_index"`
-	Generation     int64       `json:"generation"`
-	StartMs        int64       `json:"start_ms"`
-	EndMs          int64       `json:"end_ms"`
-	ParticipantRef pgtype.Text `json:"participant_ref"`
-	TrackEpoch     pgtype.Text `json:"track_epoch"`
-	IdentityKind   string      `json:"identity_kind"`
-	TrackClass     string      `json:"track_class"`
-	StorageKey     string      `json:"storage_key"`
-	Checksum       []byte      `json:"checksum"`
-	Size           int64       `json:"size"`
-	ContentType    string      `json:"content_type"`
+	ID                    pgtype.UUID `json:"id"`
+	RecordingID           pgtype.UUID `json:"recording_id"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	ChunkIndex            int32       `json:"chunk_index"`
+	Generation            int64       `json:"generation"`
+	StartMs               int64       `json:"start_ms"`
+	EndMs                 int64       `json:"end_ms"`
+	ParticipantRef        pgtype.Text `json:"participant_ref"`
+	TrackEpoch            pgtype.Text `json:"track_epoch"`
+	IdentityKind          string      `json:"identity_kind"`
+	TrackClass            string      `json:"track_class"`
+	StorageKey            string      `json:"storage_key"`
+	Checksum              []byte      `json:"checksum"`
+	Size                  int64       `json:"size"`
+	ContentType           string      `json:"content_type"`
+	TrackID               pgtype.Text `json:"track_id"`
+	ParticipantGeneration pgtype.Int8 `json:"participant_generation"`
+	DisplayNameSnapshot   pgtype.Text `json:"display_name_snapshot"`
+	Overlap               bool        `json:"overlap"`
+	SourceStartMs         int64       `json:"source_start_ms"`
+	SourceEndMs           int64       `json:"source_end_ms"`
+	AllocationID          pgtype.UUID `json:"allocation_id"`
+	ObjectVersion         pgtype.Text `json:"object_version"`
+	ObjectEtag            pgtype.Text `json:"object_etag"`
 }
 
 type Space struct {
@@ -1457,6 +1720,7 @@ type Transcription struct {
 	DeletedAt                 pgtype.Timestamptz `json:"deleted_at"`
 	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	SourceExpiresAt           pgtype.Timestamptz `json:"source_expires_at"`
 }
 
 type TranscriptionAttempt struct {
@@ -1522,6 +1786,7 @@ type TranscriptionCleanupJob struct {
 	ProviderCopyStatus string             `json:"provider_copy_status"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	RecordingID        pgtype.UUID        `json:"recording_id"`
 }
 
 type User struct {

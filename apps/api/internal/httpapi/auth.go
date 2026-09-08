@@ -221,7 +221,7 @@ func logoutEndpoint(service AuthenticationService, cookies SessionCookieOptions)
 
 		return statusResponse{Status: "ok"}, nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(accountRouteAuth()).
 		Middleware(requireAuthentication(service)).
 		Responds(http.StatusOK, "Status", statusResponse{}).
 		Errors(

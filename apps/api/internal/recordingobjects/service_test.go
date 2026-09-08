@@ -42,24 +42,28 @@ func TestAllocateGeneratesServerOwnedObjectAndOpaqueToken(t *testing.T) {
 }
 
 func TestCommitRereadsAndPersistsAuthoritativeFacts(t *testing.T) {
-	now := time.Unix(100, 0).UTC()
-	checksum := bytesOf(32, 3)
-	store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}, facts: objectstorage.ObjectFacts{Object: objectstorage.Object{ETag: "etag", VersionID: "version", ContentType: "application/octet-stream", Size: 128, ChecksumSHA256: base64.StdEncoding.EncodeToString(checksum)}}}
-	repository := &repositoryStub{}
-	service, err := recordingobjects.NewService(objectstorage.NewService(store), repository, recordingobjects.Config{Now: func() time.Time { return now }})
-	if err != nil {
-		t.Fatalf("new service: %v", err)
-	}
-	allocation, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{Authority: testAuthority(), SequenceNumber: 1, Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute)})
-	if err != nil {
-		t.Fatalf("allocate: %v", err)
-	}
-	bundle, err := service.Commit(context.Background(), recordingobjects.CommitInput{Authority: testAuthority(), AllocationID: allocation.AllocationID, UploadToken: allocation.UploadToken, ManifestDigest: bytesOf(32, 5), MonotonicEndMillis: 10, MediaEndMillis: 10})
-	if err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	if bundle.ObjectVersion != "version" || bundle.ObjectETag != "etag" || !strings.EqualFold(string(bundle.ObjectChecksumSHA256), string(checksum)) || repository.commitCalls != 1 {
-		t.Fatalf("committed bundle = %#v, calls = %d", bundle, repository.commitCalls)
+	for _, version := range []string{"version", ""} {
+		t.Run("version="+version, func(t *testing.T) {
+			now := time.Unix(100, 0).UTC()
+			checksum := bytesOf(32, 3)
+			store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}, facts: objectstorage.ObjectFacts{Object: objectstorage.Object{ETag: "etag", VersionID: version, ContentType: "application/octet-stream", Size: 128, ChecksumSHA256: base64.StdEncoding.EncodeToString(checksum)}}}
+			repository := &repositoryStub{}
+			service, err := recordingobjects.NewService(objectstorage.NewService(store), repository, recordingobjects.Config{Now: func() time.Time { return now }})
+			if err != nil {
+				t.Fatalf("new service: %v", err)
+			}
+			allocation, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{Authority: testAuthority(), SequenceNumber: 1, Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute)})
+			if err != nil {
+				t.Fatalf("allocate: %v", err)
+			}
+			bundle, err := service.Commit(context.Background(), recordingobjects.CommitInput{Authority: testAuthority(), AllocationID: allocation.AllocationID, UploadToken: allocation.UploadToken, ManifestDigest: bytesOf(32, 5), MonotonicEndMillis: 10, MediaEndMillis: 10})
+			if err != nil {
+				t.Fatalf("commit: %v", err)
+			}
+			if bundle.ObjectVersion != version || bundle.ObjectETag != "etag" || !strings.EqualFold(string(bundle.ObjectChecksumSHA256), string(checksum)) || repository.commitCalls != 1 {
+				t.Fatalf("committed bundle = %#v, calls = %d", bundle, repository.commitCalls)
+			}
+		})
 	}
 }
 

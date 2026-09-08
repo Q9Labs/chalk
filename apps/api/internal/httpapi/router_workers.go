@@ -21,9 +21,11 @@ func NewPrivateWorkerRouter(providerBridge http.Handler, options Options) http.H
 		mux.Handle("/internal/v1/sync/", providerBridge)
 	}
 	if options.Capabilities.Recording {
+		mux.Handle("/internal/v1/recorder/fleet/", NewRecorderFleetControllerRouter(options.RecorderFleetController, options.RecorderFleetVerifier, options.RecorderFleetEnvironment))
 		mux.Handle("/internal/v1/recorder/", NewRecorderWorkerRouterWithControls(options.RecorderWorker, options.RecorderWorkerVerifier, RecorderWorkerControlServices{
 			CapturePlans: options.RecorderCapturePlans, CaptureSignaling: options.RecorderCaptureSignaling,
 			RecordingKeys: options.RecorderRecordingKeys, RecordingObjects: options.RecorderRecordingObjects, RecordingLifecycle: options.RecorderRecordingLifecycle,
+			RenderAuthority: options.RecorderRenderAuthority, FleetAuthority: options.RecorderFleetWorker,
 		}))
 	}
 	return mux

@@ -58,9 +58,13 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 	if err != nil {
 		return fmt.Errorf("create recorder capture daemon: %w", err)
 	}
+	reporter, err := recorderworker.NewReadinessReporter(control)
+	if err != nil {
+		return fmt.Errorf("create recorder capture readiness reporter: %w", err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return daemon.Run(ctx)
+	return reporter.Run(ctx, daemon)
 }
 
 func parseCommandBaseURL(raw string) (*url.URL, error) {

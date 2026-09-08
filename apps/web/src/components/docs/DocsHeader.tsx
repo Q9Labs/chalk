@@ -1,8 +1,8 @@
 import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Logo } from "@q9labsai/chalk-react";
+import { AnimatedHugeiconsIcon as HugeiconsIcon } from "@q9labsai/chalk-react/utils";
 import type { RefObject } from "react";
 
 type DocsHeaderProps = {

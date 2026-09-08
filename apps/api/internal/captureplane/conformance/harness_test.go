@@ -9,7 +9,12 @@ import (
 )
 
 func TestRunExercisesAllOperationsAndRetryIdempotency(t *testing.T) {
-	Run(t, newFakePlane(), validFixture())
+	t.Run("provider offer adapter", func(t *testing.T) {
+		Run(t, newFakePlane(), validFixture())
+	})
+	t.Run("direct negotiation adapter", func(t *testing.T) {
+		Run(t, directPlane{}, validFixture())
+	})
 }
 
 type fakePlane struct {
@@ -86,6 +91,68 @@ func (p *fakePlane) CloseCaptureTracks(context.Context, captureplane.CloseCaptur
 
 func (p *fakePlane) CloseCaptureConnection(context.Context, captureplane.CloseCaptureConnectionInput) (captureplane.CloseCaptureConnectionResult, error) {
 	return captureplane.CloseCaptureConnectionResult{Connection: p.connection, Closed: true}, nil
+}
+
+// directPlane is deliberately independent from fakePlane: it derives every
+// result from the command and completes pulls without a second SDP exchange.
+type directPlane struct{}
+
+func (directPlane) CreateCaptureConnection(_ context.Context, input captureplane.CreateCaptureConnectionInput) (captureplane.CreateCaptureConnectionResult, error) {
+	return captureplane.CreateCaptureConnectionResult{
+		Connection:  directConnection(input.Metadata),
+		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
+	}, nil
+}
+
+func (directPlane) PullCaptureTracks(_ context.Context, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, error) {
+	tracks := make([]captureplane.PulledCaptureTrack, 0, len(input.Tracks))
+	for index, track := range input.Tracks {
+		tracks = append(tracks, captureplane.PulledCaptureTrack{
+			CaptureTrack: track,
+			MID:          captureplane.ProviderReference("direct-mid-" + string(rune('1'+index))),
+		})
+	}
+	return captureplane.PullCaptureTracksResult{
+		Connection: directConnection(input.Metadata), Tracks: tracks,
+		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
+	}, nil
+}
+
+func (directPlane) RenegotiateCaptureConnection(_ context.Context, input captureplane.RenegotiateCaptureConnectionInput) (captureplane.RenegotiateCaptureConnectionResult, error) {
+	return captureplane.RenegotiateCaptureConnectionResult{
+		Connection:  directConnection(input.Metadata),
+		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
+	}, nil
+}
+
+func (directPlane) InspectCaptureConnection(_ context.Context, input captureplane.InspectCaptureConnectionInput) (captureplane.InspectCaptureConnectionResult, error) {
+	tracks := make([]captureplane.ObservedCaptureTrack, 0, len(input.Tracks))
+	for _, track := range input.Tracks {
+		tracks = append(tracks, captureplane.ObservedCaptureTrack{PulledCaptureTrack: track, Active: true})
+	}
+	return captureplane.InspectCaptureConnectionResult{
+		Connection: directConnection(input.Metadata), State: captureplane.CaptureConnectionConnected, Tracks: tracks,
+		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
+	}, nil
+}
+
+func (directPlane) CloseCaptureTracks(_ context.Context, input captureplane.CloseCaptureTracksInput) (captureplane.CloseCaptureTracksResult, error) {
+	return captureplane.CloseCaptureTracksResult{
+		Connection: directConnection(input.Metadata), Tracks: append([]captureplane.PulledCaptureTrack(nil), input.Tracks...),
+		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
+	}, nil
+}
+
+func (directPlane) CloseCaptureConnection(_ context.Context, input captureplane.CloseCaptureConnectionInput) (captureplane.CloseCaptureConnectionResult, error) {
+	return captureplane.CloseCaptureConnectionResult{Connection: directConnection(input.Metadata), Closed: true}, nil
+}
+
+func directConnection(metadata captureplane.OperationMetadata) captureplane.CaptureConnection {
+	return captureplane.CaptureConnection{
+		ConnectionReference: "direct-connection",
+		CaptureEpoch:        metadata.CaptureEpoch,
+		PlanRevision:        metadata.PlanRevision,
+	}
 }
 
 func validFixture() Fixture {

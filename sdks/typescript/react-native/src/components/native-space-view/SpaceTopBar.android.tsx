@@ -1,3 +1,4 @@
+import type { Recording } from "@q9labsai/chalk-client";
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image, Platform, StyleSheet, Text, View } from "react-native";
@@ -10,9 +11,10 @@ export interface SpaceTopBarProps {
   participantCount: number;
   formattedDuration: string;
   logoUrl?: string;
+  recording?: Recording | null;
 }
 
-export function SpaceTopBarAndroid({ spaceName, participantCount, formattedDuration, logoUrl }: SpaceTopBarProps): React.JSX.Element {
+export function SpaceTopBarAndroid({ spaceName, participantCount, formattedDuration, logoUrl, recording }: SpaceTopBarProps): React.JSX.Element {
   const theme = useNativeTheme();
   return (
     <View style={[styles.topBar, { backgroundColor: theme.colors.darkCanvas, borderColor: theme.colors.border }]}>
@@ -26,6 +28,11 @@ export function SpaceTopBarAndroid({ spaceName, participantCount, formattedDurat
           <Text style={[styles.timerText, { color: theme.colors.mutedForeground }]}>{formattedDuration}</Text>
         </View>
       </View>
+      {recording && recording.status !== "stopped" ? (
+        <Text accessibilityLiveRegion="polite" style={[styles.timerText, { color: theme.colors.error }]}>
+          {recordingLabels[recording.status]}
+        </Text>
+      ) : null}
       <View style={[styles.topBarRight, { backgroundColor: theme.colors.surface }]}>
         <HugeiconsIcon icon={UserGroupIcon} size={14} color={theme.colors.foreground} />
         <Text style={[styles.topBarCount, { color: theme.colors.foreground }]}>{participantCount}</Text>
@@ -33,6 +40,14 @@ export function SpaceTopBarAndroid({ spaceName, participantCount, formattedDurat
     </View>
   );
 }
+
+const recordingLabels = {
+  starting: "Starting recording…",
+  recording: "Recording",
+  stopping: "Stopping recording…",
+  stopped: "Recording stopped",
+  failed: "Recording failed",
+};
 
 export { SpaceTopBarAndroid as SpaceTopBar };
 

@@ -11,20 +11,21 @@ import (
 
 const preDispatchReleaseTimeout = 2 * time.Second
 
-// Service serializes typed commands through a durable Port and a provider-
-// neutral CapturePlane. It never starts a background goroutine: waits are
-// bounded by context and use one timer at a time.
+// Service serializes typed commands through a durable Port and resolves the
+// Episode-bound CapturePlane before provider dispatch. It never starts a
+// background goroutine: waits are bounded by context and use one timer at a
+// time.
 type Service struct {
-	port    Port
-	plane   captureplane.CapturePlane
-	options Options
+	port     Port
+	resolver captureplane.Resolver
+	options  Options
 }
 
-func NewService(port Port, plane captureplane.CapturePlane, options Options) (*Service, error) {
-	if port == nil || plane == nil {
-		return nil, fmt.Errorf("%w: persistence port and capture plane are required", ErrInvalidInput)
+func NewService(port Port, resolver captureplane.Resolver, options Options) (*Service, error) {
+	if port == nil || resolver == nil {
+		return nil, fmt.Errorf("%w: persistence port and capture plane resolver are required", ErrInvalidInput)
 	}
-	return &Service{port: port, plane: plane, options: options.withDefaults()}, nil
+	return &Service{port: port, resolver: resolver, options: options.withDefaults()}, nil
 }
 
 // Execute prepares, serializes, and dispatches one provider command. A
@@ -54,6 +55,10 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 		return Execution{Key: key, Result: outcome, ResultBytes: append([]byte(nil), prepared.Outcome.ResultBytes...), Replayed: true}, nil
 	}
 	if err := ValidatePreparedCommand(PreparedCommand{SignalingHandle: command.SignalingHandle, Authority: command.Authority, Identity: command.Identity, Input: command.Input}, prepared.CurrentProjection); err != nil {
+		return Execution{}, err
+	}
+	plane, err := s.resolvePlane(ctx, metadata.Identity)
+	if err != nil {
 		return Execution{}, err
 	}
 
@@ -120,7 +125,7 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 			}
 		}
 
-		result, providerErr := s.dispatch(ctx, key.Operation, command.Input)
+		result, providerErr := s.dispatch(ctx, plane, key.Operation, command.Input)
 		if providerErr != nil {
 			failure := providerFailure(providerErr)
 			if err := validateProviderError(failure); err != nil {
@@ -145,7 +150,7 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 		if err := s.optionsNowBeforeLease(command.Lease); err != nil {
 			return Execution{}, ErrAmbiguousOutcome
 		}
-		nextProjection, err := resultProjection(command.SignalingHandle, command.Authority, key.Operation, result, projection)
+		nextProjection, err := ProjectResult(command.SignalingHandle, command.Authority, key.Operation, result, projection)
 		if err != nil {
 			return Execution{}, ProviderFailureError{Failure: captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_projection", Retryable: false}}
 		}
@@ -279,25 +284,39 @@ func normalizePortError(err error) error {
 	return err
 }
 
-func (s *Service) dispatch(ctx context.Context, operation captureplane.OperationKind, input CommandInput) (CommandResult, error) {
+func (s *Service) resolvePlane(ctx context.Context, identity captureplane.CaptureIdentity) (captureplane.CapturePlane, error) {
+	plane, err := s.resolver.Resolve(ctx, identity)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, ProviderFailureError{Failure: providerFailure(err)}
+	}
+	if plane == nil {
+		return nil, ProviderFailureError{Failure: captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "resolver_contract", Retryable: false}}
+	}
+	return plane, nil
+}
+
+func (s *Service) dispatch(ctx context.Context, plane captureplane.CapturePlane, operation captureplane.OperationKind, input CommandInput) (CommandResult, error) {
 	switch operation {
 	case captureplane.OperationCreateCaptureConnection:
-		result, err := s.plane.CreateCaptureConnection(ctx, *input.CreateCaptureConnection)
+		result, err := plane.CreateCaptureConnection(ctx, *input.CreateCaptureConnection)
 		return CommandResult{CreateCaptureConnection: &result}, err
 	case captureplane.OperationPullCaptureTracks:
-		result, err := s.plane.PullCaptureTracks(ctx, *input.PullCaptureTracks)
+		result, err := plane.PullCaptureTracks(ctx, *input.PullCaptureTracks)
 		return CommandResult{PullCaptureTracks: &result}, err
 	case captureplane.OperationRenegotiateCaptureConnection:
-		result, err := s.plane.RenegotiateCaptureConnection(ctx, *input.RenegotiateCaptureConnection)
+		result, err := plane.RenegotiateCaptureConnection(ctx, *input.RenegotiateCaptureConnection)
 		return CommandResult{RenegotiateCaptureConnection: &result}, err
 	case captureplane.OperationInspectCaptureConnection:
-		result, err := s.plane.InspectCaptureConnection(ctx, *input.InspectCaptureConnection)
+		result, err := plane.InspectCaptureConnection(ctx, *input.InspectCaptureConnection)
 		return CommandResult{InspectCaptureConnection: &result}, err
 	case captureplane.OperationCloseCaptureTracks:
-		result, err := s.plane.CloseCaptureTracks(ctx, *input.CloseCaptureTracks)
+		result, err := plane.CloseCaptureTracks(ctx, *input.CloseCaptureTracks)
 		return CommandResult{CloseCaptureTracks: &result}, err
 	case captureplane.OperationCloseCaptureConnection:
-		result, err := s.plane.CloseCaptureConnection(ctx, *input.CloseCaptureConnection)
+		result, err := plane.CloseCaptureConnection(ctx, *input.CloseCaptureConnection)
 		return CommandResult{CloseCaptureConnection: &result}, err
 	default:
 		return CommandResult{}, fmt.Errorf("%w: unknown operation %s", ErrInvalidCommand, operation)

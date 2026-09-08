@@ -99,6 +99,10 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteStatusMonitorIngest(ctx)
 	case ServiceEpisodeDiagnosticsScenario:
 		return runServiceEpisodeDiagnostics(ctx)
+	case ServiceFeedbackSubmissionScenario:
+		return runServiceFeedbackSubmission(ctx)
+	case EdgeFeedbackValidationFailureScenario:
+		return runEdgeFeedbackValidationFailure(ctx)
 	case ServiceDashboardSpaceJoinScenario:
 		return runServiceDashboardSpaceJoin(ctx)
 	case ServicePublicInviteLifecycleScenario:

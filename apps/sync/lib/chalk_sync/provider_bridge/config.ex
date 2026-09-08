@@ -3,6 +3,7 @@ defmodule ChalkSync.ProviderBridge.Config do
 
   alias ChalkSync.ProviderBridge.Client
   alias ChalkSync.ProviderBridge.MediaPlane
+  alias ChalkSync.ProviderBridge.RecordingPlane
 
   # Cloudflare Realtime may block a episode operation for up to five seconds
   # while the PeerConnection becomes usable. Leave transport and mTLS overhead
@@ -13,13 +14,23 @@ defmodule ChalkSync.ProviderBridge.Config do
 
   @spec media_plane!(keyword(), pos_integer()) :: {module(), MediaPlane.t()}
   def media_plane!(options, consumer_timeout_ms) do
+    client = consumer_client!(options, consumer_timeout_ms)
+    {MediaPlane, MediaPlane.new!(client)}
+  end
+
+  @spec recording_plane!(keyword(), pos_integer()) :: {module(), RecordingPlane.t()}
+  def recording_plane!(options, consumer_timeout_ms) do
+    client = consumer_client!(options, consumer_timeout_ms)
+    {RecordingPlane, RecordingPlane.new!(client)}
+  end
+
+  defp consumer_client!(options, consumer_timeout_ms) do
     if @request_timeout_ms >= consumer_timeout_ms do
       raise ArgumentError,
             "provider bridge request timeout must be shorter than the external operation timeout"
     end
 
-    client = client!(options)
-    {MediaPlane, MediaPlane.new!(client)}
+    client!(options)
   end
 
   @spec install_media_plane!(keyword(), pos_integer()) :: {module(), MediaPlane.t()}

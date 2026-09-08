@@ -12,9 +12,27 @@ select
     jobs.lease_owner,
     jobs.lease_token,
     jobs.lease_expires_at,
+    pipelines.capture_ready_at,
     sync_recordings.status as recording_status,
     sync_recordings.start_external_operation_id,
-    sync_recordings.stop_external_operation_id
+    sync_recordings.stop_external_operation_id,
+    (sync_recordings.status = 'stopped'
+     and pipelines.stop_requested_at is not null
+     and exists (
+        select 1
+        from sync_external_operations operation
+        join episodes episode
+          on episode.id = operation.episode_id
+         and episode.tenant_id = operation.tenant_id
+         and episode.space_id = operation.space_id
+        where operation.external_operation_id = pipelines.stop_operation_id
+          and operation.tenant_id = jobs.tenant_id
+          and operation.space_id = reservations.space_id
+          and operation.episode_id = jobs.episode_id
+          and operation.operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
+          and operation.status = 'applied'
+          and episode.status = 'ended'
+     ))::boolean as episode_stop_applied
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -41,10 +59,22 @@ where authority.job_id = sqlc.arg(job_id)
   and jobs.fencing_generation = sqlc.arg(fencing_generation)
   and jobs.lease_token = sqlc.arg(lease_token)
   and jobs.lease_owner = sqlc.arg(lease_owner)
-  and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
+  and jobs.lease_expires_at >= sqlc.arg(lease_expires_at)
+  and sqlc.arg(lease_expires_at)::timestamptz > clock_timestamp()
   and jobs.lease_expires_at > clock_timestamp()
-  and authority.lease_expires_at = sqlc.arg(lease_expires_at)
-for update of jobs, sync_recordings;
+for update of jobs, pipelines, sync_recordings;
+
+-- name: SetRecordingCaptureReadyAt :one
+update recording_pipelines
+set capture_ready_at = sqlc.arg(capture_ready_at),
+    state = 'capturing_segmented',
+    updated_at = now()
+where recording_id = sqlc.arg(recording_id)
+  and tenant_id = sqlc.arg(tenant_id)
+  and capture_epoch = sqlc.arg(capture_epoch)
+  and state in ('capture_leased', 'capturing_segmented')
+  and (capture_ready_at is null or capture_ready_at = sqlc.arg(capture_ready_at))
+returning capture_ready_at;
 
 -- name: LockRecordingCaptureLifecycleOperation :one
 select *

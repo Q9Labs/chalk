@@ -11,18 +11,296 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteRecordingTranscriptionSourceChunks = `-- name: DeleteRecordingTranscriptionSourceChunks :exec
-delete from recording_transcription_source_chunks
-where recording_id = $1
+const acquireRecordingTranscriptionSourceLease = `-- name: AcquireRecordingTranscriptionSourceLease :one
+update recording_transcription_sources
+set status = 'leased',
+    lease_transcript_id = $1,
+    lease_expires_at = expires_at + interval '2 hours'
+where recording_id = $2 and tenant_id = $3
+  and expires_at > $4::timestamptz
+  and (
+      (status = 'ready' and lease_transcript_id is null and lease_expires_at is null)
+      or (
+          status = 'leased'
+          and lease_transcript_id = $1
+          and lease_expires_at > $4::timestamptz
+      )
+  )
+returning recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at
 `
 
-func (q *Queries) DeleteRecordingTranscriptionSourceChunks(ctx context.Context, recordingID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteRecordingTranscriptionSourceChunks, recordingID)
-	return err
+type AcquireRecordingTranscriptionSourceLeaseParams struct {
+	TranscriptID pgtype.UUID        `json:"transcript_id"`
+	RecordingID  pgtype.UUID        `json:"recording_id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	Now          pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) AcquireRecordingTranscriptionSourceLease(ctx context.Context, arg AcquireRecordingTranscriptionSourceLeaseParams) (RecordingTranscriptionSource, error) {
+	row := q.db.QueryRow(ctx, acquireRecordingTranscriptionSourceLease,
+		arg.TranscriptID,
+		arg.RecordingID,
+		arg.TenantID,
+		arg.Now,
+	)
+	var i RecordingTranscriptionSource
+	err := row.Scan(
+		&i.RecordingID,
+		&i.TenantID,
+		&i.ManifestKey,
+		&i.ManifestSha256,
+		&i.ManifestSize,
+		&i.ManifestContentType,
+		&i.SchemaVersion,
+		&i.CommittedAt,
+		&i.Generation,
+		&i.CommitDigest,
+		&i.PresentationSha256,
+		&i.ManifestAllocationID,
+		&i.ManifestObjectVersion,
+		&i.ManifestEtag,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LeaseTranscriptID,
+		&i.LeaseExpiresAt,
+		&i.CleanupDueAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createRecordingTranscriptionSource = `-- name: CreateRecordingTranscriptionSource :one
+insert into recording_transcription_sources (
+    recording_id, tenant_id, generation, commit_digest, presentation_sha256,
+    manifest_key, manifest_allocation_id, manifest_object_version, manifest_etag, manifest_sha256,
+    manifest_size, manifest_content_type, schema_version, status, committed_at,
+    expires_at
+) values (
+    $1, $2, $3,
+    $4, $5, $6,
+    $7,
+    $8, $9,
+    $10, $11,
+    $12, 1, 'ready', $13,
+    $14
+)
+on conflict (recording_id) do nothing
+returning recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at
+`
+
+type CreateRecordingTranscriptionSourceParams struct {
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	Generation            int64              `json:"generation"`
+	CommitDigest          []byte             `json:"commit_digest"`
+	PresentationSha256    []byte             `json:"presentation_sha256"`
+	ManifestKey           string             `json:"manifest_key"`
+	ManifestAllocationID  pgtype.UUID        `json:"manifest_allocation_id"`
+	ManifestObjectVersion pgtype.Text        `json:"manifest_object_version"`
+	ManifestEtag          pgtype.Text        `json:"manifest_etag"`
+	ManifestSha256        []byte             `json:"manifest_sha256"`
+	ManifestSize          int64              `json:"manifest_size"`
+	ManifestContentType   string             `json:"manifest_content_type"`
+	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CreateRecordingTranscriptionSource(ctx context.Context, arg CreateRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error) {
+	row := q.db.QueryRow(ctx, createRecordingTranscriptionSource,
+		arg.RecordingID,
+		arg.TenantID,
+		arg.Generation,
+		arg.CommitDigest,
+		arg.PresentationSha256,
+		arg.ManifestKey,
+		arg.ManifestAllocationID,
+		arg.ManifestObjectVersion,
+		arg.ManifestEtag,
+		arg.ManifestSha256,
+		arg.ManifestSize,
+		arg.ManifestContentType,
+		arg.CommittedAt,
+		arg.ExpiresAt,
+	)
+	var i RecordingTranscriptionSource
+	err := row.Scan(
+		&i.RecordingID,
+		&i.TenantID,
+		&i.ManifestKey,
+		&i.ManifestSha256,
+		&i.ManifestSize,
+		&i.ManifestContentType,
+		&i.SchemaVersion,
+		&i.CommittedAt,
+		&i.Generation,
+		&i.CommitDigest,
+		&i.PresentationSha256,
+		&i.ManifestAllocationID,
+		&i.ManifestObjectVersion,
+		&i.ManifestEtag,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LeaseTranscriptID,
+		&i.LeaseExpiresAt,
+		&i.CleanupDueAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createRecordingTranscriptionSourceChunk = `-- name: CreateRecordingTranscriptionSourceChunk :one
+insert into recording_transcription_source_chunks (
+    id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms,
+    source_start_ms, source_end_ms, participant_ref, participant_generation,
+    track_id, track_epoch,
+    identity_kind, track_class, display_name_snapshot, overlap, storage_key,
+    allocation_id, object_version, object_etag, checksum, size, content_type
+) values (
+    $1, $2, $3,
+    $4, $5, $6,
+    $7, $8, $9,
+    $10, $11,
+    $12, $13,
+    $14, $15,
+    $16, $17, $18,
+    $19,
+    $20, $21, $22,
+    $23, $24
+)
+returning id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms, participant_ref, track_epoch, identity_kind, track_class, storage_key, checksum, size, content_type, track_id, participant_generation, display_name_snapshot, overlap, source_start_ms, source_end_ms, allocation_id, object_version, object_etag
+`
+
+type CreateRecordingTranscriptionSourceChunkParams struct {
+	ID                    pgtype.UUID `json:"id"`
+	RecordingID           pgtype.UUID `json:"recording_id"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	ChunkIndex            int32       `json:"chunk_index"`
+	Generation            int64       `json:"generation"`
+	StartMs               int64       `json:"start_ms"`
+	EndMs                 int64       `json:"end_ms"`
+	SourceStartMs         int64       `json:"source_start_ms"`
+	SourceEndMs           int64       `json:"source_end_ms"`
+	ParticipantRef        pgtype.Text `json:"participant_ref"`
+	ParticipantGeneration pgtype.Int8 `json:"participant_generation"`
+	TrackID               pgtype.Text `json:"track_id"`
+	TrackEpoch            pgtype.Text `json:"track_epoch"`
+	IdentityKind          string      `json:"identity_kind"`
+	TrackClass            string      `json:"track_class"`
+	DisplayNameSnapshot   pgtype.Text `json:"display_name_snapshot"`
+	Overlap               bool        `json:"overlap"`
+	StorageKey            string      `json:"storage_key"`
+	AllocationID          pgtype.UUID `json:"allocation_id"`
+	ObjectVersion         pgtype.Text `json:"object_version"`
+	ObjectEtag            pgtype.Text `json:"object_etag"`
+	Checksum              []byte      `json:"checksum"`
+	Size                  int64       `json:"size"`
+	ContentType           string      `json:"content_type"`
+}
+
+func (q *Queries) CreateRecordingTranscriptionSourceChunk(ctx context.Context, arg CreateRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error) {
+	row := q.db.QueryRow(ctx, createRecordingTranscriptionSourceChunk,
+		arg.ID,
+		arg.RecordingID,
+		arg.TenantID,
+		arg.ChunkIndex,
+		arg.Generation,
+		arg.StartMs,
+		arg.EndMs,
+		arg.SourceStartMs,
+		arg.SourceEndMs,
+		arg.ParticipantRef,
+		arg.ParticipantGeneration,
+		arg.TrackID,
+		arg.TrackEpoch,
+		arg.IdentityKind,
+		arg.TrackClass,
+		arg.DisplayNameSnapshot,
+		arg.Overlap,
+		arg.StorageKey,
+		arg.AllocationID,
+		arg.ObjectVersion,
+		arg.ObjectEtag,
+		arg.Checksum,
+		arg.Size,
+		arg.ContentType,
+	)
+	var i RecordingTranscriptionSourceChunk
+	err := row.Scan(
+		&i.ID,
+		&i.RecordingID,
+		&i.TenantID,
+		&i.ChunkIndex,
+		&i.Generation,
+		&i.StartMs,
+		&i.EndMs,
+		&i.ParticipantRef,
+		&i.TrackEpoch,
+		&i.IdentityKind,
+		&i.TrackClass,
+		&i.StorageKey,
+		&i.Checksum,
+		&i.Size,
+		&i.ContentType,
+		&i.TrackID,
+		&i.ParticipantGeneration,
+		&i.DisplayNameSnapshot,
+		&i.Overlap,
+		&i.SourceStartMs,
+		&i.SourceEndMs,
+		&i.AllocationID,
+		&i.ObjectVersion,
+		&i.ObjectEtag,
+	)
+	return i, err
+}
+
+const getRecordingTranscriptionPolicyForCommit = `-- name: GetRecordingTranscriptionPolicyForCommit :one
+select
+    case
+        when episodes.config_snapshot #>> '{artifact_policy,transcription,mode}' in ('on_demand', 'automatic')
+            then episodes.config_snapshot #>> '{artifact_policy,transcription,mode}'
+        else 'disabled'
+    end::text as transcription_mode,
+    coalesce((episodes.config_snapshot #>> '{artifact_policy,transcription,source_window_seconds}')::bigint, 0)::bigint as source_window_seconds
+from recordings
+join episodes on episodes.tenant_id = recordings.tenant_id
+    and episodes.id = recordings.episode_id
+    and episodes.space_id = recordings.space_id
+where recordings.tenant_id = $1
+  and recordings.space_id = $2
+  and recordings.episode_id = $3
+  and recordings.id = $4
+`
+
+type GetRecordingTranscriptionPolicyForCommitParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	SpaceID     pgtype.UUID `json:"space_id"`
+	EpisodeID   pgtype.UUID `json:"episode_id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+}
+
+type GetRecordingTranscriptionPolicyForCommitRow struct {
+	TranscriptionMode   string `json:"transcription_mode"`
+	SourceWindowSeconds int64  `json:"source_window_seconds"`
+}
+
+func (q *Queries) GetRecordingTranscriptionPolicyForCommit(ctx context.Context, arg GetRecordingTranscriptionPolicyForCommitParams) (GetRecordingTranscriptionPolicyForCommitRow, error) {
+	row := q.db.QueryRow(ctx, getRecordingTranscriptionPolicyForCommit,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.RecordingID,
+	)
+	var i GetRecordingTranscriptionPolicyForCommitRow
+	err := row.Scan(&i.TranscriptionMode, &i.SourceWindowSeconds)
+	return i, err
 }
 
 const getRecordingTranscriptionSource = `-- name: GetRecordingTranscriptionSource :one
-select recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at from recording_transcription_sources where recording_id = $1 and tenant_id = $2
+select recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at from recording_transcription_sources
+where recording_id = $1 and tenant_id = $2
 `
 
 type GetRecordingTranscriptionSourceParams struct {
@@ -42,13 +320,72 @@ func (q *Queries) GetRecordingTranscriptionSource(ctx context.Context, arg GetRe
 		&i.ManifestContentType,
 		&i.SchemaVersion,
 		&i.CommittedAt,
+		&i.Generation,
+		&i.CommitDigest,
+		&i.PresentationSha256,
+		&i.ManifestAllocationID,
+		&i.ManifestObjectVersion,
+		&i.ManifestEtag,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LeaseTranscriptID,
+		&i.LeaseExpiresAt,
+		&i.CleanupDueAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRecordingTranscriptionSourceChunk = `-- name: GetRecordingTranscriptionSourceChunk :one
+select id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms, participant_ref, track_epoch, identity_kind, track_class, storage_key, checksum, size, content_type, track_id, participant_generation, display_name_snapshot, overlap, source_start_ms, source_end_ms, allocation_id, object_version, object_etag from recording_transcription_source_chunks
+where id = $1
+  and recording_id = $2
+  and tenant_id = $3
+`
+
+type GetRecordingTranscriptionSourceChunkParams struct {
+	ID          pgtype.UUID `json:"id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+	TenantID    pgtype.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) GetRecordingTranscriptionSourceChunk(ctx context.Context, arg GetRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error) {
+	row := q.db.QueryRow(ctx, getRecordingTranscriptionSourceChunk, arg.ID, arg.RecordingID, arg.TenantID)
+	var i RecordingTranscriptionSourceChunk
+	err := row.Scan(
+		&i.ID,
+		&i.RecordingID,
+		&i.TenantID,
+		&i.ChunkIndex,
+		&i.Generation,
+		&i.StartMs,
+		&i.EndMs,
+		&i.ParticipantRef,
+		&i.TrackEpoch,
+		&i.IdentityKind,
+		&i.TrackClass,
+		&i.StorageKey,
+		&i.Checksum,
+		&i.Size,
+		&i.ContentType,
+		&i.TrackID,
+		&i.ParticipantGeneration,
+		&i.DisplayNameSnapshot,
+		&i.Overlap,
+		&i.SourceStartMs,
+		&i.SourceEndMs,
+		&i.AllocationID,
+		&i.ObjectVersion,
+		&i.ObjectEtag,
 	)
 	return i, err
 }
 
 const listRecordingTranscriptionSourceChunks = `-- name: ListRecordingTranscriptionSourceChunks :many
-select id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms, participant_ref, track_epoch, identity_kind, track_class, storage_key, checksum, size, content_type from recording_transcription_source_chunks
-where recording_id = $1 and tenant_id = $2 order by generation, chunk_index
+select id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms, participant_ref, track_epoch, identity_kind, track_class, storage_key, checksum, size, content_type, track_id, participant_generation, display_name_snapshot, overlap, source_start_ms, source_end_ms, allocation_id, object_version, object_etag from recording_transcription_source_chunks
+where recording_id = $1 and tenant_id = $2
+order by generation, chunk_index
 `
 
 type ListRecordingTranscriptionSourceChunksParams struct {
@@ -81,6 +418,15 @@ func (q *Queries) ListRecordingTranscriptionSourceChunks(ctx context.Context, ar
 			&i.Checksum,
 			&i.Size,
 			&i.ContentType,
+			&i.TrackID,
+			&i.ParticipantGeneration,
+			&i.DisplayNameSnapshot,
+			&i.Overlap,
+			&i.SourceStartMs,
+			&i.SourceEndMs,
+			&i.AllocationID,
+			&i.ObjectVersion,
+			&i.ObjectEtag,
 		); err != nil {
 			return nil, err
 		}
@@ -92,114 +438,323 @@ func (q *Queries) ListRecordingTranscriptionSourceChunks(ctx context.Context, ar
 	return items, nil
 }
 
-const replaceRecordingTranscriptionSourceChunk = `-- name: ReplaceRecordingTranscriptionSourceChunk :one
-insert into recording_transcription_source_chunks (
-    id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms,
-    participant_ref, track_epoch, identity_kind, track_class, storage_key, checksum, size, content_type
-) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-on conflict (recording_id, generation, chunk_index) do update set
-    id = excluded.id, tenant_id = excluded.tenant_id, start_ms = excluded.start_ms,
-    end_ms = excluded.end_ms, participant_ref = excluded.participant_ref,
-    track_epoch = excluded.track_epoch, identity_kind = excluded.identity_kind,
-    track_class = excluded.track_class, storage_key = excluded.storage_key,
-    checksum = excluded.checksum, size = excluded.size, content_type = excluded.content_type
-returning id, recording_id, tenant_id, chunk_index, generation, start_ms, end_ms, participant_ref, track_epoch, identity_kind, track_class, storage_key, checksum, size, content_type
+const listRecordingTranscriptionSourcesNeedingCleanup = `-- name: ListRecordingTranscriptionSourcesNeedingCleanup :many
+select recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at from recording_transcription_sources
+where status = 'cleanup_pending' and cleanup_due_at <= $1::timestamptz
+order by cleanup_due_at, recording_id
+for update skip locked
+limit $2::integer
 `
 
-type ReplaceRecordingTranscriptionSourceChunkParams struct {
-	ID             pgtype.UUID `json:"id"`
-	RecordingID    pgtype.UUID `json:"recording_id"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	ChunkIndex     int32       `json:"chunk_index"`
-	Generation     int64       `json:"generation"`
-	StartMs        int64       `json:"start_ms"`
-	EndMs          int64       `json:"end_ms"`
-	ParticipantRef pgtype.Text `json:"participant_ref"`
-	TrackEpoch     pgtype.Text `json:"track_epoch"`
-	IdentityKind   string      `json:"identity_kind"`
-	TrackClass     string      `json:"track_class"`
-	StorageKey     string      `json:"storage_key"`
-	Checksum       []byte      `json:"checksum"`
-	Size           int64       `json:"size"`
-	ContentType    string      `json:"content_type"`
+type ListRecordingTranscriptionSourcesNeedingCleanupParams struct {
+	Now      pgtype.Timestamptz `json:"now"`
+	PageSize int32              `json:"page_size"`
 }
 
-func (q *Queries) ReplaceRecordingTranscriptionSourceChunk(ctx context.Context, arg ReplaceRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error) {
-	row := q.db.QueryRow(ctx, replaceRecordingTranscriptionSourceChunk,
-		arg.ID,
-		arg.RecordingID,
-		arg.TenantID,
-		arg.ChunkIndex,
-		arg.Generation,
-		arg.StartMs,
-		arg.EndMs,
-		arg.ParticipantRef,
-		arg.TrackEpoch,
-		arg.IdentityKind,
-		arg.TrackClass,
-		arg.StorageKey,
-		arg.Checksum,
-		arg.Size,
-		arg.ContentType,
-	)
-	var i RecordingTranscriptionSourceChunk
+func (q *Queries) ListRecordingTranscriptionSourcesNeedingCleanup(ctx context.Context, arg ListRecordingTranscriptionSourcesNeedingCleanupParams) ([]RecordingTranscriptionSource, error) {
+	rows, err := q.db.Query(ctx, listRecordingTranscriptionSourcesNeedingCleanup, arg.Now, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecordingTranscriptionSource
+	for rows.Next() {
+		var i RecordingTranscriptionSource
+		if err := rows.Scan(
+			&i.RecordingID,
+			&i.TenantID,
+			&i.ManifestKey,
+			&i.ManifestSha256,
+			&i.ManifestSize,
+			&i.ManifestContentType,
+			&i.SchemaVersion,
+			&i.CommittedAt,
+			&i.Generation,
+			&i.CommitDigest,
+			&i.PresentationSha256,
+			&i.ManifestAllocationID,
+			&i.ManifestObjectVersion,
+			&i.ManifestEtag,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.LeaseTranscriptID,
+			&i.LeaseExpiresAt,
+			&i.CleanupDueAt,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockRecordingTranscriptionSource = `-- name: LockRecordingTranscriptionSource :one
+select recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at from recording_transcription_sources
+where recording_id = $1 and tenant_id = $2
+for update
+`
+
+type LockRecordingTranscriptionSourceParams struct {
+	RecordingID pgtype.UUID `json:"recording_id"`
+	TenantID    pgtype.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) LockRecordingTranscriptionSource(ctx context.Context, arg LockRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error) {
+	row := q.db.QueryRow(ctx, lockRecordingTranscriptionSource, arg.RecordingID, arg.TenantID)
+	var i RecordingTranscriptionSource
 	err := row.Scan(
-		&i.ID,
 		&i.RecordingID,
 		&i.TenantID,
-		&i.ChunkIndex,
+		&i.ManifestKey,
+		&i.ManifestSha256,
+		&i.ManifestSize,
+		&i.ManifestContentType,
+		&i.SchemaVersion,
+		&i.CommittedAt,
 		&i.Generation,
-		&i.StartMs,
-		&i.EndMs,
-		&i.ParticipantRef,
-		&i.TrackEpoch,
-		&i.IdentityKind,
-		&i.TrackClass,
-		&i.StorageKey,
-		&i.Checksum,
-		&i.Size,
-		&i.ContentType,
+		&i.CommitDigest,
+		&i.PresentationSha256,
+		&i.ManifestAllocationID,
+		&i.ManifestObjectVersion,
+		&i.ManifestEtag,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LeaseTranscriptID,
+		&i.LeaseExpiresAt,
+		&i.CleanupDueAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const upsertRecordingTranscriptionSource = `-- name: UpsertRecordingTranscriptionSource :one
-insert into recording_transcription_sources (
-    recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size,
-    manifest_content_type, schema_version, committed_at
-) values ($1, $2, $3, $4, $5, $6, $7, $8)
-on conflict (recording_id) do update set
-    tenant_id = excluded.tenant_id,
-    manifest_key = excluded.manifest_key,
-    manifest_sha256 = excluded.manifest_sha256,
-    manifest_size = excluded.manifest_size,
-    manifest_content_type = excluded.manifest_content_type,
-    schema_version = excluded.schema_version,
-    committed_at = excluded.committed_at
-returning recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at
+const markDueRecordingTranscriptionSourcesForCleanup = `-- name: MarkDueRecordingTranscriptionSourcesForCleanup :many
+with due_sources as (
+    update recording_transcription_sources source
+    set status = 'cleanup_pending', lease_transcript_id = null,
+        lease_expires_at = null, cleanup_due_at = coalesce(source.cleanup_due_at, $1),
+        updated_at = now()
+    where (source.status = 'ready' and source.expires_at <= $1::timestamptz)
+       or (
+           source.status = 'leased'
+           and (
+               source.lease_expires_at <= $1::timestamptz
+               or exists (
+                   select 1 from transcriptions transcript
+                   where transcript.id = source.lease_transcript_id
+                     and transcript.status in ('complete', 'terminal_failure', 'deleted')
+               )
+           )
+       )
+    returning source.recording_id, source.tenant_id, source.manifest_key, source.manifest_sha256, source.manifest_size, source.manifest_content_type, source.schema_version, source.committed_at, source.generation, source.commit_digest, source.presentation_sha256, source.manifest_allocation_id, source.manifest_object_version, source.manifest_etag, source.status, source.expires_at, source.lease_transcript_id, source.lease_expires_at, source.cleanup_due_at, source.deleted_at, source.updated_at
+), cancelled_jobs as (
+    update artifact_jobs jobs
+    set state = 'cancelled', error_code = 'transcription_source_expired',
+        error_detail = 'transcription source lease reached its hard deadline',
+        lease_token_hash = null, lease_owner = null, lease_expires_at = null,
+        terminal_at = now(), updated_at = now()
+    where jobs.recording_id in (select recording_id from due_sources)
+      and jobs.artifact_kind = 'transcription_chunk'
+      and jobs.state in ('pending', 'retryable', 'leased')
+    returning jobs.transcript_id
+), failed_transcripts as (
+    update transcriptions transcript
+    set status = 'terminal_failure', updated_at = now()
+    where transcript.id in (select transcript_id from cancelled_jobs)
+      and transcript.status not in ('complete', 'terminal_failure', 'deleted')
+    returning transcript.id
+)
+select recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at from due_sources
 `
 
-type UpsertRecordingTranscriptionSourceParams struct {
-	RecordingID         pgtype.UUID        `json:"recording_id"`
-	TenantID            pgtype.UUID        `json:"tenant_id"`
-	ManifestKey         string             `json:"manifest_key"`
-	ManifestSha256      []byte             `json:"manifest_sha256"`
-	ManifestSize        int64              `json:"manifest_size"`
-	ManifestContentType string             `json:"manifest_content_type"`
-	SchemaVersion       int32              `json:"schema_version"`
-	CommittedAt         pgtype.Timestamptz `json:"committed_at"`
+type MarkDueRecordingTranscriptionSourcesForCleanupRow struct {
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	ManifestKey           string             `json:"manifest_key"`
+	ManifestSha256        []byte             `json:"manifest_sha256"`
+	ManifestSize          int64              `json:"manifest_size"`
+	ManifestContentType   string             `json:"manifest_content_type"`
+	SchemaVersion         int32              `json:"schema_version"`
+	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
+	Generation            int64              `json:"generation"`
+	CommitDigest          []byte             `json:"commit_digest"`
+	PresentationSha256    []byte             `json:"presentation_sha256"`
+	ManifestAllocationID  pgtype.UUID        `json:"manifest_allocation_id"`
+	ManifestObjectVersion pgtype.Text        `json:"manifest_object_version"`
+	ManifestEtag          pgtype.Text        `json:"manifest_etag"`
+	Status                string             `json:"status"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	LeaseTranscriptID     pgtype.UUID        `json:"lease_transcript_id"`
+	LeaseExpiresAt        pgtype.Timestamptz `json:"lease_expires_at"`
+	CleanupDueAt          pgtype.Timestamptz `json:"cleanup_due_at"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) UpsertRecordingTranscriptionSource(ctx context.Context, arg UpsertRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error) {
-	row := q.db.QueryRow(ctx, upsertRecordingTranscriptionSource,
+func (q *Queries) MarkDueRecordingTranscriptionSourcesForCleanup(ctx context.Context, now pgtype.Timestamptz) ([]MarkDueRecordingTranscriptionSourcesForCleanupRow, error) {
+	rows, err := q.db.Query(ctx, markDueRecordingTranscriptionSourcesForCleanup, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MarkDueRecordingTranscriptionSourcesForCleanupRow
+	for rows.Next() {
+		var i MarkDueRecordingTranscriptionSourcesForCleanupRow
+		if err := rows.Scan(
+			&i.RecordingID,
+			&i.TenantID,
+			&i.ManifestKey,
+			&i.ManifestSha256,
+			&i.ManifestSize,
+			&i.ManifestContentType,
+			&i.SchemaVersion,
+			&i.CommittedAt,
+			&i.Generation,
+			&i.CommitDigest,
+			&i.PresentationSha256,
+			&i.ManifestAllocationID,
+			&i.ManifestObjectVersion,
+			&i.ManifestEtag,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.LeaseTranscriptID,
+			&i.LeaseExpiresAt,
+			&i.CleanupDueAt,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markRecordingTranscriptionSourceDeletedIfClean = `-- name: MarkRecordingTranscriptionSourceDeletedIfClean :one
+update recording_transcription_sources source
+set status = 'deleted', deleted_at = $1, updated_at = now()
+where source.recording_id = $2
+  and source.status in ('cleanup_pending', 'deleting')
+  and not exists (
+      select 1 from transcription_cleanup_jobs cleanup
+      where cleanup.recording_id = source.recording_id
+        and cleanup.object_kind in ('source_manifest', 'source_chunk')
+        and cleanup.state <> 'completed'
+  )
+returning source.recording_id, source.tenant_id, source.manifest_key, source.manifest_sha256, source.manifest_size, source.manifest_content_type, source.schema_version, source.committed_at, source.generation, source.commit_digest, source.presentation_sha256, source.manifest_allocation_id, source.manifest_object_version, source.manifest_etag, source.status, source.expires_at, source.lease_transcript_id, source.lease_expires_at, source.cleanup_due_at, source.deleted_at, source.updated_at
+`
+
+type MarkRecordingTranscriptionSourceDeletedIfCleanParams struct {
+	Now         pgtype.Timestamptz `json:"now"`
+	RecordingID pgtype.UUID        `json:"recording_id"`
+}
+
+func (q *Queries) MarkRecordingTranscriptionSourceDeletedIfClean(ctx context.Context, arg MarkRecordingTranscriptionSourceDeletedIfCleanParams) (RecordingTranscriptionSource, error) {
+	row := q.db.QueryRow(ctx, markRecordingTranscriptionSourceDeletedIfClean, arg.Now, arg.RecordingID)
+	var i RecordingTranscriptionSource
+	err := row.Scan(
+		&i.RecordingID,
+		&i.TenantID,
+		&i.ManifestKey,
+		&i.ManifestSha256,
+		&i.ManifestSize,
+		&i.ManifestContentType,
+		&i.SchemaVersion,
+		&i.CommittedAt,
+		&i.Generation,
+		&i.CommitDigest,
+		&i.PresentationSha256,
+		&i.ManifestAllocationID,
+		&i.ManifestObjectVersion,
+		&i.ManifestEtag,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LeaseTranscriptID,
+		&i.LeaseExpiresAt,
+		&i.CleanupDueAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markRecordingTranscriptionSourceExpired = `-- name: MarkRecordingTranscriptionSourceExpired :one
+update recording_transcription_sources
+set status = 'cleanup_pending', lease_transcript_id = null,
+    lease_expires_at = null, cleanup_due_at = $1, updated_at = now()
+where recording_id = $2 and tenant_id = $3
+  and status = 'ready' and expires_at <= $1::timestamptz
+returning recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at
+`
+
+type MarkRecordingTranscriptionSourceExpiredParams struct {
+	Now         pgtype.Timestamptz `json:"now"`
+	RecordingID pgtype.UUID        `json:"recording_id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+}
+
+func (q *Queries) MarkRecordingTranscriptionSourceExpired(ctx context.Context, arg MarkRecordingTranscriptionSourceExpiredParams) (RecordingTranscriptionSource, error) {
+	row := q.db.QueryRow(ctx, markRecordingTranscriptionSourceExpired, arg.Now, arg.RecordingID, arg.TenantID)
+	var i RecordingTranscriptionSource
+	err := row.Scan(
+		&i.RecordingID,
+		&i.TenantID,
+		&i.ManifestKey,
+		&i.ManifestSha256,
+		&i.ManifestSize,
+		&i.ManifestContentType,
+		&i.SchemaVersion,
+		&i.CommittedAt,
+		&i.Generation,
+		&i.CommitDigest,
+		&i.PresentationSha256,
+		&i.ManifestAllocationID,
+		&i.ManifestObjectVersion,
+		&i.ManifestEtag,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LeaseTranscriptID,
+		&i.LeaseExpiresAt,
+		&i.CleanupDueAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const releaseRecordingTranscriptionSource = `-- name: ReleaseRecordingTranscriptionSource :one
+update recording_transcription_sources
+set status = 'cleanup_pending', lease_transcript_id = null,
+    lease_expires_at = null, cleanup_due_at = $1, updated_at = now()
+where recording_id = $2 and tenant_id = $3
+  and (
+      (status = 'leased' and lease_transcript_id = $4)
+      or status = 'cleanup_pending'
+  )
+returning recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at, generation, commit_digest, presentation_sha256, manifest_allocation_id, manifest_object_version, manifest_etag, status, expires_at, lease_transcript_id, lease_expires_at, cleanup_due_at, deleted_at, updated_at
+`
+
+type ReleaseRecordingTranscriptionSourceParams struct {
+	Now          pgtype.Timestamptz `json:"now"`
+	RecordingID  pgtype.UUID        `json:"recording_id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	TranscriptID pgtype.UUID        `json:"transcript_id"`
+}
+
+func (q *Queries) ReleaseRecordingTranscriptionSource(ctx context.Context, arg ReleaseRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error) {
+	row := q.db.QueryRow(ctx, releaseRecordingTranscriptionSource,
+		arg.Now,
 		arg.RecordingID,
 		arg.TenantID,
-		arg.ManifestKey,
-		arg.ManifestSha256,
-		arg.ManifestSize,
-		arg.ManifestContentType,
-		arg.SchemaVersion,
-		arg.CommittedAt,
+		arg.TranscriptID,
 	)
 	var i RecordingTranscriptionSource
 	err := row.Scan(
@@ -211,6 +766,19 @@ func (q *Queries) UpsertRecordingTranscriptionSource(ctx context.Context, arg Up
 		&i.ManifestContentType,
 		&i.SchemaVersion,
 		&i.CommittedAt,
+		&i.Generation,
+		&i.CommitDigest,
+		&i.PresentationSha256,
+		&i.ManifestAllocationID,
+		&i.ManifestObjectVersion,
+		&i.ManifestEtag,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LeaseTranscriptID,
+		&i.LeaseExpiresAt,
+		&i.CleanupDueAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

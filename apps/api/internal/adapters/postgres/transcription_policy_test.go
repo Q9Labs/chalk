@@ -62,6 +62,7 @@ func TestRequestReturnsIdempotentTranscriptBeforeReadingPolicy(t *testing.T) {
 		idempotencyJob: sqlc.ArtifactJob{
 			ID:             uuid(jobID),
 			TenantID:       uuid(mustPolicyTestID(t, "00000000-0000-4000-8000-000000000001")),
+			RecordingID:    uuid(mustPolicyTestID(t, "00000000-0000-4000-8000-000000000004")),
 			TranscriptID:   uuid(transcriptID),
 			IdempotencyKey: "request-00000001",
 		},
@@ -98,7 +99,7 @@ func (q *transcriptionPolicyQueries) GetTenantTranscription(context.Context, sql
 	if !q.idempotencyJob.ID.Valid {
 		return sqlc.Transcription{}, pgx.ErrNoRows
 	}
-	return sqlc.Transcription{ID: q.idempotencyJob.TranscriptID, TenantID: q.idempotencyJob.TenantID}, nil
+	return sqlc.Transcription{ID: q.idempotencyJob.TranscriptID, TenantID: q.idempotencyJob.TenantID, RecordingID: q.idempotencyJob.RecordingID}, nil
 }
 
 func (*transcriptionPolicyQueries) GetTenantTranscriptionByRecording(context.Context, sqlc.GetTenantTranscriptionByRecordingParams) (sqlc.Transcription, error) {

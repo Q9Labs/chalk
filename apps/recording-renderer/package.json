@@ -1,0 +1,33 @@
+{
+  "name": "@chalk/recording-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run build:client && pnpm run build:node && pnpm run build:ui-manifest",
+    "build:client": "vite build",
+    "build:node": "vite build --config vite.node.config.ts",
+    "build:ui-manifest": "node ./dist/node/ui-build-cli.js \"$PWD/dist/client\"",
+    "fixture": "node ./dist/node/fixture.js",
+    "check-types": "tsc -p tsconfig.browser.json && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "lint": "pnpm exec oxfmt --check . && pnpm run check-types"
+  },
+  "dependencies": {
+    "@q9labsai/chalk-react": "workspace:^4.1.15",
+    "@q9labsai/recording-presentation": "workspace:^0.1.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.3",
+    "playwright": "^1.62.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.10"
+  }
+}

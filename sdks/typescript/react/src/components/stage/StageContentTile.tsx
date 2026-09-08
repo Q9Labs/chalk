@@ -1,6 +1,5 @@
 import React, { useRef, type CSSProperties } from "react";
 
-import { cn } from "../../utils/cn";
 import { getParticipantColor } from "../../utils/colorGenerator";
 import { Edit02Icon, Monitor01Icon } from "../../utils/icons";
 import { TileShell } from "../participant-tile/TileShell";
@@ -21,6 +20,11 @@ export interface StageContentTileProps {
   readonly hidden?: boolean;
 }
 
+export interface StageContentTileSurfaceProps extends Omit<StageContentTileProps, "active"> {
+  readonly media?: React.ReactNode;
+  readonly mediaVisible: boolean;
+}
+
 const BOARD_ACCENT = "var(--chalk-app-line-strong, currentColor)";
 
 export function contentTileLabel(item: ContentItem): string {
@@ -35,9 +39,25 @@ export function contentTileName(item: ContentItem): string {
 /** Unfocused screen share or whiteboard rendered with the same chrome as a participant tile. */
 export const StageContentTile = React.memo(function StageContentTile({ item, active, pinned, onClick, onDoubleClick, className, style, hidden }: StageContentTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const track = item.kind === "screen-share" ? item.track : null;
+  const track = item.kind === "screen-share" ? item.participant.screenShareTrack : null;
   const status = useVideoTrack(videoRef, track, active);
-  const showVideo = status === "playing";
+
+  return (
+    <StageContentTileSurface
+      item={item}
+      pinned={pinned}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      className={className}
+      style={style}
+      hidden={hidden}
+      media={item.kind === "screen-share" ? <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" /> : undefined}
+      mediaVisible={status === "playing"}
+    />
+  );
+});
+
+export const StageContentTileSurface = React.memo(function StageContentTileSurface({ item, pinned, onClick, onDoubleClick, className, style, hidden, media, mediaVisible }: StageContentTileSurfaceProps) {
   const accentColor = item.kind === "screen-share" ? getParticipantColor(item.participant.displayName || item.participant.id).primary : BOARD_ACCENT;
   const Icon = item.kind === "whiteboard" ? Edit02Icon : Monitor01Icon;
 
@@ -45,6 +65,7 @@ export const StageContentTile = React.memo(function StageContentTile({ item, act
     <TileShell
       label={contentTileLabel(item)}
       accentColor={accentColor}
+      seed={`content:${item.id}`}
       pinned={pinned}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -59,8 +80,8 @@ export const StageContentTile = React.memo(function StageContentTile({ item, act
         </>
       }
     >
-      {item.kind === "screen-share" ? <video ref={videoRef} autoPlay playsInline muted className={cn("relative z-10 block h-full w-full bg-[var(--chalk-app-tile-base)] object-contain transition-opacity duration-300", showVideo ? "opacity-100" : "opacity-0")} /> : null}
-      {!showVideo && (
+      {mediaVisible ? <div className="relative z-10 block h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] [&>*]:h-full [&>*]:w-full [&>*]:object-contain">{media}</div> : null}
+      {!mediaVisible && (
         <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 z-10 flex items-center justify-center text-[var(--chalk-app-text-muted)]">
           <Icon size={32} />
         </div>
@@ -70,3 +91,4 @@ export const StageContentTile = React.memo(function StageContentTile({ item, act
 });
 
 StageContentTile.displayName = "StageContentTile";
+StageContentTileSurface.displayName = "StageContentTileSurface";

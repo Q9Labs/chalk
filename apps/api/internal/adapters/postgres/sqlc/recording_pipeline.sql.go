@@ -59,12 +59,15 @@ func (q *Queries) AuthorizeRecordingArtifactReplay(ctx context.Context, arg Auth
 
 const claimRecordingJob = `-- name: ClaimRecordingJob :one
 with candidate as (
-    select recording_jobs.id
+    select recording_jobs.id,
+        recording_pipelines.capture_completed_at + $1::integer * interval '1 second' as render_deadline
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
     join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
-    where recording_jobs.kind = $1
+    where recording_jobs.kind = $2
       and recording_jobs.state = 'pending'
+      and (recording_jobs.kind <> 'render' or
+          recording_pipelines.capture_completed_at + $1::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
       and recording_jobs.attempt_count < recording_jobs.attempt_limit
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_operation_id is null)
@@ -81,9 +84,11 @@ with candidate as (
     update recording_jobs
     set state = 'leased',
         attempt_count = attempt_count + 1,
-        lease_token = $2,
-        lease_owner = $3,
-        lease_expires_at = $4,
+        lease_token = $3,
+        lease_owner = $4,
+        lease_expires_at = case when recording_jobs.kind = 'render'
+            then least($5::timestamptz, candidate.render_deadline)
+            else $5::timestamptz end,
         fencing_generation = fencing_generation + 1,
         updated_at = now()
     from candidate
@@ -97,14 +102,14 @@ with candidate as (
         recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at
 ), pipeline as (
     update recording_pipelines
-    set state = case when $1 = 'capture' then 'capture_leased' else 'rendering' end,
-        capture_epoch = case when $1 = 'capture' then capture_epoch + 1 else capture_epoch end,
+    set state = case when $2 = 'capture' then 'capture_leased' else 'rendering' end,
+        capture_epoch = case when $2 = 'capture' then capture_epoch + 1 else capture_epoch end,
         updated_at = now()
     from leased
     where recording_pipelines.recording_id = leased.recording_id
-      and ($1 <> 'capture' or recording_pipelines.stop_operation_id is null)
-      and (($1 = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
-        or ($1 = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
+      and ($2 <> 'capture' or recording_pipelines.stop_operation_id is null)
+      and (($2 = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
+        or ($2 = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
     returning recording_pipelines.recording_id, recording_pipelines.capture_epoch
 )
 select leased.id, leased.tenant_id, leased.episode_id, leased.recording_id, leased.kind,
@@ -114,51 +119,80 @@ select leased.id, leased.tenant_id, leased.episode_id, leased.recording_id, leas
     leased.error_detail, leased.terminal_at, leased.updated_at, leased.created_at,
     pipeline.capture_epoch, recording_reservations.space_id,
     recording_reservations.policy_snapshot_version, recording_reservations.ends_at,
-    recording_pipelines.capture_completed_at
+    recording_pipelines.capture_completed_at, recording_pipelines.capture_ready_at,
+	recording_presentations.presentation_handle,
+	recording_presentations.schema_version as presentation_schema_version,
+	recording_presentations.profile_version as presentation_profile_version,
+	recording_presentations.presentation_sha256,
+	recording_presentations.duration_millis as presentation_duration_millis,
+	recording_data_keys.key_handle as capture_key_handle
 from leased
 join pipeline on pipeline.recording_id = leased.recording_id
 join recording_pipelines on recording_pipelines.recording_id = leased.recording_id
 join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
+left join recording_presentations
+  on recording_presentations.tenant_id = leased.tenant_id
+ and recording_presentations.recording_id = leased.recording_id
+ and recording_presentations.capture_epoch = pipeline.capture_epoch
+left join recording_data_keys
+  on recording_data_keys.tenant_id = leased.tenant_id
+ and recording_data_keys.recording_id = leased.recording_id
+ and recording_data_keys.capture_epoch = pipeline.capture_epoch
+where leased.kind <> 'render'
+   or (
+	   recording_presentations.presentation_handle is not null
+	   and recording_data_keys.key_handle is not null
+	   and recording_pipelines.capture_ready_at is not null
+	)
 `
 
 type ClaimRecordingJobParams struct {
-	Kind           string             `json:"kind"`
-	LeaseToken     pgtype.Text        `json:"lease_token"`
-	LeaseOwner     pgtype.Text        `json:"lease_owner"`
-	LeaseExpiresAt pgtype.Timestamptz `json:"lease_expires_at"`
+	MaximumRenderSeconds int32              `json:"maximum_render_seconds"`
+	Kind                 string             `json:"kind"`
+	LeaseToken           pgtype.Text        `json:"lease_token"`
+	LeaseOwner           pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
 }
 
 type ClaimRecordingJobRow struct {
-	ID                    pgtype.UUID        `json:"id"`
-	TenantID              pgtype.UUID        `json:"tenant_id"`
-	EpisodeID             pgtype.UUID        `json:"episode_id"`
-	RecordingID           pgtype.UUID        `json:"recording_id"`
-	Kind                  string             `json:"kind"`
-	IdempotencyKey        string             `json:"idempotency_key"`
-	PayloadSchemaVersion  int32              `json:"payload_schema_version"`
-	State                 string             `json:"state"`
-	Priority              int32              `json:"priority"`
-	AvailableAt           pgtype.Timestamptz `json:"available_at"`
-	AttemptCount          int32              `json:"attempt_count"`
-	AttemptLimit          int32              `json:"attempt_limit"`
-	LeaseToken            pgtype.Text        `json:"lease_token"`
-	LeaseOwner            pgtype.Text        `json:"lease_owner"`
-	LeaseExpiresAt        pgtype.Timestamptz `json:"lease_expires_at"`
-	FencingGeneration     int64              `json:"fencing_generation"`
-	ErrorCode             pgtype.Text        `json:"error_code"`
-	ErrorDetail           pgtype.Text        `json:"error_detail"`
-	TerminalAt            pgtype.Timestamptz `json:"terminal_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	CaptureEpoch          int64              `json:"capture_epoch"`
-	SpaceID               pgtype.UUID        `json:"space_id"`
-	PolicySnapshotVersion string             `json:"policy_snapshot_version"`
-	EndsAt                pgtype.Timestamptz `json:"ends_at"`
-	CaptureCompletedAt    pgtype.Timestamptz `json:"capture_completed_at"`
+	ID                         pgtype.UUID        `json:"id"`
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	EpisodeID                  pgtype.UUID        `json:"episode_id"`
+	RecordingID                pgtype.UUID        `json:"recording_id"`
+	Kind                       string             `json:"kind"`
+	IdempotencyKey             string             `json:"idempotency_key"`
+	PayloadSchemaVersion       int32              `json:"payload_schema_version"`
+	State                      string             `json:"state"`
+	Priority                   int32              `json:"priority"`
+	AvailableAt                pgtype.Timestamptz `json:"available_at"`
+	AttemptCount               int32              `json:"attempt_count"`
+	AttemptLimit               int32              `json:"attempt_limit"`
+	LeaseToken                 pgtype.Text        `json:"lease_token"`
+	LeaseOwner                 pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt             pgtype.Timestamptz `json:"lease_expires_at"`
+	FencingGeneration          int64              `json:"fencing_generation"`
+	ErrorCode                  pgtype.Text        `json:"error_code"`
+	ErrorDetail                pgtype.Text        `json:"error_detail"`
+	TerminalAt                 pgtype.Timestamptz `json:"terminal_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	CaptureEpoch               int64              `json:"capture_epoch"`
+	SpaceID                    pgtype.UUID        `json:"space_id"`
+	PolicySnapshotVersion      string             `json:"policy_snapshot_version"`
+	EndsAt                     pgtype.Timestamptz `json:"ends_at"`
+	CaptureCompletedAt         pgtype.Timestamptz `json:"capture_completed_at"`
+	CaptureReadyAt             pgtype.Timestamptz `json:"capture_ready_at"`
+	PresentationHandle         pgtype.UUID        `json:"presentation_handle"`
+	PresentationSchemaVersion  pgtype.Text        `json:"presentation_schema_version"`
+	PresentationProfileVersion pgtype.Text        `json:"presentation_profile_version"`
+	PresentationSha256         []byte             `json:"presentation_sha256"`
+	PresentationDurationMillis pgtype.Int8        `json:"presentation_duration_millis"`
+	CaptureKeyHandle           pgtype.UUID        `json:"capture_key_handle"`
 }
 
 func (q *Queries) ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error) {
 	row := q.db.QueryRow(ctx, claimRecordingJob,
+		arg.MaximumRenderSeconds,
 		arg.Kind,
 		arg.LeaseToken,
 		arg.LeaseOwner,
@@ -192,6 +226,13 @@ func (q *Queries) ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobPa
 		&i.PolicySnapshotVersion,
 		&i.EndsAt,
 		&i.CaptureCompletedAt,
+		&i.CaptureReadyAt,
+		&i.PresentationHandle,
+		&i.PresentationSchemaVersion,
+		&i.PresentationProfileVersion,
+		&i.PresentationSha256,
+		&i.PresentationDurationMillis,
+		&i.CaptureKeyHandle,
 	)
 	return i, err
 }
@@ -367,7 +408,7 @@ with completed as (
             and authority.lease_token = $4
             and authority.lease_owner = $5
       )
-    returning id, tenant_id, episode_id, recording_id, attempt_count, fencing_generation
+    returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at
 ), pipeline as (
     update recording_pipelines
     set state = 'render_queued', capture_completed_at = now(), updated_at = now()
@@ -407,14 +448,7 @@ with completed as (
     where exists (select 1 from reservation_release)
     on conflict (recording_id, kind) do nothing
 )
-select recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id,
-    recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key,
-    recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority,
-    recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit,
-    recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at,
-    recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail,
-    recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at
-from recording_jobs join completed on completed.id = recording_jobs.id
+select id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at from completed
 `
 
 type CompleteCaptureRecordingJobParams struct {
@@ -431,7 +465,31 @@ type CompleteCaptureRecordingJobParams struct {
 	AttemptLimit         int32       `json:"attempt_limit"`
 }
 
-func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (RecordingJob, error) {
+type CompleteCaptureRecordingJobRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
+	RecordingID          pgtype.UUID        `json:"recording_id"`
+	Kind                 string             `json:"kind"`
+	IdempotencyKey       string             `json:"idempotency_key"`
+	PayloadSchemaVersion int32              `json:"payload_schema_version"`
+	State                string             `json:"state"`
+	Priority             int32              `json:"priority"`
+	AvailableAt          pgtype.Timestamptz `json:"available_at"`
+	AttemptCount         int32              `json:"attempt_count"`
+	AttemptLimit         int32              `json:"attempt_limit"`
+	LeaseToken           pgtype.Text        `json:"lease_token"`
+	LeaseOwner           pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	FencingGeneration    int64              `json:"fencing_generation"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorDetail          pgtype.Text        `json:"error_detail"`
+	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error) {
 	row := q.db.QueryRow(ctx, completeCaptureRecordingJob,
 		arg.ID,
 		arg.AttemptCount,
@@ -445,7 +503,7 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		arg.Priority,
 		arg.AttemptLimit,
 	)
-	var i RecordingJob
+	var i CompleteCaptureRecordingJobRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
@@ -1068,6 +1126,74 @@ func (q *Queries) FailRecordingJob(ctx context.Context, arg FailRecordingJobPara
 	return i, err
 }
 
+const getCompletedCaptureRecordingJob = `-- name: GetCompletedCaptureRecordingJob :one
+select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at
+from recording_jobs jobs
+join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
+join recording_job_attempt_authorities authority
+  on authority.job_id = jobs.id
+ and authority.kind = jobs.kind
+ and authority.attempt_count = jobs.attempt_count
+ and authority.fencing_generation = jobs.fencing_generation
+where jobs.id = $1
+  and jobs.kind = 'capture'
+  and jobs.state = 'succeeded'
+  and pipelines.capture_completed_at is not null
+  and jobs.attempt_count = $2
+  and jobs.fencing_generation = $3
+  and authority.capture_epoch = $4
+  and authority.envelope_digest = $5
+  and authority.lease_token = $6
+  and authority.lease_owner = $7
+`
+
+type GetCompletedCaptureRecordingJobParams struct {
+	ID                pgtype.UUID `json:"id"`
+	AttemptCount      int32       `json:"attempt_count"`
+	FencingGeneration int64       `json:"fencing_generation"`
+	CaptureEpoch      int64       `json:"capture_epoch"`
+	EnvelopeDigest    []byte      `json:"envelope_digest"`
+	LeaseToken        string      `json:"lease_token"`
+	LeaseOwner        string      `json:"lease_owner"`
+}
+
+func (q *Queries) GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error) {
+	row := q.db.QueryRow(ctx, getCompletedCaptureRecordingJob,
+		arg.ID,
+		arg.AttemptCount,
+		arg.FencingGeneration,
+		arg.CaptureEpoch,
+		arg.EnvelopeDigest,
+		arg.LeaseToken,
+		arg.LeaseOwner,
+	)
+	var i RecordingJob
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EpisodeID,
+		&i.RecordingID,
+		&i.Kind,
+		&i.IdempotencyKey,
+		&i.PayloadSchemaVersion,
+		&i.State,
+		&i.Priority,
+		&i.AvailableAt,
+		&i.AttemptCount,
+		&i.AttemptLimit,
+		&i.LeaseToken,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.FencingGeneration,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.TerminalAt,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getRecordingArtifact = `-- name: GetRecordingArtifact :one
 select recording_id, tenant_id, render_job_id, object_key, content_type,
     byte_size, checksum, duration_millis, committed_at, created_at
@@ -1197,9 +1323,23 @@ type GetRecordingPipelineParams struct {
 	RecordingID pgtype.UUID `json:"recording_id"`
 }
 
-func (q *Queries) GetRecordingPipeline(ctx context.Context, arg GetRecordingPipelineParams) (RecordingPipeline, error) {
+type GetRecordingPipelineRow struct {
+	RecordingID        pgtype.UUID        `json:"recording_id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	ReservationID      pgtype.UUID        `json:"reservation_id"`
+	CaptureEpoch       int64              `json:"capture_epoch"`
+	State              string             `json:"state"`
+	StopOperationID    pgtype.UUID        `json:"stop_operation_id"`
+	StopRequestedAt    pgtype.Timestamptz `json:"stop_requested_at"`
+	CaptureCompletedAt pgtype.Timestamptz `json:"capture_completed_at"`
+	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetRecordingPipeline(ctx context.Context, arg GetRecordingPipelineParams) (GetRecordingPipelineRow, error) {
 	row := q.db.QueryRow(ctx, getRecordingPipeline, arg.TenantID, arg.RecordingID)
-	var i RecordingPipeline
+	var i GetRecordingPipelineRow
 	err := row.Scan(
 		&i.RecordingID,
 		&i.TenantID,
@@ -1235,9 +1375,23 @@ type GetRecordingPipelineStopAuthorityParams struct {
 	EpisodeID   pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) GetRecordingPipelineStopAuthority(ctx context.Context, arg GetRecordingPipelineStopAuthorityParams) (RecordingPipeline, error) {
+type GetRecordingPipelineStopAuthorityRow struct {
+	RecordingID        pgtype.UUID        `json:"recording_id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	ReservationID      pgtype.UUID        `json:"reservation_id"`
+	CaptureEpoch       int64              `json:"capture_epoch"`
+	State              string             `json:"state"`
+	StopOperationID    pgtype.UUID        `json:"stop_operation_id"`
+	StopRequestedAt    pgtype.Timestamptz `json:"stop_requested_at"`
+	CaptureCompletedAt pgtype.Timestamptz `json:"capture_completed_at"`
+	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetRecordingPipelineStopAuthority(ctx context.Context, arg GetRecordingPipelineStopAuthorityParams) (GetRecordingPipelineStopAuthorityRow, error) {
 	row := q.db.QueryRow(ctx, getRecordingPipelineStopAuthority, arg.TenantID, arg.RecordingID, arg.EpisodeID)
-	var i RecordingPipeline
+	var i GetRecordingPipelineStopAuthorityRow
 	err := row.Scan(
 		&i.RecordingID,
 		&i.TenantID,
@@ -1260,9 +1414,18 @@ from recording_pool_health
 where role = $1
 `
 
-func (q *Queries) GetRecordingPoolHealth(ctx context.Context, role string) (RecordingPoolHealth, error) {
+type GetRecordingPoolHealthRow struct {
+	Role          string             `json:"role"`
+	AdmissionOpen bool               `json:"admission_open"`
+	ReadyCapacity int32              `json:"ready_capacity"`
+	Reason        string             `json:"reason"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetRecordingPoolHealth(ctx context.Context, role string) (GetRecordingPoolHealthRow, error) {
 	row := q.db.QueryRow(ctx, getRecordingPoolHealth, role)
-	var i RecordingPoolHealth
+	var i GetRecordingPoolHealthRow
 	err := row.Scan(
 		&i.Role,
 		&i.AdmissionOpen,
@@ -1406,18 +1569,27 @@ func (q *Queries) GetRecordingReservationFingerprint(ctx context.Context, arg Ge
 
 const heartbeatRecordingJob = `-- name: HeartbeatRecordingJob :one
 update recording_jobs
-set lease_expires_at = $1, updated_at = now()
+set lease_expires_at = case when recording_jobs.kind = 'render' then least(
+        $1::timestamptz,
+        (select (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz
+         from recording_job_attempt_authorities authority
+         where authority.job_id = recording_jobs.id
+           and authority.attempt_count = recording_jobs.attempt_count
+           and authority.fencing_generation = recording_jobs.fencing_generation))
+        else $1::timestamptz end, updated_at = now()
 where id = $2
   and state = 'leased'
   and recording_jobs.attempt_count = $3
   and recording_jobs.fencing_generation = $4
   and recording_jobs.lease_token = $5
   and recording_jobs.lease_owner = $6
-  and recording_jobs.lease_expires_at > now()
+  and recording_jobs.lease_expires_at > clock_timestamp()
   and exists (
       select 1 from recording_job_attempt_authorities authority
       where authority.job_id = recording_jobs.id
         and authority.kind = recording_jobs.kind
+        and (recording_jobs.kind <> 'render' or
+            (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz > clock_timestamp())
         and authority.attempt_count = $3
         and authority.fencing_generation = $4
         and authority.capture_epoch = $7
@@ -1807,15 +1979,27 @@ func (q *Queries) LockRecordingJobClaimRequest(ctx context.Context, claimRequest
 }
 
 const recoverExpiredRecordingJobs = `-- name: RecoverExpiredRecordingJobs :many
-with recovered as (
+with expired as (
+    select jobs.id, jobs.kind = 'render' and
+        pipelines.capture_completed_at + $1::integer * interval '1 second' <= clock_timestamp() as deadline_reached,
+        (jobs.kind = 'capture' and pipelines.stop_requested_at is not null)::boolean as capture_stopped
+    from recording_jobs jobs
+    join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
+    where (jobs.state = 'leased' and jobs.lease_expires_at <= clock_timestamp())
+       or (jobs.kind = 'render' and jobs.state in ('pending', 'leased') and
+           pipelines.capture_completed_at + $1::integer * interval '1 second' <= clock_timestamp())
+       or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null)
+    for update of jobs skip locked
+), recovered as (
     update recording_jobs
-    set state = case when attempt_count >= attempt_limit then 'terminal_failure' else 'pending' end,
+    set state = case when attempt_count >= attempt_limit or expired.deadline_reached or expired.capture_stopped then 'terminal_failure' else 'pending' end,
         available_at = now(), lease_token = null, lease_owner = null, lease_expires_at = null,
-        terminal_at = case when attempt_count >= attempt_limit then now() else null end,
-        error_code = coalesce(error_code, 'lease_expired'),
+        terminal_at = case when attempt_count >= attempt_limit or expired.deadline_reached or expired.capture_stopped then now() else null end,
+        error_code = case when expired.deadline_reached then 'render_deadline_exceeded' when expired.capture_stopped then 'capture_stopped_before_completion' else coalesce(error_code, 'lease_expired') end,
         updated_at = now()
-    where state = 'leased' and lease_expires_at <= now()
-    returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+    from expired
+    where recording_jobs.id = expired.id
+    returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
         error_code, error_detail, terminal_at, updated_at, created_at
@@ -1879,8 +2063,8 @@ type RecoverExpiredRecordingJobsRow struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
-func (q *Queries) RecoverExpiredRecordingJobs(ctx context.Context) ([]RecoverExpiredRecordingJobsRow, error) {
-	rows, err := q.db.Query(ctx, recoverExpiredRecordingJobs)
+func (q *Queries) RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]RecoverExpiredRecordingJobsRow, error) {
+	rows, err := q.db.Query(ctx, recoverExpiredRecordingJobs, maximumRenderSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -2033,7 +2217,7 @@ where recording_pipelines.tenant_id = $2
       recording_pipelines.stop_operation_id = $1
       or (
           recording_pipelines.stop_operation_id is null
-          and recording_pipelines.state in ('reserved', 'capture_leased', 'capturing_segmented', 'capture_complete', 'render_queued', 'rendering', 'verifying', 'retryable_failure')
+          and recording_pipelines.state in ('reserved', 'capture_leased', 'capturing_segmented', 'capture_complete', 'render_queued', 'rendering', 'verifying', 'retryable_failure', 'committed', 'terminal_failure', 'deleted')
       )
   )
 returning recording_id, tenant_id, reservation_id, capture_epoch, state, stop_operation_id, stop_requested_at,
@@ -2047,14 +2231,28 @@ type RequestRecordingStopParams struct {
 	EpisodeID       pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RecordingPipeline, error) {
+type RequestRecordingStopRow struct {
+	RecordingID        pgtype.UUID        `json:"recording_id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	ReservationID      pgtype.UUID        `json:"reservation_id"`
+	CaptureEpoch       int64              `json:"capture_epoch"`
+	State              string             `json:"state"`
+	StopOperationID    pgtype.UUID        `json:"stop_operation_id"`
+	StopRequestedAt    pgtype.Timestamptz `json:"stop_requested_at"`
+	CaptureCompletedAt pgtype.Timestamptz `json:"capture_completed_at"`
+	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error) {
 	row := q.db.QueryRow(ctx, requestRecordingStop,
 		arg.StopOperationID,
 		arg.TenantID,
 		arg.RecordingID,
 		arg.EpisodeID,
 	)
-	var i RecordingPipeline
+	var i RequestRecordingStopRow
 	err := row.Scan(
 		&i.RecordingID,
 		&i.TenantID,
@@ -2091,7 +2289,16 @@ type UpsertRecordingPoolHealthParams struct {
 	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
 }
 
-func (q *Queries) UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecordingPoolHealthParams) (RecordingPoolHealth, error) {
+type UpsertRecordingPoolHealthRow struct {
+	Role          string             `json:"role"`
+	AdmissionOpen bool               `json:"admission_open"`
+	ReadyCapacity int32              `json:"ready_capacity"`
+	Reason        string             `json:"reason"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecordingPoolHealthParams) (UpsertRecordingPoolHealthRow, error) {
 	row := q.db.QueryRow(ctx, upsertRecordingPoolHealth,
 		arg.Role,
 		arg.AdmissionOpen,
@@ -2099,7 +2306,7 @@ func (q *Queries) UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecor
 		arg.Reason,
 		arg.ObservedAt,
 	)
-	var i RecordingPoolHealth
+	var i UpsertRecordingPoolHealthRow
 	err := row.Scan(
 		&i.Role,
 		&i.AdmissionOpen,

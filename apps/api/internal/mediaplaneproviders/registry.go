@@ -25,9 +25,9 @@ const (
 	ModeDisabled               = "disabled"
 	ModeUnknown                = "unknown"
 
-	ConfigurationSourceDeploymentDefault   = "deployment_default"
-	ConfigurationSourceTenantChalkManaged  = "tenant_chalk_managed"
-	ConfigurationSourceTenantManaged       = "tenant_managed"
+	ConfigurationSourceDeploymentDefault   = mediaplane.BindingSourceDeploymentDefault
+	ConfigurationSourceTenantChalkManaged  = mediaplane.BindingSourceTenantChalkManaged
+	ConfigurationSourceTenantManaged       = mediaplane.BindingSourceTenantManaged
 	ConfigurationSourceDisabled            = "disabled"
 	ConfigurationSourceTenantConfiguration = "tenant_configuration"
 	ConfigurationSourceNone                = "none"
@@ -121,7 +121,19 @@ func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spac
 			r.telemetry.RecordResolution(ctx, resolution)
 		}
 	}()
+	resolved, err := r.resolveProviderConfig(tenant, space, &resolution)
+	if err != nil || resolved == nil {
+		return nil, err
+	}
+	return r.newService(resolved.provider, resolved.config)
+}
 
+type resolvedProviderConfig struct {
+	provider mediaplane.Provider
+	config   runtimeconfig.CloudflareRealtimeConfig
+}
+
+func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Space, resolution *Resolution) (*resolvedProviderConfig, error) {
 	providerName, err := selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
@@ -143,7 +155,7 @@ func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spac
 			if providerErr != nil {
 				return nil, providerErr
 			}
-			return r.newService(provider, r.processConfig)
+			return &resolvedProviderConfig{provider: provider, config: r.processConfig}, nil
 		}
 		return nil, err
 	}
@@ -173,14 +185,14 @@ func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spac
 	switch mode {
 	case ModeChalkManaged:
 		resolution.ConfigurationSource = ConfigurationSourceTenantChalkManaged
-		return r.newService(provider, r.processConfig)
+		return &resolvedProviderConfig{provider: provider, config: r.processConfig}, nil
 	case ModeTenantManaged:
 		resolution.ConfigurationSource = ConfigurationSourceTenantManaged
 		providerConfig, err := r.tenantManagedConfig(providerName, providerConfig)
 		if err != nil {
 			return nil, err
 		}
-		return r.newService(provider, providerConfig)
+		return &resolvedProviderConfig{provider: provider, config: providerConfig}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrInvalidMode, mode)
 	}

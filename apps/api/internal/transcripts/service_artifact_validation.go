@@ -32,64 +32,9 @@ func prepareRequestInput(input *RequestInput) error {
 		}
 	}
 	input.IdempotencyKey = key
-	if err := validateBoundedKey(input.ManifestKey); err != nil {
-		return ErrInvalidManifest
-	}
-	if len(input.ManifestSHA256) != 32 || input.ManifestSize < 1 || input.ManifestSize > 524288000 {
-		return ErrInvalidManifest
-	}
-	if input.ManifestContentType != "application/json" {
-		return ErrInvalidManifest
-	}
-	if len(input.Chunks) == 0 || len(input.Chunks) > maxTranscriptionChunks {
-		return ErrInvalidChunk
-	}
 	// Queue priority and retry budget are release policy, never tenant input.
 	input.Priority = 0
 	input.AttemptLimit = 4
-	for i := range input.Chunks {
-		chunk := &input.Chunks[i]
-		if chunk.ID.IsZero() {
-			id, err := utilities.NewID()
-			if err != nil {
-				return err
-			}
-			chunk.ID = id
-		}
-		if chunk.Index != i || chunk.Generation < 1 || chunk.StartMS < 0 || chunk.EndMS <= chunk.StartMS || chunk.EndMS-chunk.StartMS > 15*60*1000 {
-			return ErrInvalidChunk
-		}
-		if err := validateBoundedKey(chunk.StorageKey); err != nil || len(chunk.Checksum) != 32 || chunk.Size < 1 || chunk.Size > 524288000 {
-			return ErrInvalidChunk
-		}
-		if err := validateContentType(chunk.ContentType); err != nil {
-			return ErrInvalidChunk
-		}
-		if len(chunk.ParticipantRef) > 128 || len(chunk.TrackEpoch) > 128 {
-			return ErrInvalidChunk
-		}
-		if chunk.IdentityKind == "" {
-			chunk.IdentityKind = "unknown"
-		}
-		if chunk.TrackClass == "" {
-			chunk.TrackClass = "unknown"
-		}
-		if chunk.IdentityKind != "participant" && chunk.IdentityKind != "shared" && chunk.IdentityKind != "unknown" {
-			return ErrInvalidChunk
-		}
-		if chunk.TrackClass != "microphone" && chunk.TrackClass != "screen-share" && chunk.TrackClass != "system-audio" && chunk.TrackClass != "unknown" {
-			return ErrInvalidChunk
-		}
-		if chunk.IdentityKind == "participant" && (chunk.ParticipantRef == "" || chunk.TrackEpoch == "") {
-			return ErrInvalidChunk
-		}
-		if chunk.IdentityKind != "participant" && (chunk.ParticipantRef != "" || chunk.TrackEpoch != "") {
-			return ErrInvalidChunk
-		}
-		if chunk.TrackClass == "system-audio" && chunk.IdentityKind == "participant" {
-			return ErrInvalidChunk
-		}
-	}
 	if input.Language != "" && len(input.Language) > 32 {
 		return ErrInvalidTranscriptField
 	}
@@ -108,6 +53,9 @@ func prepareRequestInput(input *RequestInput) error {
 	}
 	if len(input.Traceparent) > 256 || len(input.Tracestate) > 512 {
 		return ErrInvalidTranscriptField
+	}
+	if input.Now.IsZero() {
+		input.Now = time.Now()
 	}
 	return nil
 }
@@ -181,14 +129,6 @@ func validateBoundedKey(value string) error {
 		if part == "" || part == "." || part == ".." {
 			return ErrInvalidArtifact
 		}
-	}
-	return nil
-}
-
-func validateContentType(value string) error {
-	value = strings.TrimSpace(value)
-	if value == "" || len(value) > 128 || !strings.Contains(value, "/") {
-		return ErrInvalidArtifact
 	}
 	return nil
 }

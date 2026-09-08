@@ -112,6 +112,10 @@ func Resolve(tenant TenantPolicy, space SpacePolicy) (Snapshot, error) {
 	}
 
 	mode := transcriptionModeWithinCeiling(space.Transcription, tenant.TranscriptionCeiling)
+	sourceWindow := tenant.TranscriptionSourceWindow
+	if mode == TranscriptionDisabled {
+		sourceWindow = 0
+	}
 	return Snapshot{
 		SchemaVersion: SnapshotSchemaVersion,
 		Recording: RecordingSnapshot{
@@ -123,7 +127,7 @@ func Resolve(tenant TenantPolicy, space SpacePolicy) (Snapshot, error) {
 			Mode:                  mode,
 			ProviderPolicyVersion: tenant.ProviderPolicyVersion,
 			Retention:             tenant.TranscriptRetention,
-			SourceWindow:          tenant.TranscriptionSourceWindow,
+			SourceWindow:          sourceWindow,
 		},
 	}, nil
 }

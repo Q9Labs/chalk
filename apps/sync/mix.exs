@@ -34,7 +34,7 @@ defmodule ChalkSync.MixProject do
       {:opentelemetry_exporter, "~> 1.10"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mint_web_socket, "~> 1.0", only: :test},
-      {:mint, "~> 1.9.3", only: :test}
+      {:mint, "~> 1.10.0", only: :test}
     ]
   end
 end

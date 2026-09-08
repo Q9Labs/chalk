@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -39,6 +38,8 @@ type transcriptArtifactQuerier interface {
 	CreateTranscription(context.Context, sqlc.CreateTranscriptionParams) (sqlc.Transcription, error)
 	CreateTranscriptChunk(context.Context, sqlc.CreateTranscriptChunkParams) (sqlc.TranscriptChunk, error)
 	GetTranscriptChunk(context.Context, pgtype.UUID) (sqlc.TranscriptChunk, error)
+	GetRecordingTranscriptionSource(context.Context, sqlc.GetRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error)
+	GetRecordingTranscriptionSourceChunk(context.Context, sqlc.GetRecordingTranscriptionSourceChunkParams) (sqlc.RecordingTranscriptionSourceChunk, error)
 	CreateArtifactJob(context.Context, sqlc.CreateArtifactJobParams) (sqlc.ArtifactJob, error)
 	ClaimArtifactJob(context.Context, sqlc.ClaimArtifactJobParams) (sqlc.ArtifactJob, error)
 	ClaimTranscriptionFinalizerJob(context.Context, sqlc.ClaimTranscriptionFinalizerJobParams) (sqlc.ArtifactJob, error)
@@ -56,9 +57,6 @@ type transcriptArtifactQuerier interface {
 }
 
 type transcriptSourceQuerier interface {
-	UpsertRecordingTranscriptionSource(context.Context, sqlc.UpsertRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error)
-	DeleteRecordingTranscriptionSourceChunks(context.Context, pgtype.UUID) error
-	ReplaceRecordingTranscriptionSourceChunk(context.Context, sqlc.ReplaceRecordingTranscriptionSourceChunkParams) (sqlc.RecordingTranscriptionSourceChunk, error)
 	GetRecordingTranscriptionSource(context.Context, sqlc.GetRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error)
 	ListRecordingTranscriptionSourceChunks(context.Context, sqlc.ListRecordingTranscriptionSourceChunksParams) ([]sqlc.RecordingTranscriptionSourceChunk, error)
 }
@@ -155,29 +153,24 @@ func (r TranscriptRepository) Request(ctx context.Context, input transcripts.Req
 	if r.transactor == nil {
 		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrArtifactRepository
 	}
-	// A retry first observes the deterministic per-chunk key without opening a
-	// transaction that could be poisoned by a uniqueness violation.
-	firstKey := chunkJobKey(input.IdempotencyKey, 0)
-	if existing, err := r.queries.(interface {
+	idempotencyQueries, ok := r.queries.(interface {
 		GetArtifactJobByIdempotency(context.Context, sqlc.GetArtifactJobByIdempotencyParams) (sqlc.ArtifactJob, error)
-	}).GetArtifactJobByIdempotency(ctx, sqlc.GetArtifactJobByIdempotencyParams{TenantID: uuid(input.TenantID), IdempotencyKey: firstKey}); err == nil {
-		transcript, getErr := r.Get(ctx, input.TenantID, utilities.IDFromBytes(existing.TranscriptID.Bytes))
-		if getErr != nil {
-			return transcripts.Transcript{}, transcripts.Job{}, getErr
-		}
-		return transcript, mapJob(existing), nil
+	})
+	if !ok {
+		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrArtifactRepository
 	}
-	if existing, err := r.queries.GetTenantTranscriptionByRecording(ctx, sqlc.GetTenantTranscriptionByRecordingParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)}); err == nil {
-		job, jobErr := r.queries.GetTranscriptionChunkJob(ctx, existing.ID)
-		if jobErr == nil {
-			return mapTranscript(existing), mapJob(job), nil
+	firstKey := chunkJobKey(input.IdempotencyKey, 0)
+	if existing, getErr := idempotencyQueries.GetArtifactJobByIdempotency(ctx, sqlc.GetArtifactJobByIdempotencyParams{TenantID: uuid(input.TenantID), IdempotencyKey: firstKey}); getErr == nil {
+		transcript, transcriptErr := r.queries.GetTenantTranscription(ctx, sqlc.GetTenantTranscriptionParams{TenantID: uuid(input.TenantID), ID: existing.TranscriptID})
+		if transcriptErr != nil {
+			return transcripts.Transcript{}, transcripts.Job{}, transcriptErr
 		}
-		if !errors.Is(jobErr, pgx.ErrNoRows) {
-			return transcripts.Transcript{}, transcripts.Job{}, jobErr
+		if !requestMatchesTranscript(input, transcript) {
+			return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrIdempotencyConflict
 		}
-		// A completed or tombstoned transcription remains the singular child
-		// for this recording. Do not create new work against consumed sources.
-		return mapTranscript(existing), transcripts.Job{}, nil
+		return mapTranscript(transcript), mapJob(existing), nil
+	} else if !errors.Is(getErr, pgx.ErrNoRows) {
+		return transcripts.Transcript{}, transcripts.Job{}, getErr
 	}
 	mode, err := r.queries.GetCompletedRecordingTranscriptionMode(ctx, sqlc.GetCompletedRecordingTranscriptionModeParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -195,62 +188,67 @@ func (r TranscriptRepository) Request(ctx context.Context, input transcripts.Req
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := sqlc.New(tx)
-	transcriptID, err := utilities.NewID()
-	if err != nil {
-		return transcripts.Transcript{}, transcripts.Job{}, err
-	}
-	status := transcripts.StatusPreparing
-	languages := input.Languages
-	if len(languages) == 0 && input.Language != "" {
-		languages = []string{input.Language}
-	}
-	row, err := q.CreateRequestedTranscription(ctx, sqlc.CreateRequestedTranscriptionParams{ID: uuid(transcriptID), TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), Status: status, Languages: languages, SourceManifestKey: text(&input.ManifestKey), SourceManifestSha256: input.ManifestSHA256, SourceManifestSize: pgtype.Int8{Int64: input.ManifestSize, Valid: true}, SourceManifestContentType: text(&input.ManifestContentType), Generation: 1})
-	if errors.Is(err, pgx.ErrNoRows) {
-		existing, existingErr := q.GetTenantTranscriptionByRecording(ctx, sqlc.GetTenantTranscriptionByRecordingParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)})
-		if errors.Is(existingErr, pgx.ErrNoRows) {
-			return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrRecordingNotFound
+	if existing, getErr := q.GetArtifactJobByIdempotency(ctx, sqlc.GetArtifactJobByIdempotencyParams{TenantID: uuid(input.TenantID), IdempotencyKey: firstKey}); getErr == nil {
+		transcript, transcriptErr := q.GetTenantTranscription(ctx, sqlc.GetTenantTranscriptionParams{TenantID: uuid(input.TenantID), ID: existing.TranscriptID})
+		if transcriptErr != nil {
+			return transcripts.Transcript{}, transcripts.Job{}, transcriptErr
 		}
-		if existingErr != nil {
-			return transcripts.Transcript{}, transcripts.Job{}, existingErr
-		}
-		job, jobErr := q.GetTranscriptionChunkJob(ctx, existing.ID)
-		if jobErr != nil && !errors.Is(jobErr, pgx.ErrNoRows) {
-			return transcripts.Transcript{}, transcripts.Job{}, jobErr
+		if !requestMatchesTranscript(input, transcript) {
+			return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrIdempotencyConflict
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return transcripts.Transcript{}, transcripts.Job{}, err
 		}
-		if errors.Is(jobErr, pgx.ErrNoRows) {
-			return mapTranscript(existing), transcripts.Job{}, nil
-		}
-		return mapTranscript(existing), mapJob(job), nil
+		return mapTranscript(transcript), mapJob(existing), nil
+	} else if !errors.Is(getErr, pgx.ErrNoRows) {
+		return transcripts.Transcript{}, transcripts.Job{}, getErr
+	}
+	if _, existingErr := q.GetTenantTranscriptionByRecording(ctx, sqlc.GetTenantTranscriptionByRecordingParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)}); existingErr == nil {
+		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrTranscriptAlreadyExists
+	} else if !errors.Is(existingErr, pgx.ErrNoRows) {
+		return transcripts.Transcript{}, transcripts.Job{}, existingErr
+	}
+	sourceRow, err := q.LockRecordingTranscriptionSource(ctx, sqlc.LockRecordingTranscriptionSourceParams{RecordingID: uuid(input.RecordingID), TenantID: uuid(input.TenantID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrSourceNotReady
 	}
 	if err != nil {
-		return transcripts.Transcript{}, transcripts.Job{}, fmt.Errorf("create transcription request: %w", err)
+		return transcripts.Transcript{}, transcripts.Job{}, err
 	}
-	var firstJob sqlc.ArtifactJob
-	for i, chunk := range input.Chunks {
-		resultKey := chunkResultKey(input.TenantID, transcriptID, chunk.Generation, chunk.Index, 1)
-		chunkRow, err := q.CreateTranscriptChunk(ctx, sqlc.CreateTranscriptChunkParams{ID: uuid(chunk.ID), TranscriptID: uuid(transcriptID), TenantID: uuid(input.TenantID), ChunkIndex: int32(chunk.Index), Generation: chunk.Generation, StartMs: chunk.StartMS, EndMs: chunk.EndMS, ParticipantRef: text(stringPtr(chunk.ParticipantRef)), TrackEpoch: text(stringPtr(chunk.TrackEpoch)), IdentityKind: chunk.IdentityKind, TrackClass: chunk.TrackClass, StorageKey: chunk.StorageKey, ResultKey: resultKey, Checksum: chunk.Checksum, Size: chunk.Size, ContentType: chunk.ContentType})
-		if err != nil {
-			return transcripts.Transcript{}, transcripts.Job{}, fmt.Errorf("create transcript chunk: %w", err)
+	if sourceRow.Status != "ready" || !timestamp(sourceRow.ExpiresAt).After(input.Now) {
+		if sourceRow.Status == "ready" {
+			if _, expireErr := q.MarkRecordingTranscriptionSourceExpired(ctx, sqlc.MarkRecordingTranscriptionSourceExpiredParams{RecordingID: uuid(input.RecordingID), TenantID: uuid(input.TenantID), Now: pgtype.Timestamptz{Time: input.Now, Valid: true}}); expireErr != nil && !errors.Is(expireErr, pgx.ErrNoRows) {
+				return transcripts.Transcript{}, transcripts.Job{}, expireErr
+			}
+			if err := enqueueRecordingTranscriptionSourceCleanupTx(ctx, q, sourceRow, input.Now); err != nil {
+				return transcripts.Transcript{}, transcripts.Job{}, err
+			}
 		}
-		jobID, err := utilities.NewID()
-		if err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			return transcripts.Transcript{}, transcripts.Job{}, err
 		}
-		job, err := q.CreateArtifactJob(ctx, sqlc.CreateArtifactJobParams{ID: uuid(jobID), IdempotencyKey: chunkJobKey(input.IdempotencyKey, i), TenantID: uuid(input.TenantID), EpisodeID: row.EpisodeID, RecordingID: uuid(input.RecordingID), TranscriptID: uuid(transcriptID), ChunkID: uuid(utilities.IDFromBytes(chunkRow.ID.Bytes)), ArtifactKind: "transcription_chunk", PayloadSchemaVersion: 1, Priority: int32(input.Priority), AvailableAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, AttemptLimit: int32(input.AttemptLimit), JourneyID: uuid(input.JourneyID), Traceparent: text(stringPtr(input.Traceparent)), Tracestate: text(stringPtr(input.Tracestate))})
-		if err != nil {
-			return transcripts.Transcript{}, transcripts.Job{}, fmt.Errorf("create transcription job: %w", err)
-		}
-		if i == 0 {
-			firstJob = job
-		}
+		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrSourceExpired
+	}
+	chunkRows, err := q.ListRecordingTranscriptionSourceChunks(ctx, sqlc.ListRecordingTranscriptionSourceChunksParams{RecordingID: uuid(input.RecordingID), TenantID: uuid(input.TenantID)})
+	if err != nil {
+		return transcripts.Transcript{}, transcripts.Job{}, err
+	}
+	chunks := make([]transcripts.ChunkInput, 0, len(chunkRows))
+	for _, chunk := range chunkRows {
+		chunks = append(chunks, mapSourceChunk(chunk))
+	}
+	source := mapRecordingTranscriptionSource(sourceRow, chunks)
+	transcript, jobs, err := admitTranscriptionTx(ctx, q, input, source, chunks, false)
+	if err != nil {
+		return transcripts.Transcript{}, transcripts.Job{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Transcript{}, transcripts.Job{}, fmt.Errorf("commit transcription request: %w", err)
 	}
-	return mapTranscript(row), mapJob(firstJob), nil
+	if len(jobs) == 0 {
+		return transcript, transcripts.Job{}, nil
+	}
+	return transcript, jobs[0], nil
 }
 
 func (r TranscriptRepository) mutateLease(ctx context.Context, input transcripts.LeaseInput, mutate func(transcriptArtifactQuerier, []byte) (sqlc.ArtifactJob, error)) (transcripts.Job, error) {
@@ -284,4 +282,3 @@ func (r TranscriptRepository) artifactQueries() transcriptArtifactQuerier {
 
 var _ transcripts.Repository = TranscriptRepository{}
 var _ transcripts.ArtifactRepository = TranscriptRepository{}
-var _ transcripts.SourceRepository = TranscriptRepository{}

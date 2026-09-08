@@ -11,8 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -22,11 +25,20 @@ type episodeLifecycleTransactor interface {
 }
 
 type EpisodeLifecycleRepository struct {
-	transactor episodeLifecycleTransactor
+	transactor           episodeLifecycleTransactor
+	mediaBindingResolver episodeMediaBindingResolver
+}
+
+type episodeMediaBindingResolver interface {
+	ResolveBinding(tenants.Tenant, spaces.Space) (*mediaplane.Binding, error)
 }
 
 func NewEpisodeLifecycleRepository(transactor episodeLifecycleTransactor) EpisodeLifecycleRepository {
 	return EpisodeLifecycleRepository{transactor: transactor}
+}
+
+func NewEpisodeLifecycleRepositoryWithMediaBinding(transactor episodeLifecycleTransactor, resolver episodeMediaBindingResolver) EpisodeLifecycleRepository {
+	return EpisodeLifecycleRepository{transactor: transactor, mediaBindingResolver: resolver}
 }
 
 func (r EpisodeLifecycleRepository) transaction(ctx context.Context, work func(*sqlc.Queries, pgx.Tx) error) error {

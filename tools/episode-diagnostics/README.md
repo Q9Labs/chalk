@@ -46,3 +46,23 @@ dependency for the product page, never the browser-proof target itself.
 The proof checks the product-owned debugger root, seven view controls, copy and
 export actions, recovery and visibility-gap markers, fixed clock/font/data
 readiness, and basic accessibility at 1440, 1280, and 1024 CSS pixels.
+
+## Feedback operator commands
+
+The same private operator credential and environment checks power Feedback
+retrieval. The root aliases are `pnpm feedback ...` and
+`pnpm --dir tools/episode-diagnostics feedback ...`:
+
+```sh
+pnpm feedback list --category bug --source chalk_web
+pnpm feedback show <feedback-id>
+pnpm feedback pull <feedback-id> --output .private/feedback/<feedback-id>
+pnpm feedback open <feedback-id>
+```
+
+`pull` verifies bounded evidence and screenshot bytes against their SHA-256
+headers before atomically writing a new directory. `open` uses the strongest
+validated correlation and only configured Chalk observability hosts; set
+`CHALK_FEEDBACK_OBSERVABILITY_URL` and
+`CHALK_FEEDBACK_OBSERVABILITY_HOSTS` when the debugger is hosted separately
+from the API origin. Use `--no-launch` to print the safe URL and command.

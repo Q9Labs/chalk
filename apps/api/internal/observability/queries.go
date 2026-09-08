@@ -578,24 +578,6 @@ func (q operationQuerier) ListRecordingTranscriptionSourceChunks(ctx context.Con
 	LogOperation(ctx, q.logger, "db.query", "ListRecordingTranscriptionSourceChunks", startedAt, err)
 	return value, err
 }
-func (q operationQuerier) DeleteRecordingTranscriptionSourceChunks(ctx context.Context, recordingID pgtype.UUID) error {
-	startedAt := time.Now()
-	err := q.next.DeleteRecordingTranscriptionSourceChunks(ctx, recordingID)
-	LogOperation(ctx, q.logger, "db.query", "DeleteRecordingTranscriptionSourceChunks", startedAt, err)
-	return err
-}
-func (q operationQuerier) ReplaceRecordingTranscriptionSourceChunk(ctx context.Context, arg sqlc.ReplaceRecordingTranscriptionSourceChunkParams) (sqlc.RecordingTranscriptionSourceChunk, error) {
-	startedAt := time.Now()
-	value, err := q.next.ReplaceRecordingTranscriptionSourceChunk(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReplaceRecordingTranscriptionSourceChunk", startedAt, err)
-	return value, err
-}
-func (q operationQuerier) UpsertRecordingTranscriptionSource(ctx context.Context, arg sqlc.UpsertRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error) {
-	startedAt := time.Now()
-	value, err := q.next.UpsertRecordingTranscriptionSource(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "UpsertRecordingTranscriptionSource", startedAt, err)
-	return value, err
-}
 func (q operationQuerier) CreateTranscriptionCleanupJob(ctx context.Context, arg sqlc.CreateTranscriptionCleanupJobParams) (sqlc.TranscriptionCleanupJob, error) {
 	startedAt := time.Now()
 	value, err := q.next.CreateTranscriptionCleanupJob(ctx, arg)

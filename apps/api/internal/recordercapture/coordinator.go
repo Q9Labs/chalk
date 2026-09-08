@@ -164,6 +164,9 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 		return Snapshot{}, err
 	}
 	if len(requested) == 0 {
+		if err := c.peer.RegisterTracks(nil); err != nil {
+			return Snapshot{}, fmt.Errorf("register empty initial capture track set: %w", err)
+		}
 		if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, create.Negotiation, "create"); err != nil {
 			return Snapshot{}, err
 		}
@@ -365,6 +368,10 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 	}
 	removed, additions := diffTracks(c.tracks, desired)
 	if len(removed) > 0 {
+		remaining := tracksWithout(c.tracks, removed)
+		if err := c.peer.RegisterTracks(remaining); err != nil {
+			return Snapshot{}, fmt.Errorf("register capture tracks after removals: %w", err)
+		}
 		metadata := c.authority.metadata(plan.Revision(), captureplane.OperationCloseCaptureTracks, stableIdempotencyKey(c.authority.CaptureEpoch, plan.Revision(), captureplane.OperationCloseCaptureTracks, "removed"))
 		if err := c.executeCloseTracks(ctx, metadata, c.connection.ConnectionReference, removed); err != nil {
 			return Snapshot{}, err
@@ -382,8 +389,10 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 		if err := c.validatePulledTracks(pulled, metadata, additions); err != nil {
 			return Snapshot{}, err
 		}
-		if err := c.peer.RegisterTracks(pulled.Tracks); err != nil {
-			return Snapshot{}, fmt.Errorf("register capture track additions: %w", err)
+		active := c.snapshotLocked().Tracks
+		active = append(active, pulled.Tracks...)
+		if err := c.peer.RegisterTracks(active); err != nil {
+			return Snapshot{}, fmt.Errorf("register complete capture track set: %w", err)
 		}
 		if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, pulled.Negotiation, "additions"); err != nil {
 			return Snapshot{}, err
@@ -613,6 +622,21 @@ func (c *Coordinator) setActiveTracks(tracks []captureplane.PulledCaptureTrack) 
 	for _, track := range tracks {
 		c.tracks[trackKey(track.CaptureTrack)] = track
 	}
+}
+
+func tracksWithout(active map[string]captureplane.PulledCaptureTrack, removed []captureplane.PulledCaptureTrack) []captureplane.PulledCaptureTrack {
+	removedKeys := make(map[string]struct{}, len(removed))
+	for _, track := range removed {
+		removedKeys[trackKey(track.CaptureTrack)] = struct{}{}
+	}
+	remaining := make([]captureplane.PulledCaptureTrack, 0, len(active)-len(removedKeys))
+	for key, track := range active {
+		if _, remove := removedKeys[key]; !remove {
+			remaining = append(remaining, track)
+		}
+	}
+	sort.Slice(remaining, func(i, j int) bool { return remaining[i].MID < remaining[j].MID })
+	return remaining
 }
 
 func diffTracks(active map[string]captureplane.PulledCaptureTrack, desired []captureplane.CaptureTrack) ([]captureplane.PulledCaptureTrack, []captureplane.CaptureTrack) {

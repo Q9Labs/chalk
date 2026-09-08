@@ -283,7 +283,7 @@ func (s Service) Commit(ctx context.Context, input CommitInput) (Bundle, error) 
 	if err != nil {
 		return Bundle{}, err
 	}
-	if facts.Size != allocation.ExpectedByteSize || facts.ContentType != allocation.ContentType || len(checksum) != sha256.Size || !bytesEqual(checksum, allocation.ExpectedChecksumSHA256) || strings.TrimSpace(facts.VersionID) == "" || strings.TrimSpace(facts.ETag) == "" {
+	if facts.Size != allocation.ExpectedByteSize || facts.ContentType != allocation.ContentType || len(checksum) != sha256.Size || !bytesEqual(checksum, allocation.ExpectedChecksumSHA256) || strings.TrimSpace(facts.ETag) == "" {
 		return Bundle{}, ErrObjectFactsMismatch
 	}
 
@@ -310,21 +310,11 @@ func opaqueToken() (string, error) {
 }
 
 func objectChecksum(facts objectstorage.ObjectFacts) ([]byte, error) {
-	if facts.ChecksumSHA256 != "" {
-		decoded, err := base64.StdEncoding.Strict().DecodeString(facts.ChecksumSHA256)
-		if err != nil || len(decoded) != sha256.Size {
-			return nil, ErrObjectFactsMismatch
-		}
-		return decoded, nil
+	checksum, err := objectstorage.ObjectSHA256(facts)
+	if err != nil {
+		return nil, ErrObjectFactsMismatch
 	}
-	if value := facts.Metadata["chalk-sha256"]; value != "" {
-		decoded, err := hex.DecodeString(value)
-		if err != nil || len(decoded) != sha256.Size {
-			return nil, ErrObjectFactsMismatch
-		}
-		return decoded, nil
-	}
-	return nil, ErrObjectFactsMismatch
+	return checksum, nil
 }
 
 func sameAllocationRequest(left, right Allocation) bool {

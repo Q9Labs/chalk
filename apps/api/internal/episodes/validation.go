@@ -272,6 +272,11 @@ func validateConfigSnapshot(raw json.RawMessage) (json.RawMessage, EpisodeConfig
 			return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
 		}
 	}
+	if snapshot.MediaPlaneBinding != nil {
+		if err := snapshot.MediaPlaneBinding.Validate(); err != nil {
+			return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
+		}
+	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot

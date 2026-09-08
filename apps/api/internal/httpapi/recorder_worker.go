@@ -11,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -82,6 +84,12 @@ type RecorderWorkerControlServices struct {
 	RecordingKeys      RecorderRecordingKeyService
 	RecordingObjects   RecorderRecordingObjectService
 	RecordingLifecycle RecorderRecordingLifecycleService
+	RenderAuthority    RecorderRenderAuthorityService
+	FleetAuthority     RecorderFleetWorkerService
+}
+
+type RecorderFleetWorkerService interface {
+	RecordWorkerObservation(context.Context, recorderfleetauthority.WorkerObservation) (recorderfleet.NodeObservation, error)
 }
 
 func NewRecorderWorkerRouterWithControls(service RecorderWorkerService, verifier RecorderWorkerVerifier, controls RecorderWorkerControlServices) http.Handler {
@@ -112,14 +120,14 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 		r.Post("/jobs/progress", recorderWorkerProgressHandler(service))
 		r.Post("/jobs/fail", recorderWorkerFailHandler(service))
 		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service))
-		r.Post("/artifacts", recorderWorkerArtifactHandler(service))
-		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service))
+		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority))
 		if controls.CapturePlans != nil {
 			r.Post("/plans/wait", recorderWorkerCapturePlanWaitHandler(controls.CapturePlans))
 		}
 		mountRecorderCaptureSignalingRoutes(r, controls.CaptureSignaling)
 		mountRecorderRecordingAuthorityRoutes(r, controls.RecordingKeys, controls.RecordingObjects)
 		mountRecorderRecordingLifecycleRoutes(r, controls.RecordingLifecycle)
+		mountRecorderRenderAuthorityRoutes(r, controls.RenderAuthority)
 	})
 }
 
@@ -173,22 +181,6 @@ type recorderWorkerFailBody struct {
 
 type recorderWorkerCompleteBody struct {
 	recorderWorkerLeaseBody
-}
-
-type recorderWorkerArtifactBody struct {
-	TenantID          string `json:"tenant_id"`
-	RecordingID       string `json:"recording_id"`
-	RenderJobID       string `json:"render_job_id"`
-	ObjectKey         string `json:"object_key"`
-	ContentType       string `json:"content_type"`
-	ByteSize          int64  `json:"byte_size"`
-	Checksum          string `json:"checksum"`
-	DurationMillis    int64  `json:"duration_millis"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	LeaseToken        string `json:"lease_token"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
 }
 
 type recorderWorkerPoolHealthBody struct {
@@ -462,6 +454,10 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFu
 		if !ok {
 			return
 		}
+		if identity.Role == workeridentity.RoleRender {
+			writeError(w, http.StatusForbidden, "worker.forbidden", "Render jobs complete through the fenced render commit")
+			return
+		}
 		body, ok := decodeRecorderWorkerBody[recorderWorkerCompleteBody](w, request)
 		if !ok {
 			return
@@ -477,14 +473,10 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFu
 		}
 		var job recordingpipeline.Job
 		var err error
-		if identity.Role == workeridentity.RoleCapture {
-			if captureCompleter, ok := service.(interface {
-				CompleteCapture(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
-			}); ok {
-				job, err = captureCompleter.CompleteCapture(request.Context(), lease)
-			} else {
-				job, err = service.Complete(request.Context(), lease)
-			}
+		if captureCompleter, ok := service.(interface {
+			CompleteCapture(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+		}); ok {
+			job, err = captureCompleter.CompleteCapture(request.Context(), lease)
 		} else {
 			job, err = service.Complete(request.Context(), lease)
 		}
@@ -496,39 +488,7 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFu
 	}
 }
 
-func recorderWorkerArtifactHandler(service RecorderWorkerService) http.HandlerFunc {
-	return func(w http.ResponseWriter, request *http.Request) {
-		identity, ok := recorderWorkerRequestIdentity(w, request)
-		if !ok {
-			return
-		}
-		if identity.Role != workeridentity.RoleRender {
-			writeError(w, http.StatusForbidden, "worker.forbidden", "Only render workers may report artifacts")
-			return
-		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerArtifactBody](w, request)
-		if !ok {
-			return
-		}
-		input, ok := recorderWorkerArtifactInput(identity, body)
-		if !ok {
-			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording artifact")
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
-		}
-		artifact, err := service.CommitArtifact(request.Context(), input)
-		if err != nil {
-			writeRecorderWorkerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, recorderWorkerArtifactResponseValue(artifact))
-	}
-}
-
-func recorderWorkerPoolHealthHandler(service RecorderWorkerService) http.HandlerFunc {
+func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet RecorderFleetWorkerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderWorkerRequestIdentity(w, request)
 		if !ok {
@@ -550,6 +510,22 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService) http.Handler
 				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid observation time")
 				return
 			}
+		}
+		if fleet != nil {
+			observation, err := fleet.RecordWorkerObservation(request.Context(), recorderfleetauthority.WorkerObservation{
+				Identity: identity, Ready: body.ReadyCapacity > 0, AdmissionOpen: body.AdmissionOpen,
+				ReadyCapacity: body.ReadyCapacity, ObservedAt: observedAt,
+			})
+			if err != nil {
+				writeRecorderFleetError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, recorderWorkerPoolHealthResponse{
+				Role: string(identity.Role), AdmissionOpen: observation.AdmissionOpen,
+				ReadyCapacity: observation.ReadyCapacity, Reason: strings.TrimSpace(body.Reason),
+				ObservedAt: utilities.FormatTimestamp(observation.ObservedAt), UpdatedAt: utilities.FormatTimestamp(time.Now().UTC()),
+			})
+			return
 		}
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
@@ -644,27 +620,6 @@ func recorderWorkerCapturePlanWaitInput(identity workeridentity.Identity, body r
 		time.Duration(body.WaitMilliseconds)*time.Millisecond,
 	)
 	return input, input.Validate(time.Now().UTC()) == nil
-}
-
-func recorderWorkerArtifactInput(identity workeridentity.Identity, body recorderWorkerArtifactBody) (recordingpipeline.ArtifactInput, bool) {
-	tenantID, err := utilities.ParseID(body.TenantID)
-	if err != nil {
-		return recordingpipeline.ArtifactInput{}, false
-	}
-	recordingID, err := utilities.ParseID(body.RecordingID)
-	if err != nil {
-		return recordingpipeline.ArtifactInput{}, false
-	}
-	renderJobID, err := utilities.ParseID(body.RenderJobID)
-	if err != nil {
-		return recordingpipeline.ArtifactInput{}, false
-	}
-	checksum, err := decodeChecksum(body.Checksum)
-	digest, digestErr := decodeEnvelopeDigest(body.EnvelopeDigest)
-	if err != nil || digestErr != nil || body.DurationMillis < 0 || body.AttemptCount < 1 || body.FencingGeneration < 1 || body.CaptureEpoch < 1 || strings.TrimSpace(body.LeaseToken) == "" {
-		return recordingpipeline.ArtifactInput{}, false
-	}
-	return recordingpipeline.ArtifactInput{TenantID: tenantID, RecordingID: recordingID, RenderJobID: renderJobID, ObjectKey: strings.TrimSpace(body.ObjectKey), ContentType: strings.TrimSpace(body.ContentType), ByteSize: body.ByteSize, Checksum: checksum, Duration: time.Duration(body.DurationMillis) * time.Millisecond, AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration, LeaseToken: body.LeaseToken, LeaseOwner: recorderWorkerLeaseOwner(identity), CaptureEpoch: body.CaptureEpoch, EnvelopeDigest: digest}, true
 }
 
 func decodeEnvelopeDigest(value string) ([]byte, error) {

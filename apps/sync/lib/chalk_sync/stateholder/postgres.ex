@@ -40,6 +40,9 @@ defmodule ChalkSync.Stateholder.Postgres do
   @pending_receipt_reserved_bytes 2_048
   @schema_version 1
   @publication_operation_id ~r/\A[A-Za-z0-9_-]{16,128}\z/
+  @automatic_recording_policy_snapshot_version 2
+  @uuid_namespace_dns <<0x6B, 0xA7, 0xB8, 0x10, 0x9D, 0xAD, 0x11, 0xD1, 0x80, 0xB4, 0x00, 0xC0,
+                        0x4F, 0xD4, 0x30, 0xC8>>
 
   @impl ChalkSync.Stateholder
   def decide_command(%Identity{} = identity, %Command{} = command) do
@@ -1098,20 +1101,15 @@ defmodule ChalkSync.Stateholder.Postgres do
         operation_decision(existing, :duplicate)
 
       :not_found ->
-        with :ok <- validate_internal_operation(operation),
-             {:ok, state} <- validate_fold(episode, control, policy),
-             {:ok, context} <-
-               prepare_internal_operation(connection, episode, operation, policy, state),
-             :ok <- ensure_operation_capacity(connection, episode) do
-          persist_internal_operation_acceptance(
-            connection,
-            episode,
-            operation,
-            policy,
-            state,
-            context
-          )
-        else
+        result =
+          with {:ok, state} <- validate_fold(episode, control, policy) do
+            persist_new_internal_operation(connection, episode, operation, policy, state)
+          end
+
+        case result do
+          %OperationDecision{} = decision ->
+            decision
+
           {:error, :overloaded} ->
             Postgrex.rollback(connection, {:retryable, :overloaded})
 
@@ -1467,7 +1465,8 @@ defmodule ChalkSync.Stateholder.Postgres do
        ) do
     recording_id = operation.payload["recordingId"]
 
-    with :ok <- validate_recording_policy(policy, operation),
+    with :ok <- validate_recording_episode(policy),
+         :ok <- validate_recording_policy(policy, operation),
          {:ok, recording_reservation} <- derive_recording_reservation(episode, policy) do
       if is_nil(state.recording) or state.recording["status"] in ["stopped", "failed"] do
         {:ok,
@@ -1525,6 +1524,9 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   defp validate_recording_policy(_policy, _operation), do: {:error, :recording_policy_disabled}
+
+  defp validate_recording_episode(%{status: "active"}), do: :ok
+  defp validate_recording_episode(_policy), do: {:error, :episode_ended}
 
   defp derive_recording_reservation(episode, %{
          artifact_policy: artifact_policy,
@@ -1618,21 +1620,24 @@ defmodule ChalkSync.Stateholder.Postgres do
          start_operation_id,
          start_operation_uuid
        ) do
+    with :ok <- validate_recording_start_applied(connection, episode, start_operation_id) do
+      params =
+        episode_params(episode) ++ [uuid(recording_id), capture_epoch, start_operation_uuid]
+
+      case Postgrex.query!(connection, SQL.advance_recording_capture_epoch(), params).rows do
+        [[_recording_id]] ->
+          {:ok, %{recording_id: recording_id, target: nil, sources: []}}
+
+        [] ->
+          {:error, :stale_recording_fence}
+      end
+    end
+  end
+
+  defp validate_recording_start_applied(connection, episode, start_operation_id) do
     case lock_external_operation(connection, episode, start_operation_id) do
-      %{name: :start_recording, status: :applied} ->
-        params =
-          episode_params(episode) ++ [uuid(recording_id), capture_epoch, start_operation_uuid]
-
-        case Postgrex.query!(connection, SQL.advance_recording_capture_epoch(), params).rows do
-          [[_recording_id]] ->
-            {:ok, %{recording_id: recording_id, target: nil, sources: []}}
-
-          [] ->
-            {:error, :stale_recording_fence}
-        end
-
-      _ ->
-        {:error, :stale_recording_fence}
+      %{name: :start_recording, status: :applied} -> :ok
+      _ -> {:error, :stale_recording_fence}
     end
   end
 
@@ -2261,9 +2266,25 @@ defmodule ChalkSync.Stateholder.Postgres do
          ).rows do
       [["starting", _generation, metadata, start_id, nil]]
       when start_id == start_operation_uuid ->
-        if recording_capture_epoch(metadata) == capture_epoch,
-          do: :ok,
-          else: {:error, :stale_recording_fence}
+        current_epoch = recording_capture_epoch(metadata)
+
+        cond do
+          current_epoch == capture_epoch ->
+            validate_recording_start_applied(connection, episode, start_operation_id)
+
+          is_integer(capture_epoch) and capture_epoch > current_epoch ->
+            validate_advanced_recording_capture_epoch(
+              connection,
+              episode,
+              recording_id,
+              capture_epoch,
+              start_operation_id,
+              start_operation_uuid
+            )
+
+          true ->
+            {:error, :stale_recording_fence}
+        end
 
       _ ->
         {:error, :stale_recording_fence}
@@ -2297,6 +2318,27 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   defp validate_recording_capture_epoch(_connection, _episode, _external), do: :ok
+
+  defp validate_advanced_recording_capture_epoch(
+         connection,
+         episode,
+         recording_id,
+         capture_epoch,
+         start_operation_id,
+         start_operation_uuid
+       ) do
+    case advance_recording_capture_ready(
+           connection,
+           episode,
+           recording_id,
+           capture_epoch,
+           start_operation_id,
+           start_operation_uuid
+         ) do
+      {:ok, _prepared} -> :ok
+      error -> error
+    end
+  end
 
   defp validate_finalization_episode(%{name: name}, %{status: "ending"})
        when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
@@ -3306,29 +3348,143 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   defp apply_pending_lifecycle(connection, episode, control, intent) do
-    episode_status = lock_lifecycle_episode_status(connection, episode)
+    policy = lock_operation_episode(connection, episode)
     participant = lock_lifecycle_participant(connection, episode, intent)
 
-    with :ok <- validate_lifecycle_product_state(intent, episode_status, participant),
+    with :ok <- validate_lifecycle_product_state(intent, policy.status, participant),
          {:ok, state} <- validate_fold(episode, control),
          payload = lifecycle_payload(intent, participant, state),
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, lifecycle_name(intent.name), payload) do
-      persist_lifecycle_commit(connection, episode, intent, event, next_state)
+      decision = persist_lifecycle_commit(connection, episode, intent, event, next_state)
+
+      maybe_accept_automatic_recording(connection, episode, intent, policy, next_state)
+      decision
     else
       {:error, reason} ->
         Postgrex.rollback(connection, {:error, normalize_lifecycle_error(reason)})
     end
   end
 
-  defp lock_lifecycle_episode_status(connection, episode) do
-    case Postgrex.query!(connection, SQL.lock_episode(), episode_params(episode)).rows do
-      [[status, _config_snapshot, _deadline_at, _deadline_generation, _created_at]] ->
-        status
+  defp maybe_accept_automatic_recording(
+         connection,
+         episode,
+         %{name: "participant_joined"} = intent,
+         policy,
+         state
+       ) do
+    if automatic_recording_policy?(policy) do
+      operation = automatic_recording_operation(episode)
 
-      [] ->
-        Postgrex.rollback(connection, {:error, :episode_not_found})
+      case fetch_internal_operation(connection, episode, operation) do
+        {:ok, existing} when existing.request_fingerprint == operation.fingerprint ->
+          :ok
+
+        {:ok, _conflicting} ->
+          Postgrex.rollback(connection, {:error, :invalid_state})
+
+        :not_found ->
+          checkpoint_automatic_recording_acceptance(
+            connection,
+            episode,
+            intent,
+            operation,
+            policy,
+            state
+          )
+      end
+    else
+      :ok
     end
+  end
+
+  defp maybe_accept_automatic_recording(
+         _connection,
+         _episode,
+         _intent,
+         _policy,
+         _state
+       ),
+       do: :ok
+
+  defp checkpoint_automatic_recording_acceptance(
+         connection,
+         episode,
+         intent,
+         operation,
+         policy,
+         state
+       ) do
+    case accept_automatic_recording(connection, episode, operation, policy, state) do
+      %OperationDecision{} ->
+        lifecycle_checkpoint(:after_automatic_recording_acceptance, episode, intent.id)
+
+      :ok ->
+        :ok
+    end
+  end
+
+  defp accept_automatic_recording(connection, episode, operation, policy, state) do
+    case persist_new_internal_operation(connection, episode, operation, policy, state) do
+      %OperationDecision{} = decision ->
+        decision
+
+      {:error, :recording_in_progress} ->
+        :ok
+
+      {:error, :overloaded} ->
+        Postgrex.rollback(connection, {:retryable, :overloaded})
+
+      {:error, reason} ->
+        Postgrex.rollback(connection, {:error, reason})
+    end
+  end
+
+  defp persist_new_internal_operation(connection, episode, operation, policy, state) do
+    with :ok <- validate_internal_operation(operation),
+         {:ok, context} <-
+           prepare_internal_operation(connection, episode, operation, policy, state),
+         :ok <- ensure_operation_capacity(connection, episode) do
+      persist_internal_operation_acceptance(
+        connection,
+        episode,
+        operation,
+        policy,
+        state,
+        context
+      )
+    end
+  end
+
+  defp automatic_recording_policy?(%{
+         status: "active",
+         artifact_policy: %{
+           "schema_version" => "episode_config.v2",
+           "recording" => %{"mode" => "automatic"}
+         }
+       }),
+       do: true
+
+  defp automatic_recording_policy?(_policy), do: false
+
+  defp automatic_recording_operation(%EpisodeKey{} = episode) do
+    request_key = "automatic_recording_" <> String.replace(episode.episode_id, "-", "")
+
+    {:ok, operation} =
+      Operation.system_recording_start(
+        request_key,
+        automatic_recording_id(episode),
+        @automatic_recording_policy_snapshot_version
+      )
+
+    operation
+  end
+
+  defp automatic_recording_id(%EpisodeKey{episode_id: episode_id}) do
+    <<a::48, _version::4, b::12, _variant::2, c::62, _rest::binary>> =
+      :crypto.hash(:sha, [@uuid_namespace_dns, "chalk-sync/automatic-recording/", episode_id])
+
+    UUID.load!(<<a::48, 5::4, b::12, 2::2, c::62>>)
   end
 
   defp lock_lifecycle_participant(_connection, _episode, %{name: "episode_ended"}), do: nil

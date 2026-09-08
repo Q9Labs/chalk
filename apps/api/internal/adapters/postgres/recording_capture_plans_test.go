@@ -99,3 +99,20 @@ func capturePlanID(t *testing.T, value string) utilities.ID {
 	}
 	return id
 }
+
+func TestBuildRecordingCapturePlanDeliversStopAfterEpisodeEnded(t *testing.T) {
+	source, input, deadline := capturePlanSourceFixture(t)
+	source.EpisodeFoldedState = []byte(`{"control_revision":4,"status":"ended","participants":[]}`)
+	source.EpisodeParticipants = []byte(`[]`)
+	if _, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute)); !errors.Is(err, captureplan.ErrInvalidPlan) {
+		t.Fatalf("ended Episode without stop authority: %v", err)
+	}
+	source.StopRequestedAt = pgtype.Timestamptz{Time: deadline.Add(-2 * time.Minute), Valid: true}
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.StopState() != captureplan.StopStateRequested || !plan.StopRequestedAt().Equal(source.StopRequestedAt.Time) || len(plan.Participants()) != 0 {
+		t.Fatalf("ended Episode lost final stop plan: %s", plan.StopState())
+	}
+}

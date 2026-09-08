@@ -34,6 +34,10 @@ export function useReactions(): SpaceSnapshot["reactions"] {
   return useSpaceSlice("reactions");
 }
 
+export function useRecording(): SpaceSnapshot["recording"] {
+  return useSpaceSlice("recording");
+}
+
 export function useWhiteboard(): SpaceSnapshot["whiteboard"] {
   return useSpaceSlice("whiteboard");
 }

@@ -243,7 +243,7 @@ where recording_pipelines.tenant_id = sqlc.arg(tenant_id)
       recording_pipelines.stop_operation_id = sqlc.arg(stop_operation_id)
       or (
           recording_pipelines.stop_operation_id is null
-          and recording_pipelines.state in ('reserved', 'capture_leased', 'capturing_segmented', 'capture_complete', 'render_queued', 'rendering', 'verifying', 'retryable_failure')
+          and recording_pipelines.state in ('reserved', 'capture_leased', 'capturing_segmented', 'capture_complete', 'render_queued', 'rendering', 'verifying', 'retryable_failure', 'committed', 'terminal_failure', 'deleted')
       )
   )
 returning recording_id, tenant_id, reservation_id, capture_epoch, state, stop_operation_id, stop_requested_at,
@@ -254,12 +254,15 @@ select pg_advisory_xact_lock(hashtextextended(sqlc.arg(claim_request_id)::text, 
 
 -- name: ClaimRecordingJob :one
 with candidate as (
-    select recording_jobs.id
+    select recording_jobs.id,
+        recording_pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' as render_deadline
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
     join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
     where recording_jobs.kind = sqlc.arg(kind)
       and recording_jobs.state = 'pending'
+      and (recording_jobs.kind <> 'render' or
+          recording_pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
       and recording_jobs.attempt_count < recording_jobs.attempt_limit
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_operation_id is null)
@@ -278,7 +281,9 @@ with candidate as (
         attempt_count = attempt_count + 1,
         lease_token = sqlc.arg(lease_token),
         lease_owner = sqlc.arg(lease_owner),
-        lease_expires_at = sqlc.arg(lease_expires_at),
+        lease_expires_at = case when recording_jobs.kind = 'render'
+            then least(sqlc.arg(lease_expires_at)::timestamptz, candidate.render_deadline)
+            else sqlc.arg(lease_expires_at)::timestamptz end,
         fencing_generation = fencing_generation + 1,
         updated_at = now()
     from candidate
@@ -309,11 +314,31 @@ select leased.id, leased.tenant_id, leased.episode_id, leased.recording_id, leas
     leased.error_detail, leased.terminal_at, leased.updated_at, leased.created_at,
     pipeline.capture_epoch, recording_reservations.space_id,
     recording_reservations.policy_snapshot_version, recording_reservations.ends_at,
-    recording_pipelines.capture_completed_at
+    recording_pipelines.capture_completed_at, recording_pipelines.capture_ready_at,
+	recording_presentations.presentation_handle,
+	recording_presentations.schema_version as presentation_schema_version,
+	recording_presentations.profile_version as presentation_profile_version,
+	recording_presentations.presentation_sha256,
+	recording_presentations.duration_millis as presentation_duration_millis,
+	recording_data_keys.key_handle as capture_key_handle
 from leased
 join pipeline on pipeline.recording_id = leased.recording_id
 join recording_pipelines on recording_pipelines.recording_id = leased.recording_id
-join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id;
+join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
+left join recording_presentations
+  on recording_presentations.tenant_id = leased.tenant_id
+ and recording_presentations.recording_id = leased.recording_id
+ and recording_presentations.capture_epoch = pipeline.capture_epoch
+left join recording_data_keys
+  on recording_data_keys.tenant_id = leased.tenant_id
+ and recording_data_keys.recording_id = leased.recording_id
+ and recording_data_keys.capture_epoch = pipeline.capture_epoch
+where leased.kind <> 'render'
+   or (
+	   recording_presentations.presentation_handle is not null
+	   and recording_data_keys.key_handle is not null
+	   and recording_pipelines.capture_ready_at is not null
+	);
 
 -- name: GetRecordingJobAttemptAuthorityByClaimRequest :one
 select authority.job_id, authority.attempt_count, authority.fencing_generation,
@@ -350,18 +375,27 @@ returning job_id, attempt_count, fencing_generation, capture_epoch,
 
 -- name: HeartbeatRecordingJob :one
 update recording_jobs
-set lease_expires_at = sqlc.arg(lease_expires_at), updated_at = now()
+set lease_expires_at = case when recording_jobs.kind = 'render' then least(
+        sqlc.arg(lease_expires_at)::timestamptz,
+        (select (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz
+         from recording_job_attempt_authorities authority
+         where authority.job_id = recording_jobs.id
+           and authority.attempt_count = recording_jobs.attempt_count
+           and authority.fencing_generation = recording_jobs.fencing_generation))
+        else sqlc.arg(lease_expires_at)::timestamptz end, updated_at = now()
 where id = sqlc.arg(id)
   and state = 'leased'
   and recording_jobs.attempt_count = sqlc.arg(attempt_count)
   and recording_jobs.fencing_generation = sqlc.arg(fencing_generation)
   and recording_jobs.lease_token = sqlc.arg(lease_token)
   and recording_jobs.lease_owner = sqlc.arg(lease_owner)
-  and recording_jobs.lease_expires_at > now()
+  and recording_jobs.lease_expires_at > clock_timestamp()
   and exists (
       select 1 from recording_job_attempt_authorities authority
       where authority.job_id = recording_jobs.id
         and authority.kind = recording_jobs.kind
+        and (recording_jobs.kind <> 'render' or
+            (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz > clock_timestamp())
         and authority.attempt_count = sqlc.arg(attempt_count)
         and authority.fencing_generation = sqlc.arg(fencing_generation)
         and authority.capture_epoch = sqlc.arg(capture_epoch)
@@ -401,6 +435,26 @@ returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
     error_code, error_detail, terminal_at, updated_at, created_at;
 
+-- name: GetCompletedCaptureRecordingJob :one
+select jobs.*
+from recording_jobs jobs
+join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
+join recording_job_attempt_authorities authority
+  on authority.job_id = jobs.id
+ and authority.kind = jobs.kind
+ and authority.attempt_count = jobs.attempt_count
+ and authority.fencing_generation = jobs.fencing_generation
+where jobs.id = sqlc.arg(id)
+  and jobs.kind = 'capture'
+  and jobs.state = 'succeeded'
+  and pipelines.capture_completed_at is not null
+  and jobs.attempt_count = sqlc.arg(attempt_count)
+  and jobs.fencing_generation = sqlc.arg(fencing_generation)
+  and authority.capture_epoch = sqlc.arg(capture_epoch)
+  and authority.envelope_digest = sqlc.arg(envelope_digest)
+  and authority.lease_token = sqlc.arg(lease_token)
+  and authority.lease_owner = sqlc.arg(lease_owner);
+
 -- name: CompleteCaptureRecordingJob :one
 with completed as (
     update recording_jobs
@@ -425,7 +479,7 @@ with completed as (
             and authority.lease_token = sqlc.arg(lease_token)
             and authority.lease_owner = sqlc.arg(lease_owner)
       )
-    returning id, tenant_id, episode_id, recording_id, attempt_count, fencing_generation
+    returning recording_jobs.*
 ), pipeline as (
     update recording_pipelines
     set state = 'render_queued', capture_completed_at = now(), updated_at = now()
@@ -465,14 +519,7 @@ with completed as (
     where exists (select 1 from reservation_release)
     on conflict (recording_id, kind) do nothing
 )
-select recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id,
-    recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key,
-    recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority,
-    recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit,
-    recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at,
-    recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail,
-    recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at
-from recording_jobs join completed on completed.id = recording_jobs.id;
+select * from completed;
 
 -- name: FailRecordingJob :one
 with failed as (
@@ -541,15 +588,27 @@ select failed.id, failed.tenant_id, failed.episode_id, failed.recording_id, fail
 from failed cross join (select count(*) from reservation_release) released;
 
 -- name: RecoverExpiredRecordingJobs :many
-with recovered as (
+with expired as (
+    select jobs.id, jobs.kind = 'render' and
+        pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' <= clock_timestamp() as deadline_reached,
+        (jobs.kind = 'capture' and pipelines.stop_requested_at is not null)::boolean as capture_stopped
+    from recording_jobs jobs
+    join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
+    where (jobs.state = 'leased' and jobs.lease_expires_at <= clock_timestamp())
+       or (jobs.kind = 'render' and jobs.state in ('pending', 'leased') and
+           pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' <= clock_timestamp())
+       or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null)
+    for update of jobs skip locked
+), recovered as (
     update recording_jobs
-    set state = case when attempt_count >= attempt_limit then 'terminal_failure' else 'pending' end,
+    set state = case when attempt_count >= attempt_limit or expired.deadline_reached or expired.capture_stopped then 'terminal_failure' else 'pending' end,
         available_at = now(), lease_token = null, lease_owner = null, lease_expires_at = null,
-        terminal_at = case when attempt_count >= attempt_limit then now() else null end,
-        error_code = coalesce(error_code, 'lease_expired'),
+        terminal_at = case when attempt_count >= attempt_limit or expired.deadline_reached or expired.capture_stopped then now() else null end,
+        error_code = case when expired.deadline_reached then 'render_deadline_exceeded' when expired.capture_stopped then 'capture_stopped_before_completion' else coalesce(error_code, 'lease_expired') end,
         updated_at = now()
-    where state = 'leased' and lease_expires_at <= now()
-    returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+    from expired
+    where recording_jobs.id = expired.id
+    returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
         error_code, error_detail, terminal_at, updated_at, created_at

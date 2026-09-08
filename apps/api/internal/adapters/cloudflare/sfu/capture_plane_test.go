@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -231,9 +232,9 @@ func TestCapturePlaneInspectMapsDocumentedTrackStatuses(t *testing.T) {
 		tracks []captureplane.PulledCaptureTrack
 		want   captureplane.CaptureConnectionState
 	}{
-		{name: "active", body: `{"tracks":[{"mid":"1","status":"active"},{"mid":"2","status":"inactive"}]}`, tracks: []captureplane.PulledCaptureTrack{{CaptureTrack: captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium), MID: "1"}, {CaptureTrack: captureTrack("owner-1", "screen-1", 7, captureplane.TrackSourceScreen, captureplane.TrackKindVideo, captureplane.TrackLayerLow), MID: "2"}}, want: captureplane.CaptureConnectionConnected},
-		{name: "waiting", body: `{"tracks":[{"mid":"1","status":"waiting"}]}`, tracks: []captureplane.PulledCaptureTrack{{CaptureTrack: captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium), MID: "1"}}, want: captureplane.CaptureConnectionConnecting},
-		{name: "inactive", body: `{"tracks":[{"mid":"1","status":"inactive"}]}`, tracks: []captureplane.PulledCaptureTrack{{CaptureTrack: captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium), MID: "1"}}, want: captureplane.CaptureConnectionDisconnected},
+		{name: "active", body: `{"tracks":[{"location":"remote","sessionId":"owner-1","trackName":"camera-1","mid":"1","status":"active"},{"location":"remote","sessionId":"owner-1","trackName":"screen-1","mid":"2","status":"inactive"}]}`, tracks: []captureplane.PulledCaptureTrack{{CaptureTrack: captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium), MID: "1"}, {CaptureTrack: captureTrack("owner-1", "screen-1", 7, captureplane.TrackSourceScreen, captureplane.TrackKindVideo, captureplane.TrackLayerLow), MID: "2"}}, want: captureplane.CaptureConnectionConnected},
+		{name: "waiting", body: `{"tracks":[{"location":"remote","sessionId":"owner-1","trackName":"camera-1","mid":"1","status":"waiting"}]}`, tracks: []captureplane.PulledCaptureTrack{{CaptureTrack: captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium), MID: "1"}}, want: captureplane.CaptureConnectionConnecting},
+		{name: "inactive", body: `{"tracks":[{"location":"remote","sessionId":"owner-1","trackName":"camera-1","mid":"1","status":"inactive"}]}`, tracks: []captureplane.PulledCaptureTrack{{CaptureTrack: captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium), MID: "1"}}, want: captureplane.CaptureConnectionDisconnected},
 		{name: "empty", body: `{}`, want: captureplane.CaptureConnectionConnecting},
 	}
 	for _, test := range cases {
@@ -247,6 +248,60 @@ func TestCapturePlaneInspectMapsDocumentedTrackStatuses(t *testing.T) {
 			}
 			if result.State != test.want {
 				t.Fatalf("state = %s, want %s", result.State, test.want)
+			}
+		})
+	}
+}
+
+func TestCapturePlaneAcceptsDocumentedOmittedPullLocation(t *testing.T) {
+	requested := []captureplane.CaptureTrack{
+		captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium),
+	}
+	if err := validateCapturePullResponse(captureTracksResponse{Tracks: []captureTrackResult{{
+		providerConnectionEnvelope: providerConnectionEnvelope{ConnectionReference: "owner-1"}, TrackName: "camera-1", Mid: "1",
+	}}}, requested); err != nil {
+		t.Fatalf("validation rejected provider response with documented omitted location: %v", err)
+	}
+}
+
+func TestCapturePlaneRejectsIncompleteOrLocalProviderTrackIdentity(t *testing.T) {
+	requested := []captureplane.CaptureTrack{
+		captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium),
+	}
+	pullCases := []struct {
+		name   string
+		result captureTrackResult
+	}{
+		{name: "local location", result: captureTrackResult{providerConnectionEnvelope: providerConnectionEnvelope{ConnectionReference: "owner-1"}, Location: "local", TrackName: "camera-1", Mid: "1"}},
+		{name: "missing owner", result: captureTrackResult{Location: "remote", TrackName: "camera-1", Mid: "1"}},
+		{name: "missing track name", result: captureTrackResult{providerConnectionEnvelope: providerConnectionEnvelope{ConnectionReference: "owner-1"}, Location: "remote", Mid: "1"}},
+	}
+	for _, test := range pullCases {
+		t.Run("pull_"+test.name, func(t *testing.T) {
+			err := validateCapturePullResponse(captureTracksResponse{Tracks: []captureTrackResult{test.result}}, requested)
+			var providerErr captureplane.ProviderError
+			if !errors.As(err, &providerErr) || providerErr.Code != "invalid_contract" || providerErr.Retryable {
+				t.Fatalf("validation error = %#v, want non-retryable invalid_contract", err)
+			}
+		})
+	}
+
+	pulled := captureplane.PulledCaptureTrack{CaptureTrack: requested[0], MID: "1"}
+	inspectBodies := []string{
+		`{"tracks":[{"location":"local","sessionId":"owner-1","trackName":"camera-1","mid":"1","status":"active"}]}`,
+		`{"tracks":[{"location":"remote","trackName":"camera-1","mid":"1","status":"active"}]}`,
+		`{"tracks":[{"location":"remote","sessionId":"owner-1","mid":"1","status":"active"}]}`,
+	}
+	for index, body := range inspectBodies {
+		t.Run(fmt.Sprintf("inspect_identity_%d", index), func(t *testing.T) {
+			client := &captureSequenceClient{responses: []captureHTTPResponse{{status: http.StatusOK, body: body}}}
+			adapter := newCaptureTestAdapter(t, client)
+			_, err := adapter.InspectCaptureConnection(context.Background(), captureplane.InspectCaptureConnectionInput{
+				Metadata: captureMetadata(fmt.Sprintf("inspect-invalid-%d", index)), Connection: "capture-connection", Tracks: []captureplane.PulledCaptureTrack{pulled},
+			})
+			var providerErr captureplane.ProviderError
+			if !errors.As(err, &providerErr) || providerErr.Code != "invalid_contract" || providerErr.Retryable {
+				t.Fatalf("inspect error = %#v, want non-retryable invalid_contract", err)
 			}
 		})
 	}
@@ -402,6 +457,26 @@ func TestCapturePlaneMapsRateLimitToBoundedProviderError(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "private") {
 		t.Fatalf("provider details leaked: %v", err)
+	}
+}
+
+func TestCapturePlaneMapsProviderErrorEnvelopeOnSuccessfulHTTPStatus(t *testing.T) {
+	client := &captureSequenceClient{responses: []captureHTTPResponse{{
+		status: http.StatusCreated,
+		body:   `{"errorCode":"rate_limited","errorDescription":"provider detail"}`,
+	}}}
+	adapter := newCaptureTestAdapter(t, client)
+
+	_, err := adapter.CreateCaptureConnection(context.Background(), captureplane.CreateCaptureConnectionInput{Metadata: captureMetadata("provider-envelope-rate-limit")})
+	var providerErr captureplane.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("create error = %v, want bounded provider error", err)
+	}
+	if providerErr.Class != captureplane.ProviderFailureRateLimited || providerErr.Code != "rate_limited" || !providerErr.Retryable {
+		t.Fatalf("provider error = %#v", providerErr)
+	}
+	if strings.Contains(err.Error(), "provider detail") {
+		t.Fatalf("provider response detail crossed adapter boundary: %v", err)
 	}
 }
 

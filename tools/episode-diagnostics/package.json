@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
+    "feedback": "./src/feedback-cli.mjs",
     "trace:inspect": "./src/cli.mjs"
   },
   "type": "module",
@@ -16,6 +17,7 @@
   },
   "scripts": {
     "trace:inspect": "node src/cli.mjs",
+    "feedback": "node src/feedback-cli.mjs",
     "browser-proof:local": "node src/local-browser-proof.mjs",
     "lint": "pnpm exec oxfmt --check .",
     "check-types": "node --check src/cli.mjs"

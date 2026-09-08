@@ -38,6 +38,7 @@ type transcriptArtifactResponse struct {
 	Model               string   `json:"model,omitempty"`
 	ArtifactSize        *int64   `json:"artifact_size,omitempty"`
 	ArtifactContentType *string  `json:"artifact_content_type,omitempty"`
+	SourceExpiresAt     *string  `json:"source_expires_at,omitempty"`
 	Generation          int64    `json:"generation"`
 	CompletedAt         *string  `json:"completed_at,omitempty"`
 	DeletedAt           *string  `json:"deleted_at,omitempty"`
@@ -99,7 +100,7 @@ func requestTranscriptEndpoint(service TranscriptArtifactService, authorizer Ten
 			status = transcript.Status
 		}
 		return requestTranscriptResponse{Transcript: newTranscriptArtifactResponse(transcript), JobID: job.ID.String(), Status: status}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestTranscriptRequest", requestTranscriptBody{}).Responds(http.StatusAccepted, "TranscriptRequestAcceptedResponse", requestTranscriptResponse{}).Errors(transcriptArtifactErrors(apiErrorInvalidRequest, apiErrorInvalidTranscriptID, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorTranscriptionDisabled, apiErrorRateLimited)...).MapErrors(transcriptArtifactAPIError)
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestTranscriptRequest", requestTranscriptBody{}).Responds(http.StatusAccepted, "TranscriptRequestAcceptedResponse", requestTranscriptResponse{}).Errors(transcriptArtifactErrors(apiErrorInvalidRequest, apiErrorInvalidTranscriptID, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorTranscriptionDisabled, apiErrorTranscriptSourceExpired, apiErrorTranscriptAlreadyExists, apiErrorRateLimited)...).MapErrors(transcriptArtifactAPIError)
 }
 
 type requestTranscriptEndpointRequest struct {
@@ -242,7 +243,7 @@ func decodeCreateTranscriptDownloadRequest(r *http.Request) (createTranscriptDow
 }
 
 func newTranscriptArtifactResponse(value transcripts.Transcript) transcriptArtifactResponse {
-	return transcriptArtifactResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), Status: value.Status, Languages: value.Languages, Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
+	return transcriptArtifactResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), Status: value.Status, Languages: value.Languages, Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, SourceExpiresAt: optionalTimestampString(value.SourceExpiresAt), Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
 }
 
 func decodeChecksum(value string) ([]byte, error) {
@@ -277,6 +278,12 @@ func transcriptArtifactAPIError(err error) (APIError, bool) {
 		return apiErrorRecordingNotReady, true
 	case errors.Is(err, transcripts.ErrTranscriptionDisabled):
 		return apiErrorTranscriptionDisabled, true
+	case errors.Is(err, transcripts.ErrSourceExpired):
+		return apiErrorTranscriptSourceExpired, true
+	case errors.Is(err, transcripts.ErrTranscriptAlreadyExists):
+		return apiErrorTranscriptAlreadyExists, true
+	case errors.Is(err, transcripts.ErrIdempotencyConflict):
+		return apiErrorIdempotencyConflict, true
 	case errors.Is(err, transcripts.ErrTranscriptNotFound):
 		return apiErrorTranscriptNotFound, true
 	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):

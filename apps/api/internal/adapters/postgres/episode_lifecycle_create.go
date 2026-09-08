@@ -54,6 +54,10 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 		if err != nil {
 			return fmt.Errorf("lock episode space policy: %w", err)
 		}
+		mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, input.TenantID, space)
+		if err != nil {
+			return fmt.Errorf("resolve episode media binding: %w", err)
+		}
 		artifactPolicy, err := resolveArtifactPolicyDocument(ctx, queries, input.TenantID, space)
 		if err != nil {
 			return fmt.Errorf("resolve episode Artifact policy: %w", err)
@@ -67,8 +71,9 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 		episode, err := queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{
 			ID: uuid(input.ID), Metadata: jsonBytes(input.Metadata), CreatedByUserID: uuid(input.CreatedByUserID),
 			StartedAt: timestamptz(input.StartedAt), DeadlineAt: timestamptz(&input.DeadlineAt),
-			ArtifactPolicy: artifactPolicy,
-			TenantID:       uuid(input.TenantID), SpaceID: uuid(input.SpaceID),
+			ArtifactPolicy:    artifactPolicy,
+			MediaPlaneBinding: mediaBinding,
+			TenantID:          uuid(input.TenantID), SpaceID: uuid(input.SpaceID),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return episodes.ErrSpaceNotFound

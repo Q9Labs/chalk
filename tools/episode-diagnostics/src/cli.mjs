@@ -53,7 +53,7 @@ function scanArguments(argv) {
 }
 
 /** @param {string} argument @returns {[string, string | undefined]} */
-function splitFlag(argument) {
+export function splitFlag(argument) {
   const separator = argument.indexOf("=");
   if (separator < 0) return [argument, undefined];
   return [argument.slice(0, separator), argument.slice(separator + 1)];
@@ -99,7 +99,7 @@ function simpleOption(flag) {
  * @param {string[]} argv
  * @param {number} index
  */
-function optionValue(label, inlineValue, argv, index) {
+export function optionValue(label, inlineValue, argv, index) {
   let value = inlineValue;
   let nextIndex = index;
   if (value === undefined) {

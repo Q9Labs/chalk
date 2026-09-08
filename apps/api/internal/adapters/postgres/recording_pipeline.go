@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -20,9 +21,11 @@ type recordingPipelineQuerier interface {
 	LockRecordingJobClaimRequest(context.Context, string) error
 	GetRecordingJobAttemptAuthorityByClaimRequest(context.Context, pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
 	InsertRecordingJobAttemptAuthority(context.Context, sqlc.InsertRecordingJobAttemptAuthorityParams) (sqlc.RecordingJobAttemptAuthority, error)
+	InsertRecordingRenderInput(context.Context, sqlc.InsertRecordingRenderInputParams) (sqlc.RecordingRenderInput, error)
 	AuthorizeRecordingArtifactReplay(context.Context, sqlc.AuthorizeRecordingArtifactReplayParams) (bool, error)
 	CommitRecordingArtifact(context.Context, sqlc.CommitRecordingArtifactParams) (sqlc.CommitRecordingArtifactRow, error)
-	CompleteCaptureRecordingJob(context.Context, sqlc.CompleteCaptureRecordingJobParams) (sqlc.RecordingJob, error)
+	CompleteCaptureRecordingJob(context.Context, sqlc.CompleteCaptureRecordingJobParams) (sqlc.CompleteCaptureRecordingJobRow, error)
+	GetCompletedCaptureRecordingJob(context.Context, sqlc.GetCompletedCaptureRecordingJobParams) (sqlc.RecordingJob, error)
 	CompleteRecordingJob(context.Context, sqlc.CompleteRecordingJobParams) (sqlc.RecordingJob, error)
 	CreateRecordingReservation(context.Context, sqlc.CreateRecordingReservationParams) (sqlc.CreateRecordingReservationRow, error)
 	GetRecordingArtifact(context.Context, sqlc.GetRecordingArtifactParams) (sqlc.RecordingArtifact, error)
@@ -30,19 +33,21 @@ type recordingPipelineQuerier interface {
 	GetRecordingReservationByKey(context.Context, sqlc.GetRecordingReservationByKeyParams) (sqlc.GetRecordingReservationByKeyRow, error)
 	ExtendRecordingReservation(context.Context, sqlc.ExtendRecordingReservationParams) (sqlc.ExtendRecordingReservationRow, error)
 	FailRecordingJob(context.Context, sqlc.FailRecordingJobParams) (sqlc.FailRecordingJobRow, error)
-	GetRecordingPipeline(context.Context, sqlc.GetRecordingPipelineParams) (sqlc.RecordingPipeline, error)
-	GetRecordingPipelineStopAuthority(context.Context, sqlc.GetRecordingPipelineStopAuthorityParams) (sqlc.RecordingPipeline, error)
-	RequestRecordingStop(context.Context, sqlc.RequestRecordingStopParams) (sqlc.RecordingPipeline, error)
+	GetRecordingPipeline(context.Context, sqlc.GetRecordingPipelineParams) (sqlc.GetRecordingPipelineRow, error)
+	GetRecordingPipelineStopAuthority(context.Context, sqlc.GetRecordingPipelineStopAuthorityParams) (sqlc.GetRecordingPipelineStopAuthorityRow, error)
+	RequestRecordingStop(context.Context, sqlc.RequestRecordingStopParams) (sqlc.RequestRecordingStopRow, error)
 	GetRecordingReservation(context.Context, sqlc.GetRecordingReservationParams) (sqlc.GetRecordingReservationRow, error)
 	HeartbeatRecordingJob(context.Context, sqlc.HeartbeatRecordingJobParams) (sqlc.RecordingJob, error)
 	InsertRecordingBundle(context.Context, sqlc.InsertRecordingBundleParams) (sqlc.InsertRecordingBundleRow, error)
+	InsertRecordingPresentation(context.Context, sqlc.InsertRecordingPresentationParams) (sqlc.RecordingPresentation, error)
+	InsertRecordingPresentationAsset(context.Context, sqlc.InsertRecordingPresentationAssetParams) (sqlc.RecordingPresentationAsset, error)
 	ListRecordingDeadLetters(context.Context, sqlc.ListRecordingDeadLettersParams) ([]sqlc.RecordingJob, error)
 	ListRecordingJobsForReconciliation(context.Context, sqlc.ListRecordingJobsForReconciliationParams) ([]sqlc.RecordingJob, error)
 	ExpireRecordingReservations(context.Context, pgtype.Timestamptz) ([]sqlc.ExpireRecordingReservationsRow, error)
-	RecoverExpiredRecordingJobs(context.Context) ([]sqlc.RecoverExpiredRecordingJobsRow, error)
+	RecoverExpiredRecordingJobs(context.Context, int32) ([]sqlc.RecoverExpiredRecordingJobsRow, error)
 	ReleaseRecordingReservation(context.Context, sqlc.ReleaseRecordingReservationParams) (sqlc.ReleaseRecordingReservationRow, error)
-	UpsertRecordingPoolHealth(context.Context, sqlc.UpsertRecordingPoolHealthParams) (sqlc.RecordingPoolHealth, error)
-	GetRecordingPoolHealth(context.Context, string) (sqlc.RecordingPoolHealth, error)
+	UpsertRecordingPoolHealth(context.Context, sqlc.UpsertRecordingPoolHealthParams) (sqlc.UpsertRecordingPoolHealthRow, error)
+	GetRecordingPoolHealth(context.Context, string) (sqlc.GetRecordingPoolHealthRow, error)
 }
 
 type recordingPipelineTransactor interface {
@@ -50,10 +55,12 @@ type recordingPipelineTransactor interface {
 }
 
 type RecordingPipelineRepository struct {
-	queries    recordingPipelineQuerier
-	transactor recordingPipelineTransactor
-	decorate   func(sqlc.Querier) sqlc.Querier
-	now        func() time.Time
+	queries             recordingPipelineQuerier
+	transactor          recordingPipelineTransactor
+	decorate            func(sqlc.Querier) sqlc.Querier
+	now                 func() time.Time
+	presentationProfile *recordingpresentation.Profile
+	presentationFreezer *recordingpresentation.Freezer
 }
 
 func NewRecordingPipelineRepository(queries recordingPipelineQuerier) RecordingPipelineRepository {
@@ -70,6 +77,24 @@ func NewRecordingPipelineRepositoryWithQueriesAndTransactor(queries recordingPip
 
 func NewRecordingPipelineRepositoryWithPool(pool *pgxpool.Pool) RecordingPipelineRepository {
 	return RecordingPipelineRepository{queries: sqlc.New(pool), transactor: pool, now: time.Now}
+}
+
+func (r RecordingPipelineRepository) WithRecordingPresentationProfile(profile recordingpresentation.Profile) (RecordingPipelineRepository, error) {
+	if err := recordingpresentation.ValidateProfile(profile); err != nil {
+		return RecordingPipelineRepository{}, fmt.Errorf("configure recording presentation profile: %w", err)
+	}
+	copy := profile
+	copy.FontAssetIDs = append([]string{}, profile.FontAssetIDs...)
+	r.presentationProfile = &copy
+	return r, nil
+}
+
+// WithRecordingPresentationFreezer binds the unlocked immutable-object prepare
+// phase to capture completion. The repository still performs the final
+// lease-guarded presentation insert and render enqueue in one transaction.
+func (r RecordingPipelineRepository) WithRecordingPresentationFreezer(freezer recordingpresentation.Freezer) RecordingPipelineRepository {
+	r.presentationFreezer = &freezer
+	return r
 }
 
 func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordingpipeline.ReservationInput, captureJobID utilities.ID) (recordingpipeline.Reservation, error) {
@@ -150,18 +175,24 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 	}
 	var row sqlc.CreateRecordingReservationRow
 	var err error
+	capacityUnavailable := false
 	if r.transactor == nil {
 		if r.queries == nil {
 			return recordingpipeline.Reservation{}, errors.New("recording pipeline repository has no query executor")
 		}
 		row, err = r.queries.CreateRecordingReservation(ctx, params)
+		capacityUnavailable = errors.Is(err, pgx.ErrNoRows)
 	} else {
 		err = r.transaction(ctx, func(queries recordingPipelineQuerier) error {
 			row, err = queries.CreateRecordingReservation(ctx, params)
-			return err
+			if err != nil {
+				capacityUnavailable = errors.Is(err, pgx.ErrNoRows)
+				return err
+			}
+			return r.insertRecordingPresentationBaseline(ctx, queries, input)
 		})
 	}
-	if errors.Is(err, pgx.ErrNoRows) {
+	if capacityUnavailable {
 		return recordingpipeline.Reservation{}, recordingpipeline.ErrRecordingCapacityUnavailable
 	}
 	if err != nil {
@@ -239,7 +270,7 @@ func (r RecordingPipelineRepository) UpsertPoolHealth(ctx context.Context, healt
 	if err != nil {
 		return recordingpipeline.PoolHealth{}, fmt.Errorf("upsert recording pool health: %w", err)
 	}
-	return mapPoolHealth(row), nil
+	return mapPoolHealth(sqlc.GetRecordingPoolHealthRow(row)), nil
 }
 
 func (r RecordingPipelineRepository) GetPoolHealth(ctx context.Context, role recordingpipeline.PoolRole) (recordingpipeline.PoolHealth, error) {
@@ -261,7 +292,7 @@ func (r RecordingPipelineRepository) GetPipeline(ctx context.Context, tenantID, 
 	if err != nil {
 		return recordingpipeline.Pipeline{}, fmt.Errorf("get recording pipeline: %w", err)
 	}
-	return mapPipeline(row), nil
+	return mapGetPipeline(row), nil
 }
 
 func (r RecordingPipelineRepository) RequestStop(ctx context.Context, tenantID, episodeID, recordingID, operationID utilities.ID) (recordingpipeline.Pipeline, error) {
@@ -269,7 +300,7 @@ func (r RecordingPipelineRepository) RequestStop(ctx context.Context, tenantID, 
 		TenantID: uuid(tenantID), EpisodeID: uuid(episodeID), RecordingID: uuid(recordingID), StopOperationID: uuid(operationID),
 	})
 	if err == nil {
-		return mapPipeline(row), nil
+		return mapRequestRecordingStop(row), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Pipeline{}, fmt.Errorf("request recording stop: %w", err)
@@ -318,10 +349,11 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			return err
 		}
 		row, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
-			LeaseToken:     requiredTextValue(input.LeaseToken),
-			LeaseOwner:     requiredTextValue(input.Owner),
-			LeaseExpiresAt: timestamptzValue(leaseExpiresAt),
-			Kind:           string(input.Kind),
+			MaximumRenderSeconds: int32(recordingpipeline.MaximumRenderDuration / time.Second),
+			LeaseToken:           requiredTextValue(input.LeaseToken),
+			LeaseOwner:           requiredTextValue(input.Owner),
+			LeaseExpiresAt:       timestamptzValue(leaseExpiresAt),
+			Kind:                 string(input.Kind),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return recordingpipeline.ErrJobNotFound
@@ -330,6 +362,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			return fmt.Errorf("claim recording job: %w", err)
 		}
 		claimed = mapClaimJob(row)
+		leaseExpiresAt = timestamp(row.LeaseExpiresAt)
 		claimed.CaptureEpoch = row.CaptureEpoch
 		hardDeadline := timestamp(row.EndsAt)
 		if claimed.Kind == recordingpipeline.JobKindRender {
@@ -338,10 +371,19 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			}
 			hardDeadline = timestamp(row.CaptureCompletedAt).Add(recordingpipeline.MaximumRenderDuration)
 		}
-		authority, err := recordingpipeline.NewRecorderJobAuthority(claimed, recordingpipeline.ClaimFacts{
+		claimFacts := recordingpipeline.ClaimFacts{
 			SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), PolicySnapshotVersion: row.PolicySnapshotVersion,
-			HardDeadline: hardDeadline, CaptureEpoch: row.CaptureEpoch,
-		}, input.ClaimRequestID, issuedAt)
+			HardDeadline: hardDeadline, CaptureEpoch: row.CaptureEpoch, CaptureReadyAt: nullableTimestamp(row.CaptureReadyAt),
+		}
+		if claimed.Kind == recordingpipeline.JobKindRender {
+			claimFacts.CaptureKeyHandle = utilities.IDFromBytes(row.CaptureKeyHandle.Bytes)
+			claimFacts.PresentationHandle = utilities.IDFromBytes(row.PresentationHandle.Bytes)
+			claimFacts.PresentationSchemaVersion = row.PresentationSchemaVersion.String
+			claimFacts.PresentationProfileVersion = row.PresentationProfileVersion.String
+			claimFacts.PresentationSHA256 = append([]byte(nil), row.PresentationSha256...)
+			claimFacts.PresentationDurationMillis = row.PresentationDurationMillis.Int64
+		}
+		authority, err := recordingpipeline.NewRecorderJobAuthority(claimed, claimFacts, input.ClaimRequestID, issuedAt)
 		if err != nil {
 			return err
 		}
@@ -357,6 +399,26 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			EnvelopeDigest: authority.EnvelopeDigest, IssuedAt: timestamptzValue(issuedAt),
 		}); err != nil {
 			return err
+		}
+		if claimed.Kind == recordingpipeline.JobKindRender {
+			renderInputHandle, parseInputErr := utilities.ParseID(authority.Envelope.RenderInputHandle)
+			objectHandle, parseObjectErr := utilities.ParseID(authority.Envelope.ObjectHandle)
+			if parseInputErr != nil || parseObjectErr != nil {
+				return recordingpipeline.ErrInvalidEnvelope
+			}
+			if _, err := queries.InsertRecordingRenderInput(ctx, sqlc.InsertRecordingRenderInputParams{
+				RenderInputHandle: uuid(renderInputHandle), TenantID: uuid(claimed.TenantID), SpaceID: uuid(claimFacts.SpaceID),
+				EpisodeID: uuid(claimed.EpisodeID), RecordingID: uuid(claimed.RecordingID), RenderJobID: uuid(claimed.ID),
+				AttemptCount: int32(claimed.AttemptCount), FencingGeneration: claimed.FencingGeneration,
+				CaptureEpoch: row.CaptureEpoch, EnvelopeDigest: authority.EnvelopeDigest,
+				KeyHandle: uuid(claimFacts.CaptureKeyHandle), ObjectHandle: uuid(objectHandle),
+				PresentationHandle: uuid(claimFacts.PresentationHandle), PresentationSchemaVersion: claimFacts.PresentationSchemaVersion,
+				PresentationProfileVersion: claimFacts.PresentationProfileVersion, PresentationSha256: claimFacts.PresentationSHA256,
+				PresentationDurationMillis: claimFacts.PresentationDurationMillis, CaptureReadyAt: row.CaptureReadyAt,
+				LeaseToken: requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.Owner), LeaseExpiresAt: timestamptzValue(leaseExpiresAt),
+			}); err != nil {
+				return fmt.Errorf("persist recording render input authority: %w", err)
+			}
 		}
 		claimed.Authority = &authority
 		return nil
@@ -402,7 +464,9 @@ func (r RecordingPipelineRepository) Heartbeat(ctx context.Context, input record
 	if err != nil {
 		return recordingpipeline.Job{}, fmt.Errorf("heartbeat recording job: %w", err)
 	}
-	return mapRecordingJob(row), nil
+	job := mapRecordingJob(row)
+	job.CaptureEpoch = input.CaptureEpoch
+	return job, nil
 }
 
 func (r RecordingPipelineRepository) Complete(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
@@ -421,10 +485,88 @@ func (r RecordingPipelineRepository) Complete(ctx context.Context, input recordi
 	if err != nil {
 		return recordingpipeline.Job{}, fmt.Errorf("complete recording job: %w", err)
 	}
-	return mapRecordingJob(row), nil
+	job := mapRecordingJob(row)
+	job.CaptureEpoch = input.CaptureEpoch
+	return job, nil
 }
 
 func (r RecordingPipelineRepository) CompleteCapture(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	if completed, err := r.completedCaptureReplay(ctx, input); !errors.Is(err, pgx.ErrNoRows) {
+		return completed, err
+	}
+	completed, err := r.completeCapture(ctx, input, renderJobID)
+	if err == nil {
+		return completed, nil
+	}
+	// Another request may have committed while this request was preparing
+	// presentation objects. A replay must not refreeze or requeue that capture.
+	if replay, replayErr := r.completedCaptureReplay(ctx, input); replayErr == nil {
+		return replay, nil
+	} else if !errors.Is(replayErr, pgx.ErrNoRows) {
+		return recordingpipeline.Job{}, errors.Join(err, replayErr)
+	}
+	return recordingpipeline.Job{}, err
+}
+
+func (r RecordingPipelineRepository) completedCaptureReplay(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	params := sqlc.GetCompletedCaptureRecordingJobParams{
+		ID: uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
+		FencingGeneration: input.FencingGeneration, CaptureEpoch: input.CaptureEpoch,
+		EnvelopeDigest: input.EnvelopeDigest,
+		LeaseToken:     input.LeaseToken, LeaseOwner: input.LeaseOwner,
+	}
+	var row sqlc.RecordingJob
+	read := func(queries recordingPipelineQuerier) error {
+		var err error
+		row, err = queries.GetCompletedCaptureRecordingJob(ctx, params)
+		return err
+	}
+	var err error
+	if r.queries != nil {
+		err = read(r.queries)
+	} else {
+		err = r.transaction(ctx, read)
+	}
+	if err != nil {
+		return recordingpipeline.Job{}, fmt.Errorf("read completed capture replay: %w", err)
+	}
+	job := mapRecordingJob(row)
+	job.CaptureEpoch = input.CaptureEpoch
+	return job, nil
+}
+
+func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	if r.presentationProfile != nil {
+		if r.presentationFreezer == nil || r.transactor == nil {
+			return recordingpipeline.Job{}, errors.New("recording presentation freezer is not configured")
+		}
+		prepared, err := r.presentationFreezer.Prepare(ctx, recordingpresentation.CompletionAuthority{
+			JobID: input.JobID, AttemptCount: input.AttemptCount,
+			FencingGeneration: input.FencingGeneration, CaptureEpoch: input.CaptureEpoch,
+			EnvelopeDigest: input.EnvelopeDigest, LeaseToken: input.LeaseToken, LeaseOwner: input.LeaseOwner,
+		})
+		if err != nil {
+			return recordingpipeline.Job{}, fmt.Errorf("prepare recording presentation: %w", err)
+		}
+		var completed recordingpipeline.Job
+		err = r.transaction(ctx, func(queries recordingPipelineQuerier) error {
+			if err := insertPreparedRecordingPresentation(ctx, queries, prepared); err != nil {
+				return err
+			}
+			row, err := queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(input, renderJobID))
+			if errors.Is(err, pgx.ErrNoRows) {
+				return recordingpipeline.ErrJobNotFound
+			}
+			if err != nil {
+				return fmt.Errorf("complete capture recording job: %w", err)
+			}
+			completed = mapRecordingJob(sqlc.RecordingJob(row))
+			completed.CaptureEpoch = input.CaptureEpoch
+			return nil
+		})
+		return completed, err
+	}
+
 	row, err := r.queries.CompleteCaptureRecordingJob(ctx, sqlc.CompleteCaptureRecordingJobParams{
 		ID:                   uuid(input.JobID),
 		AttemptCount:         int32(input.AttemptCount),
@@ -444,7 +586,20 @@ func (r RecordingPipelineRepository) CompleteCapture(ctx context.Context, input 
 	if err != nil {
 		return recordingpipeline.Job{}, fmt.Errorf("complete capture recording job: %w", err)
 	}
-	return mapRecordingJob(row), nil
+	job := mapRecordingJob(sqlc.RecordingJob(row))
+	job.CaptureEpoch = input.CaptureEpoch
+	return job, nil
+}
+
+func completeCaptureParams(input recordingpipeline.LeaseInput, renderJobID utilities.ID) sqlc.CompleteCaptureRecordingJobParams {
+	return sqlc.CompleteCaptureRecordingJobParams{
+		ID: uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
+		FencingGeneration: input.FencingGeneration,
+		LeaseToken:        requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.LeaseOwner),
+		CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: input.EnvelopeDigest,
+		RenderJobID: uuid(renderJobID), PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
+		Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
+	}
 }
 
 func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
@@ -466,11 +621,13 @@ func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpi
 	if err != nil {
 		return recordingpipeline.Job{}, fmt.Errorf("fail recording job: %w", err)
 	}
-	return mapFailJob(row), nil
+	job := mapFailJob(row)
+	job.CaptureEpoch = input.CaptureEpoch
+	return job, nil
 }
 
 func (r RecordingPipelineRepository) RecoverExpired(ctx context.Context) ([]recordingpipeline.Job, error) {
-	rows, err := r.queries.RecoverExpiredRecordingJobs(ctx)
+	rows, err := r.queries.RecoverExpiredRecordingJobs(ctx, int32(recordingpipeline.MaximumRenderDuration/time.Second))
 	if err != nil {
 		return nil, fmt.Errorf("recover expired recording jobs: %w", err)
 	}
@@ -740,7 +897,28 @@ func mapReservationByKey(row sqlc.GetRecordingReservationByKeyRow) recordingpipe
 	}
 }
 
-func mapPipeline(row sqlc.RecordingPipeline) recordingpipeline.Pipeline {
+func mapGetPipeline(row sqlc.GetRecordingPipelineRow) recordingpipeline.Pipeline {
+	var stopOperationID *utilities.ID
+	if row.StopOperationID.Valid {
+		id := utilities.IDFromBytes(row.StopOperationID.Bytes)
+		stopOperationID = &id
+	}
+	return recordingpipeline.Pipeline{
+		RecordingID:        utilities.IDFromBytes(row.RecordingID.Bytes),
+		TenantID:           utilities.IDFromBytes(row.TenantID.Bytes),
+		ReservationID:      utilities.IDFromBytes(row.ReservationID.Bytes),
+		State:              recordingpipeline.State(row.State),
+		CaptureEpoch:       row.CaptureEpoch,
+		StopOperationID:    stopOperationID,
+		StopRequestedAt:    nullableTimestamp(row.StopRequestedAt),
+		CaptureCompletedAt: nullableTimestamp(row.CaptureCompletedAt),
+		CommittedAt:        nullableTimestamp(row.CommittedAt),
+		UpdatedAt:          timestamp(row.UpdatedAt),
+		CreatedAt:          timestamp(row.CreatedAt),
+	}
+}
+
+func mapRequestRecordingStop(row sqlc.RequestRecordingStopRow) recordingpipeline.Pipeline {
 	var stopOperationID *utilities.ID
 	if row.StopOperationID.Valid {
 		id := utilities.IDFromBytes(row.StopOperationID.Bytes)
@@ -974,7 +1152,7 @@ func mapArtifactRecord(row sqlc.RecordingArtifact) recordingpipeline.Artifact {
 	}
 }
 
-func mapPoolHealth(row sqlc.RecordingPoolHealth) recordingpipeline.PoolHealth {
+func mapPoolHealth(row sqlc.GetRecordingPoolHealthRow) recordingpipeline.PoolHealth {
 	return recordingpipeline.PoolHealth{
 		Role:          recordingpipeline.PoolRole(row.Role),
 		AdmissionOpen: row.AdmissionOpen,

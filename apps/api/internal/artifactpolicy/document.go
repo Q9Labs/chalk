@@ -75,6 +75,9 @@ func (document Document) Validate() error {
 	if document.Transcription.SourceWindowSeconds < 0 || document.Transcription.SourceWindowSeconds > int64(MaximumSourceWindow/time.Second) {
 		return ErrInvalidSourceWindow
 	}
+	if document.Transcription.Mode == TranscriptionDisabled && document.Transcription.SourceWindowSeconds != 0 {
+		return ErrInvalidSourceWindow
+	}
 	if document.Transcription.Mode != TranscriptionDisabled {
 		if document.Transcription.SourceWindowSeconds == 0 {
 			return ErrInvalidSourceWindow

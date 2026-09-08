@@ -64,6 +64,25 @@ func TestNewAttemptAuthorityAndPlanFence(t *testing.T) {
 	}
 }
 
+func TestNewAttemptAuthorityAcceptsPersistedOriginAcrossClockSkew(t *testing.T) {
+	attempt := newAttempt(t)
+	captureReadyAt := coordinatorNow.Format(time.RFC3339Nano)
+	attempt.Envelope.CaptureReadyAt = &captureReadyAt
+
+	got, err := NewAttemptAuthorityAt(
+		attempt.Envelope,
+		digestEnvelope(t, attempt.Envelope),
+		attempt.Lease,
+		coordinatorNow.Add(-time.Second),
+	)
+	if err != nil {
+		t.Fatalf("accept server-validated capture origin across worker clock skew: %v", err)
+	}
+	if got.CaptureReadyAt == nil || !got.CaptureReadyAt.Equal(coordinatorNow) {
+		t.Fatalf("capture ready at = %v, want %v", got.CaptureReadyAt, coordinatorNow)
+	}
+}
+
 func TestCoordinatorBootstrapAnswerAndProviderFence(t *testing.T) {
 	attempt := newAttempt(t)
 	plan := newPlan(t, attempt, 1, []planTrack{{name: "one"}})
@@ -127,6 +146,9 @@ func TestCoordinatorReconcileClosesBeforePullsAndAcceptsEmptyPlan(t *testing.T) 
 	if signaling.operations[len(signaling.operations)-2] != captureplane.OperationCloseCaptureTracks || signaling.operations[len(signaling.operations)-1] != captureplane.OperationPullCaptureTracks {
 		t.Fatalf("replacement order = %#v", signaling.operations)
 	}
+	if got := registrationSizes(peer.registrations); len(got) != 3 || got[0] != 1 || got[1] != 0 || got[2] != 1 {
+		t.Fatalf("replacement registrations = %v, want complete sets [1 0 1]", got)
+	}
 	empty := newPlan(t, attempt, 3, nil)
 	got, err := coordinator.Reconcile(context.Background(), empty)
 	if err != nil {
@@ -134,6 +156,9 @@ func TestCoordinatorReconcileClosesBeforePullsAndAcceptsEmptyPlan(t *testing.T) 
 	}
 	if len(got.Tracks) != 0 || signaling.operations[len(signaling.operations)-1] != captureplane.OperationCloseCaptureTracks {
 		t.Fatalf("removed tracks = %#v, operations = %#v", got.Tracks, signaling.operations)
+	}
+	if got := registrationSizes(peer.registrations); got[len(got)-1] != 0 {
+		t.Fatalf("removal registration = %v, want final empty set", got)
 	}
 	if _, err := coordinator.Reconcile(context.Background(), replacement); !errors.Is(err, ErrStalePlan) {
 		t.Fatalf("stale plan error = %v", err)
@@ -258,6 +283,7 @@ func TestCoordinatorRejectsExpiredDeadlineAndWrongExecutionKey(t *testing.T) {
 
 type fakePeer struct {
 	registered      []captureplane.PulledCaptureTrack
+	registrations   [][]captureplane.PulledCaptureTrack
 	answer          captureplane.Description
 	offer           captureplane.Negotiation
 	createdOfferIDs []captureplane.ProviderReference
@@ -265,8 +291,17 @@ type fakePeer struct {
 }
 
 func (p *fakePeer) RegisterTracks(tracks []captureplane.PulledCaptureTrack) error {
-	p.registered = append(p.registered, tracks...)
+	p.registered = append(p.registered[:0], tracks...)
+	p.registrations = append(p.registrations, append([]captureplane.PulledCaptureTrack(nil), tracks...))
 	return nil
+}
+
+func registrationSizes(registrations [][]captureplane.PulledCaptureTrack) []int {
+	sizes := make([]int, len(registrations))
+	for index := range registrations {
+		sizes[index] = len(registrations[index])
+	}
+	return sizes
 }
 
 func (p *fakePeer) CreateLocalOffer(_ context.Context, ids ...captureplane.ProviderReference) (captureplane.Negotiation, error) {

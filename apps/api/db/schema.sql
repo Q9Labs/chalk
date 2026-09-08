@@ -4230,3 +4230,581 @@ for each row execute function reject_recording_bundle_allocation_delete();
 create trigger recording_bundle_allocations_no_truncate
 before truncate on recording_bundle_allocations
 for each statement execute function reject_recording_bundle_allocation_delete();
+
+create table feedback_reports (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    category text not null check (category in ('bug', 'feature_request', 'other')),
+    source text not null check (source in ('embedded', 'chalk_web', 'chalk_mobile', 'dashboard')),
+    message text not null check (octet_length(message) between 1 and 8000),
+    submitter_kind text not null check (submitter_kind in ('account', 'participant')),
+    submitter_id text not null check (char_length(submitter_id) between 1 and 256),
+    user_id uuid references users(id) on delete restrict,
+    space_id uuid,
+    episode_id uuid,
+    participant_id uuid,
+    environment text,
+    audience text,
+    diagnostic_reference text,
+    journey_id uuid,
+    root_journey_id uuid,
+    trace_id text,
+    span_id text,
+    request_id text,
+    command_id text,
+    submission_journey_id uuid,
+    submission_trace_id text,
+    submission_span_id text,
+    idempotency_key text not null check (char_length(idempotency_key) between 16 and 128 and idempotency_key ~ '^[A-Za-z0-9_-]+$'),
+    request_digest bytea not null check (octet_length(request_digest) = 32),
+    evidence_object_key text not null,
+    evidence_content_type text not null default 'application/json',
+    evidence_size bigint not null check (evidence_size > 0 and evidence_size <= 131072),
+    evidence_sha256 bytea not null check (octet_length(evidence_sha256) = 32),
+    evidence_schema_version text not null check (evidence_schema_version = 'FeedbackEvidence/v1'),
+    screenshot_object_key text,
+    screenshot_content_type text,
+    screenshot_size bigint,
+    screenshot_sha256 bytea,
+    screenshot_width integer,
+    screenshot_height integer,
+    screenshot_captured_at timestamptz,
+    screenshot_failure_code text,
+    created_at timestamptz not null default now(),
+    submitted_at timestamptz not null default now(),
+    constraint feedback_reports_screenshot_metadata_check check (
+        (screenshot_object_key is null and screenshot_content_type is null and screenshot_size is null and screenshot_sha256 is null and screenshot_width is null and screenshot_height is null and screenshot_captured_at is null)
+        or (screenshot_object_key is not null and screenshot_content_type in ('image/jpeg', 'image/png', 'image/webp') and screenshot_size > 0 and screenshot_size <= 460800 and screenshot_sha256 is not null and octet_length(screenshot_sha256) = 32 and screenshot_width between 1 and 1920 and screenshot_height between 1 and 1080 and screenshot_captured_at is not null)
+    ),
+    constraint feedback_reports_screenshot_failure_code_check check (screenshot_failure_code is null or screenshot_failure_code in ('capture_failed', 'unsupported', 'tainted', 'secure_surface', 'too_large')),
+    constraint feedback_reports_trace_id_check check (trace_id is null or trace_id ~ '^[0-9a-f]{32}$'),
+    constraint feedback_reports_span_id_check check (span_id is null or span_id ~ '^[0-9a-f]{16}$'),
+    constraint feedback_reports_submission_trace_id_check check (submission_trace_id is null or submission_trace_id ~ '^[0-9a-f]{32}$'),
+    constraint feedback_reports_submission_span_id_check check (submission_span_id is null or submission_span_id ~ '^[0-9a-f]{16}$')
+);
+
+create unique index feedback_reports_submitter_idempotency_idx
+    on feedback_reports(tenant_id, submitter_kind, submitter_id, idempotency_key);
+create index feedback_reports_operator_created_idx
+    on feedback_reports(created_at desc, id desc);
+create index feedback_reports_tenant_created_idx
+    on feedback_reports(tenant_id, created_at desc, id desc);
+create index feedback_reports_category_source_idx
+    on feedback_reports(category, source, created_at desc, id desc);
+
+
+alter table recording_pipelines
+    add column capture_ready_at timestamptz;
+
+comment on column recording_pipelines.capture_ready_at is
+    'Immutable recording clock origin established by the first authoritative capture-ready callback.';
+
+
+
+create table recording_presentation_baselines (
+    presentation_handle uuid primary key,
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    space_id uuid not null references spaces(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    schema_version text not null check (schema_version = 'recording_presentation.v1'),
+    profile_version text not null check (octet_length(profile_version) between 1 and 128),
+    profile jsonb not null check (
+        jsonb_typeof(profile) = 'object'
+        and profile ->> 'version' = profile_version
+        and octet_length(profile::text) between 2 and 32768
+    ),
+    space_name text not null check (octet_length(space_name) between 1 and 256),
+    episode_control_revision bigint not null check (episode_control_revision >= 0),
+    episode_folded_state jsonb not null check (jsonb_typeof(episode_folded_state) = 'object'),
+    participant_facts jsonb not null check (jsonb_typeof(participant_facts) = 'array'),
+    chat_head_sequence bigint not null check (chat_head_sequence >= 0),
+    chat_retained_floor_sequence bigint,
+    whiteboard_scene_id uuid,
+    whiteboard_revision bigint check (whiteboard_revision is null or whiteboard_revision >= 0),
+    whiteboard_snapshot jsonb,
+    baseline_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    unique (recording_id),
+    unique (tenant_id, space_id, episode_id, recording_id),
+    check ((whiteboard_scene_id is null) = (whiteboard_revision is null)),
+    check ((whiteboard_scene_id is null) = (whiteboard_snapshot is null)),
+    check (whiteboard_snapshot is null or jsonb_typeof(whiteboard_snapshot) = 'object'),
+    check (chat_retained_floor_sequence is null or chat_retained_floor_sequence between 1 and chat_head_sequence + 1)
+);
+
+create table recording_presentation_sources (
+    presentation_handle uuid primary key references recording_presentation_baselines(presentation_handle) on delete restrict,
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    recording_id uuid not null,
+    capture_epoch bigint not null check (capture_epoch > 0),
+    capture_ready_at timestamptz not null,
+    episode_control_start_revision bigint not null check (episode_control_start_revision >= 0),
+    episode_control_events jsonb not null check (jsonb_typeof(episode_control_events) = 'array'),
+    episode_control_end_revision bigint not null check (episode_control_end_revision >= episode_control_start_revision),
+    participant_facts jsonb not null check (jsonb_typeof(participant_facts) = 'array'),
+    chat_start_sequence bigint not null check (chat_start_sequence >= 0),
+    chat_retained_floor_sequence bigint,
+    initial_chat_messages jsonb not null check (jsonb_typeof(initial_chat_messages) = 'array'),
+    whiteboard_start_revision bigint not null check (whiteboard_start_revision >= 0),
+    whiteboard_events jsonb not null check (jsonb_typeof(whiteboard_events) = 'array'),
+    whiteboard_end_revision bigint not null check (whiteboard_end_revision >= whiteboard_start_revision),
+    capture_plan_start_revision bigint not null check (capture_plan_start_revision >= 0),
+    created_at timestamptz not null default now(),
+    unique (recording_id, capture_epoch),
+    unique (tenant_id, space_id, episode_id, recording_id, presentation_handle),
+    foreign key (tenant_id, space_id, episode_id, recording_id)
+        references recording_presentation_baselines(tenant_id, space_id, episode_id, recording_id)
+        on delete restrict,
+    check (chat_retained_floor_sequence is null or chat_retained_floor_sequence between 1 and chat_start_sequence + 1),
+    check (jsonb_array_length(initial_chat_messages) <= 100)
+);
+
+create table recording_presentations (
+    presentation_handle uuid primary key references recording_presentation_sources(presentation_handle) on delete restrict,
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    recording_id uuid not null,
+    capture_epoch bigint not null check (capture_epoch > 0),
+    schema_version text not null check (schema_version = 'recording_presentation.v1'),
+    profile_version text not null check (octet_length(profile_version) between 1 and 128),
+    duration_millis bigint not null check (duration_millis >= 0),
+    presentation_sha256 bytea not null check (octet_length(presentation_sha256) = 32),
+    presentation_object_key text not null check (octet_length(presentation_object_key) between 1 and 1024),
+    presentation_object_version text not null check (octet_length(presentation_object_version) <= 1024),
+    presentation_object_etag text not null check (octet_length(presentation_object_etag) between 1 and 512),
+    presentation_content_type text not null check (presentation_content_type = 'application/json'),
+    presentation_byte_size bigint not null check (presentation_byte_size between 1 and 67108864),
+    asset_manifest_object_key text not null check (octet_length(asset_manifest_object_key) between 1 and 1024),
+    asset_manifest_object_version text not null check (octet_length(asset_manifest_object_version) <= 1024),
+    asset_manifest_object_etag text not null check (octet_length(asset_manifest_object_etag) between 1 and 512),
+    asset_manifest_content_type text not null check (asset_manifest_content_type = 'application/json'),
+    asset_manifest_byte_size bigint not null check (asset_manifest_byte_size between 1 and 1048576),
+    asset_manifest_sha256 bytea not null check (octet_length(asset_manifest_sha256) = 32),
+    frozen_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    unique (recording_id),
+    unique (tenant_id, recording_id, presentation_handle),
+    foreign key (tenant_id, space_id, episode_id, recording_id, presentation_handle)
+        references recording_presentation_sources(tenant_id, space_id, episode_id, recording_id, presentation_handle)
+        on delete restrict
+);
+
+create table recording_presentation_assets (
+    presentation_handle uuid not null,
+    tenant_id uuid not null,
+    recording_id uuid not null,
+    ordinal smallint not null check (ordinal between 0 and 255),
+    asset_id text not null check (octet_length(asset_id) between 1 and 512),
+    asset_kind text not null check (asset_kind in ('logo', 'avatar', 'chat_attachment', 'whiteboard_state', 'whiteboard_file', 'font')),
+    object_key text not null check (octet_length(object_key) between 1 and 1024),
+    object_version text not null check (octet_length(object_version) <= 1024),
+    object_etag text not null check (octet_length(object_etag) between 1 and 512),
+    content_type text not null check (octet_length(content_type) between 1 and 255),
+    byte_size bigint not null check (byte_size > 0),
+    sha256 bytea not null check (octet_length(sha256) = 32),
+    created_at timestamptz not null default now(),
+    primary key (presentation_handle, ordinal),
+    unique (presentation_handle, asset_id),
+    foreign key (tenant_id, recording_id, presentation_handle)
+        references recording_presentations(tenant_id, recording_id, presentation_handle)
+        on delete restrict
+);
+
+create table recording_presentation_reactions (
+    reaction_id uuid primary key,
+    presentation_handle uuid not null,
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    recording_id uuid not null,
+    participant_id uuid not null,
+    participant_generation bigint not null check (participant_generation > 0),
+    display_name text not null check (octet_length(display_name) between 1 and 256),
+    reaction text not null check (reaction in ('👍', '❤️', '😂', '😮', '😢', '🎉')),
+    occurred_at timestamptz not null,
+    expires_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    foreign key (tenant_id, space_id, episode_id, recording_id, presentation_handle)
+        references recording_presentation_sources(tenant_id, space_id, episode_id, recording_id, presentation_handle)
+        on delete restrict,
+    foreign key (tenant_id, space_id, episode_id, participant_id, participant_generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
+        on delete restrict,
+    check (expires_at > occurred_at)
+);
+create index recording_presentation_reactions_timeline_idx
+    on recording_presentation_reactions(presentation_handle, occurred_at, reaction_id);
+
+-- +goose StatementBegin
+create function reject_recording_presentation_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording presentation authority is append-only';
+end;
+$$;
+-- +goose StatementEnd
+
+create trigger recording_presentation_baselines_immutable
+before update or delete on recording_presentation_baselines
+for each row execute function reject_recording_presentation_mutation();
+create trigger recording_presentation_sources_immutable
+before update or delete on recording_presentation_sources
+for each row execute function reject_recording_presentation_mutation();
+create trigger recording_presentations_immutable
+before update or delete on recording_presentations
+for each row execute function reject_recording_presentation_mutation();
+create trigger recording_presentation_assets_immutable
+before update or delete on recording_presentation_assets
+for each row execute function reject_recording_presentation_mutation();
+create trigger recording_presentation_reactions_immutable
+before update or delete on recording_presentation_reactions
+for each row execute function reject_recording_presentation_mutation();
+
+
+
+create table recording_render_inputs (
+    render_input_handle uuid primary key,
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    space_id uuid not null references spaces(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    render_job_id uuid not null references recording_jobs(id) on delete restrict,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    capture_epoch bigint not null check (capture_epoch > 0),
+    envelope_digest bytea not null check (octet_length(envelope_digest) = 32),
+    key_handle uuid not null,
+    object_handle uuid not null unique,
+    presentation_handle uuid not null references recording_presentations(presentation_handle) on delete restrict,
+    presentation_schema_version text not null check (presentation_schema_version = 'recording_presentation.v1'),
+    presentation_profile_version text not null check (octet_length(presentation_profile_version) between 1 and 128),
+    presentation_sha256 bytea not null check (octet_length(presentation_sha256) = 32),
+    presentation_duration_millis bigint not null check (presentation_duration_millis > 0),
+    capture_ready_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    unique (render_job_id, attempt_count, fencing_generation),
+    foreign key (render_job_id, attempt_count, fencing_generation)
+        references recording_job_attempt_authorities(job_id, attempt_count, fencing_generation)
+        on delete restrict
+);
+create index recording_render_inputs_recording_idx
+    on recording_render_inputs(tenant_id, recording_id, capture_epoch);
+
+create table recording_render_object_allocations (
+    id uuid primary key,
+    reservation_request_id uuid not null,
+    allocation_version bigint not null check (allocation_version > 0),
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    episode_id uuid not null references episodes(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    render_job_id uuid not null references recording_jobs(id) on delete restrict,
+    render_input_handle uuid not null references recording_render_inputs(render_input_handle) on delete restrict,
+    object_handle uuid not null,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    capture_epoch bigint not null check (capture_epoch > 0),
+    envelope_digest bytea not null check (octet_length(envelope_digest) = 32),
+    purpose text not null check (purpose in ('recording_video', 'transcription_manifest', 'transcription_audio')),
+    state text not null check (state in ('reserved', 'allocated', 'committed')),
+    object_key text not null unique,
+    expected_content_type text,
+    expected_byte_size bigint,
+    expected_sha256 bytea,
+    expected_duration_millis bigint,
+    upload_token_hash bytea,
+    upload_expires_at timestamptz,
+    object_version text,
+    object_etag text,
+    object_content_type text,
+    object_byte_size bigint,
+    object_sha256 bytea,
+    committed_at timestamptz,
+    created_at timestamptz not null default now(),
+    unique (object_handle, reservation_request_id),
+	unique (recording_id, allocation_version),
+    constraint recording_render_allocations_expected_facts_check check (
+        (state = 'reserved' and expected_content_type is null and expected_byte_size is null and expected_sha256 is null and expected_duration_millis is null and upload_token_hash is null and upload_expires_at is null)
+        or (state in ('allocated', 'committed') and expected_content_type is not null and expected_byte_size > 0 and octet_length(expected_sha256) = 32 and octet_length(upload_token_hash) = 32 and upload_expires_at is not null)
+    ),
+    constraint recording_render_allocations_purpose_facts_check check (
+		(purpose = 'recording_video' and (state = 'reserved' or (expected_content_type = 'video/mp4' and expected_byte_size <= 34359738368 and expected_duration_millis between 1 and 7200000)))
+		or (purpose = 'transcription_manifest' and (state = 'reserved' or (expected_content_type = 'application/json' and expected_byte_size <= 1048576 and expected_duration_millis is null)))
+		or (purpose = 'transcription_audio' and (state = 'reserved' or (expected_content_type = 'audio/flac' and expected_byte_size <= 524288000 and expected_duration_millis between 1 and 900000)))
+    ),
+    constraint recording_render_allocations_committed_facts_check check (
+        (state <> 'committed' and object_version is null and object_etag is null and object_content_type is null and object_byte_size is null and object_sha256 is null and committed_at is null)
+		or (state = 'committed' and length(object_version) between 0 and 256 and length(object_etag) between 1 and 256 and object_content_type = expected_content_type and object_byte_size = expected_byte_size and object_sha256 = expected_sha256 and committed_at is not null)
+    )
+);
+create index recording_render_allocations_authority_idx
+    on recording_render_object_allocations(render_job_id, attempt_count, fencing_generation, purpose, state);
+create index recording_render_allocations_token_idx
+    on recording_render_object_allocations(upload_token_hash)
+    where upload_token_hash is not null;
+
+create table recording_render_commits (
+    render_job_id uuid primary key references recording_jobs(id) on delete restrict,
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    capture_epoch bigint not null check (capture_epoch > 0),
+    render_input_handle uuid not null references recording_render_inputs(render_input_handle) on delete restrict,
+    commit_digest bytea not null check (octet_length(commit_digest) = 32),
+    presentation_sha256 bytea not null check (octet_length(presentation_sha256) = 32),
+    duration_millis bigint not null check (duration_millis > 0),
+    video_allocation_id uuid not null references recording_render_object_allocations(id) on delete restrict,
+    ffprobe_facts_digest bytea not null check (octet_length(ffprobe_facts_digest) = 32),
+	transcription_source_id uuid references recording_transcription_sources(recording_id) on delete restrict,
+    transcription_job_ids uuid[] not null default '{}',
+    committed_at timestamptz not null default now(),
+    unique (recording_id)
+);
+
+-- +goose StatementBegin
+create function protect_recording_render_allocation_mutation() returns trigger
+language plpgsql as $$
+begin
+    if old.id <> new.id
+        or old.reservation_request_id <> new.reservation_request_id
+        or old.allocation_version <> new.allocation_version
+        or old.tenant_id <> new.tenant_id
+        or old.episode_id <> new.episode_id
+        or old.recording_id <> new.recording_id
+        or old.render_job_id <> new.render_job_id
+        or old.render_input_handle <> new.render_input_handle
+        or old.object_handle <> new.object_handle
+        or old.attempt_count <> new.attempt_count
+        or old.fencing_generation <> new.fencing_generation
+        or old.capture_epoch <> new.capture_epoch
+        or old.envelope_digest <> new.envelope_digest
+        or old.purpose <> new.purpose
+        or old.object_key <> new.object_key
+        or old.created_at <> new.created_at then
+        raise exception 'recording render allocation authority is immutable';
+    end if;
+    if old.state = 'reserved' and new.state = 'allocated' then
+        return new;
+    end if;
+    if old.state = 'allocated' and new.state = 'allocated'
+        and old.expected_content_type = new.expected_content_type
+        and old.expected_byte_size = new.expected_byte_size
+        and old.expected_sha256 = new.expected_sha256
+        and old.expected_duration_millis is not distinct from new.expected_duration_millis
+        and old.object_version is null and new.object_version is null then
+        return new;
+    end if;
+    if old.state = 'allocated' and new.state = 'committed'
+        and old.expected_content_type = new.expected_content_type
+        and old.expected_byte_size = new.expected_byte_size
+        and old.expected_sha256 = new.expected_sha256
+        and old.expected_duration_millis is not distinct from new.expected_duration_millis
+        and old.upload_token_hash = new.upload_token_hash
+        and old.upload_expires_at = new.upload_expires_at then
+        return new;
+    end if;
+    raise exception 'recording render allocation state transition is invalid';
+end;
+$$;
+-- +goose StatementEnd
+
+create trigger recording_render_allocations_authority_immutable
+before update on recording_render_object_allocations
+for each row execute function protect_recording_render_allocation_mutation();
+
+-- +goose StatementBegin
+create function reject_recording_render_authority_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording render authority is append-only';
+end;
+$$;
+-- +goose StatementEnd
+
+create trigger recording_render_inputs_immutable
+before update or delete on recording_render_inputs
+for each row execute function reject_recording_render_authority_mutation();
+create trigger recording_render_commits_immutable
+before update or delete on recording_render_commits
+for each row execute function reject_recording_render_authority_mutation();
+create trigger recording_render_allocations_no_delete
+before delete on recording_render_object_allocations
+for each row execute function reject_recording_render_authority_mutation();
+create trigger recording_render_inputs_no_truncate
+before truncate on recording_render_inputs
+for each statement execute function reject_recording_render_authority_mutation();
+create trigger recording_render_commits_no_truncate
+before truncate on recording_render_commits
+for each statement execute function reject_recording_render_authority_mutation();
+create trigger recording_render_allocations_no_truncate
+before truncate on recording_render_object_allocations
+for each statement execute function reject_recording_render_authority_mutation();
+
+
+
+alter table recording_transcription_sources
+    add column generation bigint not null default 1,
+    add column commit_digest bytea,
+    add column presentation_sha256 bytea,
+    add column manifest_allocation_id uuid references recording_render_object_allocations(id) on delete restrict,
+    add column manifest_object_version text,
+    add column manifest_etag text,
+    add column status text not null default 'ready',
+    add column expires_at timestamptz,
+    add column lease_transcript_id uuid references transcriptions(id) on delete restrict,
+    add column lease_expires_at timestamptz,
+    add column cleanup_due_at timestamptz,
+    add column deleted_at timestamptz,
+    add column updated_at timestamptz not null default now();
+
+update recording_transcription_sources
+set commit_digest = manifest_sha256,
+    expires_at = committed_at + interval '24 hours'
+where commit_digest is null or expires_at is null;
+
+alter table recording_transcription_sources
+    alter column commit_digest set not null,
+    alter column expires_at set not null,
+    add constraint recording_transcription_sources_generation_check check (generation > 0),
+    add constraint recording_transcription_sources_commit_digest_check check (octet_length(commit_digest) = 32),
+    add constraint recording_transcription_sources_presentation_sha256_check check (presentation_sha256 is null or octet_length(presentation_sha256) = 32),
+    add constraint recording_transcription_sources_manifest_object_version_check check (manifest_object_version is null or length(manifest_object_version) between 1 and 256),
+    add constraint recording_transcription_sources_manifest_etag_check check (manifest_etag is null or length(manifest_etag) between 1 and 256),
+    add constraint recording_transcription_sources_status_check check (status in ('ready', 'leased', 'cleanup_pending', 'deleting', 'deleted')),
+    add constraint recording_transcription_sources_expiry_check check (expires_at > committed_at and expires_at <= committed_at + interval '24 hours'),
+    add constraint recording_transcription_sources_lease_check check (
+        (lease_transcript_id is null and lease_expires_at is null)
+        or (
+            lease_transcript_id is not null
+            and lease_expires_at is not null
+            and lease_expires_at <= expires_at + interval '2 hours'
+        )
+    ),
+    add constraint recording_transcription_sources_status_lease_check check (
+        (status = 'ready' and lease_transcript_id is null and lease_expires_at is null)
+        or (status = 'leased' and lease_transcript_id is not null and lease_expires_at is not null)
+        or (status in ('cleanup_pending', 'deleting', 'deleted') and lease_transcript_id is null and lease_expires_at is null)
+    ),
+    add constraint recording_transcription_sources_cleanup_check check (
+        (status in ('ready', 'leased') and cleanup_due_at is null and deleted_at is null)
+        or (status in ('cleanup_pending', 'deleting') and cleanup_due_at is not null and deleted_at is null)
+        or (status = 'deleted' and cleanup_due_at is not null and deleted_at is not null)
+    );
+
+create unique index recording_transcription_sources_recording_generation_uidx
+    on recording_transcription_sources(recording_id, generation);
+create index recording_transcription_sources_expiry_idx
+    on recording_transcription_sources(expires_at, recording_id)
+    where status = 'ready';
+create index recording_transcription_sources_lease_expiry_idx
+    on recording_transcription_sources(lease_expires_at, recording_id)
+    where status = 'leased';
+create index recording_transcription_sources_cleanup_idx
+    on recording_transcription_sources(cleanup_due_at, recording_id)
+    where status in ('cleanup_pending', 'deleting');
+
+alter table transcriptions add column source_expires_at timestamptz;
+
+update transcriptions transcript
+set source_expires_at = source.expires_at
+from recording_transcription_sources source
+where source.recording_id = transcript.recording_id
+  and transcript.source_expires_at is null;
+
+alter table recording_transcription_source_chunks
+    add column track_id text,
+    add column participant_generation bigint,
+    add column display_name_snapshot text,
+    add column overlap boolean not null default false,
+    add column source_start_ms bigint,
+    add column source_end_ms bigint,
+    add column allocation_id uuid references recording_render_object_allocations(id) on delete restrict,
+    add column object_version text,
+    add column object_etag text;
+
+update recording_transcription_source_chunks
+set source_start_ms = 0,
+    source_end_ms = end_ms - start_ms
+where source_start_ms is null or source_end_ms is null;
+
+alter table recording_transcription_source_chunks
+    alter column source_start_ms set not null,
+    alter column source_end_ms set not null,
+    add constraint recording_transcription_source_chunks_track_id_check check (track_id is null or length(track_id) between 1 and 256),
+    add constraint recording_transcription_source_chunks_participant_generation_check check (participant_generation is null or participant_generation > 0),
+    add constraint recording_transcription_source_chunks_display_name_check check (display_name_snapshot is null or length(display_name_snapshot) between 1 and 256),
+    add constraint recording_transcription_source_chunks_display_name_authority_check check (
+        display_name_snapshot is null or (identity_kind = 'participant' and track_class = 'microphone')
+    ),
+    add constraint recording_transcription_source_chunks_source_time_check check (
+        source_start_ms >= 0
+        and source_end_ms > source_start_ms
+        and source_end_ms - source_start_ms = end_ms - start_ms
+    ),
+    add constraint recording_transcription_source_chunks_object_version_check check (object_version is null or length(object_version) between 1 and 256),
+    add constraint recording_transcription_source_chunks_object_etag_check check (object_etag is null or length(object_etag) between 1 and 256);
+
+alter table transcription_cleanup_jobs
+    add column recording_id uuid references recordings(id) on delete restrict;
+
+update transcription_cleanup_jobs cleanup
+set recording_id = transcriptions.recording_id
+from transcriptions
+where transcriptions.id = cleanup.transcript_id
+  and cleanup.recording_id is null;
+
+alter table transcription_cleanup_jobs
+    alter column recording_id set not null,
+    alter column transcript_id drop not null,
+    drop constraint transcription_cleanup_jobs_transcript_id_object_key_key,
+    drop constraint transcription_cleanup_jobs_kind_check,
+    add constraint transcription_cleanup_jobs_kind_check check (
+        object_kind in ('final_artifact', 'temp_result', 'source_manifest', 'source_chunk')
+    ),
+    add constraint transcription_cleanup_jobs_owner_check check (
+        (object_kind in ('final_artifact', 'temp_result') and transcript_id is not null)
+        or (object_kind in ('source_manifest', 'source_chunk'))
+    );
+
+create unique index transcription_cleanup_jobs_recording_object_uidx
+    on transcription_cleanup_jobs(recording_id, object_key);
+
+
+
+alter table recording_pool_health
+    add column demand_revision text not null default 'legacy'
+    check (octet_length(demand_revision) between 1 and 128);
+
+create table recording_fleet_nodes (
+    environment text not null check (environment ~ '^[a-z][a-z0-9-]{0,31}$'),
+    role text not null check (role in ('capture', 'render')),
+    provider_id text not null check (octet_length(provider_id) between 1 and 128),
+    node_name text not null check (octet_length(node_name) between 1 and 255),
+    region text not null check (region ~ '^[a-z][a-z0-9-]{0,31}$'),
+    release_id text not null check (octet_length(release_id) between 1 and 128),
+    image_digest text not null check (image_digest ~ '^sha256:[0-9a-f]{64}$'),
+    boot_generation bigint not null check (boot_generation > 0),
+    inventory_digest text not null check (inventory_digest ~ '^[0-9a-f]{64}$'),
+    worker_id uuid,
+    state text not null check (state in ('requested', 'active', 'draining', 'revoked')),
+    ready boolean not null default false,
+    admission_open boolean not null default false,
+    ready_capacity integer not null default 0 check (ready_capacity >= 0),
+    observed_at timestamptz,
+    revoked_at timestamptz,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    primary key (environment, role, provider_id),
+    unique (worker_id),
+    check ((state = 'requested') = (worker_id is null)),
+    check (not admission_open or (state = 'active' and ready and ready_capacity > 0)),
+    check ((state = 'revoked') = (revoked_at is not null)),
+    check (state <> 'revoked' or (not ready and not admission_open and ready_capacity = 0))
+);
+
+create index recording_fleet_nodes_role_state_idx
+    on recording_fleet_nodes(environment, role, state, provider_id);

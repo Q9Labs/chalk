@@ -16,11 +16,15 @@ import type {
   IssueAccessGrantInput,
   ListAPIKeysInput,
   ListPublicAdmissionRequestsInput,
+  ListRecordingsInput,
   ListSpacesInput,
   ParticipantLifecycle,
   ParticipantRemoval,
   PublicAdmissionRequest,
   PublicAdmissionRequestPage,
+  Recording,
+  RecordingDownloadURL,
+  RecordingList,
   RemoveParticipantInput,
   Space,
   SpacePublicInvite,
@@ -87,6 +91,18 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       list: (input) => request<APIKeyList>({ method: "GET", path: `${tenantPath}/api-keys${apiKeyQuery(input)}`, expectedStatus: 200, retry: "always" }),
       rotate: (apiKeyId, input) => request<APIKeyWithSecret>({ method: "POST", path: `${tenantPath}/api-keys/${segment(apiKeyId)}/rotate`, body: { expires_at: input?.expiresAt }, expectedStatus: 200, retry: "never" }),
       revoke: (apiKeyId) => request<void>({ method: "DELETE", path: `${tenantPath}/api-keys/${segment(apiKeyId)}`, expectedStatus: 204, retry: "always" }),
+    },
+    recordings: {
+      list: (input) => request<RecordingList>({ method: "GET", path: `${tenantPath}/recordings${recordingQuery(input)}`, expectedStatus: 200, retry: "always" }),
+      get: (recordingId) => request<Recording>({ method: "GET", path: `${tenantPath}/recordings/${segment(recordingId)}`, expectedStatus: 200, retry: "always" }),
+      createDownloadURL: (recordingId, input) =>
+        request<RecordingDownloadURL>({
+          method: "POST",
+          path: `${tenantPath}/recordings/${segment(recordingId)}/download-url`,
+          body: { expires_in_seconds: input.expiresInSeconds },
+          expectedStatus: 200,
+          retry: "always",
+        }),
     },
     publicInvites: {
       get: (spaceId) => request<SpacePublicInvite>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite`, expectedStatus: 200, retry: "always" }),
@@ -163,6 +179,14 @@ function spaceQuery(input: ListSpacesInput | undefined): string {
 function apiKeyQuery(input: ListAPIKeysInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "cursor", input?.cursor);
+  setQueryValue(query, "page_size", input?.pageSize);
+  return prefixedQuery(query.toString());
+}
+
+function recordingQuery(input: ListRecordingsInput | undefined): string {
+  const query = new URLSearchParams();
+  setQueryValue(query, "cursor", input?.cursor);
+  setQueryValue(query, "episode_id", input?.episodeId);
   setQueryValue(query, "page_size", input?.pageSize);
   return prefixedQuery(query.toString());
 }

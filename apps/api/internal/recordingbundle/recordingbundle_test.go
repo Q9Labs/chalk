@@ -48,6 +48,39 @@ func testPacket(track TrackIdentity, monotonic, media int64, sequence uint16, pa
 	}
 }
 
+func TestComposeTrackEpochIsCollisionFreeAndJSONSafe(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name                   string
+		captureEpoch, revision uint64
+		want                   uint64
+	}{
+		{name: "first attempt keeps plan revision", captureEpoch: 1, revision: 3, want: 3},
+		{name: "retry starts a new namespace", captureEpoch: 2, revision: 1, want: 1<<32 + 1},
+		{name: "largest supported pair is JSON safe", captureEpoch: MaxTrackEpochCaptureEpoch, revision: MaxTrackEpochPlanRevision, want: 1<<53 - 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ComposeTrackEpoch(test.captureEpoch, test.revision)
+			if err != nil || got != test.want {
+				t.Fatalf("compose track epoch = %d, %v; want %d", got, err, test.want)
+			}
+		})
+	}
+
+	for _, input := range [][2]uint64{
+		{0, 1},
+		{1, 0},
+		{MaxTrackEpochCaptureEpoch + 1, 1},
+		{1, MaxTrackEpochPlanRevision + 1},
+	} {
+		if _, err := ComposeTrackEpoch(input[0], input[1]); !errors.Is(err, ErrInvalidTrackEpoch) {
+			t.Fatalf("compose track epoch (%d, %d) error = %v", input[0], input[1], err)
+		}
+	}
+}
+
 func fixtureBundle() Bundle {
 	trackA := testTrack("track-a", 1, "0")
 	trackB := TrackIdentity{TrackID: "track-b", Epoch: 1, MID: "1", Codec: "vp8", Layer: "high"}

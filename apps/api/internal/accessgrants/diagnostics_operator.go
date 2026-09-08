@@ -270,13 +270,13 @@ func validDiagnosticsOperatorSubject(subject string) bool {
 }
 
 func diagnosticsOperatorCapabilities(values []string) (map[string]struct{}, error) {
-	if len(values) == 0 || len(values) > 3 {
+	if len(values) == 0 || len(values) > 5 {
 		return nil, ErrInvalidDiagnosticsOperatorCapabilities
 	}
 	capabilities := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		switch value {
-		case "read", "stream", "export":
+		case "read", "stream", "export", "feedback.read", "feedback.evidence.read":
 			if _, exists := capabilities[value]; exists {
 				return nil, ErrInvalidDiagnosticsOperatorCapabilities
 			}

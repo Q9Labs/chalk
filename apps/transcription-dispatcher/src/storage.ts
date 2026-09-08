@@ -68,7 +68,6 @@ export async function conditionalPutJson(options: { fetch: typeof fetch; url: st
     headers: {
       "content-type": "application/json",
       "content-length": String(options.body.byteLength),
-      "x-amz-checksum-sha256": Buffer.from(options.checksumSha256, "hex").toString("base64"),
       "if-none-match": "*",
     },
     body: Buffer.from(options.body),

@@ -9,11 +9,132 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestPacedAudioVideoCaptureAndVideoPLI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	audioExpected := testTrack("0")
+	videoExpected := testTrack("1")
+	videoExpected.Source = captureplane.TrackSourceCamera
+	videoExpected.Kind = captureplane.TrackKindVideo
+	recorder, err := NewPeer(Config{CaptureEpoch: 1})
+	if err != nil {
+		t.Fatalf("new recorder peer: %v", err)
+	}
+	t.Cleanup(func() { _ = recorder.Close() })
+	if err := recorder.RegisterTracks([]captureplane.PulledCaptureTrack{audioExpected, videoExpected}); err != nil {
+		t.Fatalf("register A/V tracks: %v", err)
+	}
+
+	publisher, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatalf("new publisher peer: %v", err)
+	}
+	t.Cleanup(func() { _ = publisher.Close() })
+	audioLocal, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48_000, Channels: 2}, "audio", "publisher")
+	if err != nil {
+		t.Fatalf("new audio track: %v", err)
+	}
+	videoLocal, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90_000}, "video", "publisher")
+	if err != nil {
+		t.Fatalf("new video track: %v", err)
+	}
+	if _, err := publisher.AddTrack(audioLocal); err != nil {
+		t.Fatalf("add audio track: %v", err)
+	}
+	videoSender, err := publisher.AddTrack(videoLocal)
+	if err != nil {
+		t.Fatalf("add video track: %v", err)
+	}
+	offer, err := publisher.CreateOffer(nil)
+	if err != nil {
+		t.Fatalf("create publisher offer: %v", err)
+	}
+	gathered := webrtc.GatheringCompletePromise(publisher)
+	if err := publisher.SetLocalDescription(offer); err != nil {
+		t.Fatalf("set publisher offer: %v", err)
+	}
+	select {
+	case <-gathered:
+	case <-ctx.Done():
+		t.Fatal("publisher ICE gathering timed out")
+	}
+	remoteOffer, err := localDescription(publisher)
+	if err != nil {
+		t.Fatalf("publisher local offer: %v", err)
+	}
+	answer, err := recorder.AnswerRemoteOffer(ctx, captureplane.Negotiation{ID: "paced-av", Requirement: captureplane.NegotiationAnswerNeeded, Description: &remoteOffer})
+	if err != nil {
+		t.Fatalf("answer publisher offer: %v", err)
+	}
+	setRemoteDescription(t, publisher, webrtc.SDPTypeAnswer, answer.SDP)
+
+	mediaCtx, stopMedia := context.WithCancel(ctx)
+	defer stopMedia()
+	go writePacedTestMedia(mediaCtx, audioLocal, videoLocal)
+	audioRemote, err := recorder.WaitForTrack(ctx, "0")
+	if err != nil {
+		t.Fatalf("wait for audio: %v", err)
+	}
+	videoRemote, err := recorder.WaitForTrack(ctx, "1")
+	if err != nil {
+		t.Fatalf("wait for video: %v", err)
+	}
+	if audioRemote.Codec() != "opus" || videoRemote.Codec() != "vp8" {
+		t.Fatalf("negotiated codecs = %s/%s", audioRemote.Codec(), videoRemote.Codec())
+	}
+	if err := recorder.RequestKeyFrame("1"); err != nil {
+		t.Fatalf("request video keyframe: %v", err)
+	}
+	if err := videoSender.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("set RTCP read deadline: %v", err)
+	}
+	packets, _, err := videoSender.ReadRTCP()
+	if err != nil {
+		t.Fatalf("read publisher RTCP: %v", err)
+	}
+	foundPLI := false
+	for _, packet := range packets {
+		if _, ok := packet.(*rtcp.PictureLossIndication); ok {
+			foundPLI = true
+		}
+	}
+	if !foundPLI {
+		t.Fatalf("publisher RTCP did not contain PLI: %#v", packets)
+	}
+	if packet, _, err := audioRemote.ReadRTP(); err != nil || len(packet.Payload) == 0 {
+		t.Fatalf("read paced audio RTP: packet=%v err=%v", packet, err)
+	}
+	if packet, _, err := videoRemote.ReadRTP(); err != nil || len(packet.Payload) == 0 {
+		t.Fatalf("read paced video RTP: packet=%v err=%v", packet, err)
+	}
+}
+
+func writePacedTestMedia(ctx context.Context, audio, video *webrtc.TrackLocalStaticRTP) {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	var sequence uint16
+	var audioTimestamp, videoTimestamp uint32
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sequence++
+			audioTimestamp += 960
+			videoTimestamp += 1_800
+			_ = audio.WriteRTP(&rtp.Packet{Header: rtp.Header{Version: 2, SequenceNumber: sequence, Timestamp: audioTimestamp, SSRC: 1001}, Payload: []byte{0xf8, 0xff, 0xfe}})
+			_ = video.WriteRTP(&rtp.Packet{Header: rtp.Header{Version: 2, SequenceNumber: sequence, Timestamp: videoTimestamp, SSRC: 2001, Marker: true}, Payload: []byte{0x10, 0, 0}})
+		}
+	}
+}
 
 const (
 	testTenant      = "00000000-0000-4000-8000-000000000001"
@@ -121,10 +242,10 @@ func TestRemoteOfferLocalAnswerAndMIDBinding(t *testing.T) {
 	sent := make(chan struct{})
 	go func() {
 		defer close(sent)
-		for sequence := uint16(1); sequence < 220; sequence++ {
+		for sequence := uint16(1); sequence < 40; sequence++ {
 			packet.SequenceNumber = sequence
 			_ = sender.WriteRTP(&rtp.Packet{Header: packet.Header, Payload: append([]byte(nil), packet.Payload...)})
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 		}
 	}()
 	track, err := peer.WaitForTrack(ctx, "0")
@@ -245,7 +366,7 @@ func TestHandleOfferNeededPreservesProviderNegotiationID(t *testing.T) {
 	}
 }
 
-func TestRepeatedTrackReconciliationAddsTransceiverAndRejectsIdentityMutation(t *testing.T) {
+func TestRepeatedTrackReconciliationAddsTransceiverAndAcceptsReplacement(t *testing.T) {
 	peer := newTestPeer(t, "0")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -291,8 +412,14 @@ func TestRepeatedTrackReconciliationAddsTransceiverAndRejectsIdentityMutation(t 
 
 	replacement := testTrack("0")
 	replacement.TrackReference = "replacement-track"
-	if err := peer.RegisterTracks([]captureplane.PulledCaptureTrack{replacement}); !errors.Is(err, ErrTrackIdentityMutation) {
-		t.Fatalf("identity mutation error = %v", err)
+	if err := peer.RegisterTracks([]captureplane.PulledCaptureTrack{replacement}); err != nil {
+		t.Fatalf("register replacement: %v", err)
+	}
+	if got := peer.expected["0"].TrackReference; got != replacement.TrackReference {
+		t.Fatalf("replacement track = %q, want %q", got, replacement.TrackReference)
+	}
+	if _, exists := peer.expected["1"]; exists {
+		t.Fatal("complete registration retained a removed MID")
 	}
 }
 
@@ -334,26 +461,28 @@ func TestSequentialRegistrationPreservesMIDsBeyondSingleDigits(t *testing.T) {
 	}
 }
 
-func TestRepeatedTrackRegistrationEnforcesCumulativeLimit(t *testing.T) {
+func TestCompleteTrackRegistrationEnforcesLimit(t *testing.T) {
 	peer, err := NewPeer(Config{CaptureEpoch: 1})
 	if err != nil {
 		t.Fatalf("new peer: %v", err)
 	}
 	t.Cleanup(func() { _ = peer.Close() })
+	tracks := make([]captureplane.PulledCaptureTrack, 0, maxMediaTracks)
 	for index := 0; index < maxMediaTracks; index++ {
 		track := testTrack(strconv.Itoa(index))
 		track.ParticipantGeneration = int64(index + 1)
-		if err := peer.RegisterTracks([]captureplane.PulledCaptureTrack{track}); err != nil {
-			t.Fatalf("register track %d: %v", index, err)
-		}
+		tracks = append(tracks, track)
+	}
+	if err := peer.RegisterTracks(tracks); err != nil {
+		t.Fatalf("register complete track set: %v", err)
 	}
 	if got := len(peer.expected); got != maxMediaTracks {
 		t.Fatalf("registered MID count = %d, want %d", got, maxMediaTracks)
 	}
 	extra := testTrack(strconv.Itoa(maxMediaTracks))
 	extra.ParticipantGeneration = maxMediaTracks + 1
-	if err := peer.RegisterTracks([]captureplane.PulledCaptureTrack{extra}); !errors.Is(err, captureplane.ErrInvalidTrack) {
-		t.Fatalf("cumulative limit error = %v", err)
+	if err := peer.RegisterTracks(append(tracks, extra)); !errors.Is(err, captureplane.ErrInvalidTrack) {
+		t.Fatalf("complete-set limit error = %v", err)
 	}
 	if got := len(peer.expected); got != maxMediaTracks {
 		t.Fatalf("MID count changed after rejected reconciliation: %d", got)

@@ -29,7 +29,7 @@ func (q operationQuerier) CommitRecordingArtifact(ctx context.Context, arg sqlc.
 	return artifact, err
 }
 
-func (q operationQuerier) CompleteCaptureRecordingJob(ctx context.Context, arg sqlc.CompleteCaptureRecordingJobParams) (sqlc.RecordingJob, error) {
+func (q operationQuerier) CompleteCaptureRecordingJob(ctx context.Context, arg sqlc.CompleteCaptureRecordingJobParams) (sqlc.CompleteCaptureRecordingJobRow, error) {
 	startedAt := time.Now()
 	job, err := q.next.CompleteCaptureRecordingJob(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "CompleteCaptureRecordingJob", startedAt, err)
@@ -78,6 +78,13 @@ func (q operationQuerier) GetRecordingArtifact(ctx context.Context, arg sqlc.Get
 	return artifact, err
 }
 
+func (q operationQuerier) GetCompletedCaptureRecordingJob(ctx context.Context, arg sqlc.GetCompletedCaptureRecordingJobParams) (sqlc.RecordingJob, error) {
+	startedAt := time.Now()
+	job, err := q.next.GetCompletedCaptureRecordingJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetCompletedCaptureRecordingJob", startedAt, err)
+	return job, err
+}
+
 func (q operationQuerier) GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (sqlc.RecordingCapturePlan, error) {
 	startedAt := time.Now()
 	plan, err := q.next.GetLatestRecordingCapturePlan(ctx, planHandle)
@@ -99,14 +106,14 @@ func (q operationQuerier) GetRecordingJobAttemptAuthorityByClaimRequest(ctx cont
 	return authority, err
 }
 
-func (q operationQuerier) GetRecordingPipeline(ctx context.Context, arg sqlc.GetRecordingPipelineParams) (sqlc.RecordingPipeline, error) {
+func (q operationQuerier) GetRecordingPipeline(ctx context.Context, arg sqlc.GetRecordingPipelineParams) (sqlc.GetRecordingPipelineRow, error) {
 	startedAt := time.Now()
 	pipeline, err := q.next.GetRecordingPipeline(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "GetRecordingPipeline", startedAt, err)
 	return pipeline, err
 }
 
-func (q operationQuerier) GetRecordingPoolHealth(ctx context.Context, role string) (sqlc.RecordingPoolHealth, error) {
+func (q operationQuerier) GetRecordingPoolHealth(ctx context.Context, role string) (sqlc.GetRecordingPoolHealthRow, error) {
 	startedAt := time.Now()
 	health, err := q.next.GetRecordingPoolHealth(ctx, role)
 	LogOperation(ctx, q.logger, "db.query", "GetRecordingPoolHealth", startedAt, err)
@@ -190,9 +197,9 @@ func (q operationQuerier) LockRecordingCapturePlanHandle(ctx context.Context, pl
 	return err
 }
 
-func (q operationQuerier) RecoverExpiredRecordingJobs(ctx context.Context) ([]sqlc.RecoverExpiredRecordingJobsRow, error) {
+func (q operationQuerier) RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]sqlc.RecoverExpiredRecordingJobsRow, error) {
 	startedAt := time.Now()
-	jobs, err := q.next.RecoverExpiredRecordingJobs(ctx)
+	jobs, err := q.next.RecoverExpiredRecordingJobs(ctx, maximumRenderSeconds)
 	LogOperation(ctx, q.logger, "db.query", "RecoverExpiredRecordingJobs", startedAt, err)
 	return jobs, err
 }
@@ -204,7 +211,7 @@ func (q operationQuerier) ReleaseRecordingReservation(ctx context.Context, arg s
 	return reservation, err
 }
 
-func (q operationQuerier) UpsertRecordingPoolHealth(ctx context.Context, arg sqlc.UpsertRecordingPoolHealthParams) (sqlc.RecordingPoolHealth, error) {
+func (q operationQuerier) UpsertRecordingPoolHealth(ctx context.Context, arg sqlc.UpsertRecordingPoolHealthParams) (sqlc.UpsertRecordingPoolHealthRow, error) {
 	startedAt := time.Now()
 	health, err := q.next.UpsertRecordingPoolHealth(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "UpsertRecordingPoolHealth", startedAt, err)

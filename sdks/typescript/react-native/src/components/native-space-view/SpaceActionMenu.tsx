@@ -7,9 +7,9 @@ import type { useSpaceViewController } from "./useSpaceViewController";
 
 type Controller = ReturnType<typeof useSpaceViewController>;
 
-export function SpaceActionMenu({ controller, onOpenDiagnostics }: { readonly controller: Controller; readonly onOpenDiagnostics?: () => void }): React.JSX.Element {
+export function SpaceActionMenu({ controller, onOpenDiagnostics, onOpenFeedback }: { readonly controller: Controller; readonly onOpenDiagnostics?: () => void; readonly onOpenFeedback?: () => void }): React.JSX.Element {
   const theme = useNativeTheme();
-  const actions = [
+  const actions: { label: string; onPress: () => void; disabled?: boolean }[] = [
     ...(controller.canInvite ? [{ label: "Invite participants", onPress: controller.handleInviteParticipants }] : []),
     ...(controller.canParticipants ? [{ label: "Participants", onPress: () => controller.openPanel("participants") }] : []),
     ...(controller.canChat ? [{ label: "Chat", onPress: () => controller.openPanel("chat") }] : []),
@@ -27,6 +27,15 @@ export function SpaceActionMenu({ controller, onOpenDiagnostics }: { readonly co
           },
         ]
       : []),
+    ...(controller.canManageRecording
+      ? [
+          {
+            label: controller.recording?.status === "recording" ? "Stop recording" : "Start recording",
+            disabled: !controller.canToggleRecording,
+            onPress: controller.toggleRecording,
+          },
+        ]
+      : []),
     ...(controller.canSettings ? [{ label: "Settings", onPress: () => controller.openPanel("settings") }] : []),
     ...(onOpenDiagnostics
       ? [
@@ -35,6 +44,17 @@ export function SpaceActionMenu({ controller, onOpenDiagnostics }: { readonly co
             onPress: () => {
               controller.setActionsOpen(false);
               onOpenDiagnostics();
+            },
+          },
+        ]
+      : []),
+    ...(onOpenFeedback
+      ? [
+          {
+            label: "Feedback",
+            onPress: () => {
+              controller.setActionsOpen(false);
+              onOpenFeedback();
             },
           },
         ]
@@ -53,7 +73,7 @@ export function SpaceActionMenu({ controller, onOpenDiagnostics }: { readonly co
         <View style={[styles.sheet, { backgroundColor: theme.colors.background }]}>
           <Text style={[styles.title, { color: theme.colors.foreground }]}>Space actions</Text>
           {actions.map((action) => (
-            <Pressable key={action.label} onPress={action.onPress} style={({ pressed }) => [styles.action, { backgroundColor: theme.colors.card }, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityState={{ disabled: action.disabled ?? false }} disabled={action.disabled} key={action.label} onPress={action.onPress} style={({ pressed }) => [styles.action, { backgroundColor: theme.colors.card }, pressed && styles.pressed]}>
               <Text style={[styles.actionText, { color: theme.colors.foreground }]}>{action.label}</Text>
             </Pressable>
           ))}

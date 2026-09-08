@@ -38,7 +38,7 @@ set state = 'leased', attempt_count = jobs.attempt_count + 1,
     lease_expires_at = $3, updated_at = now()
 from candidate
 where jobs.id = candidate.id and jobs.attempt_count < jobs.attempt_limit
-returning jobs.id, jobs.tenant_id, jobs.transcript_id, jobs.object_key, jobs.object_kind, jobs.due_at, jobs.state, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token_hash, jobs.lease_owner, jobs.lease_expires_at, jobs.error_code, jobs.error_detail, jobs.verified_at, jobs.provider_copy_status, jobs.updated_at, jobs.created_at
+returning jobs.id, jobs.tenant_id, jobs.transcript_id, jobs.object_key, jobs.object_kind, jobs.due_at, jobs.state, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token_hash, jobs.lease_owner, jobs.lease_expires_at, jobs.error_code, jobs.error_detail, jobs.verified_at, jobs.provider_copy_status, jobs.updated_at, jobs.created_at, jobs.recording_id
 `
 
 type ClaimTranscriptionCleanupJobParams struct {
@@ -75,6 +75,7 @@ func (q *Queries) ClaimTranscriptionCleanupJob(ctx context.Context, arg ClaimTra
 		&i.ProviderCopyStatus,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.RecordingID,
 	)
 	return i, err
 }
@@ -86,7 +87,7 @@ set state = 'completed', verified_at = now(), lease_token_hash = null,
 where id = $1 and state = 'leased' and attempt_count = $2
   and lease_owner = $3 and lease_token_hash = $4
   and lease_expires_at > $5::timestamptz
-returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at
+returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at, recording_id
 `
 
 type CompleteTranscriptionCleanupJobParams struct {
@@ -125,23 +126,29 @@ func (q *Queries) CompleteTranscriptionCleanupJob(ctx context.Context, arg Compl
 		&i.ProviderCopyStatus,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.RecordingID,
 	)
 	return i, err
 }
 
 const createTranscriptionCleanupJob = `-- name: CreateTranscriptionCleanupJob :one
 insert into transcription_cleanup_jobs (
-    id, tenant_id, transcript_id, object_key, object_kind, due_at
-) values ($1, $2, $3, $4, $5, $6)
-on conflict (transcript_id, object_key) do update set
+    id, tenant_id, recording_id, transcript_id, object_key, object_kind, due_at
+) values (
+    $1, $2, $3,
+    $4, $5, $6,
+    $7
+)
+on conflict (recording_id, object_key) do update set
     due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
     updated_at = now()
-returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at
+returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at, recording_id
 `
 
 type CreateTranscriptionCleanupJobParams struct {
 	ID           pgtype.UUID        `json:"id"`
 	TenantID     pgtype.UUID        `json:"tenant_id"`
+	RecordingID  pgtype.UUID        `json:"recording_id"`
 	TranscriptID pgtype.UUID        `json:"transcript_id"`
 	ObjectKey    string             `json:"object_key"`
 	ObjectKind   string             `json:"object_kind"`
@@ -152,6 +159,7 @@ func (q *Queries) CreateTranscriptionCleanupJob(ctx context.Context, arg CreateT
 	row := q.db.QueryRow(ctx, createTranscriptionCleanupJob,
 		arg.ID,
 		arg.TenantID,
+		arg.RecordingID,
 		arg.TranscriptID,
 		arg.ObjectKey,
 		arg.ObjectKind,
@@ -177,12 +185,13 @@ func (q *Queries) CreateTranscriptionCleanupJob(ctx context.Context, arg CreateT
 		&i.ProviderCopyStatus,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.RecordingID,
 	)
 	return i, err
 }
 
 const getTranscriptionCleanupJob = `-- name: GetTranscriptionCleanupJob :one
-select id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at from transcription_cleanup_jobs where id = $1
+select id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at, recording_id from transcription_cleanup_jobs where id = $1
 `
 
 func (q *Queries) GetTranscriptionCleanupJob(ctx context.Context, id pgtype.UUID) (TranscriptionCleanupJob, error) {
@@ -207,6 +216,7 @@ func (q *Queries) GetTranscriptionCleanupJob(ctx context.Context, id pgtype.UUID
 		&i.ProviderCopyStatus,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.RecordingID,
 	)
 	return i, err
 }
@@ -217,7 +227,7 @@ set state = case when attempt_count >= attempt_limit then 'dead_letter' else 're
     due_at = $1, error_code = 'lease_expired', error_detail = 'cleanup lease expired',
     lease_token_hash = null, lease_owner = null, lease_expires_at = null, updated_at = now()
 where state = 'leased' and lease_expires_at <= $2::timestamptz
-returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at
+returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at, recording_id
 `
 
 type RecoverExpiredTranscriptionCleanupJobsParams struct {
@@ -253,6 +263,7 @@ func (q *Queries) RecoverExpiredTranscriptionCleanupJobs(ctx context.Context, ar
 			&i.ProviderCopyStatus,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.RecordingID,
 		); err != nil {
 			return nil, err
 		}
@@ -272,7 +283,7 @@ set state = case when $1::boolean or attempt_count >= attempt_limit then 'dead_l
 where id = $5 and state = 'leased' and attempt_count = $6
   and lease_owner = $7 and lease_token_hash = $8
   and lease_expires_at > $9::timestamptz
-returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at
+returning id, tenant_id, transcript_id, object_key, object_kind, due_at, state, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, verified_at, provider_copy_status, updated_at, created_at, recording_id
 `
 
 type RetryTranscriptionCleanupJobParams struct {
@@ -319,6 +330,7 @@ func (q *Queries) RetryTranscriptionCleanupJob(ctx context.Context, arg RetryTra
 		&i.ProviderCopyStatus,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.RecordingID,
 	)
 	return i, err
 }

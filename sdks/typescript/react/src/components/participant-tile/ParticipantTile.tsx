@@ -43,6 +43,12 @@ export interface ParticipantTileProps {
   hidden?: boolean;
 }
 
+export interface ParticipantTileSurfaceProps extends Omit<ParticipantTileProps, "videoTrack"> {
+  readonly media?: React.ReactNode;
+  readonly mediaVisible: boolean;
+  readonly animatedAvatars?: boolean;
+}
+
 const aspectRatioClasses = {
   "16:9": "aspect-video",
   "4:3": "aspect-[4/3]",
@@ -50,9 +56,15 @@ const aspectRatioClasses = {
   fill: "",
 };
 
-export const ParticipantTile = React.memo(function ParticipantTile({
+export const ParticipantTile = React.memo(function ParticipantTile({ videoTrack, ...props }: ParticipantTileProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const status = useVideoTrack(videoRef, videoTrack, props.participant.isVideoEnabled === true);
+
+  return <ParticipantTileSurface {...props} media={<video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />} mediaVisible={status === "playing"} />;
+});
+
+export const ParticipantTileSurface = React.memo(function ParticipantTileSurface({
   participant,
-  videoTrack,
   mirror,
   showName = true,
   showStatus = true,
@@ -67,11 +79,11 @@ export const ParticipantTile = React.memo(function ParticipantTile({
   children,
   gradientPreference,
   hidden,
-}: ParticipantTileProps) {
+  media,
+  mediaVisible,
+  animatedAvatars = true,
+}: ParticipantTileSurfaceProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const status = useVideoTrack(videoRef, videoTrack, participant.isVideoEnabled === true);
-  const showVideo = status === "playing";
   const mirrored = mirror ?? participant.isLocal === true;
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality > 0 && participant.connectionQuality <= 2;
@@ -80,6 +92,7 @@ export const ParticipantTile = React.memo(function ParticipantTile({
     <TileShell
       label={`Video tile for ${participant.displayName}`}
       accentColor={colors.primary}
+      seed={`participant:${participant.id}`}
       pinned={pinned}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -89,7 +102,7 @@ export const ParticipantTile = React.memo(function ParticipantTile({
       hidden={hidden}
       corner={
         showStatus && hasPoorConnection ? (
-          <ChalkBadge tone="danger" className="pointer-events-none absolute top-2 right-2 z-20 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
+          <ChalkBadge tone="danger" seed={`participant:${participant.id}:connection`} className="pointer-events-none absolute top-2 right-2 z-20 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
             <WifiOffIcon size={12} className="text-[var(--chalk-danger)]" />
           </ChalkBadge>
         ) : null
@@ -97,7 +110,9 @@ export const ParticipantTile = React.memo(function ParticipantTile({
       chip={
         showName || showStatus ? (
           <>
-            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} gradientPreference={gradientPreference} className="hidden shrink-0 @[240px]:flex" />}
+            {!mediaVisible && showAvatar && (
+              <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} animated={animatedAvatars} gradientPreference={gradientPreference} seed={`participant:${participant.id}:chip-avatar`} className="hidden shrink-0 @[240px]:flex" />
+            )}
             {showName && (
               <span className="min-w-0 truncate text-[11px] leading-4 font-medium tracking-[-0.01em] text-white @[240px]:text-[13px] @[240px]:leading-5" title={participant.displayName}>
                 {participant.displayName}
@@ -126,11 +141,11 @@ export const ParticipantTile = React.memo(function ParticipantTile({
         ) : null
       }
     >
-      <video ref={videoRef} autoPlay playsInline muted className={cn("relative z-10 block h-full w-full object-cover transition-opacity duration-300", mirrored && "scale-x-[-1]", showVideo ? "opacity-100" : "opacity-0")} />
-      {!showVideo && showAvatar && (
+      <div className={cn("relative z-10 block h-full w-full overflow-hidden transition-opacity duration-300 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
+      {!mediaVisible && showAvatar && (
         <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 z-10 flex items-center justify-center">
           <span className={cn("relative grid place-items-center rounded-full", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}>
-            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} className="opacity-90" gradientPreference={gradientPreference} />
+            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} animated={animatedAvatars} className="opacity-90" gradientPreference={gradientPreference} seed={`participant:${participant.id}:main-avatar`} />
           </span>
         </div>
       )}
@@ -140,3 +155,4 @@ export const ParticipantTile = React.memo(function ParticipantTile({
 });
 
 ParticipantTile.displayName = "ParticipantTile";
+ParticipantTileSurface.displayName = "ParticipantTileSurface";

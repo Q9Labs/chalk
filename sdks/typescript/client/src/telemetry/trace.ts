@@ -54,7 +54,7 @@ function parseTraceparentMatch(match: RegExpExecArray | null): ParsedTraceparent
   };
 }
 
-export function journeyHeaders(context: JourneyTelemetryContext): Record<string, string> {
+export function journeyHeaders(context: Pick<JourneyTelemetryContext, "journeyId" | "traceparent" | "tracestate">): Record<string, string> {
   return {
     [CHALK_JOURNEY_ID_HEADER]: context.journeyId,
     [TRACEPARENT_HEADER]: context.traceparent,

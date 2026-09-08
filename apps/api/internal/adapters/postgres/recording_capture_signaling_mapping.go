@@ -3,7 +3,6 @@ package postgres
 import (
 	"bytes"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -116,10 +115,12 @@ func validateRecordingCaptureResult(completion capturesignaling.Completion, curr
 		completion.Projection.CaptureEpoch != completion.Authority.CaptureEpoch || completion.Projection.PlanRevision != completion.Key.PlanRevision {
 		return capturesignaling.ErrCorruptStoredResult
 	}
-	connection, negotiation, state, closed, err := recordingCaptureResultProjection(result, completion.Key.Operation, currentConnection)
-	if err != nil || completion.Projection.Connection != connection || completion.Projection.NegotiationID != negotiation.ID ||
-		completion.Projection.NegotiationRequirement != negotiation.Requirement || completion.Projection.State != state ||
-		completion.Projection.Closed != closed {
+	currentProjection, err := mapRecordingCaptureConnectionProjection(currentConnection)
+	if err != nil {
+		return err
+	}
+	expected, err := capturesignaling.ProjectResult(completion.Key.SignalingHandle, completion.Authority, completion.Key.Operation, result, currentProjection)
+	if err != nil || *completion.Projection != *expected {
 		return capturesignaling.ErrCorruptStoredResult
 	}
 	if completion.Key.Operation == captureplane.OperationCreateCaptureConnection {
@@ -130,37 +131,6 @@ func validateRecordingCaptureResult(completion capturesignaling.Completion, curr
 		return capturesignaling.ErrStaleConnection
 	}
 	return nil
-}
-
-func recordingCaptureResultProjection(
-	result capturesignaling.CommandResult,
-	operation captureplane.OperationKind,
-	currentConnection sqlc.RecordingCaptureConnection,
-) (captureplane.CaptureConnection, captureplane.Negotiation, captureplane.CaptureConnectionState, bool, error) {
-	currentState := captureplane.CaptureConnectionState(currentConnection.State)
-	currentNegotiation := captureplane.Negotiation{Requirement: captureplane.NegotiationRequirement(currentConnection.NegotiationRequirement)}
-	if currentConnection.NegotiationID.Valid {
-		currentNegotiation.ID = captureplane.ProviderReference(currentConnection.NegotiationID.String)
-	}
-	switch operation {
-	case captureplane.OperationCreateCaptureConnection:
-		return result.CreateCaptureConnection.Connection, result.CreateCaptureConnection.Negotiation, captureplane.CaptureConnectionConnecting, false, nil
-	case captureplane.OperationPullCaptureTracks:
-		return result.PullCaptureTracks.Connection, result.PullCaptureTracks.Negotiation, currentState, currentState == captureplane.CaptureConnectionClosed, nil
-	case captureplane.OperationRenegotiateCaptureConnection:
-		return result.RenegotiateCaptureConnection.Connection, result.RenegotiateCaptureConnection.Negotiation, currentState, currentState == captureplane.CaptureConnectionClosed, nil
-	case captureplane.OperationInspectCaptureConnection:
-		return result.InspectCaptureConnection.Connection, result.InspectCaptureConnection.Negotiation, result.InspectCaptureConnection.State, result.InspectCaptureConnection.State == captureplane.CaptureConnectionClosed, nil
-	case captureplane.OperationCloseCaptureTracks:
-		return result.CloseCaptureTracks.Connection, result.CloseCaptureTracks.Negotiation, currentState, currentState == captureplane.CaptureConnectionClosed, nil
-	case captureplane.OperationCloseCaptureConnection:
-		if result.CloseCaptureConnection.Closed {
-			return result.CloseCaptureConnection.Connection, captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}, captureplane.CaptureConnectionClosed, true, nil
-		}
-		return result.CloseCaptureConnection.Connection, currentNegotiation, currentState, currentState == captureplane.CaptureConnectionClosed, nil
-	default:
-		return captureplane.CaptureConnection{}, captureplane.Negotiation{}, "", false, errors.New("unknown recording capture operation")
-	}
 }
 
 func nullableProviderReference(reference captureplane.ProviderReference) pgtype.Text {

@@ -18,6 +18,7 @@ import type {
   SpaceClient,
   SpaceSnapshot,
 } from "@q9labsai/chalk-client";
+import { createPreviewFeedbackController } from "./preview-feedback";
 
 import type { PreviewSearch, PreviewState } from "./preview-state";
 import { PREVIEW_ADMISSION_REQUESTS, PREVIEW_CHAT_LINES, PREVIEW_DISPLAY_NAME } from "./sdk-preview-fixtures";
@@ -44,6 +45,7 @@ const ALL_CAPABILITIES = [
   "stopScreenOthers",
   "requestMediaOthers",
   "removeParticipant",
+  "manageRecording",
   "endEpisode",
 ] as const satisfies readonly Capability[];
 
@@ -81,6 +83,7 @@ type PreviewParticipant = Participant;
 
 export function createPreviewStore(search: PreviewSearch): SpaceClient {
   let snapshot = createPreviewSnapshot(search);
+  let recordingSequence = 0;
   let disposed = false;
   const listeners = new Set<() => void>();
   const eventListeners = new Map<keyof ClientEventMap, Set<(event: never) => void>>();
@@ -111,6 +114,7 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
   };
 
   const store: SpaceClient = {
+    feedback: createPreviewFeedbackController(),
     media: {
       setMicrophoneEnabled: async (enabled) => updateLocalMedia("microphone", enabled ? "enabled" : "disabled"),
       setCameraEnabled: async (enabled) => updateLocalMedia("camera", enabled ? "enabled" : "disabled"),
@@ -160,6 +164,16 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
         const next: ActiveReaction = { eventId: `preview-reaction-${snapshot.reactions.active.length + 1}`, participantId: "you", displayName: snapshot.self.displayName ?? PREVIEW_DISPLAY_NAME, reaction, occurredAt: PREVIEW_TIME, expiresAt: PREVIEW_EXPIRY };
         update((current) => ({ ...current, reactions: { active: [...current.reactions.active, next] } }));
         return next;
+      },
+    },
+    recording: {
+      start: async () => {
+        const recordingId = `preview-recording-${++recordingSequence}`;
+        update((current) => ({ ...current, recording: { current: { recordingId, status: "recording", failureCode: null } } }));
+        return { recordingId };
+      },
+      stop: async () => {
+        update((current) => (current.recording.current ? { ...current, recording: { current: { ...current.recording.current, status: "stopped" } } } : current));
       },
     },
     whiteboard: { transport: () => createPreviewWhiteboardTransport() },
@@ -263,6 +277,7 @@ export function createPreviewSnapshot(search: PreviewSearch): SpaceSnapshot {
     },
     chat: chatFor(search),
     reactions: { active: PREVIEW_REACTIONS },
+    recording: { current: null },
     whiteboard: { open: search.stage === "whiteboard", engine: { status: "ready", sceneId: "preview-board", revision: "1", presenting: search.stage === "whiteboard", error: null } },
   };
 }

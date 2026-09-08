@@ -91,7 +91,9 @@ defmodule ChalkSync.SyncPostgres do
     }
   end
 
-  def seed_pending_join(connection) do
+  def seed_pending_join(connection), do: seed_pending_join(connection, pending_join_policy())
+
+  def seed_pending_join(connection, policy) do
     tenant_id = UUID.generate()
     space_id = UUID.generate()
     episode_id = UUID.generate()
@@ -110,8 +112,8 @@ defmodule ChalkSync.SyncPostgres do
 
     {:ok, _result} =
       Postgrex.transaction(connection, fn transaction ->
-        insert_product_rows(transaction, episode, [], %{})
-        insert_control(transaction, episode, %{})
+        insert_product_rows(transaction, episode, [], policy)
+        insert_control(transaction, episode, policy)
 
         Postgrex.query!(
           transaction,
@@ -830,6 +832,24 @@ defmodule ChalkSync.SyncPostgres do
       "maximum_episode_duration_seconds" =>
         Map.get(policy, :maximum_episode_duration_seconds, 86_400),
       "artifact_policy" => artifact_policy
+    }
+  end
+
+  defp pending_join_policy do
+    %{
+      artifact_policy: %{
+        "schema_version" => "episode_config.v2",
+        "recording" => %{
+          "mode" => "manual",
+          "profile" => "composite_720p_v1",
+          "retention_seconds" => 2_592_000
+        },
+        "transcription" => %{
+          "mode" => "disabled",
+          "retention_seconds" => 0,
+          "source_window_seconds" => 0
+        }
+      }
     }
   end
 

@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -57,6 +60,7 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	claimID := recordingLifecycleIntegrationID(t)
 	startOperationID := recordingLifecycleIntegrationID(t)
 	stopOperationID := recordingLifecycleIntegrationID(t)
+	presentationHandle := recordingLifecycleIntegrationID(t)
 	leaseExpiresAt := time.Now().UTC().Truncate(time.Microsecond).Add(5 * time.Minute)
 	envelopeDigest := sha256.Sum256([]byte("recording lifecycle integration envelope"))
 	seedFingerprint := sha256.Sum256([]byte("recording lifecycle integration seed"))
@@ -88,6 +92,21 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	if _, err := transaction.Exec(ctx, `insert into recording_pipelines(recording_id, tenant_id, reservation_id, state, capture_epoch) values($1, $2, $3, 'capture_leased', 1)`, recordingID.Bytes(), tenantID.Bytes(), reservationID.Bytes()); err != nil {
 		t.Fatalf("seed pipeline: %v", err)
 	}
+	presentationProfile, err := recordingpresentation.NewComposite720PProfile(strings.Repeat("a", 64))
+	if err != nil {
+		t.Fatalf("build presentation profile: %v", err)
+	}
+	profileBytes, err := json.Marshal(presentationProfile)
+	if err != nil {
+		t.Fatalf("marshal presentation profile: %v", err)
+	}
+	if _, err := sqlc.New(transaction).InsertRecordingPresentationBaseline(ctx, sqlc.InsertRecordingPresentationBaselineParams{
+		PresentationHandle: uuid(presentationHandle), ProfileVersion: presentationProfile.Version,
+		Profile: profileBytes, BaselineAt: timestamptzValue(time.Now().UTC().Add(-time.Second)),
+		RecordingID: uuid(recordingID), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), EpisodeID: uuid(episodeID),
+	}); err != nil {
+		t.Fatalf("seed recording presentation baseline: %v", err)
+	}
 	if _, err := transaction.Exec(ctx, `insert into recording_jobs(id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation) values($1, $2, $3, $4, 'capture', $5, 1, 'leased', now(), 1, 3, 'lease-token', 'capture-worker', $6, 1)`, jobID.Bytes(), tenantID.Bytes(), episodeID.Bytes(), recordingID.Bytes(), "capture-job-"+jobID.String(), leaseExpiresAt); err != nil {
 		t.Fatalf("seed capture job: %v", err)
 	}
@@ -111,6 +130,7 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	}
 	assertRecordingLifecyclePayload(t, ready.Payload, recordingID.String(), "startOperationId", startOperationID.String(), 1)
 	assertRecordingLifecycleOperation(t, ctx, transaction, ready, tenantID, episodeID, 1)
+	assertRecordingCaptureReadyOrigin(t, ctx, transaction, recordingID, readyInput.ReadyAt)
 
 	if _, err := transaction.Exec(ctx, `update sync_recordings set status = 'recording', updated_at = now() where recording_id = $1`, recordingID.Bytes()); err != nil {
 		t.Fatalf("advance Sync recording: %v", err)
@@ -123,6 +143,7 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 		t.Fatalf("ready replay operation = %q, want %q", replayedReady.ExternalOperationID, ready.ExternalOperationID)
 	}
 	assertRecordingLifecycleOperation(t, ctx, transaction, ready, tenantID, episodeID, 1)
+	assertRecordingCaptureReadyOrigin(t, ctx, transaction, recordingID, readyInput.ReadyAt)
 
 	conflictingReady := readyInput
 	conflictingReady.RequestKey += "_new"
@@ -143,6 +164,69 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	}
 	assertRecordingLifecyclePayload(t, stopped.Payload, recordingID.String(), "stopOperationId", stopOperationID.String(), 1)
 	assertRecordingLifecycleOperation(t, ctx, transaction, stopped, tenantID, episodeID, 1)
+
+	t.Run("acknowledge applied episode end", func(t *testing.T) {
+		endOperationID := recordingLifecycleIntegrationID(t)
+		if _, err := transaction.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, payload) values($1, $2, $3, $4, 'end_episode_integration', $5, 'tenant_end_episode', '{}'::jsonb)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), endOperationID.Bytes(), seedFingerprint[:]); err != nil {
+			t.Fatalf("seed episode end: %v", err)
+		}
+		if _, err := transaction.Exec(ctx, `update sync_recordings set status = 'stopped', completed_at = now(), stop_external_operation_id = null where recording_id = $1`, recordingID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := transaction.Exec(ctx, `update recording_pipelines set stop_operation_id = $2, stop_requested_at = now() where recording_id = $1`, recordingID.Bytes(), endOperationID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		input := stoppedInput
+		input.RequestKey += "_episode_end"
+		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("pending episode end error = %v", err)
+		}
+		if _, err := transaction.Exec(ctx, `update sync_external_operations set status = 'applied', completed_at = now() where external_operation_id = $1`, endOperationID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("active episode error = %v", err)
+		}
+		if _, err := transaction.Exec(ctx, `update episodes set status = 'ended' where id = $1`, episodeID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := transaction.Exec(ctx, `update recording_jobs set lease_expires_at = lease_expires_at + interval '1 minute' where id = $1`, jobID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		for range 2 {
+			publication, err := service.PublishStopped(ctx, input)
+			if err != nil || publication.ExternalOperationID != "" {
+				t.Fatalf("episode stop acknowledgment = %+v, error = %v", publication, err)
+			}
+		}
+		var count int
+		if err := transaction.QueryRow(ctx, `select count(*) from sync_external_operations where tenant_id = $1 and episode_id = $2 and request_key = $3`, tenantID.Bytes(), episodeID.Bytes(), input.RequestKey).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("redundant stop operations = %d, error = %v", count, err)
+		}
+		staleInput := input
+		staleInput.Authority.CaptureEpoch++
+		if _, err := service.PublishStopped(ctx, staleInput); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("stale epoch error = %v", err)
+		}
+		if _, err := transaction.Exec(ctx, `update recording_pipelines set stop_operation_id = $2 where recording_id = $1`, recordingID.Bytes(), stopOperationID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("unrelated stop operation error = %v", err)
+		}
+	})
+}
+
+func assertRecordingCaptureReadyOrigin(t *testing.T, ctx context.Context, transaction pgx.Tx, recordingID utilities.ID, expected time.Time) {
+	t.Helper()
+	var pipelineOrigin, sourceOrigin time.Time
+	if err := transaction.QueryRow(ctx, `select pipelines.capture_ready_at, sources.capture_ready_at from recording_pipelines pipelines join recording_presentation_sources sources on sources.recording_id = pipelines.recording_id where pipelines.recording_id = $1`, recordingID.Bytes()).Scan(&pipelineOrigin, &sourceOrigin); err != nil {
+		t.Fatalf("read capture-ready presentation origin: %v", err)
+	}
+	expected = expected.UTC().Truncate(time.Microsecond)
+	if !pipelineOrigin.Equal(expected) || !sourceOrigin.Equal(expected) {
+		t.Fatalf("capture-ready origin pipeline=%s source=%s, want %s", pipelineOrigin.Format(time.RFC3339Nano), sourceOrigin.Format(time.RFC3339Nano), expected.Format(time.RFC3339Nano))
+	}
 }
 
 type recordingLifecycleNestedTransactor struct {

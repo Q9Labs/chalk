@@ -1388,15 +1388,19 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
   }
 }
 
-/* Voice halo behind the avatar of a speaking, camera-off participant: a soft ring that breathes. */
+/* Voice halo behind the avatar of a speaking, camera-off participant: a soft ring that breathes.
+   The ring lives on a pseudo-element so the breathe animates transform/opacity only
+   (composited) instead of box-shadow spread, which repainted the whole tile every frame. */
 @keyframes chalk-voice-halo-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--chalk-participant-color) 22%, transparent);
+    transform: scale(1);
+    opacity: 1;
   }
 
   50% {
-    box-shadow: 0 0 0 14px color-mix(in srgb, var(--chalk-participant-color) 12%, transparent);
+    transform: scale(1.3);
+    opacity: 0.5;
   }
 }
 
@@ -1430,8 +1434,18 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
 }
 
 .chalk-voice-halo {
+  position: relative;
+}
+
+.chalk-voice-halo::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 9999px;
   box-shadow: 0 0 0 8px color-mix(in srgb, var(--chalk-participant-color) 18%, transparent);
   animation: chalk-voice-halo-breathe 1.8s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
 }
 
 .chalk-sound-bars {
@@ -1470,7 +1484,7 @@ main[data-chalk][data-chalk-skin="chalk"][data-chalk-palette="cosmic-chalk"] > *
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chalk-voice-halo {
+  .chalk-voice-halo::before {
     animation: none;
   }
 

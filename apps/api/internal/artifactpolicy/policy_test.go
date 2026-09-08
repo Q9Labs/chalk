@@ -175,3 +175,21 @@ func validTenantPolicy(ceiling artifactpolicy.TranscriptionMode) artifactpolicy.
 	}
 	return policy
 }
+
+func TestDisabledSpaceDropsEnabledTenantSourceWindow(t *testing.T) {
+	snapshot, err := artifactpolicy.Resolve(validTenantPolicy(artifactpolicy.TranscriptionAutomatic), artifactpolicy.SpacePolicy{Recording: artifactpolicy.RecordingAutomatic, Transcription: artifactpolicy.TranscriptionDisabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := snapshot.Document()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Transcription.SourceWindowSeconds != 0 {
+		t.Fatalf("disabled transcription retained source window: %d", document.Transcription.SourceWindowSeconds)
+	}
+	document.Transcription.SourceWindowSeconds = 3600
+	if err := document.Validate(); !errors.Is(err, artifactpolicy.ErrInvalidSourceWindow) {
+		t.Fatalf("enabled source window on disabled document: %v", err)
+	}
+}

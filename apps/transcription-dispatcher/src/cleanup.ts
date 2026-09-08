@@ -7,10 +7,10 @@ const NOOP_LOGGER: DispatcherLogger = { info: () => undefined, warn: () => undef
 
 export async function runCleanupDispatcher(event: DispatcherEvent, context: DispatcherContext, dependencies: DispatcherDependencies, maxClaims?: number): Promise<{ claimed: number; completed: number; failed: number }> {
   const logger = dependencies.logger ?? NOOP_LOGGER;
-  const claimCleanup = dependencies.control.claimCleanup;
+  const claimCleanup = dependencies.control.claimCleanup?.bind(dependencies.control);
   if (!claimCleanup) throw new Error("cleanup control API is not configured");
   const journey: JourneyContext = {
-    journeyId: event.journeyId ?? randomUUID(),
+    journeyId: event.journeyId || randomUUID(),
     ...(event.traceparent === undefined ? {} : { traceparent: event.traceparent }),
     ...(event.tracestate === undefined ? {} : { tracestate: event.tracestate }),
   };

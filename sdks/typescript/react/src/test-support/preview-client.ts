@@ -1,5 +1,6 @@
 import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 
+import { createPreviewFeedbackController } from "./preview-feedback";
 import { createPreviewMediaDevices } from "./preview-devices";
 
 export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
@@ -12,6 +13,8 @@ export type PreviewClientCommand =
   | { readonly type: "setMicrophoneEnabled"; readonly enabled: boolean }
   | { readonly type: "setCameraEnabled"; readonly enabled: boolean }
   | { readonly type: "setScreenShareEnabled"; readonly enabled: boolean }
+  | { readonly type: "startRecording"; readonly recordingId: string }
+  | { readonly type: "stopRecording" }
   | { readonly type: "selectMicrophone"; readonly deviceId: string }
   | { readonly type: "selectCamera"; readonly deviceId: string }
   | { readonly type: "selectSpeaker"; readonly deviceId: string }
@@ -55,6 +58,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
   let snapshot = initialSnapshot;
   let requestSequence = 0;
   let attachmentSequence = 0;
+  let recordingSequence = 0;
   const listeners = new Set<() => void>();
 
   const setSnapshot = (nextSnapshot: SpaceSnapshot): void => {
@@ -69,6 +73,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
   };
 
   const client = {
+    feedback: createPreviewFeedbackController(),
     media: {
       setMicrophoneEnabled: (enabled: boolean) => dispatch({ type: "setMicrophoneEnabled", enabled }),
       setCameraEnabled: (enabled: boolean) => dispatch({ type: "setCameraEnabled", enabled }),
@@ -124,6 +129,14 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
         return active;
       },
     },
+    recording: {
+      start: async () => {
+        const recordingId = `preview-recording-${++recordingSequence}`;
+        await dispatch({ type: "startRecording", recordingId });
+        return { recordingId };
+      },
+      stop: () => dispatch({ type: "stopRecording" }),
+    },
     whiteboard: { transport: () => null },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
@@ -161,6 +174,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
     },
     chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },
+    recording: { current: null },
     whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } },
   };
 }
@@ -191,6 +205,10 @@ function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientComm
       return updateLocalMedia(snapshot, "camera", command.enabled);
     case "setScreenShareEnabled":
       return updateScreenShare(snapshot, command.enabled);
+    case "startRecording":
+      return { ...snapshot, recording: { current: { recordingId: command.recordingId, status: "recording", failureCode: null } } };
+    case "stopRecording":
+      return snapshot.recording.current ? { ...snapshot, recording: { current: { ...snapshot.recording.current, status: "stopped" } } } : snapshot;
     case "selectMicrophone":
       return { ...snapshot, media: { ...snapshot.media, selection: { ...snapshot.media.selection, microphone: command.deviceId } } };
     case "selectCamera":

@@ -27,6 +27,10 @@ export interface AvatarProps {
   style?: React.CSSProperties;
   gradientPreference?: ParticipantGradientPreference;
   generated?: boolean;
+  /** Disable autonomous avatar motion for deterministic presentation captures. */
+  animated?: boolean;
+  /** Stable identity for deterministic Chalk chrome across projection seeks. */
+  seed?: number | string;
 }
 
 const sizeMap = {
@@ -51,7 +55,7 @@ export const Avatar = React.memo((props: AvatarProps) => {
   return skin === "classic" ? <ClassicAvatar {...props} /> : <ChalkAvatar {...props} />;
 });
 
-function ChalkAvatar({ name, src, size = "md", status, className, style, gradientPreference, generated = true }: AvatarProps) {
+function ChalkAvatar({ name, src, size = "md", status, className, style, gradientPreference, generated = true, animated = true, seed }: AvatarProps) {
   const [imageError, setImageError] = useState(false);
   const hasUploadedImage = Boolean(src) && !imageError;
   const shouldShowGeneratedAvatar = generated && Boolean(name) && !hasUploadedImage;
@@ -69,17 +73,40 @@ function ChalkAvatar({ name, src, size = "md", status, className, style, gradien
         <img src={src || ""} alt={name} className="h-full w-full rounded-full object-cover" onError={() => setImageError(true)} />
       ) : shouldShowGeneratedAvatar ? (
         <div aria-hidden="true" className="h-full w-full overflow-hidden rounded-full">
-          <GeneratedFacehash name={name || "guest"} size={pxSize} variant="flat" interactive={false} intensity3d="subtle" enableBlink colors={[...avatarRecipe.facehashColors]} />
+          <GeneratedFacehash name={name || "guest"} size={pxSize} variant="flat" interactive={false} intensity3d="subtle" enableBlink={animated} colors={[...avatarRecipe.facehashColors]} />
         </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center rounded-full font-medium !text-[var(--chalk-accent-text)]" style={{ fontSize, backgroundColor: avatarRecipe.color }}>
           {avatarRecipe.initials}
         </div>
       )}
-      <ChalkChrome className="pointer-events-none absolute inset-0 z-[2] h-full w-full" shape="circle" radius={999} roughness={0.8} stroke="var(--chalk-app-line-strong, currentColor)" focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))" part="avatar" />
-      {status && <ChalkBadge dot tone={statusToneMap[status]} className="absolute bottom-0 right-0 z-[3] rounded-full ring-2 ring-[var(--chalk-surface)]" style={{ width: Math.max(8, pxSize / 4), height: Math.max(8, pxSize / 4) }} role="status" aria-label={`Status: ${status}`} />}
+      <ChalkChrome
+        className="pointer-events-none absolute inset-0 z-[2] h-full w-full"
+        shape="circle"
+        radius={999}
+        roughness={0.8}
+        seed={childSeed(seed, "frame")}
+        stroke="var(--chalk-app-line-strong, currentColor)"
+        focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))"
+        part="avatar"
+      />
+      {status && (
+        <ChalkBadge
+          dot
+          tone={statusToneMap[status]}
+          seed={childSeed(seed, "status")}
+          className="absolute bottom-0 right-0 z-[3] rounded-full ring-2 ring-[var(--chalk-surface)]"
+          style={{ width: Math.max(8, pxSize / 4), height: Math.max(8, pxSize / 4) }}
+          role="status"
+          aria-label={`Status: ${status}`}
+        />
+      )}
     </div>
   );
 }
 
 Avatar.displayName = "Avatar";
+
+function childSeed(seed: number | string | undefined, part: string): string | undefined {
+  return seed === undefined ? undefined : `${seed}:${part}`;
+}

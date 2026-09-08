@@ -1,6 +1,6 @@
 "use client";
 
-import type { Capability, ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
+import type { Capability, ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useCallback, useContext, useSyncExternalStore } from "react";
 
 import { SpaceClientContext } from "./context";
@@ -19,6 +19,7 @@ const selectParticipants = (snapshot: SpaceSnapshot): ParticipantsSlice => snaps
 const selectMedia = (snapshot: SpaceSnapshot): MediaSlice => snapshot.media;
 const selectChat = (snapshot: SpaceSnapshot): ChatSlice => snapshot.chat;
 const selectReactions = (snapshot: SpaceSnapshot): ReactionsSlice => snapshot.reactions;
+const selectRecording = (snapshot: SpaceSnapshot): RecordingSlice => snapshot.recording;
 const selectWhiteboard = (snapshot: SpaceSnapshot): WhiteboardSlice => snapshot.whiteboard;
 
 export function useSpaceClient(): SpaceClient {
@@ -53,6 +54,10 @@ export function useChat(): ChatSlice {
 
 export function useReactions(): ReactionsSlice {
   return useSnapshotSlice(selectReactions);
+}
+
+export function useRecording(): RecordingSlice {
+  return useSnapshotSlice(selectRecording);
 }
 
 export function useWhiteboard(): WhiteboardSlice {

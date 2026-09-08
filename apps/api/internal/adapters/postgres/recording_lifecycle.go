@@ -32,6 +32,9 @@ type recordingLifecycleQuerier interface {
 	LockRecordingCaptureLifecycleAuthority(context.Context, sqlc.LockRecordingCaptureLifecycleAuthorityParams) (sqlc.LockRecordingCaptureLifecycleAuthorityRow, error)
 	LockRecordingCaptureLifecycleOperation(context.Context, sqlc.LockRecordingCaptureLifecycleOperationParams) (sqlc.SyncExternalOperation, error)
 	InsertRecordingCaptureLifecycleOperation(context.Context, sqlc.InsertRecordingCaptureLifecycleOperationParams) (sqlc.SyncExternalOperation, error)
+	SetRecordingCaptureReadyAt(context.Context, sqlc.SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
+	InsertRecordingPresentationSource(context.Context, sqlc.InsertRecordingPresentationSourceParams) (sqlc.RecordingPresentationSource, error)
+	GetRecordingPresentationSource(context.Context, sqlc.GetRecordingPresentationSourceParams) (sqlc.GetRecordingPresentationSourceRow, error)
 }
 
 type RecordingLifecycleRepository struct {
@@ -62,6 +65,11 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 	if r.transactor == nil {
 		return recordinglifecycle.Publication{}, recordinglifecycle.ErrRepositoryUnavailable
 	}
+	// PostgreSQL timestamptz stores microseconds. Canonicalize before both the
+	// idempotency fingerprint and durable capture-ready source are produced so
+	// a nanosecond-precision retry compares against the value the database can
+	// actually preserve.
+	occurredAt = occurredAt.UTC().Truncate(time.Microsecond)
 	ids, err := lifecycleIDs(authority)
 	if err != nil {
 		return recordinglifecycle.Publication{}, err
@@ -85,10 +93,18 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 		LeaseOwner: authority.LeaseOwner, LeaseExpiresAt: timestamptz(&authority.LeaseExpiresAt), TenantID: ids.tenantID, SpaceID: ids.spaceID, EpisodeID: ids.episodeID, RecordingID: ids.recordingID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return recordinglifecycle.Publication{}, recordinglifecycle.ErrAuthorityMismatch
+		return recordinglifecycle.Publication{}, fmt.Errorf("lock live capture authority: %w", recordinglifecycle.ErrAuthorityMismatch)
 	}
 	if err != nil {
 		return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("lock authority", err)
+	}
+	// Episode end already publishes the stopped state in Sync. A fresh capture
+	// authority may acknowledge that state without creating another operation.
+	if operationName == recordingCaptureStoppedOperation && authorityRow.EpisodeStopApplied {
+		if err := transaction.Commit(ctx); err != nil {
+			return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("commit episode stop acknowledgment", err)
+		}
+		return recordinglifecycle.Publication{}, nil
 	}
 	operationID, err := lifecycleOperationID(authorityRow, operationName)
 	if err != nil {
@@ -98,19 +114,40 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 	if err != nil {
 		return recordinglifecycle.Publication{}, err
 	}
-	fingerprint := sha256.Sum256(payload)
+	fingerprint := lifecycleRequestFingerprint(payload, occurredAt, noPublisher)
 	publication, replayed, err := r.replay(ctx, queries, ids, operationName, requestKey, fingerprint[:])
 	if err != nil {
 		return recordinglifecycle.Publication{}, err
 	}
 	if replayed {
+		if operationName == recordingCaptureReadyOperation {
+			if err := validateRecordingPresentationSourceReplay(ctx, queries, ids, authority.CaptureEpoch, occurredAt); err != nil {
+				return recordinglifecycle.Publication{}, err
+			}
+		}
 		if err := transaction.Commit(ctx); err != nil {
 			return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("commit replay", err)
 		}
 		return publication, nil
 	}
 	if !lifecycleStatusAllowsNewOperation(authorityRow.RecordingStatus, operationName) {
-		return recordinglifecycle.Publication{}, recordinglifecycle.ErrAuthorityMismatch
+		return recordinglifecycle.Publication{}, fmt.Errorf("recording status %q rejects %s: %w", authorityRow.RecordingStatus, operationName, recordinglifecycle.ErrAuthorityMismatch)
+	}
+	if operationName == recordingCaptureReadyOperation {
+		if authorityRow.CaptureReadyAt.Valid && !authorityRow.CaptureReadyAt.Time.Equal(occurredAt) {
+			return recordinglifecycle.Publication{}, recordinglifecycle.ErrOperationConflict
+		}
+		if _, err := queries.SetRecordingCaptureReadyAt(ctx, sqlc.SetRecordingCaptureReadyAtParams{
+			CaptureReadyAt: timestamptzValue(occurredAt), RecordingID: ids.recordingID,
+			TenantID: ids.tenantID, CaptureEpoch: authority.CaptureEpoch,
+		}); errors.Is(err, pgx.ErrNoRows) {
+			return recordinglifecycle.Publication{}, fmt.Errorf("set capture-ready origin: %w", recordinglifecycle.ErrAuthorityMismatch)
+		} else if err != nil {
+			return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("set capture ready origin", err)
+		}
+		if err := freezeRecordingPresentationSource(ctx, queries, ids, authority.CaptureEpoch, occurredAt); err != nil {
+			return recordinglifecycle.Publication{}, err
+		}
 	}
 	journey, err := recordingLifecycleJourneyFromContext(ctx)
 	if err != nil {
@@ -229,6 +266,21 @@ func lifecyclePayload(operationName, recordingID, operationID string, captureEpo
 		return nil, fmt.Errorf("marshal recording capture lifecycle payload: %w", err)
 	}
 	return encoded, nil
+}
+
+func lifecycleRequestFingerprint(payload []byte, occurredAt time.Time, noPublisher bool) [sha256.Size]byte {
+	digest := sha256.New()
+	_, _ = digest.Write(payload)
+	_, _ = digest.Write([]byte{0})
+	_, _ = digest.Write([]byte(occurredAt.UTC().Format(time.RFC3339Nano)))
+	if noPublisher {
+		_, _ = digest.Write([]byte{1})
+	} else {
+		_, _ = digest.Write([]byte{0})
+	}
+	var result [sha256.Size]byte
+	copy(result[:], digest.Sum(nil))
+	return result
 }
 
 func (r RecordingLifecycleRepository) replay(ctx context.Context, queries recordingLifecycleQuerier, ids lifecycleIDSet, operationName, requestKey string, fingerprint []byte) (recordinglifecycle.Publication, bool, error) {

@@ -21,6 +21,14 @@
 
 Web and React Native expose the same feature names: `chat`, `participants`, `admission`, `screenShare`, `whiteboard`, `reactions`, `handRaise`, `info`, and `settings`. Web also exposes `sounds` for join, leave, message, hand-raise, and reaction cues.
 
+### Send Feedback to Chalk
+
+The live web and native surfaces include Feedback in their utility menu. A
+Participant chooses Bug, Feature request, or Other and writes one message. Chalk
+automatically attaches a removable screenshot plus bounded Journey, trace,
+runtime, and diagnostic context. Screenshot capture is best effort, so the
+message can still be sent when capture is unavailable.
+
 ### Theme the boundary
 
 The `theme` prop is the styling door. Web supports `skin: "classic" | "chalk"`, independent palette and texture choices, `colorScheme: "light" | "dark" | "system"`, an accent, and typed token overrides. Native maps the same token names to platform styles.

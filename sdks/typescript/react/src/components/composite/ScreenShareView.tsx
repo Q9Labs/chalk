@@ -24,6 +24,38 @@ export interface ScreenShareViewSurfaceProps extends ScreenShareViewProps {
   readonly participants: Participant[];
 }
 
+export interface ScreenSharePresentationProps {
+  readonly sharedByName: string;
+  readonly media: React.ReactNode;
+  readonly mediaVisible: boolean;
+  readonly className?: string;
+}
+
+/** Shared-content viewport for data-driven rendering without MediaStreamTrack effects. */
+export function ScreenSharePresentation({ sharedByName, media, mediaVisible, className }: ScreenSharePresentationProps): React.JSX.Element {
+  const skin = useSkin();
+  const viewport = (
+    <div className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--chalk-text)]">
+      {mediaVisible ? <div className="absolute inset-0 [&>*]:h-full [&>*]:w-full [&>*]:object-contain">{media}</div> : null}
+      {!mediaVisible ? (
+        <ChalkEmptyState className="grid h-full place-items-center text-sm text-[var(--chalk-app-text-muted)]" title="Screen share unavailable" description={`${sharedByName}’s screen isn’t available at this moment.`}>
+          <Monitor01Icon size={32} aria-hidden="true" />
+        </ChalkEmptyState>
+      ) : null}
+      <ChalkBadge tone="accent" className="absolute top-3 left-3 text-xs font-medium">
+        Shared by {sharedByName}
+      </ChalkBadge>
+    </div>
+  );
+
+  if (skin === "classic") return <div className={cn("h-full w-full overflow-hidden rounded-2xl bg-[var(--chalk-text)]", className)}>{viewport}</div>;
+  return (
+    <ChalkPanel tone="neutral" filled className={cn("relative h-full w-full overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full", className)}>
+      {viewport}
+    </ChalkPanel>
+  );
+}
+
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.5;

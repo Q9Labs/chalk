@@ -7,11 +7,15 @@ import { CELEBRATION_EMOJIS } from "@q9labsai/chalk-ui/reactions";
 import { useSkin } from "../skin-context";
 import { ClassicReactionBubble } from "./ClassicReactionBubble";
 
-interface ReactionBubbleProps {
+export interface ReactionBubbleProps {
   emoji: string;
   participantName?: string;
   onComplete?: () => void;
   duration?: number;
+  /** Disable timers and motion for deterministic presentation frames. */
+  animated?: boolean;
+  /** Stable reaction identity for deterministic Chalk chrome across projection seeks. */
+  seed?: number | string;
   className?: string;
 }
 
@@ -52,25 +56,26 @@ export const ReactionBubble = React.memo((props: ReactionBubbleProps) => {
   return skin === "classic" ? <ClassicReactionBubble {...props} /> : <ChalkReactionBubble {...props} />;
 });
 
-function ChalkReactionBubble({ emoji, participantName, onComplete, duration: baseDuration = 3000, className }: ReactionBubbleProps) {
+function ChalkReactionBubble({ emoji, participantName, onComplete, duration: baseDuration = 3000, animated = true, seed, className }: ReactionBubbleProps) {
   const [isVisible, setIsVisible] = useState(true);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   const participantColors = useMemo(() => getParticipantColor(participantName || "unknown"), [participantName]);
   const isCelebration = CELEBRATION_EMOJIS.includes(emoji);
-  const animProps = useMemo(() => generateAnimationProps(), []);
-  const particles = useMemo(() => (isCelebration ? generateParticles(participantColors.primary) : []), [isCelebration, participantColors.primary]);
+  const animProps = useMemo(() => (animated ? generateAnimationProps() : null), [animated]);
+  const particles = useMemo(() => (animated && isCelebration ? generateParticles(participantColors.primary) : []), [animated, isCelebration, participantColors.primary]);
   const timeoutMs = baseDuration;
-  const floatDurationMs = prefersReducedMotion ? baseDuration : animProps.duration;
+  const floatDurationMs = prefersReducedMotion || !animProps ? baseDuration : animProps.duration;
 
   useEffect(() => {
+    if (!animated) return;
     const timer = setTimeout(() => {
       setIsVisible(false);
       onComplete?.();
     }, timeoutMs);
 
     return () => clearTimeout(timer);
-  }, [timeoutMs, onComplete]);
+  }, [animated, timeoutMs, onComplete]);
 
   if (!isVisible) return null;
 
@@ -78,18 +83,19 @@ function ChalkReactionBubble({ emoji, participantName, onComplete, duration: bas
     ? ({ "--primary": participantColors.primary } as React.CSSProperties)
     : ({
         "--primary": participantColors.primary,
-        "--float-offset-x": `${animProps.offsetX}px`,
-        "--float-travel-y": `${animProps.travelY}px`,
-        "--float-rotation": `${animProps.rotation}deg`,
-        "--float-scale": animProps.scale,
+        "--float-offset-x": `${animProps?.offsetX ?? 0}px`,
+        "--float-travel-y": `${animProps?.travelY ?? 0}px`,
+        "--float-rotation": `${animProps?.rotation ?? 0}deg`,
+        "--float-scale": animProps?.scale ?? 1,
         "--float-duration": `${floatDurationMs}ms`,
-        animationDelay: `${animProps.delay}ms`,
+        animationDelay: `${animProps?.delay ?? 0}ms`,
       } as React.CSSProperties);
 
   return (
-    <div className={cn("pointer-events-none relative w-16 h-16 flex items-center justify-center", !prefersReducedMotion && "chalk-animate-reaction-float", className)} style={animationStyle} role="presentation" aria-hidden="true">
+    <div className={cn("pointer-events-none relative w-16 h-16 flex items-center justify-center", animated && !prefersReducedMotion && "chalk-animate-reaction-float", className)} style={animationStyle} role="presentation" aria-hidden="true">
       {/* Particle effects for celebration */}
-      {isCelebration &&
+      {animated &&
+        isCelebration &&
         !prefersReducedMotion &&
         particles.map((particle) => (
           <div
@@ -112,16 +118,28 @@ function ChalkReactionBubble({ emoji, participantName, onComplete, duration: bas
           />
         ))}
 
-      <ChalkChrome className="pointer-events-none absolute inset-0 h-full w-full" shape="circle" filled fill="var(--chalk-surface, var(--chalk-app-control))" focusStroke={participantColors.primary} radius={999} roughness={0.9} stroke={participantColors.primary} part="reaction-bubble" />
+      <ChalkChrome
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        shape="circle"
+        filled
+        fill="var(--chalk-surface, var(--chalk-app-control))"
+        focusStroke={participantColors.primary}
+        radius={999}
+        roughness={0.9}
+        seed={childSeed(seed, "bubble")}
+        stroke={participantColors.primary}
+        part="reaction-bubble"
+      />
 
       {/* Main emoji */}
-      <div className={cn("relative z-10 text-5xl", !prefersReducedMotion && "chalk-animate-reaction-bounce-in", !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
+      <div className={cn("relative z-10 text-5xl", animated && !prefersReducedMotion && "chalk-animate-reaction-bounce-in", animated && !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
 
       {/* Participant name badge */}
       {participantName && participantName.toLowerCase() !== "unknown" && (
         <ChalkBadge
           tone="accent"
-          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 text-xs font-medium text-[var(--chalk-accent-text)] shadow-sm", !prefersReducedMotion && "animate-in fade-in duration-300")}
+          seed={childSeed(seed, "label")}
+          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 text-xs font-medium text-[var(--chalk-accent-text)] shadow-sm", animated && !prefersReducedMotion && "animate-in fade-in duration-300")}
           style={{ backgroundColor: participantColors.primary }}
         >
           {participantName}
@@ -132,3 +150,7 @@ function ChalkReactionBubble({ emoji, participantName, onComplete, duration: bas
 }
 
 ReactionBubble.displayName = "ReactionBubble";
+
+function childSeed(seed: number | string | undefined, part: string): string | undefined {
+  return seed === undefined ? undefined : `${seed}:${part}`;
+}

@@ -32,7 +32,7 @@ export async function runDispatcher(event: DispatcherEvent = {}, context: Dispat
   const logger = dependencies.logger ?? DEFAULT_LOGGER;
   const now = dependencies.now ?? Date.now;
   const contextHeaders: JourneyContext = {
-    journeyId: event.journeyId ?? randomUUID(),
+    journeyId: event.journeyId || randomUUID(),
     ...(event.traceparent === undefined ? {} : { traceparent: event.traceparent }),
     ...(event.tracestate === undefined ? {} : { tracestate: event.tracestate }),
   };
@@ -119,7 +119,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     });
     let manifest: ReturnType<typeof validateSpeakerTurnManifest>;
     try {
-      manifest = validateSpeakerTurnManifest(JSON.parse(new TextDecoder().decode(manifestBytes.bytes)) as unknown);
+      manifest = validateSpeakerTurnManifest(JSON.parse(new TextDecoder().decode(manifestBytes.bytes)) as unknown, assignment);
     } catch {
       throw new AssignmentError("speaker turn manifest is invalid");
     }
@@ -140,6 +140,8 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
       episodeId: assignment.episodeId,
       episodeStartMs: assignment.chunk.episodeStartMs,
       episodeEndMs: assignment.chunk.episodeEndMs,
+      sourceStartMs: assignment.chunk.sourceStartMs,
+      sourceEndMs: assignment.chunk.sourceEndMs,
       manifest,
       provider: transcription.result,
       attempt: assignment.attempt,

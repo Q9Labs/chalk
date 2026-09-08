@@ -8,18 +8,22 @@ export function normalizeTranscriptChunk(input: {
   episodeId: string;
   episodeStartMs: number;
   episodeEndMs: number;
+  sourceStartMs: number;
+  sourceEndMs: number;
   manifest: SpeakerTurnManifest;
   provider: ProviderResult;
   attempt: number;
   measuredAudioMs: number;
-  sourceIdentity?: ManifestIdentity;
-  sourceTrackClass?: TrackClass;
+  sourceIdentity: ManifestIdentity;
+  sourceTrackClass: TrackClass;
 }): NormalizedTranscriptDocument {
   if (!Number.isInteger(input.episodeStartMs) || !Number.isInteger(input.episodeEndMs) || input.episodeEndMs <= input.episodeStartMs) throw new AssignmentError("chunk episode range is invalid");
+  if (!Number.isInteger(input.sourceStartMs) || !Number.isInteger(input.sourceEndMs) || input.sourceStartMs < 0 || input.sourceEndMs <= input.sourceStartMs || input.sourceEndMs - input.sourceStartMs !== input.episodeEndMs - input.episodeStartMs)
+    throw new AssignmentError("chunk source range is invalid");
   if (!Number.isInteger(input.measuredAudioMs) || input.measuredAudioMs < 0) throw new AssignmentError("measured duration is invalid");
   const cues = input.provider.segments.flatMap((segment) => {
-    const startMs = Math.max(input.episodeStartMs, input.episodeStartMs + Math.round(segment.startSeconds * 1_000));
-    const endMs = Math.min(input.episodeEndMs, input.episodeStartMs + Math.round(segment.endSeconds * 1_000));
+    const startMs = Math.max(input.episodeStartMs, audioTimeToRecording(input, segment.startSeconds));
+    const endMs = Math.min(input.episodeEndMs, audioTimeToRecording(input, segment.endSeconds));
     if (endMs <= startMs) return [];
     const allMatches = input.manifest.turns.filter((turn) => turn.endMs > startMs && turn.startMs < endMs);
     const authoritative = allMatches.filter((turn) => isAuthoritativeTurn(turn, input.sourceIdentity, input.sourceTrackClass));
@@ -48,8 +52,8 @@ function cuesFromWords(segment: ProviderResult["segments"][number], segmentStart
   const words = input.provider.words?.filter((word) => word.endSeconds > segment.startSeconds && word.startSeconds < segment.endSeconds) ?? [];
   const groups: Array<{ turn: SpeakerTurn | undefined; words: typeof words }> = [];
   for (const word of words) {
-    const wordStartMs = input.episodeStartMs + Math.round(word.startSeconds * 1_000);
-    const wordEndMs = input.episodeStartMs + Math.round(word.endSeconds * 1_000);
+    const wordStartMs = audioTimeToRecording(input, word.startSeconds);
+    const wordEndMs = audioTimeToRecording(input, word.endSeconds);
     const matches = authoritative.filter((turn) => turn.endMs > wordStartMs && turn.startMs < wordEndMs);
     if (matches.length > 1) throw new AssignmentError("word crosses multiple source track epochs");
     const turn = matches[0];
@@ -62,10 +66,10 @@ function cuesFromWords(segment: ProviderResult["segments"][number], segmentStart
     const first = group.words[0];
     const last = group.words.at(-1);
     if (!first || !last) throw new AssignmentError("provider word timings are invalid");
-    const startMs = Math.max(segmentStartMs, input.episodeStartMs + Math.round(first.startSeconds * 1_000));
-    const endMs = Math.min(segmentEndMs, input.episodeStartMs + Math.round(last.endSeconds * 1_000));
+    const startMs = Math.max(segmentStartMs, audioTimeToRecording(input, first.startSeconds));
+    const endMs = Math.min(segmentEndMs, audioTimeToRecording(input, last.endSeconds));
     if (endMs <= startMs) throw new AssignmentError("provider word timing is invalid");
-    if (!group.turn && input.sourceIdentity && input.sourceIdentity.kind !== "unknown") throw new AssignmentError("word has no unambiguous source turn");
+    if (!group.turn) throw new AssignmentError("word has no authenticated source turn");
     const cueTurn = group.turn;
     const authoritativeTurn = group.turn;
     const overlap = Boolean(authoritativeTurn && (authoritativeTurn.overlap || allMatches.some((other) => other !== authoritativeTurn && overlaps(other, authoritativeTurn))));
@@ -77,8 +81,7 @@ function cuesFromSegment(segment: ProviderResult["segments"][number], segmentSta
   if (authoritative.length > 1) throw new AssignmentError("segment crosses multiple source track epochs");
   const turn = authoritative[0];
   if (!turn) {
-    if (input.sourceIdentity && input.sourceIdentity.kind !== "unknown") throw new AssignmentError("segment has no unambiguous source turn");
-    return [cueForSegment(segment.text, segmentStartMs, segmentEndMs, undefined, false, segment.confidence, input)];
+    throw new AssignmentError("segment has no authenticated source turn");
   }
   const overlap = turn.overlap || allMatches.some((other) => other !== turn && overlaps(other, turn));
   return [cueForSegment(segment.text, Math.max(segmentStartMs, turn.startMs), Math.min(segmentEndMs, turn.endMs), turn, overlap, segment.confidence, input)];
@@ -89,7 +92,11 @@ function isAuthoritativeTurn(turn: SpeakerTurn, identity: ManifestIdentity | und
 }
 
 function identityEquals(left: ManifestIdentity | undefined, right: ManifestIdentity | undefined): boolean {
-  return left?.kind === right?.kind && left?.participantId === right?.participantId && left?.trackEpoch === right?.trackEpoch;
+  return left?.kind === right?.kind && left?.participantRef === right?.participantRef && left?.participantGeneration === right?.participantGeneration && left?.trackId === right?.trackId && left?.trackEpoch === right?.trackEpoch;
+}
+
+function audioTimeToRecording(input: Parameters<typeof normalizeTranscriptChunk>[0], seconds: number): number {
+  return input.episodeStartMs + Math.round(seconds * 1_000) - input.sourceStartMs;
 }
 
 function overlaps(left: SpeakerTurn, right: SpeakerTurn): boolean {
@@ -97,12 +104,13 @@ function overlaps(left: SpeakerTurn, right: SpeakerTurn): boolean {
 }
 
 function cueForSegment(text: string, startMs: number, endMs: number, turn: CueTurn | undefined, overlap: boolean, confidence: number | undefined, input: Parameters<typeof normalizeTranscriptChunk>[0]): NormalizedCue {
+  if (!turn) throw new AssignmentError("cue has no authenticated source turn");
   return {
     startMs,
     endMs,
-    identity: turn?.identity ?? { kind: "unknown" },
-    trackClass: turn?.trackClass ?? "unknown",
-    ...(turn?.displayNameSnapshot === undefined ? {} : { displayNameSnapshot: turn.displayNameSnapshot }),
+    identity: turn.identity,
+    trackClass: turn.trackClass,
+    ...(turn.displayNameSnapshot === undefined ? {} : { displayNameSnapshot: turn.displayNameSnapshot }),
     text,
     overlap,
     provider: input.provider.provider,

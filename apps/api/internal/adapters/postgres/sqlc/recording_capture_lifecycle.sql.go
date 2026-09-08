@@ -138,9 +138,27 @@ select
     jobs.lease_owner,
     jobs.lease_token,
     jobs.lease_expires_at,
+    pipelines.capture_ready_at,
     sync_recordings.status as recording_status,
     sync_recordings.start_external_operation_id,
-    sync_recordings.stop_external_operation_id
+    sync_recordings.stop_external_operation_id,
+    (sync_recordings.status = 'stopped'
+     and pipelines.stop_requested_at is not null
+     and exists (
+        select 1
+        from sync_external_operations operation
+        join episodes episode
+          on episode.id = operation.episode_id
+         and episode.tenant_id = operation.tenant_id
+         and episode.space_id = operation.space_id
+        where operation.external_operation_id = pipelines.stop_operation_id
+          and operation.tenant_id = jobs.tenant_id
+          and operation.space_id = reservations.space_id
+          and operation.episode_id = jobs.episode_id
+          and operation.operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
+          and operation.status = 'applied'
+          and episode.status = 'ended'
+     ))::boolean as episode_stop_applied
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -167,10 +185,10 @@ where authority.job_id = $1
   and jobs.fencing_generation = $3
   and jobs.lease_token = $6
   and jobs.lease_owner = $7
-  and jobs.lease_expires_at = $12
+  and jobs.lease_expires_at >= $12
+  and $12::timestamptz > clock_timestamp()
   and jobs.lease_expires_at > clock_timestamp()
-  and authority.lease_expires_at = $12
-for update of jobs, sync_recordings
+for update of jobs, pipelines, sync_recordings
 `
 
 type LockRecordingCaptureLifecycleAuthorityParams struct {
@@ -201,9 +219,11 @@ type LockRecordingCaptureLifecycleAuthorityRow struct {
 	LeaseOwner               pgtype.Text        `json:"lease_owner"`
 	LeaseToken               pgtype.Text        `json:"lease_token"`
 	LeaseExpiresAt           pgtype.Timestamptz `json:"lease_expires_at"`
+	CaptureReadyAt           pgtype.Timestamptz `json:"capture_ready_at"`
 	RecordingStatus          string             `json:"recording_status"`
 	StartExternalOperationID pgtype.UUID        `json:"start_external_operation_id"`
 	StopExternalOperationID  pgtype.UUID        `json:"stop_external_operation_id"`
+	EpisodeStopApplied       bool               `json:"episode_stop_applied"`
 }
 
 func (q *Queries) LockRecordingCaptureLifecycleAuthority(ctx context.Context, arg LockRecordingCaptureLifecycleAuthorityParams) (LockRecordingCaptureLifecycleAuthorityRow, error) {
@@ -235,9 +255,11 @@ func (q *Queries) LockRecordingCaptureLifecycleAuthority(ctx context.Context, ar
 		&i.LeaseOwner,
 		&i.LeaseToken,
 		&i.LeaseExpiresAt,
+		&i.CaptureReadyAt,
 		&i.RecordingStatus,
 		&i.StartExternalOperationID,
 		&i.StopExternalOperationID,
+		&i.EpisodeStopApplied,
 	)
 	return i, err
 }
@@ -304,4 +326,36 @@ func (q *Queries) LockRecordingCaptureLifecycleOperation(ctx context.Context, ar
 		&i.ProducingTracestate,
 	)
 	return i, err
+}
+
+const setRecordingCaptureReadyAt = `-- name: SetRecordingCaptureReadyAt :one
+update recording_pipelines
+set capture_ready_at = $1,
+    state = 'capturing_segmented',
+    updated_at = now()
+where recording_id = $2
+  and tenant_id = $3
+  and capture_epoch = $4
+  and state in ('capture_leased', 'capturing_segmented')
+  and (capture_ready_at is null or capture_ready_at = $1)
+returning capture_ready_at
+`
+
+type SetRecordingCaptureReadyAtParams struct {
+	CaptureReadyAt pgtype.Timestamptz `json:"capture_ready_at"`
+	RecordingID    pgtype.UUID        `json:"recording_id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	CaptureEpoch   int64              `json:"capture_epoch"`
+}
+
+func (q *Queries) SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, setRecordingCaptureReadyAt,
+		arg.CaptureReadyAt,
+		arg.RecordingID,
+		arg.TenantID,
+		arg.CaptureEpoch,
+	)
+	var capture_ready_at pgtype.Timestamptz
+	err := row.Scan(&capture_ready_at)
+	return capture_ready_at, err
 }

@@ -10,12 +10,14 @@ import (
 )
 
 const (
-	MaximumEpisodes                = 20
-	MaximumParticipants            = 100
-	MinimumEpisodeParticipants     = 1
-	MaximumEpisodeParticipants     = 10
-	MaximumRecordingDuration       = 2 * time.Hour
-	MaximumRenderDuration          = 30 * time.Minute
+	MaximumEpisodes            = 20
+	MaximumParticipants        = 100
+	MinimumEpisodeParticipants = 1
+	MaximumEpisodeParticipants = 10
+	MaximumRecordingDuration   = 2 * time.Hour
+	// CPU qualification renders 1080p at about 2.4 times the media duration.
+	// Keep an absolute budget across retries with time for staging and encoding.
+	MaximumRenderDuration          = 4 * MaximumRecordingDuration
 	MaximumInputBitrateBPS         = int64(4_000_000)
 	MaximumInputBitrateTotalBPS    = int64(MaximumEpisodes) * MaximumInputBitrateBPS
 	DefaultPayloadSchemaVersion    = 1
@@ -58,10 +60,11 @@ var (
 )
 
 const (
-	RecorderJobSchemaVersion          = "recorder_job.v1"
-	RecordingBundleSchema             = "recording_bundle.v1"
-	RecordingLayoutProfile            = "composite_720p_v1"
-	RecorderInitialPlanRevision int64 = 1
+	RecorderJobSchemaVersion             = "recorder_job.v2"
+	LegacyRecorderJobSchemaVersion       = "recorder_job.v1"
+	RecordingBundleSchema                = "recording_bundle.v1"
+	RecordingLayoutProfile               = "composite_720p_v1"
+	RecorderInitialPlanRevision    int64 = 1
 )
 
 type State string
@@ -183,29 +186,36 @@ type Job struct {
 // recorder worker for one job attempt. Its JSON bytes are hashed and stored
 // with the attempt authority row before the claim is acknowledged.
 type RecorderJobEnvelope struct {
-	SchemaVersion         string   `json:"schema_version"`
-	TenantID              string   `json:"tenant_id"`
-	SpaceID               string   `json:"space_id"`
-	EpisodeID             string   `json:"episode_id"`
-	RecordingID           string   `json:"recording_id"`
-	JobID                 string   `json:"job_id"`
-	Kind                  JobKind  `json:"kind"`
-	AttemptCount          int      `json:"attempt_count"`
-	FencingGeneration     int64    `json:"fencing_generation"`
-	CaptureEpoch          int64    `json:"capture_epoch"`
-	PolicySnapshotVersion string   `json:"policy_snapshot_version"`
-	HardDeadline          string   `json:"hard_deadline"`
-	InitialPlanRevision   int64    `json:"initial_plan_revision"`
-	BundleSchemaVersion   string   `json:"bundle_schema_version"`
-	LayoutProfile         string   `json:"layout_profile"`
-	ParticipantLimit      int      `json:"participant_limit"`
-	InputBitrateBPS       int64    `json:"input_bitrate_bps"`
-	AudioCodec            string   `json:"audio_codec"`
-	VideoCodecs           []string `json:"video_codecs"`
-	PlanHandle            string   `json:"plan_handle"`
-	SignalingHandle       string   `json:"signaling_handle"`
-	KeyHandle             string   `json:"key_handle"`
-	ObjectHandle          string   `json:"object_handle"`
+	SchemaVersion              string   `json:"schema_version"`
+	TenantID                   string   `json:"tenant_id"`
+	SpaceID                    string   `json:"space_id"`
+	EpisodeID                  string   `json:"episode_id"`
+	RecordingID                string   `json:"recording_id"`
+	JobID                      string   `json:"job_id"`
+	Kind                       JobKind  `json:"kind"`
+	AttemptCount               int      `json:"attempt_count"`
+	FencingGeneration          int64    `json:"fencing_generation"`
+	CaptureEpoch               int64    `json:"capture_epoch"`
+	PolicySnapshotVersion      string   `json:"policy_snapshot_version"`
+	HardDeadline               string   `json:"hard_deadline"`
+	CaptureReadyAt             *string  `json:"capture_ready_at"`
+	RenderInputHandle          string   `json:"render_input_handle,omitempty"`
+	PresentationHandle         string   `json:"presentation_handle,omitempty"`
+	PresentationSchemaVersion  string   `json:"presentation_schema_version,omitempty"`
+	PresentationProfileVersion string   `json:"presentation_profile_version,omitempty"`
+	PresentationSHA256         string   `json:"presentation_sha256,omitempty"`
+	PresentationDurationMillis int64    `json:"presentation_duration_ms,omitempty"`
+	InitialPlanRevision        int64    `json:"initial_plan_revision"`
+	BundleSchemaVersion        string   `json:"bundle_schema_version"`
+	LayoutProfile              string   `json:"layout_profile"`
+	ParticipantLimit           int      `json:"participant_limit"`
+	InputBitrateBPS            int64    `json:"input_bitrate_bps"`
+	AudioCodec                 string   `json:"audio_codec"`
+	VideoCodecs                []string `json:"video_codecs"`
+	PlanHandle                 string   `json:"plan_handle"`
+	SignalingHandle            string   `json:"signaling_handle"`
+	KeyHandle                  string   `json:"key_handle"`
+	ObjectHandle               string   `json:"object_handle"`
 }
 
 type JobAuthority struct {

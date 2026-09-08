@@ -4,12 +4,13 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
+import { SentIcon, type SentIconHandle } from "../../utils/animated-icons";
+import { Cancel01Icon, Message01Icon, Upload01Icon } from "../../utils/icons";
 import { ChalkAlert, ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner, ChalkTextarea } from "../chalk-ui";
 import { useSkin } from "../skin-context";
-import { ClassicChatPanel } from "./ClassicChatPanel";
+import { ClassicChatPanel, ClassicChatPanelSurface } from "./ClassicChatPanel";
 import { MessageBubble } from "./MessageBubble";
-import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
+import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
 
 export type { ChatMessage } from "./chat-types";
@@ -27,13 +28,13 @@ export interface ChatPanelProps {
   readonly generatedAvatars?: boolean;
 }
 
-interface ChatPanelSurfaceProps extends ChatPanelProps {
+export interface ChatPanelSurfaceProps extends ChatPanelProps {
   readonly messages: readonly ChatMessage[];
   readonly pendingMessages?: SpaceSnapshot["chat"]["pendingSends"];
   readonly readReceipts?: readonly ChatReadReceipt[];
   readonly localReadThroughSequence?: string | null;
   readonly participantNames?: Readonly<Record<string, string>>;
-  readonly onSendMessage: (input: Pick<ChatSendInput, "text" | "attachments">) => Promise<void>;
+  readonly onSendMessage?: (input: Pick<ChatSendInput, "text" | "attachments">) => Promise<void>;
   readonly onUploadAttachment?: (file: ChatUploadFile) => Promise<ChatAttachment>;
   readonly onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
   readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
@@ -42,9 +43,13 @@ interface ChatPanelSurfaceProps extends ChatPanelProps {
   readonly loadingOlder?: boolean;
   readonly localParticipantId?: string;
   readonly error?: string | null;
+  readonly messageDisplayTime?: (message: ChatMessage) => string;
+  readonly autoScrollBehavior?: ScrollBehavior;
+  /** Use a solid message surface instead of filter-generated texture for deterministic raster output. */
+  readonly stableTexture?: boolean;
 }
 
-const ChatPanelSurface = React.memo(
+export const ChatPanelSurface = React.memo(
   ({
     messages,
     pendingMessages = [],
@@ -68,6 +73,9 @@ const ChatPanelSurface = React.memo(
     variant = "sidebar",
     generatedAvatars = true,
     error,
+    messageDisplayTime,
+    autoScrollBehavior,
+    stableTexture = false,
     className,
   }: ChatPanelSurfaceProps) => {
     const [draft, setDraft] = useState("");
@@ -79,6 +87,7 @@ const ChatPanelSurface = React.memo(
     const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const sendIconRef = useRef<SentIconHandle>(null);
     const isAtBottomRef = useRef(true);
     const mountedRef = useRef(false);
     const lastMarkedSequenceRef = useRef<string | null>(localReadThroughSequence);
@@ -102,10 +111,10 @@ const ChatPanelSurface = React.memo(
 
       if (!isAtBottomRef.current) return;
       scroller.scrollTop = scroller.scrollHeight;
-      endRef.current?.scrollIntoView?.({ behavior: mountedRef.current ? "smooth" : "auto", block: "end" });
+      endRef.current?.scrollIntoView?.({ behavior: autoScrollBehavior ?? (mountedRef.current ? "smooth" : "auto"), block: "end" });
       if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
       mountedRef.current = true;
-    }, [latestSequence, messages.length, onMarkRead, pendingMessages.length]);
+    }, [autoScrollBehavior, latestSequence, messages.length, onMarkRead, pendingMessages.length]);
 
     useEffect(() => {
       if (!localReadThroughSequence) return;
@@ -124,7 +133,7 @@ const ChatPanelSurface = React.memo(
 
     const send = async () => {
       const text = draft.trim();
-      if ((!text && stagedFiles.length === 0) || disabled || sending || pickingFiles) return;
+      if ((!text && stagedFiles.length === 0) || !onSendMessage || disabled || sending || pickingFiles) return;
       setSending(true);
       setComposerError(null);
       try {
@@ -191,18 +200,22 @@ const ChatPanelSurface = React.memo(
       }
     };
 
-    const handleScroll = () => {
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const atBottom = isChatScrollAtBottom(scroller);
-      isAtBottomRef.current = atBottom;
-      if (atBottom) {
-        if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
-        return;
-      }
-      const visibleSequence = latestVisibleChatSequence(scroller);
-      if (visibleSequence) markChatSequenceRead(visibleSequence, lastMarkedSequenceRef, onMarkRead);
-    };
+    const scrollWork = useMemo(
+      () =>
+        createChatScrollWork({
+          getScroller: () => scrollRef.current,
+          getLatestSequence: () => messages.at(-1)?.sequence ?? null,
+          lastMarkedSequenceRef,
+          onMarkRead,
+          onAtBottomChange: (atBottom) => {
+            isAtBottomRef.current = atBottom;
+          },
+        }),
+      [messages, onMarkRead],
+    );
+    useEffect(() => () => scrollWork.dispose(), [scrollWork]);
+
+    const handleScroll = scrollWork.onScroll;
 
     return (
       <ChalkPanel className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent p-0 text-[var(--chalk-app-text)]", className)} contentClassName="flex h-full min-h-0 flex-col" role="complementary" aria-label="Chat panel">
@@ -221,7 +234,7 @@ const ChatPanelSurface = React.memo(
             </header>
           ) : null}
 
-          <div ref={scrollRef} className="chalk-textured-surface flex-1 overflow-y-auto bg-[var(--chalk-app-panel)] px-2 py-5" aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
+          <div ref={scrollRef} className={cn("flex-1 overflow-y-auto bg-[var(--chalk-app-panel)] px-2 py-5", !stableTexture && "chalk-textured-surface")} aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
             {hasOlder && onLoadOlder ? (
               <ChalkButton variant="ghost" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void loadOlder()}>
                 {loadingOlder ? (
@@ -255,8 +268,11 @@ const ChatPanelSurface = React.memo(
                       <div key={message.messageId} data-chat-sequence={message.sequence}>
                         <MessageBubble
                           content={message.text}
+                          seed={message.messageId}
+                          avatarSeed={message.participantId}
                           senderName={message.displayName}
                           timestamp={message.createdAt}
+                          displayTime={messageDisplayTime?.(message)}
                           isLocal={isLocal}
                           isFirstInGroup={index === 0}
                           isLastInGroup={index === group.messages.length - 1}
@@ -280,6 +296,8 @@ const ChatPanelSurface = React.memo(
               <div key={pending.clientMessageId} className="my-2">
                 <MessageBubble
                   content={pending.text}
+                  seed={pending.clientMessageId}
+                  avatarSeed={localParticipantId}
                   senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"}
                   timestamp={new Date().toISOString()}
                   isLocal
@@ -350,9 +368,11 @@ const ChatPanelSurface = React.memo(
               className="relative z-[1] h-11 w-11 shrink-0 rounded-[8px] p-0 !text-[var(--chalk-app-control-active-text)]"
               disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
               onClick={() => void send()}
+              onMouseEnter={() => sendIconRef.current?.startAnimation()}
+              onFocus={() => sendIconRef.current?.startAnimation()}
               aria-label="Send message"
             >
-              <SentIcon className="h-5 w-5" />
+              <SentIcon ref={sendIconRef} className="h-5 w-5" />
             </ChalkButton>
           </div>
         </div>
@@ -400,7 +420,14 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
   return skin === "classic" ? <ClassicChatPanel {...props} /> : <ChalkChatPanel {...props} />;
 });
 
+/** Data-driven chat presentation without a Space client or bindings provider. */
+export const ChatPanelPresentation = React.memo((props: ChatPanelSurfaceProps): React.JSX.Element => {
+  const skin = useSkin();
+  return skin === "classic" ? <ClassicChatPanelSurface {...props} /> : <ChatPanelSurface {...props} />;
+});
+
 ChatPanel.displayName = "ChatPanel";
+ChatPanelPresentation.displayName = "ChatPanelPresentation";
 
 function describeChatUploadFile(file: ChatUploadFile): { readonly fileName: string; readonly mimeType: string; readonly byteLength: number } {
   if ("bytes" in file) return { fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };

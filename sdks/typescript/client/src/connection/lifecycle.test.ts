@@ -11,8 +11,8 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     const access = parseParsedAccessGrant({
       subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
       episode_started_at: "2026-08-25T10:00:00.000Z",
-      sync: { token: credential("chalk-sync"), expires_at: "2026-08-25T10:05:00.000Z" },
-      media: { token: credential("chalk-media"), expires_at: "2026-08-25T10:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
+      sync: { token: credential("chalk-sync"), expires_at: "2030-08-25T10:05:00.000Z" },
+      media: { token: credential("chalk-media"), expires_at: "2030-08-25T10:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
     });
     const layer = makeConnectionLifecycleLayer({
       access: async () => access,

@@ -24,6 +24,10 @@ var (
 	ErrRecordingNotFound       = errors.New("recording not found")
 	ErrTranscriptionDisabled   = errors.New("transcription is disabled")
 	ErrSourceNotReady          = errors.New("transcription source not ready")
+	ErrSourceExpired           = errors.New("transcription source expired")
+	ErrSourceConflict          = errors.New("transcription source commit conflicts with the committed source")
+	ErrTranscriptAlreadyExists = errors.New("transcript already exists")
+	ErrIdempotencyConflict     = errors.New("transcription idempotency key conflicts with an earlier request")
 	ErrTranscriptNotFound      = errors.New("transcript not found")
 	ErrArtifactRepository      = errors.New("transcription artifact repository unavailable")
 	ErrInvalidIdempotencyKey   = errors.New("invalid transcription idempotency key")
@@ -79,6 +83,7 @@ type Transcript struct {
 	SourceManifestSHA256      []byte
 	SourceManifestSize        *int64
 	SourceManifestContentType *string
+	SourceExpiresAt           *time.Time
 	Generation                int64
 	DeletedAt                 *time.Time
 	CompletedAt               *time.Time
@@ -122,19 +127,27 @@ type FinalizeInput struct {
 	ArtifactContentType string
 }
 
-type SourceRepository interface {
-	SeedSource(context.Context, SourceInput) error
-	LoadSource(context.Context, utilities.ID, utilities.ID) (SourceInput, error)
-}
-
 type SourceInput struct {
-	TenantID            utilities.ID
-	RecordingID         utilities.ID
-	ManifestKey         string
-	ManifestSHA256      []byte
-	ManifestSize        int64
-	ManifestContentType string
-	Chunks              []ChunkInput
+	TenantID              utilities.ID
+	RecordingID           utilities.ID
+	Generation            int64
+	CommitDigest          []byte
+	PresentationSHA256    []byte
+	ManifestKey           string
+	ManifestAllocationID  utilities.ID
+	ManifestObjectVersion string
+	ManifestETag          string
+	ManifestSHA256        []byte
+	ManifestSize          int64
+	ManifestContentType   string
+	Status                string
+	CommittedAt           time.Time
+	ExpiresAt             time.Time
+	LeaseTranscriptID     utilities.ID
+	LeaseExpiresAt        *time.Time
+	CleanupDueAt          *time.Time
+	DeletedAt             *time.Time
+	Chunks                []ChunkInput
 }
 
 type Service struct {
@@ -157,18 +170,27 @@ type DispatcherWaker interface {
 }
 
 type ChunkInput struct {
-	ID             utilities.ID
-	Index          int
-	Generation     int64
-	StartMS        int64
-	EndMS          int64
-	ParticipantRef string
-	TrackEpoch     string
-	IdentityKind   string
-	TrackClass     string
-	StorageKey     string
-	ResultKey      string
-	Checksum       []byte
-	Size           int64
-	ContentType    string
+	ID                    utilities.ID
+	Index                 int
+	Generation            int64
+	StartMS               int64
+	EndMS                 int64
+	SourceStartMS         int64
+	SourceEndMS           int64
+	ParticipantRef        string
+	ParticipantGeneration int64
+	TrackID               string
+	TrackEpoch            string
+	IdentityKind          string
+	TrackClass            string
+	DisplayNameSnapshot   string
+	Overlap               bool
+	StorageKey            string
+	AllocationID          utilities.ID
+	ObjectVersion         string
+	ObjectETag            string
+	ResultKey             string
+	Checksum              []byte
+	Size                  int64
+	ContentType           string
 }

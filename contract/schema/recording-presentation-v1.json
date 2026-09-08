@@ -1,0 +1,373 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chalk.dev/contracts/recording-presentation-v1.json",
+  "title": "RecordingPresentationTimelineV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "recordingId", "episodeId", "clock", "sourceCursors", "initial", "events", "assets"],
+  "properties": {
+    "schemaVersion": { "const": "recording_presentation.v1" },
+    "recordingId": { "$ref": "#/$defs/id" },
+    "episodeId": { "$ref": "#/$defs/id" },
+    "clock": { "$ref": "#/$defs/clock" },
+    "sourceCursors": { "$ref": "#/$defs/sourceCursors" },
+    "initial": { "$ref": "#/$defs/snapshot" },
+    "events": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "assets": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/asset" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "nonNegativeInteger": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "positiveInteger": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "timebase", "captureEpoch", "originAuthorityId", "durationMs"],
+      "properties": {
+        "origin": { "const": "capture_ready" },
+        "timebase": { "const": "recording_relative_ms" },
+        "captureEpoch": { "$ref": "#/$defs/positiveInteger" },
+        "originAuthorityId": { "$ref": "#/$defs/id" },
+        "durationMs": { "$ref": "#/$defs/nonNegativeInteger" }
+      }
+    },
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "deviceScaleFactor"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 320 },
+        "height": { "type": "integer", "minimum": 240 },
+        "deviceScaleFactor": { "type": "number", "minimum": 1, "maximum": 4 }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["colorScheme", "skin", "palette", "texture", "stageBackground", "generatedAvatars"],
+      "properties": {
+        "colorScheme": { "enum": ["light", "dark"] },
+        "skin": { "enum": ["classic", "chalk"] },
+        "palette": {
+          "enum": ["light", "warm-porcelain", "cool-mist", "paper-and-ink", "cream-and-clay", "studio-canvas", "prism-daylight", "signal-white", "warm-charcoal", "cool-graphite", "high-contrast-ink", "espresso-night", "chalkboard-atelier", "prism-nocturne", "cosmic-chalk", "oled-signal"]
+        },
+        "texture": { "enum": ["none", "paper", "slate"] },
+        "stageBackground": { "type": "boolean" },
+        "generatedAvatars": { "type": "boolean" }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "uiBuildSha256", "viewport", "locale", "timeZone", "fontAssetIds", "theme"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "uiBuildSha256": { "$ref": "#/$defs/sha256" },
+        "viewport": { "$ref": "#/$defs/viewport" },
+        "locale": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "timeZone": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fontAssetIds": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "theme": { "$ref": "#/$defs/theme" }
+      }
+    },
+    "space": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "logoAssetId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout", "sidebar"],
+      "properties": {
+        "layout": { "enum": ["grid", "presentation"] },
+        "sidebar": { "const": "chat" }
+      }
+    },
+    "participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "joinOrdinal", "joined", "microphoneMuted", "cameraEnabled", "screenShareEnabled", "speaking", "activeSpeaker", "handRaised"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "joinOrdinal": { "$ref": "#/$defs/positiveInteger" },
+        "joined": { "type": "boolean" },
+        "microphoneMuted": { "type": "boolean" },
+        "cameraEnabled": { "type": "boolean" },
+        "screenShareEnabled": { "type": "boolean" },
+        "speaking": { "type": "boolean" },
+        "activeSpeaker": { "type": "boolean" },
+        "handRaised": { "type": "boolean" },
+        "avatarAssetId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "assetId", "fileName", "contentType", "byteSize"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "assetId": { "$ref": "#/$defs/id" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "contentType": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "byteSize": { "$ref": "#/$defs/positiveInteger" }
+      }
+    },
+    "chatMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sequence", "participantId", "displayName", "text", "createdAtMs", "displayTime", "attachments"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/positiveInteger" },
+        "participantId": { "$ref": "#/$defs/id" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "text": { "type": "string", "maxLength": 4000 },
+        "createdAtMs": { "$ref": "#/$defs/nonNegativeInteger" },
+        "displayTime": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "attachments": {
+          "type": "array",
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/attachment" }
+        }
+      }
+    },
+    "chat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retainedFloorSequence", "headSequence", "messages"],
+      "properties": {
+        "retainedFloorSequence": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/positiveInteger" }]
+        },
+        "headSequence": { "$ref": "#/$defs/nonNegativeInteger" },
+        "messages": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/chatMessage" }
+        }
+      }
+    },
+    "reaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "participantId", "displayName", "value", "occurredAtMs", "expiresAtMs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "participantId": { "$ref": "#/$defs/id" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "value": { "enum": ["👍", "❤️", "😂", "😮", "😢", "🎉"] },
+        "occurredAtMs": { "$ref": "#/$defs/nonNegativeInteger" },
+        "expiresAtMs": { "$ref": "#/$defs/positiveInteger" }
+      }
+    },
+    "mediaSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "participantId", "participantGeneration", "kind", "trackId", "epoch", "visible"],
+      "properties": {
+        "sourceId": { "type": "string", "pattern": "^rps_[0-9a-f]{64}$" },
+        "participantId": { "$ref": "#/$defs/id" },
+        "participantGeneration": { "$ref": "#/$defs/positiveInteger" },
+        "kind": { "enum": ["microphone", "camera", "screen_share"] },
+        "trackId": { "$ref": "#/$defs/id" },
+        "epoch": { "$ref": "#/$defs/positiveInteger" },
+        "visible": { "type": "boolean" }
+      },
+      "allOf": [{ "if": { "properties": { "kind": { "const": "microphone" } } }, "then": { "properties": { "visible": { "const": false } } } }]
+    },
+    "sharedContent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "none" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "participantId", "sourceId"],
+          "properties": {
+            "kind": { "const": "screen_share" },
+            "participantId": { "$ref": "#/$defs/id" },
+            "sourceId": { "$ref": "#/$defs/id" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "sceneId", "revision", "stateAssetId"],
+          "properties": {
+            "kind": { "const": "whiteboard" },
+            "sceneId": { "$ref": "#/$defs/id" },
+            "revision": { "$ref": "#/$defs/nonNegativeInteger" },
+            "stateAssetId": { "$ref": "#/$defs/id" }
+          }
+        }
+      ]
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["elapsedMs", "profile", "space", "view", "participants", "media", "chat", "sharedContent", "reactions"],
+      "properties": {
+        "elapsedMs": { "$ref": "#/$defs/nonNegativeInteger" },
+        "profile": { "$ref": "#/$defs/profile" },
+        "space": { "$ref": "#/$defs/space" },
+        "view": { "$ref": "#/$defs/view" },
+        "participants": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/participant" } },
+        "media": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/mediaSource" } },
+        "chat": { "$ref": "#/$defs/chat" },
+        "sharedContent": { "$ref": "#/$defs/sharedContent" },
+        "reactions": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/reaction" } }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "objectKey", "contentType", "byteSize", "sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font"] },
+        "objectKey": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "contentType": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "byteSize": { "$ref": "#/$defs/positiveInteger" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceCursors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["episodeControlStartRevision", "episodeControlEndRevision", "chatStartSequence", "chatEndSequence", "whiteboardStartRevision", "whiteboardEndRevision", "capturePlanStartRevision", "capturePlanEndRevision"],
+      "properties": {
+        "episodeControlStartRevision": { "$ref": "#/$defs/nonNegativeInteger" },
+        "episodeControlEndRevision": { "$ref": "#/$defs/nonNegativeInteger" },
+        "chatStartSequence": { "$ref": "#/$defs/nonNegativeInteger" },
+        "chatEndSequence": { "$ref": "#/$defs/nonNegativeInteger" },
+        "whiteboardStartRevision": { "$ref": "#/$defs/nonNegativeInteger" },
+        "whiteboardEndRevision": { "$ref": "#/$defs/nonNegativeInteger" },
+        "capturePlanStartRevision": { "$ref": "#/$defs/nonNegativeInteger" },
+        "capturePlanEndRevision": { "$ref": "#/$defs/nonNegativeInteger" }
+      }
+    },
+    "eventBase": {
+      "type": "object",
+      "required": ["atMs", "sequence", "kind"],
+      "properties": {
+        "atMs": { "$ref": "#/$defs/nonNegativeInteger" },
+        "sequence": { "$ref": "#/$defs/positiveInteger" },
+        "kind": { "type": "string" }
+      }
+    },
+    "event": {
+      "oneOf": [
+        { "$ref": "#/$defs/participantJoinedEvent" },
+        { "$ref": "#/$defs/participantLeftEvent" },
+        { "$ref": "#/$defs/displayNameEvent" },
+        { "$ref": "#/$defs/handEvent" },
+        { "$ref": "#/$defs/microphoneEvent" },
+        { "$ref": "#/$defs/enabledEvent" },
+        { "$ref": "#/$defs/speakingEvent" },
+        { "$ref": "#/$defs/activeSpeakerEvent" },
+        { "$ref": "#/$defs/mediaEvent" },
+        { "$ref": "#/$defs/chatEvent" },
+        { "$ref": "#/$defs/reactionEvent" },
+        { "$ref": "#/$defs/sharedContentEvent" }
+      ]
+    },
+    "participantJoinedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participant"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "participant_joined" }, "participant": { "$ref": "#/$defs/participant" } }
+    },
+    "participantLeftEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participantId"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "participant_left" }, "participantId": { "$ref": "#/$defs/id" } }
+    },
+    "displayNameEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participantId", "displayName"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "participant_display_name_changed" }, "participantId": { "$ref": "#/$defs/id" }, "displayName": { "type": "string", "minLength": 1, "maxLength": 256 } }
+    },
+    "handEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participantId", "raised"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "participant_hand_raised_changed" }, "participantId": { "$ref": "#/$defs/id" }, "raised": { "type": "boolean" } }
+    },
+    "microphoneEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participantId", "muted"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "participant_microphone_changed" }, "participantId": { "$ref": "#/$defs/id" }, "muted": { "type": "boolean" } }
+    },
+    "enabledEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participantId", "enabled"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "enum": ["participant_camera_changed", "participant_screen_share_changed"] }, "participantId": { "$ref": "#/$defs/id" }, "enabled": { "type": "boolean" } }
+    },
+    "speakingEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participantId", "speaking"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "participant_speaking_changed" }, "participantId": { "$ref": "#/$defs/id" }, "speaking": { "type": "boolean" } }
+    },
+    "activeSpeakerEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "participantId"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "active_speaker_changed" }, "participantId": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }] } }
+    },
+    "mediaEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "source"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "media_source_changed" }, "source": { "$ref": "#/$defs/mediaSource" } }
+    },
+    "chatEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "message"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "chat_message_added" }, "message": { "$ref": "#/$defs/chatMessage" } }
+    },
+    "reactionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "reaction"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "reaction_added" }, "reaction": { "$ref": "#/$defs/reaction" } }
+    },
+    "sharedContentEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atMs", "sequence", "kind", "sharedContent"],
+      "properties": { "atMs": { "$ref": "#/$defs/nonNegativeInteger" }, "sequence": { "$ref": "#/$defs/positiveInteger" }, "kind": { "const": "shared_content_changed" }, "sharedContent": { "$ref": "#/$defs/sharedContent" } }
+    }
+  }
+}

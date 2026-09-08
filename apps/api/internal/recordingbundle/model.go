@@ -25,6 +25,12 @@ const (
 	MaxTimelineEvents     = 1_024
 	MaxGaps               = 1_024
 	MaxIdentifierBytes    = 512
+
+	// Track epochs combine the capture attempt epoch with its attempt-local
+	// plan revision into one JSON-safe integer. Epoch one retains the legacy
+	// plan-revision values.
+	MaxTrackEpochCaptureEpoch uint64 = 1 << 21
+	MaxTrackEpochPlanRevision uint64 = 1<<32 - 1
 )
 
 var (
@@ -40,8 +46,20 @@ var (
 	ErrEmptyBundle            = errors.New("recording bundle has no content")
 	ErrTrackEpochChangeNeeded = errors.New("recording bundle track epoch change must be explicit")
 	ErrTrackIdentityMutation  = errors.New("recording bundle track identity changed")
+	ErrInvalidTrackEpoch      = errors.New("recording bundle track epoch is invalid")
 	ErrNonMonotonicTime       = errors.New("recording bundle event time is invalid")
 )
+
+// ComposeTrackEpoch creates the identity shared by capture bundles and the
+// recording presentation. The result never exceeds JavaScript's largest
+// exactly representable integer.
+func ComposeTrackEpoch(captureEpoch, planRevision uint64) (uint64, error) {
+	if captureEpoch == 0 || captureEpoch > MaxTrackEpochCaptureEpoch ||
+		planRevision == 0 || planRevision > MaxTrackEpochPlanRevision {
+		return 0, ErrInvalidTrackEpoch
+	}
+	return (captureEpoch-1)<<32 | planRevision, nil
+}
 
 type CloseReason string
 
@@ -113,8 +131,11 @@ type TrackIdentity struct {
 }
 
 // RTPPacket is the adapter-neutral subset needed to retain codec-native RTP.
-// Payload is copied by Assembler.AddPacket and is never retained by reference
-// to a caller-owned buffer.
+// Capture normalizes Timestamp to the recording clock origin using the codec
+// clock rate (48 kHz Opus, 90 kHz VP8/H264). A late or replacement source
+// therefore starts at its recording-relative offset instead of zero. Payload
+// is copied by Assembler.AddPacket and is never retained by reference to a
+// caller-owned buffer.
 type RTPPacket struct {
 	SequenceNumber         uint16 `json:"sequence_number"`
 	ExtendedSequenceNumber uint64 `json:"extended_sequence_number"`
@@ -125,7 +146,9 @@ type RTPPacket struct {
 	Payload                []byte `json:"payload"`
 }
 
-// MediaPacket carries the two worker clocks alongside one copied RTP packet.
+// MediaPacket carries recording-relative arrival and media clocks alongside
+// one copied RTP packet. Zero is the first authoritative capture-ready instant
+// persisted for the Recording and is shared across tracks and capture attempts.
 // RTP timestamp ordering remains separate from the media/monotonic ranges.
 type MediaPacket struct {
 	Track                 TrackIdentity `json:"track"`

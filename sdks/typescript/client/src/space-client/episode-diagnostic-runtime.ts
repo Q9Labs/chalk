@@ -195,6 +195,17 @@ export class EpisodeDiagnosticRuntime {
     return this.#enabled() ? this.context() : undefined;
   }
 
+  /** Internal Feedback seam. It returns only a short-lived verified credential to the private transport. */
+  feedbackCredentialUnsafe(): EpisodeDiagnosticCredential | null {
+    if (!this.#enabled() || !this.#credential) return null;
+    return Object.freeze({ ...this.#credential });
+  }
+
+  feedbackAvailabilityUnsafe(): "available" | "disabled" | "disposed" | "unavailable" {
+    if (this.#disposed) return "disposed";
+    return this.#enabled() ? "available" : "disabled";
+  }
+
   startOperation(name: string, attributes?: Readonly<Record<string, unknown>>, parentOperationRef?: string, producerOperationRef?: string, correlationInput?: EpisodeDiagnosticCorrelationInput): EpisodeDiagnosticOperation | undefined {
     if (!this.#enabled()) return undefined;
     const credentialGeneration = this.#credential?.generation;

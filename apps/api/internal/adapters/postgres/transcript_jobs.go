@@ -36,9 +36,13 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 	if err != nil {
 		return transcripts.Assignment{}, fmt.Errorf("claim artifact job: %w", err)
 	}
-	chunk, err := q.GetTranscriptChunk(ctx, job.ChunkID)
+	sourceRow, err := q.GetRecordingTranscriptionSource(ctx, sqlc.GetRecordingTranscriptionSourceParams{RecordingID: job.RecordingID, TenantID: job.TenantID})
 	if err != nil {
-		return transcripts.Assignment{}, fmt.Errorf("load claimed chunk: %w", err)
+		return transcripts.Assignment{}, fmt.Errorf("load claimed source: %w", err)
+	}
+	sourceChunk, err := q.GetRecordingTranscriptionSourceChunk(ctx, sqlc.GetRecordingTranscriptionSourceChunkParams{ID: job.ChunkID, RecordingID: job.RecordingID, TenantID: job.TenantID})
+	if err != nil {
+		return transcripts.Assignment{}, fmt.Errorf("load claimed source chunk: %w", err)
 	}
 	transcript, err := q.MarkTranscriptionTranscribing(ctx, sqlc.MarkTranscriptionTranscribingParams{TenantID: job.TenantID, ID: job.TranscriptID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -51,15 +55,16 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Assignment{}, err
 	}
-	chunkInput := mapChunk(chunk)
+	chunkInput := mapSourceChunk(sourceChunk)
 	chunkInput.ResultKey = chunkResultKey(
 		utilities.IDFromBytes(job.TenantID.Bytes),
 		utilities.IDFromBytes(job.TranscriptID.Bytes),
-		chunk.Generation,
-		int(chunk.ChunkIndex),
+		sourceChunk.Generation,
+		int(sourceChunk.ChunkIndex),
 		int(job.AttemptCount),
 	)
-	return transcripts.Assignment{Job: mapJob(job), LeaseToken: token, Chunk: &chunkInput, Transcript: mapTranscript(transcript)}, nil
+	source := mapRecordingTranscriptionSource(sourceRow, []transcripts.ChunkInput{chunkInput})
+	return transcripts.Assignment{Job: mapJob(job), LeaseToken: token, Chunk: &chunkInput, Source: &source, Transcript: mapTranscript(transcript)}, nil
 }
 
 func (r TranscriptRepository) Heartbeat(ctx context.Context, input transcripts.LeaseInput, expiresAt time.Time) (transcripts.Job, error) {

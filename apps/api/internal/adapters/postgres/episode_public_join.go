@@ -31,7 +31,7 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 			return episodes.ErrAdmissionClosed
 		}
 
-		episode, created, metric, err := ensurePublicLiveEpisode(ctx, queries, tx, input.TenantID, input.SpaceID, space)
+		episode, created, metric, err := r.ensurePublicLiveEpisode(ctx, queries, tx, input.TenantID, input.SpaceID, space)
 		if err != nil {
 			return err
 		}
@@ -294,7 +294,7 @@ func (r EpisodeLifecycleRepository) LeavePublic(ctx context.Context, input episo
 	return result, err
 }
 
-func ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, tenantID, spaceID utilities.ID, space sqlc.Space) (sqlc.Episode, bool, webhookCommitMetric, error) {
+func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, tenantID, spaceID utilities.ID, space sqlc.Space) (sqlc.Episode, bool, webhookCommitMetric, error) {
 	episode, err := queries.LockLiveEpisodeForUpdate(ctx, sqlc.LockLiveEpisodeForUpdateParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
 	if err == nil {
 		return episode, false, webhookCommitMetric{}, nil
@@ -306,8 +306,16 @@ func ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.
 	if err != nil {
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("create public Episode id: %w", err)
 	}
+	artifactPolicy, err := resolveArtifactPolicyDocument(ctx, queries, tenantID, space)
+	if err != nil {
+		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("resolve public Episode Artifact policy: %w", err)
+	}
+	mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, tenantID, space)
+	if err != nil {
+		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("resolve public Episode media binding: %w", err)
+	}
 	deadline := time.Now().UTC().Truncate(time.Millisecond).Add(time.Duration(space.DefaultEpisodeDurationSeconds) * time.Second)
-	episode, err = queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{ID: uuid(id), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), DeadlineAt: timestamptz(&deadline)})
+	episode, err = queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{ID: uuid(id), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), DeadlineAt: timestamptz(&deadline), ArtifactPolicy: artifactPolicy, MediaPlaneBinding: mediaBinding})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sqlc.Episode{}, false, webhookCommitMetric{}, episodes.ErrSpaceNotFound
 	}

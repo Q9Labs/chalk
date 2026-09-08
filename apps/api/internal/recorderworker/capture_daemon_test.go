@@ -3,6 +3,7 @@ package recorderworker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,99 @@ func TestCaptureDaemonCorrelatesWholeAttemptFromClaimAuthority(t *testing.T) {
 	}
 	if trace.SpanContextFromContext(factoryContext).TraceID() != trace.SpanContextFromContext(control.completeContext).TraceID() {
 		t.Fatal("capture attempt trace changed before completion")
+	}
+}
+
+func TestCaptureCompletionHeartbeatsWhileBlockedAndRetriesTransientFailure(t *testing.T) {
+	claim := captureDaemonClaim(t, 7)
+	started := make(chan struct{})
+	renewed := make(chan struct{})
+	control := &captureControlStub{}
+	control.complete = func(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		if control.completeCalls == 1 {
+			close(started)
+			select {
+			case <-renewed:
+				return recordingpipeline.Job{}, TransportError{Err: errors.New("response lost")}
+			case <-ctx.Done():
+				return recordingpipeline.Job{}, ctx.Err()
+			}
+		}
+		return captureJobFromLease(input, time.Now().Add(DefaultCaptureLease)), nil
+	}
+	control.heartbeat = func(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		select {
+		case <-started:
+		case <-ctx.Done():
+			return recordingpipeline.Job{}, ctx.Err()
+		}
+		if control.heartbeatCalls == 1 {
+			close(renewed)
+		}
+		return captureJobFromLease(input, time.Now().Add(DefaultCaptureLease)), nil
+	}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
+	}), nil)
+	daemon.config.HeartbeatInterval = time.Millisecond
+	daemon.config.ClaimRetryWait = time.Millisecond
+	daemon.config.CompletionTimeout = time.Second
+	if err := daemon.runClaim(context.Background(), claim); err != nil {
+		t.Fatalf("complete with live lease: %v", err)
+	}
+	if control.completeCalls != 2 || control.heartbeatCalls == 0 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
+		t.Fatalf("completion calls=%d heartbeat=%d failures=%d epoch=%d", control.completeCalls, control.heartbeatCalls, control.failCalls, control.completed.CaptureEpoch)
+	}
+}
+
+func TestCaptureCompletionDoesNotRetryTerminalFailure(t *testing.T) {
+	control := &captureControlStub{complete: func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		return recordingpipeline.Job{}, ErrControlPlaneFenced
+	}}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
+	}), nil)
+	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7)); !errors.Is(err, ErrControlPlaneFenced) {
+		t.Fatalf("terminal completion: %v", err)
+	}
+	if control.completeCalls != 1 {
+		t.Fatalf("retried terminal completion %d times", control.completeCalls)
+	}
+}
+
+func TestCaptureCompletionCancelsWhenBoundExpiresOrLeaseIsLost(t *testing.T) {
+	for _, leaseLost := range []bool{false, true} {
+		t.Run(fmt.Sprint("lease_lost=", leaseLost), func(t *testing.T) {
+			finished := make(chan struct{})
+			control := &captureControlStub{complete: func(ctx context.Context, _ recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+				defer close(finished)
+				<-ctx.Done()
+				return recordingpipeline.Job{}, ctx.Err()
+			}}
+			if leaseLost {
+				control.heartbeat = func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+					return recordingpipeline.Job{}, ErrControlPlaneFenced
+				}
+			}
+			daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+				return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
+			}), nil)
+			daemon.config.HeartbeatInterval = time.Millisecond
+			daemon.config.CompletionTimeout = 20 * time.Millisecond
+			err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7))
+			want := context.DeadlineExceeded
+			if leaseLost {
+				want = ErrControlPlaneFenced
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("completion cancellation = %v, want %v", err, want)
+			}
+			select {
+			case <-finished:
+			case <-time.After(time.Second):
+				t.Fatal("completion request was not canceled")
+			}
+		})
 	}
 }
 
@@ -133,6 +227,70 @@ func TestCaptureDaemonRenewsAttemptLeaseBeforeCompletion(t *testing.T) {
 	}
 }
 
+func TestCaptureDaemonRetriesTransientHeartbeatWithinCurrentLease(t *testing.T) {
+	now := time.Now().UTC()
+	claim := captureDaemonClaim(t, 3)
+	claim.LeaseExpiresAt = now.Add(DefaultCaptureLease)
+	control := &captureControlStub{}
+	control.heartbeat = func(_ context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		if control.heartbeatCalls == 1 {
+			return recordingpipeline.Job{}, TransportError{Err: errors.New("temporary control-plane failure")}
+		}
+		return captureJobFromLease(input, now.Add(DefaultCaptureLease)), nil
+	}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
+	}), func() time.Time { return now })
+	waits := 0
+	daemon.config.Wait = func(context.Context, time.Duration) error {
+		waits++
+		return nil
+	}
+	lease, err := captureLeaseInput(claim, DefaultCaptureLease)
+	if err != nil {
+		t.Fatalf("capture lease: %v", err)
+	}
+	if _, err := daemon.heartbeat(context.Background(), lease, claim.LeaseExpiresAt); err != nil {
+		t.Fatalf("retry heartbeat: %v", err)
+	}
+	if control.heartbeatCalls != 2 || waits != 1 {
+		t.Fatalf("heartbeat attempts = %d waits = %d, want 2/1", control.heartbeatCalls, waits)
+	}
+}
+
+func TestCaptureDaemonBoundsUncooperativeAttemptShutdown(t *testing.T) {
+	claim := captureDaemonClaim(t, 4)
+	runRelease := make(chan struct{})
+	closeRelease := make(chan struct{})
+	defer close(runRelease)
+	defer close(closeRelease)
+	started := make(chan struct{})
+	attempt := &captureAttemptStub{
+		run: func(context.Context) error {
+			close(started)
+			<-runRelease
+			return nil
+		},
+		close: func() error {
+			<-closeRelease
+			return nil
+		},
+	}
+	daemon := captureDaemonForTest(t, &captureControlStub{}, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return attempt, nil
+	}), nil)
+	daemon.config.AttemptShutdown = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan error, 1)
+	go func() { finished <- daemon.runClaim(ctx, claim) }()
+	<-started
+	cancel()
+	err := <-finished
+	if !errors.Is(err, ErrCaptureAttemptShutdown) || !errors.Is(err, ErrCaptureDaemonStopped) {
+		t.Fatalf("bounded shutdown error = %v", err)
+	}
+}
+
 func TestCaptureDaemonRejectsHeartbeatAuthorityMutation(t *testing.T) {
 	claim := captureDaemonClaim(t, 2)
 	release := make(chan struct{})
@@ -190,6 +348,40 @@ func TestCaptureDaemonRetriesSameClaimRequestAfterRetryableTransportFailure(t *t
 	}
 }
 
+func TestCaptureDaemonDrainFinishesActiveClaimBeforeStopping(t *testing.T) {
+	t.Parallel()
+	claim := captureDaemonClaim(t, 7)
+	claimCalls := 0
+	control := &captureControlStub{claim: func(context.Context, utilities.ID, time.Duration) (ClaimResult, error) {
+		claimCalls++
+		if claimCalls > 1 {
+			t.Fatal("capture daemon claimed after drain")
+		}
+		return claim, nil
+	}}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	attempt := &captureAttemptStub{run: func(context.Context) error {
+		close(started)
+		<-release
+		return nil
+	}}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return attempt, nil
+	}), nil)
+	result := make(chan error, 1)
+	go func() { result <- daemon.Run(context.Background()) }()
+	<-started
+	daemon.Drain()
+	close(release)
+	if err := <-result; !errors.Is(err, ErrWorkerDraining) {
+		t.Fatalf("drain error = %v", err)
+	}
+	if claimCalls != 1 || control.completeCalls != 1 {
+		t.Fatalf("claims/completions = %d/%d", claimCalls, control.completeCalls)
+	}
+}
+
 func TestBoundedFailureDetailKeepsValidUTF8(t *testing.T) {
 	detail := boundedFailureDetail(errors.New(strings.Repeat("a", 511) + "é"))
 	if len(detail) > 512 || !utf8.ValidString(detail) || strings.HasSuffix(detail, "é") {
@@ -206,6 +398,7 @@ func (f captureAttemptFactoryFunc) NewCaptureAttempt(ctx context.Context, claim 
 type captureAttemptStub struct {
 	run        func(context.Context) error
 	renew      func(capturesignaling.WorkerLease) error
+	close      func() error
 	closeCalls int
 }
 
@@ -220,11 +413,16 @@ func (s *captureAttemptStub) RenewLease(lease capturesignaling.WorkerLease) erro
 
 func (s *captureAttemptStub) Close() error {
 	s.closeCalls++
+	if s.close != nil {
+		return s.close()
+	}
 	return nil
 }
 
 type captureControlStub struct {
 	claim           func(context.Context, utilities.ID, time.Duration) (ClaimResult, error)
+	complete        func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+	heartbeat       func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	claimRequestIDs []utilities.ID
 	heartbeatJob    recordingpipeline.Job
 	heartbeatCalls  int
@@ -242,8 +440,11 @@ func (s *captureControlStub) ClaimJob(ctx context.Context, claimRequestID utilit
 	return ClaimResult{}, ErrNoWork
 }
 
-func (s *captureControlStub) Heartbeat(_ context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+func (s *captureControlStub) Heartbeat(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
 	s.heartbeatCalls++
+	if s.heartbeat != nil {
+		return s.heartbeat(ctx, input)
+	}
 	if s.heartbeatJob.ID.IsZero() {
 		return captureJobFromLease(input, time.Now().UTC().Add(DefaultCaptureLease)), nil
 	}
@@ -260,6 +461,9 @@ func (s *captureControlStub) Complete(ctx context.Context, input recordingpipeli
 	s.completeCalls++
 	s.completed = input
 	s.completeContext = ctx
+	if s.complete != nil {
+		return s.complete(ctx, input)
+	}
 	return captureJobFromLease(input, time.Now().UTC().Add(DefaultCaptureLease)), nil
 }
 

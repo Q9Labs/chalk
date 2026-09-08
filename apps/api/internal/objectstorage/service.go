@@ -70,6 +70,8 @@ type CreateUploadURLInput struct {
 
 type CreateDownloadURLInput struct {
 	Key                string
+	VersionID          string
+	IfMatch            string
 	ContentDisposition string
 	ExpiresIn          time.Duration
 }
@@ -261,6 +263,14 @@ func normalizeCreateDownloadURLInput(input *CreateDownloadURLInput) error {
 		return ErrInvalidObjectKey
 	}
 	input.Key = key
+	input.VersionID = strings.TrimSpace(input.VersionID)
+	if strings.ContainsFunc(input.VersionID, unicode.IsControl) {
+		return ErrInvalidObjectKey
+	}
+	input.IfMatch = strings.TrimSpace(input.IfMatch)
+	if strings.ContainsFunc(input.IfMatch, unicode.IsControl) {
+		return ErrInvalidChecksum
+	}
 
 	if input.ExpiresIn <= 0 {
 		return ErrInvalidURLExpiration

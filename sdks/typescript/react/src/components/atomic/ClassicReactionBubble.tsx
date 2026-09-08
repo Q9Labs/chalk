@@ -9,6 +9,7 @@ interface ReactionBubbleProps {
   participantName?: string;
   onComplete?: () => void;
   duration?: number;
+  animated?: boolean;
   className?: string;
 }
 
@@ -70,25 +71,26 @@ function getParticleStyle(particle: ReturnType<typeof generateParticles>[number]
   };
 }
 
-export const ClassicReactionBubble = React.memo(({ emoji, participantName, onComplete, duration: baseDuration = 3000, className }: ReactionBubbleProps) => {
+export const ClassicReactionBubble = React.memo(({ emoji, participantName, onComplete, duration: baseDuration = 3000, animated = true, className }: ReactionBubbleProps) => {
   const [isVisible, setIsVisible] = useState(true);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   const participantColors = useMemo(() => getParticipantColor(participantName || "unknown"), [participantName]);
   const isCelebration = CELEBRATION_EMOJIS.includes(emoji);
-  const animProps = useMemo(() => generateAnimationProps(), []);
-  const particles = useMemo(() => (isCelebration ? generateParticles(participantColors.primary) : []), [isCelebration, participantColors.primary]);
+  const animProps = useMemo(() => (animated ? generateAnimationProps() : null), [animated]);
+  const particles = useMemo(() => (animated && isCelebration ? generateParticles(participantColors.primary) : []), [animated, isCelebration, participantColors.primary]);
   const timeoutMs = baseDuration;
-  const floatDurationMs = prefersReducedMotion ? baseDuration : animProps.duration;
+  const floatDurationMs = prefersReducedMotion || !animProps ? baseDuration : animProps.duration;
 
   useEffect(() => {
+    if (!animated) return;
     const timer = setTimeout(() => {
       setIsVisible(false);
       onComplete?.();
     }, timeoutMs);
 
     return () => clearTimeout(timer);
-  }, [timeoutMs, onComplete]);
+  }, [animated, timeoutMs, onComplete]);
 
   if (!isVisible) return null;
 
@@ -96,23 +98,23 @@ export const ClassicReactionBubble = React.memo(({ emoji, participantName, onCom
     ? { "--primary": participantColors.primary }
     : {
         "--primary": participantColors.primary,
-        "--float-offset-x": `${animProps.offsetX}px`,
-        "--float-travel-y": `${animProps.travelY}px`,
-        "--float-rotation": `${animProps.rotation}deg`,
-        "--float-scale": animProps.scale,
+        "--float-offset-x": `${animProps?.offsetX ?? 0}px`,
+        "--float-travel-y": `${animProps?.travelY ?? 0}px`,
+        "--float-rotation": `${animProps?.rotation ?? 0}deg`,
+        "--float-scale": animProps?.scale ?? 1,
         "--float-duration": `${floatDurationMs}ms`,
-        animationDelay: `${animProps.delay}ms`,
+        animationDelay: `${animProps?.delay ?? 0}ms`,
       };
 
   return (
-    <div className={cn("pointer-events-none relative w-16 h-16 flex items-center justify-center", !prefersReducedMotion && "chalk-animate-reaction-float", className)} style={animationStyle} role="presentation" aria-hidden="true">
-      {isCelebration && !prefersReducedMotion && particles.map((particle) => <div key={particle.id} className="absolute rounded-full" style={getParticleStyle(particle)} />)}
+    <div className={cn("pointer-events-none relative w-16 h-16 flex items-center justify-center", animated && !prefersReducedMotion && "chalk-animate-reaction-float", className)} style={animationStyle} role="presentation" aria-hidden="true">
+      {animated && isCelebration && !prefersReducedMotion && particles.map((particle) => <div key={particle.id} className="absolute rounded-full" style={getParticleStyle(particle)} />)}
 
-      <div className={cn("relative z-10 text-5xl", !prefersReducedMotion && "chalk-animate-reaction-bounce-in", !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
+      <div className={cn("relative z-10 text-5xl", animated && !prefersReducedMotion && "chalk-animate-reaction-bounce-in", animated && !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
 
       {participantName && participantName.toLowerCase() !== "unknown" && (
         <div
-          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] shadow-sm", !prefersReducedMotion && "animate-in fade-in duration-300")}
+          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] shadow-sm", animated && !prefersReducedMotion && "animate-in fade-in duration-300")}
           style={{ backgroundColor: participantColors.primary }}
         >
           {participantName}

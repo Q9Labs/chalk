@@ -143,7 +143,19 @@ function isLockfile(relativePath) {
 
 const REFERENCE_FILENAMES = new Set(["CHANGELOG.md", "GLOSSARY.md", "checklist.md"]);
 const VENDORED_DIRECTORIES = new Set(["node_modules", "dist", "vendor", "sqlc"]);
-const PROVIDER_VOCABULARY_ADAPTERS = new Set(["sdks/typescript/client/src/media/rtk.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts", "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.test.ts"]);
+// Vendored wire fields and protocol types retain their standards' spelling at
+// these adapter seams; platform-domain modules remain subject to the ratchet.
+const PROVIDER_VOCABULARY_ADAPTERS = new Set([
+  "apps/api/internal/adapters/cloudflare/sfu/capture_plane.go",
+  "apps/api/internal/adapters/cloudflare/sfu/capture_plane_test.go",
+  "apps/api/internal/adapters/cloudflare/sfu/live_capture_test.go",
+  "apps/api/internal/adapters/pion/peer.go",
+  "apps/api/internal/adapters/pion/peer_test.go",
+  "apps/recording-renderer/src/cli.ts",
+  "sdks/typescript/client/src/media/rtk.ts",
+  "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts",
+  "sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.test.ts",
+]);
 
 function exclusionContext(relativePath) {
   const parts = relativePath.split("/");

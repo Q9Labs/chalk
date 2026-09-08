@@ -6,7 +6,7 @@ export { Logo } from "./components/logo/Logo";
 export type { LogoMotion, LogoProps, LogoVariant } from "./components/logo/Logo";
 export { ChalkProvider, useSpaceClient } from "./context/space-client-context";
 export type { ChalkProviderProps } from "./context/space-client-context";
-export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useSelf, useWhiteboard } from "./hooks/space-hooks";
+export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useRecording, useSelf, useWhiteboard } from "./hooks/space-hooks";
 export { Theme, createNativeTheme } from "./ui/theme";
 export { extractSpaceInviteFromLink, getClipboardInviteSuggestion, parseSpaceInviteLink } from "./invites";
 export type { SpaceInviteLink } from "./invites";

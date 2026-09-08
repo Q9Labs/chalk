@@ -10,6 +10,7 @@ import { makeMediaController, type MediaControllerEffects } from "./media-contro
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { makeParticipantsController, type ParticipantsControllerEffects } from "./participants-controller";
 import { makeReactionsController, type ReactionsControllerEffects } from "./reactions-controller";
+import { makeRecordingController, type RecordingControllerEffects } from "./recording-controller";
 import { SpaceStore } from "./store";
 import type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, MediaRequestKind, Reaction } from "./types";
 import { makeWhiteboardController, type WhiteboardControllerEffects } from "./whiteboard-controller";
@@ -20,6 +21,7 @@ export type ControllerEffects = {
   readonly chat: ChatControllerEffects;
   readonly participants: ParticipantsControllerEffects;
   readonly reactions: ReactionsControllerEffects;
+  readonly recording: RecordingControllerEffects;
   readonly whiteboard: WhiteboardControllerEffects;
 };
 export class ControllerEffectsService extends Context.Service<ControllerEffectsService, ControllerEffects>()("@chalk/client/ControllerEffects") {}
@@ -40,8 +42,9 @@ export const makeControllerEffects = (input: {
     const chat = yield* makeChatController({ connection: input.connection, store: input.store, createTransport: input.featureFactories?.createChatFileTransport, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch, episodeDiagnostics: input.episodeDiagnostics });
     const participants = yield* makeParticipantsController(input.connection, input.store, input.episodeDiagnostics);
     const reactions = yield* makeReactionsController(input.connection, input.store, input.episodeDiagnostics);
+    const recording = yield* makeRecordingController(input.connection, input.store, input.episodeDiagnostics);
     const whiteboard = yield* makeWhiteboardController(input.connection, input.store, input.featureFactories?.createWhiteboardClient);
-    return { media, chat, participants, reactions, whiteboard };
+    return { media, chat, participants, reactions, recording, whiteboard };
   });
 
 export const makeControllerEffectsLayer = (input: Parameters<typeof makeControllerEffects>[0]) => Layer.effect(ControllerEffectsService, makeControllerEffects(input));

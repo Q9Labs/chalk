@@ -44,10 +44,14 @@ func (r EpisodeLifecycleRepository) JoinSelf(ctx context.Context, input episodes
 			if policyErr != nil {
 				return fmt.Errorf("resolve dashboard Episode Artifact policy: %w", policyErr)
 			}
+			mediaBinding, bindingErr := r.resolveEpisodeMediaBinding(ctx, queries, input.TenantID, space)
+			if bindingErr != nil {
+				return fmt.Errorf("resolve dashboard Episode media binding: %w", bindingErr)
+			}
 			deadline := time.Now().UTC().Truncate(time.Millisecond).Add(time.Duration(space.DefaultEpisodeDurationSeconds) * time.Second)
 			episode, err = queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{
 				ID: uuid(id), TenantID: uuid(input.TenantID), SpaceID: space.ID,
-				CreatedByUserID: uuid(input.AccountID), DeadlineAt: timestamptz(&deadline), ArtifactPolicy: artifactPolicy,
+				CreatedByUserID: uuid(input.AccountID), DeadlineAt: timestamptz(&deadline), ArtifactPolicy: artifactPolicy, MediaPlaneBinding: mediaBinding,
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
 				return episodes.ErrSpaceNotFound

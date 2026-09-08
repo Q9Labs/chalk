@@ -71,6 +71,29 @@ func TestServiceReplaysExactCompletedResultWithoutProviderCall(t *testing.T) {
 	if provider.calls(captureplane.OperationCreateCaptureConnection) != 1 {
 		t.Fatalf("provider calls = %d, want one", provider.calls(captureplane.OperationCreateCaptureConnection))
 	}
+	if provider.resolutions() != 1 {
+		t.Fatalf("provider resolutions = %d, want one; durable replay must not resolve again", provider.resolutions())
+	}
+}
+
+func TestServiceFailsBeforeClaimWhenEpisodeCaptureBindingCannotResolve(t *testing.T) {
+	provider := &fakePlane{resolveErr: captureplane.ProviderError{
+		Class: captureplane.ProviderFailureUnavailable, Code: "adapter_unavailable", Retryable: false,
+	}}
+	store := newMemoryPort()
+	service, err := NewService(store, provider, Options{MaxWait: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.Execute(context.Background(), ExecuteRequest{Command: commandFor(captureplane.OperationCreateCaptureConnection, time.Now().Add(time.Minute))})
+	var failure ProviderFailureError
+	if !errors.As(err, &failure) || failure.Failure.Code != "adapter_unavailable" || failure.Failure.Retryable {
+		t.Fatalf("execute error = %#v, want bounded non-retryable adapter_unavailable", err)
+	}
+	if store.claims != 0 || provider.calls(captureplane.OperationCreateCaptureConnection) != 0 {
+		t.Fatalf("claims = %d provider calls = %d, want no claimed or dispatched command", store.claims, provider.calls(captureplane.OperationCreateCaptureConnection))
+	}
 }
 
 func TestServicePassesFullAuthorityAndLeaseToEveryMutation(t *testing.T) {
@@ -99,6 +122,9 @@ func TestServicePassesFullAuthorityAndLeaseToEveryMutation(t *testing.T) {
 	}
 	if !bytes.Equal(store.claim[0].RequestBytes, store.prepare.RequestBytes) || store.claim[0].Fingerprint != store.prepare.Fingerprint || store.claim[0].Input.CreateCaptureConnection == nil {
 		t.Fatal("claim did not receive the immutable canonical command")
+	}
+	if provider.resolved() != metadata.Identity {
+		t.Fatal("capture plane resolver did not receive the canonical Chalk identity")
 	}
 	if !sameAuthority(store.completion.Authority, command.Authority) || !sameLease(store.completion.Lease, command.Lease) {
 		t.Fatal("completion did not receive full authority and lease")
@@ -342,7 +368,7 @@ func TestRemoteAnswerResultDoesNotPersistNegotiationFence(t *testing.T) {
 			Description: &captureplane.Description{Type: "answer", SDP: "v=0"},
 		},
 	}}
-	next, err := resultProjection(command.SignalingHandle, command.Authority, captureplane.OperationPullCaptureTracks, result, projection)
+	next, err := ProjectResult(command.SignalingHandle, command.Authority, captureplane.OperationPullCaptureTracks, result, projection)
 	if err != nil {
 		t.Fatalf("result projection: %v", err)
 	}
@@ -607,10 +633,36 @@ func projectionFor(command Command, negotiation string) *ConnectionProjection {
 }
 
 type fakePlane struct {
-	mu          sync.Mutex
-	counts      map[captureplane.OperationKind]int
-	badResult   bool
-	closeDenied bool
+	mu               sync.Mutex
+	counts           map[captureplane.OperationKind]int
+	resolveCalls     int
+	resolvedIdentity captureplane.CaptureIdentity
+	resolveErr       error
+	badResult        bool
+	closeDenied      bool
+}
+
+func (p *fakePlane) Resolve(_ context.Context, identity captureplane.CaptureIdentity) (captureplane.CapturePlane, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.resolveCalls++
+	p.resolvedIdentity = identity
+	if p.resolveErr != nil {
+		return nil, p.resolveErr
+	}
+	return p, nil
+}
+
+func (p *fakePlane) resolutions() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.resolveCalls
+}
+
+func (p *fakePlane) resolved() captureplane.CaptureIdentity {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.resolvedIdentity
 }
 
 func (p *fakePlane) calls(operation captureplane.OperationKind) int {

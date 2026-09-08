@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "product": "Chalk",
+  "vault": "Mobile App Releases",
+  "android": {
+    "package_name": "ai.q9labs.chalk.mobile",
+    "version_name": "2.0.1",
+    "version_code": 28,
+    "signing_item_id": "lf5l4ocenblm3n6swnbxjcsfya",
+    "keystore_sha256": "5fc23399a308b8960236c13c046dd64f43569df04742e5fd0b0e82210cd622ef",
+    "certificate_sha256": "70:57:9D:12:D1:8E:8E:4C:82:44:BA:6C:28:C1:05:10:64:4B:EA:83:9F:E1:06:3F:85:E6:46:15:16:05:BD:EE"
+  },
+  "apple": {
+    "team_id": "5K9635LZ6F",
+    "bundle_id": "ai.q9labs.chalk.mobile",
+    "screen_share_bundle_id": "ai.q9labs.chalk.mobile.screenshare",
+    "profile_item_id": "3txshcr6pzpvnh5zgcla35jnwe",
+    "profile_name": "iOS Team Store Provisioning Profile: ai.q9labs.chalk.mobile",
+    "profile_uuid": "2b4f53e9-ed7c-47b8-92a9-b9a8fbce170b",
+    "profile_sha256": "a0c1a5f9b1710ffe4acfa5379ce0626ae21e36bfb1309d06d5f02d21bae47939",
+    "screen_share_profile_item_id": "eszrwicesknvomj6dhzdqosvf4",
+    "screen_share_profile_name": "iOS Team Store Provisioning Profile: ai.q9labs.chalk.mobile.screenshare",
+    "screen_share_profile_uuid": "26e79bcd-a6e1-41c1-8f66-a52d90278294",
+    "screen_share_profile_sha256": "a4a5ebbe272de260ae99c038a32262f26b131ef0611e83141464ec5169e60df8",
+    "profile_certificate_sha256": "F7:C1:7F:6D:0F:DE:55:F1:7F:43:91:61:26:57:57:32:C9:1B:C6:04:AD:B5:D9:37:70:B4:1F:24:8C:86:8E:55",
+    "p12_item_id": "jw7juoemfup6yh5lbjaklpn7va",
+    "p12_password_item_id": "ndofbbyh5laduewwm2pfltq37y",
+    "p12_certificate_sha256": "97:B9:31:DA:10:8D:7E:DE:A6:FC:88:32:85:A6:7A:E9:71:3B:28:49:27:AB:9A:BC:5A:71:BA:9D:91:8B:69:98",
+    "status": "The stored Chalk App Store profiles are signed by F7:C1:7F:6D:0F:DE:55:F1:7F:43:91:61:26:57:57:32:C9:1B:C6:04:AD:B5:D9:37:70:B4:1F:24:8C:86:8E:55, but the shared Apple Distribution p12 is 97:B9:31:DA:10:8D:7E:DE:A6:FC:88:32:85:A6:7A:E9:71:3B:28:49:27:AB:9A:BC:5A:71:BA:9D:91:8B:69:98. A matching private key is required before signed iOS builds can run."
+  }
+}

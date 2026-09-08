@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import type { Copy01IconHandle } from "../../utils/animated-icons";
 import { Input } from "@q9labsai/chalk-ui";
 import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -11,6 +12,7 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
+  const copyIconRef = useRef<Copy01IconHandle>(null);
   const [isCopyFeedbackVisible, setIsCopyFeedbackVisible] = useState(false);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
   const handleCopyLink = async () => {
     if (!onCopyLink) return;
     await onCopyLink();
+    copyIconRef.current?.startAnimation();
     setIsCopyFeedbackVisible(true);
     if (copyResetTimeoutRef.current) {
       window.clearTimeout(copyResetTimeoutRef.current);
@@ -77,10 +80,12 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
               <button
                 type="button"
                 onClick={handleCopyLink}
+                onMouseEnter={() => copyIconRef.current?.startAnimation()}
+                onFocus={() => copyIconRef.current?.startAnimation()}
                 disabled={isCopyFeedbackVisible}
                 className={cn("flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--chalk-app-control-primary)] text-sm font-semibold text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)]", isCopyFeedbackVisible && "cursor-default bg-[#49645d]")}
               >
-                <Copy01Icon size={18} />
+                <Copy01Icon ref={copyIconRef} size={18} aria-hidden="true" onMouseEnter={() => copyIconRef.current?.startAnimation()} />
                 {isCopyFeedbackVisible ? "Copied" : "Copy Link"}
                 <span className="sr-only" aria-live="polite">
                   {isCopyFeedbackVisible ? "Copied space link to clipboard" : ""}

@@ -29,7 +29,7 @@ func (r TranscriptRepository) Delete(ctx context.Context, tenantID, transcriptID
 	if err != nil {
 		return transcripts.Transcript{}, err
 	}
-	dueAt := time.Now().Add(24 * time.Hour)
+	dueAt := time.Now()
 	finalizerJobs, err := q.ListTranscriptionFinalizerJobs(ctx, row.ID)
 	if err != nil {
 		return transcripts.Transcript{}, err
@@ -60,6 +60,18 @@ func (r TranscriptRepository) Delete(ctx context.Context, tenantID, transcriptID
 			return transcripts.Transcript{}, err
 		}
 	}
+	source, err := q.ReleaseRecordingTranscriptionSource(ctx, sqlc.ReleaseRecordingTranscriptionSourceParams{
+		RecordingID: row.RecordingID, TenantID: row.TenantID, TranscriptID: row.ID,
+		Now: pgtype.Timestamptz{Time: dueAt, Valid: true},
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return transcripts.Transcript{}, err
+	}
+	if err == nil {
+		if err := enqueueRecordingTranscriptionSourceCleanupTx(ctx, q, source, dueAt); err != nil {
+			return transcripts.Transcript{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Transcript{}, err
 	}
@@ -73,6 +85,6 @@ func enqueueCleanupTx(ctx context.Context, q interface {
 	if err != nil {
 		return err
 	}
-	_, err = q.CreateTranscriptionCleanupJob(ctx, sqlc.CreateTranscriptionCleanupJobParams{ID: uuid(id), TenantID: row.TenantID, TranscriptID: row.ID, ObjectKey: key, ObjectKind: kind, DueAt: pgtype.Timestamptz{Time: dueAt, Valid: true}})
+	_, err = q.CreateTranscriptionCleanupJob(ctx, sqlc.CreateTranscriptionCleanupJobParams{ID: uuid(id), TenantID: row.TenantID, RecordingID: row.RecordingID, TranscriptID: row.ID, ObjectKey: key, ObjectKind: kind, DueAt: pgtype.Timestamptz{Time: dueAt, Valid: true}})
 	return err
 }

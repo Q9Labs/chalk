@@ -13,11 +13,7 @@ const env: EpisodeDiagnosticsGatewayEnv = {
 describe("Episode Diagnostics gateway", () => {
   it("requires same-origin account access and forwards only the account bearer", async () => {
     const rejectedFetcher = vi.fn();
-    const rejected = await handleEpisodeDiagnosticsGateway(
-      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01`, { headers: { Origin: "https://evil.test", Cookie: "__Host-chalk_account=account-token" } }),
-      env,
-      rejectedFetcher,
-    );
+    const rejected = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01`, { headers: { Origin: "https://evil.test", Cookie: "__Host-chalk_account=account-token" } }), env, rejectedFetcher);
     expect(rejected.status).toBe(403);
     expect(rejectedFetcher).not.toHaveBeenCalled();
 
@@ -67,11 +63,7 @@ describe("Episode Diagnostics gateway", () => {
       .mockResolvedValueOnce(Response.json({ user: { id: "account-1" } }))
       .mockResolvedValueOnce(new Response(null, { status: 302, headers: { Location: "https://downloads.chalk.test/diagnostics/job-1?signature=secret" } }))
       .mockResolvedValueOnce(new Response("redacted bundle", { status: 200, headers: { "content-type": "application/gzip", "content-disposition": 'attachment; filename="episode-diagnostic-job-1.gz"', authorization: "Bearer secret", "set-cookie": "opaque=secret" } }));
-    const response = await handleEpisodeDiagnosticsGateway(
-      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }),
-      env,
-      fetcher,
-    );
+    const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }), env, fetcher);
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("redacted bundle");
@@ -87,11 +79,7 @@ describe("Episode Diagnostics gateway", () => {
       .fn()
       .mockResolvedValueOnce(Response.json({ user: { id: "account-1" } }))
       .mockResolvedValueOnce(new Response(null, { status: 302, headers: { Location: "https://evil.test/diagnostics/job-1?signature=secret" } }));
-    const response = await handleEpisodeDiagnosticsGateway(
-      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }),
-      env,
-      fetcher,
-    );
+    const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/export-jobs/job-1/download`, { headers: { Cookie: "__Host-chalk_account=account-token", Origin: origin } }), env, fetcher);
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toMatchObject({ code: "download.redirect_invalid" });
@@ -103,11 +91,7 @@ describe("Episode Diagnostics gateway", () => {
       .fn()
       .mockResolvedValueOnce(Response.json({ user: { id: "account-1" } }))
       .mockResolvedValueOnce(new Response("{not-json", { status: 200, headers: { "content-type": "application/json" } }));
-    const response = await handleEpisodeDiagnosticsGateway(
-      new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/stream`, { headers: { Cookie: "__Host-chalk_account=account-token" } }),
-      env,
-      fetcher,
-    );
+    const response = await handleEpisodeDiagnosticsGateway(new Request(`${origin}/_internal/episode-diagnostics/chalkdiag%3Av1%3Astaging%3Adiag01/stream`, { headers: { Cookie: "__Host-chalk_account=account-token" } }), env, fetcher);
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toMatchObject({ code: "upstream.contract_error" });

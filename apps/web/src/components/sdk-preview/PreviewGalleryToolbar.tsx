@@ -1,13 +1,11 @@
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
 import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
-import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
 import RotateLeft01Icon from "@hugeicons/core-free-icons/RotateLeft01Icon";
 import SidebarLeftIcon from "@hugeicons/core-free-icons/SidebarLeftIcon";
 import SidebarRightIcon from "@hugeicons/core-free-icons/SidebarRightIcon";
 import SlidersHorizontalIcon from "@hugeicons/core-free-icons/SlidersHorizontalIcon";
-import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { AnimatedCopy01Icon, AnimatedHugeiconsIcon as HugeiconsIcon, type AnimatedCopy01IconHandle } from "@q9labsai/chalk-react/utils";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
 import { PREVIEW_CONTROL_TABS, readPreviewControlTab, readPreviewDockSide, storePreviewControlTab, storePreviewDockSide, type PreviewControlTab, type PreviewDockSide } from "./preview-chrome-preferences";
@@ -68,6 +66,7 @@ export function PreviewGalleryToolbar({ search, onChange }: PreviewGalleryToolba
   const [dock, setDock] = useState<PreviewDockSide>(readPreviewDockSide);
   const [tab, setTab] = useState<PreviewControlTab>(readPreviewControlTab);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const copyIconRef = useRef<AnimatedCopy01IconHandle>(null);
   const searchRef = useRef(search);
   searchRef.current = search;
 
@@ -133,6 +132,7 @@ export function PreviewGalleryToolbar({ search, onChange }: PreviewGalleryToolba
     }
     await navigator.clipboard.writeText(href);
     setCopyStatus("copied");
+    copyIconRef.current?.startAnimation();
   };
   const reset = () => onChange({ ...DEFAULT_PREVIEW_SEARCH, chrome: "visible" });
 
@@ -152,9 +152,7 @@ export function PreviewGalleryToolbar({ search, onChange }: PreviewGalleryToolba
           className="group pointer-events-auto inline-flex h-9 max-w-9 items-center gap-2 overflow-hidden rounded-full border border-white/15 bg-[#202329]/70 px-2 text-[13px] font-medium text-white/90 opacity-55 shadow-[0_6px_24px_rgba(12,14,18,0.25)] backdrop-blur transition-[max-width,opacity,background-color] duration-300 hover:max-w-64 hover:bg-[#202329]/90 hover:opacity-100 focus-visible:max-w-64 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#55aac9]"
         >
           <HugeiconsIcon icon={SlidersHorizontalIcon} className="size-[18px] shrink-0" strokeWidth={2} />
-          <span className="whitespace-nowrap pr-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-            Preview controls
-          </span>
+          <span className="whitespace-nowrap pr-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">Preview controls</span>
         </button>
       </div>
     );
@@ -179,8 +177,16 @@ export function PreviewGalleryToolbar({ search, onChange }: PreviewGalleryToolba
               Preview controls
             </h2>
             <div className="flex items-center gap-0.5">
-              <button type="button" className={headerButtonClassName} aria-label={copyStatus === "copied" ? "Preview link copied" : "Copy preview link"} title="Copy preview link" onClick={() => void copyLink()}>
-                <HugeiconsIcon icon={copyStatus === "copied" ? Tick02Icon : Copy01Icon} className={`size-4 ${copyStatus === "copied" ? "text-[#2f8f5b]" : ""}`} strokeWidth={2} />
+              <button
+                type="button"
+                className={headerButtonClassName}
+                aria-label={copyStatus === "copied" ? "Preview link copied" : "Copy preview link"}
+                title="Copy preview link"
+                onClick={() => void copyLink()}
+                onMouseEnter={() => copyIconRef.current?.startAnimation()}
+                onFocus={() => copyIconRef.current?.startAnimation()}
+              >
+                <AnimatedCopy01Icon ref={copyIconRef} className={`size-4 ${copyStatus === "copied" ? "text-[#2f8f5b]" : ""}`} size={16} aria-hidden="true" onMouseEnter={() => copyIconRef.current?.startAnimation()} />
               </button>
               <button type="button" className={headerButtonClassName} aria-label="Reset preview to defaults" title="Reset to defaults" onClick={reset}>
                 <HugeiconsIcon icon={RotateLeft01Icon} className="size-4" strokeWidth={2} />

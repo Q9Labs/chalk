@@ -2,13 +2,13 @@
 insert into transcriptions (
     id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
     languages, metadata, source_manifest_key, source_manifest_sha256,
-    source_manifest_size, source_manifest_content_type, generation
+    source_manifest_size, source_manifest_content_type, source_expires_at, generation
 ) select
     sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.space_id,
     recordings.episode_id, sqlc.arg(status), sqlc.narg(provider), sqlc.narg(model),
     sqlc.arg(languages), sqlc.narg(metadata), sqlc.arg(source_manifest_key),
     sqlc.arg(source_manifest_sha256), sqlc.arg(source_manifest_size),
-    sqlc.arg(source_manifest_content_type), sqlc.arg(generation)
+    sqlc.arg(source_manifest_content_type), null, sqlc.arg(generation)
 from recordings
 where recordings.tenant_id = sqlc.arg(tenant_id)
   and recordings.id = sqlc.arg(recording_id)
@@ -21,17 +21,34 @@ returning *;
 insert into transcriptions (
     id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
     languages, metadata, source_manifest_key, source_manifest_sha256,
-    source_manifest_size, source_manifest_content_type, generation
+    source_manifest_size, source_manifest_content_type, source_expires_at, generation
 ) select
     sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.space_id,
     recordings.episode_id, sqlc.arg(status), null, null,
     sqlc.arg(languages), sqlc.narg(metadata), sqlc.narg(source_manifest_key),
     sqlc.narg(source_manifest_sha256), sqlc.narg(source_manifest_size),
-    sqlc.narg(source_manifest_content_type), sqlc.arg(generation)
+    sqlc.narg(source_manifest_content_type), sqlc.arg(source_expires_at), sqlc.arg(generation)
 from recordings
 where recordings.tenant_id = sqlc.arg(tenant_id)
   and recordings.id = sqlc.arg(recording_id)
   and recordings.status = 'completed'
+on conflict (recording_id) do nothing
+returning *;
+
+-- name: CreateRenderCommittedTranscription :one
+insert into transcriptions (
+    id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
+    languages, metadata, source_manifest_key, source_manifest_sha256,
+    source_manifest_size, source_manifest_content_type, source_expires_at, generation
+) select
+    sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.space_id,
+    recordings.episode_id, sqlc.arg(status), null, null,
+    sqlc.arg(languages), sqlc.narg(metadata), sqlc.arg(source_manifest_key),
+    sqlc.arg(source_manifest_sha256), sqlc.arg(source_manifest_size),
+    sqlc.arg(source_manifest_content_type), sqlc.arg(source_expires_at), sqlc.arg(generation)
+from recordings
+where recordings.tenant_id = sqlc.arg(tenant_id)
+  and recordings.id = sqlc.arg(recording_id)
 on conflict (recording_id) do nothing
 returning *;
 

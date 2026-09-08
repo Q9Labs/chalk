@@ -90,7 +90,8 @@ func DecodeResult(data []byte, kind captureplane.OperationKind, metadata capture
 	return result, nil
 }
 
-func resultProjection(handle SignalingHandle, authority CommandAuthority, operation captureplane.OperationKind, result CommandResult, existing *ConnectionProjection) (*ConnectionProjection, error) {
+// ProjectResult derives the durable connection state from a validated provider result.
+func ProjectResult(handle SignalingHandle, authority CommandAuthority, operation captureplane.OperationKind, result CommandResult, existing *ConnectionProjection) (*ConnectionProjection, error) {
 	if operation != captureplane.OperationCreateCaptureConnection && existing == nil {
 		return nil, FenceError{Kind: "connection"}
 	}

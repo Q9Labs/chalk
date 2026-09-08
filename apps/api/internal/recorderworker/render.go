@@ -122,21 +122,27 @@ type MediaFacts struct {
 }
 
 type MediaStream struct {
-	CodecType  string `json:"codec_type"`
-	CodecName  string `json:"codec_name"`
-	Profile    string `json:"profile"`
-	Width      int    `json:"width"`
-	Height     int    `json:"height"`
-	SampleRate string `json:"sample_rate"`
-	Channels   int    `json:"channels"`
-	FrameRate  string `json:"avg_frame_rate"`
-	BitRate    string `json:"bit_rate"`
-	Duration   string `json:"duration"`
+	CodecType   string `json:"codec_type"`
+	CodecName   string `json:"codec_name"`
+	Profile     string `json:"profile"`
+	PixelFormat string `json:"pix_fmt"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	SampleRate  string `json:"sample_rate"`
+	Channels    int    `json:"channels"`
+	FrameRate   string `json:"avg_frame_rate"`
+	BitRate     string `json:"bit_rate"`
+	StartTime   string `json:"start_time"`
+	Duration    string `json:"duration"`
+	FrameCount  string `json:"nb_frames"`
 }
 
 type MediaFormat struct {
 	Duration   string `json:"duration"`
 	FormatName string `json:"format_name"`
+	StartTime  string `json:"start_time"`
+	Size       string `json:"size"`
+	BitRate    string `json:"bit_rate"`
 }
 
 func VerifyMedia(ctx context.Context, runner CommandRunner, path string) (MediaFacts, error) {
@@ -147,13 +153,9 @@ func VerifyMediaWithExpectedDuration(ctx context.Context, runner CommandRunner, 
 	if runner == nil || path == "" {
 		return MediaFacts{}, errors.New("ffprobe runner and media path are required")
 	}
-	output, err := runner.Run(ctx, "ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", path)
+	facts, err := probeMediaFacts(ctx, runner, path)
 	if err != nil {
-		return MediaFacts{}, fmt.Errorf("ffprobe: %w: %s", err, string(output))
-	}
-	var facts MediaFacts
-	if err := json.Unmarshal(output, &facts); err != nil {
-		return MediaFacts{}, fmt.Errorf("decode ffprobe output: %w", err)
+		return MediaFacts{}, err
 	}
 	if err := facts.validate(); err != nil {
 		return MediaFacts{}, err
@@ -164,6 +166,26 @@ func VerifyMediaWithExpectedDuration(ctx context.Context, runner CommandRunner, 
 		if durationMs < expectedMs-100 || durationMs > expectedMs+100 {
 			return MediaFacts{}, fmt.Errorf("media duration %dms differs from expected %dms", durationMs, expectedMs)
 		}
+	}
+	return facts, nil
+}
+
+func decodeMediaFacts(output []byte) (MediaFacts, error) {
+	var facts MediaFacts
+	if err := json.Unmarshal(output, &facts); err != nil {
+		return MediaFacts{}, err
+	}
+	return facts, nil
+}
+
+func probeMediaFacts(ctx context.Context, runner CommandRunner, path string) (MediaFacts, error) {
+	output, err := runner.Run(ctx, "ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", path)
+	if err != nil {
+		return MediaFacts{}, fmt.Errorf("ffprobe: %w: %s", err, string(output))
+	}
+	var facts MediaFacts
+	if err := json.Unmarshal(output, &facts); err != nil {
+		return MediaFacts{}, fmt.Errorf("decode ffprobe output: %w", err)
 	}
 	return facts, nil
 }

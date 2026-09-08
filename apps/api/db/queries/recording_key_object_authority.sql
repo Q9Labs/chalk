@@ -19,13 +19,13 @@ where recording_data_keys.recording_id = sqlc.arg(recording_id)
   and jobs.state = 'leased'
   and jobs.lease_token = sqlc.arg(lease_token)
   and jobs.lease_owner = sqlc.arg(lease_owner)
-  and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
+  and jobs.lease_expires_at >= sqlc.arg(lease_expires_at)
   and jobs.lease_expires_at > clock_timestamp()
   and authority.capture_epoch = sqlc.arg(capture_epoch)
   and authority.envelope_digest = sqlc.arg(envelope_digest)
   and authority.lease_token = sqlc.arg(lease_token)
   and authority.lease_owner = sqlc.arg(lease_owner)
-  and authority.lease_expires_at = sqlc.arg(lease_expires_at);
+  and sqlc.arg(lease_expires_at)::timestamptz > clock_timestamp();
 
 -- name: InsertRecordingDataKey :one
 with authorized as (
@@ -44,13 +44,13 @@ with authorized as (
       and jobs.fencing_generation = sqlc.arg(fencing_generation)
       and jobs.lease_token = sqlc.arg(lease_token)
       and jobs.lease_owner = sqlc.arg(lease_owner)
-      and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
+      and jobs.lease_expires_at >= sqlc.arg(lease_expires_at)
       and jobs.lease_expires_at > clock_timestamp()
       and authority.capture_epoch = sqlc.arg(capture_epoch)
       and authority.envelope_digest = sqlc.arg(envelope_digest)
       and authority.lease_token = sqlc.arg(lease_token)
       and authority.lease_owner = sqlc.arg(lease_owner)
-      and authority.lease_expires_at = sqlc.arg(lease_expires_at)
+      and sqlc.arg(lease_expires_at)::timestamptz > clock_timestamp()
 )
 insert into recording_data_keys (
     recording_id, capture_epoch, tenant_id, episode_id, job_id,
@@ -82,13 +82,13 @@ where jobs.id = sqlc.arg(job_id)
   and jobs.fencing_generation = sqlc.arg(fencing_generation)
   and jobs.lease_token = sqlc.arg(lease_token)
   and jobs.lease_owner = sqlc.arg(lease_owner)
-  and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
+  and jobs.lease_expires_at >= sqlc.arg(lease_expires_at)
   and jobs.lease_expires_at > clock_timestamp()
   and authority.capture_epoch = sqlc.arg(capture_epoch)
   and authority.envelope_digest = sqlc.arg(envelope_digest)
   and authority.lease_token = sqlc.arg(lease_token)
   and authority.lease_owner = sqlc.arg(lease_owner)
-  and authority.lease_expires_at = sqlc.arg(lease_expires_at);
+  and sqlc.arg(lease_expires_at)::timestamptz > clock_timestamp();
 
 -- name: GetRecordingBundleAllocation :one
 select id, tenant_id, episode_id, recording_id, job_id, object_handle,
@@ -128,7 +128,7 @@ where upload_token_hash = sqlc.arg(upload_token_hash);
 
 -- name: ReserveRecordingBundleAllocation :one
 with authorized_job as (
-    select jobs.id
+    select jobs.recording_id
     from recording_jobs jobs
     join recording_job_attempt_authorities authority
       on authority.job_id = jobs.id
@@ -143,18 +143,18 @@ with authorized_job as (
       and jobs.fencing_generation = sqlc.arg(fencing_generation)
       and jobs.lease_token = sqlc.arg(lease_token)
       and jobs.lease_owner = sqlc.arg(lease_owner)
-      and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
+      and jobs.lease_expires_at >= sqlc.arg(lease_expires_at)
       and jobs.lease_expires_at > clock_timestamp()
       and authority.capture_epoch = sqlc.arg(capture_epoch)
       and authority.envelope_digest = sqlc.arg(envelope_digest)
       and authority.lease_token = sqlc.arg(lease_token)
       and authority.lease_owner = sqlc.arg(lease_owner)
-      and authority.lease_expires_at = sqlc.arg(lease_expires_at)
+      and sqlc.arg(lease_expires_at)::timestamptz > clock_timestamp()
     for update of jobs
 ), locked_recording as (
     select recordings.id
     from recordings
-    join authorized_job on authorized_job.id = recordings.id
+    join authorized_job on authorized_job.recording_id = recordings.id
     where recordings.id = sqlc.arg(recording_id)
       and recordings.tenant_id = sqlc.arg(tenant_id)
     for update of recordings
@@ -193,12 +193,12 @@ with authorized_job as (
         media_start_millis, media_end_millis, object_key, upload_token_hash, expected_byte_size,
         expected_checksum, content_type, expires_at, encryption_context_digest, state
     )
-    select sqlc.arg(allocation_id), sqlc.arg(tenant_id), sqlc.arg(episode_id), locked_recording.id,
+    select sqlc.arg(allocation_id)::uuid, sqlc.arg(tenant_id), sqlc.arg(episode_id), locked_recording.id,
         sqlc.arg(job_id), sqlc.arg(object_handle), sqlc.arg(reservation_request_id), next_values.allocation_version,
         sqlc.arg(attempt_count), sqlc.arg(fencing_generation), sqlc.arg(capture_epoch), sqlc.arg(envelope_digest),
         next_values.sequence_number, 'unknown', null, 0, 0, 0, 0,
-        format('recordings/%s/capture/%s/bundles/%s/%s.bundle', sqlc.arg(recording_id)::text, sqlc.arg(capture_epoch)::text, next_values.sequence_number::text, sqlc.arg(allocation_id)::text),
-        decode(md5('reserved:' || sqlc.arg(allocation_id)::text), 'hex'), 0, decode(repeat('00', 32), 'hex'),
+        format('recordings/%s/capture/%s/bundles/%s/%s.bundle', sqlc.arg(recording_id)::text, sqlc.arg(capture_epoch)::text, next_values.sequence_number::text, sqlc.arg(allocation_id)::uuid::text),
+        sha256(convert_to('reserved:' || sqlc.arg(allocation_id)::uuid::text, 'UTF8')), 0, decode(repeat('00', 32), 'hex'),
         'application/octet-stream', clock_timestamp() + interval '30 minutes', sqlc.arg(encryption_context_digest), 'reserved'
     from locked_recording, next_values
     on conflict (job_id, attempt_count, reservation_request_id) do nothing
@@ -290,13 +290,13 @@ where recording_bundle_allocations.id = sqlc.arg(id)
         and jobs.fencing_generation = sqlc.arg(fencing_generation)
         and jobs.lease_token = sqlc.arg(lease_token)
         and jobs.lease_owner = sqlc.arg(lease_owner)
-        and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
+        and jobs.lease_expires_at >= sqlc.arg(lease_expires_at)
         and jobs.lease_expires_at > clock_timestamp()
         and authority.capture_epoch = sqlc.arg(capture_epoch)
         and authority.envelope_digest = sqlc.arg(envelope_digest)
         and authority.lease_token = sqlc.arg(lease_token)
         and authority.lease_owner = sqlc.arg(lease_owner)
-        and authority.lease_expires_at = sqlc.arg(lease_expires_at)
+        and sqlc.arg(lease_expires_at)::timestamptz > clock_timestamp()
   )
 returning id, tenant_id, episode_id, recording_id, job_id, object_handle,
     reservation_request_id, allocation_version,
@@ -344,13 +344,13 @@ with committed as (
             and jobs.fencing_generation = sqlc.arg(fencing_generation)
             and jobs.lease_token = sqlc.arg(lease_token)
             and jobs.lease_owner = sqlc.arg(lease_owner)
-            and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
+            and jobs.lease_expires_at >= sqlc.arg(lease_expires_at)
             and jobs.lease_expires_at > clock_timestamp()
             and authority.capture_epoch = sqlc.arg(capture_epoch)
             and authority.envelope_digest = sqlc.arg(envelope_digest)
             and authority.lease_token = sqlc.arg(lease_token)
             and authority.lease_owner = sqlc.arg(lease_owner)
-            and authority.lease_expires_at = sqlc.arg(lease_expires_at)
+            and sqlc.arg(lease_expires_at)::timestamptz > clock_timestamp()
       )
     returning id, tenant_id, episode_id, recording_id, job_id, object_handle,
         reservation_request_id, allocation_version,

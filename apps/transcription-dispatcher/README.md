@@ -29,9 +29,9 @@ accepted from a production Lambda environment variable.
 The control API boundary assumed by this package is:
 
 - `POST /internal/v1/transcription/jobs/claim` with `{batch_size}` and
-  job-scoped audio plus speaker-turn-manifest GET authorities (URL, expiry,
-  content type, size, checksum), the chunk's opaque source identity/track
-  epoch/class, and never inline manifest bytes;
+  job-scoped FLAC plus canonical source-manifest GET authorities (URL, expiry,
+  content type, size, checksum), the chunk's committed object and authenticated
+  participant/track provenance, and never inline manifest bytes;
 - `POST /internal/v1/transcription/jobs/heartbeat` with fenced snake_case
   fields including `job_id`;
 - `POST /internal/v1/transcription/jobs/retry` with fenced snake_case fields
@@ -48,6 +48,16 @@ The API independently verifies the selected result object before its
 compare-and-set completion. Completion does not send a URL or object key. A
 retry after a successful conditional PUT reuses the existing object by
 resubmitting its checksum and letting that same API verification decide.
+
+The downloaded source must be exactly `recording-transcription-source.v1` in
+snake_case. The dispatcher rejects unknown fields and requires its selected
+chunk to match the claim's allocation, version, ETag, checksum, size,
+recording-relative/source offsets, participant generation, track identity,
+display-name snapshot, and overlap fact. Only committed 16 kHz mono FLAC
+microphone tracks receive speaker attribution; no diarization or mixed-audio
+fallback exists. Source retention expiry is database-owned and therefore is
+not embedded in the pre-commit manifest. Worker leases and signed URLs are
+capped by the persisted source hard deadline.
 
 Final transcript composition is a separate fenced queue. The EventBridge
 payload `{\"source\":\"eventbridge.scheduler\",\"kind\":\"transcription-reconcile\"}`

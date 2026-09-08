@@ -28,8 +28,10 @@ export function SpaceStage({ tiles, layout, generatedAvatars = true, whiteboard,
       if (item.kind === "whiteboard") {
         return whiteboard ? <WhiteboardView {...whiteboard.props} className={cn("h-full min-h-0", whiteboard.props.className)} /> : null;
       }
+      const track = item.participant.screenShareTrack;
+      if (!track) return null;
       const stop = item.participant.isLocal ? () => void client.media.setScreenShareEnabled(false) : () => void client.participants.stopScreenShare(item.participant.id);
-      return <ScreenShareViewSurface screenShareTrack={item.track} sharedByName={item.participant.displayName} participants={[]} showThumbnails={false} onStopShare={stop} className="h-full" />;
+      return <ScreenShareViewSurface screenShareTrack={track} sharedByName={item.participant.displayName} participants={[]} showThumbnails={false} onStopShare={stop} className="h-full" />;
     },
     [client, whiteboard],
   );

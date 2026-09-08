@@ -1,8 +1,12 @@
 -- name: CreateTranscriptionCleanupJob :one
 insert into transcription_cleanup_jobs (
-    id, tenant_id, transcript_id, object_key, object_kind, due_at
-) values ($1, $2, $3, $4, $5, $6)
-on conflict (transcript_id, object_key) do update set
+    id, tenant_id, recording_id, transcript_id, object_key, object_kind, due_at
+) values (
+    sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(recording_id),
+    sqlc.narg(transcript_id), sqlc.arg(object_key), sqlc.arg(object_kind),
+    sqlc.arg(due_at)
+)
+on conflict (recording_id, object_key) do update set
     due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
     updated_at = now()
 returning *;
