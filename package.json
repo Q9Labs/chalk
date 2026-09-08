@@ -112,7 +112,7 @@
     "turbo": "^2.9.14",
     "typescript": "^6.0.3",
     "typescript-7": "npm:typescript@7.0.1-rc",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "wrangler": "^4.107.0"
   },
   "engines": {
