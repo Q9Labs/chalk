@@ -30,8 +30,7 @@ type sourceState struct {
 	presentation recordingpresentation.MediaSource
 	track        recordingbundle.TrackIdentity
 	spoolPath    string
-	hasPacket    bool
-	lastSequence uint64
+	spoolGroups  []spoolRunGroup
 }
 
 type observedGap struct {
@@ -258,6 +257,7 @@ func ingestBundles(ctx context.Context, request Request, catalog map[sourceIdent
 	gaps := make([]observedGap, 0)
 	var previous *recordingbundle.Bundle
 	var previousDigest string
+	var recoveryGeneration uint64
 	var inputBytes int64
 	for index, file := range bundles {
 		if err := ctx.Err(); err != nil {
@@ -285,7 +285,6 @@ func ingestBundles(ctx context.Context, request Request, catalog map[sourceIdent
 			clearBundle(&bundle)
 			return nil, nil, err
 		}
-		recoveryBoundary := false
 		if previous != nil {
 			if err := recordingbundle.ValidateSequence(*previous, bundle); err != nil {
 				clearBundle(&bundle)
@@ -295,8 +294,9 @@ func ingestBundles(ctx context.Context, request Request, catalog map[sourceIdent
 				clearBundle(&bundle)
 				return nil, nil, fmt.Errorf("%w: capture epoch regressed", ErrInvalidBundle)
 			}
-			if previousDigest != "" && previousDigest != bundle.Manifest.RecorderEnvelopeDigest {
-				recoveryBoundary = true
+			if bundle.Manifest.CaptureEpoch > previous.Manifest.CaptureEpoch ||
+				(previousDigest != "" && previousDigest != bundle.Manifest.RecorderEnvelopeDigest) {
+				recoveryGeneration++
 				gaps = append(gaps, observedGap{startMS: previous.Manifest.MediaRange.EndMilliseconds, endMS: bundle.Manifest.MediaRange.StartMilliseconds, reason: "attempt_recovery"})
 			}
 		}
@@ -321,7 +321,7 @@ func ingestBundles(ctx context.Context, request Request, catalog map[sourceIdent
 				clearBundle(&bundle)
 				return nil, nil, fmt.Errorf("%w: source track identity mutated", ErrInvalidBundle)
 			}
-			if err := appendFragment(state, fragment, recoveryBoundary); err != nil {
+			if err := appendFragmentRun(ctx, state, fragment, recoveryGeneration); err != nil {
 				clearBundle(&bundle)
 				return nil, nil, err
 			}
@@ -330,6 +330,16 @@ func ingestBundles(ctx context.Context, request Request, catalog map[sourceIdent
 		previous = &previousCopy
 		previousDigest = bundle.Manifest.RecorderEnvelopeDigest
 		clearBundle(&bundle)
+	}
+	stateIDs := make([]string, 0, len(states))
+	for sourceID := range states {
+		stateIDs = append(stateIDs, sourceID)
+	}
+	sort.Strings(stateIDs)
+	for _, sourceID := range stateIDs {
+		if err := finalizeSourceSpool(ctx, states[sourceID]); err != nil {
+			return nil, nil, err
+		}
 	}
 	return states, gaps, nil
 }
@@ -358,34 +368,6 @@ func validateTrackKind(kind recordingpresentation.MediaKind, codec string) error
 	return fmt.Errorf("%w: presentation kind %q cannot decode codec %q", ErrInvalidBundle, kind, codec)
 }
 
-func appendFragment(state *sourceState, fragment recordingbundle.RTPFragment, allowSequenceReset bool) (resultErr error) {
-	file, err := os.OpenFile(state.spoolPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
-	if err != nil {
-		return fmt.Errorf("open RTP spool: %w", err)
-	}
-	defer func() {
-		resultErr = errors.Join(resultErr, closeFileWithContext(file, "close RTP spool"))
-	}()
-	buffer := bufio.NewWriterSize(file, 64<<10)
-	for index, packet := range fragment.Packets {
-		if state.hasPacket && packet.ExtendedSequenceNumber <= state.lastSequence && !(allowSequenceReset && index == 0) {
-			return fmt.Errorf("%w: source RTP sequence is not increasing", ErrInvalidBundle)
-		}
-		if len(packet.Payload) > recordingbundle.MaxPacketPayloadBytes {
-			return fmt.Errorf("%w: source RTP payload exceeds bound", ErrInvalidBundle)
-		}
-		if err := writeSpoolPacket(buffer, packet); err != nil {
-			return fmt.Errorf("write RTP spool: %w", err)
-		}
-		state.hasPacket = true
-		state.lastSequence = packet.ExtendedSequenceNumber
-	}
-	if err := buffer.Flush(); err != nil {
-		return fmt.Errorf("flush RTP spool: %w", err)
-	}
-	return nil
-}
-
 func writeSpoolPacket(writer io.Writer, packet recordingbundle.RTPPacket) error {
 	var header [spoolRecordHeaderBytes]byte
 	binary.BigEndian.PutUint64(header[0:8], packet.ExtendedSequenceNumber)
@@ -409,8 +391,8 @@ func readSpoolPacket(reader *bufio.Reader) (recordingbundle.RTPPacket, error) {
 		return recordingbundle.RTPPacket{}, err
 	}
 	payloadLength := binary.BigEndian.Uint32(header[18:22])
-	if payloadLength > recordingbundle.MaxPacketPayloadBytes {
-		return recordingbundle.RTPPacket{}, fmt.Errorf("%w: corrupt RTP spool payload", ErrDecode)
+	if header[17] > 1 || payloadLength > recordingbundle.MaxPacketPayloadBytes {
+		return recordingbundle.RTPPacket{}, fmt.Errorf("%w: corrupt RTP spool packet", ErrDecode)
 	}
 	payload := make([]byte, int(payloadLength))
 	if _, err := io.ReadFull(reader, payload); err != nil {
