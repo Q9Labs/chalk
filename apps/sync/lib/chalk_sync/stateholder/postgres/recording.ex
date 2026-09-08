@@ -31,22 +31,16 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
 
   def prepare_capture_stopped(connection, episode, operation) do
     recording_id = operation.payload["recordingId"]
-    stop_operation_id = operation.payload["stopOperationId"]
-    capture_epoch = operation.payload["captureEpoch"]
-    stop_operation_uuid = Scope.uuid(stop_operation_id)
 
     case lock(connection, episode, recording_id) do
       [[recording_status, _generation, metadata, _start_id, stop_id]] ->
         validate_capture_stopped(
           connection,
           episode,
-          recording_id,
-          stop_operation_id,
-          stop_operation_uuid,
+          operation,
           recording_status,
           stop_id,
-          metadata,
-          capture_epoch
+          metadata
         )
 
       _ ->
@@ -116,22 +110,16 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
         %{name: :recording_capture_stopped} = external
       ) do
     recording_id = external.payload["recordingId"]
-    stop_operation_id = external.payload["stopOperationId"]
-    capture_epoch = external.payload["captureEpoch"]
-    stop_operation_uuid = Scope.uuid(stop_operation_id)
 
     case lock(connection, episode, recording_id) do
       [[recording_status, _generation, metadata, _start_id, stop_id]] ->
         case validate_capture_stopped(
                connection,
                episode,
-               recording_id,
-               stop_operation_id,
-               stop_operation_uuid,
+               external,
                recording_status,
                stop_id,
-               metadata,
-               capture_epoch
+               metadata
              ) do
           {:ok, _prepared} -> :ok
           error -> error
@@ -212,14 +200,15 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
   defp validate_capture_stopped(
          connection,
          episode,
-         recording_id,
-         stop_operation_id,
-         stop_operation_uuid,
+         operation,
          recording_status,
          recording_stop_id,
-         metadata,
-         capture_epoch
+         metadata
        ) do
+    recording_id = operation.payload["recordingId"]
+    stop_operation_id = operation.payload["stopOperationId"]
+    capture_epoch = operation.payload["captureEpoch"]
+    stop_operation_uuid = Scope.uuid(stop_operation_id)
     source_operation = lock_external_operation(connection, episode, stop_operation_id)
 
     valid_source =
