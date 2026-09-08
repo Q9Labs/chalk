@@ -511,6 +511,15 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				return a.finishFailure(err, writer)
 			}
 		case event := <-planEvents:
+			if event.checkpointNoRTP {
+				if len(readers) == 0 {
+					if err := writer.checkpointNoRTP(runCtx, event.at); err != nil {
+						cancel()
+						return a.finishFailure(err, writer)
+					}
+				}
+				continue
+			}
 			if event.err != nil {
 				if errors.Is(event.err, captureplan.ErrNoChange) || errors.Is(event.err, ErrNoChange) || errors.Is(event.err, captureplan.ErrWaitTimeout) {
 					continue
@@ -575,6 +584,9 @@ func (a *PionCaptureAttempt) planLoop(ctx context.Context, output chan<- capture
 		plan, err := a.plans.WaitForPlan(ctx, input)
 		if err != nil {
 			if errors.Is(err, ErrNoChange) || errors.Is(err, captureplan.ErrNoChange) || errors.Is(err, captureplan.ErrWaitTimeout) {
+				if sendCapturePlanEvent(ctx, output, capturePlanEvent{checkpointNoRTP: true, at: a.config.Now().UTC()}) != nil {
+					return
+				}
 				continue
 			}
 			if sendCapturePlanEvent(ctx, output, capturePlanEvent{err: err}) != nil {
@@ -592,8 +604,10 @@ func (a *PionCaptureAttempt) planLoop(ctx context.Context, output chan<- capture
 }
 
 type capturePlanEvent struct {
-	plan captureplan.Plan
-	err  error
+	plan            captureplan.Plan
+	err             error
+	checkpointNoRTP bool
+	at              time.Time
 }
 
 func sendCapturePlanEvent(ctx context.Context, output chan<- capturePlanEvent, event capturePlanEvent) error {
@@ -1125,6 +1139,28 @@ func (w *captureBundleWriter) closeCurrentBundle(ctx context.Context, reason rec
 		}
 	}
 	return w.persist(ctx)
+}
+
+func (w *captureBundleWriter) checkpointNoRTP(ctx context.Context, now time.Time) error {
+	if w.origin.IsZero() || w.terminalGap || len(w.active) > 0 {
+		return nil
+	}
+	targetMono, targetMedia := w.controlEventClocks(now)
+	const maximumGapDuration = recordingbundle.TargetBundleDurationMilliseconds - 1
+	for targetMono-w.lastMono >= maximumGapDuration || targetMedia-w.lastMedia >= maximumGapDuration {
+		if err := w.closeCurrentBundle(ctx, recordingbundle.CloseReasonExplicit); err != nil {
+			return err
+		}
+		endMono := min(targetMono, w.lastMono+maximumGapDuration)
+		endMedia := min(targetMedia, w.lastMedia+maximumGapDuration)
+		if err := w.appendGapUntil(ctx, endMono, endMedia, false); err != nil {
+			return err
+		}
+		if err := w.closeCurrentBundle(ctx, recordingbundle.CloseReasonExplicit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *captureBundleWriter) appendGapUntil(ctx context.Context, endMono, endMedia int64, terminal bool) error {

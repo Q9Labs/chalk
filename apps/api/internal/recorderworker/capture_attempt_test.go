@@ -467,6 +467,102 @@ func TestCaptureAttemptStopClosesProviderBeforePeerAndStoppedCallback(t *testing
 	}
 }
 
+func TestCaptureAttemptCheckpointsLongNoPublisherGapBeforeStop(t *testing.T) {
+	origin := time.Unix(1_000, 0).UTC()
+	running := captureTestPlanAtEpoch(t, 2, 1, origin)
+	stopAt := origin.Add(562_500 * time.Millisecond)
+	stopped, err := captureplan.NewPlan(captureplan.PlanInput{
+		Authority: running.Authority(), Revision: 2, LayoutProfile: captureplan.LayoutProfileComposite720PV1,
+		ParticipantLimit: captureplan.MaximumParticipants, InputBitrateBPS: captureplan.MaximumInputBitrateBPS,
+		EffectiveDeadline: stopAt.Add(time.Hour), StopState: captureplan.StopStateRequested, StopRequestedAt: stopAt,
+	})
+	if err != nil {
+		t.Fatalf("new stopped capture plan: %v", err)
+	}
+	plans := &captureLongNoPublisherPlanSource{
+		now: origin, running: running, stopped: stopped,
+		waitCount: 56, waitAdvance: 10 * time.Second, stopAdvance: 2_500 * time.Millisecond,
+	}
+	storage := &captureCloseBudgetStorage{
+		captureTestStorage: captureTestStorage{key: bytesOf(0x41)},
+		perBundleCost:      3 * time.Second,
+		closeBudget:        defaultCaptureCloseTimeout,
+	}
+	lifecycle := &captureTestLifecycle{}
+	authority := recordercapture.AttemptAuthority{
+		Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42),
+		TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), SpaceID: captureTestID(t, "33333333-3333-4333-8333-333333333333"),
+		EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"),
+		PlanHandle: "11111111-1111-4111-8111-111111111111", CaptureEpoch: 2, AttemptCount: 1, FencingGeneration: 1,
+	}
+	attempt := &PionCaptureAttempt{
+		authority: authority,
+		lease:     capturesignaling.WorkerLease{Owner: "worker", Token: "lease", ExpiresAt: origin.Add(time.Hour)},
+		peer:      &captureTestPeer{epoch: 2}, coordinator: &captureTestCoordinator{}, plans: plans,
+		keys: storage, objects: storage, bundles: storage, lifecycle: lifecycle,
+		config: CaptureAttemptConfig{Now: plans.Now}.normalized(),
+	}
+	control := &captureControlStub{}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return attempt, nil
+	}), plans.Now)
+	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 2)); err != nil {
+		t.Fatalf("run long no-publisher claim: %v", err)
+	}
+	if control.completeCalls != 1 || control.failCalls != 0 {
+		t.Fatalf("capture job lifecycle complete/fail calls = %d/%d, want 1/0; failure=%+v", control.completeCalls, control.failCalls, control.failed)
+	}
+	if len(lifecycle.stopped) != 1 {
+		t.Fatalf("capture stopped callbacks = %d, want 1", len(lifecycle.stopped))
+	}
+
+	storage.mu.Lock()
+	bundles := append([]recordingbundle.Bundle(nil), storage.bundles...)
+	runningUploads := storage.runningUploads
+	closeUploads := storage.closeUploads
+	closeSpent := storage.closeSpent
+	storage.mu.Unlock()
+	if runningUploads < 56 {
+		t.Fatalf("running checkpoint uploads = %d, want at least 56", runningUploads)
+	}
+	if closeUploads > 1 || closeSpent > storage.closeBudget {
+		t.Fatalf("close-tail uploads/cost = %d/%s, want at most 1/%s", closeUploads, closeSpent, storage.closeBudget)
+	}
+	gapEnd := int64(0)
+	terminalGaps := 0
+	for index, bundle := range bundles {
+		manifest := bundle.Manifest
+		if duration := manifest.MonotonicRange.EndMilliseconds - manifest.MonotonicRange.StartMilliseconds; duration > recordingbundle.MaxBundleDurationMilliseconds {
+			t.Fatalf("bundle %d monotonic duration = %d", index, duration)
+		}
+		if duration := manifest.MediaRange.EndMilliseconds - manifest.MediaRange.StartMilliseconds; duration > recordingbundle.MaxBundleDurationMilliseconds {
+			t.Fatalf("bundle %d media duration = %d", index, duration)
+		}
+		if index > 0 {
+			if err := recordingbundle.ValidateSequence(bundles[index-1], bundle); err != nil {
+				t.Fatalf("bundle %d sequence: %v", index, err)
+			}
+		}
+		if len(bundle.Gaps) != 1 {
+			t.Fatalf("bundle %d gaps = %+v, want one contiguous segment", index, bundle.Gaps)
+		}
+		gap := bundle.Gaps[0]
+		if gap.StartMonotonicMilliseconds != gapEnd || gap.StartMediaMilliseconds != gapEnd {
+			t.Fatalf("bundle %d gap starts at %d/%d, want %d", index, gap.StartMonotonicMilliseconds, gap.StartMediaMilliseconds, gapEnd)
+		}
+		gapEnd = gap.EndMonotonicMilliseconds
+		if gap.EndMediaMilliseconds != gapEnd {
+			t.Fatalf("bundle %d gap ends at %d/%d", index, gap.EndMonotonicMilliseconds, gap.EndMediaMilliseconds)
+		}
+		if gap.Terminal {
+			terminalGaps++
+		}
+	}
+	if gapEnd != stopAt.Sub(origin).Milliseconds() || terminalGaps != 1 {
+		t.Fatalf("gap coverage end/terminal count = %d/%d, want %d/1", gapEnd, terminalGaps, stopAt.Sub(origin).Milliseconds())
+	}
+}
+
 func TestCaptureAttemptRenewsExactLeaseWithoutChangingEpoch(t *testing.T) {
 	coordinator := &captureTestCoordinator{}
 	attempt := &PionCaptureAttempt{coordinator: coordinator, lease: capturesignaling.WorkerLease{Owner: "worker", Token: "old", ExpiresAt: time.Now().Add(time.Minute)}, authority: recordercapture.AttemptAuthority{CaptureEpoch: 12}}
@@ -589,6 +685,48 @@ func (p *captureTestPlanSource) WaitForPlan(context.Context, captureplan.WaitInp
 	return p.plan, nil
 }
 
+type captureLongNoPublisherPlanSource struct {
+	mu          sync.Mutex
+	now         time.Time
+	running     captureplan.Plan
+	stopped     captureplan.Plan
+	calls       int
+	waitCount   int
+	waitAdvance time.Duration
+	stopAdvance time.Duration
+}
+
+func (p *captureLongNoPublisherPlanSource) Now() time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.now
+}
+
+func (p *captureLongNoPublisherPlanSource) WaitForPlan(ctx context.Context, _ captureplan.WaitInput) (captureplan.Plan, error) {
+	p.mu.Lock()
+	p.calls++
+	call := p.calls
+	switch {
+	case call == 1:
+		plan := p.running
+		p.mu.Unlock()
+		return plan, nil
+	case call <= p.waitCount+1:
+		p.now = p.now.Add(p.waitAdvance)
+		p.mu.Unlock()
+		return captureplan.Plan{}, captureplan.ErrWaitTimeout
+	case call == p.waitCount+2:
+		p.now = p.now.Add(p.stopAdvance)
+		plan := p.stopped
+		p.mu.Unlock()
+		return plan, nil
+	default:
+		p.mu.Unlock()
+		<-ctx.Done()
+		return captureplan.Plan{}, ctx.Err()
+	}
+}
+
 type captureTestCoordinator struct {
 	order  *[]string
 	forces []bool
@@ -642,6 +780,31 @@ type captureTestStorage struct {
 	bundles   []recordingbundle.Bundle
 	upload    CaptureObjectUpload
 	finalize  func(context.Context, CaptureBundleFinalize) (CaptureBundleUpload, error)
+}
+
+type captureCloseBudgetStorage struct {
+	captureTestStorage
+	perBundleCost  time.Duration
+	closeBudget    time.Duration
+	closeSpent     time.Duration
+	runningUploads int
+	closeUploads   int
+}
+
+func (s *captureCloseBudgetStorage) Upload(ctx context.Context, input CaptureObjectUpload) error {
+	s.mu.Lock()
+	if _, closing := ctx.Deadline(); closing {
+		s.closeUploads++
+		s.closeSpent += s.perBundleCost
+		if s.closeSpent > s.closeBudget {
+			s.mu.Unlock()
+			return context.DeadlineExceeded
+		}
+	} else {
+		s.runningUploads++
+	}
+	s.mu.Unlock()
+	return s.captureTestStorage.Upload(ctx, input)
 }
 
 func (s *captureTestStorage) AccessKey(context.Context, CaptureKeyRequest) (CaptureDataKey, error) {
@@ -851,6 +1014,59 @@ func TestCaptureBundleWriterClampsQueuedPacketToAcceptedControlBoundary(t *testi
 		if err := recordingbundle.ValidateSequence(storage.bundles[index-1], storage.bundles[index]); err != nil {
 			t.Fatalf("bundle %d follows accepted control boundary: %v; manifests=%+v", index, err, storage.manifests)
 		}
+	}
+}
+
+func TestCaptureBundleWriterPreservesNoPublisherCheckpointAcrossZeroToActive(t *testing.T) {
+	origin := time.UnixMilli(1000).UTC()
+	writer, storage := newCaptureTestWriter(t, origin)
+	checkpoint := recordingbundle.TargetBundleDurationMilliseconds - 1
+	if err := writer.appendGapUntil(context.Background(), checkpoint, checkpoint, false); err != nil {
+		t.Fatalf("append no-publisher checkpoint: %v", err)
+	}
+	if err := writer.closeCurrentBundle(context.Background(), recordingbundle.CloseReasonExplicit); err != nil {
+		t.Fatalf("persist no-publisher checkpoint: %v", err)
+	}
+	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{
+		TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto,
+	}, MID: "0"}, codec: "opus"}
+	activeAt := origin.Add(time.Duration(checkpoint) * time.Millisecond)
+	if err := writer.reconcileTracks(context.Background(), captureTestPlan(t, 2, activeAt), map[string]CaptureMediaTrack{"0": track}, activeAt); err != nil {
+		t.Fatalf("reconcile first active track: %v", err)
+	}
+	packet := &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 100}, Payload: []byte{1}}
+	if err := writer.addPacket(context.Background(), track, packet, activeAt.Add(time.Millisecond)); err != nil {
+		t.Fatalf("add first active packet: %v", err)
+	}
+	if err := writer.close(recordingbundle.CloseReasonFinalStop, activeAt.Add(500*time.Millisecond)); err != nil {
+		t.Fatalf("close zero-to-active capture: %v", err)
+	}
+	if len(storage.bundles) < 3 {
+		t.Fatalf("committed %d bundles, want checkpoint, media, and terminal tail", len(storage.bundles))
+	}
+	for index := 1; index < len(storage.bundles); index++ {
+		if err := recordingbundle.ValidateSequence(storage.bundles[index-1], storage.bundles[index]); err != nil {
+			t.Fatalf("bundle %d zero-to-active sequence: %v", index, err)
+		}
+	}
+	checkpointGap := storage.bundles[0].Gaps
+	if len(checkpointGap) != 1 || checkpointGap[0].Reason != "no_rtp" || checkpointGap[0].Terminal || checkpointGap[0].StartMonotonicMilliseconds != 0 || checkpointGap[0].EndMonotonicMilliseconds != checkpoint {
+		t.Fatalf("no-publisher checkpoint = %+v", checkpointGap)
+	}
+	wantEpoch, err := recordingbundle.ComposeTrackEpoch(2, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundTrackSnapshot := false
+	for _, bundle := range storage.bundles[1:] {
+		for _, event := range bundle.TrackTimeline {
+			if event.Track.Epoch == wantEpoch && event.Reason == "bundle_start" {
+				foundTrackSnapshot = true
+			}
+		}
+	}
+	if !foundTrackSnapshot {
+		t.Fatalf("first active bundle did not use plan revision epoch %d", wantEpoch)
 	}
 }
 
