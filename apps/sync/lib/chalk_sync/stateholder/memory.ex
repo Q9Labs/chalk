@@ -18,7 +18,8 @@ defmodule ChalkSync.Stateholder.Memory do
     :maximum_duration_expired,
     :start_recording,
     :recording_capture_ready,
-    :recording_capture_stopped
+    :recording_capture_stopped,
+    :recording_capture_failed
   ]
 
   alias ChalkSync.Episodes.Reducer
@@ -280,7 +281,8 @@ defmodule ChalkSync.Stateholder.Memory do
         :tenant_end_episode,
         :maximum_duration_expired,
         :recording_capture_ready,
-        :recording_capture_stopped
+        :recording_capture_stopped,
+        :recording_capture_failed
       ]
     end)
   end
@@ -691,6 +693,8 @@ defmodule ChalkSync.Stateholder.Memory do
 
   defp validate_memory_internal_operation(%{name: :recording_capture_stopped}), do: :ok
 
+  defp validate_memory_internal_operation(%{name: :recording_capture_failed}), do: :ok
+
   defp validate_memory_internal_operation(%{name: name})
        when name in [
               :admission_request_expired,
@@ -733,25 +737,14 @@ defmodule ChalkSync.Stateholder.Memory do
   defp prepare_memory_internal_operation(
          episode,
          %{name: :recording_capture_stopped} = operation
-       ) do
-    recording = episode.state.recording
-    stop_operation_id = operation.payload["stopOperationId"]
-    recording_id = operation.payload["recordingId"]
-    capture_epoch = operation.payload["captureEpoch"]
+       ),
+       do: validate_memory_recording_capture_stop(episode, operation)
 
-    with %{"recording_id" => ^recording_id, "status" => "stopping"} <- recording,
-         %{
-           ^stop_operation_id => %{
-             name: :stop_recording,
-             status: :applied,
-             recording_id: ^recording_id
-           }
-         } <- episode.operations,
-         ^capture_epoch <- Map.get(episode.recording_capture_epochs, recording_id) do
-      :ok
-    else
-      _ -> {:error, :stale_recording_fence}
-    end
+  defp prepare_memory_internal_operation(
+         episode,
+         %{name: :recording_capture_failed} = operation
+       ) do
+    validate_memory_recording_capture_failure(episode, operation)
   end
 
   defp prepare_memory_internal_operation(_episode, _operation), do: :ok
@@ -855,8 +848,17 @@ defmodule ChalkSync.Stateholder.Memory do
       %{^external_operation_id => %{status: status} = operation} when status != :pending ->
         {:ok, operation_decision(operation, :duplicate), episode}
 
-      %{^external_operation_id => %{name: name} = operation}
-      when name in [:recording_capture_ready, :recording_capture_stopped] ->
+      %{^external_operation_id => %{name: :recording_capture_failed} = operation} ->
+        with :ok <- validate_memory_recording_capture_failure(episode, operation) do
+          do_finalize_memory_operation(episode, operation, outcome)
+        end
+
+      %{^external_operation_id => %{name: :recording_capture_stopped} = operation} ->
+        with :ok <- validate_memory_recording_capture_stop(episode, operation) do
+          finalize_memory_recording_capture_stopped(episode, operation, outcome)
+        end
+
+      %{^external_operation_id => %{name: :recording_capture_ready} = operation} ->
         with :ok <- validate_memory_recording_capture_epoch(episode, operation) do
           do_finalize_memory_operation(episode, operation, outcome)
         end
@@ -877,6 +879,7 @@ defmodule ChalkSync.Stateholder.Memory do
        when name in [
               :recording_capture_ready,
               :recording_capture_stopped,
+              :recording_capture_failed,
               :participant_leave,
               :end_episode,
               :tenant_end_episode,
@@ -889,6 +892,9 @@ defmodule ChalkSync.Stateholder.Memory do
 
         :recording_capture_stopped ->
           {:recording_status_changed, recording_stopped_payload(operation)}
+
+        :recording_capture_failed ->
+          {:recording_status_changed, recording_failed_payload(operation)}
 
         _ ->
           local_memory_outcome(operation, episode.state)
@@ -922,7 +928,8 @@ defmodule ChalkSync.Stateholder.Memory do
               :start_recording,
               :stop_recording,
               :recording_capture_ready,
-              :recording_capture_stopped
+              :recording_capture_stopped,
+              :recording_capture_failed
             ] and
               is_atom(reason) do
     failure_payload = %{
@@ -1014,6 +1021,85 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
+  defp validate_memory_recording_capture_stop(episode, operation) do
+    recording_id = operation.payload["recordingId"]
+    stop_operation_id = operation.payload["stopOperationId"]
+    capture_epoch = operation.payload["captureEpoch"]
+    recording = episode.state.recording
+    source_operation = episode.operations[stop_operation_id]
+
+    valid_source =
+      case source_operation do
+        %{
+          name: :stop_recording,
+          status: :applied,
+          recording_id: ^recording_id
+        } ->
+          match?(
+            %{"recording_id" => ^recording_id, "status" => status}
+            when status in ["stopping", "stopped"],
+            recording
+          )
+
+        %{name: name, recording_id: ^recording_id}
+        when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] ->
+          episode.state.status == "ended" or
+            match?(
+              %{"recording_id" => ^recording_id, "status" => status}
+              when status in ["starting", "recording", "stopping", "stopped"],
+              recording
+            )
+
+        _ ->
+          false
+      end
+
+    if valid_source and
+         Map.get(episode.recording_capture_epochs, recording_id, 0) <= capture_epoch do
+      :ok
+    else
+      {:error, :stale_recording_fence}
+    end
+  end
+
+  defp finalize_memory_recording_capture_stopped(episode, operation, {:confirmed, :local}) do
+    if episode.state.status == "ended" or
+         match?(%{"status" => "stopped"}, episode.state.recording) do
+      applied = %{operation | status: :applied}
+
+      next = %{
+        episode
+        | operations: Map.put(episode.operations, operation.external_operation_id, applied)
+      }
+
+      {:ok, operation_decision(applied, :original, episode.state), next}
+    else
+      do_finalize_memory_operation(episode, operation, {:confirmed, :local})
+    end
+  end
+
+  defp finalize_memory_recording_capture_stopped(episode, operation, outcome),
+    do: do_finalize_memory_operation(episode, operation, outcome)
+
+  defp validate_memory_recording_capture_failure(episode, operation) do
+    recording_id = operation.payload["recordingId"]
+    start_operation_id = operation.payload["startOperationId"]
+
+    with %{"recording_id" => ^recording_id, "status" => status}
+         when status in ["starting", "recording", "stopping"] <- episode.state.recording,
+         %{
+           ^start_operation_id => %{
+             name: :start_recording,
+             status: :applied,
+             recording_id: ^recording_id
+           }
+         } <- episode.operations do
+      :ok
+    else
+      _ -> {:error, :stale_recording_fence}
+    end
+  end
+
   defp local_memory_outcome(%{name: :participant_leave} = operation, state) do
     {:change, event, _next_state} =
       Reducer.decide_external(
@@ -1047,6 +1133,14 @@ defmodule ChalkSync.Stateholder.Memory do
       "recording_id" => operation.recording_id,
       "status" => "stopped",
       "failure_code" => nil
+    }
+  end
+
+  defp recording_failed_payload(operation) do
+    %{
+      "recording_id" => operation.recording_id,
+      "status" => "failed",
+      "failure_code" => operation.payload["failureCode"]
     }
   end
 
@@ -1092,7 +1186,8 @@ defmodule ChalkSync.Stateholder.Memory do
               :start_recording,
               :stop_recording,
               :recording_capture_ready,
-              :recording_capture_stopped
+              :recording_capture_stopped,
+              :recording_capture_failed
             ],
        do: :ok
 

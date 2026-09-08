@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Database
+  alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -306,6 +307,376 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              recording_capture_rows(fixture, internal_ready_operation_id)
   end
 
+  test "cold expiry waits for a pending Recording start and a late acknowledgement cannot resurrect it",
+       %{
+         connections: connections
+       } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    recording_id = UUID.generate()
+
+    {:ok, start} =
+      Operation.new("cold_expiry_start_0001", :start_recording, %{
+        "recordingId" => recording_id
+      })
+
+    assert {:ok, %{external_operation_id: start_operation_id}} =
+             Postgres.begin_operation(hd(fixture.identities), start)
+
+    failure_operation_id =
+      insert_trusted_capture_failure(
+        connection,
+        fixture,
+        "cold_expiry_failure_0001",
+        recording_id,
+        start_operation_id
+      )
+
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, failure_operation} =
+             Enum.find(claimed, fn {_episode, candidate} ->
+               candidate.external_operation_id == failure_operation_id
+             end)
+
+    assert :finalization_failure =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               failure_operation,
+               nil,
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert [["pending", "pending", "starting", nil, "starting", nil, 0]] =
+             recording_failure_rows(fixture, failure_operation_id)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               start_operation_id,
+               {:confirmed, :recording}
+             )
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               failure_operation,
+               nil,
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert [
+             [
+               "applied",
+               "applied",
+               "failed",
+               "capture_reservation_expired",
+               "failed",
+               "capture_reservation_expired",
+               1
+             ]
+           ] = recording_failure_rows(fixture, failure_operation_id)
+
+    assert {:ok, %{result: :applied, delivery: :duplicate}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               start_operation_id,
+               {:confirmed, :recording}
+             )
+
+    assert [
+             [
+               "applied",
+               "applied",
+               "failed",
+               "capture_reservation_expired",
+               "failed",
+               "capture_reservation_expired",
+               1
+             ]
+           ] = recording_failure_rows(fixture, failure_operation_id)
+  end
+
+  test "capture failure terminals every active Recording state and fences late callbacks", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+
+    Enum.each(["starting", "recording", "stopping"], fn active_status ->
+      fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+      recording_id = UUID.generate()
+
+      {:ok, start} =
+        Operation.new("active_failure_#{active_status}_start", :start_recording, %{
+          "recordingId" => recording_id
+        })
+
+      assert {:ok, %{external_operation_id: start_operation_id}} =
+               Postgres.begin_operation(hd(fixture.identities), start)
+
+      assert {:ok, %{result: :applied}} =
+               Postgres.finalize_operation(
+                 fixture.episode,
+                 start_operation_id,
+                 {:confirmed, :recording}
+               )
+
+      {late_ready_operation_id, stop_operation_id, late_stopped_operation_id} =
+        prepare_active_recording_state(
+          connection,
+          fixture,
+          active_status,
+          recording_id,
+          start_operation_id
+        )
+
+      failure_code =
+        if active_status == "stopping",
+          do: "capture_stopped_before_completion",
+          else: "capture_attempt_failed"
+
+      failure_operation_id =
+        insert_trusted_capture_failure(
+          connection,
+          fixture,
+          "active_failure_#{active_status}_terminal",
+          recording_id,
+          start_operation_id,
+          failure_code
+        )
+
+      assert {:ok, %{result: :applied}} =
+               Postgres.finalize_operation(
+                 fixture.episode,
+                 failure_operation_id,
+                 {:confirmed, :local}
+               )
+
+      assert [
+               [
+                 "applied",
+                 "applied",
+                 "failed",
+                 ^failure_code,
+                 "failed",
+                 ^failure_code,
+                 1
+               ]
+             ] = recording_failure_rows(fixture, failure_operation_id)
+
+      assert {:ok, %{result: :applied, delivery: :duplicate}} =
+               Postgres.finalize_operation(
+                 fixture.episode,
+                 failure_operation_id,
+                 {:confirmed, :local}
+               )
+
+      if late_ready_operation_id do
+        assert {:error, :stale_recording_fence} =
+                 Postgres.finalize_operation(
+                   fixture.episode,
+                   late_ready_operation_id,
+                   {:confirmed, :local}
+                 )
+      end
+
+      if stop_operation_id do
+        assert {:ok, %{result: :applied}} =
+                 Postgres.finalize_operation(
+                   fixture.episode,
+                   stop_operation_id,
+                   {:confirmed, :recording}
+                 )
+      end
+
+      if late_stopped_operation_id do
+        assert {:error, :stale_recording_fence} =
+                 Postgres.finalize_operation(
+                   fixture.episode,
+                   late_stopped_operation_id,
+                   {:confirmed, :local}
+                 )
+      end
+
+      assert [
+               [
+                 "applied",
+                 "applied",
+                 "failed",
+                 ^failure_code,
+                 "failed",
+                 ^failure_code,
+                 1
+               ]
+             ] = recording_failure_rows(fixture, failure_operation_id)
+    end)
+  end
+
+  test "capture stopped accepts a recovered epoch while fencing an older callback", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    recording_id = activate_recording(connection, fixture, "recovered_stop", 2)
+
+    {:ok, stop} =
+      Operation.new("recovered_stop_recording", :stop_recording, %{
+        "recordingId" => recording_id
+      })
+
+    assert {:ok, %{external_operation_id: stop_operation_id}} =
+             Postgres.begin_operation(hd(fixture.identities), stop)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               stop_operation_id,
+               {:confirmed, :recording}
+             )
+
+    {:ok, stale_stopped} =
+      Operation.recording_capture_stopped(
+        "recovered_stop_stale_epoch",
+        recording_id,
+        stop_operation_id,
+        1
+      )
+
+    assert {:error, :stale_recording_fence} =
+             Postgres.begin_internal_operation(fixture.episode, stale_stopped)
+
+    {:ok, stopped} =
+      Operation.recording_capture_stopped(
+        "recovered_stop_current_epoch",
+        recording_id,
+        stop_operation_id,
+        3
+      )
+
+    assert {:ok, %{external_operation_id: stopped_operation_id}} =
+             Postgres.begin_internal_operation(fixture.episode, stopped)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               stopped_operation_id,
+               {:confirmed, :local}
+             )
+
+    assert [["applied", "applied", "stop_recording", "stopped", "active", "stopped", 2, 1]] =
+             recording_stop_rows(fixture, stopped_operation_id, stop_operation_id)
+  end
+
+  test "capture stopped remains durable when its pending Episode end later fails", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    recording_id = activate_recording(connection, fixture, "failed_end_stop", 1)
+
+    {:ok, ending} = Operation.new("failed_end_stop_episode", :tenant_end_episode, %{})
+
+    assert {:ok, %{external_operation_id: end_operation_id}} =
+             Postgres.begin_internal_operation(fixture.episode, ending)
+
+    {:ok, stopped} =
+      Operation.recording_capture_stopped(
+        "failed_end_capture_stopped",
+        recording_id,
+        end_operation_id,
+        2
+      )
+
+    assert {:ok, %{external_operation_id: stopped_operation_id}} =
+             Postgres.begin_internal_operation(fixture.episode, stopped)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               stopped_operation_id,
+               {:confirmed, :local}
+             )
+
+    assert {:ok, %{result: :failed}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               end_operation_id,
+               {:failed, :unsupported_effect}
+             )
+
+    assert [
+             [
+               "applied",
+               "failed",
+               "tenant_end_episode",
+               "stopped",
+               "active",
+               "stopped",
+               1,
+               1
+             ]
+           ] = recording_stop_rows(fixture, stopped_operation_id, end_operation_id)
+  end
+
+  test "capture stopped settles without resurrecting Recording after Episode end wins the race",
+       %{
+         connections: connections
+       } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    recording_id = activate_recording(connection, fixture, "applied_end_stop", 1)
+
+    {:ok, ending} = Operation.new("applied_end_stop_episode", :tenant_end_episode, %{})
+
+    assert {:ok, %{external_operation_id: end_operation_id}} =
+             Postgres.begin_internal_operation(fixture.episode, ending)
+
+    {:ok, stopped} =
+      Operation.recording_capture_stopped(
+        "applied_end_capture_stopped",
+        recording_id,
+        end_operation_id,
+        2
+      )
+
+    assert {:ok, %{external_operation_id: stopped_operation_id}} =
+             Postgres.begin_internal_operation(fixture.episode, stopped)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               end_operation_id,
+               {:confirmed, :provider}
+             )
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               stopped_operation_id,
+               {:confirmed, :local}
+             )
+
+    assert [
+             [
+               "applied",
+               "applied",
+               "tenant_end_episode",
+               "stopped",
+               "ended",
+               nil,
+               1,
+               0
+             ]
+           ] = recording_stop_rows(fixture, stopped_operation_id, end_operation_id)
+  end
+
   test "manual and disabled Recording policies do not queue an automatic start", %{
     connections: connections
   } do
@@ -484,6 +855,188 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     external_operation_id
   end
 
+  defp insert_trusted_capture_failure(
+         connection,
+         fixture,
+         request_key,
+         recording_id,
+         start_operation_id,
+         failure_code \\ "capture_reservation_expired"
+       ) do
+    external_operation_id = UUID.generate()
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_external_operations (
+        tenant_id, space_id, episode_id, external_operation_id, request_key,
+        request_fingerprint, operation_name, recording_id, payload, fence_active
+      ) values ($1, $2, $3, $4, $5, $6, 'recording_capture_failed', $7, $8, false)
+      """,
+      [
+        UUID.dump!(fixture.episode.tenant_id),
+        UUID.dump!(fixture.episode.space_id),
+        UUID.dump!(fixture.episode.episode_id),
+        UUID.dump!(external_operation_id),
+        request_key,
+        :crypto.hash(:sha256, request_key),
+        UUID.dump!(recording_id),
+        %{
+          "recordingId" => recording_id,
+          "startOperationId" => start_operation_id,
+          "failureCode" => failure_code
+        }
+      ]
+    )
+
+    external_operation_id
+  end
+
+  defp insert_trusted_capture_stopped(
+         connection,
+         fixture,
+         request_key,
+         recording_id,
+         stop_operation_id,
+         capture_epoch
+       ) do
+    external_operation_id = UUID.generate()
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_external_operations (
+        tenant_id, space_id, episode_id, external_operation_id, request_key,
+        request_fingerprint, operation_name, recording_id, payload, fence_active
+      ) values ($1, $2, $3, $4, $5, $6, 'recording_capture_stopped', $7, $8, false)
+      """,
+      [
+        UUID.dump!(fixture.episode.tenant_id),
+        UUID.dump!(fixture.episode.space_id),
+        UUID.dump!(fixture.episode.episode_id),
+        UUID.dump!(external_operation_id),
+        request_key,
+        :crypto.hash(:sha256, request_key),
+        UUID.dump!(recording_id),
+        %{
+          "recordingId" => recording_id,
+          "stopOperationId" => stop_operation_id,
+          "captureEpoch" => capture_epoch
+        }
+      ]
+    )
+
+    external_operation_id
+  end
+
+  defp prepare_active_recording_state(
+         connection,
+         fixture,
+         "starting",
+         recording_id,
+         start_operation_id
+       ) do
+    late_ready_operation_id =
+      insert_trusted_capture_ready(
+        connection,
+        fixture,
+        "active_failure_starting_late_ready",
+        recording_id,
+        start_operation_id,
+        1
+      )
+
+    {late_ready_operation_id, nil, nil}
+  end
+
+  defp prepare_active_recording_state(
+         connection,
+         fixture,
+         active_status,
+         recording_id,
+         start_operation_id
+       )
+       when active_status in ["recording", "stopping"] do
+    ready_operation_id =
+      insert_trusted_capture_ready(
+        connection,
+        fixture,
+        "active_failure_#{active_status}_ready",
+        recording_id,
+        start_operation_id,
+        1
+      )
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               ready_operation_id,
+               {:confirmed, :local}
+             )
+
+    if active_status == "recording" do
+      {nil, nil, nil}
+    else
+      {:ok, stop} =
+        Operation.new("active_failure_stopping_stop", :stop_recording, %{
+          "recordingId" => recording_id
+        })
+
+      assert {:ok, %{external_operation_id: stop_operation_id}} =
+               Postgres.begin_operation(hd(fixture.identities), stop)
+
+      late_stopped_operation_id =
+        insert_trusted_capture_stopped(
+          connection,
+          fixture,
+          "active_failure_stopping_late_stopped",
+          recording_id,
+          stop_operation_id,
+          1
+        )
+
+      {nil, stop_operation_id, late_stopped_operation_id}
+    end
+  end
+
+  defp activate_recording(connection, fixture, request_prefix, capture_epoch) do
+    recording_id = UUID.generate()
+
+    {:ok, start} =
+      Operation.new(request_prefix <> "_recording_start", :start_recording, %{
+        "recordingId" => recording_id
+      })
+
+    {:ok, %{external_operation_id: start_operation_id}} =
+      Postgres.begin_operation(hd(fixture.identities), start)
+
+    {:ok, %{result: :applied}} =
+      Postgres.finalize_operation(
+        fixture.episode,
+        start_operation_id,
+        {:confirmed, :recording}
+      )
+
+    ready_operation_id =
+      insert_trusted_capture_ready(
+        connection,
+        fixture,
+        request_prefix <> "_capture_ready",
+        recording_id,
+        start_operation_id,
+        capture_epoch
+      )
+
+    {:ok, %{result: :applied}} =
+      Postgres.finalize_operation(
+        fixture.episode,
+        ready_operation_id,
+        {:confirmed, :local}
+      )
+
+    recording_id
+  end
+
   defp recording_capture_rows(fixture, external_operation_id) do
     query_rows(
       fixture,
@@ -499,6 +1052,73 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
         and operation.external_operation_id = $3
       """,
       [UUID.dump!(external_operation_id)]
+    )
+  end
+
+  defp recording_failure_rows(fixture, external_operation_id) do
+    query_rows(
+      fixture,
+      """
+      select failure.status, start_operation.status, recording.status, recording.failure_code,
+        control.folded_state #>> '{recording,status}',
+        control.folded_state #>> '{recording,failure_code}',
+        (select count(*)
+         from sync_control_events event
+         where event.tenant_id = failure.tenant_id
+           and event.episode_id = failure.episode_id
+           and event.external_operation_id = failure.external_operation_id
+           and event.event_name = 'recording_status_changed')
+      from sync_external_operations failure
+      join sync_external_operations start_operation
+        on start_operation.tenant_id = failure.tenant_id
+        and start_operation.episode_id = failure.episode_id
+        and start_operation.external_operation_id = (failure.payload ->> 'startOperationId')::uuid
+      join sync_recordings recording
+        on recording.tenant_id = failure.tenant_id
+        and recording.episode_id = failure.episode_id
+        and recording.recording_id = failure.recording_id
+      join sync_episode_control control
+        on control.tenant_id = failure.tenant_id
+        and control.episode_id = failure.episode_id
+      where failure.tenant_id = $1 and failure.episode_id = $2
+        and failure.external_operation_id = $3
+      """,
+      [UUID.dump!(external_operation_id)]
+    )
+  end
+
+  defp recording_stop_rows(fixture, stopped_operation_id, source_operation_id) do
+    query_rows(
+      fixture,
+      """
+      select stopped.status, source.status, source.operation_name, recording.status,
+        episode.status, control.folded_state #>> '{recording,status}',
+        coalesce((recording.adapter_metadata ->> 'capture_epoch')::bigint, 0),
+        (select count(*)
+         from sync_control_events event
+         where event.tenant_id = stopped.tenant_id
+           and event.episode_id = stopped.episode_id
+           and event.external_operation_id = stopped.external_operation_id
+           and event.event_name = 'recording_status_changed')
+      from sync_external_operations stopped
+      join sync_external_operations source
+        on source.tenant_id = stopped.tenant_id
+        and source.episode_id = stopped.episode_id
+        and source.external_operation_id = $4
+      join sync_recordings recording
+        on recording.tenant_id = stopped.tenant_id
+        and recording.episode_id = stopped.episode_id
+        and recording.recording_id = stopped.recording_id
+      join episodes episode
+        on episode.tenant_id = stopped.tenant_id
+        and episode.id = stopped.episode_id
+      join sync_episode_control control
+        on control.tenant_id = stopped.tenant_id
+        and control.episode_id = stopped.episode_id
+      where stopped.tenant_id = $1 and stopped.episode_id = $2
+        and stopped.external_operation_id = $3
+      """,
+      [UUID.dump!(stopped_operation_id), UUID.dump!(source_operation_id)]
     )
   end
 

@@ -13,7 +13,9 @@ write_files:
       CHALK_RECORDER_RELEASE=${release_id}
       CHALK_RECORDER_IMAGE_DIGEST=${image_digest}
       CHALK_RECORDER_BOOTSTRAP_ENDPOINT=${bootstrap_endpoint}
+      CHALK_RECORDER_GPU=${gpu}
       CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE=external-reconciler
 runcmd:
   - [ "/usr/local/sbin/chalk-recorder-bootstrap", "--one-time", "--require-signed-assertion", "--require-droplet-inventory-match", "--require-boot-generation", "--env-file", "/etc/chalk-recorder/bootstrap.env" ]
+  - [ "/bin/systemctl", "enable", "--now", "chalk-recorder-render.service", "chalk-recorder-renew.timer" ]
   - [ "/usr/bin/rm", "-f", "/etc/chalk-recorder/bootstrap.env" ]

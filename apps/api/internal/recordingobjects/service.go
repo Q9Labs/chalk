@@ -156,6 +156,9 @@ func (s Service) Reserve(ctx context.Context, input ReserveInput) (Allocation, e
 		if !SameAuthority(existing.Authority, input.Authority) || !bytesEqual(existing.EncryptionContextDigest, input.EncryptionContextDigest) {
 			return Allocation{}, ErrAuthorityMismatch
 		}
+		if !hasCanonicalObjectKey(existing) {
+			return Allocation{}, ErrInvalidRequest
+		}
 		return existing, nil
 	}
 	if err != nil {
@@ -167,7 +170,7 @@ func (s Service) Reserve(ctx context.Context, input ReserveInput) (Allocation, e
 	allocation.Authority.LeaseToken = input.Authority.LeaseToken
 	allocation.Authority.LeaseOwner = input.Authority.LeaseOwner
 	allocation.Authority.LeaseExpiresAt = input.Authority.LeaseExpiresAt
-	if allocation.ObjectKey != canonicalObjectKey(allocation.Authority.RecordingID, allocation.Authority.CaptureEpoch, allocation.SequenceNumber, allocation.ID) {
+	if !hasCanonicalObjectKey(allocation) {
 		return Allocation{}, ErrInvalidRequest
 	}
 	return allocation, nil
@@ -298,7 +301,17 @@ func (s Service) Commit(ctx context.Context, input CommitInput) (Bundle, error) 
 }
 
 func canonicalObjectKey(recordingID string, captureEpoch, sequence int64, allocationID string) string {
+	return fmt.Sprintf("temporary/recordings/%s/capture/%d/bundles/%d/%s.bundle", recordingID, captureEpoch, sequence, allocationID)
+}
+
+func legacyCanonicalObjectKey(recordingID string, captureEpoch, sequence int64, allocationID string) string {
 	return fmt.Sprintf("recordings/%s/capture/%d/bundles/%d/%s.bundle", recordingID, captureEpoch, sequence, allocationID)
+}
+
+func hasCanonicalObjectKey(allocation Allocation) bool {
+	newKey := canonicalObjectKey(allocation.Authority.RecordingID, allocation.Authority.CaptureEpoch, allocation.SequenceNumber, allocation.ID)
+	legacyKey := legacyCanonicalObjectKey(allocation.Authority.RecordingID, allocation.Authority.CaptureEpoch, allocation.SequenceNumber, allocation.ID)
+	return allocation.ObjectKey == newKey || allocation.ObjectKey == legacyKey
 }
 
 func opaqueToken() (string, error) {

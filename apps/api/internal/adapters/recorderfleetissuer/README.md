@@ -18,8 +18,9 @@ absent, `UnavailableAuthority` keeps bootstrap and revocation fail-closed.
 - the fields of `recorderfleet.BootstrapRequest`
 
 After independently verifying the immutable provider node binding, the issuer
-must idempotently mint or recover the exact worker identity, deliver its
-one-time bootstrap assertion directly to that node, and return HTTP 200 with:
+registers the exact worker identity and returns HTTP 202 while node delivery is
+pending. The reconciler retries this idempotent request. Only after the node has
+completed its direct bootstrap does the issuer return HTTP 200 with:
 
 ```json
 {
@@ -33,8 +34,8 @@ one-time bootstrap assertion directly to that node, and return HTTP 200 with:
 }
 ```
 
-The assertion, certificate private key, and other credentials must never be
-returned to the API server.
+The certificate private key is generated and retained by the node. It and all
+other reusable worker credentials are never returned to the API server.
 
 `POST /v1/recorder-fleet/revoke` accepts JSON with:
 
@@ -45,17 +46,26 @@ It returns HTTP 204 with an empty body only after that exact identity is
 revoked. Calls must be idempotent. The API server records durable revocation
 only after this response succeeds.
 
-## Deployment prerequisites
+## Issuer implementation
 
-Enabling a fleet in production still requires all of the following outside
-this repository:
+`cmd/recorder-fleet-issuer` implements this boundary with durable file-backed
+registration, challenge consumption, issuance, renewal, and revocation state.
+It re-reads DigitalOcean inventory before registration and both node bootstrap
+exchanges. Node authentication combines all of the following:
 
-- a deployed issuer implementing the protocol and direct one-time assertion
-  delivery;
-- a trusted worker certificate authority and revocation enforcement path;
-- an immutable, digest-qualified worker image whose bootstrap binary consumes
-  the one-time assertion and starts the selected worker role;
-- provider-network and firewall qualification for the chosen region and image.
+- an exact controller-authorized provider ID, release, image digest, boot
+  generation, and canonical live inventory digest;
+- a fresh DigitalOcean lookup with the expected immutable tags and firewall;
+- the direct TCP peer address matching the droplet's sole live public IPv4;
+- an Ed25519 CSR and a signature over a short-lived, single-use challenge.
 
-Until these prerequisites are supplied, the server authority routes exist but
-new provider nodes cannot become active workers.
+DigitalOcean metadata supplies only a claimed provider ID. It is never treated
+as proof. The issuer must be the direct TLS listener: a proxy, NAT, shared
+egress address, or forwarded-address header invalidates the source-address
+trust boundary.
+
+The issuer returns the signed leaf and CA chain only to the node over its
+server-authenticated TLS connection. It issues 12-hour leaves by default and
+supports mTLS renewal eight hours before expiry. Revocation persists across
+restarts and is published as an X.509 CRL. Credential consumers must enforce
+the CRL; short certificate lifetime is not a substitute for revocation.

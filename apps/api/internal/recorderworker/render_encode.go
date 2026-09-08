@@ -78,7 +78,8 @@ func BuildRecordingEncodePlan(audioInput, output string, config RecordingEncodeC
 		"-i", audioInput,
 		"-map", "0:v:0", "-map", "1:a:0",
 		"-vf", videoFilter, "-af", audioFilter,
-		"-frames:v", strconv.FormatInt(frameCount, 10), "-fps_mode", "cfr",
+		// setpts can erase the filter output rate; CFR alone otherwise defaults to 25 fps.
+		"-frames:v", strconv.FormatInt(frameCount, 10), "-r", strconv.Itoa(config.FPS), "-fps_mode", "cfr",
 		"-c:v", string(config.Encoder),
 	}
 	args = append(args, encoderArgs...)
@@ -207,7 +208,8 @@ func ProbeVideoEncoder(ctx context.Context, runner CommandRunner, encoder VideoE
 	if err != nil {
 		return err
 	}
-	args := []string{"-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "color=black:size=128x72:rate=1", "-frames:v", "1", "-c:v", string(encoder)}
+	// NVENC rejects frames below its hardware minimum even when full-size encoding works.
+	args := []string{"-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "color=black:size=192x108:rate=1", "-frames:v", "1", "-c:v", string(encoder)}
 	args = append(args, encoderArgs...)
 	args = append(args, "-f", "null", "-")
 	if output, err := runner.Run(ctx, "ffmpeg", args...); err != nil {

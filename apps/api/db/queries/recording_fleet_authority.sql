@@ -20,6 +20,11 @@ job_demand as (
     from recording_jobs
     where kind = sqlc.arg(role)
       and state in ('pending', 'retryable_failure', 'leased')
+      and (
+          sqlc.arg(role)::text <> 'capture'
+          or state = 'leased'
+          or available_at <= sqlc.arg(observed_at)::timestamptz
+      )
 ),
 facts as (
     select
@@ -29,7 +34,7 @@ facts as (
         job_demand.leased_jobs,
         case
             when sqlc.arg(role)::text = 'capture' then greatest(
-                (reservation_demand.episode_count + 3) / 4,
+                reservation_demand.episode_count,
                 ((reservation_demand.participant_count + 39) / 40)::integer,
                 ((reservation_demand.input_bitrate_bps + 15999999) / 16000000)::integer,
                 job_demand.queued_jobs + job_demand.leased_jobs

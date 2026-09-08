@@ -33,16 +33,19 @@ func TestRecorderFleetEnsureCreatesFencedNodeAndAttachesFirewall(t *testing.T) {
 			if err := json.NewDecoder(httpRequest.Body).Decode(&body); err != nil {
 				t.Errorf("decode create request: %v", err)
 			}
-			if body.Name != request.Name || body.Image != request.Release.ImageID || body.Region != request.Release.Region || body.Size != request.Release.Size || !slices.Equal(body.Tags, request.RequiredTags) {
+			if body.Name != request.Name || body.Image != request.Release.ImageID || body.Region != request.Release.Region || body.Size != request.Release.Size || !slices.Equal(body.Tags, request.RequiredTags) || !slices.Equal(body.SSHKeys, []int64{17}) {
 				t.Errorf("create body = %+v", body)
 			}
 			if strings.Contains(body.UserData, secret) || strings.Contains(body.UserData, "CHALK_RECORDER_BOOTSTRAP_ASSERTION=") {
 				t.Errorf("cloud-init contains reusable secret or assertion: %q", body.UserData)
 			}
-			for _, required := range []string{"--one-time", "--require-signed-assertion", "--require-droplet-inventory-match", "--require-boot-generation", "CHALK_RECORDER_BOOT_GENERATION='1'"} {
+			for _, required := range []string{"--one-time", "--require-signed-assertion", "--require-droplet-inventory-match", "--require-boot-generation", "CHALK_RECORDER_BOOT_GENERATION='1'", "chalk-recorder-capture.service"} {
 				if !strings.Contains(body.UserData, required) {
 					t.Errorf("cloud-init missing %q", required)
 				}
+			}
+			if strings.Contains(body.UserData, "source /etc/chalk-recorder/bootstrap.env") {
+				t.Errorf("cloud-init executes bootstrap environment as shell: %q", body.UserData)
 			}
 			writeJSON(t, writer, http.StatusAccepted, map[string]any{"droplet": dropletResponse(request, 123)})
 		case httpRequest.Method == http.MethodPost && httpRequest.URL.Path == "/v2/projects/project-1/resources":
@@ -152,12 +155,50 @@ func TestRecorderFleetErrorsNeverExposeTokenOrProviderBody(t *testing.T) {
 	}
 }
 
+func TestNewRecorderFleetAcceptsCPURenderPool(t *testing.T) {
+	t.Parallel()
+	adapter, err := NewRecorderFleet(RecorderFleetConfig{
+		Token: "token", BaseURL: "https://api.digitalocean.com", Environment: "staging",
+		Role: workeridentity.RoleRender, OwnerTag: "chalk-recorder-owned", GPU: false,
+	})
+	if err != nil || adapter.gpu {
+		t.Fatalf("CPU render adapter/error = %#v/%v", adapter, err)
+	}
+}
+
+func TestRecorderFleetInspectNodeReturnsFreshExactInventoryAndExclusivePublicIP(t *testing.T) {
+	request := recorderFleetEnsureRequest()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, httpRequest *http.Request) {
+		switch httpRequest.URL.Path {
+		case "/v2/droplets/123":
+			droplet := dropletResponse(request, 123)
+			droplet["networks"] = map[string]any{"v4": []map[string]any{
+				{"ip_address": "10.0.0.4", "type": "private"},
+				{"ip_address": "192.0.2.10", "type": "public"},
+			}}
+			writeJSON(t, writer, http.StatusOK, map[string]any{"droplet": droplet})
+		case "/v2/droplets/123/firewalls":
+			writeJSON(t, writer, http.StatusOK, map[string]any{"firewalls": []map[string]any{{"id": "firewall-1"}}})
+		default:
+			t.Errorf("unexpected request %s", httpRequest.URL.Path)
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	adapter := recorderFleetAdapter(t, server, "token")
+
+	node, publicIP, err := adapter.InspectNode(t.Context(), request.Key, "123")
+	if err != nil || publicIP.String() != "192.0.2.10" || node.ProviderID != "123" || !slices.Equal(node.FirewallIDs, []string{"firewall-1"}) {
+		t.Fatalf("inspected node/IP/error = %+v/%v/%v", node, publicIP, err)
+	}
+}
+
 func recorderFleetAdapter(t *testing.T, server *httptest.Server, token string) *RecorderFleet {
 	t.Helper()
 	adapter, err := NewRecorderFleet(RecorderFleetConfig{
 		Token: token, BaseURL: server.URL, HTTPClient: server.Client(),
 		Environment: "staging", Role: workeridentity.RoleCapture,
-		OwnerTag: "chalk-recorder-owned", ProjectID: "project-1", VPCUUID: "vpc-1",
+		OwnerTag: "chalk-recorder-owned", ProjectID: "project-1", VPCUUID: "vpc-1", SSHKeyIDs: []int64{17},
 	})
 	if err != nil {
 		t.Fatalf("new adapter: %v", err)

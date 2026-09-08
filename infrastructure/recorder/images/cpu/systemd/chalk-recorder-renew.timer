@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Chalk recorder worker identity renewal
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

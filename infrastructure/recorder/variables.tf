@@ -104,13 +104,13 @@ variable "whiteboard_allowed_origins" {
 }
 
 variable "temporary_bundle_prefix" {
-  description = "Prefix containing encrypted temporary capture bundles and wrapped-key metadata."
+  description = "Compatibility input for the fixed temporary/ prefix containing encrypted capture bundles and wrapped-key metadata."
   type        = string
   default     = "temporary/"
 
   validation {
-    condition     = length(var.temporary_bundle_prefix) > 0 && endswith(var.temporary_bundle_prefix, "/")
-    error_message = "temporary_bundle_prefix must be a non-empty prefix ending in '/'."
+    condition     = var.temporary_bundle_prefix == "temporary/"
+    error_message = "temporary_bundle_prefix is a fixed storage contract and must equal 'temporary/'."
   }
 }
 
@@ -177,7 +177,7 @@ variable "capture_image_id" {
 }
 
 variable "capture_image_digest" {
-  description = "OCI digest attested for the capture image."
+  description = "SHA-256 digest of the installed recorder image manifest for the capture pool."
   type        = string
   default     = null
   nullable    = true
@@ -198,7 +198,7 @@ variable "render_image_id" {
 }
 
 variable "render_image_digest" {
-  description = "OCI digest attested for the render image."
+  description = "SHA-256 digest of the installed recorder image manifest for the render pool."
   type        = string
   default     = null
   nullable    = true
@@ -263,9 +263,9 @@ variable "ready_spare" {
 }
 
 variable "capture_episodes_per_node" {
-  description = "Qualified capture density for a two-vCPU node."
+  description = "Qualified serial capture density for a two-vCPU node."
   type        = number
-  default     = 4
+  default     = 1
 }
 
 variable "capture_capacity_inputs_migrated" {
@@ -304,7 +304,24 @@ variable "capture_node_size" {
 }
 
 variable "render_node_size" {
-  description = "DigitalOcean TOR1 RTX 4000 Ada GPU size selected for staging qualification."
+  description = "DigitalOcean renderer size. The default is the measured eight-vCPU CPU renderer; a GPU image must override this together with render_region and render_gpu."
   type        = string
-  default     = "gpu-4000adax1-20gb"
+  default     = "c-8"
+}
+
+variable "render_region" {
+  description = "DigitalOcean renderer region. NYC1 is the measured CPU renderer region."
+  type        = string
+  default     = "nyc1"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{1,31}$", var.render_region))
+    error_message = "render_region must be a DigitalOcean region slug."
+  }
+}
+
+variable "render_gpu" {
+  description = "Whether the render pool uses DigitalOcean GPU inventory. Keep false for the c-8/libx264 image; set true only with a separately qualified GPU image, region, and size."
+  type        = bool
+  default     = false
 }

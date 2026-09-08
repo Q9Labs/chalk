@@ -138,7 +138,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
               :tenant_end_episode,
               :maximum_duration_expired,
               :recording_capture_ready,
-              :recording_capture_stopped
+              :recording_capture_stopped,
+              :recording_capture_failed
             ],
        do: :ok
 
@@ -207,6 +208,15 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
          _state
        ),
        do: Recording.prepare_capture_stopped(connection, episode, operation)
+
+  defp prepare_internal_operation(
+         connection,
+         episode,
+         %{name: :recording_capture_failed} = operation,
+         _policy,
+         _state
+       ),
+       do: Recording.prepare_capture_failed(connection, episode, operation)
 
   defp prepare_internal_operation(
          connection,

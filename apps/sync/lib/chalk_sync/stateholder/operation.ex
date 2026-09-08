@@ -19,6 +19,7 @@ defmodule ChalkSync.Stateholder.Operation do
     "stop_recording" => :stop_recording,
     "recording_capture_ready" => :recording_capture_ready,
     "recording_capture_stopped" => :recording_capture_stopped,
+    "recording_capture_failed" => :recording_capture_failed,
     "participant_leave" => :participant_leave,
     "start_episode" => :start_episode,
     "extend_episode" => :extend_episode,
@@ -44,6 +45,7 @@ defmodule ChalkSync.Stateholder.Operation do
           | :stop_recording
           | :recording_capture_ready
           | :recording_capture_stopped
+          | :recording_capture_failed
           | :participant_leave
           | :start_episode
           | :extend_episode
@@ -141,6 +143,26 @@ defmodule ChalkSync.Stateholder.Operation do
   def recording_capture_stopped(_request_key, _recording_id, _stop_operation_id, _capture_epoch),
     do: {:error, :invalid_payload}
 
+  @spec recording_capture_failed(String.t(), String.t(), String.t(), String.t()) ::
+          {:ok, t()} | {:error, atom()}
+  def recording_capture_failed(request_key, recording_id, start_operation_id, failure_code)
+      when is_binary(recording_id) and is_binary(start_operation_id) and
+             is_binary(failure_code) do
+    new(request_key, :recording_capture_failed, %{
+      "recordingId" => recording_id,
+      "startOperationId" => start_operation_id,
+      "failureCode" => failure_code
+    })
+  end
+
+  def recording_capture_failed(
+        _request_key,
+        _recording_id,
+        _start_operation_id,
+        _failure_code
+      ),
+      do: {:error, :invalid_payload}
+
   defp normalize_name(name) when is_atom(name) do
     if name in Map.values(@names), do: {:ok, name}, else: {:error, :unknown_operation}
   end
@@ -217,6 +239,26 @@ defmodule ChalkSync.Stateholder.Operation do
        when map_size(payload) == 3 and is_integer(capture_epoch) and capture_epoch > 0 do
     case validate_uuid(recording_id) do
       :ok -> validate_uuid(stop_operation_id)
+      error -> error
+    end
+  end
+
+  defp validate_payload(
+         :recording_capture_failed,
+         %{
+           "recordingId" => recording_id,
+           "startOperationId" => start_operation_id,
+           "failureCode" => failure_code
+         } = payload
+       )
+       when map_size(payload) == 3 and
+              failure_code in [
+                "capture_reservation_expired",
+                "capture_attempt_failed",
+                "capture_stopped_before_completion"
+              ] do
+    case validate_uuid(recording_id) do
+      :ok -> validate_uuid(start_operation_id)
       error -> error
     end
   end

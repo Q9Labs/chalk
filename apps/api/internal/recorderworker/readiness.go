@@ -15,7 +15,7 @@ const (
 	SerialWorkerReadyCapacity  = 1
 	ReadinessRefreshInterval   = 10 * time.Second
 	ReadinessRequestTimeout    = 5 * time.Second
-	ReadinessShutdownGrace     = 10 * time.Second
+	ReadinessShutdownGrace     = 22 * time.Second
 	ReadinessReasonReady       = "worker_ready"
 	ReadinessReasonDraining    = "worker_draining"
 	maximumReadinessReasonSize = 256

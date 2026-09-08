@@ -47,10 +47,11 @@ resource "digitalocean_firewall" "render" {
 resource "terraform_data" "runtime_capacity_contract" {
   input = {
     pool                   = local.pool_tag
-    region                 = "tor1"
+    region                 = var.region
     max_nodes              = var.max_nodes
     desired_nodes          = var.desired_nodes
     node_size              = var.node_size
+    gpu                    = var.gpu
     immutable_image_id     = var.image_id
     immutable_image_digest = var.image_digest
     bootstrap_endpoint     = var.bootstrap_endpoint

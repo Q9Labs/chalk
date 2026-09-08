@@ -44,12 +44,13 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return r.failClosed(ctx, state, "", now, fmt.Errorf("read recorder fleet demand: %w", err))
 	}
-	if err := demand.Validate(r.config.MaxNodes); err != nil {
+	if err := demand.Validate(); err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, err)
 	}
 	if demand.ObservedAt.After(now.Add(time.Second)) || now.Sub(demand.ObservedAt) > r.config.DemandMaxAge {
 		return r.failClosed(ctx, state, demand.Revision, now, ErrDemandStale)
 	}
+	targetNodes := min(demand.DesiredNodes, r.config.MaxNodes)
 
 	inventory, err := r.provider.ListNodes(ctx, r.config.Key)
 	if err != nil {
@@ -82,14 +83,14 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.failClosed(ctx, state, demand.Revision, now, err)
 	}
 
-	state, result, handled, err = r.advanceReadiness(ctx, state, nodes, observed, demand, now)
+	state, result, handled, err = r.advanceReadiness(ctx, state, nodes, observed, targetNodes, now)
 	if err != nil || handled {
 		result.Quarantined = quarantined
 		return r.finish(ctx, state, nodes, observed, demand, now, result, err)
 	}
 
 	current, stale := r.partitionNodes(nodes, state, observed, now)
-	if demand.DesiredNodes > len(current) && len(nodes) < r.config.MaxNodes {
+	if targetNodes > len(current) && len(nodes) < r.config.MaxNodes {
 		generation := state.NextBootGeneration
 		request := EnsureNodeRequest{
 			Key: r.config.Key, Name: NodeName(r.config.Key, r.config.Release.ReleaseID, generation),
@@ -104,7 +105,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.finish(ctx, state, nodes, observed, demand, now, result, err)
 	}
 
-	candidate := r.drainCandidate(current, stale, demand.DesiredNodes, state)
+	candidate := r.drainCandidate(current, stale, targetNodes, state)
 	if candidate != nil {
 		state, result, err = r.advanceDrain(ctx, state, *candidate, nodes[candidate.ProviderID], observed[candidate.ProviderID], now)
 		result.Quarantined = quarantined
@@ -254,11 +255,11 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 	return indexed, nil
 }
 
-func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes map[string]Node, observed map[string]NodeObservation, demand Demand, now time.Time) (Journal, Result, bool, error) {
-	needed := make(map[string]struct{}, demand.DesiredNodes)
+func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes map[string]Node, observed map[string]NodeObservation, targetNodes int, now time.Time) (Journal, Result, bool, error) {
+	needed := make(map[string]struct{}, targetNodes)
 	for _, providerID := range sortedNodeIDs(nodes) {
 		managed := state.Nodes[providerID]
-		if len(needed) >= demand.DesiredNodes {
+		if len(needed) >= targetNodes {
 			break
 		}
 		if managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting || !r.nodeMatchesCurrentRelease(nodes[providerID]) {

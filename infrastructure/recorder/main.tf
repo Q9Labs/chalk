@@ -25,6 +25,8 @@ module "render" {
   environment        = var.environment
   desired_nodes      = local.desired_render_nodes
   node_size          = var.render_node_size
+  region             = var.render_region
+  gpu                = var.render_gpu
   image_id           = var.render_image_id
   image_digest       = local.render_image_digest
   release_id         = var.release_id

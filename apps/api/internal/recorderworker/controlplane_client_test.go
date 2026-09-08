@@ -191,6 +191,10 @@ func TestControlPlaneClientBindsJobResponsesToLeaseAuthority(t *testing.T) {
 			_, err := client.Fail(context.Background(), recordingpipeline.FailureInput{LeaseInput: testLeaseInput(t), ErrorCode: "capture_failed"})
 			return err
 		}},
+		{name: "relinquish capture", call: func(client *ControlPlaneClient) error {
+			_, err := client.RelinquishCapture(context.Background(), testLeaseInput(t))
+			return err
+		}},
 		{name: "complete", call: func(client *ControlPlaneClient) error {
 			_, err := client.Complete(context.Background(), testLeaseInput(t))
 			return err
@@ -216,6 +220,39 @@ func TestControlPlaneClientBindsJobResponsesToLeaseAuthority(t *testing.T) {
 				t.Fatalf("authority mismatch error = %v", err)
 			}
 		})
+	}
+}
+
+func TestControlPlaneClientRelinquishesCaptureWithExactAuthority(t *testing.T) {
+	var path string
+	var body map[string]any
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode relinquish request: %v", err)
+		}
+		job := testJobResponse()
+		job["state"] = string(recordingpipeline.JobStatePending)
+		job["attempt_count"] = 0
+		delete(job, "lease_token")
+		delete(job, "lease_owner")
+		delete(job, "lease_expires_at")
+		writeJSONTest(w, http.StatusOK, job)
+	}))
+	defer server.Close()
+	client, err := NewControlPlaneClient(server.URL, server.Client())
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	job, err := client.RelinquishCapture(context.Background(), testLeaseInput(t))
+	if err != nil {
+		t.Fatalf("relinquish capture: %v", err)
+	}
+	if path != "/internal/v1/recorder/jobs/capture/relinquish" || body["attempt_count"] != float64(1) || body["fencing_generation"] != float64(1) || body["capture_epoch"] != float64(1) || body["lease_token"] != "lease" || body["envelope_digest"] != hex.EncodeToString(testLeaseInput(t).EnvelopeDigest) {
+		t.Fatalf("relinquish path=%q body=%#v", path, body)
+	}
+	if job.State != recordingpipeline.JobStatePending || job.AttemptCount != 0 || job.FencingGeneration != 1 || job.CaptureEpoch != 1 || job.LeaseToken != nil || job.LeaseOwner != nil || job.LeaseExpiresAt != nil {
+		t.Fatalf("relinquished job = %#v", job)
 	}
 }
 

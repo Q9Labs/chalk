@@ -618,12 +618,6 @@ with existing as (
     from recording_capacity
     where id = 1
       and not exists (select 1 from existing)
-      and (select count(*) from recording_pool_health
-           where role in ('capture', 'render')
-             and admission_open
-             and ready_capacity > 0
-             and observed_at > now() - interval '2 minutes'
-             and observed_at <= now()) = 2
     for update
 ), capacity_update as (
     update recording_capacity
@@ -633,9 +627,16 @@ with existing as (
         updated_at = now()
     from locked_capacity
     where recording_capacity.id = 1
-      and locked_capacity.reserved_episodes + $3::integer <= 20
+      -- Storage retains the prior bound so grandfathered reservations can drain;
+      -- these predicates are the launch policy for new admission.
+      and locked_capacity.reserved_episodes + $3::integer + (
+          select count(*)::integer
+          from recording_pipelines
+          where capture_completed_at is not null
+            and state in ('render_queued', 'rendering', 'verifying', 'retryable_failure')
+      ) <= 10
       and locked_capacity.reserved_participants + $4::integer <= 100
-      and locked_capacity.reserved_input_bitrate_bps + $5::bigint <= 80000000
+      and locked_capacity.reserved_input_bitrate_bps + $5::bigint <= 40000000
       and exists (
           select 1 from episodes
           where episodes.tenant_id = $1
@@ -846,19 +847,74 @@ with expired as (
     returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
+), jobs as (
+    update recording_jobs
+    set state = 'terminal_failure', lease_token = null, lease_owner = null, lease_expires_at = null,
+        error_code = 'capture_reservation_expired', terminal_at = now(), updated_at = now()
+    from reservations
+    where recording_jobs.recording_id = reservations.recording_id
+      and recording_jobs.kind = 'capture'
+      and recording_jobs.state = 'pending'
+      and recording_jobs.attempt_count = 0
+    returning recording_jobs.recording_id
 ), pipelines as (
     update recording_pipelines
     set state = 'terminal_failure', updated_at = now()
-    from reservations cross join capacity_update
+    from reservations
+    join jobs on jobs.recording_id = reservations.recording_id
+    cross join capacity_update
     where recording_pipelines.recording_id = reservations.recording_id
       and recording_pipelines.state in ('requested', 'reserved', 'retryable_failure')
     returning recording_pipelines.recording_id
+), failure_candidates as (
+    select reservations.tenant_id, reservations.space_id, reservations.episode_id,
+        reservations.recording_id, start_operations.external_operation_id as start_operation_id
+    from reservations
+    join pipelines on pipelines.recording_id = reservations.recording_id
+    join sync_recordings
+      on sync_recordings.tenant_id = reservations.tenant_id
+     and sync_recordings.space_id = reservations.space_id
+     and sync_recordings.episode_id = reservations.episode_id
+     and sync_recordings.recording_id = reservations.recording_id
+     and sync_recordings.status = 'starting'
+    join sync_external_operations start_operations
+      on start_operations.tenant_id = sync_recordings.tenant_id
+     and start_operations.space_id = sync_recordings.space_id
+     and start_operations.episode_id = sync_recordings.episode_id
+     and start_operations.external_operation_id = sync_recordings.start_external_operation_id
+     and start_operations.operation_name = 'start_recording'
+     and start_operations.recording_id = reservations.recording_id
+     and start_operations.external_operation_id::text = reservations.idempotency_key
+), failure_operations as (
+    insert into sync_external_operations (
+        tenant_id, space_id, episode_id, external_operation_id, request_key,
+        request_fingerprint, operation_name, recording_id, payload, fence_active
+    )
+    select tenant_id, space_id, episode_id, gen_random_uuid(),
+        'capture_expired_' || replace(recording_id::text, '-', ''),
+        sha256(convert_to(
+            'recording_capture_failed:' || recording_id::text || ':' ||
+            start_operation_id::text || ':capture_reservation_expired',
+            'UTF8'
+        )),
+        'recording_capture_failed', recording_id,
+        jsonb_build_object(
+            'recordingId', recording_id::text,
+            'startOperationId', start_operation_id::text,
+            'failureCode', 'capture_reservation_expired'
+        ),
+        false
+    from failure_candidates
+    on conflict (tenant_id, episode_id, operation_name, request_key) do nothing
+    returning recording_id
 )
 select reservations.id, reservations.tenant_id, reservations.space_id, reservations.episode_id,
     reservations.recording_id, reservations.idempotency_key, reservations.policy_snapshot_version, reservations.participant_count,
     reservations.max_duration_seconds, reservations.input_bitrate_bps, reservations.state,
     reservations.starts_at, reservations.ends_at, reservations.updated_at, reservations.created_at
-from reservations join pipelines on pipelines.recording_id = reservations.recording_id
+from reservations
+join pipelines on pipelines.recording_id = reservations.recording_id
+cross join (select count(*) from failure_operations) projected_failures
 `
 
 type ExpireRecordingReservationsRow struct {
@@ -1969,6 +2025,17 @@ func (q *Queries) ListRecordingJobsForReconciliation(ctx context.Context, arg Li
 	return items, nil
 }
 
+const lockRecordingCapacity = `-- name: LockRecordingCapacity :one
+select id from recording_capacity where id = 1 for update
+`
+
+func (q *Queries) LockRecordingCapacity(ctx context.Context) (int16, error) {
+	row := q.db.QueryRow(ctx, lockRecordingCapacity)
+	var id int16
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockRecordingJobClaimRequest = `-- name: LockRecordingJobClaimRequest :exec
 select pg_advisory_xact_lock(hashtextextended($1::text, 0))
 `
@@ -2194,6 +2261,163 @@ func (q *Queries) ReleaseRecordingReservation(ctx context.Context, arg ReleaseRe
 		&i.State,
 		&i.StartsAt,
 		&i.EndsAt,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const relinquishCaptureRecordingJob = `-- name: RelinquishCaptureRecordingJob :one
+with locked as (
+    select jobs.id
+    from recording_jobs jobs
+    join recording_pipelines pipeline on pipeline.recording_id = jobs.recording_id
+    where jobs.id = $1
+      and jobs.kind = 'capture'
+      and jobs.state = 'leased'
+      and jobs.attempt_count = $2
+      and jobs.fencing_generation = $3
+      and jobs.lease_token = $4
+      and jobs.lease_owner = $5
+      and jobs.lease_expires_at > now()
+      and pipeline.stop_operation_id is null
+      and pipeline.state in ('capture_leased', 'capturing_segmented')
+      and exists (
+          select 1 from recording_job_attempt_authorities authority
+          where authority.job_id = jobs.id
+            and authority.kind = 'capture'
+            and authority.attempt_count = $2
+            and authority.fencing_generation = $3
+            and authority.capture_epoch = $6
+            and authority.envelope_digest = $7
+            and authority.lease_token = $4
+            and authority.lease_owner = $5
+      )
+    for update of jobs, pipeline
+), relinquished as (
+    update recording_jobs
+    set state = 'pending',
+        available_at = now(),
+        attempt_count = attempt_count - 1,
+        lease_token = null,
+        lease_owner = null,
+        lease_expires_at = null,
+        updated_at = now()
+    from locked
+    where recording_jobs.id = locked.id
+    returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+        payload_schema_version, state, priority, available_at, attempt_count,
+        attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
+        error_code, error_detail, terminal_at, updated_at, created_at
+), pipeline as (
+    update recording_pipelines
+    set state = 'retryable_failure', updated_at = now()
+    from relinquished
+    where recording_pipelines.recording_id = relinquished.recording_id
+    returning recording_pipelines.recording_id
+), result as (
+    select relinquished.id, relinquished.tenant_id, relinquished.episode_id, relinquished.recording_id, relinquished.kind, relinquished.idempotency_key, relinquished.payload_schema_version, relinquished.state, relinquished.priority, relinquished.available_at, relinquished.attempt_count, relinquished.attempt_limit, relinquished.lease_token, relinquished.lease_owner, relinquished.lease_expires_at, relinquished.fencing_generation, relinquished.error_code, relinquished.error_detail, relinquished.terminal_at, relinquished.updated_at, relinquished.created_at
+    from relinquished
+    join pipeline on pipeline.recording_id = relinquished.recording_id
+    union all
+    select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at
+    from recording_jobs jobs
+    join recording_pipelines current_pipeline on current_pipeline.recording_id = jobs.recording_id
+    where jobs.id = $1
+      and jobs.kind = 'capture'
+      and jobs.state = 'pending'
+      and jobs.attempt_count = $2 - 1
+      and jobs.fencing_generation = $3
+      and jobs.lease_token is null
+      and jobs.lease_owner is null
+      and jobs.lease_expires_at is null
+      and current_pipeline.state = 'retryable_failure'
+      and current_pipeline.stop_operation_id is null
+      and not exists (select 1 from relinquished)
+      and exists (
+          select 1 from recording_job_attempt_authorities authority
+          where authority.job_id = jobs.id
+            and authority.kind = 'capture'
+            and authority.attempt_count = $2
+            and authority.fencing_generation = $3
+            and authority.capture_epoch = $6
+            and authority.envelope_digest = $7
+            and authority.lease_token = $4
+            and authority.lease_owner = $5
+      )
+)
+select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+    payload_schema_version, state, priority, available_at, attempt_count,
+    attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
+    error_code, error_detail, terminal_at, updated_at, created_at
+from result
+`
+
+type RelinquishCaptureRecordingJobParams struct {
+	ID                pgtype.UUID `json:"id"`
+	AttemptCount      int32       `json:"attempt_count"`
+	FencingGeneration int64       `json:"fencing_generation"`
+	LeaseToken        pgtype.Text `json:"lease_token"`
+	LeaseOwner        pgtype.Text `json:"lease_owner"`
+	CaptureEpoch      int64       `json:"capture_epoch"`
+	EnvelopeDigest    []byte      `json:"envelope_digest"`
+}
+
+type RelinquishCaptureRecordingJobRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
+	RecordingID          pgtype.UUID        `json:"recording_id"`
+	Kind                 string             `json:"kind"`
+	IdempotencyKey       string             `json:"idempotency_key"`
+	PayloadSchemaVersion int32              `json:"payload_schema_version"`
+	State                string             `json:"state"`
+	Priority             int32              `json:"priority"`
+	AvailableAt          pgtype.Timestamptz `json:"available_at"`
+	AttemptCount         int32              `json:"attempt_count"`
+	AttemptLimit         int32              `json:"attempt_limit"`
+	LeaseToken           pgtype.Text        `json:"lease_token"`
+	LeaseOwner           pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	FencingGeneration    int64              `json:"fencing_generation"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorDetail          pgtype.Text        `json:"error_detail"`
+	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) RelinquishCaptureRecordingJob(ctx context.Context, arg RelinquishCaptureRecordingJobParams) (RelinquishCaptureRecordingJobRow, error) {
+	row := q.db.QueryRow(ctx, relinquishCaptureRecordingJob,
+		arg.ID,
+		arg.AttemptCount,
+		arg.FencingGeneration,
+		arg.LeaseToken,
+		arg.LeaseOwner,
+		arg.CaptureEpoch,
+		arg.EnvelopeDigest,
+	)
+	var i RelinquishCaptureRecordingJobRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EpisodeID,
+		&i.RecordingID,
+		&i.Kind,
+		&i.IdempotencyKey,
+		&i.PayloadSchemaVersion,
+		&i.State,
+		&i.Priority,
+		&i.AvailableAt,
+		&i.AttemptCount,
+		&i.AttemptLimit,
+		&i.LeaseToken,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.FencingGeneration,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
 	)

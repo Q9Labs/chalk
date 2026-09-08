@@ -135,6 +135,31 @@ func TestCaptureReaderPropagatesTerminalPeerError(t *testing.T) {
 	}
 }
 
+func TestCaptureReaderStopWaitsForReadLoopToSettle(t *testing.T) {
+	track := &captureBlockingTestTrack{started: make(chan struct{}), release: make(chan struct{})}
+	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, make(chan captureRuntimeEvent, 1))
+	if err != nil {
+		t.Fatalf("start reader: %v", err)
+	}
+	<-track.started
+	stopped := make(chan struct{})
+	go func() {
+		stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		t.Fatal("reader stop returned while ReadRTP was still active")
+	case <-time.After(10 * time.Millisecond):
+	}
+	close(track.release)
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("reader stop did not join the settled read loop")
+	}
+}
+
 func TestCaptureReaderRequestsBoundedKeyFrameAfterVideoPacketLoss(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -471,6 +496,24 @@ type captureTestTrack struct {
 	readErr  error
 	deadline time.Time
 }
+
+type captureBlockingTestTrack struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (*captureBlockingTestTrack) CaptureTrack() captureplane.PulledCaptureTrack {
+	return captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{Kind: captureplane.TrackKindAudio}, MID: "0"}
+}
+func (*captureBlockingTestTrack) MID() captureplane.ProviderReference { return "0" }
+func (*captureBlockingTestTrack) Codec() string                       { return "opus" }
+func (*captureBlockingTestTrack) RID() string                         { return "" }
+func (t *captureBlockingTestTrack) ReadRTP() (*rtp.Packet, interceptor.Attributes, error) {
+	close(t.started)
+	<-t.release
+	return nil, nil, errors.New("reader released")
+}
+func (*captureBlockingTestTrack) SetReadDeadline(time.Time) error { return nil }
 
 func (t *captureTestTrack) CaptureTrack() captureplane.PulledCaptureTrack { return t.capture }
 func (t *captureTestTrack) MID() captureplane.ProviderReference           { return t.capture.MID }

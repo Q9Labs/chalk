@@ -56,6 +56,8 @@ type rawCommandConfig struct {
 	size              string
 	firewallID        string
 	bootstrapEndpoint string
+	gpu               string
+	sshKeyIDs         string
 }
 
 func loadCommandConfig(args []string, getenv func(string) string) (commandConfig, error) {
@@ -92,6 +94,8 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		size:              getenv("CHALK_RECORDER_FLEET_SIZE"),
 		firewallID:        getenv("CHALK_RECORDER_FLEET_FIREWALL_ID"),
 		bootstrapEndpoint: getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT"),
+		gpu:               getenv("CHALK_RECORDER_FLEET_GPU"),
+		sshKeyIDs:         getenv("CHALK_RECORDER_FLEET_SSH_KEY_IDS"),
 	}
 
 	flags := flag.NewFlagSet("recorder-fleet-controller", flag.ContinueOnError)
@@ -124,6 +128,8 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 	flags.StringVar(&raw.size, "size", raw.size, "DigitalOcean size slug")
 	flags.StringVar(&raw.firewallID, "firewall-id", raw.firewallID, "outbound-only firewall ID")
 	flags.StringVar(&raw.bootstrapEndpoint, "bootstrap-endpoint", raw.bootstrapEndpoint, "node bootstrap HTTPS endpoint")
+	flags.StringVar(&raw.gpu, "gpu", raw.gpu, "whether the pool uses DigitalOcean GPU nodes (true or false)")
+	flags.StringVar(&raw.sshKeyIDs, "ssh-key-ids", raw.sshKeyIDs, "optional comma-separated DigitalOcean SSH key IDs for qualification")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
 		return commandConfig{}, fmt.Errorf("%w: parse command arguments", recorderfleet.ErrInvalidConfig)
 	}
@@ -173,8 +179,23 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	if reconcileInterval > healthRefresh {
 		return commandConfig{}, fmt.Errorf("%w: reconcile-interval exceeds health-refresh", recorderfleet.ErrInvalidConfig)
 	}
+	gpu := role == workeridentity.RoleRender
+	if trim(raw.gpu) != "" {
+		switch trim(raw.gpu) {
+		case "true":
+			gpu = true
+		case "false":
+			gpu = false
+		default:
+			return commandConfig{}, fmt.Errorf("%w: gpu", recorderfleet.ErrInvalidConfig)
+		}
+	}
 	if trim(raw.controlPlaneURL) == "" || trim(raw.controllerCert) == "" || trim(raw.controllerKey) == "" || trim(raw.serverCA) == "" || trim(raw.serverName) == "" || trim(raw.spiffeTrustDomain) == "" || trim(raw.digitalOceanToken) == "" || trim(raw.journalPath) == "" {
 		return commandConfig{}, fmt.Errorf("%w: required controller connection setting", recorderfleet.ErrInvalidConfig)
+	}
+	sshKeyIDs, err := parseOptionalIDs("ssh-key-ids", raw.sshKeyIDs)
+	if err != nil {
+		return commandConfig{}, err
 	}
 
 	fleetConfig := recorderfleet.Config{
@@ -184,7 +205,7 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 		Release: recorderfleet.ReleaseSpec{
 			ReleaseID: trim(raw.releaseID), ImageID: imageID, ImageDigest: trim(raw.imageDigest),
 			Region: trim(raw.region), Size: trim(raw.size), FirewallID: trim(raw.firewallID),
-			BootstrapEndpoint: trim(raw.bootstrapEndpoint), GPU: role == workeridentity.RoleRender,
+			BootstrapEndpoint: trim(raw.bootstrapEndpoint), GPU: gpu,
 		},
 	}
 	if err := fleetConfig.Validate(); err != nil {
@@ -193,7 +214,7 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	providerConfig := digitalocean.RecorderFleetConfig{
 		Token: trim(raw.digitalOceanToken), BaseURL: trim(raw.digitalOceanURL), Environment: key.Environment,
 		Role: key.Role, OwnerTag: fleetConfig.OwnerTag, ProjectID: trim(raw.projectID),
-		VPCUUID: trim(raw.vpcUUID), GPU: fleetConfig.Release.GPU,
+		VPCUUID: trim(raw.vpcUUID), GPU: fleetConfig.Release.GPU, SSHKeyIDs: sshKeyIDs,
 	}
 	return commandConfig{
 		Fleet: fleetConfig, Provider: providerConfig, ControlPlaneURL: trim(raw.controlPlaneURL),
@@ -225,4 +246,29 @@ func parseDuration(name, value string) (time.Duration, error) {
 		return 0, fmt.Errorf("%w: %s", recorderfleet.ErrInvalidConfig, name)
 	}
 	return parsed, nil
+}
+
+func parseOptionalIDs(name, value string) ([]int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parts := strings.Split(value, ",")
+	if len(parts) > 8 {
+		return nil, fmt.Errorf("%w: %s", recorderfleet.ErrInvalidConfig, name)
+	}
+	result := make([]int64, 0, len(parts))
+	seen := make(map[int64]struct{}, len(parts))
+	for _, part := range parts {
+		id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("%w: %s", recorderfleet.ErrInvalidConfig, name)
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return nil, fmt.Errorf("%w: %s", recorderfleet.ErrInvalidConfig, name)
+		}
+		seen[id] = struct{}{}
+		result = append(result, id)
+	}
+	return result, nil
 }

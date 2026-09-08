@@ -624,7 +624,6 @@ func run() error {
 		RecorderFleetVerifier:      recorderFleetVerifier,
 		RecorderFleetEnvironment:   cfg.Observability.Environment,
 		RecorderWorkerVerifier:     recorderWorkerVerifier,
-		RecorderWorkerReadiness:    httpapi.NewRecorderWorkerReadiness(recorderHealthService),
 		Recordings:                 recordingService,
 		Spaces:                     spaceService,
 		Episodes:                   episodeService,
@@ -704,6 +703,14 @@ func run() error {
 	deadlineScheduler := episodes.NewDeadlineScheduler(episodeRepository, cfg.DeadlineScheduler.Interval, cfg.DeadlineScheduler.Batch)
 	deadlineSchedulerErr := make(chan error, 1)
 	go func() { deadlineSchedulerErr <- deadlineScheduler.Run(signalCtx) }()
+	var recordingMaintenanceErr <-chan error
+	if cfg.Capabilities.Recording {
+		maintenanceErr := make(chan error, 1)
+		recordingMaintenanceErr = maintenanceErr
+		go func() {
+			maintenanceErr <- recordingPipelineService.RunMaintenance(signalCtx, recordingpipeline.DefaultMaintenanceInterval)
+		}()
+	}
 	var episodeDiagnosticsRuntimeErr <-chan error
 	if episodeDiagnostics != nil {
 		runtimeErr := make(chan error, 1)
@@ -758,6 +765,7 @@ func run() error {
 	publicInviteLifecycleResultReceived := false
 	episodeDiagnosticsRuntimeResultReceived := false
 	whiteboardCleanupResultReceived := false
+	recordingMaintenanceResultReceived := false
 	select {
 	case err := <-serverErr:
 		runErr = err
@@ -775,6 +783,10 @@ func run() error {
 		stop()
 	case err := <-deadlineSchedulerErr:
 		runErr = err
+		stop()
+	case err := <-recordingMaintenanceErr:
+		runErr = err
+		recordingMaintenanceResultReceived = true
 		stop()
 	case err := <-episodeDiagnosticsRuntimeErr:
 		runErr = err
@@ -844,6 +856,11 @@ func run() error {
 	}
 	if episodeDiagnosticsRuntimeErr != nil && !episodeDiagnosticsRuntimeResultReceived {
 		if err := <-episodeDiagnosticsRuntimeErr; runErr == nil {
+			runErr = err
+		}
+	}
+	if recordingMaintenanceErr != nil && !recordingMaintenanceResultReceived {
+		if err := <-recordingMaintenanceErr; runErr == nil {
 			runErr = err
 		}
 	}
@@ -985,7 +1002,6 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 		options.RecorderFleetVerifier = nil
 		options.RecorderFleetEnvironment = ""
 		options.RecorderWorkerVerifier = nil
-		options.RecorderWorkerReadiness = nil
 	}
 	if !capabilities.WhiteboardFiles {
 		options.WhiteboardFiles = nil

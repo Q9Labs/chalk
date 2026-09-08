@@ -156,19 +156,77 @@ func TestReconcilerQuarantinesForeignNodeWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestReconcilerRefusesDemandBeyondConfiguredCap(t *testing.T) {
+func TestReconcilerSaturatesColdDemandAtConfiguredCap(t *testing.T) {
 	fixture := newFleetFixture(t)
 	fixture.config.MaxNodes = 1
 	fixture.demand.value.DesiredNodes = 2
 	fixture.demand.value.ScheduledPrewarms = 2
+	fixture.demand.value.QueuedJobs = 2
+	reconciler := fixture.reconciler(t)
+
+	if result := fixture.step(t, reconciler); result.Action != ActionCreatePlanned || result.Projection.DemandRevision != fixture.demand.value.Revision {
+		t.Fatalf("cold over-cap plan = %+v", result)
+	}
+	if result := fixture.step(t, reconciler); result.Action != ActionNodeEnsured {
+		t.Fatalf("cold over-cap ensure = %+v", result)
+	}
+	if result := fixture.step(t, reconciler); result.Action != ActionBootstrapEnsured {
+		t.Fatalf("cold over-cap bootstrap = %+v", result)
+	}
+	fixture.step(t, reconciler)
+	if fixture.provider.ensureCalls != 1 || len(fixture.provider.nodes) != fixture.config.MaxNodes {
+		t.Fatalf("cold over-cap ensure calls/nodes = %d/%d", fixture.provider.ensureCalls, len(fixture.provider.nodes))
+	}
+	if fixture.demand.value.DesiredNodes != 2 || fixture.demand.value.ScheduledPrewarms != 2 || fixture.demand.value.QueuedJobs != 2 {
+		t.Fatalf("raw demand was changed: %+v", fixture.demand.value)
+	}
+}
+
+func TestReconcilerSaturatesWarmDemandAtConfiguredCap(t *testing.T) {
+	fixture := newFleetFixture(t)
+	fixture.config.MaxNodes = 2
+	reconciler := fixture.reconciler(t)
+	fixture.step(t, reconciler)
+	fixture.step(t, reconciler)
+	fixture.step(t, reconciler)
+	node := fixture.provider.onlyNode(t)
+	fixture.runtime.observations = []NodeObservation{{
+		Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+	}}
+	fixture.step(t, reconciler)
+
+	fixture.demand.value = Demand{
+		Revision: "demand-over-cap", DesiredNodes: 3, ScheduledPrewarms: 3,
+		QueuedJobs: 3, ObservedAt: fixture.now,
+	}
+	result := fixture.step(t, reconciler)
+	if result.Action != ActionCreatePlanned || !result.Projection.AdmissionOpen || result.Projection.ReadyCapacity != fixture.config.SlotsPerNode || result.Projection.DemandRevision != fixture.demand.value.Revision {
+		t.Fatalf("warm over-cap plan = %+v", result)
+	}
+	if result = fixture.step(t, reconciler); result.Action != ActionNodeEnsured {
+		t.Fatalf("warm over-cap ensure = %+v", result)
+	}
+	if result = fixture.step(t, reconciler); result.Action != ActionBootstrapEnsured {
+		t.Fatalf("warm over-cap bootstrap = %+v", result)
+	}
+	fixture.step(t, reconciler)
+	if fixture.provider.ensureCalls != fixture.config.MaxNodes || len(fixture.provider.nodes) != fixture.config.MaxNodes || fixture.runtime.closeCalls != 0 {
+		t.Fatalf("warm over-cap ensure/nodes/close = %d/%d/%d", fixture.provider.ensureCalls, len(fixture.provider.nodes), fixture.runtime.closeCalls)
+	}
+}
+
+func TestReconcilerStillFailsClosedOnMalformedDemand(t *testing.T) {
+	fixture := newFleetFixture(t)
+	fixture.demand.value.DesiredNodes = 0
 	reconciler := fixture.reconciler(t)
 
 	result, err := reconciler.Reconcile(context.Background())
-	if !errors.Is(err, ErrCapacityExceeded) || result.Projection.Reason != "capacity_exceeded" || result.Projection.AdmissionOpen {
+	if !errors.Is(err, ErrInvalidDemand) || result.Projection.Reason != "invalid_demand" || result.Projection.AdmissionOpen {
 		t.Fatalf("result/error = %+v/%v", result, err)
 	}
 	if fixture.provider.ensureCalls != 0 {
-		t.Fatalf("over-cap demand created %d nodes", fixture.provider.ensureCalls)
+		t.Fatalf("malformed demand created %d nodes", fixture.provider.ensureCalls)
 	}
 }
 

@@ -1,6 +1,7 @@
 package mtls
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -8,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,6 +47,60 @@ func TestLoadClientConfigRejectsAmbientOrMalformedTrust(t *testing.T) {
 				t.Fatal("invalid client mutual tls config accepted")
 			}
 		})
+	}
+}
+
+func TestLoadReloadingClientConfigReadsRenewedCertificate(t *testing.T) {
+	directory := t.TempDir()
+	ca, caKey := testCertificateAuthority(t)
+	first, firstKey := testClientCertificate(t, ca, caKey)
+	second, secondKey := testClientCertificate(t, ca, caKey)
+	certificateFile := filepath.Join(directory, "client.pem")
+	keyFile := filepath.Join(directory, "client-key.pem")
+	caFile := filepath.Join(directory, "server-ca.pem")
+	writeTestPEM(t, certificateFile, "CERTIFICATE", first.Raw)
+	writeTestPEM(t, keyFile, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(firstKey))
+	writeTestPEM(t, caFile, "CERTIFICATE", ca.Raw)
+
+	config, err := LoadReloadingClientConfig(certificateFile, keyFile, caFile, "recorder-control.internal")
+	if err != nil {
+		t.Fatalf("load reloading config: %v", err)
+	}
+	loaded, err := config.GetClientCertificate(&tls.CertificateRequestInfo{})
+	if err != nil || len(loaded.Certificate) == 0 || !bytes.Equal(loaded.Certificate[0], first.Raw) {
+		t.Fatalf("initial certificate/error = %#v/%v", loaded, err)
+	}
+	writeTestPEM(t, certificateFile, "CERTIFICATE", second.Raw)
+	writeTestPEM(t, keyFile, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(secondKey))
+	loaded, err = config.GetClientCertificate(&tls.CertificateRequestInfo{})
+	if err != nil || len(loaded.Certificate) == 0 || !bytes.Equal(loaded.Certificate[0], second.Raw) {
+		t.Fatalf("renewed certificate/error = %#v/%v", loaded, err)
+	}
+}
+
+func TestReloadingClientTransportRotatesConnectionPool(t *testing.T) {
+	directory := t.TempDir()
+	ca, caKey := testCertificateAuthority(t)
+	first, firstKey := testClientCertificate(t, ca, caKey)
+	second, secondKey := testClientCertificate(t, ca, caKey)
+	certificateFile := filepath.Join(directory, "client.pem")
+	keyFile := filepath.Join(directory, "client-key.pem")
+	caFile := filepath.Join(directory, "server-ca.pem")
+	writeTestPEM(t, certificateFile, "CERTIFICATE", first.Raw)
+	writeTestPEM(t, keyFile, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(firstKey))
+	writeTestPEM(t, caFile, "CERTIFICATE", ca.Raw)
+
+	transport, err := NewReloadingClientTransport(certificateFile, keyFile, caFile, "recorder-control.internal")
+	if err != nil {
+		t.Fatalf("new reloading transport: %v", err)
+	}
+	initialPool := transport.current
+	writeTestPEM(t, certificateFile, "CERTIFICATE", second.Raw)
+	writeTestPEM(t, keyFile, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(secondKey))
+	request, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:1", nil)
+	_, _ = transport.RoundTrip(request)
+	if transport.current == initialPool {
+		t.Fatal("renewed certificate reused the previous connection pool")
 	}
 }
 

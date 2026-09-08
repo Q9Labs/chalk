@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -34,6 +35,7 @@ type RecorderFleetConfig struct {
 	ProjectID   string
 	VPCUUID     string
 	GPU         bool
+	SSHKeyIDs   []int64
 }
 
 type RecorderFleet struct {
@@ -46,6 +48,7 @@ type RecorderFleet struct {
 	role        workeridentity.Role
 	token       string
 	vpcUUID     string
+	sshKeyIDs   []int64
 }
 
 func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
@@ -54,8 +57,8 @@ func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
 	}
 	baseURL, err := url.Parse(config.BaseURL)
 	key := recorderfleet.PoolKey{Environment: config.Environment, Role: config.Role}
-	roleGPUValid := config.Role == workeridentity.RoleCapture && !config.GPU || config.Role == workeridentity.RoleRender && config.GPU
-	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" || strings.TrimSpace(config.Token) == "" || len(config.Token) > 4096 || key.Validate() != nil || !validDigitalOceanTag(config.OwnerTag) || !roleGPUValid || !validOptionalIdentifier(config.ProjectID) || !validOptionalIdentifier(config.VPCUUID) {
+	roleGPUValid := config.Role == workeridentity.RoleRender || config.Role == workeridentity.RoleCapture && !config.GPU
+	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" || strings.TrimSpace(config.Token) == "" || len(config.Token) > 4096 || key.Validate() != nil || !validDigitalOceanTag(config.OwnerTag) || !roleGPUValid || !validOptionalIdentifier(config.ProjectID) || !validOptionalIdentifier(config.VPCUUID) || !validSSHKeyIDs(config.SSHKeyIDs) {
 		return nil, recorderfleet.ErrInvalidConfig
 	}
 	if config.HTTPClient == nil {
@@ -64,7 +67,7 @@ func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
 	return &RecorderFleet{
 		baseURL: baseURL, client: config.HTTPClient, environment: config.Environment,
 		gpu: config.GPU, ownerTag: config.OwnerTag, projectID: config.ProjectID,
-		role: config.Role, token: config.Token, vpcUUID: config.VPCUUID,
+		role: config.Role, token: config.Token, vpcUUID: config.VPCUUID, sshKeyIDs: append([]int64(nil), config.SSHKeyIDs...),
 	}, nil
 }
 
@@ -95,6 +98,49 @@ func (a *RecorderFleet) ListNodes(ctx context.Context, key recorderfleet.PoolKey
 	}
 	slices.SortFunc(nodes, func(left, right recorderfleet.Node) int { return strings.Compare(left.ProviderID, right.ProviderID) })
 	return nodes, nil
+}
+
+// InspectNode returns a fresh, exact provider view for bootstrap authorization.
+// The public address is accepted only when DigitalOcean reports one exclusive
+// public IPv4 address; bootstrap callers are bound to that address at the TCP
+// peer rather than to forwarded headers or unsigned metadata.
+func (a *RecorderFleet) InspectNode(ctx context.Context, key recorderfleet.PoolKey, providerID string) (recorderfleet.Node, netip.Addr, error) {
+	if err := a.validateKey(key); err != nil {
+		return recorderfleet.Node{}, netip.Addr{}, err
+	}
+	id, err := strconv.ParseInt(providerID, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != providerID {
+		return recorderfleet.Node{}, netip.Addr{}, recorderfleet.ErrInventoryDrift
+	}
+	var response retrieveDropletResponse
+	if err := a.doJSON(ctx, http.MethodGet, "/v2/droplets/"+providerID, nil, nil, &response, http.StatusOK); err != nil {
+		if errors.Is(err, errNotFound) {
+			return recorderfleet.Node{}, netip.Addr{}, recorderfleet.ErrNodeNotFound
+		}
+		return recorderfleet.Node{}, netip.Addr{}, err
+	}
+	if !slices.Contains(response.Droplet.Tags, a.ownerTag) || !slices.Contains(response.Droplet.Tags, recorderfleet.EnvironmentTag(a.environment)) || !slices.Contains(response.Droplet.Tags, recorderfleet.RoleTag(a.role)) {
+		return recorderfleet.Node{}, netip.Addr{}, recorderfleet.ErrInventoryDrift
+	}
+	node, err := a.mapNode(ctx, response.Droplet, true)
+	if err != nil {
+		return recorderfleet.Node{}, netip.Addr{}, err
+	}
+	var publicAddress netip.Addr
+	for _, network := range response.Droplet.Networks.V4 {
+		if network.Type != "public" {
+			continue
+		}
+		address, parseErr := netip.ParseAddr(network.IPAddress)
+		if parseErr != nil || !address.Is4() || publicAddress.IsValid() {
+			return recorderfleet.Node{}, netip.Addr{}, recorderfleet.ErrInventoryDrift
+		}
+		publicAddress = address
+	}
+	if !publicAddress.IsValid() {
+		return recorderfleet.Node{}, netip.Addr{}, recorderfleet.ErrInventoryDrift
+	}
+	return node, publicAddress, nil
 }
 
 func (a *RecorderFleet) EnsureNode(ctx context.Context, request recorderfleet.EnsureNodeRequest) (recorderfleet.Node, error) {
@@ -129,7 +175,7 @@ func (a *RecorderFleet) EnsureNode(ctx context.Context, request recorderfleet.En
 	payload := createDropletRequest{
 		Name: request.Name, Region: request.Release.Region, Size: request.Release.Size,
 		Image: request.Release.ImageID, Monitoring: true, Tags: append([]string(nil), request.RequiredTags...),
-		UserData: userData, VPCUUID: a.vpcUUID,
+		UserData: userData, VPCUUID: a.vpcUUID, SSHKeys: append([]int64(nil), a.sshKeyIDs...),
 	}
 	var response createDropletResponse
 	if err := a.doJSON(ctx, http.MethodPost, "/v2/droplets", nil, payload, &response, http.StatusAccepted); err != nil {
@@ -327,6 +373,7 @@ func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest) (string, e
 	if err := request.Validate(); err != nil {
 		return "", err
 	}
+	workerUnit := "chalk-recorder-" + string(request.Key.Role) + ".service"
 	values := []string{
 		"CHALK_RECORDER_ENVIRONMENT=" + quoteEnv(request.Key.Environment),
 		"CHALK_RECORDER_POOL=" + quoteEnv(string(request.Key.Role)),
@@ -334,9 +381,10 @@ func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest) (string, e
 		"CHALK_RECORDER_IMAGE_DIGEST=" + quoteEnv(request.Release.ImageDigest),
 		"CHALK_RECORDER_BOOTSTRAP_ENDPOINT=" + quoteEnv(request.Release.BootstrapEndpoint),
 		"CHALK_RECORDER_BOOT_GENERATION=" + quoteEnv(strconv.FormatUint(request.BootGeneration, 10)),
+		"CHALK_RECORDER_GPU=" + quoteEnv(strconv.FormatBool(request.Release.GPU)),
 		"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE=" + quoteEnv("external-reconciler"),
 	}
-	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\nruncmd:\n  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
+	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\nruncmd:\n  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/bin/systemctl\", \"enable\", \"--now\", \"" + workerUnit + "\", \"chalk-recorder-renew.timer\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
 }
 
 func quoteEnv(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }
@@ -356,6 +404,23 @@ func validDigitalOceanTag(value string) bool {
 
 func validOptionalIdentifier(value string) bool {
 	return value == "" || strings.TrimSpace(value) == value && len(value) <= 128 && !strings.ContainsAny(value, "\r\n\x00")
+}
+
+func validSSHKeyIDs(values []int64) bool {
+	if len(values) > 8 {
+		return false
+	}
+	seen := make(map[int64]struct{}, len(values))
+	for _, value := range values {
+		if value <= 0 {
+			return false
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
 }
 
 func nodeMatchesEnsure(node recorderfleet.Node, request recorderfleet.EnsureNodeRequest, requireFirewall bool) bool {
@@ -398,7 +463,13 @@ type digitalOceanDroplet struct {
 	Image struct {
 		ID int64 `json:"id"`
 	} `json:"image"`
-	Tags []string `json:"tags"`
+	Tags     []string `json:"tags"`
+	Networks struct {
+		V4 []struct {
+			IPAddress string `json:"ip_address"`
+			Type      string `json:"type"`
+		} `json:"v4"`
+	} `json:"networks"`
 }
 
 type listDropletsResponse struct {
@@ -419,6 +490,7 @@ type createDropletRequest struct {
 	Tags       []string `json:"tags"`
 	UserData   string   `json:"user_data"`
 	VPCUUID    string   `json:"vpc_uuid,omitempty"`
+	SSHKeys    []int64  `json:"ssh_keys,omitempty"`
 }
 
 type createDropletResponse struct {

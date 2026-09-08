@@ -1113,6 +1113,22 @@ type RecordingTranscriptionSourceChunk struct {
 	ObjectEtag            pgtype.Text `json:"object_etag"`
 }
 
+type ShowcaseDatasetRegistry struct {
+	DatasetID        string             `json:"dataset_id"`
+	Product          string             `json:"product"`
+	DatasetVersion   string             `json:"dataset_version"`
+	OrganizationKey  string             `json:"organization_key"`
+	OrganizationID   pgtype.UUID        `json:"organization_id"`
+	OwnerUserID      pgtype.UUID        `json:"owner_user_id"`
+	State            string             `json:"state"`
+	ManifestSha256   []byte             `json:"manifest_sha256"`
+	AssetsSha256     []byte             `json:"assets_sha256"`
+	Counts           []byte             `json:"counts"`
+	PendingAssetKeys []byte             `json:"pending_asset_keys"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Space struct {
 	ID                            pgtype.UUID        `json:"id"`
 	Name                          string             `json:"name"`

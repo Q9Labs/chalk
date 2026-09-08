@@ -1,0 +1,36 @@
+[Unit]
+Description=Chalk recorder render worker
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/chalk-recorder/worker.env
+
+[Service]
+Type=simple
+User=chalk-recorder
+Group=chalk-recorder
+Environment=HOME=/var/lib/chalk-recorder
+EnvironmentFile=/etc/chalk-recorder/worker.env
+EnvironmentFile=/etc/chalk-recorder/render.env
+RuntimeDirectory=chalk-recorder
+RuntimeDirectoryMode=0700
+ExecStart=/opt/chalk-recorder/current/bin/recorder-render --run --frame-concurrency 8
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=5min
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/run/chalk-recorder /var/lib/chalk-recorder
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

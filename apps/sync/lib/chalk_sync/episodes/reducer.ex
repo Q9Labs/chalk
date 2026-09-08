@@ -722,8 +722,10 @@ defmodule ChalkSync.Episodes.Reducer do
     if {from, to} in [
          {"starting", "recording"},
          {"starting", "failed"},
+         {"starting", "stopped"},
          {"recording", "stopping"},
          {"recording", "failed"},
+         {"recording", "stopped"},
          {"stopping", "stopped"},
          {"stopping", "failed"}
        ], do: :ok, else: {:error, :invalid_transition}

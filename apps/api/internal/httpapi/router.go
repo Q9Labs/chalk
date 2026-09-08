@@ -59,7 +59,6 @@ type Options struct {
 	RecorderFleetVerifier      RecorderFleetControllerVerifier
 	RecorderFleetEnvironment   string
 	RecorderWorkerVerifier     RecorderWorkerVerifier
-	RecorderWorkerReadiness    ReadinessChecker
 	Authentication             AuthenticationService
 	RecentAuth                 RecentAuthProvider
 	AccountTenants             AccountTenantService
@@ -142,7 +141,7 @@ func NewRouter(options Options) http.Handler {
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
-	r.Get("/readyz", handleReady(options.Readiness, options.RecorderWorkerReadiness, options.Capabilities))
+	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}
@@ -174,7 +173,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReady(checker ReadinessChecker, recorderWorkerReadiness ReadinessChecker, capabilities CapabilityStatus) http.HandlerFunc {
+func handleReady(checker ReadinessChecker, capabilities CapabilityStatus) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if checker == nil {
 			writeReadinessError(w, capabilities, "postgres")
@@ -188,11 +187,6 @@ func handleReady(checker ReadinessChecker, recorderWorkerReadiness ReadinessChec
 			writeReadinessError(w, capabilities, "postgres")
 			return
 		}
-		if capabilities.Recording && (recorderWorkerReadiness == nil || recorderWorkerReadiness.Check(ctx) != nil) {
-			writeReadinessError(w, capabilities, "recorder_pool")
-			return
-		}
-
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status": "ok",
 			"dependencies": map[string]string{

@@ -173,7 +173,8 @@ defmodule ChalkSync.RecordingFoundationTest do
     assert recovery.snapshot["recording"]["status"] == "recording"
   end
 
-  test "stop acknowledgement leaves stopping until fenced capture completion", context do
+  test "stop acknowledgement accepts a recovered capture epoch and fences an older callback",
+       context do
     {:ok, start} =
       Operation.new("stop_completion_recording_start", :start_recording, %{
         "recordingId" => @recording_id
@@ -244,7 +245,7 @@ defmodule ChalkSync.RecordingFoundationTest do
         "stop_completion_capture_stopped",
         @recording_id,
         pending_stop.external_operation_id,
-        3
+        4
       )
 
     assert {:ok, %{result: :pending} = pending_completion} =

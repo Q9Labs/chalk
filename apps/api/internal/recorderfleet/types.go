@@ -62,10 +62,7 @@ type Demand struct {
 	ObservedAt        time.Time `json:"observed_at"`
 }
 
-func (d Demand) Validate(maxNodes int) error {
-	if d.DesiredNodes > maxNodes {
-		return ErrCapacityExceeded
-	}
+func (d Demand) Validate() error {
 	if strings.TrimSpace(d.Revision) == "" || len(d.Revision) > 128 || d.DesiredNodes < 0 || d.ScheduledPrewarms < 0 || d.HeldStarts < 0 || d.QueuedJobs < 0 || d.ObservedAt.IsZero() {
 		return ErrInvalidDemand
 	}

@@ -14,6 +14,7 @@ import (
 
 func TestAllocateGeneratesServerOwnedObjectAndOpaqueToken(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
+	allocationID := "00000000-0000-4000-8000-000000000006"
 	store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}}
 	repository := &repositoryStub{}
 	service, err := recordingobjects.NewService(objectstorage.NewService(store), repository, recordingobjects.Config{Now: func() time.Time { return now }})
@@ -22,7 +23,7 @@ func TestAllocateGeneratesServerOwnedObjectAndOpaqueToken(t *testing.T) {
 	}
 	checksum := bytesOf(32, 3)
 	result, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{
-		Authority: testAuthority(), SequenceNumber: 7, ExpectedByteSize: 128,
+		Authority: testAuthority(), AllocationID: allocationID, SequenceNumber: 7, ExpectedByteSize: 128,
 		Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10,
 		ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream",
 		EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute),
@@ -33,7 +34,8 @@ func TestAllocateGeneratesServerOwnedObjectAndOpaqueToken(t *testing.T) {
 	if result.UploadToken == "" || len(repository.allocation.TokenHash) != 32 || strings.Contains(string(repository.allocation.TokenHash), result.UploadToken) {
 		t.Fatalf("token persistence leaked raw token: result=%q hash=%x", result.UploadToken, repository.allocation.TokenHash)
 	}
-	if !strings.Contains(store.uploadInput.Key, "/capture/3/bundles/7/") {
+	expectedKey := "temporary/recordings/00000000-0000-4000-8000-000000000003/capture/3/bundles/7/" + allocationID + ".bundle"
+	if store.uploadInput.Key != expectedKey || repository.allocation.ObjectKey != expectedKey {
 		t.Fatalf("server object key = %q, upload = %#v", store.uploadInput.Key, result.UploadURL)
 	}
 	if store.uploadInput.ContentLength != 128 || store.uploadInput.ChecksumSHA256 != base64.StdEncoding.EncodeToString(checksum) || !store.uploadInput.IfNoneMatch {
@@ -126,6 +128,68 @@ func TestReserveAssignsSequenceAndFinalizeBindsFacts(t *testing.T) {
 	}
 }
 
+func TestReserveReplaysLegacyCanonicalObjectKeyThroughFinalize(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	checksum := bytesOf(32, 3)
+	store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}}
+	legacyKey := "recordings/00000000-0000-4000-8000-000000000003/capture/3/bundles/4/00000000-0000-4000-8000-000000000006.bundle"
+	repository := &repositoryStub{allocation: recordingobjects.Allocation{
+		ID:                      "00000000-0000-4000-8000-000000000006",
+		ReservationRequestID:    "00000000-0000-4000-8000-000000000007",
+		AllocationVersion:       1,
+		Authority:               testAuthority(),
+		SequenceNumber:          4,
+		ObjectKey:               legacyKey,
+		EncryptionContextDigest: bytesOf(32, 4),
+		State:                   "reserved",
+	}}
+	service, err := recordingobjects.NewService(objectstorage.NewService(store), repository, recordingobjects.Config{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	reserved, err := service.Reserve(context.Background(), recordingobjects.ReserveInput{
+		Authority:               testAuthority(),
+		AllocationID:            repository.allocation.ID,
+		ReservationRequestID:    repository.allocation.ReservationRequestID,
+		EncryptionContextDigest: bytesOf(32, 4),
+	})
+	if err != nil || reserved.ObjectKey != legacyKey {
+		t.Fatalf("replay legacy reservation: allocation=%#v error=%v", reserved, err)
+	}
+	if _, err := service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10}); err != nil {
+		t.Fatalf("finalize legacy reservation: %v", err)
+	}
+	if store.uploadInput.Key != legacyKey || repository.allocation.ObjectKey != legacyKey {
+		t.Fatalf("legacy key changed during finalize: upload=%q allocation=%q", store.uploadInput.Key, repository.allocation.ObjectKey)
+	}
+}
+
+func TestReserveRejectsNoncanonicalPersistedObjectKey(t *testing.T) {
+	repository := &repositoryStub{allocation: recordingobjects.Allocation{
+		ID:                      "00000000-0000-4000-8000-000000000006",
+		ReservationRequestID:    "00000000-0000-4000-8000-000000000007",
+		AllocationVersion:       1,
+		Authority:               testAuthority(),
+		SequenceNumber:          4,
+		ObjectKey:               "archive/recordings/00000000-0000-4000-8000-000000000003/capture/3/bundles/4/00000000-0000-4000-8000-000000000006.bundle",
+		EncryptionContextDigest: bytesOf(32, 4),
+		State:                   "reserved",
+	}}
+	service, err := recordingobjects.NewService(objectstorage.NewService(&storeStub{}), repository, recordingobjects.Config{})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	_, err = service.Reserve(context.Background(), recordingobjects.ReserveInput{
+		Authority:               testAuthority(),
+		AllocationID:            repository.allocation.ID,
+		ReservationRequestID:    repository.allocation.ReservationRequestID,
+		EncryptionContextDigest: bytesOf(32, 4),
+	})
+	if !errors.Is(err, recordingobjects.ErrInvalidRequest) {
+		t.Fatalf("noncanonical persisted object key error = %v, want invalid request", err)
+	}
+}
+
 type storeStub struct {
 	uploadURL   objectstorage.SignedURL
 	uploadInput objectstorage.CreateUploadURLInput
@@ -164,7 +228,7 @@ func (r *repositoryStub) ReserveAllocation(_ context.Context, input recordingobj
 	if r.allocation.ID != "" {
 		return recordingobjects.Allocation{}, recordingobjects.ErrAllocationConflict
 	}
-	r.allocation = recordingobjects.Allocation{ID: "00000000-0000-4000-8000-000000000006", ReservationRequestID: input.ReservationRequestID, AllocationVersion: 1, Authority: input.Authority, SequenceNumber: 4, ObjectKey: "recordings/00000000-0000-4000-8000-000000000003/capture/3/bundles/4/00000000-0000-4000-8000-000000000006.bundle", EncryptionContextDigest: input.EncryptionContextDigest, State: "reserved"}
+	r.allocation = recordingobjects.Allocation{ID: "00000000-0000-4000-8000-000000000006", ReservationRequestID: input.ReservationRequestID, AllocationVersion: 1, Authority: input.Authority, SequenceNumber: 4, ObjectKey: "temporary/recordings/00000000-0000-4000-8000-000000000003/capture/3/bundles/4/00000000-0000-4000-8000-000000000006.bundle", EncryptionContextDigest: input.EncryptionContextDigest, State: "reserved"}
 	return r.allocation, nil
 }
 func (r *repositoryStub) GetAllocationByReservationRequest(_ context.Context, requestID string) (recordingobjects.Allocation, error) {

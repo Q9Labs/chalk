@@ -199,6 +199,13 @@ func (s Service) CompleteCapture(ctx context.Context, input LeaseInput) (Job, er
 	return s.repository.CompleteCapture(ctx, input, renderJobID)
 }
 
+func (s Service) RelinquishCapture(ctx context.Context, input LeaseInput) (Job, error) {
+	if err := ValidateLeaseInput(input); err != nil {
+		return Job{}, err
+	}
+	return s.repository.RelinquishCapture(ctx, input)
+}
+
 func (s Service) Fail(ctx context.Context, input FailureInput) (Job, error) {
 	if err := ValidateLeaseInput(input.LeaseInput); err != nil {
 		return Job{}, err

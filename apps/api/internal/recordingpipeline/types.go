@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	MaximumEpisodes            = 20
+	MaximumEpisodes            = 10
 	MaximumParticipants        = 100
 	MinimumEpisodeParticipants = 1
 	MaximumEpisodeParticipants = 10
@@ -363,6 +363,7 @@ type Repository interface {
 	Heartbeat(ctx context.Context, input LeaseInput) (Job, error)
 	Complete(ctx context.Context, input LeaseInput) (Job, error)
 	CompleteCapture(ctx context.Context, input LeaseInput, renderJobID utilities.ID) (Job, error)
+	RelinquishCapture(ctx context.Context, input LeaseInput) (Job, error)
 	Fail(ctx context.Context, input FailureInput) (Job, error)
 	RecoverExpired(ctx context.Context) ([]Job, error)
 	ListDeadLetters(ctx context.Context, tenantID utilities.ID, limit int) ([]Job, error)

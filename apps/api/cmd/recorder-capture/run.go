@@ -28,11 +28,11 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 	if strings.TrimSpace(controlPlaneURL) == "" {
 		return errors.New("--control-plane-url or CHALK_RECORDER_CONTROL_PLANE_URL is required")
 	}
-	tlsConfig, err := mtls.LoadClientConfig(workerCertificate, workerKey, serverCA, serverName)
+	controlTransport, err := mtls.NewReloadingClientTransport(workerCertificate, workerKey, serverCA, serverName)
 	if err != nil {
 		return fmt.Errorf("load recorder worker mTLS config: %w", err)
 	}
-	controlHTTP := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true, MaxIdleConns: 8, MaxIdleConnsPerHost: 4, IdleConnTimeout: time.Minute}, Timeout: 30 * time.Second}
+	controlHTTP := &http.Client{Transport: controlTransport, Timeout: 30 * time.Second}
 	controlBase, err := parseCommandBaseURL(controlPlaneURL)
 	if err != nil {
 		return err

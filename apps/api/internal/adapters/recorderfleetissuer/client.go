@@ -12,17 +12,18 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mtls"
+	"github.com/q9labs/chalk/apps/api/internal/recorderbootstrapprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 const (
-	BootstrapSchemaVersion = "recorder_fleet_issuer_bootstrap.v1"
-	RevokeSchemaVersion    = "recorder_fleet_issuer_revoke.v1"
+	BootstrapSchemaVersion = recorderbootstrapprotocol.ControllerBootstrapSchemaVersion
+	RevokeSchemaVersion    = recorderbootstrapprotocol.ControllerRevokeSchemaVersion
 
-	bootstrapPath       = "/v1/recorder-fleet/bootstrap"
-	revokePath          = "/v1/recorder-fleet/revoke"
+	bootstrapPath       = recorderbootstrapprotocol.ControllerBootstrapPath
+	revokePath          = recorderbootstrapprotocol.ControllerRevokePath
 	maximumResponseSize = 1 << 20
 	defaultTimeout      = 30 * time.Second
 )

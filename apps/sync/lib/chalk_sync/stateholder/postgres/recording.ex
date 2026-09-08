@@ -36,16 +36,36 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
     stop_operation_uuid = Scope.uuid(stop_operation_id)
 
     case lock(connection, episode, recording_id) do
-      [["stopping", _generation, metadata, _start_id, stop_id]]
-      when stop_id == stop_operation_uuid ->
+      [[recording_status, _generation, metadata, _start_id, stop_id]] ->
         validate_capture_stopped(
           connection,
           episode,
           recording_id,
           stop_operation_id,
+          stop_operation_uuid,
+          recording_status,
+          stop_id,
           metadata,
           capture_epoch
         )
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  def prepare_capture_failed(connection, episode, operation) do
+    recording_id = operation.payload["recordingId"]
+    start_operation_id = operation.payload["startOperationId"]
+    start_operation_uuid = Scope.uuid(start_operation_id)
+
+    case lock(connection, episode, recording_id) do
+      [[status, _generation, _metadata, start_id, _stop_id]]
+      when status in ["starting", "recording", "stopping"] and
+             start_id == start_operation_uuid ->
+        with :ok <- validate_start_applied(connection, episode, start_operation_id) do
+          {:ok, %{recording_id: recording_id, target: nil, sources: []}}
+        end
 
       _ ->
         {:error, :stale_recording_fence}
@@ -101,11 +121,41 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
     stop_operation_uuid = Scope.uuid(stop_operation_id)
 
     case lock(connection, episode, recording_id) do
-      [["stopping", _generation, metadata, _start_id, stop_id]]
-      when stop_id == stop_operation_uuid ->
-        if capture_epoch(metadata) == capture_epoch,
-          do: :ok,
-          else: {:error, :stale_recording_fence}
+      [[recording_status, _generation, metadata, _start_id, stop_id]] ->
+        case validate_capture_stopped(
+               connection,
+               episode,
+               recording_id,
+               stop_operation_id,
+               stop_operation_uuid,
+               recording_status,
+               stop_id,
+               metadata,
+               capture_epoch
+             ) do
+          {:ok, _prepared} -> :ok
+          error -> error
+        end
+
+      _ ->
+        {:error, :stale_recording_fence}
+    end
+  end
+
+  def validate_capture_epoch(
+        connection,
+        episode,
+        %{name: :recording_capture_failed} = external
+      ) do
+    recording_id = external.payload["recordingId"]
+    start_operation_id = external.payload["startOperationId"]
+    start_operation_uuid = Scope.uuid(start_operation_id)
+
+    case lock(connection, episode, recording_id) do
+      [[status, _generation, _metadata, start_id, _stop_id]]
+      when status in ["starting", "recording", "stopping"] and
+             start_id == start_operation_uuid ->
+        validate_start_applied(connection, episode, start_operation_id)
 
       _ ->
         {:error, :stale_recording_fence}
@@ -113,6 +163,13 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
   end
 
   def validate_capture_epoch(_connection, _episode, _external), do: :ok
+
+  def stopped?(connection, episode, recording_id) do
+    match?(
+      [["stopped", _generation, _metadata, _start_id, _stop_id]],
+      lock(connection, episode, recording_id)
+    )
+  end
 
   defp lock(connection, episode, recording_id) do
     Postgrex.query!(
@@ -157,19 +214,36 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
          episode,
          recording_id,
          stop_operation_id,
+         stop_operation_uuid,
+         recording_status,
+         recording_stop_id,
          metadata,
          capture_epoch
        ) do
-    case lock_external_operation(connection, episode, stop_operation_id) do
-      %{name: :stop_recording, status: :applied} ->
-        if capture_epoch(metadata) == capture_epoch do
-          {:ok, %{recording_id: recording_id, target: nil, sources: []}}
-        else
-          {:error, :stale_recording_fence}
-        end
+    source_operation = lock_external_operation(connection, episode, stop_operation_id)
 
-      _ ->
-        {:error, :stale_recording_fence}
+    valid_source =
+      case source_operation do
+        %{
+          name: :stop_recording,
+          status: :applied,
+          recording_id: ^recording_id
+        } ->
+          recording_status in ["stopping", "stopped"] and
+            recording_stop_id == stop_operation_uuid
+
+        %{name: name, recording_id: ^recording_id}
+        when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] ->
+          recording_status in ["starting", "recording", "stopping", "stopped"]
+
+        _ ->
+          false
+      end
+
+    if valid_source and capture_epoch(metadata) <= capture_epoch do
+      {:ok, %{recording_id: recording_id, target: nil, sources: []}}
+    else
+      {:error, :stale_recording_fence}
     end
   end
 

@@ -391,7 +391,10 @@ type PionCaptureAttempt struct {
 	config      CaptureAttemptConfig
 
 	running      bool
+	closing      bool
 	closed       bool
+	closeDone    chan struct{}
+	closeErr     error
 	bootstrapped bool
 	ready        bool
 	readyEvent   CaptureReadyEvent
@@ -421,25 +424,16 @@ func (a *PionCaptureAttempt) RenewLease(lease capturesignaling.WorkerLease) erro
 	return nil
 }
 
-func (a *PionCaptureAttempt) Close() error {
+func (a *PionCaptureAttempt) Close(ctx context.Context) error {
 	if a == nil {
 		return nil
 	}
-	a.mu.Lock()
-	if a.closed {
-		a.mu.Unlock()
-		return nil
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	a.closed = true
-	bootstrapped := a.bootstrapped
-	a.mu.Unlock()
-	var closeErr error
-	if bootstrapped {
-		closeCtx, cancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
-		closeErr = a.coordinator.Close(closeCtx, true)
-		cancel()
-	}
-	return errors.Join(closeErr, a.peer.Close())
+	closeCtx, cancel := context.WithTimeout(ctx, a.config.CloseTimeout)
+	defer cancel()
+	return a.closeLocal(closeCtx, nil, recordingbundle.CloseReasonExplicit)
 }
 
 func (a *PionCaptureAttempt) Run(ctx context.Context) error {
@@ -450,7 +444,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	a.mu.Lock()
-	if a.running || a.closed {
+	if a.running || a.closing || a.closed {
 		a.mu.Unlock()
 		return ErrInvalidCaptureAttempt
 	}
@@ -730,20 +724,15 @@ func sameCaptureBinding(left, right CaptureMediaTrack) bool {
 }
 
 func (a *PionCaptureAttempt) finishSuccess(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan) error {
-	var result error
-	if writer != nil {
-		result = writer.close(recordingbundle.CloseReasonFinalStop, a.config.Now())
-	}
-	closeCtx, cancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
 	// A planned stop is terminal for this capture epoch. Active publishers may
 	// still have tracks when an Episode ends, and the provider contract requires
 	// force for that close. Cleanup uses the same value so a retry preserves the
 	// durable signaling command fingerprint.
-	providerErr := a.coordinator.Close(closeCtx, true)
+	closeCtx, cancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
+	result := a.closeLocal(closeCtx, writer, recordingbundle.CloseReasonFinalStop)
 	cancel()
-	peerErr := a.peer.Close()
-	if result = errors.Join(result, providerErr, peerErr); result != nil {
-		return a.finishFailure(result, nil)
+	if result != nil {
+		return result
 	}
 	stopID := captureLifecycleKey("stopped", a.authority.RecordingID.String(), uint64(a.authority.CaptureEpoch))
 	lease := a.currentLease()
@@ -759,28 +748,49 @@ func (a *PionCaptureAttempt) finishSuccess(ctx context.Context, writer *captureB
 	if err != nil {
 		return fmt.Errorf("emit capture stopped: %w", err)
 	}
-	a.mu.Lock()
-	a.closed = true
-	a.mu.Unlock()
 	return nil
 }
 
 func (a *PionCaptureAttempt) finishFailure(cause error, writer *captureBundleWriter) error {
-	result := cause
-	if writer != nil {
-		result = errors.Join(result, writer.close(recordingbundle.CloseReasonExplicit, a.config.Now()))
-	}
 	closeCtx, cancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
+	closeErr := a.closeLocal(closeCtx, writer, recordingbundle.CloseReasonExplicit)
+	cancel()
+	return errors.Join(cause, closeErr)
+}
+
+func (a *PionCaptureAttempt) closeLocal(ctx context.Context, writer *captureBundleWriter, reason recordingbundle.CloseReason) error {
 	a.mu.Lock()
+	if a.closing || a.closed {
+		done := a.closeDone
+		a.mu.Unlock()
+		select {
+		case <-done:
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return a.closeErr
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	a.closing = true
+	a.closeDone = make(chan struct{})
 	bootstrapped := a.bootstrapped
 	a.mu.Unlock()
-	if bootstrapped {
-		result = errors.Join(result, a.coordinator.Close(closeCtx, true))
+
+	var result error
+	if writer != nil {
+		result = writer.closeWithContext(ctx, reason, a.config.Now())
 	}
-	cancel()
+	if bootstrapped {
+		result = errors.Join(result, a.coordinator.Close(ctx, true))
+	}
 	result = errors.Join(result, a.peer.Close())
+	result = errors.Join(result, ctx.Err())
 	a.mu.Lock()
+	a.closeErr = result
+	a.closing = false
 	a.closed = true
+	close(a.closeDone)
 	a.mu.Unlock()
 	return result
 }
@@ -812,11 +822,19 @@ func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[strin
 		readerCancel, err := startCaptureReader(readerCtx, peer, mid, track, deadline, events)
 		if err != nil {
 			cancel()
+			for _, stop := range cancels {
+				stop()
+			}
 			return nil, nil, err
 		}
 		cancels[mid] = readerCancel
 	}
-	return cancels, cancel, nil
+	return cancels, func() {
+		cancel()
+		for _, stop := range cancels {
+			stop()
+		}
+	}, nil
 }
 
 func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track CaptureMediaTrack, deadline time.Duration, events chan<- captureRuntimeEvent) (func(), error) {
@@ -824,8 +842,10 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 		return nil, ErrInvalidCaptureAttempt
 	}
 	readerCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
 	video := track.CaptureTrack().Kind == captureplane.TrackKindVideo
 	go func() {
+		defer close(done)
 		defer cancel()
 		var lossFeedback captureVideoLossFeedback
 		for {
@@ -864,7 +884,10 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 			}
 		}
 	}()
-	return cancel, nil
+	return func() {
+		cancel()
+		<-done
+	}, nil
 }
 
 type captureVideoLossFeedback struct {
@@ -1421,7 +1444,11 @@ func (w *captureBundleWriter) addTerminalGapWithContext(ctx context.Context, now
 func (w *captureBundleWriter) close(reason recordingbundle.CloseReason, now time.Time) error {
 	storageCtx, cancel := context.WithTimeout(context.Background(), w.attempt.config.CloseTimeout)
 	defer cancel()
-	if err := w.addTerminalGapWithContext(storageCtx, now); err != nil {
+	return w.closeWithContext(storageCtx, reason, now)
+}
+
+func (w *captureBundleWriter) closeWithContext(ctx context.Context, reason recordingbundle.CloseReason, now time.Time) error {
+	if err := w.addTerminalGapWithContext(ctx, now); err != nil {
 		return err
 	}
 	if w.assembler != nil {
@@ -1435,13 +1462,13 @@ func (w *captureBundleWriter) close(reason recordingbundle.CloseReason, now time
 			}
 		}
 		if w.assembler.Closed() {
-			if err := w.persist(storageCtx); err != nil {
+			if err := w.persist(ctx); err != nil {
 				return err
 			}
 		}
 	}
 	if len(w.pendingGaps) > 0 {
-		if err := w.ensureAssembler(storageCtx); err != nil {
+		if err := w.ensureAssembler(ctx); err != nil {
 			return err
 		}
 		endMono, endMedia := w.controlEventClocks(now)
@@ -1451,7 +1478,7 @@ func (w *captureBundleWriter) close(reason recordingbundle.CloseReason, now time
 		if err := w.assembler.Close(reason, endMono, endMedia); err != nil {
 			return err
 		}
-		if err := w.persist(storageCtx); err != nil {
+		if err := w.persist(ctx); err != nil {
 			return err
 		}
 	}

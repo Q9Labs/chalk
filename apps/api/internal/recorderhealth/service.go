@@ -34,7 +34,7 @@ func (s Service) CheckRecorderPool(ctx context.Context, role workeridentity.Role
 		return err
 	}
 	health, err := s.repository.GetPoolHealth(ctx, poolRole)
-	if err != nil || !health.AdmissionReady(s.now().UTC(), s.maxAge) {
+	if err != nil || !health.Healthy(s.now().UTC(), s.maxAge) {
 		return ErrPoolUnavailable
 	}
 	return nil

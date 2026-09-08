@@ -88,6 +88,10 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
        when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
        do: :ok
 
+  defp validate_finalization_episode(%{name: :recording_capture_stopped}, %{status: status})
+       when status in ["active", "ending", "ended"],
+       do: :ok
+
   defp validate_finalization_episode(%{name: name}, %{status: "active"})
        when name not in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
        do: :ok
@@ -188,7 +192,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
          state,
          {:confirmed, :local}
        )
-       when name in [:recording_capture_ready, :recording_capture_stopped],
+       when name in [
+              :recording_capture_ready,
+              :recording_capture_stopped,
+              :recording_capture_failed
+            ],
        do: finalize_confirmed_operation(connection, episode, external, state)
 
   defp finalize_pending_operation(
@@ -311,7 +319,24 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   defp finalize_pending_operation(connection, _episode, _external, _state, _outcome),
     do: Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
 
-  defp finalize_confirmed_operation(connection, episode, external, state) do
+  defp finalize_confirmed_operation(
+         connection,
+         episode,
+         %{name: :recording_capture_stopped} = external,
+         state
+       ) do
+    if Recording.stopped?(connection, episode, external.recording_id) do
+      mark_external_applied(connection, episode, external, nil, nil)
+      ExternalOperationDecision.build(%{external | status: :applied}, :original, state)
+    else
+      finalize_confirmed_operation_fact(connection, episode, external, state)
+    end
+  end
+
+  defp finalize_confirmed_operation(connection, episode, external, state),
+    do: finalize_confirmed_operation_fact(connection, episode, external, state)
+
+  defp finalize_confirmed_operation_fact(connection, episode, external, state) do
     case local_operation_outcome(external, state) do
       {:ok, event_name, payload} ->
         finalize_pending_operation(
@@ -565,6 +590,15 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
      }}
   end
 
+  defp expected_fact(%{name: :recording_capture_failed} = external, _state) do
+    {:recording_status_changed,
+     %{
+       "recording_id" => external.recording_id,
+       "status" => "failed",
+       "failure_code" => external.payload["failureCode"]
+     }}
+  end
+
   defp expected_fact(%{name: :end_episode}, _state),
     do: {:episode_ended, %{"reason" => "ended_by_participant"}}
 
@@ -696,8 +730,19 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp update_external_products(connection, episode, %{name: name} = external, event, _state)
-       when name in [:recording_capture_ready, :recording_capture_stopped],
-       do: finalize_recording_product(connection, episode, external, event.payload["status"], nil)
+       when name in [
+              :recording_capture_ready,
+              :recording_capture_stopped,
+              :recording_capture_failed
+            ],
+       do:
+         finalize_recording_product(
+           connection,
+           episode,
+           external,
+           event.payload["status"],
+           event.payload["failure_code"]
+         )
 
   defp update_external_products(
          connection,
@@ -799,6 +844,17 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     end
   end
 
+  defp finalize_recording_product(connection, episode, external, "failed", failure_code) do
+    params =
+      Scope.episode(episode) ++
+        [Scope.uuid(external.recording_id), failure_code]
+
+    case Postgrex.query!(connection, SQL.fail_recording(), params).rows do
+      [[_id]] -> :ok
+      [] -> Postgrex.rollback(connection, {:error, :invalid_state})
+    end
+  end
+
   defp finalize_recording_product(connection, episode, external, status, failure_code) do
     params =
       Scope.episode(episode) ++
@@ -841,7 +897,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
               :start_recording,
               :stop_recording,
               :recording_capture_ready,
-              :recording_capture_stopped
+              :recording_capture_stopped,
+              :recording_capture_failed
             ] do
     payload = %{
       "recording_id" => external.recording_id,

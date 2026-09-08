@@ -33,6 +33,7 @@ type recordingPipelineQuerier interface {
 	GetRecordingReservationByKey(context.Context, sqlc.GetRecordingReservationByKeyParams) (sqlc.GetRecordingReservationByKeyRow, error)
 	ExtendRecordingReservation(context.Context, sqlc.ExtendRecordingReservationParams) (sqlc.ExtendRecordingReservationRow, error)
 	FailRecordingJob(context.Context, sqlc.FailRecordingJobParams) (sqlc.FailRecordingJobRow, error)
+	RelinquishCaptureRecordingJob(context.Context, sqlc.RelinquishCaptureRecordingJobParams) (sqlc.RelinquishCaptureRecordingJobRow, error)
 	GetRecordingPipeline(context.Context, sqlc.GetRecordingPipelineParams) (sqlc.GetRecordingPipelineRow, error)
 	GetRecordingPipelineStopAuthority(context.Context, sqlc.GetRecordingPipelineStopAuthorityParams) (sqlc.GetRecordingPipelineStopAuthorityRow, error)
 	RequestRecordingStop(context.Context, sqlc.RequestRecordingStopParams) (sqlc.RequestRecordingStopRow, error)
@@ -43,6 +44,7 @@ type recordingPipelineQuerier interface {
 	InsertRecordingPresentationAsset(context.Context, sqlc.InsertRecordingPresentationAssetParams) (sqlc.RecordingPresentationAsset, error)
 	ListRecordingDeadLetters(context.Context, sqlc.ListRecordingDeadLettersParams) ([]sqlc.RecordingJob, error)
 	ListRecordingJobsForReconciliation(context.Context, sqlc.ListRecordingJobsForReconciliationParams) ([]sqlc.RecordingJob, error)
+	LockRecordingCapacity(context.Context) (int16, error)
 	ExpireRecordingReservations(context.Context, pgtype.Timestamptz) ([]sqlc.ExpireRecordingReservationsRow, error)
 	RecoverExpiredRecordingJobs(context.Context, int32) ([]sqlc.RecoverExpiredRecordingJobsRow, error)
 	ReleaseRecordingReservation(context.Context, sqlc.ReleaseRecordingReservationParams) (sqlc.ReleaseRecordingReservationRow, error)
@@ -173,25 +175,23 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 		AvailableAt:           timestamptzValue(availableAt),
 		AttemptLimit:          recordingpipeline.DefaultCaptureAttemptLimit,
 	}
-	var row sqlc.CreateRecordingReservationRow
-	var err error
-	capacityUnavailable := false
 	if r.transactor == nil {
-		if r.queries == nil {
-			return recordingpipeline.Reservation{}, errors.New("recording pipeline repository has no query executor")
-		}
-		row, err = r.queries.CreateRecordingReservation(ctx, params)
-		capacityUnavailable = errors.Is(err, pgx.ErrNoRows)
-	} else {
-		err = r.transaction(ctx, func(queries recordingPipelineQuerier) error {
-			row, err = queries.CreateRecordingReservation(ctx, params)
-			if err != nil {
-				capacityUnavailable = errors.Is(err, pgx.ErrNoRows)
-				return err
-			}
-			return r.insertRecordingPresentationBaseline(ctx, queries, input)
-		})
+		return recordingpipeline.Reservation{}, errors.New("recording reservation admission requires a transaction")
 	}
+	var row sqlc.CreateRecordingReservationRow
+	capacityUnavailable := false
+	err := r.transaction(ctx, func(queries recordingPipelineQuerier) error {
+		if _, err := queries.LockRecordingCapacity(ctx); err != nil {
+			return fmt.Errorf("lock recording capacity: %w", err)
+		}
+		var err error
+		row, err = queries.CreateRecordingReservation(ctx, params)
+		if err != nil {
+			capacityUnavailable = errors.Is(err, pgx.ErrNoRows)
+			return err
+		}
+		return r.insertRecordingPresentationBaseline(ctx, queries, input)
+	})
 	if capacityUnavailable {
 		return recordingpipeline.Reservation{}, recordingpipeline.ErrRecordingCapacityUnavailable
 	}
@@ -626,6 +626,27 @@ func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpi
 	return job, nil
 }
 
+func (r RecordingPipelineRepository) RelinquishCapture(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	row, err := r.queries.RelinquishCaptureRecordingJob(ctx, sqlc.RelinquishCaptureRecordingJobParams{
+		ID:                uuid(input.JobID),
+		AttemptCount:      int32(input.AttemptCount),
+		FencingGeneration: input.FencingGeneration,
+		LeaseToken:        requiredTextValue(input.LeaseToken),
+		LeaseOwner:        requiredTextValue(input.LeaseOwner),
+		CaptureEpoch:      input.CaptureEpoch,
+		EnvelopeDigest:    input.EnvelopeDigest,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
+	}
+	if err != nil {
+		return recordingpipeline.Job{}, fmt.Errorf("relinquish capture recording job: %w", err)
+	}
+	job := mapRelinquishedCaptureJob(row)
+	job.CaptureEpoch = input.CaptureEpoch
+	return job, nil
+}
+
 func (r RecordingPipelineRepository) RecoverExpired(ctx context.Context) ([]recordingpipeline.Job, error) {
 	rows, err := r.queries.RecoverExpiredRecordingJobs(ctx, int32(recordingpipeline.MaximumRenderDuration/time.Second))
 	if err != nil {
@@ -779,7 +800,7 @@ func compareArtifactReplay(row sqlc.RecordingArtifact, input recordingpipeline.A
 }
 
 func (r RecordingPipelineRepository) transaction(ctx context.Context, work func(recordingPipelineQuerier) error) error {
-	tx, err := r.transactor.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := r.transactor.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return fmt.Errorf("begin recording pipeline transaction: %w", err)
 	}
@@ -1041,6 +1062,32 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 }
 
 func mapFailJob(row sqlc.FailRecordingJobRow) recordingpipeline.Job {
+	return recordingpipeline.Job{
+		ID:                   utilities.IDFromBytes(row.ID.Bytes),
+		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),
+		EpisodeID:            utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:          utilities.IDFromBytes(row.RecordingID.Bytes),
+		Kind:                 recordingpipeline.JobKind(row.Kind),
+		IdempotencyKey:       row.IdempotencyKey,
+		PayloadSchemaVersion: int(row.PayloadSchemaVersion),
+		State:                recordingpipeline.JobState(row.State),
+		Priority:             int(row.Priority),
+		AvailableAt:          timestamp(row.AvailableAt),
+		AttemptCount:         int(row.AttemptCount),
+		AttemptLimit:         int(row.AttemptLimit),
+		LeaseToken:           nullableTextPointer(row.LeaseToken),
+		LeaseOwner:           nullableTextPointer(row.LeaseOwner),
+		LeaseExpiresAt:       nullableTimestamp(row.LeaseExpiresAt),
+		FencingGeneration:    row.FencingGeneration,
+		ErrorCode:            nullableTextPointer(row.ErrorCode),
+		ErrorDetail:          nullableTextPointer(row.ErrorDetail),
+		TerminalAt:           nullableTimestamp(row.TerminalAt),
+		UpdatedAt:            timestamp(row.UpdatedAt),
+		CreatedAt:            timestamp(row.CreatedAt),
+	}
+}
+
+func mapRelinquishedCaptureJob(row sqlc.RelinquishCaptureRecordingJobRow) recordingpipeline.Job {
 	return recordingpipeline.Job{
 		ID:                   utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),

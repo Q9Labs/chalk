@@ -48,7 +48,7 @@ func runWorker(config renderWorkerConfig) error {
 	if err != nil {
 		return err
 	}
-	tlsConfig, err := mtls.LoadClientConfig(config.WorkerCertificate, config.WorkerKey, config.ServerCA, config.ServerName)
+	controlTransport, err := mtls.NewReloadingClientTransport(config.WorkerCertificate, config.WorkerKey, config.ServerCA, config.ServerName)
 	if err != nil {
 		return fmt.Errorf("load recorder render worker mTLS config: %w", err)
 	}
@@ -74,9 +74,7 @@ func runWorker(config renderWorkerConfig) error {
 	}
 	encoder := recorderworker.VideoEncoder(strings.TrimSpace(config.Encoder))
 
-	controlHTTP := &http.Client{Transport: &http.Transport{
-		TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true, MaxIdleConns: 8, MaxIdleConnsPerHost: 4, IdleConnTimeout: time.Minute,
-	}, Timeout: 30 * time.Second}
+	controlHTTP := &http.Client{Transport: controlTransport, Timeout: 30 * time.Second}
 	objectHTTP := &http.Client{Transport: &http.Transport{
 		Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, MaxIdleConns: 8, MaxIdleConnsPerHost: 4, IdleConnTimeout: time.Minute,
 		ResponseHeaderTimeout: 30 * time.Second, TLSClientConfig: nil,

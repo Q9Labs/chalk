@@ -35,6 +35,7 @@ type recorderWorkerServiceStub struct {
 	heartbeat       func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	complete        func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	completeCapture func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+	relinquish      func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	fail            func(context.Context, recordingpipeline.FailureInput) (recordingpipeline.Job, error)
 	bundle          func(context.Context, recordingpipeline.BundleInput) (recordingpipeline.Bundle, error)
 	artifact        func(context.Context, recordingpipeline.ArtifactInput) (recordingpipeline.Artifact, error)
@@ -71,6 +72,9 @@ func (s recorderWorkerServiceStub) CompleteCapture(ctx context.Context, input re
 		return s.completeCapture(ctx, input)
 	}
 	return s.complete(ctx, input)
+}
+func (s recorderWorkerServiceStub) RelinquishCapture(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	return s.relinquish(ctx, input)
 }
 func (s recorderWorkerServiceStub) Fail(ctx context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
 	return s.fail(ctx, input)
@@ -258,11 +262,41 @@ func TestRecorderWorkerLeaseEndpointsUseFencingAndProgressShape(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("fail status=%d body=%s", response.Code, response.Body.String())
 	}
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/capture/relinquish", body))
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("render relinquish status=%d body=%s", response.Code, response.Body.String())
+	}
 	complete := `{"job_id":"` + workerTestJob + `","attempt_count":1,"fencing_generation":2,"lease_token":"lease","lease_for_seconds":60,"capture_epoch":1,"envelope_digest":"` + workerTestDigest + `"}`
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/complete", complete))
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("complete status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestRecorderWorkerCaptureRelinquishUsesVerifiedLeaseAuthority(t *testing.T) {
+	var relinquished recordingpipeline.LeaseInput
+	service := recorderWorkerServiceStub{relinquish: func(_ context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		relinquished = input
+		job := recorderWorkerJobFixture(t, recordingpipeline.JobKindCapture)
+		job.State = recordingpipeline.JobStatePending
+		job.AttemptCount = input.AttemptCount - 1
+		job.LeaseToken = nil
+		job.LeaseOwner = nil
+		job.LeaseExpiresAt = nil
+		return job, nil
+	}}
+	router := recorderWorkerTestRouter(t, service, workeridentity.RoleCapture)
+	body := `{"job_id":"` + workerTestJob + `","attempt_count":1,"fencing_generation":2,"lease_token":"lease","lease_for_seconds":60,"capture_epoch":1,"envelope_digest":"` + workerTestDigest + `"}`
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/capture/relinquish", body))
+	if response.Code != http.StatusOK || relinquished.LeaseOwner != workerTestID || relinquished.AttemptCount != 1 || relinquished.FencingGeneration != 2 || relinquished.CaptureEpoch != 1 {
+		t.Fatalf("relinquish status=%d input=%#v body=%s", response.Code, relinquished, response.Body.String())
+	}
+	decoded := decodeRecorderWorkerJSON(t, response)
+	if decoded["state"] != string(recordingpipeline.JobStatePending) || decoded["attempt_count"] != float64(0) {
+		t.Fatalf("relinquish response = %#v", decoded)
 	}
 }
 

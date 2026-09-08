@@ -20,6 +20,14 @@ variable "node_size" {
   type = string
 }
 
+variable "region" {
+  type = string
+}
+
+variable "gpu" {
+  type = bool
+}
+
 variable "image_id" {
   type = number
 }

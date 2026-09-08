@@ -97,6 +97,13 @@ func (q operationQuerier) CreateRecording(ctx context.Context, arg sqlc.CreateRe
 	return recording, err
 }
 
+func (q operationQuerier) RelinquishCaptureRecordingJob(ctx context.Context, arg sqlc.RelinquishCaptureRecordingJobParams) (sqlc.RelinquishCaptureRecordingJobRow, error) {
+	startedAt := time.Now()
+	job, err := q.next.RelinquishCaptureRecordingJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "RelinquishCaptureRecordingJob", startedAt, err)
+	return job, err
+}
+
 func (q operationQuerier) CreateSpace(ctx context.Context, arg sqlc.CreateSpaceParams) (sqlc.CreateSpaceRow, error) {
 	startedAt := time.Now()
 	space, err := q.next.CreateSpace(ctx, arg)

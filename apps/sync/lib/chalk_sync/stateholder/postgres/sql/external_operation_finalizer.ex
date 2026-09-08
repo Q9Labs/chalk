@@ -133,7 +133,21 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
       completed_at = case when $5 in ('stopped', 'failed') then now() else null end,
       updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
-      and recording_id = $4 and status in ('starting', 'stopping')
+      and recording_id = $4 and status in ('starting', 'recording', 'stopping')
+    returning recording_id
+    """
+  end
+
+  def fail_recording do
+    """
+    update sync_recordings
+    set
+      status = 'failed',
+      failure_code = $5,
+      completed_at = now(),
+      updated_at = now()
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and recording_id = $4 and status in ('starting', 'recording', 'stopping')
     returning recording_id
     """
   end

@@ -8,18 +8,27 @@ recorder reconciler owns scheduled prewarm, scale-to-zero, desired capacity,
 fencing, and replacement, so replacement cannot exceed eleven capture nodes,
 ten render nodes, or the twenty-one-node global cap.
 
-Capture is qualified for SGP1 CPU-Optimized two-vCPU nodes at four Episodes,
-forty participants, and sixteen Mbps per node. The root exposes the contract
-formula as `desired_capture_nodes`:
+The default capture pool uses SGP1 CPU-Optimized two-vCPU nodes. Its configured
+per-node admission targets are one serial Episode, forty participants, and sixteen
+Mbps; these are capacity inputs, not a claim of regional load qualification.
+The root exposes the contract formula as `desired_capture_nodes`:
 
 ```text
-max(ceil(episodes / 4), ceil(participants / 40), ceil(input_mbps / 16))
+max(episodes, ceil(participants / 40), ceil(input_mbps / 16))
 + ready_spare
 ```
 
-Reservations are checked against twenty Episodes and one hundred participants.
-The render target is a TOR1 RTX 4000 pool with a deadline-aware scaler capped at
-ten nodes. Both pools default to zero desired nodes.
+Reservations are checked against ten Episodes, one hundred participants, and
+forty Mbps of aggregate input. Admission also bounds capture reservations plus
+nonterminal render-phase pipelines to ten Episodes. The default eleven-node
+capture pool therefore supports at most ten concurrent captures while retaining
+one ready spare. A smaller capture or render maximum lowers the supported
+concurrency; operators must reduce the admission ceiling with it before launch.
+The default render target is the measured NYC1 CPU-Optimized eight-vCPU
+`c-8`/`libx264` profile with eight browser-frame producers and a deadline-aware
+scaler capped at ten nodes. Both pools default to zero desired nodes. A GPU pool
+remains configurable by setting `render_gpu = true` together with an independently
+qualified GPU image, region, and size; CPU and GPU artifacts are never mixed.
 
 ## External fleet reconciliation
 
@@ -28,7 +37,8 @@ The runtime controller is implemented as a provider-neutral state machine in
 zero nodes → one bootstrapping node → one role-fenced ready node → admission
 closed → active leases drained → certificate revoked → zero nodes. The same
 contract accepts configured targets up to the eleven-node capture and ten-node
-render limits; demand above a configured limit fails closed.
+render limits. The controller saturates its operational target at the configured
+limit while preserving raw demand for capacity signals.
 
 The controller does not infer demand from claimable jobs. Its authoritative
 demand source must include scheduled prewarms and held unscheduled starts in
@@ -77,12 +87,19 @@ corresponding uppercase suffixes are `ENVIRONMENT`, `ROLE`,
 `CONTROL_PLANE_URL`, `CONTROLLER_CERT`, `CONTROLLER_KEY`, `SERVER_CA`,
 `SERVER_NAME`, `SPIFFE_TRUST_DOMAIN`, `JOURNAL_PATH`, `OWNER_TAG`, `MAX_NODES`,
 `SLOTS_PER_NODE`, `RELEASE_ID`, `IMAGE_ID`, `IMAGE_DIGEST`, `REGION`, `SIZE`,
-`FIREWALL_ID`, and `BOOTSTRAP_ENDPOINT`. `DIGITALOCEAN_TOKEN` is also required;
+`FIREWALL_ID`, `BOOTSTRAP_ENDPOINT`, and `GPU`. `DIGITALOCEAN_TOKEN` is also required;
 `CHALK_RECORDER_FLEET_DIGITALOCEAN_API_URL`,
 `CHALK_RECORDER_FLEET_DIGITALOCEAN_PROJECT_ID`, and
 `CHALK_RECORDER_FLEET_DIGITALOCEAN_VPC_UUID` are optional. Duration overrides
 use `DEMAND_MAX_AGE`, `OBSERVATION_MAX_AGE`, `STARTUP_TIMEOUT`, `DRAIN_TIMEOUT`,
 `HEALTH_REFRESH`, and `RECONCILE_INTERVAL` with Go duration syntax.
+Set `CHALK_RECORDER_FLEET_SLOTS_PER_NODE=1` for both the serial capture pool and
+the one-job-per-node render pool. This setting is required; the command has no
+implicit role-specific default.
+`CHALK_RECORDER_FLEET_SSH_KEY_IDS` is an optional comma-separated list of at
+most eight DigitalOcean public key IDs for a bounded qualification run. It is
+empty by default, does not open the firewall, and must remain empty in the
+production no-inbound policy.
 
 The controller certificate must have exactly one URI SAN:
 `spiffe://<trust-domain>/environment/<environment>/recorder-fleet-controller/<uuid>`.
@@ -107,16 +124,65 @@ the configured environment and role. The bootstrap response returns only the
 non-secret node identity: the backend must validate the supplied live inventory
 digest and deliver its signed, one-time assertion directly to that node.
 
-The API handlers and durable fleet authority for these endpoints are implemented
-in this tree. Certificate issuance and direct one-time assertion delivery remain
-an external integration boundary, described in
-`apps/api/internal/adapters/recorderfleetissuer/README.md`. Without the configured
-issuer, bootstrap fails closed and new provider nodes cannot become active
-workers; the controller never fabricates bootstrap or readiness state. The immutable
-Droplet image must also supply the referenced
-`/usr/local/sbin/chalk-recorder-bootstrap` one-time bootstrap agent; this tree
-defines its fail-closed invocation contract but does not build that image
-component.
+The API handlers, durable fleet authority, issuer protocol, and CPU image
+bootstrap agent are implemented in this tree. Bootstrap remains fail-closed
+unless the separately deployed issuer is configured. The node generates its
+Ed25519 key locally, proves possession over a short-lived challenge, and accepts
+the leaf certificate only over issuer-pinned TLS after the issuer binds the TCP
+peer address to exact live DigitalOcean inventory. Provider metadata supplies a
+claimed ID only; it is never treated as authentication. The controller never
+receives the private key or fabricates bootstrap/readiness state.
+
+The five-minute scheduled prewarm is a scaling signal, not a media-start hold.
+This release does not gate Episode media on capture-worker attachment, so an
+immediate Recording can begin before cold capacity arrives. Production must keep
+enough warm capture capacity for its startup objective and monitor that gap.
+
+## Shared CPU worker image
+
+`images/cpu` builds one Ubuntu 24.04 AMD64 release containing both real worker
+daemons, the renderer UI, Playwright Chromium, and the node bootstrap/renewal
+agent. Build the public artifact on a machine with sufficient CPU, then install
+it on a clean 25-GiB `c-2` builder so the resulting DigitalOcean snapshot can
+launch both `c-2` capture and `c-8` render nodes:
+
+```sh
+sudo infrastructure/recorder/images/cpu/build-release.sh \
+  --source /absolute/path/to/chalk \
+  --release-id <release-id> \
+  --output /absolute/path/chalk-recorder-cpu.tar.gz
+
+sudo infrastructure/recorder/images/cpu/install.sh \
+  --bundle /absolute/path/chalk-recorder-cpu.tar.gz \
+  --bundle-sha256 <bundle-sha256> \
+  --bootstrap-ca /absolute/path/issuer-server-ca.pem \
+  --bootstrap-server-name <issuer-server-name>
+```
+
+The build uses checksum-pinned Go 1.25.13 and Node.js 22.23.2 toolchains plus
+pnpm 10.26.2. It records the Git commit, a deterministic SHA-256 of the complete
+public source tree, the UI digest, and every installed recorder file. The
+installer prints `image_manifest_digest`; this is specifically the SHA-256 of
+`/opt/chalk-recorder/image-manifest.json`, not an OCI digest or a digest of the
+entire VM filesystem. Cloud-init supplies that exact value as
+`CHALK_RECORDER_FLEET_IMAGE_DIGEST`, and the bootstrap agent rehashes the
+manifest and every listed file before it generates a node key or contacts the
+issuer.
+
+Before snapshotting, stop any worker and run `sudo images/cpu/seal.sh` from this
+directory. It removes bootstrap/runtime identity files, operator authorized
+keys, SSH host keys, cloud-init state, machine identity, histories, journals,
+and temporary build material. Shut down the builder, create the immutable
+snapshot, and configure both controllers with its numeric image ID and the
+printed manifest digest. The first boot regenerates host/machine identity; the
+external reconciler's cloud-init runs the one-time bootstrap and starts only the
+role named by the fenced pool release.
+
+The render service always launches `libx264` with frame concurrency eight. The
+capture service uses the same credential delivery path. A renewal timer derives
+its lead time as one third of each issued certificate lifetime, atomically
+replaces the leaf, and both workers swap to a fresh HTTP connection pool on the
+next control request without stopping an active attempt.
 
 ## Recording UI build identity
 
@@ -146,12 +212,24 @@ must therefore be copied from the manifest produced by the exact client tree
 shipped in the render image, not recomputed over a different directory or
 release.
 
-Capture bundles are private temporary R2 objects and expire after 24 hours;
-incomplete multipart uploads expire after seven days. The AWS KMS key is in
-Singapore, rotates automatically, and permits data-key generation/decryption
-only to the control-plane role when the authenticated context contains the
-fixed environment, tenant, Episode, recording, recording-job, bundle-schema,
-capture-epoch, and recorder-envelope-digest keys.
+Capture bundles are private R2 objects under
+`temporary/recordings/<recording>/capture/<epoch>/bundles/...`. The fixed
+`temporary/` lifecycle rule makes them eligible for deletion after 24 hours;
+actual deletion may occur later. The API allows at most two hours of capture
+(`recordingpipeline.MaximumRecordingDuration`) and eight hours of rendering
+after capture completion (`recordingpipeline.MaximumRenderDuration`), so the
+earliest bundle remains available for at least fourteen hours after its maximum
+ten-hour capture-and-render window. Retained render/source objects under
+`tenants/<tenant>/recordings/...` and transcripts under
+`tenants/<tenant>/transcripts/...` do not match the temporary prefix. Incomplete
+multipart uploads are eligible for abort after seven days. Previously issued
+allocation keys under `recordings/...` remain readable for replay compatibility,
+but are outside the `temporary/` lifecycle rule and require separate cleanup
+after their processing window. The AWS KMS key is in Singapore, rotates
+automatically, and permits data-key
+generation/decryption only to the control-plane role when the authenticated
+context contains the fixed environment, tenant, Episode, recording,
+recording-job, bundle-schema, capture-epoch, and recorder-envelope-digest keys.
 Workers receive neither KMS credentials nor reusable R2 or DigitalOcean
 credentials.
 
@@ -226,9 +304,9 @@ only `GET`, `PUT`, the four headers signed by whiteboard-v1, and the SHA-256
 checksum and attachment identity headers used by chat uploads; it does not make
 the bucket public. Wildcard origins, paths, and trailing slashes are rejected.
 
-The reference bootstrap templates describe the external handshake only. A
-reconciler must deliver a signed, one-time assertion bound to environment,
-role, release, intended Droplet, region, and boot generation, verify live
-DigitalOcean inventory, consume the assertion once, and revoke the resulting
-certificate on pool removal. The assertion never enters OpenTofu state,
-cloud-init, logs, or a tracked file.
+The reference bootstrap templates mirror the external controller's cloud-init
+contract. The issuer verifies live DigitalOcean inventory before returning a
+node certificate bound to environment, role, release, intended Droplet, region,
+and boot generation; the controller revokes that identity on pool removal. No
+bootstrap assertion or reusable credential enters OpenTofu state, cloud-init,
+logs, or a tracked file.

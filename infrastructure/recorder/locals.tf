@@ -27,8 +27,8 @@ locals {
 
 check "capture_admission_ceiling" {
   assert {
-    condition     = var.reserved_capture_episodes >= 0 && var.reserved_capture_episodes <= 20 && floor(var.reserved_capture_episodes) == var.reserved_capture_episodes
-    error_message = "capture reservations must contain an integer number of Episodes from zero through twenty."
+    condition     = var.reserved_capture_episodes >= 0 && var.reserved_capture_episodes <= 10 && floor(var.reserved_capture_episodes) == var.reserved_capture_episodes
+    error_message = "capture reservations must contain an integer number of Episodes from zero through ten."
   }
 
   assert {
@@ -37,8 +37,8 @@ check "capture_admission_ceiling" {
   }
 
   assert {
-    condition     = var.reserved_capture_input_mbps >= 0 && var.reserved_capture_input_mbps <= 80
-    error_message = "capture reservations must stay within the qualified 80 Mbps launch input ceiling."
+    condition     = var.reserved_capture_input_mbps >= 0 && var.reserved_capture_input_mbps <= 40
+    error_message = "capture reservations must stay within the qualified 40 Mbps launch input ceiling."
   }
 
   assert {

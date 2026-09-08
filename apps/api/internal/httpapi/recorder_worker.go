@@ -31,6 +31,7 @@ type RecorderWorkerService interface {
 	Claim(context.Context, recordingpipeline.ClaimInput) (recordingpipeline.Job, error)
 	Heartbeat(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	Complete(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+	RelinquishCapture(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	Fail(context.Context, recordingpipeline.FailureInput) (recordingpipeline.Job, error)
 	InsertBundle(context.Context, recordingpipeline.BundleInput) (recordingpipeline.Bundle, error)
 	CommitArtifact(context.Context, recordingpipeline.ArtifactInput) (recordingpipeline.Artifact, error)
@@ -45,27 +46,6 @@ type RecorderCapturePlanService interface {
 // repeats its capture epoch and digest in addition to the existing lease fence.
 
 var _ RecorderWorkerService = recordingpipeline.Service{}
-
-type recorderWorkerReadiness struct {
-	checker RecorderHealthChecker
-}
-
-// NewRecorderWorkerReadiness turns the role-specific pool health checks into
-// the dependency used by /readyz. Both pools must be admitting work before the
-// Recording capability is advertised as ready.
-func NewRecorderWorkerReadiness(checker RecorderHealthChecker) ReadinessChecker {
-	return recorderWorkerReadiness{checker: checker}
-}
-
-func (r recorderWorkerReadiness) Check(ctx context.Context) error {
-	if r.checker == nil {
-		return errors.New("recorder worker health is unavailable")
-	}
-	if err := r.checker.CheckRecorderPool(ctx, workeridentity.RoleCapture); err != nil {
-		return err
-	}
-	return r.checker.CheckRecorderPool(ctx, workeridentity.RoleRender)
-}
 
 // NewRecorderWorkerRouter creates the private router used by recorder worker
 // traffic. It intentionally does not install the public CORS, system-token,
@@ -119,6 +99,7 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 		r.Post("/jobs/heartbeat", recorderWorkerHeartbeatHandler(service))
 		r.Post("/jobs/progress", recorderWorkerProgressHandler(service))
 		r.Post("/jobs/fail", recorderWorkerFailHandler(service))
+		r.Post("/jobs/capture/relinquish", recorderWorkerRelinquishCaptureHandler(service))
 		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service))
 		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority))
 		if controls.CapturePlans != nil {
@@ -440,6 +421,38 @@ func recorderWorkerFailHandler(service RecorderWorkerService) http.HandlerFunc {
 			return
 		}
 		job, err := service.Fail(request.Context(), recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: body.ErrorCode, ErrorDetail: body.ErrorDetail})
+		if err != nil {
+			writeRecorderWorkerError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, recorderWorkerJobResponseValue(job))
+	}
+}
+
+func recorderWorkerRelinquishCaptureHandler(service RecorderWorkerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		identity, ok := recorderWorkerRequestIdentity(w, request)
+		if !ok {
+			return
+		}
+		if identity.Role != workeridentity.RoleCapture {
+			writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers can relinquish capture jobs")
+			return
+		}
+		body, ok := decodeRecorderWorkerBody[recorderWorkerLeaseBody](w, request)
+		if !ok {
+			return
+		}
+		lease, ok := recorderWorkerLeaseInput(identity, body)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid capture relinquish")
+			return
+		}
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
+			return
+		}
+		job, err := service.RelinquishCapture(request.Context(), lease)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
 			return

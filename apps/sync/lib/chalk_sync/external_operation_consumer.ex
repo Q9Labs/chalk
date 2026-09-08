@@ -32,7 +32,8 @@ defmodule ChalkSync.ExternalOperationConsumer do
     :admission_request_expired,
     :tenant_set_deadline,
     :recording_capture_ready,
-    :recording_capture_stopped
+    :recording_capture_stopped,
+    :recording_capture_failed
   ]
   @end_episode_operations [
     :end_episode,

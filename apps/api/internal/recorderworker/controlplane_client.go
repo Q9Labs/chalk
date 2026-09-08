@@ -412,6 +412,29 @@ func (c *ControlPlaneClient) Fail(ctx context.Context, input recordingpipeline.F
 	return job, nil
 }
 
+func (c *ControlPlaneClient) RelinquishCapture(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	payload, err := leaseRequest(input)
+	if err != nil {
+		return recordingpipeline.Job{}, err
+	}
+	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/capture/relinquish", payload, ControlPlaneResponseLimit)
+	if err != nil {
+		return recordingpipeline.Job{}, err
+	}
+	var response recorderWorkerJobResponse
+	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
+		return recordingpipeline.Job{}, ProtocolError{Err: err}
+	}
+	job, err := decodeJob(response)
+	if err != nil {
+		return recordingpipeline.Job{}, err
+	}
+	if job.ID != input.JobID || job.Kind != recordingpipeline.JobKindCapture || job.State != recordingpipeline.JobStatePending || job.AttemptCount != input.AttemptCount-1 || job.FencingGeneration != input.FencingGeneration || job.CaptureEpoch != input.CaptureEpoch || job.LeaseToken != nil || job.LeaseOwner != nil || job.LeaseExpiresAt != nil {
+		return recordingpipeline.Job{}, ProtocolError{Err: errors.New("capture relinquish response authority mismatch")}
+	}
+	return job, nil
+}
+
 func (c *ControlPlaneClient) Complete(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
 	payload, err := leaseRequest(input)
 	if err != nil {

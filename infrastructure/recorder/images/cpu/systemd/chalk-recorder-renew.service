@@ -1,0 +1,23 @@
+[Unit]
+Description=Renew Chalk recorder worker identity
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/chalk-recorder/node.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/chalk-recorder-bootstrap --renew --env-file /etc/chalk-recorder/node.env --image-env-file /etc/chalk-recorder/image.env
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/etc/chalk-recorder /var/lib/chalk-recorder
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
