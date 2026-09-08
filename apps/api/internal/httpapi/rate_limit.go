@@ -45,6 +45,11 @@ var (
 		Limit:  30,
 		Window: time.Minute,
 	}
+	corsPolicyLookupRateLimit = ratelimit.Policy{
+		Name:   ratelimit.PolicyNameCORSPolicyLookup,
+		Limit:  600,
+		Window: time.Minute,
+	}
 	authenticatedWriteRateLimit = ratelimit.Policy{
 		Name:   ratelimit.PolicyNameAuthenticatedWrite,
 		Limit:  60,

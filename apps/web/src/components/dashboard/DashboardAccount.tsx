@@ -1,12 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { DashboardAPIError, getAccount, listAllAccountTenants, logoutAccount, type AccountTenant, type DashboardAccount } from "../../lib/dashboard-api";
+import { DashboardAPIError, getAccount, listAllAccountTenants, logoutAccount, type AccountTenant, type DashboardAccount, type Tenant } from "../../lib/dashboard-api";
 
 type DashboardAccountValue = {
   account: DashboardAccount;
   tenants: AccountTenant[];
   current: AccountTenant;
   selectTenant: (tenantID: string) => void;
+  updateCurrentTenant: (tenant: Tenant) => void;
   signOut: () => Promise<void>;
 };
 
@@ -53,6 +54,15 @@ export function DashboardAccountGate({ children }: { children: ReactNode }) {
         if (!state.tenants.some((item) => item.tenant.id === tenantID)) return;
         window.localStorage.setItem(tenantHintKey, tenantID);
         setSelectedTenantID(tenantID);
+      },
+      updateCurrentTenant(tenant) {
+        setState((existing) => {
+          if (!existing) return existing;
+          return {
+            ...existing,
+            tenants: existing.tenants.map((item) => (item.tenant.id === tenant.id ? { ...item, tenant } : item)),
+          };
+        });
       },
       async signOut() {
         await logoutAccount();

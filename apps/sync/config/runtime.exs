@@ -360,13 +360,20 @@ if config_env() == :prod do
     raise "CHALK_SYNC_LOCAL_PARITY requires a localhost provider bridge"
   end
 
+  require_synchronous_standby? =
+    case System.get_env("CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY", "true") do
+      "true" -> not (local_proof? or local_parity?)
+      "false" -> false
+      _ -> raise "CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY must be true or false"
+    end
+
   config :chalk_sync,
     enforce_production_boot_checks: true,
     max_synchronous_wal_lag_bytes: max_wal_lag_bytes,
     local_parity: local_parity?,
     provider_bridge: provider_bridge,
     require_production_auth: not local_proof?,
-    require_synchronous_standby: not (local_proof? or local_parity?),
+    require_synchronous_standby: require_synchronous_standby?,
     token_verifier: verifier
 
   config :chalk_sync, token_config

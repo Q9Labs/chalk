@@ -51,12 +51,16 @@ try {
       "esbuild@0.28.1",
       "typescript@5.9.3",
       "ws@8.18.3",
+      "tailwindcss@4.2.2",
+      "@tailwindcss/cli@4.2.2",
+      "tw-animate-css@1.4.0",
     ],
     consumerDirectory,
   );
   await assertPackedInstall(consumerDirectory, archiveDirectory, { clientArchive, reactArchive, diagnosticsArchive, supportingArchives });
   await run("pnpm", ["exec", "tsc", "--project", "tsconfig.json"], consumerDirectory);
   await run(process.execPath, ["build.mjs"], consumerDirectory);
+  await run("pnpm", ["exec", "tailwindcss", "--input", "styles.css", "--output", "dist/bundle.css"], consumerDirectory);
 
   serverProcess = spawn(process.execPath, ["server.mjs"], {
     cwd: consumerDirectory,
@@ -96,6 +100,7 @@ async function runChromiumMatrix(browser, baseURL, secretMarker) {
   try {
     await verifyPairJoined(alice.page, bob.page);
     await verifyCollaborations(alice.page, bob.page);
+    await verifyImageAttachment(alice.page, bob.page);
     await verifyDirectedRequests(alice.page, bob.page);
     await verifyScreenShare(alice.page, bob.page);
     await verifyRecovery(alice.page, bob.page, baseURL);
@@ -120,13 +125,35 @@ async function verifyDirectedRequests(alice, bob) {
 }
 
 async function verifyCollaborations(alice, bob) {
-  const chatMessage = await invoke(alice, "sendChatMessage", { text: "Hello from the packed SDK" });
-  if (chatMessage.text !== "Hello from the packed SDK") throw new TypeError("Packed SDK chat action returned the wrong message");
+  const text = "Hello from the packed SDK: 👍 ❤️ 😂 😮 😢 🎉";
+  const chatMessage = await invoke(alice, "sendChatMessage", { text });
+  if (chatMessage.text !== text) throw new TypeError("Packed SDK chat action returned the wrong message");
   await waitFor(bob, (snapshot, expected) => snapshot.chat.messages.some((message) => message.clientMessageId === expected && message.participantId === "alice"), chatMessage.clientMessageId);
+  await bob.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await bob.getByRole("button", { name: "Chat", exact: true }).click();
+  await bob.getByText(text, { exact: true }).waitFor({ state: "visible" });
 
-  const reaction = await invoke(bob, "sendReaction", "🎉");
-  if (reaction.reaction !== "🎉") throw new TypeError("Packed SDK reaction action returned the wrong reaction");
-  await waitFor(alice, (snapshot, expected) => snapshot.reactions.some((item) => item.eventId === expected.eventId), reaction);
+  for (const emoji of ["👍", "❤️", "😂", "😮", "😢", "🎉"]) {
+    const reaction = await invoke(bob, "sendReaction", emoji);
+    if (reaction.reaction !== emoji) throw new TypeError("Packed SDK reaction action returned the wrong reaction");
+    await waitFor(alice, (snapshot, expected) => snapshot.reactions.some((item) => item.eventId === expected.eventId && item.reaction === expected.reaction), reaction);
+    await alice.getByText(emoji, { exact: true }).first().waitFor({ state: "visible" });
+  }
+}
+
+async function verifyImageAttachment(sender, receiver, fileName = "packed-upload.png") {
+  await sender.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await sender.getByRole("button", { name: "Chat", exact: true }).click();
+  const chooserReady = sender.waitForEvent("filechooser");
+  await sender.getByRole("button", { name: "Attach files", exact: true }).click();
+  const chooser = await chooserReady;
+  await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: await readFile(join(repositoryDirectory, "apps/web/public/brand/chalk/chalk-icon-192.png")) });
+  await sender.locator('[aria-label="Attachments"]').waitFor({ state: "visible" });
+  await sender.getByPlaceholder("Type a message...").fill("Image from the packed SDK");
+  await sender.getByRole("button", { name: "Send message", exact: true }).click();
+  await receiver.getByRole("img", { name: fileName, exact: true }).waitFor({ state: "visible" });
+  await receiver.waitForFunction((expected) => [...document.images].some((image) => image.alt === expected && image.complete && image.naturalWidth > 0), fileName);
+  await sender.getByRole("button", { name: "Close chat", exact: true }).click();
 }
 
 async function verifyPairJoined(alice, bob) {
@@ -239,6 +266,7 @@ async function runLaunchSmoke(browser, browserName, baseURL) {
     await invoke(participant.page, "setMicrophoneEnabled", true);
     await invoke(participant.page, "startScreenShare");
     await invoke(participant.page, "stopScreenShare");
+    await verifyImageAttachment(participant.page, participant.page, `${browserName}-upload.png`);
     await invoke(participant.page, "leave");
     await invoke(participant.page, "dispose");
     await waitForClean(participant.page);
@@ -332,7 +360,7 @@ async function assertPackedInstall(directory, archiveDirectory_, archives) {
     process.execPath,
     [
       "-e",
-      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react", "@q9labsai/recording-presentation"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@q9labsai/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@q9labsai/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== process.argv[1]) throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
+      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react", "@q9labsai/chalk-react/preview", "@q9labsai/recording-presentation"]) { const path = require.resolve(name); if (!path.includes("node_modules") || path.includes("/src/")) throw new Error(`${name} did not resolve to a built artifact from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@q9labsai/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@q9labsai/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== process.argv[1]) throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
       diagnosticsManifest.version,
     ],
     directory,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -81,12 +82,21 @@ type Registry interface {
 	Latest(context.Context, utilities.ID, utilities.ID) (Snapshot, error)
 }
 
+type RemoteTrackObserver interface {
+	ObserveRemoteTracks(context.Context, RemoteTrackObservationInput) error
+}
+
 type Service struct {
-	repository Repository
+	repository      Repository
+	absenceEvidence *remoteTrackAbsenceEvidence
 }
 
 func NewService(repository Repository) Service {
-	return Service{repository: repository}
+	return newService(repository, time.Now)
+}
+
+func newService(repository Repository, now func() time.Time) Service {
+	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now)}
 }
 
 func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (Snapshot, error) {

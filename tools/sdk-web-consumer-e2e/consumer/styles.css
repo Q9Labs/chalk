@@ -1,0 +1,10 @@
+@import "@q9labsai/chalk-ui/styles.css";
+@source "./node_modules/@q9labsai/chalk-react/dist";
+@source "./node_modules/@q9labsai/chalk-ui/dist";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}

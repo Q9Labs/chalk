@@ -1,6 +1,7 @@
-import { createSpaceClient, type AccessGrant, type SpaceClient, type SpaceSnapshot } from "@q9labsai/chalk-client";
+import { createChalkChatFileHttpTransport, createSpaceClient, type AccessGrant, type SpaceClient, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
+import type { PreviewClientCommand } from "@q9labsai/chalk-react/preview";
 import { createRoot } from "react-dom/client";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
@@ -26,6 +27,7 @@ type Harness = {
   readonly snapshot: () => ReturnType<typeof publicSnapshot>;
   readonly resources: typeof resourceCounts;
   readonly accessRequests: () => number;
+  readonly previewCommandContract?: PreviewClientCommand;
 };
 
 declare global {
@@ -46,6 +48,7 @@ const createFixtureSpaceClient: typeof createSpaceClient = (options) =>
       mediaDevices: fixtureMediaDevices,
       createMediaClient: (input) => bindFixtureMediaClient(new FixtureMediaClient(`${socketBaseURL}/media`, input)),
       createSyncClient: (input) => bindFixtureSyncClient(new FixtureSyncClient(`${socketBaseURL}/sync`, input)),
+      createChatFileTransport: (input) => createChalkChatFileHttpTransport({ baseUrl: location.origin, token: input.token }),
     },
   });
 

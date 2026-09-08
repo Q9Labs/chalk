@@ -393,6 +393,18 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 	if isOptionalInt64(t) {
 		return map[string]any{"type": []string{"integer", "null"}}
 	}
+	if isOptionalCORSOrigins(t) {
+		return map[string]any{
+			"type":     "array",
+			"maxItems": tenants.MaxCORSOrigins,
+			"items": map[string]any{
+				"type":      "string",
+				"format":    "uri",
+				"maxLength": tenants.MaxCORSOriginBytes,
+				"pattern":   tenants.CORSOriginPattern,
+			},
+		}
+	}
 	if isOptionalTimeRequest(t) {
 		return nullableSchema(timestampSchema())
 	}
@@ -512,6 +524,19 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 		}
 		return applyFieldConstraints(schema, schemaName, fieldName, request)
 	}
+	if isOptionalCORSOrigins(fieldType) {
+		schema := map[string]any{
+			"type":     "array",
+			"maxItems": tenants.MaxCORSOrigins,
+			"items": map[string]any{
+				"type":      "string",
+				"format":    "uri",
+				"maxLength": tenants.MaxCORSOriginBytes,
+				"pattern":   tenants.CORSOriginPattern,
+			},
+		}
+		return applyFieldConstraints(schema, schemaName, fieldName, request)
+	}
 
 	schema := g.schemaFromType(fieldType, request, schemaName)
 	return applyFieldConstraints(schema, schemaName, fieldName, request)
@@ -562,6 +587,14 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["minItems"] = 1
 		if items, ok := schema["items"].(map[string]any); ok {
 			items["minLength"] = 1
+		}
+	}
+	if fieldName == "cors_allowed_origins" && schemaTypeIs(schema, "array") {
+		schema["maxItems"] = tenants.MaxCORSOrigins
+		if items, ok := schema["items"].(map[string]any); ok {
+			items["format"] = "uri"
+			items["maxLength"] = tenants.MaxCORSOriginBytes
+			items["pattern"] = tenants.CORSOriginPattern
 		}
 	}
 	if schemaName == "JourneyEventBatch" && fieldName == "events" {
@@ -656,6 +689,7 @@ func isOptionalRequestField(t reflect.Type) bool {
 		isOptionalJSON(t) ||
 		isOptionalStrings(t) ||
 		isOptionalInt64(t) ||
+		isOptionalCORSOrigins(t) ||
 		isOptionalTimeRequest(t)
 }
 
@@ -671,6 +705,9 @@ func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bo
 	}
 	if isOptionalInt64(t) {
 		return true
+	}
+	if isOptionalCORSOrigins(t) {
+		return false
 	}
 	return isOptionalJSON(t) || isOptionalTimeRequest(t)
 }
@@ -701,6 +738,10 @@ func isOptionalStrings(t reflect.Type) bool {
 
 func isOptionalInt64(t reflect.Type) bool {
 	return dereference(t) == reflect.TypeOf(tenants.OptionalInt64{})
+}
+
+func isOptionalCORSOrigins(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(tenants.OptionalCORSOrigins{})
 }
 
 func isRawJSON(t reflect.Type) bool {

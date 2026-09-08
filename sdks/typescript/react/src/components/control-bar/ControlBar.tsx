@@ -1,7 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React from "react";
 import { Tooltip } from "@q9labsai/chalk-ui";
-import { useCan, useChat, useMedia, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
-import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { cn } from "../../utils/cn";
 import {
   CallEnd01Icon,
@@ -25,139 +23,14 @@ import {
   VideoOffIcon,
 } from "../../utils/icons";
 import { ControlBarButton } from "../atomic";
-import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkIconButton, ChalkPanel } from "../chalk-ui";
 import { useSkin } from "../skin-context";
 import { ClassicControlBar, ClassicControlBarSurface } from "./ClassicControlBar";
+import { formatControlBarDuration, useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarButtonName, type ControlBarProps, type ControlBarSurfaceProps } from "./control-bar-behavior";
 
-interface MediaDevice {
-  deviceId: string;
-  label: string;
-  kind: MediaDeviceKind;
-  groupId?: string;
-}
-
-const EMPTY_DETECTED_DEVICES = {
-  audioinput: [] as MediaDevice[],
-  audiooutput: [] as MediaDevice[],
-  videoinput: [] as MediaDevice[],
-};
-
-function mergeDevices(...deviceGroups: ReadonlyArray<readonly MediaDevice[] | undefined>): MediaDevice[] {
-  const devicesById = new Map<string, MediaDevice>();
-  for (const deviceGroup of deviceGroups) {
-    for (const device of deviceGroup ?? []) {
-      const existing = devicesById.get(device.deviceId);
-      if (!existing || (!existing.label && device.label)) devicesById.set(device.deviceId, device);
-    }
-  }
-  return [...devicesById.values()];
-}
-
-function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined, selectedDeviceId: string | undefined, fallbackLabel: string, kind: MediaDevice["kind"]): MediaDevice[] {
-  if (devices?.length) return [...devices];
-  return selectedDeviceId ? [{ deviceId: selectedDeviceId, label: fallbackLabel, kind }] : [];
-}
-
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "feedback" | "more" | "info" | "thumbsup" | "leave";
-
-export interface ControlBarSurfaceProps {
-  position?: "bottom" | "top";
-  placement?: "inline" | "floating";
-  density?: "comfortable" | "compact";
-  showLabels?: boolean;
-  buttons?: ControlBarButtonName[];
-
-  isMuted?: boolean;
-  isVideoEnabled?: boolean;
-  isScreenSharing?: boolean;
-  isRecording?: boolean;
-  isRecordingPending?: boolean;
-  isChatOpen?: boolean;
-  isParticipantsOpen?: boolean;
-  isTranscriptionEnabled?: boolean;
-  isHandRaised?: boolean;
-  isWhiteboardOpen?: boolean;
-  isPictureInPictureActive?: boolean;
-  duration?: number;
-  unreadChatCount?: number;
-  audioInputDevices?: readonly MediaDevice[];
-  audioOutputDevices?: readonly MediaDevice[];
-  videoInputDevices?: readonly MediaDevice[];
-  selectedAudioInput?: string;
-  selectedAudioOutput?: string;
-  selectedVideoInput?: string;
-
-  onToggleMute?: () => void;
-  onToggleVideo?: () => void;
-  onAudioInputChange?: (deviceId: string) => void;
-  onAudioOutputChange?: (deviceId: string) => void;
-  onVideoInputChange?: (deviceId: string) => void;
-  onToggleScreenShare?: () => void;
-  onToggleRecording?: () => void;
-  onToggleChat?: () => void;
-  onToggleParticipants?: () => void;
-  onToggleTranscription?: () => void;
-  onToggleHandRaise?: () => void;
-  onToggleWhiteboard?: () => void;
-  onTogglePictureInPicture?: () => Promise<void> | void;
-  onOpenReactions?: () => void;
-  onOpenSettings?: () => void;
-  onOpenDiagnostics?: () => void;
-  onOpenFeedback?: () => void;
-  onOpenMore?: () => void;
-  onOpenInfo?: () => void;
-  onLeft?: () => void;
-
-  participantColorSeed?: string;
-  participantGradientPreference?: ParticipantGradientPreference;
-  expanded?: boolean;
-  detectDevices?: boolean;
-  /** Render the requested controls as inert display state without commands. */
-  displayOnly?: boolean;
-  className?: string;
-}
-
-export interface ControlBarProps {
-  readonly position?: "bottom" | "top";
-  readonly placement?: "inline" | "floating";
-  readonly density?: "comfortable" | "compact";
-  /** A shared Episode clock supplied by the owning Space surface. */
-  readonly duration?: number;
-  readonly showLabels?: boolean;
-  readonly buttons?: ControlBarButtonName[];
-  readonly activePanel?: "chat" | "participants" | null;
-  readonly onToggleChat?: () => void;
-  readonly onToggleParticipants?: () => void;
-  readonly onToggleWhiteboard?: () => void;
-  readonly onOpenReactions?: () => void;
-  readonly onOpenSettings?: () => void;
-  readonly onOpenDiagnostics?: () => void;
-  readonly onOpenFeedback?: () => void;
-  readonly onOpenMore?: () => void;
-  readonly onOpenInfo?: () => void;
-  readonly onLeaveRequest?: () => void;
-  readonly onLeft?: () => void;
-  readonly onCommandError?: (message: string | null) => void;
-  readonly participantColorSeed?: string;
-  readonly participantGradientPreference?: ParticipantGradientPreference;
-  readonly className?: string;
-}
-
-const DEFAULT_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "thumbsup", "pip", "settings"];
-
-const formatDuration = (seconds: number) => {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(secs).padStart(2, "0")}`;
-};
+export type { ControlBarButtonName, ControlBarProps } from "./control-bar-behavior";
 
 function FloatingControlBarButton({
   icon,
@@ -200,6 +73,8 @@ function FloatingControlBarButton({
 export const ControlBarSurface = React.memo(
   ({
     isMuted = false,
+    microphonePending = false,
+    cameraPending = false,
     isVideoEnabled = true,
     isScreenSharing = false,
     isRecording = false,
@@ -251,42 +126,20 @@ export const ControlBarSurface = React.memo(
 
     className,
   }: ControlBarSurfaceProps) => {
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
-    const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
-    const buttonsToRender = buttons ?? DEFAULT_BUTTONS;
-
-    useEffect(() => {
-      if (!detectDevices || placement !== "floating" || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
-      let cancelled = false;
-      const syncDevices = async () => {
-        try {
-          const devices = (await navigator.mediaDevices.enumerateDevices()) as MediaDevice[];
-          if (!cancelled) {
-            setDetectedDevices({
-              audioinput: devices.filter((device) => device.kind === "audioinput"),
-              audiooutput: devices.filter((device) => device.kind === "audiooutput"),
-              videoinput: devices.filter((device) => device.kind === "videoinput"),
-            });
-          }
-        } catch {
-          if (!cancelled) setDetectedDevices(EMPTY_DETECTED_DEVICES);
-        }
-      };
-      void syncDevices();
-      navigator.mediaDevices.addEventListener?.("devicechange", syncDevices);
-      return () => {
-        cancelled = true;
-        navigator.mediaDevices.removeEventListener?.("devicechange", syncDevices);
-      };
-    }, [density, detectDevices, placement]);
-
-    const effectiveAudioInputDevices = withSelectedDeviceFallback(mergeDevices(audioInputDevices, detectedDevices.audioinput), selectedAudioInput, "Current microphone", "audioinput");
-    const effectiveAudioOutputDevices = withSelectedDeviceFallback(mergeDevices(audioOutputDevices, detectedDevices.audiooutput), selectedAudioOutput, "Current speaker", "audiooutput");
-    const effectiveVideoInputDevices = withSelectedDeviceFallback(mergeDevices(videoInputDevices, detectedDevices.videoinput), selectedVideoInput, "Current camera", "videoinput");
-
-    const showLeave = buttonsToRender.includes("leave");
-    const mediaButtons = buttonsToRender.filter((b) => b === "mic" || b === "video" || b === "screenshare" || b === "record" || b === "whiteboard" || b === "handraise");
-    const interactionButtons = buttonsToRender.filter((b) => b === "participants" || b === "chat" || b === "transcription" || b === "thumbsup" || b === "pip" || b === "reactions" || b === "settings" || b === "diagnostics" || b === "feedback" || b === "more" || b === "info");
+    const { themeVariables, buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave, mediaButtons, interactionButtons } = useControlBarSurfaceBehavior({
+      placement,
+      density,
+      buttons,
+      audioInputDevices,
+      audioOutputDevices,
+      videoInputDevices,
+      selectedAudioInput,
+      selectedAudioOutput,
+      selectedVideoInput,
+      participantColorSeed,
+      participantGradientPreference,
+      detectDevices,
+    });
 
     const renderButton = (type: ControlBarButtonName) => {
       switch (type) {
@@ -439,6 +292,7 @@ export const ControlBarSurface = React.memo(
 
             <ChalkPanel className="order-3 shrink-0 rounded-none p-1" seed="control-compact-interactions">
               <ChalkControlGroup aria-label="Interaction controls" className="gap-1">
+                {buttonsToRender.includes("screenshare") ? renderButton("screenshare") : null}
                 {buttonsToRender.includes("handraise") && onToggleHandRaise ? (
                   <Tooltip content={isHandRaised ? "Lower hand" : "Raise hand"} position="top">
                     <ChalkIconButton
@@ -600,6 +454,7 @@ export const ControlBarSurface = React.memo(
               {buttonsToRender.includes("mic") ? (
                 <DevicePopover
                   type="mic"
+                  busy={microphonePending}
                   appearance="floating"
                   isActive={!isMuted}
                   onToggle={onToggleMute ?? (() => {})}
@@ -614,7 +469,18 @@ export const ControlBarSurface = React.memo(
                 />
               ) : null}
               {buttonsToRender.includes("video") ? (
-                <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
+                <DevicePopover
+                  type="video"
+                  busy={cameraPending}
+                  appearance="floating"
+                  isActive={isVideoEnabled}
+                  onToggle={onToggleVideo ?? (() => {})}
+                  devices={effectiveVideoInputDevices}
+                  selectedDeviceId={selectedVideoInput}
+                  onDeviceChange={onVideoInputChange ?? (() => {})}
+                  orientation="up"
+                  haptic="medium"
+                />
               ) : null}
               <div
                 className={cn(
@@ -639,7 +505,7 @@ export const ControlBarSurface = React.memo(
         <ChalkPanel className="rounded-none p-2" seed="control-inline-timer">
           <ChalkControlGroup aria-label="Episode duration" className="gap-3">
             <ChalkBadge dot aria-label="Live" seed="control-inline-live" tone="success" />
-            <span className="text-[var(--chalk-app-text)] text-[14px] font-semibold tracking-wide tabular-nums">{formatDuration(duration)}</span>
+            <span className="text-[var(--chalk-app-text)] text-[14px] font-semibold tracking-wide tabular-nums">{formatControlBarDuration(duration)}</span>
           </ChalkControlGroup>
         </ChalkPanel>
 
@@ -672,102 +538,16 @@ ControlBar.displayName = "ControlBar";
 ControlBarPresentation.displayName = "ControlBarPresentation";
 
 function ChalkControlBar(props: ControlBarProps): React.JSX.Element {
-  const client = useSpaceClient();
-  const self = useSelf();
-  const media = useMedia();
-  const chat = useChat();
-  const recording = useRecording();
-  const canPublishScreen = useCan("publishScreen");
-  const canSendReaction = useCan("sendReaction");
-  const canRaiseHand = useCan("raiseHand");
-  const canDrawWhiteboard = useCan("drawWhiteboard");
-  const canManageRecording = useCan("manageRecording");
-  const microphoneEnabled = media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting";
-  const cameraEnabled = media.local.camera.state === "enabled" || media.local.camera.state === "requesting";
-  const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
-  const recordingStatus = recording.current?.status;
-  const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
-  const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
-  const measuredEpisodeDuration = useEpisodeDuration();
-  const episodeDuration = props.duration ?? measuredEpisodeDuration;
-  const [commandError, setCommandError] = useState<string | null>(null);
-
-  const run = useCallback(
-    async (command: () => Promise<unknown>) => {
-      try {
-        await command();
-        setCommandError(null);
-        props.onCommandError?.(null);
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : "This command could not be completed.";
-        if (!props.onCommandError) setCommandError(message);
-        props.onCommandError?.(message);
-      }
-    },
-    [props.onCommandError],
-  );
-  const leave = useCallback(() => {
-    if (props.onLeaveRequest) {
-      props.onLeaveRequest();
-      return;
-    }
-    void run(async () => {
-      await client.leave();
-      props.onLeft?.();
-    });
-  }, [client, props.onLeaveRequest, props.onLeft, run]);
-  const buttons = (props.buttons ?? DEFAULT_BUTTONS).filter((button) => {
-    if (button === "screenshare") return canPublishScreen;
-    if (button === "reactions" || button === "thumbsup") return canSendReaction;
-    if (button === "handraise") return canRaiseHand;
-    if (button === "whiteboard") return canDrawWhiteboard;
-    if (button === "record") return canManageRecording;
-    return true;
-  });
-  const audioInputDevices = media.devices.microphones.map((device) => ({ ...device, kind: "audioinput" as const }));
-  const audioOutputDevices = media.devices.speakers.map((device) => ({ ...device, kind: "audiooutput" as const }));
-  const videoInputDevices = media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" as const }));
+  const { surfaceProps, commandError } = useConnectedControlBarBehavior(props);
 
   return (
     <>
-      <ControlBarSurface
-        {...props}
-        buttons={buttons}
-        duration={episodeDuration}
-        isMuted={!microphoneEnabled}
-        isVideoEnabled={cameraEnabled}
-        isScreenSharing={screenSharing}
-        isRecording={isRecording}
-        isRecordingPending={isRecordingPending}
-        isChatOpen={props.activePanel === "chat"}
-        isParticipantsOpen={props.activePanel === "participants"}
-        isHandRaised={self.handRaised}
-        unreadChatCount={chat.unreadCount}
-        audioInputDevices={audioInputDevices}
-        audioOutputDevices={audioOutputDevices}
-        videoInputDevices={videoInputDevices}
-        selectedAudioInput={media.selection.microphone ?? undefined}
-        selectedAudioOutput={media.selection.speaker ?? undefined}
-        selectedVideoInput={media.selection.camera ?? undefined}
-        onToggleMute={() => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled))}
-        onToggleVideo={() => void run(() => client.media.setCameraEnabled(!cameraEnabled))}
-        onAudioInputChange={(deviceId) => void run(() => client.media.selectMicrophone(deviceId))}
-        onAudioOutputChange={(deviceId) => void run(() => client.media.selectSpeaker(deviceId))}
-        onVideoInputChange={(deviceId) => void run(() => client.media.selectCamera(deviceId))}
-        onToggleScreenShare={() => void run(() => client.media.setScreenShareEnabled(!screenSharing))}
-        onToggleRecording={() => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start()))}
-        onToggleChat={props.onToggleChat}
-        onToggleParticipants={props.onToggleParticipants}
-        onToggleHandRaise={() => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand()))}
-        onToggleWhiteboard={props.onToggleWhiteboard}
-        onOpenReactions={props.onOpenReactions}
-        onOpenSettings={props.onOpenSettings}
-        onOpenDiagnostics={props.onOpenDiagnostics}
-        onOpenFeedback={props.onOpenFeedback}
-        onOpenMore={props.onOpenMore}
-        onOpenInfo={props.onOpenInfo}
-        onLeft={leave}
-      />
+      {surfaceProps.microphonePending || surfaceProps.cameraPending ? (
+        <span role="status" className="sr-only">
+          Updating camera or microphone.
+        </span>
+      ) : null}
+      <ControlBarSurface {...surfaceProps} />
       {!props.onCommandError ? <CommandErrorAlert message={commandError ?? undefined} /> : null}
     </>
   );

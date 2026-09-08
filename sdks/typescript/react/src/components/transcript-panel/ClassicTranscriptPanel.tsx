@@ -1,97 +1,20 @@
-import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
+import React from "react";
 import { IconButton, Input } from "@q9labsai/chalk-ui";
-import { useConnection, useSelf } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon, ArrowDown01Icon, ArrowUp01Icon, Download01Icon, Copy01Icon, FileTextIcon } from "../../utils/icons";
 import { TranscriptLine } from "../atomic";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
-import { getParticipantColor, getParticipantThemeVariables } from "../../utils/colorGenerator";
-import type { TranscriptEntry, TranscriptPanelProps } from "./TranscriptPanel";
-
-interface TranscriptPanelSurfaceProps extends TranscriptPanelProps {
-  readonly transcripts: TranscriptEntry[];
-  readonly isLive?: boolean;
-  readonly localParticipantId?: string;
-}
-
-interface GroupedTranscript {
-  speakerId: string;
-  speaker: string;
-  speakerColor: string;
-  isLocalParticipant?: boolean;
-  entries: TranscriptEntry[];
-}
-
-function groupTranscriptsBySpeaker(transcripts: TranscriptEntry[]): GroupedTranscript[] {
-  const groups: GroupedTranscript[] = [];
-
-  for (const entry of transcripts) {
-    const lastGroup = groups[groups.length - 1];
-    if (!lastGroup || lastGroup.speakerId !== entry.speakerId) {
-      groups.push({
-        speakerId: entry.speakerId,
-        speaker: entry.speaker,
-        speakerColor: getParticipantColor(entry.speaker || entry.speakerId).primary,
-        isLocalParticipant: entry.isLocalParticipant,
-        entries: [entry],
-      });
-    } else {
-      lastGroup.entries.push(entry);
-    }
-  }
-
-  return groups;
-}
-
-interface SearchMatch {
-  entryId: string;
-  index: number;
-}
-
-function findSearchMatches(transcripts: TranscriptEntry[], query: string): SearchMatch[] {
-  if (!query.trim()) return [];
-  const lowerQuery = query.toLowerCase();
-  const matches: SearchMatch[] = [];
-
-  for (const [i, entry] of transcripts.entries()) {
-    if (entry.text.toLowerCase().includes(lowerQuery) || entry.speaker.toLowerCase().includes(lowerQuery)) {
-      matches.push({ entryId: entry.id, index: i });
-    }
-  }
-
-  return matches;
-}
+import { useConnectedTranscriptPanelBehavior, useTranscriptExportMenu, useTranscriptPanelBehavior, type TranscriptExportFormat, type TranscriptPanelProps, type TranscriptPanelSurfaceProps } from "./transcript-panel-behavior";
 
 // Export dropdown component
-function ExportDropdown({ onExport, onCopyAll }: { onExport?: (format: "txt" | "srt" | "vtt" | "json") => void; onCopyAll?: () => void }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleExport = (format: "txt" | "srt" | "vtt" | "json") => {
-    onExport?.(format);
-    setIsOpen(false);
-  };
-
-  const handleCopy = () => {
-    onCopyAll?.();
-    setIsOpen(false);
-  };
+function ExportDropdown({ onExport, onCopyAll }: { onExport?: (format: TranscriptExportFormat) => void; onCopyAll?: () => void }) {
+  const { isOpen, menuRef: dropdownRef, toggleMenu, selectExport: handleExport, selectCopy: handleCopy } = useTranscriptExportMenu(onExport, onCopyAll);
 
   return (
     <div ref={dropdownRef} className="relative">
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleMenu}
         className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors", "bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)] hover:bg-[var(--chalk-stage)] hover:text-[var(--chalk-text)]")}
         aria-expanded={isOpen}
         aria-haspopup="menu"
@@ -181,137 +104,24 @@ const TranscriptPanelSurface = React.memo(
     className,
   }: TranscriptPanelSurfaceProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
-    const [searchQuery, setSearchQuery] = useState("");
-    const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
-    const [autoScroll, setAutoScroll] = useState(true);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const endRef = useRef<HTMLDivElement>(null);
-    const searchInputRef = useRef<HTMLInputElement>(null);
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed ?? localParticipantId, participantGradientPreference), [participantColorSeed, participantGradientPreference, localParticipantId]);
-
-    // Search matches
-    const searchMatches = useMemo(() => findSearchMatches(transcripts, searchQuery), [transcripts, searchQuery]);
-
-    const currentMatch = searchMatches[currentMatchIndex];
-
-    // Filter out interim transcripts that have been superseded by final ones
-    // Keep only the latest transcript per speaker when interim is followed by final
-    const filteredTranscripts = useMemo(() => {
-      const result: TranscriptEntry[] = [];
-      for (const [i, current] of transcripts.entries()) {
-        const next = transcripts[i + 1];
-
-        // Skip interim if next is final from same speaker (it supersedes)
-        if (current.isInterim && next && !next.isInterim && next.speakerId === current.speakerId) {
-          continue;
-        }
-        result.push(current);
-      }
-      return result;
-    }, [transcripts]);
-
-    // Group transcripts by speaker
-    const groupedTranscripts = useMemo(() => groupTranscriptsBySpeaker(filteredTranscripts), [filteredTranscripts]);
-
-    // Filter transcripts when searching
-    const displayedGroups = useMemo(() => {
-      if (!searchQuery.trim()) return groupedTranscripts;
-
-      const matchedIds = new Set(searchMatches.map((m) => m.entryId));
-      return groupedTranscripts
-        .map((group) => ({
-          ...group,
-          entries: group.entries.filter((e) => matchedIds.has(e.id)),
-        }))
-        .filter((group) => group.entries.length > 0);
-    }, [groupedTranscripts, searchQuery, searchMatches]);
-
-    // Auto-scroll effect
-    useEffect(() => {
-      if (autoScroll && endRef.current && !searchQuery) {
-        endRef.current.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth" });
-      }
-    }, [transcripts, autoScroll, prefersReducedMotion, searchQuery]);
-
-    // Scroll to current match
-    useEffect(() => {
-      if (currentMatch && containerRef.current) {
-        const matchElement = containerRef.current.querySelector(`[data-transcript-match="true"]`);
-        matchElement?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }, [currentMatch, currentMatchIndex]);
-
-    // Keyboard shortcuts
-    useEffect(() => {
-      function handleKeyDown(event: KeyboardEvent) {
-        // Cmd/Ctrl + F to focus search
-        if ((event.metaKey || event.ctrlKey) && event.key === "f" && searchable) {
-          event.preventDefault();
-          searchInputRef.current?.focus();
-        }
-
-        // Escape to clear search
-        if (event.key === "Escape" && searchQuery) {
-          setSearchQuery("");
-          setCurrentMatchIndex(0);
-        }
-
-        // Enter/Shift+Enter to navigate matches when search has focus
-        if (document.activeElement === searchInputRef.current && searchMatches.length > 0) {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            setCurrentMatchIndex((i) => (i + 1) % searchMatches.length);
-          } else if (event.key === "Enter" && event.shiftKey) {
-            event.preventDefault();
-            setCurrentMatchIndex((i) => (i - 1 + searchMatches.length) % searchMatches.length);
-          }
-        }
-      }
-
-      document.addEventListener("keydown", handleKeyDown);
-      return () => document.removeEventListener("keydown", handleKeyDown);
-    }, [searchable, searchQuery, searchMatches.length]);
-
-    const handleScroll = useCallback(() => {
-      if (containerRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-        const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-        setAutoScroll(isAtBottom);
-      }
-    }, []);
-
-    const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-      setSearchQuery(e.target.value);
-      setCurrentMatchIndex(0);
-    }, []);
-
-    const handleClearSearch = useCallback(() => {
-      setSearchQuery("");
-      setCurrentMatchIndex(0);
-      searchInputRef.current?.focus();
-    }, []);
-
-    const navigateMatch = useCallback(
-      (direction: "prev" | "next") => {
-        if (searchMatches.length === 0) return;
-        setCurrentMatchIndex((i) => {
-          if (direction === "next") {
-            return (i + 1) % searchMatches.length;
-          }
-          return (i - 1 + searchMatches.length) % searchMatches.length;
-        });
-      },
-      [searchMatches.length],
-    );
-
-    const handleCopyAll = useCallback(() => {
-      if (onCopyAll) {
-        onCopyAll();
-      } else {
-        const text = transcripts.map((t) => `[${t.timestamp.toLocaleTimeString()}] ${t.speaker}: ${t.text}`).join("\n");
-        navigator.clipboard.writeText(text);
-      }
-    }, [transcripts, onCopyAll]);
+    const {
+      searchQuery,
+      themeVariables,
+      currentMatchIndex,
+      autoScroll,
+      containerRef,
+      endRef,
+      searchInputRef,
+      searchMatches,
+      currentMatch,
+      displayedGroups,
+      onScroll: handleScroll,
+      onSearchChange: handleSearchChange,
+      clearSearch: handleClearSearch,
+      navigateMatch,
+      copyAll: handleCopyAll,
+      scrollToLatest,
+    } = useTranscriptPanelBehavior({ transcripts, searchable, prefersReducedMotion, onCopyAll, participantColorSeed, localParticipantId, participantGradientPreference });
 
     // Render transcript content
     const renderTranscriptContent = () => {
@@ -399,14 +209,7 @@ const TranscriptPanelSurface = React.memo(
 
       return (
         <div className="sticky bottom-0 flex justify-center pb-2 pointer-events-none">
-          <button
-            type="button"
-            onClick={() => {
-              setAutoScroll(true);
-              endRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth" });
-            }}
-            className={cn("px-3 py-1.5 rounded-full text-xs font-medium shadow-lg flex items-center gap-1.5 pointer-events-auto transition-all", "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]", "hover:bg-[var(--chalk-accent)]")}
-          >
+          <button type="button" onClick={scrollToLatest} className={cn("px-3 py-1.5 rounded-full text-xs font-medium shadow-lg flex items-center gap-1.5 pointer-events-auto transition-all", "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]", "hover:bg-[var(--chalk-accent)]")}>
             <ArrowDown01Icon className="w-3.5 h-3.5" />
             New content
           </button>
@@ -542,10 +345,8 @@ const TranscriptPanelSurface = React.memo(
 );
 
 export const ClassicTranscriptPanel = React.memo((props: TranscriptPanelProps): React.JSX.Element => {
-  const connection = useConnection();
-  const self = useSelf();
-
-  return <TranscriptPanelSurface {...props} transcripts={[]} isLive={connection.status === "live" || connection.status === "reconnecting"} localParticipantId={self.participantId ?? undefined} participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined} />;
+  const surfaceProps = useConnectedTranscriptPanelBehavior(props);
+  return <TranscriptPanelSurface {...surfaceProps} />;
 });
 
 ClassicTranscriptPanel.displayName = "TranscriptPanel";

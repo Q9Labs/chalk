@@ -39,7 +39,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
     result.push({
       id: participant.participantId,
       displayName: participant.displayName,
-      isMuted: !remoteMedia.some((publication) => publication.participantId === participant.participantId && publication.source === "microphone"),
+      isMuted: participant.media.microphone !== "active",
       isSpeaking: participant.presence.speaking,
       isActiveSpeaker: participant.presence.activeSpeaker,
       isVideoEnabled: Boolean(media?.camera),
@@ -75,8 +75,8 @@ export function toListParticipants(tiles: readonly Participant[], participantMed
       id: participant.id,
       displayName: participant.displayName,
       isLocal: participant.isLocal,
-      isMuted: media?.microphone === "active" ? false : media?.microphone === "inactive" ? true : participant.isMuted,
-      isVideoEnabled: media?.camera === "active" ? true : media?.camera === "inactive" ? false : participant.isVideoEnabled,
+      isMuted: participant.isLocal ? participant.isMuted : media?.microphone !== "active",
+      isVideoEnabled: participant.isLocal ? participant.isVideoEnabled : media?.camera === "active",
       isHandRaised: participant.isHandRaised,
     };
   });

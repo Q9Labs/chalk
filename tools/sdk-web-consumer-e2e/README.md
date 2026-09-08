@@ -14,7 +14,11 @@ The browser proof uses a localhost, protocol-faithful Sync and WebRTC signaling
 mock. It proves SDK lifecycle and browser media behavior without claiming that
 traffic reached Cloudflare. Chromium runs the complete two-context recovery
 matrix. Firefox and WebKit run the launch smoke when their local Playwright
-binaries are installed; CI installs and requires all three browsers.
+binaries are installed; CI installs and requires all three browsers. Every engine
+also uploads a browser File through the real HTTP attachment transport and
+decodes its Chat preview. The local storage fixture checks the uploaded byte
+count and SHA-256 digest before finalization. Chromium verifies the preview in
+the other Participant's Chat panel.
 
 Run the complete proof from the repository root:
 

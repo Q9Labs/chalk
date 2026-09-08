@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Tooltip } from "@q9labsai/chalk-ui";
-import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, ArrowDown01Icon, Tick01Icon, VolumeHighIcon } from "../../utils/icons";
+import { Loading01Icon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, ArrowDown01Icon, Tick01Icon, VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { ControlBarButton } from "../atomic";
 import { useHaptics } from "../../internal/useHaptics";
@@ -20,6 +20,7 @@ export const ClassicDevicePopover = ({
   orientation = "up",
   className,
   disabled = false,
+  busy = false,
   haptic = "soft",
   size = "md",
   appearance = "default",
@@ -83,11 +84,11 @@ export const ClassicDevicePopover = ({
     <div data-chalk-skin={skin} className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
       <ControlBarButton
-        icon={icon}
-        label={label}
+        icon={busy ? <Loading01Icon className="motion-safe:animate-spin" /> : icon}
+        label={busy ? `Updating ${isMic ? "microphone" : "camera"}` : label}
         onClick={onToggle}
         active={isActive}
-        disabled={disabled}
+        disabled={disabled || busy}
         haptic={haptic}
         size={size}
         className={cn(

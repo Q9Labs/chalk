@@ -1,7 +1,5 @@
 # Chalk web SDK quickstart
 
-> Descriptive snapshot, last verified against code on 2026-08-04. Not a source of truth.
-
 Keep the tenant API key on your server. Your server authenticates the application user, obtains an opaque `AccessGrant` for the target Space, and returns that grant unchanged to the browser. The browser passes a `getAccess` callback to Chalk; `SpaceClient` handles access refresh and recovery.
 
 ## Install
@@ -16,20 +14,11 @@ The server entry point requires Node.js 22 or later. Never import `@q9labsai/cha
 
 Create an application-owned endpoint that authenticates the current user, checks their access to the Space, and asks your server-side Chalk integration for an `AccessGrant`. Return the grant as JSON without inspecting or reshaping it. Keep the tenant API key and any server-side identity records out of browser responses.
 
-The browser sends this small request body whenever Chalk needs access:
-
-```ts
-type AccessRequest = {
-  readonly space: string;
-  readonly reason: "join" | "refresh" | "retry";
-};
-```
-
 Return the grant with `cache-control: no-store`. Your endpoint owns admission and identity policy; `SpaceClient` only consumes the opaque grant it receives.
 
 ## Create the access callback
 
-`GetAccess` is exported by `@q9labsai/chalk-client`. The callback receives the Space slug and the reason for the request and resolves with the server-minted grant returned unchanged: either the fetch `Response` that carries it or its decoded JSON (`AccessGrantSource`). Chalk validates the grant before use and fails the join with `Access was rejected` on a non-OK response or a malformed body. Do not construct or inspect a grant in browser code.
+`GetAccess` receives `{ space, reason }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk rejects non-OK or malformed responses.
 
 ```ts
 // browser/access.ts
@@ -47,7 +36,7 @@ If your endpoint wraps the grant in a larger payload, return the grant field ins
 
 ## Create a SpaceClient
 
-Use `createSpaceClient` when the application owns the client lifecycle or when a custom UI needs direct access to the snapshot and controllers.
+Use `createSpaceClient` for an application-owned client.
 
 ```ts
 // browser/space-client.ts
@@ -61,7 +50,7 @@ export const spaceClient = createSpaceClient({
 });
 ```
 
-`SpaceClient` exposes a flat lifecycle and namespaced controllers. `join` accepts the optional `displayName`, `microphone`, and `camera` defaults; media, chat, participant, reaction, and whiteboard commands stay on their matching controllers.
+Join defaults are optional; media commands live on `client.media`:
 
 ```ts
 await spaceClient.join({ displayName: "Taylor", microphone: true, camera: false });
@@ -80,7 +69,7 @@ Run `leave()` before disposing an application-owned client so Chalk can finish t
 
 ## Render the turnkey Chalk experience
 
-`<Chalk />` creates and owns a `SpaceClient` when given `space` and `getAccess`. It renders the `Entrance` by default, then the live Space surface and recovery or exit states. Lifecycle callbacks expose join, leave, and Episode events.
+`<Chalk />` owns its client when given `space` and `getAccess`, and shows an entrance before joining:
 
 ```tsx
 // browser/SpaceRoute.tsx
@@ -115,7 +104,7 @@ Set `entrance={false}` to enter directly with `displayName` and `defaults`. If t
 
 ## Build custom UI with ChalkProvider
 
-`ChalkProvider` shares an existing `SpaceClient` with React. It does not join, leave, refresh access, or own the client. The public hooks are a closed set: `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and `useCan`.
+`ChalkProvider` shares an existing `SpaceClient` with React. It does not join, leave, refresh access, or own the client.
 
 ```tsx
 import type { SpaceClient } from "@q9labsai/chalk-client";
@@ -148,6 +137,4 @@ export function CustomSpace({ client }: { readonly client: SpaceClient }) {
 
 Use `useCan(capability)` for capability checks. Feature availability belongs in the single `features` object on `<Chalk />`; roles and capability decisions come from the `SpaceSnapshot`, not component props.
 
-## Verified scope
-
-This quickstart covers managed web Spaces, camera, microphone, screen sharing, access refresh, recovery, remote media removal, and durable Leave. Recording, transcription, and React Native launch readiness are outside this document's scope.
+This guide covers managed web Spaces. It does not establish recording, transcription, or React Native readiness.

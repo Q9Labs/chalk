@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { WebSocketServer } from "ws";
+import { createChatFileRoutes } from "./chat-files.mjs";
 
 const tenantAPIKey = process.env.CHALK_API_KEY;
 if (!tenantAPIKey || !/^chalk_sk_[^.]+\.[A-Za-z0-9_-]+$/u.test(tenantAPIKey)) throw new TypeError("A canonical CHALK_API_KEY is required by the fixture backend");
@@ -41,8 +42,10 @@ let revision = 0;
 let chatSequence = 0;
 
 const httpRoutes = new Map([
+  ...createChatFileRoutes({ readJSON, sendJSON, send }),
   ["GET /", serveHTML],
   ["GET /bundle.js", serveBundle],
+  ["GET /bundle.css", serveStyles],
   ["GET /test/login", logIn],
   ["POST /api/chalk/access", issueAccess],
   ["GET /test/state", serveState],
@@ -67,6 +70,10 @@ function serveHTML(_request, response) {
 
 async function serveBundle(_request, response) {
   send(response, 200, await readFile(resolve("dist/bundle.js")), "text/javascript; charset=utf-8");
+}
+
+async function serveStyles(_request, response) {
+  send(response, 200, await readFile(resolve("dist/bundle.css")), "text/css; charset=utf-8");
 }
 
 function logIn(_request, response, url) {
@@ -262,7 +269,7 @@ function sendChat(socket, actor, request) {
     participantId: actor,
     displayName: actor,
     text: String(request.payload?.text),
-    attachments: [],
+    attachments: request.payload.attachments,
     createdAt: new Date().toISOString(),
   };
   chatMessages.push(message);
@@ -455,7 +462,7 @@ function send(response, status, body, contentType) {
 }
 
 function html() {
-  return '<!doctype html><html><head><meta charset="utf-8"><title>Packed Chalk consumer</title></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Packed Chalk consumer</title><link rel="stylesheet" href="/bundle.css"></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>';
 }
 
 function shutdown() {

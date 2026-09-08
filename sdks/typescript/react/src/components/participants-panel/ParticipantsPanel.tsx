@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -266,6 +266,7 @@ const ChalkParticipantsPanel = React.memo((props: ParticipantsPanelProps): React
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
+  const media = useMedia();
   const canMuteOthers = useCan("muteOthers");
   const canStopVideoOthers = useCan("stopVideoOthers");
   const canRequestMedia = useCan("requestMediaOthers");
@@ -291,11 +292,11 @@ const ChalkParticipantsPanel = React.memo((props: ParticipantsPanelProps): React
         id: participant.participantId,
         displayName: participant.displayName,
         isLocal: participant.participantId === self.participantId,
-        isMuted: participant.media.microphone !== "active",
-        isVideoEnabled: participant.media.camera === "active",
+        isMuted: participant.participantId === self.participantId ? media.local.microphone.state !== "enabled" : participant.media.microphone !== "active",
+        isVideoEnabled: participant.participantId === self.participantId ? media.local.camera.state === "enabled" : participant.media.camera === "active",
         isHandRaised: participant.handRaised,
       })),
-    [participantsSlice.roster, self.participantId],
+    [participantsSlice.roster, self.participantId, media.local],
   );
 
   return (

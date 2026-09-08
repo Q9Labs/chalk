@@ -1713,6 +1713,7 @@ export interface components {
     };
     CreateTenantRequest: {
       ai_provider_config?: components["schemas"]["AIProviderConfig"] | null;
+      cors_allowed_origins?: string[];
       default_media_plane?: string | null;
       default_region?: string | null;
       logo_key?: string | null;
@@ -2434,6 +2435,7 @@ export interface components {
     };
     Tenant: {
       ai_provider_config: components["schemas"]["AIProviderConfig"] | null;
+      cors_allowed_origins: string[];
       created_at: components["schemas"]["DateTimeString"];
       default_media_plane: string | null;
       default_region: string | null;
@@ -2556,6 +2558,7 @@ export interface components {
     };
     UpdateTenantRequest: {
       ai_provider_config?: components["schemas"]["AIProviderConfig"] | null;
+      cors_allowed_origins?: string[];
       default_media_plane?: string | null;
       default_region?: string | null;
       logo_key?: string | null;
@@ -8574,7 +8577,9 @@ export interface operations {
   };
   addCloudflareSFUTracks: {
     parameters: {
-      query?: never;
+      query?: {
+        allow_partial_remote_tracks?: boolean;
+      };
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];

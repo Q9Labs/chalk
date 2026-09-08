@@ -1,15 +1,11 @@
 import type { Capability, ChalkChatMessage, ChalkReactionEvent, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
-import type { SpacePanel, ThemePalette, ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
-import type { Participant } from "../../../../../sdks/typescript/react/src/components/participant-grid/ParticipantGrid";
-import type { SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
-import type { ReconnectingOverlayProps } from "../../../../../sdks/typescript/react/src/components/reconnecting-overlay/ReconnectingOverlay";
-import { createSnapshot } from "../../../../../sdks/typescript/react/src/test-support/preview-client";
+import { createSnapshot, type Participant, type ReconnectingOverlayProps, type SettingsDialogValue, type SpacePanel, type ThemePalette, type ThemeTexture } from "@q9labsai/chalk-react/preview";
 
 import { PREVIEW_CAPABILITIES, type PreviewSearch } from "./preview-state";
 
 export const SPACE_NAME = "Design review Space";
 export const SPACE_DESCRIPTION = "Critiques, focused work, and product decisions.";
-export const DISPLAY_NAME = "Hasan";
+export const DISPLAY_NAME = "Adam Rivers";
 export const SPACE_LINK = "https://chalk.example/spaces/design-review";
 export const DIAGNOSTIC_REFERENCE = "chalkdiag:v1:preview-reference";
 export const PREVIEW_EPOCH = "2026-08-01T10:00:00.000Z";

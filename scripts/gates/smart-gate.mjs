@@ -11,7 +11,7 @@ const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript",
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
-const gateDefinitionPaths = new Set([".fallowrc.json", "lefthook.yml", "package.json", "pnpm-workspace.yaml", "turbo.json", ".github/workflows/ci.yml"]);
+const gateDefinitionPaths = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "package.json", "pnpm-workspace.yaml", "turbo.json", ".github/workflows/ci.yml"]);
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const targetRoots = {
   web: ["web", "@q9labsai/chalk-react", "@chalk/sdk-web-consumer-e2e"],
@@ -78,6 +78,7 @@ function isSyncReliabilityInput(file) {
 }
 
 function isKnownPath(file, workspaces) {
+  if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
   if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/architecture-worker", "infrastructure/recorder"])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/") || file.startsWith(".semgrep/")) return true;
@@ -336,7 +337,7 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const semgrepCommand = explicitFull || (full && scope !== "staged") ? ["bash", "scripts/gates/semgrep.sh"] : sourceFiles.length > 0 ? ["bash", "scripts/gates/semgrep.sh", ...sourceFiles] : null;
   const tasks = [
-    task("self-test", "Sync reliability self-test", true, "always required", ["node", "--test", "apps/sync/scripts/reliability_harness.test.mjs"]),
+    task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
     task("language-ratchet", "Language vocabulary ratchet", true, "always required", ["pnpm", "run", "language:ratchet"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
@@ -344,6 +345,11 @@ export function createGatePlan(files, options = {}) {
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
     task("fallow", "Changed-code analysis", full || architecture || sourceFiles.length > 0, full ? fullReason : architecture ? "architecture inputs changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("semgrep", "Static security rules", Boolean(semgrepCommand), full ? fullReason : `${sourceFiles.length} source file(s) changed`, semgrepCommand),
+    task("boundaries", "Workspace import boundaries", full || dependencyChange || sourceFiles.some((file) => [".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"].includes(path.extname(file))), full ? fullReason : "JavaScript/TypeScript source or dependency inputs changed", [
+      "pnpm",
+      "run",
+      "gate:boundaries",
+    ]),
     task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
     task("services", "Service-backed API and Sync correctness gates", serviceGates.length > 0, serviceGates.length > 0 ? serviceGates.join(" and ") : "API and Sync are unaffected", ["bash", "scripts/gates/with-postgres.sh", ...serviceGates]),
     task("contracts", "Contract and generated SDK drift", contracts, contracts ? "contract producers or consumers changed" : "contracts are unaffected", ["pnpm", "run", "contract:check"]),

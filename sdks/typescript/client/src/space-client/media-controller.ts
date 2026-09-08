@@ -1,5 +1,6 @@
 import { Clock, Context, Effect, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
+import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
@@ -80,6 +81,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #fork: Fork;
   readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
+  readonly #pendingSources = new Set<MediaSource>();
   readonly #requestGenerations = new Map<string, number>();
   #intent = { microphone: true, camera: true };
   #requests: readonly IncomingMediaRequest[] = Object.freeze([]);
@@ -341,11 +343,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#connection.runCommand((ports) =>
         Effect.suspend(() => {
           const track = this.#tracks.get("screen");
-          if (!track) {
-            operation?.notObservable("stop_confirmation", "already_stopped");
-            operation?.succeed();
-            return Effect.void;
-          }
           return foreign(() => ports.sync.setScreenShareEnabled(false)).pipe(
             Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "stopScreenShare"))),
             Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
@@ -353,7 +350,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               Effect.sync(() => {
                 this.#assertActivePorts(ports, "stopScreenShare");
                 if (this.#tracks.get("screen") === track) this.#tracks.delete("screen");
-                track.stop();
+                track?.stop();
                 this.#screenEndedPending = false;
                 this.#publish();
                 operation?.observe("observed", "stop_confirmation");
@@ -371,10 +368,24 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
 
   #serialize<A>(source: MediaSource, effect: Effect.Effect<A, unknown>): Effect.Effect<A, unknown> {
-    return this.#gates.get(source)!.withPermit(effect);
+    return this.#gates.get(source)!.withPermit(
+      Effect.sync(() => {
+        this.#pendingSources.add(source);
+        this.#publish();
+      }).pipe(
+        Effect.andThen(effect),
+        Effect.ensuring(
+          Effect.sync(() => {
+            this.#pendingSources.delete(source);
+            this.#publish();
+          }),
+        ),
+      ),
+    );
   }
   #captureSource(source: "microphone" | "camera"): Effect.Effect<MediaStreamTrack, unknown> {
     return foreign(() => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" })).pipe(
+      Effect.mapError((cause) => captureError(cause, source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled", `${source} permission was denied`)),
       Effect.tap(() => this.#refreshDevices().pipe(Effect.ignore)),
       Effect.flatMap((stream) =>
         Effect.try({
@@ -517,7 +528,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const current = this.#store.getSnapshot();
     const snapshot = this.#ports?.media.getSnapshot();
     const state = this.#connection.getSnapshot().state;
-    const local = Object.freeze({ microphone: localMedia("microphone", this.#tracks, snapshot, this.#intent.microphone, state), camera: localMedia("camera", this.#tracks, snapshot, this.#intent.camera, state), screen: localMedia("screen", this.#tracks, snapshot, false, state) });
+    const local = Object.freeze({
+      microphone: localMedia("microphone", this.#tracks, snapshot, this.#intent.microphone, state, this.#pendingSources.has("microphone")),
+      camera: localMedia("camera", this.#tracks, snapshot, this.#intent.camera, state, this.#pendingSources.has("camera")),
+      screen: localMedia("screen", this.#tracks, snapshot, false, state, this.#pendingSources.has("screen")),
+    });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
     const media = Object.freeze({ ...current.media, local, remote, screenShare: local.screen, incomingRequests: this.#requests });
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
@@ -555,10 +570,12 @@ function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: M
   if (camera) entries.push(["camera", camera]);
   return entries;
 }
-function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]) {
+function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean) {
   const track = tracks.get(source) ?? null;
+  if (pending) return Object.freeze({ source, state: "requesting" as const, track });
   const publication = snapshot?.localTracks.find((candidate) => candidate.source === source);
   if (publication?.enabled) return Object.freeze({ source, state: "enabled" as const, track });
+  if (publication && connectionState === "live") return Object.freeze({ source, state: "disabled" as const, track });
   return Object.freeze({ source, state: localMediaState(source, track, intended, connectionState), track });
 }
 function localMediaState(source: MediaSource, track: MediaStreamTrack | null, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"][MediaSource]["state"] {
@@ -603,11 +620,13 @@ function sameDeviceList(left: MediaSlice["devices"]["microphones"], right: Media
   return left.length === right.length && left.every((device, index) => device.deviceId === right[index]?.deviceId && device.label === right[index]?.label);
 }
 function captureError(cause: unknown, action: "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare", permissionMessage: string): ConnectionError {
+  if (cause instanceof ConnectionError) return cause;
   if (isPermissionDenied(cause)) return new ConnectionError({ code: "permission_denied", action, recoverable: true, message: permissionMessage }, { cause });
-  return new ConnectionError({ code: "unsupported_environment", action, recoverable: false, message: action === "startScreenShare" ? "Screen sharing is unavailable in this browser." : "Media capture is unavailable" }, { cause });
+  const failure = describeMediaCaptureError(cause);
+  return new ConnectionError({ ...failure, action, message: action === "startScreenShare" ? "Screen sharing could not start. Check screen recording permission and try again in a supported browser or app." : failure.message }, { cause });
 }
 function isPermissionDenied(cause: unknown): boolean {
-  return cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "SecurityError");
+  return describeMediaCaptureError(cause).code === "permission_denied";
 }
 function isAccessInvalid(cause: unknown): boolean {
   return typeof cause === "object" && cause !== null && "code" in cause && ((cause as { readonly code?: unknown }).code === "access.invalid" || (cause as { readonly code?: unknown }).code === "invalid_access");

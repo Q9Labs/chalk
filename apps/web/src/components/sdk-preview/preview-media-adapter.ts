@@ -1,10 +1,10 @@
 import { createPreviewAudioTrack, type PreviewAudioTrack } from "./preview-audio-track";
 import { createPreviewCameraTrack, type PreviewCameraTrack } from "./preview-camera-track";
 import { createPreviewScreenTrack, type PreviewScreenTrack } from "./preview-screen-track";
-import { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices, type PreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
+import { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices, type PreviewMediaDevices } from "@q9labsai/chalk-react/preview";
 
-export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
-export type { PreviewMediaDevices } from "../../../../../sdks/typescript/react/src/test-support/preview-devices";
+export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "@q9labsai/chalk-react/preview";
+export type { PreviewMediaDevices } from "@q9labsai/chalk-react/preview";
 
 export type PreviewMediaKind = "microphone" | "camera" | "screen";
 

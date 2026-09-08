@@ -125,6 +125,13 @@ func (q operationQuerier) GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.G
 	return tenant, err
 }
 
+func (q operationQuerier) GetTenantCORSAllowedOrigins(ctx context.Context, id pgtype.UUID) ([]string, error) {
+	startedAt := time.Now()
+	origins, err := q.next.GetTenantCORSAllowedOrigins(ctx, id)
+	LogOperation(ctx, q.logger, "db.query", "GetTenantCORSAllowedOrigins", startedAt, err)
+	return origins, err
+}
+
 func (q operationQuerier) GetJourneyTerminalState(ctx context.Context, journeyID pgtype.UUID) (string, error) {
 	startedAt := time.Now()
 	state, err := q.next.GetJourneyTerminalState(ctx, journeyID)

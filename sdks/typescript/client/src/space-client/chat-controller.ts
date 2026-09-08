@@ -17,6 +17,7 @@ export type ChatControllerEffects = {
   readonly markRead: (messageId: string) => ClientEffect<ChatReadReceipt | null>;
   readonly upload: (file: ChatUploadFile) => ClientEffect<ChatAttachment>;
   readonly url: (attachment: ChatAttachment) => string;
+  readonly resolveUrl: (attachment: ChatAttachment) => ClientEffect<string>;
   readonly dispose: () => void;
 };
 export class ChatControllerService extends Context.Service<ChatControllerService, ChatControllerEffects>()("@chalk/client/ChatController") {}
@@ -177,6 +178,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   };
 
   upload = (file: ChatUploadFile): ClientEffect<ChatAttachment> => {
+    const fetch = this.#fetch;
     const prepareOperation = this.#diagnostics?.startOperation("chat.attachment.prepare");
     return Effect.suspend(() => {
       if (!this.#transport) {
@@ -197,7 +199,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
                       prepareOperation?.succeed();
                     }).pipe(
                       Effect.andThen(
-                        foreign(() => this.#fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
+                        foreign(() => fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
                           Effect.flatMap((response) => {
                             const commitOperation = this.#diagnostics?.startOperation("chat.attachment.commit");
                             if (!response.ok) {
@@ -237,6 +239,12 @@ class ChatControllerRuntime implements ChatControllerEffects {
   };
 
   url = (attachment: ChatAttachment): string => `${this.#apiBaseUrl}/v1/chat/attachments/${encodeURIComponent(attachment.attachmentId)}/download`;
+  resolveUrl = (attachment: ChatAttachment): ClientEffect<string> =>
+    Effect.suspend(() => {
+      if (!this.#transport) return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file download is unavailable" }));
+      return this.#connection.runPortCommand(() => foreign(() => this.#transport!.getDownloadUrl(attachment.attachmentId)).pipe(Effect.map((descriptor) => descriptor.downloadUrl))).pipe(Effect.mapError(normalizeClientError));
+    });
+
   dispose(): void {
     this.#unsubscribeConnection?.();
     this.#unsubscribeConnection = null;
@@ -444,7 +452,7 @@ function validateUpload(file: ChatUploadFile, bytes: ArrayBuffer, clientAttachme
   return upload;
 }
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
-  return "bytes" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
+  return "fileName" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
 }
 function catchUpRequest(latestSequence: string | null, ports: ConnectionPorts): { readonly kind: "initial" | "newer"; readonly input: { readonly limit: number; readonly afterSequence?: string } } | null {
   const extension = ports.sync.getCollaborationExtensionState();

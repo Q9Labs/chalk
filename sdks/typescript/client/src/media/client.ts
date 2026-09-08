@@ -2,6 +2,7 @@ import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublica
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
+import { matchRemotePullTracks } from "./remote-track-response";
 import { CloudflareSFUError } from "./types";
 import type {
   CloudflareSFUBootstrap,
@@ -63,6 +64,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #connection: RTCPeerConnection;
   #connectionEpoch = 0;
   #cursor: PublicationCursor | null = null;
+  #remotePullIncomplete = false;
   #generation = 0;
   #negotiatedGeneration: number | null = null;
   #replacementAttemptedGeneration: number | null = null;
@@ -414,7 +416,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const cursor = this.#validatedRemotePublicationCursor(authoritative);
     if (cursor === null) return;
     const ordering = comparePublicationCursor(this.#cursor, cursor);
-    if (ordering !== "newer") return;
+    if (ordering === "stale" || (ordering === "same" && !this.#remotePullIncomplete)) return;
 
     const desired = this.#desiredRemotePublications(authoritative, cursor);
     const toPull = [...desired].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId).map(([, publication]) => publication);
@@ -426,6 +428,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
+    this.#remotePullIncomplete = pulled.length < toPull.length;
     for (const publication of pulled) this.#invokeListener(() => this.#onRemoteTrack?.(publication));
     this.#publishSnapshot();
     this.#emitRemote();
@@ -499,17 +502,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       connection.addEventListener("track", onTrack);
       try {
         this.#requireGeneration(generation);
-        const response = await this.#requireTransport().addTracks({ connectionId, tracks: requested });
+        const response = await this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true });
         this.#requireGeneration(generation);
         const responseTracks = response.tracks ?? [];
+        const matched = matchRemotePullTracks(publications, responseTracks);
         await this.#completeRenegotiation(response, connection, connectionId, generation);
+        if (matched.length === 0) return [];
         await this.#waitForConnection(connection, generation);
         this.#negotiatedGeneration = generation;
         await waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5_000);
         this.#requireGeneration(generation);
-        return publications.map((publication, index) => {
-          const responseTrack = responseTracks[index];
-          const track = responseTrack?.mid === undefined ? undefined : received.get(responseTrack.mid);
+        return matched.map(({ publication, mid }) => {
+          const track = received.get(mid);
           if (!track) throw new CloudflareSFUError("A negotiated remote track did not arrive", "media_failed");
           return Object.freeze({ ...publication, track });
         });
@@ -634,6 +638,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
   #observeRemotePublicationCursor(cursor: PublicationCursor): void {
     this.#cursor = cursor;
+    this.#remotePullIncomplete = false;
     this.#publishSnapshot();
   }
 
@@ -901,10 +906,10 @@ function desiredRemotePublications(publications: readonly CloudflareSFUPublicati
 function reconcileRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], current: ReadonlyMap<string, CloudflareSFURemoteTrack>): Map<string, CloudflareSFURemoteTrack> {
   const pulledByKey = new Map(pulled.map((publication) => [publicationKey(publication), publication]));
   return new Map(
-    [...desired].map(([key, publication]) => {
+    [...desired].flatMap(([key, publication]) => {
       const track = pulledByKey.get(key) ?? current.get(key);
-      if (!track || track.publicationId !== publication.publicationId) throw new CloudflareSFUError("Cloudflare SFU did not return a requested remote track", "media_failed");
-      return [key, track];
+      if (!track || track.publicationId !== publication.publicationId) return [];
+      return [[key, track] as const];
     }),
   );
 }

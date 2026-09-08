@@ -92,6 +92,19 @@ describe("Feedback controller", () => {
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("x-chalk-journey-id")).toBe(ID);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)).evidence.correlations).toMatchObject({ journey_id: ID, trace_id: TRACE_ID, span_id: SPAN_ID });
     expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(prepared.idempotency_key);
+    vi.useFakeTimers();
+    try {
+      const preparation = controller.prepare({ screenshot_provider: () => new Promise(() => undefined) });
+      await vi.advanceTimersByTimeAsync(5_000);
+      const withoutScreenshot = await preparation;
+      expect(withoutScreenshot.evidence.screenshot).toMatchObject({ state: "unavailable", failure_code: "capture_failed" });
+      expect(withoutScreenshot.screenshot).toBeUndefined();
+      await withoutScreenshot.send({ category: "bug", message: "Capture never completed" });
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
     controller.dispose();
     await expect(controller.send({ category: "other", message: "Later" })).rejects.toMatchObject({ code: "unavailable" });
   });

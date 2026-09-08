@@ -21,6 +21,7 @@ insert into tenants (
     media_plane_provider_config,
     ai_provider_config,
     storage_provider_config,
+    cors_allowed_origins,
     logo_key,
     website
 ) values (
@@ -32,9 +33,10 @@ insert into tenants (
     $6,
     $7,
     $8,
-    $9
+    $9,
+    $10
 )
-returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, logo_key, website, updated_at, created_at
+returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, cors_allowed_origins, logo_key, website, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
     select id
@@ -56,6 +58,7 @@ select
     inserted.media_plane_provider_config,
     inserted.ai_provider_config,
     inserted.storage_provider_config,
+    inserted.cors_allowed_origins,
     inserted.logo_key,
     inserted.website,
     seeded.transcription_ceiling,
@@ -78,6 +81,7 @@ type CreateTenantParams struct {
 	MediaPlaneProviderConfig []byte      `json:"media_plane_provider_config"`
 	AiProviderConfig         []byte      `json:"ai_provider_config"`
 	StorageProviderConfig    []byte      `json:"storage_provider_config"`
+	CorsAllowedOrigins       []string    `json:"cors_allowed_origins"`
 	LogoKey                  pgtype.Text `json:"logo_key"`
 	Website                  pgtype.Text `json:"website"`
 }
@@ -90,6 +94,7 @@ type CreateTenantRow struct {
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	AiProviderConfig           []byte             `json:"ai_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
@@ -111,6 +116,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 		arg.MediaPlaneProviderConfig,
 		arg.AiProviderConfig,
 		arg.StorageProviderConfig,
+		arg.CorsAllowedOrigins,
 		arg.LogoKey,
 		arg.Website,
 	)
@@ -123,6 +129,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 		&i.MediaPlaneProviderConfig,
 		&i.AiProviderConfig,
 		&i.StorageProviderConfig,
+		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
 		&i.TranscriptionCeiling,
@@ -146,6 +153,7 @@ select
     tenants.media_plane_provider_config,
     tenants.ai_provider_config,
     tenants.storage_provider_config,
+    tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
     tenant_artifact_policies.transcription_ceiling,
@@ -169,6 +177,7 @@ type GetTenantRow struct {
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	AiProviderConfig           []byte             `json:"ai_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
@@ -192,6 +201,7 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 		&i.MediaPlaneProviderConfig,
 		&i.AiProviderConfig,
 		&i.StorageProviderConfig,
+		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
 		&i.TranscriptionCeiling,
@@ -206,6 +216,19 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 	return i, err
 }
 
+const getTenantCORSAllowedOrigins = `-- name: GetTenantCORSAllowedOrigins :one
+select cors_allowed_origins
+from tenants
+where id = $1
+`
+
+func (q *Queries) GetTenantCORSAllowedOrigins(ctx context.Context, id pgtype.UUID) ([]string, error) {
+	row := q.db.QueryRow(ctx, getTenantCORSAllowedOrigins, id)
+	var cors_allowed_origins []string
+	err := row.Scan(&cors_allowed_origins)
+	return cors_allowed_origins, err
+}
+
 const listTenants = `-- name: ListTenants :many
 select
     tenants.id::uuid as id,
@@ -215,6 +238,7 @@ select
     tenants.media_plane_provider_config,
     tenants.ai_provider_config,
     tenants.storage_provider_config,
+    tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
     tenant_artifact_policies.transcription_ceiling,
@@ -254,6 +278,7 @@ type ListTenantsRow struct {
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	AiProviderConfig           []byte             `json:"ai_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
@@ -288,6 +313,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 			&i.MediaPlaneProviderConfig,
 			&i.AiProviderConfig,
 			&i.StorageProviderConfig,
+			&i.CorsAllowedOrigins,
 			&i.LogoKey,
 			&i.Website,
 			&i.TranscriptionCeiling,
@@ -337,42 +363,46 @@ set
         when $11::boolean then $12::jsonb
         else storage_provider_config
     end,
+    cors_allowed_origins = case
+        when $13::boolean then $14::text[]
+        else cors_allowed_origins
+    end,
     logo_key = case
-        when $13::boolean then $14::text
+        when $15::boolean then $16::text
         else logo_key
     end,
     website = case
-        when $15::boolean then $16::text
+        when $17::boolean then $18::text
         else website
     end,
     updated_at = now()
-where id = $17
-returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, logo_key, website, updated_at, created_at
+where id = $19
+returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, cors_allowed_origins, logo_key, website, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
 set
     transcription_ceiling = case
-        when $18::boolean then $19::text
+        when $20::boolean then $21::text
         else transcription_ceiling
     end,
     transcription_default_mode = case
-        when $20::boolean then $21::text
+        when $22::boolean then $23::text
         else transcription_default_mode
     end,
     provider_policy_version = case
-        when $22::boolean then $23::text
+        when $24::boolean then $25::text
         else provider_policy_version
     end,
     recording_retention_seconds = case
-        when $24::boolean then $25::bigint
+        when $26::boolean then $27::bigint
         else recording_retention_seconds
     end,
     transcript_retention_seconds = case
-        when $26::boolean then $27::bigint
+        when $28::boolean then $29::bigint
         else transcript_retention_seconds
     end,
     source_window_seconds = case
-        when $28::boolean then $29::bigint
+        when $30::boolean then $31::bigint
         else source_window_seconds
     end,
     updated_at = now()
@@ -387,6 +417,7 @@ select
     updated_tenant.media_plane_provider_config,
     updated_tenant.ai_provider_config,
     updated_tenant.storage_provider_config,
+    updated_tenant.cors_allowed_origins,
     updated_tenant.logo_key,
     updated_tenant.website,
     updated_policy.transcription_ceiling,
@@ -414,6 +445,8 @@ type UpdateTenantParams struct {
 	AiProviderConfig              []byte      `json:"ai_provider_config"`
 	StorageProviderConfigSet      bool        `json:"storage_provider_config_set"`
 	StorageProviderConfig         []byte      `json:"storage_provider_config"`
+	CorsAllowedOriginsSet         bool        `json:"cors_allowed_origins_set"`
+	CorsAllowedOrigins            []string    `json:"cors_allowed_origins"`
 	LogoKeySet                    bool        `json:"logo_key_set"`
 	LogoKey                       pgtype.Text `json:"logo_key"`
 	WebsiteSet                    bool        `json:"website_set"`
@@ -441,6 +474,7 @@ type UpdateTenantRow struct {
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	AiProviderConfig           []byte             `json:"ai_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
@@ -467,6 +501,8 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 		arg.AiProviderConfig,
 		arg.StorageProviderConfigSet,
 		arg.StorageProviderConfig,
+		arg.CorsAllowedOriginsSet,
+		arg.CorsAllowedOrigins,
 		arg.LogoKeySet,
 		arg.LogoKey,
 		arg.WebsiteSet,
@@ -494,6 +530,7 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 		&i.MediaPlaneProviderConfig,
 		&i.AiProviderConfig,
 		&i.StorageProviderConfig,
+		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
 		&i.TranscriptionCeiling,

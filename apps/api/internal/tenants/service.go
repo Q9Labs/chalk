@@ -27,6 +27,7 @@ var (
 	ErrInvalidTenantName     = errors.New("invalid tenant name")
 	ErrInvalidTenantRegion   = errors.New("invalid tenant region")
 	ErrInvalidTenantField    = errors.New("invalid tenant field")
+	ErrInvalidCORSOrigin     = errors.New("invalid tenant CORS origin")
 	ErrTenantNotFound        = errors.New("tenant not found")
 	ErrInvalidAccountID      = errors.New("invalid dashboard account id")
 	ErrInvalidRequestKey     = errors.New("invalid tenant onboarding request key")
@@ -55,6 +56,7 @@ type Tenant struct {
 	MediaPlaneProviderConfig json.RawMessage
 	AIProviderConfig         json.RawMessage
 	StorageProviderConfig    json.RawMessage
+	CORSAllowedOrigins       []string
 	LogoKey                  *string
 	Website                  *string
 	ArtifactPolicy           artifactpolicy.TenantPolicy
@@ -67,6 +69,7 @@ type TenantRepository interface {
 	GetTenant(ctx context.Context, id utilities.ID) (Tenant, error)
 	ListTenants(ctx context.Context, page pagination.PageRequest) (TenantList, error)
 	UpdateTenant(ctx context.Context, id utilities.ID, input UpdateTenantInput) (Tenant, error)
+	GetTenantCORSAllowedOrigins(ctx context.Context, id utilities.ID) ([]string, error)
 }
 
 type Service struct {
@@ -81,6 +84,7 @@ type CreateTenantInput struct {
 	MediaPlaneProviderConfig json.RawMessage
 	AIProviderConfig         json.RawMessage
 	StorageProviderConfig    json.RawMessage
+	CORSAllowedOrigins       []string
 	LogoKey                  *string
 	Website                  *string
 }
@@ -92,6 +96,7 @@ type UpdateTenantInput struct {
 	MediaPlaneProviderConfig utilities.OptionalJSON
 	AIProviderConfig         utilities.OptionalJSON
 	StorageProviderConfig    utilities.OptionalJSON
+	CORSAllowedOrigins       OptionalCORSOrigins
 	LogoKey                  utilities.OptionalString
 	Website                  utilities.OptionalString
 	ArtifactPolicy           ArtifactPolicyUpdate
@@ -299,6 +304,29 @@ func (s Service) UpdateTenant(ctx context.Context, id utilities.ID, input Update
 	return s.repository.UpdateTenant(ctx, id, input)
 }
 
+func (s Service) AllowsOrigin(ctx context.Context, id utilities.ID, origin string) (bool, error) {
+	if id.IsZero() {
+		return false, ErrInvalidTenantID
+	}
+	prepared, err := CORSOrigin(origin)
+	if err != nil {
+		return false, nil
+	}
+	origins, err := s.repository.GetTenantCORSAllowedOrigins(ctx, id)
+	if errors.Is(err, ErrTenantNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	for _, allowed := range origins {
+		if allowed == prepared {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (Service) AvailableRegions(ctx context.Context) ([]regions.Region, error) {
 	return regions.Available(), nil
 }
@@ -318,6 +346,10 @@ func prepareCreateTenantInput(input *CreateTenantInput) error {
 		return ErrInvalidTenantRegion
 	}
 	input.DefaultRegion = defaultRegion
+	input.CORSAllowedOrigins, err = CORSOrigins(input.CORSAllowedOrigins)
+	if err != nil {
+		return err
+	}
 
 	if err := prepareCreateNullableFields(input); err != nil {
 		return err
@@ -383,6 +415,13 @@ func prepareUpdateTenantInput(input *UpdateTenantInput) error {
 		return ErrInvalidTenantRegion
 	}
 	input.DefaultRegion = defaultRegion
+	if input.CORSAllowedOrigins.Set {
+		origins, originsErr := CORSOrigins(input.CORSAllowedOrigins.Value)
+		if originsErr != nil {
+			return originsErr
+		}
+		input.CORSAllowedOrigins.Value = origins
+	}
 
 	if err := prepareUpdateNullableFields(input); err != nil {
 		return err

@@ -88,6 +88,12 @@ errors keep their current behavior.
   becomes the next locked baseline.
 - Formatting, Fallow, Semgrep, workspace type checks, coverage tests, and
   builds follow affected source files and workspace dependents.
+- The boundary gate covers cross-workspace dependency direction under `apps`,
+  `packages`, and `sdks/typescript`. Use named package entrypoints or configured
+  aliases: relative reach-through into another workspace's private source is
+  rejected, and packages or SDKs cannot import applications. This lane does not
+  enforce intra-workspace cycles, development-dependency policy, or orphan
+  detection. Generated build output and dedicated fixtures are excluded.
 - Tests run once with coverage; lint aliases do not repeat formatting or type
   checks.
 - Go API changes run the complete language gate. Elixir Sync changes run the

@@ -1,4 +1,4 @@
-import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "../../../../../sdks/typescript/react/src/components/theme";
+import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "@q9labsai/chalk-react/preview";
 
 import type { PreviewFeatureKey, PreviewSearch, PreviewState } from "./preview-state";
 

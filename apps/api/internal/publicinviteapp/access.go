@@ -10,7 +10,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -118,6 +117,11 @@ func NewAccessPort(config AccessConfig) (publicinvites.Access, error) {
 
 func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
 	arrival := input.Arrival
+	// An authenticated arrival can collect its approved grant before it has a
+	// media proof. Reuse the admitted Participant and provider connection.
+	if arrival.State == publicinvites.ArrivalAdmitted {
+		return a.resumePublicAccess(ctx, arrival, false)
+	}
 	result, err := a.episodes.JoinPublic(ctx, episodes.PublicJoinInput{
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, AccountID: arrival.AccountID,
 		IdentityMode: string(arrival.IdentityMode), DisplayName: arrival.DisplayName,
@@ -174,6 +178,13 @@ func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites
 			return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
 		}
 	}
+	return a.resumePublicAccess(ctx, arrival, input.ReplaceMediaConnection)
+}
+
+func (a accessPort) resumePublicAccess(ctx context.Context, arrival publicinvites.Arrival, replaceMediaConnection bool) (publicinvites.PublicAccessGrant, error) {
+	if arrival.Provider == "" || arrival.ProviderSubject == "" {
+		return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
+	}
 	result, err := a.episodes.FindPublic(ctx, episodes.PublicAccessInput{
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: arrival.EpisodeID,
 		ParticipantID: arrival.ParticipantID, ParticipantGeneration: arrival.ParticipantGeneration,
@@ -189,7 +200,7 @@ func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites
 	if result.Participant.TenantID != arrival.TenantID || result.Participant.SpaceID != arrival.SpaceID || result.Participant.EpisodeID != arrival.EpisodeID || result.Participant.ID != arrival.ParticipantID || result.Participant.Generation != arrival.ParticipantGeneration {
 		return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
 	}
-	return a.issue(ctx, arrival, ready, true, input.ReplaceMediaConnection)
+	return a.issue(ctx, arrival, ready, true, replaceMediaConnection)
 }
 
 func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) error {
@@ -401,4 +412,3 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 }
 
 var _ publicinvites.Access = accessPort{}
-var _ mediaplaneproviders.Resolver = (*mediaplaneproviders.Registry)(nil)

@@ -7,6 +7,7 @@ select
     tenants.media_plane_provider_config,
     tenants.ai_provider_config,
     tenants.storage_provider_config,
+    tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
     tenant_artifact_policies.transcription_ceiling,
@@ -30,6 +31,7 @@ select
     tenants.media_plane_provider_config,
     tenants.ai_provider_config,
     tenants.storage_provider_config,
+    tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
     tenant_artifact_policies.transcription_ceiling,
@@ -63,6 +65,7 @@ insert into tenants (
     media_plane_provider_config,
     ai_provider_config,
     storage_provider_config,
+    cors_allowed_origins,
     logo_key,
     website
 ) values (
@@ -73,6 +76,7 @@ insert into tenants (
     sqlc.narg(media_plane_provider_config),
     sqlc.narg(ai_provider_config),
     sqlc.narg(storage_provider_config),
+    sqlc.arg(cors_allowed_origins),
     sqlc.narg(logo_key),
     sqlc.narg(website)
 )
@@ -98,6 +102,7 @@ select
     inserted.media_plane_provider_config,
     inserted.ai_provider_config,
     inserted.storage_provider_config,
+    inserted.cors_allowed_origins,
     inserted.logo_key,
     inserted.website,
     seeded.transcription_ceiling,
@@ -138,6 +143,10 @@ set
     storage_provider_config = case
         when sqlc.arg(storage_provider_config_set)::boolean then sqlc.narg(storage_provider_config)::jsonb
         else storage_provider_config
+    end,
+    cors_allowed_origins = case
+        when sqlc.arg(cors_allowed_origins_set)::boolean then sqlc.arg(cors_allowed_origins)::text[]
+        else cors_allowed_origins
     end,
     logo_key = case
         when sqlc.arg(logo_key_set)::boolean then sqlc.narg(logo_key)::text
@@ -189,6 +198,7 @@ select
     updated_tenant.media_plane_provider_config,
     updated_tenant.ai_provider_config,
     updated_tenant.storage_provider_config,
+    updated_tenant.cors_allowed_origins,
     updated_tenant.logo_key,
     updated_tenant.website,
     updated_policy.transcription_ceiling,
@@ -201,3 +211,8 @@ select
     updated_tenant.created_at
 from updated_tenant
 join updated_policy on updated_policy.tenant_id = updated_tenant.id;
+
+-- name: GetTenantCORSAllowedOrigins :one
+select cors_allowed_origins
+from tenants
+where id = sqlc.arg(id);

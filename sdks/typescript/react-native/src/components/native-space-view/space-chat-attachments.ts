@@ -11,10 +11,8 @@ export interface NativeChatFileDraft {
 }
 
 export function describeChatUploadFile(file: ChatUploadFile): NativeChatFileDraft {
-  if ("bytes" in file) {
-    return { file, fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };
-  }
-  return { file, fileName: file.name, mimeType: file.type, byteLength: file.size };
+  if ("arrayBuffer" in file) return { file, fileName: file.name, mimeType: file.type, byteLength: file.size };
+  return { file, fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };
 }
 
 export function validateChatFileDraft(draft: NativeChatFileDraft): string | null {

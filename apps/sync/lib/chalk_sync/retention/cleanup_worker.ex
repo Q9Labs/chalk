@@ -217,8 +217,6 @@ defmodule ChalkSync.Retention.CleanupWorker do
 
   defp persisted_deadline_policy(candidate) do
     with %DateTime{} = deadline_at <- candidate.deadline_at,
-         {microseconds, _precision} <- deadline_at.microsecond,
-         true <- rem(microseconds, 1_000) == 0,
          deadline_at_ms <- DateTime.to_unix(deadline_at, :millisecond),
          true <- deadline_at_ms >= 1,
          generation when is_integer(generation) and generation >= 1 <-

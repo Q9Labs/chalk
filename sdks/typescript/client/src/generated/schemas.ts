@@ -145,6 +145,9 @@ export type StorageProviderConfig = typeof StorageProviderConfigSchema.Type;
 
 export const TenantSchema = Schema.Struct({
   ai_provider_config: Schema.NullOr(AIProviderConfigSchema),
+  cors_allowed_origins: Schema.Array(
+    Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+  ).check(Schema.isMaxLength(32)),
   created_at: DateTimeStringSchema,
   default_media_plane: Schema.NullOr(Schema.String),
   default_region: Schema.NullOr(Schema.String),
@@ -440,6 +443,11 @@ export type CreateSpaceRequest = typeof CreateSpaceRequestSchema.Type;
 
 export const CreateTenantRequestSchema = Schema.Struct({
   ai_provider_config: Schema.optional(Schema.NullOr(AIProviderConfigSchema)),
+  cors_allowed_origins: Schema.optional(
+    Schema.Array(
+      Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+    ).check(Schema.isMaxLength(32)),
+  ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
@@ -1253,6 +1261,11 @@ export type UpdateSpaceRequest = typeof UpdateSpaceRequestSchema.Type;
 
 export const UpdateTenantRequestSchema = Schema.Struct({
   ai_provider_config: Schema.optional(Schema.NullOr(AIProviderConfigSchema)),
+  cors_allowed_origins: Schema.optional(
+    Schema.Array(
+      Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+    ).check(Schema.isMaxLength(32)),
+  ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
@@ -1423,6 +1436,11 @@ export const AddCloudflareSFUTracksPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
 export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPathParamsSchema.Type;
+
+export const AddCloudflareSFUTracksQueryParamsSchema = Schema.Struct({
+  allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
+});
+export type AddCloudflareSFUTracksQueryParams = typeof AddCloudflareSFUTracksQueryParamsSchema.Type;
 
 export const AddCloudflareSFUTracksRequestBodySchema = CloudflareSFUTracksRequestSchema;
 export type AddCloudflareSFUTracksRequestBody = typeof AddCloudflareSFUTracksRequestBodySchema.Type;
@@ -4823,6 +4841,25 @@ export const TenantInvalidArtifactPolicyErrorSchema = TenantInvalidArtifactPolic
   }),
 );
 
+export class TenantInvalidCorsOriginError extends Schema.TaggedErrorClass<TenantInvalidCorsOriginError>()("TenantInvalidCorsOriginError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.invalid_cors_origin"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantInvalidCorsOriginErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.invalid_cors_origin"),
+    message: Schema.String,
+  }),
+});
+export const TenantInvalidCorsOriginErrorSchema = TenantInvalidCorsOriginErrorWireSchema.pipe(
+  Schema.decodeTo(TenantInvalidCorsOriginError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantInvalidCorsOriginError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class TenantInvalidFieldError extends Schema.TaggedErrorClass<TenantInvalidFieldError>()("TenantInvalidFieldError", {
   error: Schema.Struct({
     code: Schema.Literal("tenant.invalid_field"),
@@ -5833,6 +5870,7 @@ export const CreateTenantErrorSchema = Schema.Union([
   RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
+  TenantInvalidCorsOriginErrorSchema,
   TenantInvalidFieldErrorSchema,
   TenantInvalidNameErrorSchema,
   TenantInvalidRegionErrorSchema,
@@ -6854,6 +6892,7 @@ export const UpdateTenantErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
   TenantArtifactPolicyConflictErrorSchema,
   TenantInvalidArtifactPolicyErrorSchema,
+  TenantInvalidCorsOriginErrorSchema,
   TenantInvalidFieldErrorSchema,
   TenantInvalidIdErrorSchema,
   TenantInvalidNameErrorSchema,

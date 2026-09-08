@@ -1,226 +1,25 @@
-# Execution Trace Harness
+# Execution trace harness
 
-> Descriptive snapshot, last verified against code on 2026-08-18. Not a source of truth.
-
-Use this when Hasan wants to review a finished Go API change by watching it run as a readable story, not by reading code and tests alone.
-
-## What It Is
-
-The Execution Trace Harness is local developer tooling under
-`apps/api/internal/traceharness`, exposed by:
-
-```bash
-go run ./cmd/trace -list
-go run ./cmd/trace
-```
-
-It runs scripted scenarios and prints an execution timeline. The first scenario,
-`tenant-create`, goes through the real HTTP router and tenant service, then uses
-traced local doubles at external boundaries so it can run without Postgres, Redis, email, or storage services.
-
-The goal is confidence and familiarity: show request input, authentication, authorization or policy decisions, service transformations, repository or adapter calls, database/provider-shaped operations, returned data, and final output.
-
-## How To Run
+Use this to explain or test an API flow without live dependencies. It runs real application code with traced doubles at external boundaries; it isn't production observability or a real-provider test.
 
 From `apps/api`:
 
-```bash
-go run ./cmd/trace
-go run ./cmd/trace -scenario all
-go run ./cmd/trace -scenario tenant-create
-go run ./cmd/trace -scenario integration-execute-action
-go run ./cmd/trace -scenario route:recording-transcribe
-go run ./cmd/trace -scenario route:episode-admit-member
-go run ./cmd/trace -scenario route:api-key-customer-flow
-go run ./cmd/trace -scenario edge:api-key-rejected-scope
-go run ./cmd/trace -scenario route:participant-media-sfu-auth
-go run ./cmd/trace -scenario edge:participant-media-wrong-audience
-go run ./cmd/trace -scenario route:public-invite-access-recovery
-go run ./cmd/trace -scenario service:media-plane-default-resolution
-go run ./cmd/trace -scenario edge:media-plane-disabled
-go run ./cmd/trace -color always
-go run ./cmd/trace -style tree
-go run ./cmd/trace -format json
+```sh
+go run ./cmd/trace -list
+go run ./cmd/trace -scenario <name>
+go run ./cmd/trace -scenario all -format json
+go run ./cmd/trace -style tree -color always
 ```
 
-By default, the command runs every registered scenario in catalog order. Use
-`-scenario <name>` to focus on one trace. Text output is for humans. JSON output
-is for tools; `-scenario all -format json` prints a JSON array.
+No scenario argument runs the full catalog. `-list` is the current inventory; text is for reading and JSON is for tools.
 
-`-style` picks the timeline layout: `minimal` (default) uses flat indentation;
-`tree` draws box-drawing guides so nesting depth is explicit. Both share the
-same palette, aligned key/value columns, and per-event summary.
+## Add a scenario
 
-## When To Add A Scenario
+- Add it in `internal/traceharness`, following a neighboring scenario. Register it in `Run` and `ScenarioNames`.
+- Use `route:*`, `service:*`, `policy:*`, `ratelimit:*`, `adapter:*`, or `edge:*` to identify what it tests.
+- Exercise real behavior and double only external dependencies. Keep one review question per scenario.
+- `Recorder.Add` records a step; `Recorder.Start` / `Span.End` records an operation's duration and result.
+- Show relevant input, policy decision, service/repository calls, and result. Redact credentials, customer data, production IDs, and private configuration.
+- Test the result and important events with `go test ./internal/traceharness ./cmd/trace`, then run the API gate for Go changes.
 
-Add or update a scenario when a change introduces behavior Hasan may want to
-review end to end:
-
-- a new route or changed HTTP flow
-- authorization, scope, role, or tenant-policy behavior
-- rate limiting keys, policies, windows, or denial paths
-- service-level business behavior that is easier to understand without HTTP
-- adapter behavior for email, storage, Cloudflare, Redis, or another provider
-- important edge cases: invalid input, missing auth, forbidden access, duplicate
-  records, provider failure, cancellation, timeout, rollback, or empty results
-
-Prefer one clear scenario per review question. Do not create one giant trace
-that tries to explain the whole application.
-
-## Scenario Families
-
-Use scenario names that make the review target obvious:
-
-- `route:*` for full HTTP flows
-- `service:*` for direct domain/service behavior
-- `policy:*` for authorization decisions
-- `ratelimit:*` for rate-limit decisions
-- `adapter:*` for provider request/response/error mapping
-- `edge:*` for failure and boundary behavior
-
-The CLI accepts `-scenario all` or any registered scenario name. Keep new names
-simple, documented in `Run`, and included in `ScenarioNames` so the full-catalog
-trace remains complete.
-
-## Current Scenarios
-
-Run the full catalog in text mode with:
-
-```bash
-go run ./cmd/trace -color always
-go run ./cmd/trace -scenario all -style tree -color always
-```
-
-Run one scenario in text mode with:
-
-```bash
-go run ./cmd/trace -scenario <name> -color always
-```
-
-Registered scenarios:
-
-- `tenant-create`
-- `integration-execute-action`
-- `route:auth-register`
-- `route:auth-login`
-- `route:auth-logout`
-- `route:auth-google-start`
-- `route:auth-google-callback`
-- `route:me`
-- `route:tenant-create`
-- `service:media-plane-default-resolution`
-- `route:tenant-list-system`
-- `route:tenant-get-authorized`
-- `route:tenant-update-authorized`
-- `route:regions-list`
-- `route:user-create`
-- `route:user-list-system`
-- `route:user-get`
-- `route:membership-create-owner`
-- `route:membership-list-viewer`
-- `route:membership-update-owner`
-- `route:space-create-member`
-- `route:episode-create-member`
-- `route:episode-admit-member`
-- `route:episode-remove-participant`
-- `route:episode-end`
-- `route:episode-deadline`
-- `route:recording-transcribe`
-- `route:telemetry-journey-event-intake`
-- `route:status-monitor-ingest`
-- `service:episode-diagnostics`
-- `service:public-invite-lifecycle`
-- `route:chat-attachment-upload`
-- `route:whiteboard-file-upload`
-- `route:api-key-customer-flow`
-- `route:public-invite-observability`
-- `edge:api-key-rejected-scope`
-- `route:participant-media-sfu-auth`
-- `route:public-invite-access-recovery`
-- `edge:participant-media-wrong-audience`
-- `policy:tenant-system-allow`
-- `policy:tenant-api-key-scope`
-- `policy:tenant-user-role`
-- `ratelimit:ip-deny`
-- `ratelimit:principal-deny`
-- `adapter:postgres-tenant-create`
-- `adapter:redis-rate-limit`
-- `adapter:cloudflare-r2-signed-url`
-- `adapter:cloudflare-sfu-bootstrap`
-- `adapter:cloudflare-sfu-failure-observability`
-- `adapter:provider-bridge-publication-grant`
-- `adapter:cloudflare-rtk-join`
-- `adapter:resend-send-email`
-- `edge:unauthenticated-route`
-- `edge:forbidden-tenant-route`
-- `edge:invalid-route-id`
-- `edge:media-plane-disabled`
-- `webhook:delivery-attempt`
-
-## Web Launch Authentication Proof
-
-The launch scenarios cover both customer API-key authentication and the participant-only Cloudflare SFU boundary. The accepted API-key trace shows credential parsing, the redacted database lookup, best-effort usage touch, tenant authorization, and the customer resource response. The rejected-scope trace proves the same authenticated key stops at policy before the tenant service runs.
-
-The participant-media pair uses a real Ed25519 issuer and verifier. The accepted `chalk-media` credential reaches the active-participant check and the traced Cloudflare SFU adapter. The wrong-audience credential returns `401` before the active-participant check, media-plane resolver, or adapter runs. Neither trace records API-key material, participant credentials, scopes, network addresses, or SDP.
-
-Operational instrumentation is provided by `observability.NewLaunchTelemetry`. API-key services receive it through `apikeys.Config.Telemetry`; AccessGrant issuers and media verifiers are wrapped with `observability.InstrumentAccessGrantIssuer` and `observability.InstrumentParticipantMediaVerifier`. The resulting metrics use only bounded `outcome` and `reason` attributes while the wrappers preserve the active journey and W3C trace context.
-
-## Media Plane Resolution Proof
-
-`service:media-plane-default-resolution` runs the real
-`mediaplaneproviders.Registry` with a Space selecting `cf_sfu`, no Tenant
-provider configuration, and deployment-owned process configuration. It builds
-the local adapter without making a provider request and records
-`configuration_source=deployment_default`, `mode=chalk_managed`, and
-`outcome=resolved`.
-
-`edge:media-plane-disabled` supplies the concrete Tenant configuration
-`{"enabled":false}`. The Registry returns no service before adapter
-construction and records `configuration_source=disabled`, `mode=disabled`, and
-`outcome=disabled`. Both traces record only bounded provider state; process
-configuration values and the raw Tenant JSON stay out of the result.
-
-## What A Good Trace Shows
-
-A good scenario shows the shape change across boundaries:
-
-- raw input before validation or normalization
-- authenticated principal and relevant scopes/roles
-- policy requirement and allow/deny reason
-- service input after validation/normalization
-- repository or adapter input
-- database query/provider operation shape, with secrets redacted
-- returned row/provider result
-- mapped domain object or error
-- final HTTP response or service result
-
-Keep sensitive values out of traces. Redact tokens, secrets, provider keys,
-production IDs, customer data, and private operational detail.
-
-## Implementation Pattern
-
-1. Add a scenario in `apps/api/internal/traceharness`.
-2. Reuse real code for the behavior being reviewed.
-3. Use traced local doubles at external boundaries unless the scenario is
-   explicitly about a real local dependency.
-4. Record events with `Recorder.Add` for point-in-time steps.
-5. Use `Recorder.Start` and `Span.End` for operations with a return value,
-   duration, or error.
-6. Add a focused test that asserts the scenario status/result and the important
-   event names.
-7. Update this doc or the API README if you add a scenario that other agents
-   should know exists.
-
-## Agent Checklist
-
-When finishing Go API work and Hasan asks for harness coverage:
-
-- Add the smallest scenario that proves the new behavior.
-- Include the happy path and at least one important edge case when it materially
-  improves review confidence.
-- Keep output readable in text mode; avoid dumping huge structs.
-- Preserve `-format json` for machine-readable output.
-- Run `go test ./internal/traceharness ./cmd/trace`.
-- Run `apps/api/scripts/gate.sh` after touching Go API code.
-
-Do not commit raw trace output.
+Don't commit raw trace output. Add scenarios when useful or requested, not as a routine handoff requirement.

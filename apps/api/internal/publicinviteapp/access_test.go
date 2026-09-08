@@ -17,6 +17,40 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+func TestApprovedArrivalCollectsGrantWithoutMediaProof(t *testing.T) {
+	fixture := newAccessFixture(t)
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grant.ParticipantID != fixture.arrival.ParticipantID || grant.ParticipantGeneration != fixture.arrival.ParticipantGeneration || grant.ProviderSubject != fixture.arrival.ProviderSubject {
+		t.Fatalf("grant changed the admitted Participant or media connection")
+	}
+	if fixture.plane.createCalls != 0 || fixture.plane.resumeCalls != 1 {
+		t.Fatalf("create/resume calls = %d/%d, want 0/1", fixture.plane.createCalls, fixture.plane.resumeCalls)
+	}
+}
+
+func TestApprovedArrivalRejectsChangedParticipantGeneration(t *testing.T) {
+	fixture := newAccessFixture(t)
+	fixture.result.Participant.Generation++
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if !errors.Is(err, publicinvites.ErrMediaProofRejected) {
+		t.Fatalf("changed generation error = %v, want %v", err, publicinvites.ErrMediaProofRejected)
+	}
+	if fixture.plane.createCalls != 0 || fixture.plane.resumeCalls != 0 {
+		t.Fatal("stale arrival must not reach the media provider")
+	}
+}
+
 func TestRefreshReplacementIssuesDiagnostics(t *testing.T) {
 	fixture := newAccessFixture(t)
 	access, err := publicinviteapp.NewAccessPort(fixture.config())
@@ -191,6 +225,7 @@ func (failingDiagnosticsIssuer) Issue(context.Context, accessgrants.DiagnosticsS
 }
 
 type mediaPlaneStub struct {
+	resumeCalls           int
 	createCalls           int
 	removeCalls           int
 	removedParticipantRef string
@@ -202,6 +237,11 @@ func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.Ensur
 func (p *mediaPlaneStub) CreateJoin(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	p.createCalls++
 	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareRTK, ParticipantRef: "new-provider", ClientPayload: map[string]any{"token": "provider-token"}}, nil
+}
+
+func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	p.resumeCalls++
+	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"token": "provider-token"}}, nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {

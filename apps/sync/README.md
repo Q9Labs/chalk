@@ -54,8 +54,27 @@ serialization lock. One transaction returns a committed event and receipt or a
 stable rejected receipt. An uncertain COMMIT is resolved by reading that
 receipt from a fresh writable-primary connection.
 
-`Episodes.Reducer` owns pure state transitions. `Stateholder.Postgres` owns
-production decisions and recovery. `Episodes.Coordinator` caches only local
+`Episodes.Reducer` owns pure state transitions. `Stateholder.Postgres` is the
+public persistence facade and sole owner of `Postgrex.transaction/3`, boundary
+timeout/error and uncertain-commit mapping, and post-commit hooks. Its
+transaction-scoped collaborators divide semantic ownership:
+
+- `Authority` and `Control` own locks, receipts, and control reads;
+  `CommandDecision` and `CommandPersistence` own command replay and atomic
+  event/state/receipt writes; `Lifecycle` owns end/abort intents; and
+  `RecoveryReader` owns bounded recovery pages.
+- `ExternalOperationPlanner`, `ExternalOperationClaims`,
+  `ExternalOperationDecision`, `ExternalOperationFinalizer`, and
+  `ExternalOperationRecord` own the external-operation lifecycle.
+- `ParticipantAuthority`, `PublicationGrants`, `PublicationFences`,
+  `RoleTransitionPlanner`, and `RoleTransitionSettlement` own their named
+  authority and fencing decisions; `WebhookObservation` owns post-commit
+  delivery observation.
+- `Postgres.SQL.*` mirrors those areas; `ExternalOperationColumns` owns only the
+  shared row projection. `Scope`, `Transaction`, and `FaultHooks` remain narrow
+  policy adapters.
+
+No collaborator opens a transaction. `Episodes.Coordinator` caches only local
 heads and subscriptions. PostgreSQL notifications accelerate delivery, while a
 periodic authoritative head read repairs every dropped hint.
 
@@ -98,6 +117,11 @@ snapshots cannot overwrite newer truth.
 Production boot refuses Memory, the development verifier, an incompatible
 migration, a non-writable database, and a missing required synchronous standby.
 The exact launch topology and WAL-lag ceiling remain deployment inputs.
+`CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY` defaults to `true`. Set it to `false`
+only for an approved single-node deployment without automatic failover. This
+keeps PostgreSQL 18, writable-primary, migration, fsync, full-page-write,
+checksum, synchronous-commit, authentication, and provider-bridge checks enabled.
+Readiness reports the standby requirement as `not_required` in this mode.
 
 Production protocol-v1 admission verifies API-issued Ed25519 JWTs locally. Set
 `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`, and

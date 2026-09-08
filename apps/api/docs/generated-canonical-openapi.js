@@ -3022,7 +3022,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_field", "tenant.invalid_name", "tenant.invalid_region"],
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_cors_origin", "tenant.invalid_field", "tenant.invalid_name", "tenant.invalid_region"],
           },
           401: {
             content: {
@@ -3254,7 +3254,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_artifact_policy", "tenant.invalid_field", "tenant.invalid_id", "tenant.invalid_name", "tenant.invalid_region"],
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_artifact_policy", "tenant.invalid_cors_origin", "tenant.invalid_field", "tenant.invalid_id", "tenant.invalid_name", "tenant.invalid_region"],
           },
           401: {
             content: {
@@ -9213,6 +9213,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             required: true,
             schema: {
               $ref: "#/components/schemas/ParticipantId",
+            },
+          },
+          {
+            in: "query",
+            name: "allow_partial_remote_tracks",
+            required: false,
+            schema: {
+              type: "boolean",
             },
           },
         ],
@@ -15323,6 +15331,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             ],
           },
+          cors_allowed_origins: {
+            items: {
+              format: "uri",
+              maxLength: 2048,
+              pattern: "^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$",
+              type: "string",
+            },
+            maxItems: 32,
+            type: "array",
+          },
           default_media_plane: {
             minLength: 1,
             type: ["string", "null"],
@@ -17642,6 +17660,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             ],
           },
+          cors_allowed_origins: {
+            items: {
+              format: "uri",
+              maxLength: 2048,
+              pattern: "^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$",
+              type: "string",
+            },
+            maxItems: 32,
+            type: "array",
+          },
           created_at: {
             $ref: "#/components/schemas/DateTimeString",
           },
@@ -17714,6 +17742,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         },
         required: [
           "ai_provider_config",
+          "cors_allowed_origins",
           "created_at",
           "default_media_plane",
           "default_region",
@@ -18034,6 +18063,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
                 type: "null",
               },
             ],
+          },
+          cors_allowed_origins: {
+            items: {
+              format: "uri",
+              maxLength: 2048,
+              pattern: "^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$",
+              type: "string",
+            },
+            maxItems: 32,
+            type: "array",
           },
           default_media_plane: {
             minLength: 1,

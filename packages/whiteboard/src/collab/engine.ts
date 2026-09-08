@@ -1,5 +1,6 @@
 import { CaptureUpdateAction, hashElementsVersion, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
+import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
 import { WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
 import { WhiteboardPresence } from "./presence";
@@ -28,7 +29,7 @@ export type WhiteboardCollaborationEvent =
       readonly revision: string;
       readonly sceneGeneration?: string;
       readonly elements: readonly WhiteboardWireElement[];
-      readonly appState?: { readonly viewBackgroundColor?: string };
+      readonly appState?: SharedWhiteboardAppState;
     }
   | {
       readonly type: "update";
@@ -175,7 +176,7 @@ export class ExcalidrawCollabEngine {
           sceneId: event.sceneId,
           ...(event.sceneGeneration ? { sceneGeneration: event.sceneGeneration } : {}),
           elements: event.elements,
-          appState: event.appState as AppState | undefined,
+          appState: event.appState,
         });
         return;
       case "update":
@@ -210,7 +211,7 @@ export class ExcalidrawCollabEngine {
     });
   }
 
-  handleRemoteSnapshot(payload: { sceneId: string; sceneGeneration?: string; elements: readonly WhiteboardWireElement[]; appState?: AppState }): void {
+  handleRemoteSnapshot(payload: { sceneId: string; sceneGeneration?: string; elements: readonly WhiteboardWireElement[]; appState?: SharedWhiteboardAppState }): void {
     this.applyRemoteElements({
       sceneId: payload.sceneId,
       ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
@@ -345,7 +346,7 @@ export class ExcalidrawCollabEngine {
     void submission.catch((cause: unknown) => this.opts.onSubmissionError?.(cause));
   }
 
-  private applyRemoteElements(args: { sceneId: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: AppState; isSnapshot: boolean }) {
+  private applyRemoteElements(args: { sceneId: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: SharedWhiteboardAppState; isSnapshot: boolean }) {
     const remoteSceneId = args.sceneId;
 
     if (!this.sceneId) {
@@ -385,7 +386,7 @@ export class ExcalidrawCollabEngine {
 
     excalidrawAPI.updateScene({
       elements: reconciled,
-      appState: args.appState,
+      appState: withLocalWhiteboardCamera(args.appState, excalidrawAPI.getAppState()),
       captureUpdate: CaptureUpdateAction.NEVER,
     });
 

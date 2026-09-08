@@ -1,110 +1,17 @@
 import { Dialog } from "@base-ui/react/dialog";
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import { IconButton, Input } from "@q9labsai/chalk-ui";
 
-import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
-import { ArrowLeft02Icon, Cancel01Icon, Message01Icon, Microphone01Icon, Monitor01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, VolumeHighIcon } from "../../utils/icons";
-import { resolvePortalThemeFromDocument } from "../../utils/theme";
+import { ArrowLeft02Icon, Cancel01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, VolumeHighIcon } from "../../utils/icons";
 import { VolumeSlider } from "../atomic";
-import { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type ThemePalette } from "../theme";
-import { SkinProvider, useSkin } from "../skin-context";
+import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "../theme";
+import { SkinProvider } from "../skin-context";
 import { ChalkToggle } from "../chalk-ui";
-import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
+import { BackgroundEffectsPicker } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
-import type { SettingsDialogValue } from "./SettingsDialog";
-
-type SectionId = "audio-video" | "audio" | "video" | "appearance" | "experience";
-type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;
-
-const EMPTY_DEVICE_GROUPS = {
-  audioinput: [] as SelectableDevice[],
-  audiooutput: [] as SelectableDevice[],
-  videoinput: [] as SelectableDevice[],
-};
-
-function mergeDevices(...deviceGroups: ReadonlyArray<readonly SelectableDevice[]>) {
-  const devicesById = new Map<string, SelectableDevice>();
-
-  for (const deviceGroup of deviceGroups) {
-    for (const device of deviceGroup) {
-      const existingDevice = devicesById.get(device.deviceId);
-      if (!existingDevice || (!existingDevice.label && device.label)) {
-        devicesById.set(device.deviceId, device);
-      }
-    }
-  }
-
-  return Array.from(devicesById.values());
-}
-
-interface SettingsDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  settings: SettingsDialogValue;
-  onUpdateIdentity: (updates: Partial<SettingsDialogValue["identity"]>) => void;
-  onUpdateJoin: (updates: Partial<SettingsDialogValue["join"]>) => void;
-  onUpdateAudio: (updates: Partial<SettingsDialogValue["audio"]>) => void;
-  onUpdateVideo: (updates: Partial<SettingsDialogValue["video"]>) => void;
-  onUpdateAppearance: (updates: Partial<SettingsDialogValue["appearance"]>) => void;
-  onUpdateExperience: (updates: Partial<SettingsDialogValue["experience"]>) => void;
-  enablePictureInPicture?: boolean;
-  isPictureInPictureSupported?: boolean;
-  isPictureInPictureActive?: boolean;
-  onOpenPictureInPicture?: () => Promise<void> | void;
-  enableBackgroundEffects?: boolean;
-  isBackgroundEffectsSupported?: boolean;
-  isApplyingBackgroundEffect?: boolean;
-  backgroundEffects?: readonly BackgroundEffect[];
-  selectedBackgroundEffectId?: string;
-  onSelectBackgroundEffect?: (effectId: string) => void;
-  onUploadBackgroundEffect?: (file: File) => void;
-  audioInputDevices?: readonly Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[];
-  audioOutputDevices?: readonly Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[];
-  videoInputDevices?: readonly Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[];
-  audioLevel?: number;
-  videoTrack?: MediaStreamTrack | null;
-  reducedMotion?: boolean;
-  participantColorSeed?: string;
-  isDarkMode?: boolean;
-  initialSection?: SectionId;
-}
-
-const SECTIONS = [
-  {
-    id: "audio-video",
-    label: "Audio & video",
-    description: "Microphone, speakers, camera",
-    icon: Microphone01Icon,
-    keywords: ["audio", "video", "mic", "microphone", "speaker", "volume", "noise", "camera", "preview", "background", "blur"],
-  },
-  {
-    id: "appearance",
-    label: "Appearance",
-    description: "Skin, palette, texture, avatars",
-    icon: Monitor01Icon,
-    keywords: ["theme", "skin", "classic", "chalk", "palette", "texture", "paper", "slate", "motion", "dark", "light", "color", "avatar", "facehash", "generated", "initials", "fun"],
-  },
-  {
-    id: "experience",
-    label: "Experience",
-    description: "Picture-in-Picture and device extras",
-    icon: Message01Icon,
-    keywords: ["picture", "picture-in-picture", "pip"],
-  },
-] as const satisfies ReadonlyArray<{
-  id: SectionId;
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  keywords: readonly string[];
-}>;
-
-function normalizeSection(section: SectionId): Exclude<SectionId, "audio" | "video"> {
-  return section === "audio" || section === "video" ? "audio-video" : section;
-}
+import { SETTINGS_SECTIONS, useSettingsDialogBehavior, type SettingsDialogProps } from "./settings-dialog-behavior";
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
@@ -166,90 +73,26 @@ export const ClassicSettingsDialog = React.memo(
     isDarkMode = false,
     initialSection = "audio-video",
   }: SettingsDialogProps) => {
-    const prefersReducedMotion = usePrefersReducedMotion();
-    const portalTheme = resolvePortalThemeFromDocument();
-    const isDesktop = useMediaQuery("(min-width: 768px)");
-    const disableMotion = prefersReducedMotion || reducedMotion;
-    const fallbackPalette: ThemePalette = settings.appearance.theme === "dark" || (settings.appearance.theme === "system" && portalTheme === "dark") ? "warm-charcoal" : "light";
-    const inheritedSkin = useSkin();
-    const resolvedSkin = settings.appearance.skin ?? inheritedSkin;
-    const resolvedPalette = settings.appearance.palette ?? fallbackPalette;
-    const resolvedTexture = settings.appearance.texture ?? "none";
-    const resolvedTheme = getThemeMode(resolvedPalette);
-    const usesDarkPalette = isDarkMode || isDarkThemePalette(resolvedPalette);
-    const [activeSection, setActiveSection] = useState<SectionId>(normalizeSection(initialSection));
-    const [isNavOpen, setIsNavOpen] = useState(true);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [detectedDevices, setDetectedDevices] = useState(EMPTY_DEVICE_GROUPS);
-    const effectiveParticipantSeed = useMemo(() => participantColorSeed?.trim() || settings.identity.displayName.trim() || "You", [participantColorSeed, settings.identity.displayName]);
-    const effectiveAudioInputDevices = useMemo(() => mergeDevices(audioInputDevices, detectedDevices.audioinput), [audioInputDevices, detectedDevices.audioinput]);
-    const effectiveAudioOutputDevices = useMemo(() => mergeDevices(audioOutputDevices, detectedDevices.audiooutput), [audioOutputDevices, detectedDevices.audiooutput]);
-    const effectiveVideoInputDevices = useMemo(() => mergeDevices(videoInputDevices, detectedDevices.videoinput), [detectedDevices.videoinput, videoInputDevices]);
-    const settingsChromeVariables = useMemo(() => {
-      const vars = getParticipantThemeVariables(effectiveParticipantSeed, settings.appearance.profileGradient);
-      return vars as React.CSSProperties;
-    }, [effectiveParticipantSeed, settings.appearance.profileGradient]);
-
-    const filteredSections = useMemo(() => {
-      if (!searchQuery.trim()) {
-        return SECTIONS;
-      }
-
-      const query = searchQuery.toLowerCase();
-      return SECTIONS.filter((section) => {
-        return section.label.toLowerCase().includes(query) || section.description.toLowerCase().includes(query) || section.keywords.some((keyword) => keyword.includes(query));
-      });
-    }, [searchQuery]);
-
-    useEffect(() => {
-      if (!filteredSections.some((section) => section.id === activeSection)) {
-        setActiveSection(filteredSections[0]?.id ?? "audio-video");
-      }
-    }, [activeSection, filteredSections]);
-
-    useEffect(() => {
-      if (isOpen) {
-        setIsNavOpen(true);
-      }
-    }, [isOpen]);
-
-    useEffect(() => {
-      if (!isOpen) {
-        return;
-      }
-
-      const mediaDevices = navigator.mediaDevices;
-      if (!mediaDevices?.enumerateDevices) {
-        return;
-      }
-
-      let isCancelled = false;
-
-      const syncDevices = async () => {
-        try {
-          const devices = await mediaDevices.enumerateDevices();
-          if (isCancelled) {
-            return;
-          }
-
-          setDetectedDevices({
-            audioinput: devices.filter((device) => device.kind === "audioinput"),
-            audiooutput: devices.filter((device) => device.kind === "audiooutput"),
-            videoinput: devices.filter((device) => device.kind === "videoinput"),
-          });
-        } catch {
-          // Keep prop-driven device lists if enumeration fails.
-        }
-      };
-
-      void syncDevices();
-      mediaDevices.addEventListener?.("devicechange", syncDevices);
-
-      return () => {
-        isCancelled = true;
-        mediaDevices.removeEventListener?.("devicechange", syncDevices);
-      };
-    }, [isOpen]);
+    const {
+      disableMotion,
+      isDesktop,
+      resolvedSkin,
+      resolvedPalette,
+      resolvedTexture,
+      resolvedTheme,
+      usesDarkPalette,
+      activeSection,
+      setActiveSection,
+      isNavOpen,
+      setIsNavOpen,
+      searchQuery,
+      setSearchQuery,
+      effectiveAudioInputDevices,
+      effectiveAudioOutputDevices,
+      effectiveVideoInputDevices,
+      settingsChromeVariables,
+      filteredSections,
+    } = useSettingsDialogBehavior({ isOpen, settings, audioInputDevices, audioOutputDevices, videoInputDevices, reducedMotion, participantColorSeed, isDarkMode, initialSection });
 
     const renderSectionContent = () => {
       switch (activeSection) {
@@ -628,7 +471,7 @@ export const ClassicSettingsDialog = React.memo(
                     <div className="flex items-center gap-3">
                       <IconButton icon={<ArrowLeft02Icon className="h-5 w-5" />} variant="ghost" onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections" />
                       <div>
-                        <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                        <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SETTINGS_SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
                         <p className="mt-0.5 text-xs text-[var(--chalk-app-text-muted)] md:mt-1 md:text-sm">Changes apply to this device.</p>
                       </div>
                     </div>

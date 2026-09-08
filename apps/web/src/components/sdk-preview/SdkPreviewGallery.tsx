@@ -2,13 +2,26 @@ import type React from "react";
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { MediaRequestDialog } from "../../../../../sdks/typescript/react/src/components/media-request-dialog/MediaRequestDialog";
-import { SettingsDialog, type SettingsDialogValue } from "../../../../../sdks/typescript/react/src/components/composite/SettingsDialog";
-import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
-import { ToastStack } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
-import { CommandErrorAlert, LeaveDialog, PreviewEpisodeEnded, PreviewEntrance, PreviewSpaceView, PreviewStatus, type SpaceLayout, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../../../../../sdks/typescript/react/src/test-support/preview-fixtures";
-import { createPreviewClient, type PreviewClientCommand } from "../../../../../sdks/typescript/react/src/test-support/preview-client";
-import { COSMIC_CHALK_THEME } from "../../../../../sdks/typescript/react/src/theme";
+import {
+  CommandErrorAlert,
+  COSMIC_CHALK_THEME,
+  LeaveDialog,
+  MediaRequestDialog,
+  PreviewEpisodeEnded,
+  PreviewEntrance,
+  PreviewSpaceView,
+  PreviewStatus,
+  SettingsDialog,
+  ToastStack,
+  createPreviewClient,
+  type PreviewClientCommand,
+  type SettingsDialogValue,
+  type SpaceLayout,
+  type ThemePalette,
+  type ThemeSkin,
+  type ThemeTexture,
+  type Toast,
+} from "@q9labsai/chalk-react/preview";
 
 import { PreviewGalleryToolbar } from "./PreviewGalleryToolbar";
 import { DIAGNOSTIC_REFERENCE, DISPLAY_NAME, INITIAL_SETTINGS, SPACE_DESCRIPTION, SPACE_LINK, SPACE_NAME, TOAST_MESSAGES, buildPreviewSnapshot, panelFor, participantsForCount, productionPalette, productionTexture, statusOverlay, type PreviewSnapshotTracks } from "./sdk-preview-fixtures";

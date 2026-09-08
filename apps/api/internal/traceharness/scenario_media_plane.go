@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
@@ -21,7 +22,7 @@ const (
 func runServiceMediaPlaneDefaultResolution(ctx context.Context) (ScenarioResult, error) {
 	recorder := NewRecorder(deterministicClock())
 	telemetry := &tracedMediaPlaneResolutionTelemetry{recorder: recorder}
-	registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+	registry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
 		ProcessConfig:   traceCloudflareSFUProcessConfig(),
 		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
 		Telemetry:       telemetry,
@@ -71,7 +72,7 @@ func runServiceMediaPlaneDefaultResolution(ctx context.Context) (ScenarioResult,
 func runEdgeMediaPlaneDisabled(ctx context.Context) (ScenarioResult, error) {
 	recorder := NewRecorder(deterministicClock())
 	telemetry := &tracedMediaPlaneResolutionTelemetry{recorder: recorder}
-	registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+	registry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
 		ProcessConfig:   runtimeconfig.CloudflareRealtimeConfig{},
 		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
 		Telemetry:       telemetry,

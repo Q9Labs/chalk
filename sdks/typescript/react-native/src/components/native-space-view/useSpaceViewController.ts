@@ -1,6 +1,7 @@
 import type { ChatSendInput, Reaction } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Linking } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
+import { mediaDevices } from "@cloudflare/react-native-webrtc";
 
 import { useSpaceClient } from "../../context/space-client-context";
 import { useChat as useSpaceChat, useMedia as useSpaceMedia, useParticipants as useSpaceParticipants, useReactions as useSpaceReactions, useSelf, useWhiteboard, useRecording, useConnection } from "../../hooks/space-hooks";
@@ -58,7 +59,7 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
         return {
           ...participant,
           id: participant.participantId,
-          audioEnabled: local ? media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting" : participant.media.microphone === "active",
+          audioEnabled: local ? media.local.microphone.state === "enabled" : participant.media.microphone === "active",
           videoEnabled: local ? media.local.camera.state === "enabled" || media.local.camera.state === "requesting" : participant.media.camera === "active",
           audioTrack: local ? media.local.microphone.track : (remoteMedia.find((publication) => publication.source === "microphone")?.track ?? null),
           videoTrack: local ? media.local.camera.track : (remoteMedia.find((publication) => publication.source === "camera")?.track ?? null),
@@ -178,7 +179,7 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
   const canClear = canWhiteboard && self.can("manageWhiteboard");
   const whiteboardTransport = useMemo(() => client.whiteboard.transport(), [client.whiteboard, whiteboardSlice.engine.status]);
   const canEndEpisode = self.can("endEpisode");
-  const screenShareAvailability = useMemo(() => resolveNativeScreenShareAvailability({ featureEnabled: features?.screenShare !== false }), [features?.screenShare]);
+  const screenShareAvailability = useMemo(() => resolveNativeScreenShareAvailability({ featureEnabled: features?.screenShare !== false, platform: Platform.OS, simulator: isIosSimulator(), captureAvailable: typeof mediaDevices.getDisplayMedia === "function" }), [features?.screenShare]);
   const capabilities = useMemo(
     () => ({
       canEndEpisode,
@@ -300,6 +301,14 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     });
   }, [chat, chatAttachments, chatDraft, client.chat.files, run]);
 
+  const resolveChatAttachmentUrl = useCallback(
+    async (attachmentId: string) => {
+      const attachment = chatSlice.messages.flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
+      return attachment ? client.chat.files.resolveUrl(attachment) : null;
+    },
+    [chatSlice.messages, client.chat.files],
+  );
+
   return {
     recording,
     canManageRecording: self.can("manageRecording"),
@@ -309,7 +318,7 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     spaceName: spaceName || "Space",
     panel: spacePanels.panel,
     selfName: self.displayName || "Participant",
-    isMuted: !(media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting"),
+    isMuted: media.local.microphone.state !== "enabled",
     isCameraOff: !(media.local.camera.state === "enabled" || media.local.camera.state === "requesting"),
     handRaised: interactionState.isHandRaised,
     raisedHandCount: interactionState.raisedHandCount,
@@ -328,6 +337,7 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     canChat: capabilities.canChat,
     canParticipants: capabilities.canParticipants,
     canScreenShare: capabilities.canScreenShare,
+    screenShareUnavailableReason: features?.screenShare !== false && self.can("publishScreen") ? screenShareAvailability.detail : null,
     canReactions: capabilities.canReactions,
     canHandRaise: capabilities.canHandRaise,
     canInvite: capabilities.canInvite,
@@ -344,7 +354,7 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     participants: spaceParticipants,
     settings: {
       displayName: self.displayName ?? "",
-      microphoneEnabled: media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting",
+      microphoneEnabled: media.local.microphone.state === "enabled",
       cameraEnabled: media.local.camera.state === "enabled" || media.local.camera.state === "requesting",
       devices: media.devices,
       selection: media.selection,
@@ -380,9 +390,12 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
       void run(() => interactionState.sendReaction(reaction));
     },
     sendChatMessage,
+    resolveChatAttachmentUrl,
     openChatAttachment: (attachmentId: string) => {
-      const attachment = chat.messages.flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
-      if (attachment) void run(() => Linking.openURL(client.chat.files.url(attachment)));
+      void run(async () => {
+        const url = await resolveChatAttachmentUrl(attachmentId);
+        if (url) await Linking.openURL(url);
+      });
     },
     markChatMessageVisible: (sequence: string) => void run(() => chat.markAsRead(sequence)),
     admitParticipant: (requestId: string) => void run(() => client.participants.admit(requestId)),

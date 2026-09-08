@@ -149,3 +149,14 @@ client hook for commands.
 
 `AccessGrant` remains opaque. The application backend creates it, `getAccess`
 returns it unchanged, and `SpaceClient` handles refresh and recovery.
+
+## Component maintenance
+
+`transcript-panel-behavior.ts`, `settings-dialog-behavior.ts`, and
+`control-bar-behavior.ts` own the shared contracts, state, and commands for their
+components. Their `Classic*.tsx` and Chalk-skin `*.tsx` counterparts own
+skin-specific rendering; keep behavior out of those paired renderers.
+
+The SDK-owned `@q9labsai/chalk-react/preview` dev-tool entrypoint exposes the
+preview contract used by the first-party gallery. Application previews should
+consume that entrypoint instead of reaching into this package's `src` tree.

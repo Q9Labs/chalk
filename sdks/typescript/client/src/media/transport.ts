@@ -24,11 +24,12 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   };
   return {
     addTracks: async (input) => {
+      const path = input.allowPartialRemoteTracks ? "tracks?allow_partial_remote_tracks=true" : "tracks";
       const response = await request<{
         readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
         readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & { readonly publication_id?: string })[];
         readonly requiresImmediateRenegotiation?: boolean;
-      }>("tracks", {
+      }>(path, {
         method: "POST",
         body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription, tracks: input.tracks }),
       });

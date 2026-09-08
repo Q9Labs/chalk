@@ -23,6 +23,7 @@ import (
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
+	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -173,9 +174,10 @@ func run() error {
 		oauthStates = redisadapter.NewOAuthStateStore(redisClient)
 	}
 	authenticationService := authentication.NewService(authenticationRepository, passwords, googleProvider, oauthStates, authentication.Config{
-		RequireEmailVerification: cfg.Auth.EmailVerificationRequired,
-		OAuthStateTTL:            cfg.Auth.OAuthStateTTL,
-		SessionTTL:               cfg.Auth.SessionTTL,
+		RequireEmailVerification:          cfg.Auth.EmailVerificationRequired,
+		OAuthStateTTL:                     cfg.Auth.OAuthStateTTL,
+		SessionTTL:                        cfg.Auth.SessionTTL,
+		GoogleReauthenticationRedirectURL: cfg.GoogleOAuth.ReauthenticationRedirectURL,
 	})
 	recentAuthService := recentauth.NewService(authenticationService, recentauth.Config{
 		Secret:    cfg.Auth.RecentAuthSecret,
@@ -193,7 +195,7 @@ func run() error {
 	membershipService := memberships.NewService(membershipRepository)
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
 	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
-	episodeMediaBindingResolver := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})
+	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
@@ -336,7 +338,7 @@ func run() error {
 		}
 		episodeCredentials = verifier
 	}
-	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+	mediaPlaneRegistry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
 		ProcessConfig:   cfg.CloudflareRealtime,
 		DefaultProvider: cfg.DefaultMediaPlane,
 		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),
@@ -580,6 +582,7 @@ func run() error {
 		},
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
+			TenantOrigins:  tenantService,
 		},
 		LocalSystemToken:           cfg.API.LocalSystemToken,
 		OpsIngestToken:             cfg.API.OpsIngestToken,

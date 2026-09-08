@@ -112,6 +112,7 @@ export class ChalkWhiteboardController {
   readonly #nextMessageId: () => string;
   #canDraw: boolean;
   #canClear: boolean;
+  #viewport: ChalkEmbeddedWhiteboardViewport | null = null;
   #rendererGeneration: string | null = null;
   #sceneId: string | null = null;
   #sceneRevision: string | null = null;
@@ -165,6 +166,7 @@ export class ChalkWhiteboardController {
   }
 
   setViewport(viewport: ChalkEmbeddedWhiteboardViewport): void {
+    this.#viewport = viewport;
     this.#send({ type: "set_viewport", payload: viewport });
   }
 
@@ -260,6 +262,7 @@ export class ChalkWhiteboardController {
         ...(this.options.localParticipantColor ? { localParticipantColor: this.options.localParticipantColor } : {}),
       },
     });
+    if (this.#viewport) this.#send({ type: "set_viewport", payload: this.#viewport });
 
     if (!this.#transportStarted) {
       await this.options.transport.startSceneSubscription();

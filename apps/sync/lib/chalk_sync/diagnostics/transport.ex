@@ -271,6 +271,8 @@ defmodule ChalkSync.Diagnostics.Transport do
     end
   end
 
+  defp validate_addresses([], _mode), do: {:error, :destination_blocked}
+
   defp validate_addresses(addresses, :localhost) do
     if Enum.all?(addresses, &loopback_address?/1), do: :ok, else: {:error, :destination_blocked}
   end
@@ -300,6 +302,7 @@ defmodule ChalkSync.Diagnostics.Transport do
   defp blocked_address?({203, 0, 113, _d}), do: true
   defp blocked_address?({100, b, _c, _d}) when b in 64..127, do: true
   defp blocked_address?({255, 255, 255, 255}), do: true
+  defp blocked_address?({_a, _b, _c, _d}), do: false
 
   defp blocked_address?({_, _, _, _, _, _, _, _} = address) do
     ipv4_mapped? = ipv4_mapped?(address)
