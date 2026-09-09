@@ -167,7 +167,7 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 			if ctx.Err() != nil {
 				return errors.Join(ctx.Err(), unexpectedDaemonError(daemonErr, authorityDraining), closeErr)
 			}
-			if authorityDraining && errors.Is(daemonErr, ErrWorkerDraining) {
+			if authorityDraining && expectedDaemonDrainError(daemonErr) {
 				return closeErr
 			}
 			if daemonErr == nil {
@@ -227,10 +227,32 @@ func readinessFailure(operation string, err error) error {
 }
 
 func unexpectedDaemonError(err error, draining bool) error {
-	if err == nil || draining && errors.Is(err, ErrWorkerDraining) {
+	if err == nil || draining && expectedDaemonDrainError(err) {
 		return nil
 	}
 	return readinessFailure("run recorder worker daemon", err)
+}
+
+func expectedDaemonDrainError(err error) bool {
+	if err == nil || err == ErrWorkerDraining || err == context.Canceled {
+		return true
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		children := joined.Unwrap()
+		if len(children) == 0 {
+			return false
+		}
+		for _, child := range children {
+			if !expectedDaemonDrainError(child) {
+				return false
+			}
+		}
+		return true
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return expectedDaemonDrainError(wrapped.Unwrap())
+	}
+	return false
 }
 
 func (r *ReadinessReporter) publish(ctx context.Context, ready bool) (WorkerReadinessReceipt, error) {

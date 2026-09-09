@@ -261,6 +261,26 @@ func TestReadinessReporterPreservesCloseFailureDuringShutdown(t *testing.T) {
 	}
 }
 
+func TestReadinessReporterPreservesCaptureCleanupFailureDuringShutdown(t *testing.T) {
+	t.Parallel()
+	cleanupErr := errors.New("persist capture tail")
+	control := &readinessControlStub{reports: make(chan WorkerReadiness, 2)}
+	reporter, _ := NewReadinessReporter(control)
+	daemon := newReadinessDaemonStub()
+	daemon.drainErr = cleanupErr
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- reporter.Run(ctx, daemon) }()
+	assertReadinessReport(t, control.reports, true, 1, ReadinessReasonReady)
+	<-daemon.started
+	cancel()
+	assertReadinessReport(t, control.reports, false, 0, ReadinessReasonDraining)
+	err := <-result
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrReadinessFailure) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("run error = %v", err)
+	}
+}
+
 type readinessControlStub struct {
 	mu                    sync.Mutex
 	calls                 int
@@ -292,10 +312,11 @@ func (s *readinessControlStub) ReportReadiness(ctx context.Context, readiness Wo
 }
 
 type readinessDaemonStub struct {
-	started chan struct{}
-	stopped chan struct{}
-	drain   chan struct{}
-	drained chan struct{}
+	started  chan struct{}
+	stopped  chan struct{}
+	drain    chan struct{}
+	drained  chan struct{}
+	drainErr error
 }
 
 func (s *readinessDaemonStub) Run(ctx context.Context) error {
@@ -307,7 +328,7 @@ func (s *readinessDaemonStub) Run(ctx context.Context) error {
 	case <-s.drain:
 		close(s.drained)
 		close(s.stopped)
-		return ErrWorkerDraining
+		return errors.Join(ErrWorkerDraining, s.drainErr)
 	}
 }
 

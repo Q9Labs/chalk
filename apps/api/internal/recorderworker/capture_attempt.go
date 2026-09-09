@@ -532,11 +532,9 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 		case event := <-planEvents:
 			if event.checkpointNoRTP {
-				if len(readers) == 0 {
-					if err := writer.checkpointNoRTP(runCtx, event.at); err != nil {
-						cancel()
-						return a.finishFailure(err, writer)
-					}
+				if err := writer.checkpointNoRTP(runCtx, event.at); err != nil {
+					cancel()
+					return a.finishFailure(err, writer)
 				}
 				continue
 			}
@@ -720,16 +718,13 @@ bindPlan:
 				}
 			case event := <-planEvents:
 				if event.checkpointNoRTP {
-					if !hasPlannedCaptureReader(currentReaders, snapshot.Tracks) {
-						if err := writer.checkpointNoRTP(ctx, event.at); err == nil {
-							continue
-						} else {
-							cancelBind()
-							<-result
-							return nil, captureplan.Plan{}, false, err
-						}
+					if err := writer.checkpointNoRTP(ctx, event.at); err == nil {
+						continue
+					} else {
+						cancelBind()
+						<-result
+						return nil, captureplan.Plan{}, false, err
 					}
-					continue
 				}
 				cancelBind()
 				<-result
@@ -762,16 +757,6 @@ func captureRuntimeEventMatchesPlannedReaders(event captureRuntimeEvent, readers
 	}
 	for _, track := range expected {
 		if track.MID.String() == event.mid && track == event.track.CaptureTrack() {
-			return true
-		}
-	}
-	return false
-}
-
-func hasPlannedCaptureReader(readers map[string]CaptureMediaTrack, expected []captureplane.PulledCaptureTrack) bool {
-	for _, track := range expected {
-		current, ok := readers[track.MID.String()]
-		if ok && current != nil && track == current.CaptureTrack() {
 			return true
 		}
 	}
@@ -926,6 +911,7 @@ func (a *PionCaptureAttempt) closeLocal(ctx context.Context, writer *captureBund
 	result = errors.Join(result, a.peer.Close())
 	if writer != nil {
 		result = errors.Join(result, writer.closeWithContext(ctx, reason, a.config.Now()))
+		writer.clearTerminalState()
 	}
 	result = errors.Join(result, ctx.Err())
 	a.mu.Lock()
@@ -1176,6 +1162,7 @@ type captureBundleWriter struct {
 	key            []byte
 	contextDigest  []byte
 	assembler      *recordingbundle.Assembler
+	pendingObject  *pendingCaptureObject
 	reservation    BundleReservation
 	reserveOrdinal uint64
 	origin         time.Time
@@ -1188,6 +1175,16 @@ type captureBundleWriter struct {
 	lastMono       int64
 	lastMedia      int64
 	terminalGap    bool
+}
+
+type pendingCaptureObject struct {
+	assembler       *recordingbundle.Assembler
+	reservation     string
+	body            []byte
+	checksum        string
+	upload          CaptureBundleUpload
+	finalized       bool
+	uploadAttempted bool
 }
 
 func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
@@ -1276,7 +1273,7 @@ func (w *captureBundleWriter) closeCurrentBundle(ctx context.Context, reason rec
 }
 
 func (w *captureBundleWriter) checkpointNoRTP(ctx context.Context, now time.Time) error {
-	if w.origin.IsZero() || w.terminalGap || len(w.active) > 0 {
+	if w.origin.IsZero() || w.terminalGap {
 		return nil
 	}
 	targetMono, targetMedia := w.controlEventClocks(now)
@@ -1671,43 +1668,95 @@ func (w *captureBundleWriter) persist(ctx context.Context) error {
 		return fmt.Errorf("%w: key unavailable", ErrInvalidCaptureAttempt)
 	}
 	bundle := sealed.Bundle
-	encoded, err := recordingbundle.Encrypt(w.key, bundle)
 	pending := w.assembler.TakePendingGaps()
 	w.pendingGaps = append(w.pendingGaps, pending...)
-	if err != nil {
+	if w.pendingObject != nil && (w.pendingObject.assembler != w.assembler || w.pendingObject.reservation != w.reservation.ReservationID) {
 		recordingbundle.ClearSealedBundle(&sealed)
-		return err
+		return fmt.Errorf("%w: encrypted bundle retry identity mismatch", ErrInvalidCaptureAttempt)
 	}
-	checksum := recordingbundle.ObjectChecksumHex(encoded)
+	if w.pendingObject == nil {
+		encoded, err := recordingbundle.Encrypt(w.key, bundle)
+		if err != nil {
+			recordingbundle.ClearSealedBundle(&sealed)
+			return err
+		}
+		w.pendingObject = &pendingCaptureObject{
+			assembler:   w.assembler,
+			reservation: w.reservation.ReservationID,
+			body:        encoded,
+			checksum:    recordingbundle.ObjectChecksumHex(encoded),
+		}
+	}
+	encoded := w.pendingObject.body
+	checksum := w.pendingObject.checksum
 	contentType := captureBundleContentType
 	codec, layer := captureBundleCodecAndLayer(bundle)
 	authority := w.bundleAuthority()
-	upload, err := w.attempt.bundles.Finalize(ctx, CaptureBundleFinalize{Authority: authority, Reservation: w.reservation, Bundle: bundle, ObjectSize: int64(len(encoded)), ObjectSHA256: checksum, ContentType: contentType, Codec: codec, Layer: layer})
-	if err != nil {
-		recordingbundle.ClearSealedBundle(&sealed)
-		clear(encoded)
-		return fmt.Errorf("finalize recording bundle: %w", err)
+	if !w.pendingObject.finalized {
+		upload, err := w.attempt.bundles.Finalize(ctx, CaptureBundleFinalize{Authority: authority, Reservation: w.reservation, Bundle: bundle, ObjectSize: int64(len(encoded)), ObjectSHA256: checksum, ContentType: contentType, Codec: codec, Layer: layer})
+		if err != nil {
+			recordingbundle.ClearSealedBundle(&sealed)
+			return fmt.Errorf("finalize recording bundle: %w", err)
+		}
+		if upload.Reservation.ReservationID != w.reservation.ReservationID || strings.TrimSpace(upload.UploadToken) == "" {
+			recordingbundle.ClearSealedBundle(&sealed)
+			return fmt.Errorf("%w: finalized bundle authority mismatch", ErrInvalidCaptureAttempt)
+		}
+		w.pendingObject.upload = upload
+		w.pendingObject.finalized = true
 	}
-	if upload.Reservation.ReservationID != w.reservation.ReservationID || strings.TrimSpace(upload.UploadToken) == "" {
-		recordingbundle.ClearSealedBundle(&sealed)
-		clear(encoded)
-		return fmt.Errorf("%w: finalized bundle authority mismatch", ErrInvalidCaptureAttempt)
+	commit := func() error {
+		return w.attempt.bundles.Commit(ctx, CaptureBundleCommit{Authority: authority, Reservation: w.reservation, UploadToken: w.pendingObject.upload.UploadToken, Bundle: bundle, ObjectSize: int64(len(encoded)), ObjectSHA256: checksum, ContentType: contentType})
 	}
-	if err := w.attempt.objects.Upload(ctx, CaptureObjectUpload{Upload: upload, Body: encoded, ContentType: contentType, Checksum: checksum}); err != nil {
-		recordingbundle.ClearSealedBundle(&sealed)
-		clear(encoded)
-		return fmt.Errorf("upload recording bundle: %w", err)
+	if w.pendingObject.uploadAttempted {
+		if err := commit(); err == nil {
+			return w.finishPendingObject(&sealed)
+		} else if !errors.Is(err, ErrControlPlaneRetryable) {
+			recordingbundle.ClearSealedBundle(&sealed)
+			return fmt.Errorf("resume recording bundle commit: %w", err)
+		}
 	}
-	if err := w.attempt.bundles.Commit(ctx, CaptureBundleCommit{Authority: authority, Reservation: w.reservation, UploadToken: upload.UploadToken, Bundle: bundle, ObjectSize: int64(len(encoded)), ObjectSHA256: checksum, ContentType: contentType}); err != nil {
+	w.pendingObject.uploadAttempted = true
+	if uploadErr := w.attempt.objects.Upload(ctx, CaptureObjectUpload{Upload: w.pendingObject.upload, Body: encoded, ContentType: contentType, Checksum: checksum}); uploadErr != nil {
+		commitErr := commit()
+		if commitErr == nil {
+			return w.finishPendingObject(&sealed)
+		}
 		recordingbundle.ClearSealedBundle(&sealed)
-		clear(encoded)
+		return fmt.Errorf("upload recording bundle: %w", errors.Join(uploadErr, commitErr))
+	}
+	if err := commit(); err != nil {
+		recordingbundle.ClearSealedBundle(&sealed)
 		return fmt.Errorf("commit recording bundle: %w", err)
 	}
-	recordingbundle.ClearSealedBundle(&sealed)
+	return w.finishPendingObject(&sealed)
+}
+
+func (w *captureBundleWriter) finishPendingObject(sealed *recordingbundle.SealedBundle) error {
+	recordingbundle.ClearSealedBundle(sealed)
+	w.clearPendingObject()
 	w.assembler = nil
 	w.reservation = BundleReservation{}
-	clear(encoded)
 	return nil
+}
+
+func (w *captureBundleWriter) clearPendingObject() {
+	if w.pendingObject == nil {
+		return
+	}
+	clear(w.pendingObject.body)
+	w.pendingObject = nil
+}
+
+func (w *captureBundleWriter) clearTerminalState() {
+	w.clearPendingObject()
+	clear(w.key)
+	w.key = nil
+	clear(w.contextDigest)
+	w.contextDigest = nil
+	w.assembler = nil
+	w.reservation = BundleReservation{}
+	w.pendingGaps = nil
 }
 
 func (w *captureBundleWriter) bundleAuthority() BundleReserveRequest {
