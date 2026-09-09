@@ -451,7 +451,10 @@ func TestCaptureDaemonHandoffSettlesPionAttemptOnceBeforeRelinquish(t *testing.T
 	if err := <-result; !errors.Is(err, ErrWorkerDraining) {
 		t.Fatalf("capture handoff error = %v", err)
 	}
-	if got, want := strings.Join(order, ","), "persisted,provider,peer,relinquish"; got != want {
+	if len(order) == 0 || order[len(order)-1] != "relinquish" {
+		t.Fatalf("capture lease relinquished before cleanup settled: %v", order)
+	}
+	if got, want := strings.Join(order, ","), "provider,peer,persisted,relinquish"; got != want {
 		t.Fatalf("capture handoff order = %q, want %q", got, want)
 	}
 	if coordinator.closeCalls != 1 || peer.closeCalls != 1 || control.relinquishCalls != 1 {

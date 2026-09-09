@@ -470,16 +470,35 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	if plan.StopState() != captureplan.StopStateRunning {
 		return a.finishSuccess(runCtx, writer, plan)
 	}
+	planEvents := make(chan capturePlanEvent, 1)
+	readers := make(map[string]CaptureMediaTrack)
 	if len(snapshot.Tracks) == 0 {
+		// Empty initial plans have no blocking track bind to supervise. Establish
+		// the recording origin before polling can advance no-RTP checkpoints.
 		readyAt := a.config.Now().UTC()
 		if err := a.emitReadyAt(runCtx, true, readyAt); err != nil {
 			return a.finishFailure(err, writer)
 		}
 		writer.setOrigin(readyAt)
 	}
-	readers, err := a.bindTracks(runCtx, snapshot.Tracks)
-	if err != nil {
-		return a.finishFailure(err, writer)
+	go a.planLoop(runCtx, planEvents)
+	if len(snapshot.Tracks) > 0 {
+		var stopped bool
+		readers, plan, stopped, err = a.bindTracksWhileWatchingPlans(runCtx, writer, plan, snapshot, planEvents, nil, nil)
+		if err != nil {
+			return a.finishFailure(err, writer)
+		}
+		if stopped {
+			cancel()
+			return a.finishSuccess(runCtx, writer, plan)
+		}
+	}
+	if len(readers) == 0 && len(snapshot.Tracks) > 0 {
+		readyAt := a.config.Now().UTC()
+		if err := a.emitReadyAt(runCtx, true, readyAt); err != nil {
+			return a.finishFailure(err, writer)
+		}
+		writer.setOrigin(readyAt)
 	}
 	if err := writer.reconcileTracks(runCtx, plan, readers, a.config.Now()); err != nil {
 		return a.finishFailure(err, writer)
@@ -491,14 +510,15 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		return a.finishFailure(startErr, writer)
 	}
 	defer readerCancel()
-	planEvents := make(chan capturePlanEvent, 1)
-	go a.planLoop(runCtx, planEvents)
 
 	for {
 		select {
 		case <-runCtx.Done():
 			return a.finishFailure(runCtx.Err(), writer)
 		case event := <-events:
+			if !captureRuntimeEventMatchesReaders(event, readers) {
+				continue
+			}
 			if event.err != nil {
 				if gapErr := writer.addTerminalGap(a.config.Now()); gapErr != nil {
 					event.err = errors.Join(event.err, gapErr)
@@ -532,16 +552,24 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel()
 				return a.finishFailure(err, writer)
 			}
-			updatedReaders, err := a.applyPlan(runCtx, writer, event.plan, snapshot, readers, readerCancels, events)
-			if err != nil {
-				cancel()
-				return a.finishFailure(err, writer)
-			}
-			readers = updatedReaders
 			if event.plan.StopState() != captureplan.StopStateRunning {
 				cancel()
 				return a.finishSuccess(runCtx, writer, event.plan)
 			}
+			updatedReaders, appliedPlan, stopped, err := a.bindTracksWhileWatchingPlans(runCtx, writer, event.plan, snapshot, planEvents, events, readers)
+			if err != nil {
+				cancel()
+				return a.finishFailure(err, writer)
+			}
+			if stopped {
+				cancel()
+				return a.finishSuccess(runCtx, writer, appliedPlan)
+			}
+			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events); err != nil {
+				cancel()
+				return a.finishFailure(err, writer)
+			}
+			readers = updatedReaders
 		}
 	}
 }
@@ -648,13 +676,111 @@ func (a *PionCaptureAttempt) bindTracks(ctx context.Context, tracks []capturepla
 	return bound, nil
 }
 
-func (a *PionCaptureAttempt) applyPlan(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, snapshot recordercapture.Snapshot, previous map[string]CaptureMediaTrack, readerCancels map[string]func(), events chan<- captureRuntimeEvent) (map[string]CaptureMediaTrack, error) {
-	next, err := a.bindTracks(ctx, snapshot.Tracks)
-	if err != nil {
-		return nil, err
+type captureTrackBindResult struct {
+	tracks map[string]CaptureMediaTrack
+	err    error
+}
+
+func (a *PionCaptureAttempt) bindTracksWhileWatchingPlans(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, snapshot recordercapture.Snapshot, planEvents <-chan capturePlanEvent, runtimeEvents <-chan captureRuntimeEvent, currentReaders map[string]CaptureMediaTrack) (map[string]CaptureMediaTrack, captureplan.Plan, bool, error) {
+bindPlan:
+	for {
+		bindCtx, cancelBind := context.WithTimeout(ctx, a.config.InitialPlanWait)
+		result := make(chan captureTrackBindResult, 1)
+		expected := append([]captureplane.PulledCaptureTrack(nil), snapshot.Tracks...)
+		go func() {
+			tracks, err := a.bindTracks(bindCtx, expected)
+			result <- captureTrackBindResult{tracks: tracks, err: err}
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				cancelBind()
+				<-result
+				return nil, captureplan.Plan{}, false, ctx.Err()
+			case bound := <-result:
+				cancelBind()
+				return bound.tracks, plan, false, bound.err
+			case event := <-runtimeEvents:
+				if !captureRuntimeEventMatchesPlannedReaders(event, currentReaders, snapshot.Tracks) {
+					continue
+				}
+				if event.err != nil {
+					cancelBind()
+					<-result
+					if gapErr := writer.addTerminalGap(a.config.Now()); gapErr != nil {
+						event.err = errors.Join(event.err, gapErr)
+					}
+					return nil, captureplan.Plan{}, false, event.err
+				}
+				if err := a.consumePacket(ctx, writer, event); err != nil {
+					cancelBind()
+					<-result
+					return nil, captureplan.Plan{}, false, err
+				}
+			case event := <-planEvents:
+				if event.checkpointNoRTP {
+					if !hasPlannedCaptureReader(currentReaders, snapshot.Tracks) {
+						if err := writer.checkpointNoRTP(ctx, event.at); err == nil {
+							continue
+						} else {
+							cancelBind()
+							<-result
+							return nil, captureplan.Plan{}, false, err
+						}
+					}
+					continue
+				}
+				cancelBind()
+				<-result
+				if event.err != nil {
+					return nil, captureplan.Plan{}, false, event.err
+				}
+				latest, err := a.coordinator.Reconcile(ctx, event.plan)
+				if err != nil {
+					return nil, captureplan.Plan{}, false, err
+				}
+				plan = event.plan
+				snapshot = latest
+				if plan.StopState() != captureplan.StopStateRunning {
+					return nil, plan, true, nil
+				}
+				continue bindPlan
+			}
+		}
 	}
+}
+
+func captureRuntimeEventMatchesReaders(event captureRuntimeEvent, readers map[string]CaptureMediaTrack) bool {
+	current, ok := readers[event.mid]
+	return ok && event.track != nil && sameCaptureBinding(current, event.track)
+}
+
+func captureRuntimeEventMatchesPlannedReaders(event captureRuntimeEvent, readers map[string]CaptureMediaTrack, expected []captureplane.PulledCaptureTrack) bool {
+	if !captureRuntimeEventMatchesReaders(event, readers) {
+		return false
+	}
+	for _, track := range expected {
+		if track.MID.String() == event.mid && track == event.track.CaptureTrack() {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPlannedCaptureReader(readers map[string]CaptureMediaTrack, expected []captureplane.PulledCaptureTrack) bool {
+	for _, track := range expected {
+		current, ok := readers[track.MID.String()]
+		if ok && current != nil && track == current.CaptureTrack() {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, next, previous map[string]CaptureMediaTrack, readerCancels map[string]func(), events chan<- captureRuntimeEvent) error {
 	if err := writer.reconcileTracks(ctx, plan, next, a.config.Now()); err != nil {
-		return nil, err
+		return err
 	}
 	for mid, previousTrack := range previous {
 		nextTrack, ok := next[mid]
@@ -671,11 +797,11 @@ func (a *PionCaptureAttempt) applyPlan(ctx context.Context, writer *captureBundl
 		}
 		cancel, err := startCaptureReader(ctx, a.peer, mid, track, a.config.RTPReadDeadline, events)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		readerCancels[mid] = cancel
 	}
-	return next, nil
+	return nil
 }
 
 func (a *PionCaptureAttempt) consumePacket(ctx context.Context, writer *captureBundleWriter, event captureRuntimeEvent) error {
@@ -792,13 +918,15 @@ func (a *PionCaptureAttempt) closeLocal(ctx context.Context, writer *captureBund
 	a.mu.Unlock()
 
 	var result error
-	if writer != nil {
-		result = writer.closeWithContext(ctx, reason, a.config.Now())
-	}
+	// Stop remote ingress before the bounded durable tail. A storage timeout must
+	// fail the attempt, but it must not consume the provider shutdown budget first.
 	if bootstrapped {
-		result = errors.Join(result, a.coordinator.Close(ctx, true))
+		result = a.coordinator.Close(ctx, true)
 	}
 	result = errors.Join(result, a.peer.Close())
+	if writer != nil {
+		result = errors.Join(result, writer.closeWithContext(ctx, reason, a.config.Now()))
+	}
 	result = errors.Join(result, ctx.Err())
 	a.mu.Lock()
 	a.closeErr = result
@@ -1066,6 +1194,12 @@ func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
 	writer := &captureBundleWriter{attempt: attempt, active: make(map[string]recordingbundle.TrackIdentity), bindings: make(map[string]captureplane.PulledCaptureTrack), clocks: make(map[string]*captureTrackClock)}
 	if attempt.authority.CaptureReadyAt != nil {
 		writer.origin = attempt.authority.CaptureReadyAt.UTC()
+		// A replacement epoch has no authoritative prior bundle end in its
+		// envelope. Start its no-RTP bookkeeping at the local recovery boundary;
+		// the decoder represents the interval from the prior epoch as recovery.
+		recoveryStart := writer.relative(attempt.config.Now().UTC())
+		writer.lastMono = recoveryStart
+		writer.lastMedia = recoveryStart
 	}
 	return writer
 }

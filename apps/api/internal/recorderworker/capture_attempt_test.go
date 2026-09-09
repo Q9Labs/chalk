@@ -3,6 +3,8 @@ package recorderworker
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -467,6 +469,495 @@ func TestCaptureAttemptStopClosesProviderBeforePeerAndStoppedCallback(t *testing
 	}
 }
 
+func TestCaptureAttemptStopCancelsInitialTrackBindAndCompletesRecovery(t *testing.T) {
+	origin := time.Unix(1_000, 0).UTC()
+	recoveryStart := origin.Add(5 * time.Minute)
+	stopAt := recoveryStart.Add(5 * time.Second)
+	clock := &capturePlanWatchClock{now: recoveryStart}
+	expected := capturePlanWatchPulledTrack(t, "0", "initial")
+	authority := captureTestPlanAtEpoch(t, 2, 1, recoveryStart).Authority()
+	running := capturePlanWatchPlan(t, authority, 1, recoveryStart, captureplan.StopStateRunning, expected)
+	stopped := capturePlanWatchPlan(t, authority, 2, stopAt, captureplan.StopStateRequested)
+
+	bindStarted := make(chan struct{})
+	bindCanceled := make(chan struct{})
+	peer := &capturePlanWatchPeer{wait: func(ctx context.Context, mid captureplane.ProviderReference) (CaptureMediaTrack, error) {
+		if mid != expected.MID {
+			return nil, fmt.Errorf("unexpected MID %s", mid)
+		}
+		close(bindStarted)
+		<-ctx.Done()
+		close(bindCanceled)
+		return nil, ctx.Err()
+	}}
+	coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{
+		1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{expected}},
+		2: {PlanRevision: 2},
+	})
+	plans := &capturePlanWatchSource{steps: []capturePlanWatchStep{
+		func(context.Context) (captureplan.Plan, error) { return running, nil },
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-bindStarted:
+				clock.Set(stopAt)
+				return stopped, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+	}}
+	priorEnd := int64(295_000)
+	storage := &captureTestStorage{key: bytesOf(0x41), reserves: 23, manifests: []recordingbundle.Manifest{{
+		CaptureEpoch: 1, Sequence: 22,
+		MonotonicRange: recordingbundle.TimeRange{StartMilliseconds: 285_000, EndMilliseconds: priorEnd},
+		MediaRange:     recordingbundle.TimeRange{StartMilliseconds: 285_000, EndMilliseconds: priorEnd},
+	}}}
+	lifecycle := &captureTestLifecycle{}
+	attempt := capturePlanWatchAttempt(t, authority, &origin, peer, coordinator, plans, storage, lifecycle, clock.Now, 200*time.Millisecond, 200*time.Millisecond)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := attempt.Run(runCtx); err != nil {
+		t.Fatalf("run stopped recovery while initial track is absent: %v", err)
+	}
+	select {
+	case <-bindCanceled:
+	default:
+		t.Fatal("initial track bind was not canceled and joined")
+	}
+	if len(lifecycle.stopped) != 1 || peer.CloseCalls() != 1 {
+		t.Fatalf("stopped callbacks/peer closes = %d/%d, want 1/1", len(lifecycle.stopped), peer.CloseCalls())
+	}
+	if got := coordinator.Reconciled(); !slices.Equal(got, []captureplane.PlanRevision{2}) {
+		t.Fatalf("reconciled revisions = %v, want [2]", got)
+	}
+	storage.mu.Lock()
+	manifests := append([]recordingbundle.Manifest(nil), storage.manifests...)
+	bundles := append([]recordingbundle.Bundle(nil), storage.bundles...)
+	storage.mu.Unlock()
+	if len(manifests) != 2 || len(bundles) != 1 || len(bundles[0].Gaps) != 1 {
+		t.Fatalf("recovery manifests/bundles = %d/%d: %+v", len(manifests), len(bundles), bundles)
+	}
+	gap := bundles[0].Gaps[0]
+	wantStart := recoveryStart.Sub(origin).Milliseconds()
+	if gap.StartMonotonicMilliseconds != wantStart || gap.StartMediaMilliseconds != wantStart ||
+		gap.EndMonotonicMilliseconds != stopAt.Sub(origin).Milliseconds() || !gap.Terminal ||
+		manifests[1].MonotonicRange.StartMilliseconds <= priorEnd {
+		t.Fatalf("recovery terminal gap = %+v, prior end=%d, successor manifest=%+v", gap, priorEnd, manifests[1])
+	}
+}
+
+func TestCaptureAttemptMissingRunningTrackTimesOut(t *testing.T) {
+	now := time.Unix(2_000, 0).UTC()
+	expected := capturePlanWatchPulledTrack(t, "0", "timeout")
+	authority := captureTestPlanAtEpoch(t, 1, 1, now).Authority()
+	running := capturePlanWatchPlan(t, authority, 1, now, captureplan.StopStateRunning, expected)
+	bindCanceled := make(chan struct{})
+	peer := &capturePlanWatchPeer{wait: func(ctx context.Context, _ captureplane.ProviderReference) (CaptureMediaTrack, error) {
+		<-ctx.Done()
+		close(bindCanceled)
+		return nil, ctx.Err()
+	}}
+	coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{
+		1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{expected}},
+	})
+	plans := &capturePlanWatchSource{steps: []capturePlanWatchStep{
+		func(context.Context) (captureplan.Plan, error) { return running, nil },
+	}}
+	storage := &captureTestStorage{key: bytesOf(0x41)}
+	lifecycle := &captureTestLifecycle{}
+	attempt := capturePlanWatchAttempt(t, authority, nil, peer, coordinator, plans, storage, lifecycle, func() time.Time { return now }, 20*time.Millisecond, 100*time.Millisecond)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	err := attempt.Run(runCtx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("missing running track error = %v, want deadline exceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed >= 250*time.Millisecond {
+		t.Fatalf("missing running track was not bounded by InitialPlanWait: %s", elapsed)
+	}
+	select {
+	case <-bindCanceled:
+	default:
+		t.Fatal("timed-out track bind was not joined")
+	}
+	if peer.CloseCalls() != 1 || len(lifecycle.stopped) != 0 {
+		t.Fatalf("peer closes/stopped callbacks = %d/%d, want 1/0", peer.CloseCalls(), len(lifecycle.stopped))
+	}
+}
+
+func TestCaptureAttemptStopCancelsDynamicTrackBind(t *testing.T) {
+	origin := time.Unix(3_000, 0).UTC()
+	start := origin.Add(time.Minute)
+	stopAt := start.Add(2 * time.Second)
+	clock := &capturePlanWatchClock{now: start}
+	first := capturePlanWatchPulledTrack(t, "0", "first")
+	missing := capturePlanWatchPulledTrack(t, "1", "missing")
+	authority := captureTestPlanAtEpoch(t, 2, 1, start).Authority()
+	initial := capturePlanWatchPlan(t, authority, 1, start, captureplan.StopStateRunning, first)
+	updated := capturePlanWatchPlan(t, authority, 2, start.Add(time.Second), captureplan.StopStateRunning, missing)
+	stopped := capturePlanWatchPlan(t, authority, 3, stopAt, captureplan.StopStateRequested)
+	firstTrack := newCapturePlanWatchTrack(first)
+	dynamicStarted := make(chan struct{})
+	dynamicCanceled := make(chan struct{})
+	allowStop := make(chan struct{})
+	peer := &capturePlanWatchPeer{tracks: []*capturePlanWatchTrack{firstTrack}, wait: func(ctx context.Context, mid captureplane.ProviderReference) (CaptureMediaTrack, error) {
+		switch mid {
+		case first.MID:
+			return firstTrack, nil
+		case missing.MID:
+			close(dynamicStarted)
+			<-ctx.Done()
+			close(dynamicCanceled)
+			return nil, ctx.Err()
+		default:
+			return nil, fmt.Errorf("unexpected MID %s", mid)
+		}
+	}}
+	coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{
+		1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{first}},
+		2: {PlanRevision: 2, Tracks: []captureplane.PulledCaptureTrack{missing}},
+		3: {PlanRevision: 3},
+	})
+	plans := &capturePlanWatchSource{steps: []capturePlanWatchStep{
+		func(context.Context) (captureplan.Plan, error) { return initial, nil },
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-firstTrack.readStarted:
+				return updated, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-allowStop:
+				clock.Set(stopAt)
+				return stopped, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+	}}
+	storage := &captureTestStorage{key: bytesOf(0x41)}
+	lifecycle := &captureTestLifecycle{}
+	attempt := capturePlanWatchAttempt(t, authority, &origin, peer, coordinator, plans, storage, lifecycle, clock.Now, 200*time.Millisecond, 200*time.Millisecond)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() { runDone <- attempt.Run(runCtx) }()
+	select {
+	case <-dynamicStarted:
+	case err := <-runDone:
+		t.Fatalf("attempt ended before dynamic bind started: %v", err)
+	case <-runCtx.Done():
+		t.Fatal("dynamic bind did not start")
+	}
+	firstTrack.stop()
+	select {
+	case <-firstTrack.readStopped:
+	case err := <-runDone:
+		t.Fatalf("attempt ended before retired reader returned its error: %v", err)
+	case <-runCtx.Done():
+		t.Fatal("retired reader did not return its error")
+	}
+	select {
+	case err := <-runDone:
+		t.Fatalf("retired reader error terminated pending rebind: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(allowStop)
+	if err := <-runDone; err != nil {
+		t.Fatalf("run stopped recovery while dynamic track is absent: %v", err)
+	}
+	select {
+	case <-dynamicCanceled:
+	default:
+		t.Fatal("dynamic track bind was not canceled and joined")
+	}
+	if got := coordinator.Reconciled(); !slices.Equal(got, []captureplane.PlanRevision{2, 3}) {
+		t.Fatalf("reconciled revisions = %v, want [2 3]", got)
+	}
+	if len(lifecycle.stopped) != 1 || peer.CloseCalls() != 1 {
+		t.Fatalf("stopped callbacks/peer closes = %d/%d, want 1/1", len(lifecycle.stopped), peer.CloseCalls())
+	}
+}
+
+func TestCaptureAttemptConsumesRetainedTrackWhileDynamicBindBlocks(t *testing.T) {
+	origin := time.Now().UTC().Add(-time.Second)
+	start := origin.Add(time.Second)
+	stopAt := origin.Add(2 * time.Second)
+	clock := &capturePlanWatchClock{now: start}
+	retained := capturePlanWatchPulledTrack(t, "0", "retained")
+	missing := capturePlanWatchPulledTrack(t, "1", "missing")
+	missing.ParticipantID = captureTestID(t, "99999999-9999-4999-8999-999999999999")
+	authority := captureTestPlanAtEpoch(t, 2, 1, start).Authority()
+	initial := capturePlanWatchPlan(t, authority, 1, start, captureplan.StopStateRunning, retained)
+	updated := capturePlanWatchPlan(t, authority, 2, start.Add(500*time.Millisecond), captureplan.StopStateRunning, retained, missing)
+	stopped := capturePlanWatchPlan(t, authority, 3, stopAt, captureplan.StopStateRequested)
+	retainedTrack := newCapturePlanWatchTrack(retained)
+	retainedTrack.packets = make(chan *rtp.Packet, 1)
+	dynamicStarted := make(chan struct{})
+	dynamicCanceled := make(chan struct{})
+	peer := &capturePlanWatchPeer{tracks: []*capturePlanWatchTrack{retainedTrack}, wait: func(ctx context.Context, mid captureplane.ProviderReference) (CaptureMediaTrack, error) {
+		switch mid {
+		case retained.MID:
+			return retainedTrack, nil
+		case missing.MID:
+			close(dynamicStarted)
+			<-ctx.Done()
+			close(dynamicCanceled)
+			return nil, ctx.Err()
+		default:
+			return nil, fmt.Errorf("unexpected MID %s", mid)
+		}
+	}}
+	coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{
+		1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{retained}},
+		2: {PlanRevision: 2, Tracks: []captureplane.PulledCaptureTrack{retained, missing}},
+		3: {PlanRevision: 3},
+	})
+	key := bytesOf(0x41)
+	storage := &captureTestStorage{key: key, accessed: make(chan struct{})}
+	packet := &rtp.Packet{Header: rtp.Header{SequenceNumber: 17, Timestamp: 48_000, SSRC: 7, PayloadType: 111}, Payload: []byte{0x55}}
+	plans := &capturePlanWatchSource{steps: []capturePlanWatchStep{
+		func(context.Context) (captureplan.Plan, error) { return initial, nil },
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-retainedTrack.readStarted:
+				return updated, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-dynamicStarted:
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+			select {
+			case retainedTrack.packets <- packet:
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+			select {
+			case <-storage.accessed:
+				clock.Set(stopAt)
+				return stopped, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+	}}
+	lifecycle := &captureTestLifecycle{}
+	attempt := capturePlanWatchAttempt(t, authority, &origin, peer, coordinator, plans, storage, lifecycle, clock.Now, 200*time.Millisecond, 200*time.Millisecond)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := attempt.Run(runCtx); err != nil {
+		t.Fatalf("run stop while retained track publishes during dynamic bind: %v", err)
+	}
+	select {
+	case <-dynamicCanceled:
+	default:
+		t.Fatal("dynamic bind was not canceled and joined")
+	}
+	storage.mu.Lock()
+	uploads := append([]CaptureObjectUpload(nil), storage.uploadHistory...)
+	storage.mu.Unlock()
+	packets := 0
+	for uploadIndex, upload := range uploads {
+		bundle, err := recordingbundle.Decrypt(key, upload.Body)
+		if err != nil {
+			t.Fatalf("decrypt retained-track bundle %d: %v", uploadIndex, err)
+		}
+		for _, fragment := range bundle.Fragments {
+			if fragment.Track.TrackID != retained.TrackReference.String() {
+				t.Fatalf("unexpected retained-track fragment: %+v", fragment)
+			}
+			for _, persisted := range fragment.Packets {
+				packets++
+				if persisted.SequenceNumber != packet.SequenceNumber || !slices.Equal(persisted.Payload, packet.Payload) {
+					t.Fatalf("persisted retained packet = %+v, want sequence %d payload %v", persisted, packet.SequenceNumber, packet.Payload)
+				}
+			}
+		}
+		for _, gap := range bundle.Gaps {
+			if !gap.Terminal {
+				t.Fatalf("dynamic bind created a no-RTP checkpoint despite retained reader: %+v", bundle.Gaps)
+			}
+		}
+	}
+	if packets != 1 {
+		t.Fatalf("persisted retained packet count = %d, want 1", packets)
+	}
+	if len(lifecycle.stopped) != 1 {
+		t.Fatalf("stopped callbacks = %d, want 1", len(lifecycle.stopped))
+	}
+}
+
+func TestCaptureAttemptNewerRunningPlanCancelsStaleTrackBind(t *testing.T) {
+	origin := time.Unix(4_000, 0).UTC()
+	start := origin.Add(time.Minute)
+	clock := &capturePlanWatchClock{now: start}
+	first := capturePlanWatchPulledTrack(t, "0", "first")
+	stale := capturePlanWatchPulledTrack(t, "1", "stale")
+	latest := capturePlanWatchPulledTrack(t, "2", "latest")
+	authority := captureTestPlanAtEpoch(t, 2, 1, start).Authority()
+	initial := capturePlanWatchPlan(t, authority, 1, start, captureplan.StopStateRunning, first)
+	stalePlan := capturePlanWatchPlan(t, authority, 2, start.Add(time.Second), captureplan.StopStateRunning, stale)
+	latestPlan := capturePlanWatchPlan(t, authority, 3, start.Add(2*time.Second), captureplan.StopStateRunning, latest)
+	stopped := capturePlanWatchPlan(t, authority, 4, start.Add(3*time.Second), captureplan.StopStateRequested)
+	firstTrack := newCapturePlanWatchTrack(first)
+	latestTrack := newCapturePlanWatchTrack(latest)
+	staleStarted := make(chan struct{})
+	staleCanceled := make(chan struct{})
+	peer := &capturePlanWatchPeer{tracks: []*capturePlanWatchTrack{firstTrack, latestTrack}, wait: func(ctx context.Context, mid captureplane.ProviderReference) (CaptureMediaTrack, error) {
+		switch mid {
+		case first.MID:
+			return firstTrack, nil
+		case stale.MID:
+			close(staleStarted)
+			<-ctx.Done()
+			close(staleCanceled)
+			return nil, ctx.Err()
+		case latest.MID:
+			return latestTrack, nil
+		default:
+			return nil, fmt.Errorf("unexpected MID %s", mid)
+		}
+	}}
+	coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{
+		1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{first}},
+		2: {PlanRevision: 2, Tracks: []captureplane.PulledCaptureTrack{stale}},
+		3: {PlanRevision: 3, Tracks: []captureplane.PulledCaptureTrack{latest}},
+		4: {PlanRevision: 4},
+	})
+	plans := &capturePlanWatchSource{steps: []capturePlanWatchStep{
+		func(context.Context) (captureplan.Plan, error) { return initial, nil },
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-firstTrack.readStarted:
+				return stalePlan, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-staleStarted:
+				clock.Set(start.Add(2 * time.Second))
+				return latestPlan, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+		func(ctx context.Context) (captureplan.Plan, error) {
+			select {
+			case <-latestTrack.readStarted:
+				clock.Set(start.Add(3 * time.Second))
+				return stopped, nil
+			case <-ctx.Done():
+				return captureplan.Plan{}, ctx.Err()
+			}
+		},
+	}}
+	storage := &captureTestStorage{key: bytesOf(0x41)}
+	lifecycle := &captureTestLifecycle{}
+	attempt := capturePlanWatchAttempt(t, authority, &origin, peer, coordinator, plans, storage, lifecycle, clock.Now, 200*time.Millisecond, 200*time.Millisecond)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := attempt.Run(runCtx); err != nil {
+		t.Fatalf("run capture across superseded dynamic bind: %v", err)
+	}
+	select {
+	case <-staleCanceled:
+	default:
+		t.Fatal("stale running-plan bind was not canceled and joined")
+	}
+	if got := coordinator.Reconciled(); !slices.Equal(got, []captureplane.PlanRevision{2, 3, 4}) {
+		t.Fatalf("reconciled revisions = %v, want [2 3 4]", got)
+	}
+	storage.mu.Lock()
+	bundles := append([]recordingbundle.Bundle(nil), storage.bundles...)
+	storage.mu.Unlock()
+	foundLatest := false
+	for _, bundle := range bundles {
+		for _, layout := range bundle.LayoutTimeline {
+			if layout.Revision == 2 {
+				t.Fatalf("stale plan revision reached writer: %+v", bundle.LayoutTimeline)
+			}
+			foundLatest = foundLatest || layout.Revision == 3
+		}
+	}
+	if !foundLatest || len(lifecycle.stopped) != 1 {
+		t.Fatalf("latest writer revision/stopped callback = %v/%d, bundles=%+v", foundLatest, len(lifecycle.stopped), bundles)
+	}
+}
+
+func TestCaptureAttemptInitialStopNeverWaitsForTrack(t *testing.T) {
+	now := time.Unix(5_000, 0).UTC()
+	expected := capturePlanWatchPulledTrack(t, "0", "stopped")
+	authority := captureTestPlanAtEpoch(t, 1, 1, now).Authority()
+	stopped := capturePlanWatchPlan(t, authority, 1, now, captureplan.StopStateRequested, expected)
+	peer := &capturePlanWatchPeer{wait: func(context.Context, captureplane.ProviderReference) (CaptureMediaTrack, error) {
+		return nil, errors.New("initial stopped plan waited for RTP")
+	}}
+	coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{
+		1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{expected}},
+	})
+	plans := &capturePlanWatchSource{steps: []capturePlanWatchStep{
+		func(context.Context) (captureplan.Plan, error) { return stopped, nil },
+	}}
+	storage := &captureTestStorage{key: bytesOf(0x41)}
+	lifecycle := &captureTestLifecycle{}
+	attempt := capturePlanWatchAttempt(t, authority, nil, peer, coordinator, plans, storage, lifecycle, func() time.Time { return now }, 20*time.Millisecond, 100*time.Millisecond)
+	if err := attempt.Run(context.Background()); err != nil {
+		t.Fatalf("run initial stopped plan: %v", err)
+	}
+	if waits := peer.Waits(); len(waits) != 0 || len(lifecycle.stopped) != 1 {
+		t.Fatalf("initial stop waits/stopped callbacks = %v/%d, want none/1", waits, len(lifecycle.stopped))
+	}
+}
+
+func TestCaptureAttemptClosesProviderBeforeBlockedWriter(t *testing.T) {
+	origin := time.Unix(6_000, 0).UTC()
+	stopAt := origin.Add(time.Second)
+	authority := captureTestPlanAtEpoch(t, 2, 1, stopAt).Authority()
+	stopped := capturePlanWatchPlan(t, authority, 1, stopAt, captureplan.StopStateRequested)
+	order := make([]string, 0, 4)
+	peer := &captureTestPeer{epoch: 2, order: &order}
+	coordinator := &captureTestCoordinator{order: &order}
+	plans := &captureTestPlanSource{plan: stopped}
+	storage := &captureTestStorage{key: bytesOf(0x41)}
+	storage.finalize = func(ctx context.Context, _ CaptureBundleFinalize) (CaptureBundleUpload, error) {
+		order = append(order, "writer")
+		<-ctx.Done()
+		return CaptureBundleUpload{}, ctx.Err()
+	}
+	lifecycle := &captureTestLifecycle{order: &order}
+	attempt := capturePlanWatchAttempt(t, authority, &origin, peer, coordinator, plans, storage, lifecycle, func() time.Time { return stopAt }, 20*time.Millisecond, 20*time.Millisecond)
+	started := time.Now()
+	err := attempt.Run(context.Background())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("blocked durable writer error = %v, want deadline exceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed >= time.Second {
+		t.Fatalf("blocked durable writer close exceeded bound: %s", elapsed)
+	}
+	if got, want := strings.Join(order, ","), "provider,peer,writer"; got != want {
+		t.Fatalf("blocked writer close order = %q, want %q", got, want)
+	}
+	if len(lifecycle.stopped) != 0 {
+		t.Fatalf("stopped emitted despite failed durable flush: %+v", lifecycle.stopped)
+	}
+}
+
 func TestCaptureAttemptCheckpointsLongNoPublisherGapBeforeStop(t *testing.T) {
 	origin := time.Unix(1_000, 0).UTC()
 	running := captureTestPlanAtEpoch(t, 2, 1, origin)
@@ -575,6 +1066,257 @@ func TestCaptureAttemptRenewsExactLeaseWithoutChangingEpoch(t *testing.T) {
 	}
 	if attempt.authority.CaptureEpoch != 12 {
 		t.Fatalf("lease renewal changed capture epoch to %d", attempt.authority.CaptureEpoch)
+	}
+}
+
+type capturePlanWatchClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *capturePlanWatchClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *capturePlanWatchClock) Set(now time.Time) {
+	c.mu.Lock()
+	c.now = now
+	c.mu.Unlock()
+}
+
+type capturePlanWatchStep func(context.Context) (captureplan.Plan, error)
+
+type capturePlanWatchSource struct {
+	mu    sync.Mutex
+	steps []capturePlanWatchStep
+	calls int
+}
+
+func (s *capturePlanWatchSource) WaitForPlan(ctx context.Context, _ captureplan.WaitInput) (captureplan.Plan, error) {
+	s.mu.Lock()
+	index := s.calls
+	s.calls++
+	var step capturePlanWatchStep
+	if index < len(s.steps) {
+		step = s.steps[index]
+	}
+	s.mu.Unlock()
+	if step != nil {
+		return step(ctx)
+	}
+	<-ctx.Done()
+	return captureplan.Plan{}, ctx.Err()
+}
+
+type capturePlanWatchCoordinator struct {
+	mu         sync.Mutex
+	snapshots  map[captureplane.PlanRevision]recordercapture.Snapshot
+	current    recordercapture.Snapshot
+	reconciled []captureplane.PlanRevision
+	closeCalls int
+}
+
+func newCapturePlanWatchCoordinator(snapshots map[captureplane.PlanRevision]recordercapture.Snapshot) *capturePlanWatchCoordinator {
+	return &capturePlanWatchCoordinator{snapshots: snapshots}
+}
+
+func (c *capturePlanWatchCoordinator) Bootstrap(_ context.Context, plan captureplan.Plan) (recordercapture.Snapshot, error) {
+	return c.accept(plan, false)
+}
+
+func (c *capturePlanWatchCoordinator) Reconcile(_ context.Context, plan captureplan.Plan) (recordercapture.Snapshot, error) {
+	return c.accept(plan, true)
+}
+
+func (c *capturePlanWatchCoordinator) accept(plan captureplan.Plan, reconcile bool) (recordercapture.Snapshot, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	snapshot, ok := c.snapshots[plan.Revision()]
+	if !ok {
+		return recordercapture.Snapshot{}, fmt.Errorf("missing snapshot for revision %d", plan.Revision())
+	}
+	snapshot.Tracks = append([]captureplane.PulledCaptureTrack(nil), snapshot.Tracks...)
+	c.current = snapshot
+	if reconcile {
+		c.reconciled = append(c.reconciled, plan.Revision())
+	}
+	return snapshot, nil
+}
+
+func (c *capturePlanWatchCoordinator) Snapshot() (recordercapture.Snapshot, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	snapshot := c.current
+	snapshot.Tracks = append([]captureplane.PulledCaptureTrack(nil), snapshot.Tracks...)
+	return snapshot, nil
+}
+
+func (c *capturePlanWatchCoordinator) Close(context.Context, bool) error {
+	c.mu.Lock()
+	c.closeCalls++
+	c.mu.Unlock()
+	return nil
+}
+
+func (*capturePlanWatchCoordinator) RenewLease(capturesignaling.WorkerLease) error { return nil }
+
+func (c *capturePlanWatchCoordinator) Reconciled() []captureplane.PlanRevision {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]captureplane.PlanRevision(nil), c.reconciled...)
+}
+
+type capturePlanWatchPeer struct {
+	mu         sync.Mutex
+	wait       func(context.Context, captureplane.ProviderReference) (CaptureMediaTrack, error)
+	waits      []captureplane.ProviderReference
+	tracks     []*capturePlanWatchTrack
+	closeCalls int
+	closeOnce  sync.Once
+}
+
+func (*capturePlanWatchPeer) RegisterTracks([]captureplane.PulledCaptureTrack) error { return nil }
+func (*capturePlanWatchPeer) CreateLocalOffer(context.Context, ...captureplane.ProviderReference) (captureplane.Negotiation, error) {
+	return captureplane.Negotiation{}, nil
+}
+func (*capturePlanWatchPeer) AnswerRemoteOffer(context.Context, captureplane.Negotiation) (captureplane.Description, error) {
+	return captureplane.Description{}, nil
+}
+func (*capturePlanWatchPeer) ApplyRemoteAnswer(context.Context, captureplane.Negotiation) error {
+	return nil
+}
+func (*capturePlanWatchPeer) Epoch() captureplane.CaptureEpoch { return 2 }
+func (p *capturePlanWatchPeer) WaitForTrack(ctx context.Context, mid captureplane.ProviderReference) (CaptureMediaTrack, error) {
+	p.mu.Lock()
+	p.waits = append(p.waits, mid)
+	wait := p.wait
+	p.mu.Unlock()
+	if wait == nil {
+		return nil, errors.New("capture plan watch peer has no track wait")
+	}
+	return wait(ctx, mid)
+}
+func (*capturePlanWatchPeer) RequestKeyFrame(captureplane.ProviderReference) error { return nil }
+func (*capturePlanWatchPeer) Error() error                                         { return nil }
+func (p *capturePlanWatchPeer) Close() error {
+	p.closeOnce.Do(func() {
+		p.mu.Lock()
+		p.closeCalls++
+		tracks := append([]*capturePlanWatchTrack(nil), p.tracks...)
+		p.mu.Unlock()
+		for _, track := range tracks {
+			track.stop()
+		}
+	})
+	return nil
+}
+func (p *capturePlanWatchPeer) CloseCalls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.closeCalls
+}
+func (p *capturePlanWatchPeer) Waits() []captureplane.ProviderReference {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]captureplane.ProviderReference(nil), p.waits...)
+}
+
+type capturePlanWatchTrack struct {
+	capture     captureplane.PulledCaptureTrack
+	readStarted chan struct{}
+	readStopped chan struct{}
+	release     chan struct{}
+	packets     chan *rtp.Packet
+	readOnce    sync.Once
+	stopOnce    sync.Once
+}
+
+func newCapturePlanWatchTrack(capture captureplane.PulledCaptureTrack) *capturePlanWatchTrack {
+	return &capturePlanWatchTrack{capture: capture, readStarted: make(chan struct{}), readStopped: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (t *capturePlanWatchTrack) CaptureTrack() captureplane.PulledCaptureTrack { return t.capture }
+func (t *capturePlanWatchTrack) MID() captureplane.ProviderReference           { return t.capture.MID }
+func (*capturePlanWatchTrack) Codec() string                                   { return "opus" }
+func (*capturePlanWatchTrack) RID() string                                     { return "" }
+func (t *capturePlanWatchTrack) ReadRTP() (*rtp.Packet, interceptor.Attributes, error) {
+	t.readOnce.Do(func() { close(t.readStarted) })
+	select {
+	case <-t.release:
+		close(t.readStopped)
+		return nil, nil, errors.New("capture plan watch track closed")
+	case packet := <-t.packets:
+		return packet, nil, nil
+	case <-time.After(5 * time.Millisecond):
+		return nil, nil, captureTimeoutError{}
+	}
+}
+func (*capturePlanWatchTrack) SetReadDeadline(time.Time) error { return nil }
+func (t *capturePlanWatchTrack) stop()                         { t.stopOnce.Do(func() { close(t.release) }) }
+
+func capturePlanWatchPulledTrack(t *testing.T, mid, suffix string) captureplane.PulledCaptureTrack {
+	t.Helper()
+	return captureplane.PulledCaptureTrack{
+		CaptureTrack: captureplane.CaptureTrack{
+			OwnerReference: "owner-" + captureplane.ProviderReference(suffix), TrackReference: "track-" + captureplane.ProviderReference(suffix),
+			ParticipantID: captureTestID(t, "88888888-8888-4888-8888-888888888888"), ParticipantGeneration: 1,
+			Source: captureplane.TrackSourceMicrophone, Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto,
+		},
+		MID: captureplane.ProviderReference(mid),
+	}
+}
+
+func capturePlanWatchPlan(t *testing.T, authority captureplan.PlanAuthority, revision captureplane.PlanRevision, at time.Time, stop captureplan.StopState, tracks ...captureplane.PulledCaptureTrack) captureplan.Plan {
+	t.Helper()
+	participants := make([]captureplan.ParticipantSnapshot, 0, len(tracks))
+	participantIDs := make(map[utilities.ID]struct{}, len(tracks))
+	planTracks := make([]captureplan.TrackSnapshot, 0, len(tracks))
+	for _, track := range tracks {
+		if _, exists := participantIDs[track.ParticipantID]; !exists {
+			participants = append(participants, captureplan.ParticipantSnapshot{ID: track.ParticipantID, Generation: track.ParticipantGeneration, DisplayName: "Participant", JoinOrdinal: int64(len(participants) + 1), Lifecycle: captureplan.ParticipantActive})
+			participantIDs[track.ParticipantID] = struct{}{}
+		}
+		planTracks = append(planTracks, captureplan.TrackSnapshot{
+			ParticipantID: track.ParticipantID, ParticipantGeneration: track.ParticipantGeneration,
+			Source: track.Source, Kind: track.Kind, OwnerReference: track.OwnerReference, TrackReference: track.TrackReference,
+			OwnerMID: "owner-mid-" + track.MID, PublicationReference: captureplan.PublicationReference("publication-" + track.MID), RequestedLayer: track.RequestedLayer,
+		})
+	}
+	stopRequestedAt := time.Time{}
+	if stop != captureplan.StopStateRunning {
+		stopRequestedAt = at
+	}
+	plan, err := captureplan.NewPlan(captureplan.PlanInput{
+		Authority: authority, Revision: revision, LayoutProfile: captureplan.LayoutProfileComposite720PV1,
+		ParticipantLimit: captureplan.MaximumParticipants, InputBitrateBPS: captureplan.MaximumInputBitrateBPS,
+		EffectiveDeadline: at.Add(time.Hour), StopState: stop, StopRequestedAt: stopRequestedAt,
+		Participants: participants, Tracks: planTracks,
+	})
+	if err != nil {
+		t.Fatalf("create capture plan watch revision %d: %v", revision, err)
+	}
+	return plan
+}
+
+func capturePlanWatchAttempt(t *testing.T, planAuthority captureplan.PlanAuthority, readyAt *time.Time, peer CapturePeer, coordinator captureCoordinator, plans recordercapture.PlanSource, storage *captureTestStorage, lifecycle CaptureLifecyclePort, now func() time.Time, initialWait, closeTimeout time.Duration) *PionCaptureAttempt {
+	t.Helper()
+	var ready *time.Time
+	if readyAt != nil {
+		value := readyAt.UTC()
+		ready = &value
+	}
+	authority := recordercapture.AttemptAuthority{
+		Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"}, EnvelopeDigest: append([]byte(nil), planAuthority.EnvelopeDigest...),
+		TenantID: planAuthority.TenantID, SpaceID: planAuthority.SpaceID, EpisodeID: planAuthority.EpisodeID, RecordingID: planAuthority.RecordingID, JobID: planAuthority.JobID,
+		PlanHandle: planAuthority.PlanHandle, AttemptCount: planAuthority.AttemptCount, FencingGeneration: planAuthority.FencingGeneration,
+		CaptureEpoch: planAuthority.CaptureEpoch, HardDeadline: now().Add(time.Hour), CaptureReadyAt: ready,
+	}
+	return &PionCaptureAttempt{
+		authority: authority, lease: capturesignaling.WorkerLease{Owner: "worker", Token: "lease", ExpiresAt: now().Add(time.Hour)},
+		peer: peer, coordinator: coordinator, plans: plans, keys: storage, objects: storage, bundles: storage, lifecycle: lifecycle,
+		config: CaptureAttemptConfig{InitialPlanWait: initialWait, CloseTimeout: closeTimeout, Now: now}.normalized(), ready: ready != nil,
 	}
 }
 
@@ -769,17 +1511,20 @@ func (l *captureTestLifecycle) Stopped(_ context.Context, event CaptureStoppedEv
 }
 
 type captureTestStorage struct {
-	mu        sync.Mutex
-	key       []byte
-	accesses  int
-	reserves  uint64
-	uploads   int
-	finalizes int
-	commits   int
-	manifests []recordingbundle.Manifest
-	bundles   []recordingbundle.Bundle
-	upload    CaptureObjectUpload
-	finalize  func(context.Context, CaptureBundleFinalize) (CaptureBundleUpload, error)
+	mu            sync.Mutex
+	key           []byte
+	accessed      chan struct{}
+	accessOnce    sync.Once
+	accesses      int
+	reserves      uint64
+	uploads       int
+	finalizes     int
+	commits       int
+	manifests     []recordingbundle.Manifest
+	bundles       []recordingbundle.Bundle
+	upload        CaptureObjectUpload
+	uploadHistory []CaptureObjectUpload
+	finalize      func(context.Context, CaptureBundleFinalize) (CaptureBundleUpload, error)
 }
 
 type captureCloseBudgetStorage struct {
@@ -811,6 +1556,9 @@ func (s *captureTestStorage) AccessKey(context.Context, CaptureKeyRequest) (Capt
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.accesses++
+	if s.accessed != nil {
+		s.accessOnce.Do(func() { close(s.accessed) })
+	}
 	return CaptureDataKey{Plaintext: append([]byte(nil), s.key...), EncryptionContextDigest: bytesOf(0xcd)}, nil
 }
 func (s *captureTestStorage) Reserve(context.Context, BundleReserveRequest) (BundleReservation, error) {
@@ -834,6 +1582,7 @@ func (s *captureTestStorage) Upload(_ context.Context, input CaptureObjectUpload
 	defer s.mu.Unlock()
 	s.uploads++
 	s.upload = CaptureObjectUpload{Upload: input.Upload, Body: append([]byte(nil), input.Body...), ContentType: input.ContentType, Checksum: input.Checksum}
+	s.uploadHistory = append(s.uploadHistory, s.upload)
 	return nil
 }
 func (s *captureTestStorage) Commit(_ context.Context, input CaptureBundleCommit) error {
@@ -910,7 +1659,10 @@ func newCaptureTestWriter(t *testing.T, origin time.Time) (*captureBundleWriter,
 			CaptureEpoch: 2, AttemptCount: 2, FencingGeneration: 2, Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42), CaptureReadyAt: &origin,
 		},
 		lease: capturesignaling.WorkerLease{Owner: "worker", Token: "lease", ExpiresAt: time.Now().Add(time.Minute)},
-		keys:  storage, objects: storage, bundles: storage, config: CaptureAttemptConfig{}.normalized(),
+		keys:  storage, objects: storage, bundles: storage,
+		config: CaptureAttemptConfig{Now: func() time.Time {
+			return origin
+		}}.normalized(),
 	}
 	return newCaptureBundleWriter(attempt), storage
 }
@@ -1014,6 +1766,61 @@ func TestCaptureBundleWriterClampsQueuedPacketToAcceptedControlBoundary(t *testi
 		if err := recordingbundle.ValidateSequence(storage.bundles[index-1], storage.bundles[index]); err != nil {
 			t.Fatalf("bundle %d follows accepted control boundary: %v; manifests=%+v", index, err, storage.manifests)
 		}
+	}
+}
+
+func TestCaptureBundleWriterDropsQueuedPacketAfterPlanRebind(t *testing.T) {
+	origin := time.UnixMilli(1000).UTC()
+	writer, storage := newCaptureTestWriter(t, origin)
+	key := append([]byte(nil), storage.key...)
+	firstBinding := capturePlanWatchPulledTrack(t, "0", "first-binding")
+	latestBinding := capturePlanWatchPulledTrack(t, "0", "latest-binding")
+	firstTrack := &captureTestTrack{capture: firstBinding, codec: "opus"}
+	latestTrack := &captureTestTrack{capture: latestBinding, codec: "opus"}
+	authority := captureTestPlanAtEpoch(t, 2, 1, origin).Authority()
+	if err := writer.reconcileTracks(context.Background(), capturePlanWatchPlan(t, authority, 1, origin, captureplan.StopStateRunning, firstBinding), map[string]CaptureMediaTrack{"0": firstTrack}, origin); err != nil {
+		t.Fatalf("apply first binding: %v", err)
+	}
+	if err := writer.reconcileTracks(context.Background(), capturePlanWatchPlan(t, authority, 2, origin.Add(time.Second), captureplan.StopStateRunning, latestBinding), map[string]CaptureMediaTrack{"0": latestTrack}, origin.Add(time.Second)); err != nil {
+		t.Fatalf("apply latest binding: %v", err)
+	}
+	queued := &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 100}, Payload: []byte{1}}
+	if err := writer.addPacket(context.Background(), firstTrack, queued, origin.Add(2*time.Second)); err != nil {
+		t.Fatalf("drop queued prior-binding packet: %v", err)
+	}
+	if writer.assembler != nil {
+		t.Fatal("queued prior-binding packet created media state after rebind")
+	}
+	accepted := &rtp.Packet{Header: rtp.Header{SequenceNumber: 2, Timestamp: 200}, Payload: []byte{2}}
+	if err := writer.addPacket(context.Background(), latestTrack, accepted, origin.Add(2*time.Second)); err != nil {
+		t.Fatalf("add latest-binding packet: %v", err)
+	}
+	if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add(3*time.Second)); err != nil {
+		t.Fatalf("close rebound writer: %v", err)
+	}
+	storage.mu.Lock()
+	uploads := append([]CaptureObjectUpload(nil), storage.uploadHistory...)
+	storage.mu.Unlock()
+	packets := 0
+	for uploadIndex, upload := range uploads {
+		bundle, err := recordingbundle.Decrypt(key, upload.Body)
+		if err != nil {
+			t.Fatalf("decrypt rebound writer bundle %d: %v", uploadIndex, err)
+		}
+		for _, fragment := range bundle.Fragments {
+			if fragment.Track.TrackID != latestBinding.TrackReference.String() {
+				t.Fatalf("queued prior binding reached bundle: %+v", fragment)
+			}
+			for _, packet := range fragment.Packets {
+				packets++
+				if packet.SequenceNumber != accepted.SequenceNumber {
+					t.Fatalf("persisted packet sequence = %d, want %d", packet.SequenceNumber, accepted.SequenceNumber)
+				}
+			}
+		}
+	}
+	if packets != 1 {
+		t.Fatalf("persisted packet count = %d, want 1", packets)
 	}
 }
 
