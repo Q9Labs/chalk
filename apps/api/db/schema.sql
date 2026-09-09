@@ -4829,7 +4829,11 @@ create table recording_fleet_nodes (
     created_at timestamptz not null default now(),
     primary key (environment, role, provider_id),
     unique (worker_id),
-    check ((state = 'requested') = (worker_id is null)),
+    constraint recording_fleet_nodes_environment_provider_key unique (environment, provider_id),
+    constraint recording_fleet_nodes_worker_state_check check (
+        state = 'revoked'
+        or (state = 'requested') = (worker_id is null)
+    ),
     check (not admission_open or (state = 'active' and ready and ready_capacity > 0)),
     check ((state = 'revoked') = (revoked_at is not null)),
     check (state <> 'revoked' or (not ready and not admission_open and ready_capacity = 0))

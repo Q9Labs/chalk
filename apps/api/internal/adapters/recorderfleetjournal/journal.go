@@ -106,7 +106,27 @@ func (s *Store) loadUnlocked(key recorderfleet.PoolKey) (recorderfleet.Journal, 
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
 	}
-	if envelope.Key != key || envelope.Journal.Validate(key) != nil {
+	if envelope.Key != key {
+		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+	}
+	if envelope.Journal.SchemaVersion == recorderfleet.LegacyJournalSchemaVersion {
+		for _, node := range envelope.Journal.Nodes {
+			if node.Identity == nil || node.Phase == recorderfleet.PhaseAwaitingBootstrap {
+				return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+			}
+		}
+		envelope.Journal.SchemaVersion = recorderfleet.JournalSchemaVersion
+		if envelope.Journal.Validate(key) != nil {
+			return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+		}
+		encoded, err := json.Marshal(envelope)
+		if err != nil || len(encoded) > maximumJournalBytes {
+			return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+		}
+		if err := writeAtomic(s.path, encoded); err != nil {
+			return recorderfleet.Journal{}, fmt.Errorf("migrate recorder fleet journal: %w", err)
+		}
+	} else if envelope.Journal.Validate(key) != nil {
 		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
 	}
 	return cloneJournal(envelope.Journal)

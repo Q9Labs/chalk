@@ -88,6 +88,29 @@ where environment = sqlc.arg(environment)
   and (state = 'requested' or (state = 'active' and worker_id = sqlc.arg(worker_id)))
 returning *;
 
+-- name: AbandonRecordingFleetBootstrap :one
+insert into recording_fleet_nodes (
+    environment, role, provider_id, node_name, region, release_id,
+    image_digest, boot_generation, inventory_digest, state, revoked_at
+) values (
+    sqlc.arg(environment), sqlc.arg(role), sqlc.arg(provider_id), sqlc.arg(node_name),
+    sqlc.arg(region), sqlc.arg(release_id), sqlc.arg(image_digest),
+    sqlc.arg(boot_generation), sqlc.arg(inventory_digest), 'revoked', sqlc.arg(revoked_at)
+)
+on conflict (environment, role, provider_id) do update
+set state = 'revoked', ready = false, admission_open = false,
+    ready_capacity = 0,
+    revoked_at = coalesce(recording_fleet_nodes.revoked_at, excluded.revoked_at),
+    updated_at = now()
+where recording_fleet_nodes.node_name = excluded.node_name
+  and recording_fleet_nodes.region = excluded.region
+  and recording_fleet_nodes.release_id = excluded.release_id
+  and recording_fleet_nodes.image_digest = excluded.image_digest
+  and recording_fleet_nodes.boot_generation = excluded.boot_generation
+  and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
+  and recording_fleet_nodes.state in ('requested', 'active', 'draining', 'revoked')
+returning provider_id;
+
 -- name: ListRecordingFleetNodeObservations :many
 select
     node.provider_id,

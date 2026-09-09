@@ -1,9 +1,11 @@
 package recorderfleetissuer
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,7 +14,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 )
 
-const stateSchemaVersion = "recorder_fleet_issuer_state.v1"
+const (
+	stateSchemaVersion  = "recorder_fleet_issuer_state.v2"
+	legacySchemaVersion = "recorder_fleet_issuer_state.v1"
+)
 
 type Store struct {
 	mu    sync.Mutex
@@ -23,7 +28,13 @@ type Store struct {
 type persistedState struct {
 	SchemaVersion string                   `json:"schema_version"`
 	Registrations map[string]*registration `json:"registrations"`
+	Abandonments  map[string]*abandonment  `json:"abandonments"`
 	Challenges    map[string]*challenge    `json:"challenges"`
+}
+
+type abandonment struct {
+	Request   recorderfleet.BootstrapRequest `json:"request"`
+	RevokedAt time.Time                      `json:"revoked_at"`
 }
 
 type registration struct {
@@ -72,7 +83,35 @@ func OpenStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read issuer state: %w", err)
 	}
-	if err := json.Unmarshal(encoded, &store.state); err != nil || store.state.SchemaVersion != stateSchemaVersion || store.state.Registrations == nil || store.state.Challenges == nil {
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&store.state); err != nil || store.state.Registrations == nil || store.state.Challenges == nil {
+		return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
+	}
+	switch store.state.SchemaVersion {
+	case legacySchemaVersion:
+		store.state.SchemaVersion = stateSchemaVersion
+		store.state.Abandonments = make(map[string]*abandonment)
+		if err := store.persistLocked(); err != nil {
+			return nil, fmt.Errorf("migrate issuer state: %w", err)
+		}
+	case stateSchemaVersion:
+		if store.state.Abandonments == nil {
+			return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
+		}
+		for providerID, tombstone := range store.state.Abandonments {
+			if tombstone == nil || tombstone.Request.ProviderID != providerID || tombstone.Request.Validate() != nil || tombstone.RevokedAt.IsZero() {
+				return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
+			}
+			if registration := store.state.Registrations[providerID]; registration != nil && registration.Request != tombstone.Request {
+				return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
+			}
+		}
+	default:
 		return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
 	}
 	return store, nil
@@ -82,6 +121,7 @@ func newState() persistedState {
 	return persistedState{
 		SchemaVersion: stateSchemaVersion,
 		Registrations: make(map[string]*registration),
+		Abandonments:  make(map[string]*abandonment),
 		Challenges:    make(map[string]*challenge),
 	}
 }

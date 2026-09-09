@@ -193,6 +193,11 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 			state, err := r.save(ctx, state)
 			return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: providerID}, true, err
 		}
+		if managed.PendingBootstrap != nil {
+			if err := r.bootstrap.AbandonBootstrap(ctx, *managed.PendingBootstrap); err != nil {
+				return state, Result{}, true, fmt.Errorf("abandon missing recorder node bootstrap: %w", err)
+			}
+		}
 		delete(state.Nodes, providerID)
 		state, err := r.save(ctx, state)
 		return state, Result{Action: ActionMissingNodeReconciled, ProviderNodeID: providerID}, true, err
@@ -272,11 +277,21 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 		node := nodes[providerID]
 		_, required := needed[providerID]
 		if managed.Phase == PhaseAwaitingBootstrap && required && node.Status == "active" && now.Sub(node.CreatedAt) <= r.config.StartupTimeout {
-			request := BootstrapRequest{
-				Key: r.config.Key, ProviderID: node.ProviderID, NodeName: node.Name, Region: node.Region,
-				ReleaseID: r.config.Release.ReleaseID, ImageDigest: r.config.Release.ImageDigest,
-				BootGeneration: node.BootGeneration, InventoryDigest: InventoryDigest(node),
+			if managed.PendingBootstrap == nil {
+				request := BootstrapRequest{
+					Key: r.config.Key, ProviderID: node.ProviderID, NodeName: node.Name, Region: node.Region,
+					ReleaseID: r.config.Release.ReleaseID, ImageDigest: r.config.Release.ImageDigest,
+					BootGeneration: node.BootGeneration, InventoryDigest: InventoryDigest(node),
+				}
+				managed.PendingBootstrap = &request
+				state.Nodes[providerID] = managed
+				var err error
+				state, err = r.save(ctx, state)
+				if err != nil {
+					return state, Result{}, true, err
+				}
 			}
+			request := *managed.PendingBootstrap
 			identity, err := r.bootstrap.EnsureBootstrap(ctx, request)
 			if err != nil {
 				return state, Result{}, true, fmt.Errorf("ensure recorder node bootstrap: %w", err)
@@ -285,6 +300,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 				return state, Result{}, true, err
 			}
 			managed.Identity = &identity
+			managed.PendingBootstrap = nil
 			managed.Phase = PhaseBootstrapping
 			state.Nodes[providerID] = managed
 			state, err = r.save(ctx, state)
@@ -343,12 +359,27 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 			if err := r.bootstrap.RevokeIdentity(ctx, *managed.Identity); err != nil {
 				return state, Result{}, fmt.Errorf("revoke recorder node identity: %w", err)
 			}
+		} else if managed.PendingBootstrap != nil {
+			if err := r.bootstrap.AbandonBootstrap(ctx, *managed.PendingBootstrap); err != nil {
+				return state, Result{}, fmt.Errorf("abandon recorder node bootstrap: %w", err)
+			}
+			managed.PendingBootstrap = nil
 		}
 		managed.Phase = PhaseIdentityRevoked
 		state.Nodes[node.ProviderID] = managed
 		state, err := r.save(ctx, state)
 		return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: node.ProviderID}, err
 	default:
+		if managed.Identity == nil && managed.PendingBootstrap != nil {
+			if err := r.bootstrap.AbandonBootstrap(ctx, *managed.PendingBootstrap); err != nil {
+				return state, Result{}, fmt.Errorf("abandon recorder node bootstrap: %w", err)
+			}
+			managed.PendingBootstrap = nil
+			managed.Phase = PhaseIdentityRevoked
+			state.Nodes[node.ProviderID] = managed
+			state, err := r.save(ctx, state)
+			return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: node.ProviderID}, err
+		}
 		if managed.Identity != nil {
 			if err := r.runtime.CloseAdmission(ctx, *managed.Identity); err != nil {
 				return state, Result{}, fmt.Errorf("close recorder node admission: %w", err)

@@ -7,9 +7,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"math/big"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -112,7 +114,15 @@ func TestBootstrapPersistsExactIdentityCertificateAndRevocation(t *testing.T) {
 	if err != nil || retried.ClientCertificatePEM != renewed.ClientCertificatePEM {
 		t.Fatalf("renew retry changed certificate: %v", err)
 	}
-	if err := restarted.Revoke(identity); err != nil {
+	if err := restarted.AbandonBootstrap(registrationRequest); err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.read(func(state persistedState) error {
+		if len(state.Challenges) != 0 || state.Abandonments[node.ProviderID] == nil || state.Abandonments[node.ProviderID].Request != registrationRequest {
+			t.Fatalf("abandoned issuer state = %+v", state)
+		}
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	crlPEM, err := restarted.RevocationList()
@@ -134,9 +144,149 @@ func TestBootstrapPersistsExactIdentityCertificateAndRevocation(t *testing.T) {
 	}
 }
 
+func TestAbandonBootstrapBeforeRegisterPersistsFailClosedTombstone(t *testing.T) {
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	node := recorderfleet.Node{
+		ProviderID: "12345", Name: "chalk-recorder-capture-local-1-test", Status: "active", Region: "fra1", Size: "c-2", ImageID: 77,
+		Tags:        []string{"chalk-owner", recorderfleet.EnvironmentTag("local"), recorderfleet.RoleTag(workeridentity.RoleCapture), recorderfleet.ReleaseTag("release-1"), recorderfleet.ImageTag("sha256:" + repeat("ab", 32)), recorderfleet.BootTag(1)},
+		FirewallIDs: []string{"firewall-1"}, BootGeneration: 1, CreatedAt: now.Add(-time.Minute),
+	}
+	request := recorderfleet.BootstrapRequest{
+		Key:        recorderfleet.PoolKey{Environment: "local", Role: workeridentity.RoleCapture},
+		ProviderID: node.ProviderID, NodeName: node.Name, Region: node.Region, ReleaseID: "release-1",
+		ImageDigest: "sha256:" + repeat("ab", 32), BootGeneration: 1, InventoryDigest: recorderfleet.InventoryDigest(node),
+	}
+	ca, _ := testCertificateAuthority(t, now)
+	path := filepath.Join(t.TempDir(), "issuer-state.json")
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := testService(t, store, ca, node, &now)
+	if err := service.AbandonBootstrap(request); err != nil {
+		t.Fatalf("abandon missing registration: %v", err)
+	}
+	if err := service.AbandonBootstrap(request); err != nil {
+		t.Fatalf("idempotent abandon: %v", err)
+	}
+
+	reopened, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted := testService(t, reopened, ca, node, &now)
+	if _, _, err := restarted.Register(context.Background(), request); err != ErrConflict {
+		t.Fatalf("late registration error = %v", err)
+	}
+	mismatch := request
+	mismatch.ReleaseID = "release-2"
+	if err := restarted.AbandonBootstrap(mismatch); err != ErrConflict {
+		t.Fatalf("mismatched abandonment error = %v", err)
+	}
+	if err := reopened.read(func(state persistedState) error {
+		tombstone := state.Abandonments[request.ProviderID]
+		if tombstone == nil || tombstone.Request != request || !tombstone.RevokedAt.Equal(now) {
+			t.Fatalf("durable tombstone = %+v", tombstone)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenStoreMigratesLegacyStateToFailClosedSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "issuer-state.json")
+	legacy := newState()
+	legacy.SchemaVersion = legacySchemaVersion
+	legacy.Abandonments = nil
+	encoded, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate legacy store: %v", err)
+	}
+	if err := store.read(func(state persistedState) error {
+		if state.SchemaVersion != stateSchemaVersion || state.Abandonments == nil {
+			t.Fatalf("migrated state = %+v", state)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted persistedState
+	if err := json.Unmarshal(contents, &persisted); err != nil || persisted.SchemaVersion != stateSchemaVersion || persisted.Abandonments == nil {
+		t.Fatalf("persisted migration = %+v, %v", persisted, err)
+	}
+}
+
+func TestAbandonBootstrapBlocksRegisterAlreadyInspectingInventory(t *testing.T) {
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	node := recorderfleet.Node{
+		ProviderID: "12345", Name: "chalk-recorder-capture-local-1-test", Status: "active", Region: "fra1", Size: "c-2", ImageID: 77,
+		Tags:        []string{"chalk-owner", recorderfleet.EnvironmentTag("local"), recorderfleet.RoleTag(workeridentity.RoleCapture), recorderfleet.ReleaseTag("release-1"), recorderfleet.ImageTag("sha256:" + repeat("ab", 32)), recorderfleet.BootTag(1)},
+		FirewallIDs: []string{"firewall-1"}, BootGeneration: 1, CreatedAt: now.Add(-time.Minute),
+	}
+	request := recorderfleet.BootstrapRequest{
+		Key:        recorderfleet.PoolKey{Environment: "local", Role: workeridentity.RoleCapture},
+		ProviderID: node.ProviderID, NodeName: node.Name, Region: node.Region, ReleaseID: "release-1",
+		ImageDigest: "sha256:" + repeat("ab", 32), BootGeneration: 1, InventoryDigest: recorderfleet.InventoryDigest(node),
+	}
+	ca, _ := testCertificateAuthority(t, now)
+	store, err := OpenStore(filepath.Join(t.TempDir(), "issuer-state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory := &blockingInventoryStub{
+		node: node, ip: netip.MustParseAddr("192.0.2.10"), entered: make(chan struct{}), release: make(chan struct{}),
+	}
+	service, err := New(Config{
+		Environment: "local", OwnerTag: "chalk-owner", Store: store, Inventory: inventory, CertificateAuthority: ca,
+		ControlPlaneURL: "https://control.example.test", ControlPlaneServerName: "control.example.test",
+		ControlPlaneServerCAPEM: "control-ca", PublicBaseURL: "https://issuer.example.test", Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerResult := make(chan error, 1)
+	go func() {
+		_, _, err := service.Register(context.Background(), request)
+		registerResult <- err
+	}()
+	<-inventory.entered
+	if err := service.AbandonBootstrap(request); err != nil {
+		t.Fatalf("abandon during registration: %v", err)
+	}
+	close(inventory.release)
+	if err := <-registerResult; err != ErrConflict {
+		t.Fatalf("in-flight registration error = %v", err)
+	}
+}
+
 type inventoryStub struct {
 	node recorderfleet.Node
 	ip   netip.Addr
+}
+
+type blockingInventoryStub struct {
+	node    recorderfleet.Node
+	ip      netip.Addr
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (stub *blockingInventoryStub) InspectNode(_ context.Context, _ recorderfleet.PoolKey, _ string) (recorderfleet.Node, netip.Addr, error) {
+	close(stub.entered)
+	<-stub.release
+	return stub.node, stub.ip, nil
 }
 
 func (stub inventoryStub) InspectNode(_ context.Context, _ recorderfleet.PoolKey, _ string) (recorderfleet.Node, netip.Addr, error) {

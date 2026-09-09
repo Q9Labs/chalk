@@ -15,6 +15,7 @@ type RecorderFleetControllerService interface {
 	GetDemand(context.Context, recorderfleet.PoolKey) (recorderfleet.Demand, error)
 	ObserveNodes(context.Context, recorderfleet.PoolKey) ([]recorderfleet.NodeObservation, error)
 	EnsureBootstrap(context.Context, recorderfleet.BootstrapRequest) (recorderfleet.NodeIdentity, error)
+	AbandonBootstrap(context.Context, recorderfleet.BootstrapRequest) error
 	CloseAdmission(context.Context, recorderfleet.NodeIdentity) error
 	RevokeIdentity(context.Context, recorderfleet.NodeIdentity) error
 	PublishPool(context.Context, recorderfleet.PoolProjection) error
@@ -36,11 +37,31 @@ func NewRecorderFleetControllerRouter(service RecorderFleetControllerService, ve
 		router.Get("/demand", recorderFleetDemandHandler(service, environment))
 		router.Get("/nodes", recorderFleetNodesHandler(service, environment))
 		router.Post("/nodes/{providerID}/bootstrap", recorderFleetBootstrapHandler(service, environment))
+		router.Post("/nodes/{providerID}/bootstrap/abandon", recorderFleetBootstrapAbandonHandler(service, environment))
 		router.Post("/nodes/{providerID}/admission/close", recorderFleetCommandHandler(service, environment, false))
 		router.Post("/nodes/{providerID}/identity/revoke", recorderFleetCommandHandler(service, environment, true))
 		router.Put("/pool", recorderFleetPoolHandler(service, environment))
 	})
 	return router
+}
+
+func recorderFleetBootstrapAbandonHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		body, ok := decodeRecorderWorkerBody[recorderFleetBootstrapRequest](w, request)
+		if !ok {
+			return
+		}
+		providerID := chi.URLParam(request, "providerID")
+		if body.SchemaVersion != recorderfleet.BootstrapAbandonSchemaVersion || body.Key.Environment != environment || body.ProviderID != providerID {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder fleet bootstrap abandonment request")
+			return
+		}
+		if err := service.AbandonBootstrap(request.Context(), body.BootstrapRequest); err != nil {
+			writeRecorderFleetError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func requireRecorderFleetController(verifier RecorderFleetControllerVerifier, next http.Handler) http.Handler {

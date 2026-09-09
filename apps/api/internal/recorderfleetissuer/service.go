@@ -105,6 +105,9 @@ func (service *Service) Register(ctx context.Context, request recorderfleet.Boot
 	var identity recorderfleet.NodeIdentity
 	var delivered bool
 	err := service.store.update(func(state *persistedState) error {
+		if state.Abandonments[request.ProviderID] != nil {
+			return ErrConflict
+		}
 		if existing := state.Registrations[request.ProviderID]; existing != nil {
 			if existing.Request != request || existing.RevokedAt != nil {
 				return ErrConflict
@@ -128,6 +131,39 @@ func (service *Service) Register(ctx context.Context, request recorderfleet.Boot
 		return nil
 	})
 	return identity, delivered, err
+}
+
+func (service *Service) AbandonBootstrap(request recorderfleet.BootstrapRequest) error {
+	if err := request.Validate(); err != nil || request.Key.Environment != service.environment {
+		return ErrUnauthorized
+	}
+	now := service.now().UTC()
+	return service.store.update(func(state *persistedState) error {
+		if state.Abandonments == nil {
+			return ErrInvalidConfig
+		}
+		if existing := state.Abandonments[request.ProviderID]; existing != nil {
+			if existing.Request != request {
+				return ErrConflict
+			}
+		} else {
+			state.Abandonments[request.ProviderID] = &abandonment{Request: request, RevokedAt: now}
+		}
+		if registration := state.Registrations[request.ProviderID]; registration != nil {
+			if registration.Request != request {
+				return ErrConflict
+			}
+			if registration.RevokedAt == nil {
+				registration.RevokedAt = &now
+			}
+		}
+		for nonce, challenge := range state.Challenges {
+			if challenge.ProviderID == request.ProviderID {
+				delete(state.Challenges, nonce)
+			}
+		}
+		return nil
+	})
 }
 
 func (service *Service) Challenge(ctx context.Context, peerIP netip.Addr, request recorderbootstrapprotocol.ChallengeRequest) (recorderbootstrapprotocol.ChallengeResponse, error) {

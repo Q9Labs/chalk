@@ -51,6 +51,9 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	if got, err := client.EnsureBootstrap(t.Context(), bootstrapRequest); err != nil || got != identity {
 		t.Fatalf("bootstrap identity/error = %+v/%v", got, err)
 	}
+	if err := client.AbandonBootstrap(t.Context(), bootstrapRequest); err != nil {
+		t.Fatalf("abandon bootstrap: %v", err)
+	}
 	if err := client.CloseAdmission(t.Context(), identity); err != nil {
 		t.Fatalf("close admission: %v", err)
 	}
@@ -61,7 +64,7 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	if err := client.PublishPool(t.Context(), projection); err != nil {
 		t.Fatalf("publish pool: %v", err)
 	}
-	if service.bootstrap != bootstrapRequest || service.closed != identity || service.revoked != identity || service.projection != projection {
+	if service.bootstrap != bootstrapRequest || service.abandoned != bootstrapRequest || service.closed != identity || service.revoked != identity || service.projection != projection {
 		t.Fatalf("service calls = %+v", service)
 	}
 }
@@ -101,10 +104,16 @@ type recorderFleetControllerServiceStub struct {
 	nodes       []recorderfleet.NodeObservation
 	identity    recorderfleet.NodeIdentity
 	bootstrap   recorderfleet.BootstrapRequest
+	abandoned   recorderfleet.BootstrapRequest
 	closed      recorderfleet.NodeIdentity
 	revoked     recorderfleet.NodeIdentity
 	projection  recorderfleet.PoolProjection
 	demandCalls int
+}
+
+func (s *recorderFleetControllerServiceStub) AbandonBootstrap(_ context.Context, request recorderfleet.BootstrapRequest) error {
+	s.abandoned = request
+	return nil
 }
 
 func (s *recorderFleetControllerServiceStub) GetDemand(context.Context, recorderfleet.PoolKey) (recorderfleet.Demand, error) {

@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	AbandonRecordingFleetBootstrap(ctx context.Context, arg AbandonRecordingFleetBootstrapParams) (string, error)
 	AcceptTranscriptionChunkResult(ctx context.Context, arg AcceptTranscriptionChunkResultParams) (TranscriptionChunkResult, error)
 	AcquireRecordingTranscriptionSourceLease(ctx context.Context, arg AcquireRecordingTranscriptionSourceLeaseParams) (RecordingTranscriptionSource, error)
 	ActivateRecordingFleetBootstrap(ctx context.Context, arg ActivateRecordingFleetBootstrapParams) (RecordingFleetNode, error)

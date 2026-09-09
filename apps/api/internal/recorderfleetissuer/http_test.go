@@ -83,4 +83,21 @@ func TestControllerRegistrationReturnsIdentityOnlyAfterNodeDelivery(t *testing.T
 	if err := json.NewDecoder(secondResponse.Body).Decode(&response); err != nil || response.Identity.ProviderID != node.ProviderID || response.Identity.WorkerID == "" {
 		t.Fatalf("delivered registration response/error = %+v/%v", response, err)
 	}
+	abandonBody, _ := json.Marshal(abandonRequest{
+		SchemaVersion: recorderbootstrapprotocol.ControllerAbandonSchemaVersion, BootstrapRequest: bootstrapRequest,
+	})
+	abandon := httptest.NewRequest(http.MethodPost, recorderbootstrapprotocol.ControllerAbandonPath, bytes.NewReader(abandonBody))
+	abandon.TLS = requestTLS
+	abandonResponse := httptest.NewRecorder()
+	handler.ServeHTTP(abandonResponse, abandon)
+	if abandonResponse.Code != http.StatusNoContent {
+		t.Fatalf("abandon status/body = %d/%s", abandonResponse.Code, abandonResponse.Body.String())
+	}
+	late := httptest.NewRequest(http.MethodPost, recorderbootstrapprotocol.ControllerBootstrapPath, bytes.NewReader(encoded))
+	late.TLS = requestTLS
+	lateResponse := httptest.NewRecorder()
+	handler.ServeHTTP(lateResponse, late)
+	if lateResponse.Code != http.StatusForbidden {
+		t.Fatalf("late registration status/body = %d/%s", lateResponse.Code, lateResponse.Body.String())
+	}
 }

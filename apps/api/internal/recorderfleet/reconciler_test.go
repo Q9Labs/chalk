@@ -93,6 +93,68 @@ func TestReconcilerAdoptsMatchingNodeAfterRestart(t *testing.T) {
 	}
 }
 
+func TestReconcilerAbandonsPersistedBootstrapBeforeDroppingMissingNode(t *testing.T) {
+	fixture := newFleetFixture(t)
+	request := fixture.ensureRequest(7)
+	node := fixture.provider.nodeFor(request, "7007")
+	fixture.provider.nodes[node.ProviderID] = node
+	reconciler := fixture.reconciler(t)
+
+	if result := fixture.step(t, reconciler); result.Action != ActionMissingNodeReconciled {
+		t.Fatalf("adoption result = %+v", result)
+	}
+	fixture.bootstrap.ensureErr = ErrProviderUnavailable
+	if _, err := reconciler.Reconcile(context.Background()); !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("bootstrap error = %v", err)
+	}
+	managed := fixture.journal.state.Nodes[node.ProviderID]
+	if managed.PendingBootstrap == nil || *managed.PendingBootstrap != fixture.bootstrap.lastRequest {
+		t.Fatalf("pending bootstrap was not durably preserved: %+v", managed)
+	}
+
+	delete(fixture.provider.nodes, node.ProviderID)
+	fixture.bootstrap.abandonErr = ErrProviderUnavailable
+	if _, err := reconciler.Reconcile(context.Background()); !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("abandon error = %v", err)
+	}
+	if _, exists := fixture.journal.state.Nodes[node.ProviderID]; !exists {
+		t.Fatal("failed abandonment dropped the journal authority")
+	}
+	fixture.bootstrap.abandonErr = nil
+	result := fixture.step(t, reconciler)
+	if result.Action != ActionMissingNodeReconciled || fixture.bootstrap.abandonCalls != 2 {
+		t.Fatalf("abandon result/calls = %+v/%d", result, fixture.bootstrap.abandonCalls)
+	}
+	if fixture.bootstrap.lastAbandoned != fixture.bootstrap.lastRequest {
+		t.Fatalf("abandoned request = %+v, want %+v", fixture.bootstrap.lastAbandoned, fixture.bootstrap.lastRequest)
+	}
+	if _, exists := fixture.journal.state.Nodes[node.ProviderID]; exists {
+		t.Fatal("successful abandonment retained the missing journal node")
+	}
+}
+
+func TestReconcilerAbandonsHistoricalBootstrapOnReleaseDrift(t *testing.T) {
+	fixture := newFleetFixture(t)
+	request := fixture.ensureRequest(8)
+	node := fixture.provider.nodeFor(request, "8008")
+	fixture.provider.nodes[node.ProviderID] = node
+	reconciler := fixture.reconciler(t)
+	fixture.step(t, reconciler)
+	fixture.bootstrap.ensureErr = ErrProviderUnavailable
+	if _, err := reconciler.Reconcile(context.Background()); !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("bootstrap error = %v", err)
+	}
+	historical := fixture.bootstrap.lastRequest
+	fixture.config.Release.ReleaseID = "release-2"
+	fixture.config.MaxNodes = 1
+	newReconciler := fixture.reconciler(t)
+	fixture.bootstrap.ensureErr = nil
+	result := fixture.step(t, newReconciler)
+	if result.Action != ActionIdentityRevoked || fixture.bootstrap.lastAbandoned != historical {
+		t.Fatalf("release-drift abandonment = %+v, request %+v", result, fixture.bootstrap.lastAbandoned)
+	}
+}
+
 func TestReconcilerFailsClosedOnRoleMismatch(t *testing.T) {
 	fixture := newFleetFixture(t)
 	reconciler := fixture.reconciler(t)
@@ -478,17 +540,31 @@ func (f *fakeProvider) onlyNode(t *testing.T) Node {
 }
 
 type fakeBootstrap struct {
-	ensureCalls int
-	revokeCalls int
-	lastRequest BootstrapRequest
-	events      *[]string
+	ensureCalls   int
+	revokeCalls   int
+	abandonCalls  int
+	ensureErr     error
+	abandonErr    error
+	lastRequest   BootstrapRequest
+	lastAbandoned BootstrapRequest
+	events        *[]string
 }
 
 func (f *fakeBootstrap) EnsureBootstrap(_ context.Context, request BootstrapRequest) (NodeIdentity, error) {
 	f.ensureCalls++
 	f.lastRequest = request
 	*f.events = append(*f.events, "bootstrap")
+	if f.ensureErr != nil {
+		return NodeIdentity{}, f.ensureErr
+	}
 	return f.identity(Node{ProviderID: request.ProviderID, BootGeneration: request.BootGeneration}), nil
+}
+
+func (f *fakeBootstrap) AbandonBootstrap(_ context.Context, request BootstrapRequest) error {
+	f.abandonCalls++
+	f.lastAbandoned = request
+	*f.events = append(*f.events, "abandon")
+	return f.abandonErr
 }
 
 func (f *fakeBootstrap) RevokeIdentity(context.Context, NodeIdentity) error {

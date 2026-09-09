@@ -7,4 +7,4 @@ import "embed"
 //go:embed *.sql
 var Files embed.FS
 
-const LatestVersion int64 = 20260908123000
+const LatestVersion int64 = 20260909120000

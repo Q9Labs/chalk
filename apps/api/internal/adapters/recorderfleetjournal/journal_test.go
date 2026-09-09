@@ -1,6 +1,7 @@
 package recorderfleetjournal
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -117,6 +118,75 @@ func TestStoreRejectsCorruptAndSymlinkJournals(t *testing.T) {
 	symlink, _ := New(symlinkPath)
 	if _, err := symlink.Load(t.Context(), key); !errors.Is(err, recorderfleet.ErrInvalidJournal) {
 		t.Fatalf("symlink load error = %v", err)
+	}
+}
+
+func TestStoreMigratesSafeLegacyJournalAndRejectsAmbiguousBootstrap(t *testing.T) {
+	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	directory := t.TempDir()
+	legacy := recorderfleet.NewJournal()
+	legacy.SchemaVersion = recorderfleet.LegacyJournalSchemaVersion
+	legacy.Revision = 4
+	legacy.Nodes["provider-6"] = recorderfleet.ManagedNode{
+		ProviderID: "provider-6", Name: "capture-6", Phase: recorderfleet.PhaseBootstrapping, BootGeneration: 6,
+		Identity: &recorderfleet.NodeIdentity{
+			ProviderID: "provider-6", WorkerID: "55555555-5555-4555-8555-555555555555",
+			Role: workeridentity.RoleCapture, BootGeneration: 6,
+		},
+	}
+
+	safePath := filepath.Join(directory, "safe.json")
+	writeJournalEnvelope(t, safePath, key, legacy)
+	safeStore, _ := New(safePath)
+	loaded, err := safeStore.Load(t.Context(), key)
+	if err != nil || loaded.SchemaVersion != recorderfleet.JournalSchemaVersion || loaded.Revision != legacy.Revision {
+		t.Fatalf("migrated journal/error = %+v/%v", loaded, err)
+	}
+	encoded, err := os.ReadFile(safePath)
+	if err != nil || !stringContains(string(encoded), recorderfleet.JournalSchemaVersion) {
+		t.Fatalf("persisted migration = %q, %v", encoded, err)
+	}
+
+	drainStartedAt := time.Date(2026, 9, 9, 11, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name           string
+		phase          recorderfleet.Phase
+		drainStartedAt *time.Time
+	}{
+		{name: "awaiting bootstrap", phase: recorderfleet.PhaseAwaitingBootstrap},
+		{name: "draining", phase: recorderfleet.PhaseDraining, drainStartedAt: &drainStartedAt},
+		{name: "identity revoked", phase: recorderfleet.PhaseIdentityRevoked, drainStartedAt: &drainStartedAt},
+		{name: "deleting", phase: recorderfleet.PhaseDeleting, drainStartedAt: &drainStartedAt},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ambiguousPath := filepath.Join(directory, string(test.phase)+".json")
+			ambiguous := legacy
+			ambiguous.Nodes = map[string]recorderfleet.ManagedNode{"provider-7": {
+				ProviderID: "provider-7", Name: "capture-7", Phase: test.phase, BootGeneration: 7,
+				DrainStartedAt: test.drainStartedAt,
+			}}
+			writeJournalEnvelope(t, ambiguousPath, key, ambiguous)
+			before, _ := os.ReadFile(ambiguousPath)
+			ambiguousStore, _ := New(ambiguousPath)
+			if _, err := ambiguousStore.Load(t.Context(), key); !errors.Is(err, recorderfleet.ErrInvalidJournal) {
+				t.Fatalf("ambiguous legacy load error = %v", err)
+			}
+			after, _ := os.ReadFile(ambiguousPath)
+			if string(after) != string(before) || !stringContains(string(after), recorderfleet.LegacyJournalSchemaVersion) {
+				t.Fatalf("ambiguous legacy journal was mutated: %s", after)
+			}
+		})
+	}
+}
+
+func writeJournalEnvelope(t *testing.T, path string, key recorderfleet.PoolKey, journal recorderfleet.Journal) {
+	t.Helper()
+	encoded, err := json.Marshal(fileEnvelope{Key: key, Journal: journal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

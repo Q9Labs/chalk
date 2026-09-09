@@ -11,6 +11,61 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const abandonRecordingFleetBootstrap = `-- name: AbandonRecordingFleetBootstrap :one
+insert into recording_fleet_nodes (
+    environment, role, provider_id, node_name, region, release_id,
+    image_digest, boot_generation, inventory_digest, state, revoked_at
+) values (
+    $1, $2, $3, $4,
+    $5, $6, $7,
+    $8, $9, 'revoked', $10
+)
+on conflict (environment, role, provider_id) do update
+set state = 'revoked', ready = false, admission_open = false,
+    ready_capacity = 0,
+    revoked_at = coalesce(recording_fleet_nodes.revoked_at, excluded.revoked_at),
+    updated_at = now()
+where recording_fleet_nodes.node_name = excluded.node_name
+  and recording_fleet_nodes.region = excluded.region
+  and recording_fleet_nodes.release_id = excluded.release_id
+  and recording_fleet_nodes.image_digest = excluded.image_digest
+  and recording_fleet_nodes.boot_generation = excluded.boot_generation
+  and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
+  and recording_fleet_nodes.state in ('requested', 'active', 'draining', 'revoked')
+returning provider_id
+`
+
+type AbandonRecordingFleetBootstrapParams struct {
+	Environment     string             `json:"environment"`
+	Role            string             `json:"role"`
+	ProviderID      string             `json:"provider_id"`
+	NodeName        string             `json:"node_name"`
+	Region          string             `json:"region"`
+	ReleaseID       string             `json:"release_id"`
+	ImageDigest     string             `json:"image_digest"`
+	BootGeneration  int64              `json:"boot_generation"`
+	InventoryDigest string             `json:"inventory_digest"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+}
+
+func (q *Queries) AbandonRecordingFleetBootstrap(ctx context.Context, arg AbandonRecordingFleetBootstrapParams) (string, error) {
+	row := q.db.QueryRow(ctx, abandonRecordingFleetBootstrap,
+		arg.Environment,
+		arg.Role,
+		arg.ProviderID,
+		arg.NodeName,
+		arg.Region,
+		arg.ReleaseID,
+		arg.ImageDigest,
+		arg.BootGeneration,
+		arg.InventoryDigest,
+		arg.RevokedAt,
+	)
+	var provider_id string
+	err := row.Scan(&provider_id)
+	return provider_id, err
+}
+
 const activateRecordingFleetBootstrap = `-- name: ActivateRecordingFleetBootstrap :one
 update recording_fleet_nodes
 set worker_id = $1, state = 'active', updated_at = now()

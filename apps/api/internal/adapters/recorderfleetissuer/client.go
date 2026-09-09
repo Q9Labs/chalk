@@ -20,9 +20,11 @@ import (
 
 const (
 	BootstrapSchemaVersion = recorderbootstrapprotocol.ControllerBootstrapSchemaVersion
+	AbandonSchemaVersion   = recorderbootstrapprotocol.ControllerAbandonSchemaVersion
 	RevokeSchemaVersion    = recorderbootstrapprotocol.ControllerRevokeSchemaVersion
 
 	bootstrapPath       = recorderbootstrapprotocol.ControllerBootstrapPath
+	abandonPath         = recorderbootstrapprotocol.ControllerAbandonPath
 	revokePath          = recorderbootstrapprotocol.ControllerRevokePath
 	maximumResponseSize = 1 << 20
 	defaultTimeout      = 30 * time.Second
@@ -35,6 +37,15 @@ type Config struct {
 	ServerCAFile   string
 	ServerName     string
 	Timeout        time.Duration
+}
+
+func (c *Client) AbandonBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest) error {
+	if c == nil || request.Validate() != nil {
+		return recorderfleet.ErrRoleFence
+	}
+	return c.doJSON(ctx, abandonPath, abandonRequest{
+		SchemaVersion: AbandonSchemaVersion, BootstrapRequest: request,
+	}, nil, http.StatusNoContent)
 }
 
 type Client struct {
@@ -167,6 +178,11 @@ type bootstrapResponse struct {
 	Identity      recorderfleet.NodeIdentity `json:"identity"`
 }
 
+type abandonRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	recorderfleet.BootstrapRequest
+}
+
 type revokeRequest struct {
 	SchemaVersion string                     `json:"schema_version"`
 	Identity      recorderfleet.NodeIdentity `json:"identity"`
@@ -176,6 +192,10 @@ type UnavailableAuthority struct{}
 
 func (UnavailableAuthority) EnsureBootstrap(context.Context, recorderfleet.BootstrapRequest) (recorderfleet.NodeIdentity, error) {
 	return recorderfleet.NodeIdentity{}, recorderfleet.ErrProviderUnavailable
+}
+
+func (UnavailableAuthority) AbandonBootstrap(context.Context, recorderfleet.BootstrapRequest) error {
+	return recorderfleet.ErrProviderUnavailable
 }
 
 func (UnavailableAuthority) RevokeIdentity(context.Context, recorderfleet.NodeIdentity) error {

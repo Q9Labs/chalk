@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -63,6 +64,27 @@ func TestRecordingFleetAuthorityRepositoryMapsBindingConflicts(t *testing.T) {
 	}
 }
 
+func TestRecordingFleetAuthorityRepositoryAbandonsExactRequest(t *testing.T) {
+	t.Parallel()
+	request := postgresFleetBootstrapRequest()
+	queries := &recordingFleetAuthorityQueriesStub{abandonProviderID: request.ProviderID}
+	repository := NewRecordingFleetAuthorityRepository(queries)
+	if err := repository.AbandonBootstrap(t.Context(), request, time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("abandon: %v", err)
+	}
+	if queries.abandonArg.ProviderID != request.ProviderID || queries.abandonArg.NodeName != request.NodeName || queries.abandonArg.InventoryDigest != request.InventoryDigest || queries.abandonArg.BootGeneration != int64(request.BootGeneration) || !queries.abandonArg.RevokedAt.Valid {
+		t.Fatalf("abandon params = %#v", queries.abandonArg)
+	}
+	queries.abandonErr = pgx.ErrNoRows
+	if err := repository.AbandonBootstrap(t.Context(), request, time.Now()); !errors.Is(err, recorderfleet.ErrInventoryDrift) {
+		t.Fatalf("mismatch error = %v", err)
+	}
+	queries.abandonErr = &pgconn.PgError{Code: "23505"}
+	if err := repository.AbandonBootstrap(t.Context(), request, time.Now()); !errors.Is(err, recorderfleet.ErrInventoryDrift) {
+		t.Fatalf("cross-role provider conflict error = %v", err)
+	}
+}
+
 func TestRecordingFleetAuthorityRepositorySeparatesDrainFromClaimAuthorization(t *testing.T) {
 	t.Parallel()
 	workerID, _ := utilities.ParseID("55555555-5555-4555-8555-555555555555")
@@ -78,12 +100,20 @@ func TestRecordingFleetAuthorityRepositorySeparatesDrainFromClaimAuthorization(t
 }
 
 type recordingFleetAuthorityQueriesStub struct {
-	reserveArg      sqlc.ReserveRecordingFleetBootstrapParams
-	reserveRow      sqlc.RecordingFleetNode
-	reserveErr      error
-	activateErr     error
-	authorizeWorker bool
-	authorizeClaim  bool
+	abandonArg        sqlc.AbandonRecordingFleetBootstrapParams
+	abandonProviderID string
+	abandonErr        error
+	reserveArg        sqlc.ReserveRecordingFleetBootstrapParams
+	reserveRow        sqlc.RecordingFleetNode
+	reserveErr        error
+	activateErr       error
+	authorizeWorker   bool
+	authorizeClaim    bool
+}
+
+func (s *recordingFleetAuthorityQueriesStub) AbandonRecordingFleetBootstrap(_ context.Context, arg sqlc.AbandonRecordingFleetBootstrapParams) (string, error) {
+	s.abandonArg = arg
+	return s.abandonProviderID, s.abandonErr
 }
 
 func (s *recordingFleetAuthorityQueriesStub) ActivateRecordingFleetBootstrap(context.Context, sqlc.ActivateRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error) {

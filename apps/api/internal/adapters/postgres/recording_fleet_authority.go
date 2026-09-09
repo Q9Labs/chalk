@@ -18,6 +18,7 @@ import (
 )
 
 type recordingFleetAuthorityQuerier interface {
+	AbandonRecordingFleetBootstrap(context.Context, sqlc.AbandonRecordingFleetBootstrapParams) (string, error)
 	ActivateRecordingFleetBootstrap(context.Context, sqlc.ActivateRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error)
 	AuthorizeRecordingFleetWorker(context.Context, sqlc.AuthorizeRecordingFleetWorkerParams) (bool, error)
 	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (bool, error)
@@ -28,6 +29,32 @@ type recordingFleetAuthorityQuerier interface {
 	RecordRecordingFleetWorkerObservation(context.Context, sqlc.RecordRecordingFleetWorkerObservationParams) (sqlc.RecordRecordingFleetWorkerObservationRow, error)
 	ReserveRecordingFleetBootstrap(context.Context, sqlc.ReserveRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error)
 	RevokeRecordingFleetNode(context.Context, sqlc.RevokeRecordingFleetNodeParams) (string, error)
+}
+
+func (r RecordingFleetAuthorityRepository) AbandonBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest, revokedAt time.Time) error {
+	if r.queries == nil {
+		return recorderfleet.ErrProviderUnavailable
+	}
+	bootGeneration, ok := recordingFleetGeneration(request.BootGeneration)
+	if !ok {
+		return recorderfleet.ErrInventoryDrift
+	}
+	providerID, err := r.queries.AbandonRecordingFleetBootstrap(ctx, sqlc.AbandonRecordingFleetBootstrapParams{
+		Environment: request.Key.Environment, Role: string(request.Key.Role), ProviderID: request.ProviderID,
+		NodeName: request.NodeName, Region: request.Region, ReleaseID: request.ReleaseID,
+		ImageDigest: request.ImageDigest, BootGeneration: bootGeneration, InventoryDigest: request.InventoryDigest,
+		RevokedAt: timestamptzValue(revokedAt),
+	})
+	if errors.Is(err, pgx.ErrNoRows) || isUniqueViolation(err) {
+		return recorderfleet.ErrInventoryDrift
+	}
+	if err != nil {
+		return fmt.Errorf("abandon recording fleet bootstrap: %w", err)
+	}
+	if providerID != request.ProviderID {
+		return recorderfleet.ErrInventoryDrift
+	}
+	return nil
 }
 
 type RecordingFleetAuthorityRepository struct {

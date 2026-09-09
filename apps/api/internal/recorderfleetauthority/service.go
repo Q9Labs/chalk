@@ -31,6 +31,7 @@ type Repository interface {
 	ObserveNodes(context.Context, recorderfleet.PoolKey, time.Time) ([]recorderfleet.NodeObservation, error)
 	ReserveBootstrap(context.Context, recorderfleet.BootstrapRequest) (BootstrapRecord, error)
 	ActivateBootstrap(context.Context, recorderfleet.BootstrapRequest, recorderfleet.NodeIdentity) (recorderfleet.NodeIdentity, error)
+	AbandonBootstrap(context.Context, recorderfleet.BootstrapRequest, time.Time) error
 	CloseAdmission(context.Context, string, recorderfleet.NodeIdentity) error
 	MarkRevoked(context.Context, string, recorderfleet.NodeIdentity, time.Time) error
 	PublishPool(context.Context, recorderfleet.PoolProjection) error
@@ -100,6 +101,19 @@ func (s Service) EnsureBootstrap(ctx context.Context, request recorderfleet.Boot
 		return recorderfleet.NodeIdentity{}, recorderfleet.ErrRoleFence
 	}
 	return activated, nil
+}
+
+func (s Service) AbandonBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest) error {
+	if err := request.Validate(); err != nil || request.Key.Environment != s.environment {
+		return recorderfleet.ErrRoleFence
+	}
+	if err := s.repository.AbandonBootstrap(ctx, request, s.now().UTC()); err != nil {
+		return fmt.Errorf("record recorder fleet bootstrap abandonment: %w", err)
+	}
+	if err := s.issuer.AbandonBootstrap(ctx, request); err != nil {
+		return fmt.Errorf("abandon recorder fleet certificate authority: %w", err)
+	}
+	return nil
 }
 
 func (s Service) CloseAdmission(ctx context.Context, identity recorderfleet.NodeIdentity) error {

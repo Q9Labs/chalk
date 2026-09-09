@@ -40,6 +40,11 @@ func TestClientUsesBoundedIssuerProtocol(t *testing.T) {
 				t.Fatalf("bootstrap request contains an assertion: %#v", body)
 			}
 			return issuerJSONResponse(http.StatusOK, `{"schema_version":"recorder_fleet_issuer_bootstrap.v1","identity":{"provider_id":"provider-7","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":7}}`), nil
+		case abandonPath:
+			if body["schema_version"] != AbandonSchemaVersion || body["provider_id"] != request.ProviderID || body["inventory_digest"] != request.InventoryDigest {
+				t.Fatalf("abandon body = %#v", body)
+			}
+			return issuerJSONResponse(http.StatusNoContent, ""), nil
 		case revokePath:
 			if body["schema_version"] != RevokeSchemaVersion || body["identity"] == nil {
 				t.Fatalf("revoke body = %#v", body)
@@ -60,7 +65,10 @@ func TestClientUsesBoundedIssuerProtocol(t *testing.T) {
 	if err := client.RevokeIdentity(context.Background(), identity); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	if calls != 2 {
+	if err := client.AbandonBootstrap(context.Background(), request); err != nil {
+		t.Fatalf("abandon: %v", err)
+	}
+	if calls != 3 {
 		t.Fatalf("calls = %d", calls)
 	}
 }
@@ -92,6 +100,9 @@ func TestUnavailableAuthorityFailsClosed(t *testing.T) {
 	authority := UnavailableAuthority{}
 	if _, err := authority.EnsureBootstrap(t.Context(), issuerBootstrapRequest()); !errors.Is(err, recorderfleet.ErrProviderUnavailable) {
 		t.Fatalf("ensure error = %v", err)
+	}
+	if err := authority.AbandonBootstrap(t.Context(), issuerBootstrapRequest()); !errors.Is(err, recorderfleet.ErrProviderUnavailable) {
+		t.Fatalf("abandon error = %v", err)
 	}
 	if err := authority.RevokeIdentity(t.Context(), recorderfleet.NodeIdentity{}); !errors.Is(err, recorderfleet.ErrProviderUnavailable) {
 		t.Fatalf("revoke error = %v", err)

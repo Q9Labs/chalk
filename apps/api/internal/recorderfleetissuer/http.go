@@ -42,11 +42,29 @@ func NewHTTPHandler(service *Service, controllerVerifier recorderfleet.Controlle
 	mux.HandleFunc("GET /metrics", handler.metricsHTTP)
 	mux.HandleFunc("GET /v1/recorder-fleet/crl.pem", handler.crl)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.ControllerBootstrapPath, handler.register)
+	mux.HandleFunc("POST "+recorderbootstrapprotocol.ControllerAbandonPath, handler.abandon)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.ControllerRevokePath, handler.revoke)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.ChallengePath, handler.challenge)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.BootstrapPath, handler.bootstrap)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.RenewPath, handler.renew)
 	return handler.observe(mux), nil
+}
+
+func (handler *HTTPHandler) abandon(response http.ResponseWriter, request *http.Request) {
+	if _, err := handler.controllerVerifier.Verify(request); err != nil {
+		writeError(response, ErrUnauthorized)
+		return
+	}
+	var input abandonRequest
+	if decodeJSON(response, request, &input) != nil || input.SchemaVersion != recorderbootstrapprotocol.ControllerAbandonSchemaVersion {
+		writeError(response, recorderbootstrapprotocol.ErrInvalidProtocol)
+		return
+	}
+	if err := handler.service.AbandonBootstrap(input.BootstrapRequest); err != nil {
+		writeError(response, err)
+		return
+	}
+	response.WriteHeader(http.StatusNoContent)
 }
 
 func (handler *HTTPHandler) observe(next http.Handler) http.Handler {
@@ -261,6 +279,11 @@ type registerResponse struct {
 	Identity      recorderfleet.NodeIdentity `json:"identity"`
 }
 
+type abandonRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	recorderfleet.BootstrapRequest
+}
+
 type revokeRequest struct {
 	SchemaVersion string                     `json:"schema_version"`
 	Identity      recorderfleet.NodeIdentity `json:"identity"`
@@ -319,6 +342,8 @@ func operationName(path string) string {
 		return "metrics"
 	case recorderbootstrapprotocol.ControllerBootstrapPath:
 		return "register"
+	case recorderbootstrapprotocol.ControllerAbandonPath:
+		return "abandon"
 	case recorderbootstrapprotocol.ControllerRevokePath:
 		return "revoke"
 	case recorderbootstrapprotocol.ChallengePath:

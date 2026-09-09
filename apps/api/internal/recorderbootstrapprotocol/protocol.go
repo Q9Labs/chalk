@@ -18,6 +18,7 @@ import (
 
 const (
 	ControllerBootstrapSchemaVersion = "recorder_fleet_issuer_bootstrap.v1"
+	ControllerAbandonSchemaVersion   = "recorder_fleet_issuer_abandon.v1"
 	ControllerRevokeSchemaVersion    = "recorder_fleet_issuer_revoke.v1"
 	ChallengeSchemaVersion           = "recorder_fleet_node_bootstrap_challenge.v1"
 	BootstrapSchemaVersion           = "recorder_fleet_node_bootstrap.v1"
@@ -27,6 +28,7 @@ const (
 	BootstrapPath           = "/v1/recorder-fleet/node-bootstrap"
 	RenewPath               = "/v1/recorder-fleet/node-renew"
 	ControllerBootstrapPath = "/v1/recorder-fleet/bootstrap"
+	ControllerAbandonPath   = "/v1/recorder-fleet/bootstrap/abandon"
 	ControllerRevokePath    = "/v1/recorder-fleet/revoke"
 )
 

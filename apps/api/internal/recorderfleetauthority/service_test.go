@@ -55,6 +55,38 @@ func TestServiceDoesNotPersistRevocationUntilIssuerSucceeds(t *testing.T) {
 	}
 }
 
+func TestServiceAbandonsDatabaseBeforeIssuerAndRetriesPartialSuccess(t *testing.T) {
+	t.Parallel()
+	request := testBootstrapRequest()
+	repository := &authorityRepositoryStub{abandonErr: recorderfleet.ErrInventoryDrift}
+	issuer := &bootstrapAuthorityStub{}
+	service, _ := NewService("staging", repository, issuer)
+
+	if err := service.AbandonBootstrap(t.Context(), request); !errors.Is(err, recorderfleet.ErrInventoryDrift) {
+		t.Fatalf("database mismatch error = %v", err)
+	}
+	if issuer.abandonCalls != 0 {
+		t.Fatalf("mismatched database request mutated issuer %d times", issuer.abandonCalls)
+	}
+
+	repository.abandonErr = nil
+	issuer.abandonErr = recorderfleet.ErrProviderUnavailable
+	if err := service.AbandonBootstrap(t.Context(), request); !errors.Is(err, recorderfleet.ErrProviderUnavailable) {
+		t.Fatalf("issuer failure error = %v", err)
+	}
+	if repository.abandonCalls != 2 || issuer.abandonCalls != 1 {
+		t.Fatalf("partial-success calls repository/issuer = %d/%d", repository.abandonCalls, issuer.abandonCalls)
+	}
+
+	issuer.abandonErr = nil
+	if err := service.AbandonBootstrap(t.Context(), request); err != nil {
+		t.Fatalf("retry abandonment: %v", err)
+	}
+	if repository.abandoned != request || issuer.abandoned != request || repository.abandonCalls != 3 || issuer.abandonCalls != 2 {
+		t.Fatalf("retry state repository=%+v issuer=%+v", repository, issuer)
+	}
+}
+
 func TestBoundWorkerVerifierAllowsDrainCompletionButRejectsClaimsAndRevocation(t *testing.T) {
 	t.Parallel()
 	workerID, _ := utilities.ParseID("55555555-5555-4555-8555-555555555555")
@@ -101,6 +133,15 @@ type authorityRepositoryStub struct {
 	activated    recorderfleet.NodeIdentity
 	revokeCalls  int
 	authorizeErr error
+	abandoned    recorderfleet.BootstrapRequest
+	abandonCalls int
+	abandonErr   error
+}
+
+func (r *authorityRepositoryStub) AbandonBootstrap(_ context.Context, request recorderfleet.BootstrapRequest, _ time.Time) error {
+	r.abandoned = request
+	r.abandonCalls++
+	return r.abandonErr
 }
 
 func (r *authorityRepositoryStub) GetDemand(context.Context, recorderfleet.PoolKey, time.Time) (recorderfleet.Demand, error) {
@@ -150,9 +191,18 @@ func (r *authorityRepositoryStub) AuthorizeWorkerClaim(context.Context, string, 
 }
 
 type bootstrapAuthorityStub struct {
-	identity    recorderfleet.NodeIdentity
-	ensureCalls int
-	revokeErr   error
+	identity     recorderfleet.NodeIdentity
+	ensureCalls  int
+	revokeErr    error
+	abandoned    recorderfleet.BootstrapRequest
+	abandonCalls int
+	abandonErr   error
+}
+
+func (a *bootstrapAuthorityStub) AbandonBootstrap(_ context.Context, request recorderfleet.BootstrapRequest) error {
+	a.abandoned = request
+	a.abandonCalls++
+	return a.abandonErr
 }
 
 func (a *bootstrapAuthorityStub) EnsureBootstrap(context.Context, recorderfleet.BootstrapRequest) (recorderfleet.NodeIdentity, error) {

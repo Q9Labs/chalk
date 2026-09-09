@@ -91,6 +91,14 @@ func (c *Client) EnsureBootstrap(ctx context.Context, request recorderfleet.Boot
 	return identity, nil
 }
 
+func (c *Client) AbandonBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest) error {
+	if err := c.validateKey(request.Key); err != nil || request.Validate() != nil || !validPathSegment(request.ProviderID) {
+		return recorderfleet.ErrRoleFence
+	}
+	body := bootstrapRequest{SchemaVersion: recorderfleet.BootstrapAbandonSchemaVersion, BootstrapRequest: request}
+	return c.doJSON(ctx, http.MethodPost, fleetPath+"/nodes/"+url.PathEscape(request.ProviderID)+"/bootstrap/abandon", nil, body, nil, http.StatusNoContent)
+}
+
 func (c *Client) CloseAdmission(ctx context.Context, identity recorderfleet.NodeIdentity) error {
 	return c.nodeCommand(ctx, identity, "admission/close")
 }

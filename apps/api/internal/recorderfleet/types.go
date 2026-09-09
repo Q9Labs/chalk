@@ -17,13 +17,15 @@ import (
 )
 
 const (
-	JournalSchemaVersion   = "recorder_fleet_journal.v1"
-	DemandSchemaVersion    = "recorder_fleet_demand.v1"
-	NodesSchemaVersion     = "recorder_fleet_nodes.v1"
-	BootstrapSchemaVersion = "recorder_fleet_bootstrap.v1"
-	CommandSchemaVersion   = "recorder_fleet_command.v1"
-	PoolSchemaVersion      = "recorder_fleet_pool.v1"
-	ControllerRole         = "recorder-fleet-controller"
+	JournalSchemaVersion          = "recorder_fleet_journal.v2"
+	LegacyJournalSchemaVersion    = "recorder_fleet_journal.v1"
+	DemandSchemaVersion           = "recorder_fleet_demand.v1"
+	NodesSchemaVersion            = "recorder_fleet_nodes.v1"
+	BootstrapSchemaVersion        = "recorder_fleet_bootstrap.v1"
+	BootstrapAbandonSchemaVersion = "recorder_fleet_bootstrap_abandon.v1"
+	CommandSchemaVersion          = "recorder_fleet_command.v1"
+	PoolSchemaVersion             = "recorder_fleet_pool.v1"
+	ControllerRole                = "recorder-fleet-controller"
 )
 
 var (
@@ -257,6 +259,7 @@ type Provider interface {
 // persisted. RevokeIdentity must be idempotent.
 type BootstrapAuthority interface {
 	EnsureBootstrap(context.Context, BootstrapRequest) (NodeIdentity, error)
+	AbandonBootstrap(context.Context, BootstrapRequest) error
 	RevokeIdentity(context.Context, NodeIdentity) error
 }
 
@@ -283,13 +286,14 @@ const (
 )
 
 type ManagedNode struct {
-	ProviderID     string        `json:"provider_id"`
-	Name           string        `json:"name"`
-	Phase          Phase         `json:"phase"`
-	BootGeneration uint64        `json:"boot_generation"`
-	Identity       *NodeIdentity `json:"identity,omitempty"`
-	LastReadyAt    *time.Time    `json:"last_ready_at,omitempty"`
-	DrainStartedAt *time.Time    `json:"drain_started_at,omitempty"`
+	ProviderID       string            `json:"provider_id"`
+	Name             string            `json:"name"`
+	Phase            Phase             `json:"phase"`
+	BootGeneration   uint64            `json:"boot_generation"`
+	PendingBootstrap *BootstrapRequest `json:"pending_bootstrap,omitempty"`
+	Identity         *NodeIdentity     `json:"identity,omitempty"`
+	LastReadyAt      *time.Time        `json:"last_ready_at,omitempty"`
+	DrainStartedAt   *time.Time        `json:"drain_started_at,omitempty"`
 }
 
 type PendingCreate struct {
@@ -326,6 +330,12 @@ func (j Journal) Validate(key PoolKey) error {
 		if node.Identity != nil {
 			workerID, err := utilities.ParseID(node.Identity.WorkerID)
 			if node.Identity.ProviderID != providerID || node.Identity.Role != key.Role || node.Identity.BootGeneration != node.BootGeneration || err != nil || workerID.IsZero() {
+				return ErrInvalidJournal
+			}
+		}
+		if node.PendingBootstrap != nil {
+			request := *node.PendingBootstrap
+			if request.Validate() != nil || request.Key != key || request.ProviderID != providerID || request.NodeName != node.Name || request.BootGeneration != node.BootGeneration || node.Identity != nil || node.Phase != PhaseAwaitingBootstrap {
 				return ErrInvalidJournal
 			}
 		}
