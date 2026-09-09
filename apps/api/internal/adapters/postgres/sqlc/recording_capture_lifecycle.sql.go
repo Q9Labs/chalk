@@ -142,6 +142,24 @@ select
     sync_recordings.status as recording_status,
     sync_recordings.start_external_operation_id,
     sync_recordings.stop_external_operation_id,
+    (pipelines.stop_requested_at is not null
+     and exists (
+        select 1
+        from sync_external_operations operation
+        join episodes episode
+          on episode.id = operation.episode_id
+         and episode.tenant_id = operation.tenant_id
+         and episode.space_id = operation.space_id
+        where operation.external_operation_id = pipelines.stop_operation_id
+          and operation.tenant_id = jobs.tenant_id
+          and operation.space_id = reservations.space_id
+          and operation.episode_id = jobs.episode_id
+          and (operation.recording_id is null or operation.recording_id = jobs.recording_id)
+          and operation.operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
+          and operation.status = 'pending'
+          and operation.fence_active
+          and episode.status = 'ending'
+     ))::boolean as episode_stop_pending,
     (sync_recordings.status = 'stopped'
      and pipelines.stop_requested_at is not null
      and exists (
@@ -223,6 +241,7 @@ type LockRecordingCaptureLifecycleAuthorityRow struct {
 	RecordingStatus          string             `json:"recording_status"`
 	StartExternalOperationID pgtype.UUID        `json:"start_external_operation_id"`
 	StopExternalOperationID  pgtype.UUID        `json:"stop_external_operation_id"`
+	EpisodeStopPending       bool               `json:"episode_stop_pending"`
 	EpisodeStopApplied       bool               `json:"episode_stop_applied"`
 }
 
@@ -259,6 +278,7 @@ func (q *Queries) LockRecordingCaptureLifecycleAuthority(ctx context.Context, ar
 		&i.RecordingStatus,
 		&i.StartExternalOperationID,
 		&i.StopExternalOperationID,
+		&i.EpisodeStopPending,
 		&i.EpisodeStopApplied,
 	)
 	return i, err

@@ -98,6 +98,9 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 	if err != nil {
 		return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("lock authority", err)
 	}
+	if operationName == recordingCaptureStoppedOperation && authorityRow.EpisodeStopPending {
+		return recordinglifecycle.Publication{}, recordinglifecycle.ErrEpisodeStopPending
+	}
 	// Episode end already publishes the stopped state in Sync. A fresh capture
 	// authority may acknowledge that state without creating another operation.
 	if operationName == recordingCaptureStoppedOperation && authorityRow.EpisodeStopApplied {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
@@ -86,6 +87,23 @@ func TestRecorderRecordingLifecycleRejectsWrongRoleAndMapsConflict(t *testing.T)
 	captureRouter.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/capture/ready", body))
 	if response.Code != http.StatusConflict || !called {
 		t.Fatalf("conflict status=%d called=%v body=%s", response.Code, called, response.Body.String())
+	}
+}
+
+func TestRecorderRecordingLifecycleMapsPendingEpisodeStopAsRetryable(t *testing.T) {
+	service := recorderRecordingLifecycleServiceStub{
+		ready: func(context.Context, recordinglifecycle.ReadyInput) (recordinglifecycle.Publication, error) {
+			return recordinglifecycle.Publication{}, errors.New("unexpected ready callback")
+		},
+		stopped: func(context.Context, recordinglifecycle.StoppedInput) (recordinglifecycle.Publication, error) {
+			return recordinglifecycle.Publication{}, recordinglifecycle.ErrEpisodeStopPending
+		},
+	}
+	router := recorderRecordingLifecycleRouter(t, workeridentity.RoleCapture, service)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/capture/stopped", recordingLifecycleAuthorityJSON()+`,"request_key":"capture_stopped_44444444-4444-4444-8444-444444444444_3","observed_at":"2026-08-25T12:01:00Z"}`))
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), `"code":"episode.stop_pending"`) {
+		t.Fatalf("pending stop status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

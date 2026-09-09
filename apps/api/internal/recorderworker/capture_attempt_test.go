@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -634,6 +635,64 @@ func TestCaptureAttemptStopClosesProviderBeforePeerAndStoppedCallback(t *testing
 	if len(coordinator.forces) != 1 || !coordinator.forces[0] {
 		t.Fatalf("planned stop close forces = %v, want [true]", coordinator.forces)
 	}
+}
+
+func TestCaptureAttemptStoppedCallbackRetriesOnlyRetryableFailures(t *testing.T) {
+	t.Run("refreshes lease and preserves idempotency facts", func(t *testing.T) {
+		now := time.UnixMilli(1000).UTC()
+		lifecycle := &captureStoppedSequenceLifecycle{failures: []error{HTTPError{Status: http.StatusServiceUnavailable, Retryable: true}}, firstCall: make(chan struct{}), releaseFirst: make(chan struct{})}
+		attempt := captureStoppedTestAttempt(t, now, lifecycle, 2*time.Second)
+		done := make(chan error, 1)
+		go func() { done <- attempt.Run(context.Background()) }()
+
+		select {
+		case <-lifecycle.firstCall:
+		case <-time.After(time.Second):
+			t.Fatal("first stopped callback did not arrive")
+		}
+		renewed := attempt.currentLease()
+		renewed.ExpiresAt = renewed.ExpiresAt.Add(time.Minute)
+		if err := attempt.RenewLease(renewed); err != nil {
+			t.Fatalf("renew callback authority: %v", err)
+		}
+		close(lifecycle.releaseFirst)
+		if err := <-done; err != nil {
+			t.Fatalf("run stopped retry: %v", err)
+		}
+
+		events := lifecycle.events()
+		if len(events) != 2 {
+			t.Fatalf("stopped callback count = %d, want 2", len(events))
+		}
+		if events[0].At != events[1].At || events[0].IdempotencyKey != events[1].IdempotencyKey {
+			t.Fatalf("retry changed idempotency facts: first=%+v retry=%+v", events[0], events[1])
+		}
+		if events[0].LeaseExpiresAt.Equal(events[1].LeaseExpiresAt) || !events[1].LeaseExpiresAt.Equal(renewed.ExpiresAt) {
+			t.Fatalf("retry lease expiry = %s, want refreshed %s after %s", events[1].LeaseExpiresAt, renewed.ExpiresAt, events[0].LeaseExpiresAt)
+		}
+	})
+
+	t.Run("returns fenced failure without retry", func(t *testing.T) {
+		lifecycle := &captureStoppedSequenceLifecycle{failures: []error{HTTPError{Status: http.StatusConflict, Fenced: true}}}
+		err := captureStoppedTestAttempt(t, time.UnixMilli(1000).UTC(), lifecycle, time.Second).Run(context.Background())
+		if !errors.Is(err, ErrControlPlaneFenced) {
+			t.Fatalf("stopped callback error = %v, want fenced", err)
+		}
+		if calls := len(lifecycle.events()); calls != 1 {
+			t.Fatalf("fenced callback count = %d, want 1", calls)
+		}
+	})
+
+	t.Run("bounds retry by close timeout", func(t *testing.T) {
+		lifecycle := &captureStoppedSequenceLifecycle{repeat: HTTPError{Status: http.StatusServiceUnavailable, Retryable: true}}
+		err := captureStoppedTestAttempt(t, time.UnixMilli(1000).UTC(), lifecycle, 150*time.Millisecond).Run(context.Background())
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("stopped callback error = %v, want deadline exceeded", err)
+		}
+		if calls := len(lifecycle.events()); calls < 1 || calls > 3 {
+			t.Fatalf("bounded callback count = %d, want 1..3", calls)
+		}
+	})
 }
 
 func TestCaptureAttemptStopCancelsInitialTrackBindAndCompletesRecovery(t *testing.T) {
@@ -1665,6 +1724,49 @@ type captureTestLifecycle struct {
 	order   *[]string
 }
 
+type captureStoppedSequenceLifecycle struct {
+	mu           sync.Mutex
+	failures     []error
+	repeat       error
+	stopped      []CaptureStoppedEvent
+	firstCall    chan struct{}
+	releaseFirst chan struct{}
+}
+
+func (*captureStoppedSequenceLifecycle) Ready(context.Context, CaptureReadyEvent) error {
+	return nil
+}
+
+func (l *captureStoppedSequenceLifecycle) Stopped(ctx context.Context, event CaptureStoppedEvent) error {
+	l.mu.Lock()
+	l.stopped = append(l.stopped, event)
+	call := len(l.stopped)
+	var err error
+	if call <= len(l.failures) {
+		err = l.failures[call-1]
+	} else {
+		err = l.repeat
+	}
+	firstCall := l.firstCall
+	releaseFirst := l.releaseFirst
+	l.mu.Unlock()
+	if call == 1 && firstCall != nil {
+		close(firstCall)
+		select {
+		case <-releaseFirst:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return err
+}
+
+func (l *captureStoppedSequenceLifecycle) events() []CaptureStoppedEvent {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]CaptureStoppedEvent(nil), l.stopped...)
+}
+
 func (l *captureTestLifecycle) Ready(_ context.Context, event CaptureReadyEvent) error {
 	l.ready = append(l.ready, event)
 	return nil
@@ -1957,6 +2059,20 @@ func captureTestID(t *testing.T, value string) utilities.ID {
 		t.Fatalf("parse test ID: %v", err)
 	}
 	return id
+}
+
+func captureStoppedTestAttempt(t *testing.T, now time.Time, lifecycle CaptureLifecyclePort, closeTimeout time.Duration) *PionCaptureAttempt {
+	t.Helper()
+	authority := captureTestPlanAtEpoch(t, 2, 1, now).Authority()
+	plan, err := captureplan.NewPlan(captureplan.PlanInput{
+		Authority: authority, Revision: 1, LayoutProfile: captureplan.LayoutProfileComposite720PV1,
+		ParticipantLimit: captureplan.MaximumParticipants, InputBitrateBPS: captureplan.MaximumInputBitrateBPS,
+		EffectiveDeadline: now.Add(time.Hour), StopState: captureplan.StopStateRequested, StopRequestedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("create stopped callback plan: %v", err)
+	}
+	return capturePlanWatchAttempt(t, authority, nil, &captureTestPeer{epoch: 2}, &captureTestCoordinator{}, &captureTestPlanSource{plan: plan}, &captureTestStorage{key: bytesOf(0x42)}, lifecycle, func() time.Time { return now }, 0, closeTimeout)
 }
 
 func captureTestPlan(t *testing.T, revision captureplane.PlanRevision, now time.Time) captureplan.Plan {

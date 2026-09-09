@@ -55,6 +55,7 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	spaceID := recordingLifecycleIntegrationID(t)
 	episodeID := recordingLifecycleIntegrationID(t)
 	recordingID := recordingLifecycleIntegrationID(t)
+	otherRecordingID := recordingLifecycleIntegrationID(t)
 	reservationID := recordingLifecycleIntegrationID(t)
 	jobID := recordingLifecycleIntegrationID(t)
 	claimID := recordingLifecycleIntegrationID(t)
@@ -79,6 +80,9 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	}
 	if _, err := transaction.Exec(ctx, `insert into recordings(id, tenant_id, space_id, episode_id, status, storage_provider) values($1, $2, $3, $4, 'processing', 'cf')`, recordingID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes()); err != nil {
 		t.Fatalf("seed recording aggregate: %v", err)
+	}
+	if _, err := transaction.Exec(ctx, `insert into recordings(id, tenant_id, space_id, episode_id, status, storage_provider) values($1, $2, $3, $4, 'failed', 'cf')`, otherRecordingID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes()); err != nil {
+		t.Fatalf("seed unrelated recording aggregate: %v", err)
 	}
 	if _, err := transaction.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload) values($1, $2, $3, $4, 'start_recording_integration', $5, 'start_recording', $6, '{}'::jsonb)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), startOperationID.Bytes(), seedFingerprint[:], recordingID.Bytes()); err != nil {
 		t.Fatalf("seed start operation: %v", err)
@@ -167,27 +171,45 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 
 	t.Run("acknowledge applied episode end", func(t *testing.T) {
 		endOperationID := recordingLifecycleIntegrationID(t)
-		if _, err := transaction.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, payload) values($1, $2, $3, $4, 'end_episode_integration', $5, 'tenant_end_episode', '{}'::jsonb)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), endOperationID.Bytes(), seedFingerprint[:]); err != nil {
+		if _, err := transaction.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload, fence_active) values($1, $2, $3, $4, 'end_episode_integration', $5, 'tenant_end_episode', $6, '{}'::jsonb, true)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), endOperationID.Bytes(), seedFingerprint[:], recordingID.Bytes()); err != nil {
 			t.Fatalf("seed episode end: %v", err)
 		}
-		if _, err := transaction.Exec(ctx, `update sync_recordings set status = 'stopped', completed_at = now(), stop_external_operation_id = null where recording_id = $1`, recordingID.Bytes()); err != nil {
+		if _, err := transaction.Exec(ctx, `update sync_recordings set status = 'recording', completed_at = null, stop_external_operation_id = null where recording_id = $1`, recordingID.Bytes()); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := transaction.Exec(ctx, `update recording_pipelines set stop_operation_id = $2, stop_requested_at = now() where recording_id = $1`, recordingID.Bytes(), endOperationID.Bytes()); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := transaction.Exec(ctx, `update episodes set status = 'ending' where id = $1`, episodeID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
 		input := stoppedInput
 		input.RequestKey += "_episode_end"
-		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrEpisodeStopPending) {
 			t.Fatalf("pending episode end error = %v", err)
 		}
-		if _, err := transaction.Exec(ctx, `update sync_external_operations set status = 'applied', completed_at = now() where external_operation_id = $1`, endOperationID.Bytes()); err != nil {
+		if _, err := transaction.Exec(ctx, `update sync_external_operations set recording_id = $2 where external_operation_id = $1`, endOperationID.Bytes(), otherRecordingID.Bytes()); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
-			t.Fatalf("active episode error = %v", err)
+			t.Fatalf("mismatched episode end recording error = %v", err)
+		}
+		if _, err := transaction.Exec(ctx, `update sync_external_operations set recording_id = null where external_operation_id = $1`, endOperationID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrEpisodeStopPending) {
+			t.Fatalf("nullable pending episode end error = %v", err)
+		}
+		if _, err := transaction.Exec(ctx, `update sync_external_operations set recording_id = $2, status = 'applied', fence_active = false, completed_at = now() where external_operation_id = $1`, endOperationID.Bytes(), recordingID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("ending episode error = %v", err)
 		}
 		if _, err := transaction.Exec(ctx, `update episodes set status = 'ended' where id = $1`, episodeID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := transaction.Exec(ctx, `update sync_recordings set status = 'stopped', completed_at = now() where recording_id = $1`, recordingID.Bytes()); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := transaction.Exec(ctx, `update recording_jobs set lease_expires_at = lease_expires_at + interval '1 minute' where id = $1`, jobID.Bytes()); err != nil {

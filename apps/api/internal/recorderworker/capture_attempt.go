@@ -29,6 +29,7 @@ const (
 	defaultCapturePlanWait        = 2 * time.Second
 	defaultCaptureRTPDeadline     = 250 * time.Millisecond
 	defaultCaptureCloseTimeout    = 15 * time.Second
+	defaultCaptureLifecycleRetry  = 100 * time.Millisecond
 	captureVideoReorderWindow     = uint64(16)
 	captureKeyFrameRequestSpacing = time.Second
 	captureBundleContentType      = "application/vnd.chalk.recording-bundle+json"
@@ -859,21 +860,33 @@ func (a *PionCaptureAttempt) finishSuccess(ctx context.Context, writer *captureB
 	if result != nil {
 		return result
 	}
-	stopID := captureLifecycleKey("stopped", a.authority.RecordingID.String(), uint64(a.authority.CaptureEpoch))
-	lease := a.currentLease()
-	stop := CaptureStoppedEvent{
-		TenantID: a.authority.TenantID.String(), SpaceID: a.authority.SpaceID.String(), EpisodeID: a.authority.EpisodeID.String(), RecordingID: a.authority.RecordingID.String(), JobID: a.authority.JobID.String(),
-		CaptureEpoch: uint64(a.authority.CaptureEpoch), Attempt: a.authority.AttemptCount, FencingGeneration: a.authority.FencingGeneration,
-		EnvelopeDigest: hex.EncodeToString(a.authority.EnvelopeDigest), LeaseOwner: lease.Owner, LeaseToken: lease.Token, LeaseExpiresAt: lease.ExpiresAt,
-		At: a.config.Now().UTC(), IdempotencyKey: stopID,
-	}
 	callbackCtx, callbackCancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
-	err := a.lifecycle.Stopped(callbackCtx, stop)
-	callbackCancel()
-	if err != nil {
-		return fmt.Errorf("emit capture stopped: %w", err)
+	defer callbackCancel()
+	stopID := captureLifecycleKey("stopped", a.authority.RecordingID.String(), uint64(a.authority.CaptureEpoch))
+	stoppedAt := a.config.Now().UTC()
+	for {
+		lease := a.currentLease()
+		stop := CaptureStoppedEvent{
+			TenantID: a.authority.TenantID.String(), SpaceID: a.authority.SpaceID.String(), EpisodeID: a.authority.EpisodeID.String(), RecordingID: a.authority.RecordingID.String(), JobID: a.authority.JobID.String(),
+			CaptureEpoch: uint64(a.authority.CaptureEpoch), Attempt: a.authority.AttemptCount, FencingGeneration: a.authority.FencingGeneration,
+			EnvelopeDigest: hex.EncodeToString(a.authority.EnvelopeDigest), LeaseOwner: lease.Owner, LeaseToken: lease.Token, LeaseExpiresAt: lease.ExpiresAt,
+			At: stoppedAt, IdempotencyKey: stopID,
+		}
+		err := a.lifecycle.Stopped(callbackCtx, stop)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, ErrControlPlaneRetryable) {
+			return fmt.Errorf("emit capture stopped: %w", err)
+		}
+		timer := time.NewTimer(defaultCaptureLifecycleRetry)
+		select {
+		case <-timer.C:
+		case <-callbackCtx.Done():
+			timer.Stop()
+			return fmt.Errorf("emit capture stopped: %w", errors.Join(err, callbackCtx.Err()))
+		}
 	}
-	return nil
 }
 
 func (a *PionCaptureAttempt) finishFailure(cause error, writer *captureBundleWriter) error {
