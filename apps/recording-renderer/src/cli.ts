@@ -9,6 +9,9 @@ import { verifyClientBuild } from "./node/ui-build.js";
 
 const FRAME_RESULT_VERSION = "recording-frame-render-result.v1";
 const MAXIMUM_REQUEST_BYTES = 64 << 10;
+// page.clock replaces in-page timers, including requestAnimationFrame. Keep
+// the stall deadline here so it measures wall time instead of synthetic ticks.
+const FRAME_PREPARATION_DEADLINE_MS = 30_000;
 
 interface Arguments {
   readonly requestPath: string;
@@ -175,17 +178,22 @@ async function writeFrames(pages: readonly RenderPage[], request: FrameRenderReq
   for (let firstIndex = 0; firstIndex < frameCount; firstIndex += pages.length) {
     const batch = pages.slice(0, Math.min(pages.length, frameCount - firstIndex));
     const preparationStarted = process.hrtime.bigint();
-    await Promise.all(
-      batch.map(({ page }, offset) => {
-        const index = firstIndex + offset;
-        const elapsedMs = Math.floor((index * 1_000) / request.fps);
-        return page.evaluate(
-          async ({ frameMs, frameToken }) => {
-            await window.chalkRecordingRenderer.renderFrame(frameMs, frameToken);
-          },
-          { frameMs: elapsedMs, frameToken: `${index}:${elapsedMs}` },
-        );
-      }),
+    const lastIndex = firstIndex + batch.length - 1;
+    await withFramePreparationDeadline(
+      Promise.all(
+        batch.map(({ page }, offset) => {
+          const index = firstIndex + offset;
+          const elapsedMs = Math.floor((index * 1_000) / request.fps);
+          return page.evaluate(
+            async ({ frameMs, frameToken }) => {
+              await window.chalkRecordingRenderer.renderFrame(frameMs, frameToken);
+            },
+            { frameMs: elapsedMs, frameToken: `${index}:${elapsedMs}` },
+          );
+        }),
+      ),
+      firstIndex,
+      lastIndex,
     );
     preparationNanoseconds += process.hrtime.bigint() - preparationStarted;
     const captureStarted = process.hrtime.bigint();
@@ -208,6 +216,18 @@ async function writeFrames(pages: readonly RenderPage[], request: FrameRenderReq
     captureWallMs: nanosecondsToMilliseconds(captureNanoseconds),
     outputWallMs: nanosecondsToMilliseconds(outputNanoseconds),
   };
+}
+
+async function withFramePreparationDeadline<T>(operation: Promise<T>, firstIndex: number, lastIndex: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error(`recording renderer timed out preparing frame batch ${firstIndex}-${lastIndex}`)), FRAME_PREPARATION_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([operation, deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
 }
 
 async function writeReplayInspection(page: Page, cdp: CDPSession, request: FrameRenderRequestV1, directory: string): Promise<void> {

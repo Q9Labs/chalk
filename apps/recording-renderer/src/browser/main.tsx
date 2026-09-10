@@ -169,19 +169,15 @@ async function seekVideo(video: HTMLVideoElement, frame: RecordingPresentationSn
   const targetMs = readVideoTargetMs(video, frame, media);
   video.pause();
   const targetSeconds = targetMs / 1_000;
-  let presented = presentedFrameIfPending(video, targetSeconds);
   await ensureMediaReadyState(video, HTMLMediaElement.HAVE_METADATA, "loadedmetadata");
   if (Math.abs(video.currentTime - targetSeconds) > 0.000_5) {
-    presented ??= presentedVideoFrame(video, targetSeconds);
+    const seeked = mediaEvent(video, "seeked");
     video.currentTime = targetSeconds;
-    await mediaEvent(video, "seeked");
+    await seeked;
   }
+  // A paused element need not produce another video-frame callback after a
+  // seek. Current data is the decoded boundary that CDP will composite.
   await ensureMediaReadyState(video, HTMLMediaElement.HAVE_CURRENT_DATA, "loadeddata");
-  await presented;
-}
-
-function presentedFrameIfPending(video: HTMLVideoElement, targetSeconds: number): Promise<void> | undefined {
-  return video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ? presentedVideoFrame(video, targetSeconds) : undefined;
 }
 
 async function ensureMediaReadyState(video: HTMLVideoElement, readyState: number, event: string): Promise<void> {
@@ -212,51 +208,6 @@ function isValidVideoTarget(targetMs: number, elapsedMs: number, sourceStartMs: 
 
 function throwInvalidVideoBinding(): never {
   throw new Error("recording renderer video is not bound to its frame clock");
-}
-
-async function presentedVideoFrame(video: HTMLVideoElement, targetSeconds: number): Promise<void> {
-  if (typeof video.requestVideoFrameCallback !== "function") {
-    await animationFrames(2);
-    return;
-  }
-  await new Promise<void>((resolve, reject) => {
-    let callbackId = 0;
-    let deadlineFrameId = 0;
-    let deadlineFrames = 0;
-    let settled = false;
-    const cleanup = (): void => {
-      video.removeEventListener("error", failed);
-      video.cancelVideoFrameCallback(callbackId);
-      cancelAnimationFrame(deadlineFrameId);
-    };
-    const succeed = (): void => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-    const fail = (error: Error): void => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    };
-    const failed = (): void => {
-      fail(new Error("recording renderer video failed before frame presentation"));
-    };
-    const presented = (_now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata): void => {
-      if (Math.abs(metadata.mediaTime - targetSeconds) <= 0.05) succeed();
-      else callbackId = video.requestVideoFrameCallback(presented);
-    };
-    const deadline = (): void => {
-      deadlineFrames += 1;
-      if (deadlineFrames >= 120) fail(new Error("recording renderer timed out waiting for decoded video frame presentation"));
-      else deadlineFrameId = requestAnimationFrame(deadline);
-    };
-    video.addEventListener("error", failed, { once: true });
-    callbackId = video.requestVideoFrameCallback(presented);
-    deadlineFrameId = requestAnimationFrame(deadline);
-  });
 }
 
 async function animationFrames(count: number): Promise<void> {
