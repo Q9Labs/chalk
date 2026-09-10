@@ -102,8 +102,8 @@ The web experience is the launch-critical surface. The mobile redesign remains i
 - [x] Recording control-plane API and durable job contracts
 - [x] Capture and render infrastructure definitions
 - [x] React recording controls
-- [ ] Qualified real capture and render worker pools
-- [ ] End-to-end recording to downloadable artifact proof
+- [x] Qualified real capture and render worker pools
+- [x] End-to-end recording to downloadable artifact proof
 - [ ] Meeting recording is wired into the first-party mobile flow
 
 ## Transcription
@@ -111,7 +111,7 @@ The web experience is the launch-critical surface. The mobile redesign remains i
 - [x] Transcript API, artifact contracts, and worker boundaries
 - [x] Provider dispatcher, retry, finalization, and cleanup implementation
 - [x] React transcript and transcription UI
-- [ ] End-to-end managed recording-to-provider-to-final-transcript proof
+- [x] End-to-end managed recording-to-provider-to-final-transcript proof
 - [ ] Live in-room captions with consent and privacy lifecycle
 - [ ] Meeting transcripts are wired into the first-party mobile flow
 - [x] Standalone mobile dictation and transcription flow

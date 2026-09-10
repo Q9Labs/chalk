@@ -159,11 +159,11 @@ domains:
       done: true
       evidence: ["sdks/typescript/react/src/components"]
     - capability: "Qualified real capture and render worker pools"
-      done: false
-      evidence: ["architecture.html", "infrastructure/README.md"]
+      done: true
+      evidence: ["docs/recording-transcription.md", "infrastructure/recorder/README.md"]
     - capability: "End-to-end recording to downloadable artifact proof"
-      done: false
-      evidence: ["architecture.html"]
+      done: true
+      evidence: ["docs/recording-transcription.md", "architecture.html"]
     - capability: "Episode recording is wired into the first-party mobile flow"
       done: false
       evidence: ["apps/mobile/src"]
@@ -179,8 +179,8 @@ domains:
       done: true
       evidence: ["sdks/typescript/react/src/components"]
     - capability: "End-to-end managed recording-to-provider-to-final-transcript proof"
-      done: false
-      evidence: ["architecture.html"]
+      done: true
+      evidence: ["docs/recording-transcription.md", "architecture.html"]
     - capability: "Live in-Space captions with consent and privacy lifecycle"
       done: false
       evidence: ["architecture.html"]
