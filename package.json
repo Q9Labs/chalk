@@ -105,7 +105,7 @@
     "@types/react": "^19.2.14",
     "dependency-cruiser": "18.2.0",
     "fallow": "^2.96.0",
-    "js-yaml": "^4.3.1",
+    "js-yaml": "^4.3.2",
     "lefthook": "^2.1.9",
     "openapi-typescript": "7.13.0",
     "oxfmt": "^0.36.0",
@@ -116,7 +116,7 @@
     "turbo": "^2.9.14",
     "typescript": "^6.0.3",
     "typescript-7": "npm:typescript@7.0.1-rc",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "wrangler": "^4.107.0"
   },
   "engines": {

@@ -7,3 +7,8 @@ reason = "image-size 2.0.2 is patched locally in patches/image-size@2.0.2.patch;
 id = "GHSA-w3rx-r6r6-pgpr"
 ignoreUntil = 2026-10-08
 reason = "Same locally patched image-size 2.0.2 build-time metro dependency as GHSA-5p2g-fcmc-qvqq; local project assets only, no untrusted input at build time. Revisit when image-size ships an upstream fix or metro moves to it."
+
+[[IgnoredVulns]]
+id = "GHSA-2q42-4q24-7rgv"
+ignoreUntil = 2026-10-15
+reason = "The vulnerable @typespec/openapi3 emitter is not installed. Contract fixture checks invoke @typespec/compiler with noEmit against repository-owned inputs, so the advisory's out-of-tree emitter write is unreachable. Revisit when TypeSpec publishes a fix or an emitter is added."

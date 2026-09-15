@@ -15,7 +15,7 @@ auditConfig:
 overrides:
   "@babel/core": ^7.29.7
   "@tanstack/start-server-core": 1.169.16
-  "@vitest/browser": ^4.1.10
+  "@vitest/browser": ^4.1.11
   "@xmldom/xmldom": ^0.8.15
   browserslist: ^4.28.7
   defu: ^6.1.7
@@ -26,7 +26,7 @@ overrides:
   h3-v2: npm:h3@^2.0.1-rc.20
   image-size: 2.0.2
   immutable: ^4.3.9
-  js-yaml: ^4.3.1
+  js-yaml: ^4.3.2
   lodash-es: ^4.18.1
   mermaid: ^11.16.1
   minimatch@10>brace-expansion: 5.0.9
@@ -39,7 +39,7 @@ overrides:
   postcss: ^8.5.18
   react: 19.2.7
   react-dom: 19.2.7
-  sharp: ^0.35.0
+  sharp: ^0.35.4
   shell-quote: ^1.9.0
   tar: ^7.5.21
   toml: ^4.2.0
