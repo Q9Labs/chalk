@@ -4,20 +4,23 @@ import { isMain } from "./script-entry.mjs";
 import { readTracker, repoRoot } from "./tracker-data.mjs";
 import { renderHtml, renderMarkdown } from "./tracker-render.mjs";
 
+const checkOutput = async (root, [file, expected]) => {
+  const actual = await readFile(path.join(root, file), "utf8");
+  if (actual !== expected) throw new Error(`${file} is stale; run pnpm generate:tracker`);
+};
+
+const writeOutput = async (root, [file, contents]) => {
+  await writeFile(path.join(root, file), contents);
+};
+
 export const generateTracker = async ({ root = repoRoot, check = false } = {}) => {
   const tracker = await readTracker(root);
   const outputs = [
     ["tracker-human.md", renderMarkdown(tracker)],
     ["tracker-human.html", renderHtml(tracker)],
   ];
-  if (check) {
-    for (const [file, expected] of outputs) {
-      const actual = await readFile(path.join(root, file), "utf8");
-      if (actual !== expected) throw new Error(`${file} is stale; run pnpm generate:tracker`);
-    }
-  } else {
-    for (const [file, contents] of outputs) await writeFile(path.join(root, file), contents);
-  }
+  const operation = check ? checkOutput : writeOutput;
+  await Promise.all(outputs.map((output) => operation(root, output)));
   return tracker;
 };
 
