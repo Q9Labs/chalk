@@ -21,10 +21,7 @@
       }
     },
     "topology_check": {
-      "allOf": [
-        { "$ref": "#/$defs/action" },
-        { "properties": { "expect": { "const": "confirmed" } } }
-      ]
+      "allOf": [{ "$ref": "#/$defs/action" }, { "properties": { "expect": { "const": "confirmed" } } }]
     },
     "breaker": { "$ref": "#/$defs/breaker" },
     "events": {
@@ -87,34 +84,19 @@
           "items": { "$ref": "#/$defs/identifier" }
         },
         "trigger_check": {
-          "allOf": [
-            { "$ref": "#/$defs/action" },
-            { "properties": { "expect": { "const": "confirmed" } } }
-          ]
+          "allOf": [{ "$ref": "#/$defs/action" }, { "properties": { "expect": { "const": "confirmed" } } }]
         },
         "inject": {
-          "allOf": [
-            { "$ref": "#/$defs/action" },
-            { "properties": { "expect": { "const": "injected" } } }
-          ]
+          "allOf": [{ "$ref": "#/$defs/action" }, { "properties": { "expect": { "const": "injected" } } }]
         },
         "observe": {
-          "allOf": [
-            { "$ref": "#/$defs/action" },
-            { "properties": { "expect": { "const": "confirmed" } } }
-          ]
+          "allOf": [{ "$ref": "#/$defs/action" }, { "properties": { "expect": { "const": "confirmed" } } }]
         },
         "telemetry": {
-          "allOf": [
-            { "$ref": "#/$defs/action" },
-            { "properties": { "expect": { "const": "available" } } }
-          ]
+          "allOf": [{ "$ref": "#/$defs/action" }, { "properties": { "expect": { "const": "available" } } }]
         },
         "cleanup": {
-          "allOf": [
-            { "$ref": "#/$defs/action" },
-            { "properties": { "expect": { "const": "cleaned" } } }
-          ]
+          "allOf": [{ "$ref": "#/$defs/action" }, { "properties": { "expect": { "const": "cleaned" } } }]
         }
       }
     }

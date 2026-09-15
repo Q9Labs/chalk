@@ -65,13 +65,13 @@ references, or database URLs. It never retains command output.
 Action commands must exit zero and print exactly one of the following markers,
 after surrounding whitespace is removed:
 
-| Action | Required marker |
-| --- | --- |
-| `trigger_check` | `confirmed` |
-| `inject` | `injected` |
-| `observe` | `confirmed` |
-| `telemetry` | `available` |
-| `cleanup` | `cleaned` |
+| Action          | Required marker |
+| --------------- | --------------- |
+| `trigger_check` | `confirmed`     |
+| `inject`        | `injected`      |
+| `observe`       | `confirmed`     |
+| `telemetry`     | `available`     |
+| `cleanup`       | `cleaned`       |
 
 The independent observation marker prevents an injection command from being
 mistaken for observed recovery. A missing marker, nonzero exit, timeout,

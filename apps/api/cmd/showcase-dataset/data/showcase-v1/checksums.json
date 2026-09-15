@@ -46,11 +46,11 @@
     "chalk": {
       "manifest": {
         "path": "exports/showcase-v1/chalk.json",
-        "contentHash": "sha256:53cceacd082068128a580ca5a70553796ac005a691618f63bd666afade05ac6b"
+        "contentHash": "sha256:2673f60bdfa88176d49ad075b35ddf38c5181b34841f793b8c8be590b2d68787"
       },
       "assets": {
         "path": "exports/showcase-v1/chalk-assets.json",
-        "contentHash": "sha256:9e6ed3fe3e0822d9cef990abab7081eecbe10d8314203adcfd0c22c1ac33fe47"
+        "contentHash": "sha256:2f5b54363e21a096d52ba062f12ad767b851d3828216a2ab7fe3ec13abb83a80"
       }
     },
     "kaadr": {

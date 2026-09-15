@@ -1,0 +1,1003 @@
+schema_version: 7
+principle: >-
+  Track meaningful product outcomes and concrete remaining work, not completed setup or CRUD
+  inventory. The repository-wide audit is dated 2026-09-08; recording and transcription status was
+  refreshed against revision 4ebb57f2 on 2026-09-15. Working means only the explicitly stated source
+  scope is implemented; it is not live-release certification. Planned means a specific
+  implementation gap was found; unknown names the exact proof still unavailable. P0 first, P1 next,
+  P2 later. Retire basic completed items; consolidate related outcomes without discarding unresolved
+  scope.
+sizing: >-
+  Estimate remaining work, not elapsed time. S: one focused change. M: several connected changes. L:
+  substantial cross-cutting work; split before starting. Unknown: investigate before sizing. Working
+  entries have no remaining work to size. Waiting does not increase size. Revisit estimates when the
+  work is inspected.
+outcomes:
+  - id: episode_core.admission_and_join
+    title: Participants create or enter a Space through explicit admission and capability rules
+    area: episode_core
+    state: working
+    summary: >-
+      Web and mobile expose public Space creation and invite entry. API admission and Sync
+      capability handling are implemented; mobile creation is not guarded by a release-only disabled
+      flag in HomeScreen.shared. This source scope does not certify a released binary or provider
+      connection.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/mobile/src/screens/HomeScreen.shared.tsx
+      - apps/web/src/components/space/SpacePage.tsx
+      - apps/api/internal/httpapi/episode_lifecycle.go
+      - apps/sync/lib
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Web and mobile expose public Space creation and invite entry. API admission and Sync
+          capability handling are implemented; mobile creation is not guarded by a release-only
+          disabled flag in HomeScreen.shared. This source scope does not certify a released binary
+          or provider connection.
+        artifact: apps/mobile/src/screens/HomeScreen.shared.tsx
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: identity_and_tenancy.authorization
+    title: Tenant authorization and scoped API-key lifecycle remain server-owned
+    area: identity_and_tenancy
+    state: working
+    summary: >-
+      Authentication, Tenant membership checks and API-key creation/rotation/revocation exist on the
+      server. Dashboard visibility is not the authority boundary. Keep this security-sensitive
+      behavior visible after retiring basic auth/CRUD inventory.
+    theory: theory.md#identity-and-membership
+    code:
+      - apps/api/internal/httpapi/api_keys.go
+      - apps/api/internal/adapters/postgres/api_keys.go
+      - apps/api/internal/authentication
+      - apps/api/internal/httpapi/memberships.go
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Authentication, Tenant membership checks and API-key creation/rotation/revocation exist on
+          the server. Dashboard visibility is not the authority boundary. Keep this
+          security-sensitive behavior visible after retiring basic auth/CRUD inventory.
+        artifact: apps/api/internal/httpapi/api_keys.go
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: identity_and_tenancy.management_ui
+    title: Finish the first-party Tenant member and invitation management flow
+    area: identity_and_tenancy
+    state: planned
+    summary: >-
+      TenantSettingsPage edits allowed CORS origins and shows current access. The People route still
+      renders ContractPage, whose copy explicitly waits for self-scoped Tenant access and invitation
+      contracts; this is not a complete member-management UI.
+    theory: theory.md#identity-and-membership
+    code:
+      - apps/web/src/components/dashboard/TenantSettingsPage.tsx
+      - apps/web/src/routes/_app.people.tsx
+      - apps/web/src/components/dashboard/ContractPage.tsx
+    priority: P1
+    size: M
+    size_reason: Several connected implementation and verification changes.
+    remaining:
+      - >-
+        Define and wire self-scoped membership/invitation operations, then replace the People
+        contract placeholder with actionable invite, role-change and removal views.
+      - >-
+        Verify denied roles cannot mutate membership and that expired/revoked invites have
+        recoverable UI states.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          TenantSettingsPage edits allowed CORS origins and shows current access. The People route
+          still renders ContractPage, whose copy explicitly waits for self-scoped Tenant access and
+          invitation contracts; this is not a complete member-management UI.
+        artifact: apps/web/src/components/dashboard/TenantSettingsPage.tsx
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: media.bound_access_and_adapters
+    title: Web and native media adapters consume provider- and connection-bound access
+    area: media
+    state: working
+    summary: >-
+      The media plane declares Cloudflare SFU and RTK providers. React Native
+      create-native-space-client selects RTK or SFU adapters; the former tracker referenced an
+      obsolete RealtimeKit directory. API participant-media authorization binds short-lived
+      credentials to the selected route/generation/connection.
+    theory: theory.md#what-chalk-is
+    code:
+      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
+      - sdks/typescript/react-native/src/space-client/cloudflare-rtk-native.ts
+      - apps/api/internal/httpapi/participant_media_auth.go
+      - apps/api/internal/mediaplane/service.go
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          The media plane declares Cloudflare SFU and RTK providers. React Native
+          create-native-space-client selects RTK or SFU adapters; the former tracker referenced an
+          obsolete RealtimeKit directory. API participant-media authorization binds short-lived
+          credentials to the selected route/generation/connection.
+        artifact: sdks/typescript/react-native/src/space-client/create-native-space-client.ts
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: media.live_platform_qualification
+    title: Qualify released web/native media on real provider networks
+    area: media
+    state: unknown
+    summary: >-
+      Web and native media implementations exist. The packed web consumer fixture intentionally uses
+      local protocol-faithful signaling/Sync mocks, so even a green fixture is not a real Cloudflare
+      or physical-device media proof.
+    theory: theory.md#what-chalk-is
+    code:
+      - tools/sdk-web-consumer-e2e/README.md
+      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
+      - apps/mobile/MOBILE_ENV_CONTRACT.md
+    priority: P0
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Run two-party audio/video, screen sharing, admission changes and reconnect against the
+        configured provider on supported browsers and physical iOS/Android release builds.
+      - >-
+        Record provider, build/revision and network conditions; exercise permission denial,
+        background return and media-route replacement without exposing credentials.
+    uncertainty: No current real-network or signed-device media observation was produced by this audit.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Web and native media implementations exist. The packed web consumer fixture intentionally
+          uses local protocol-faithful signaling/Sync mocks, so even a green fixture is not a real
+          Cloudflare or physical-device media proof.
+        artifact: tools/sdk-web-consumer-e2e/README.md
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: media.self_hosted_provider
+    title: Add a usable non-Cloudflare media provider for full media self-hosting
+    area: media
+    state: planned
+    summary: >-
+      App-tier API/Sync/Postgres self-hosting exists, but the current media provider enum and
+      adapters are Cloudflare SFU/RTK only. An abstract media-plane boundary does not make the whole
+      product Cloudflare-free.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/api/internal/mediaplane/service.go
+      - sdks/typescript/client/src/media
+      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
+    priority: P2
+    size: L
+    size_reason: Cross-cutting scope; split into bounded deliveries before implementation.
+    remaining:
+      - >-
+        Implement a self-hosted provider adapter for control plane, web/native clients and
+        credential renewal under the existing access contracts.
+      - >-
+        Qualify join, screen share, reconnect and recording compatibility without requiring
+        Cloudflare credentials.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          App-tier API/Sync/Postgres self-hosting exists, but the current media provider enum and
+          adapters are Cloudflare SFU/RTK only. An abstract media-plane boundary does not make the
+          whole product Cloudflare-free.
+        artifact: apps/api/internal/mediaplane/service.go
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: realtime_sync.durable_control_and_chat
+    title: Acknowledged Episode state and chat have server-owned durable recovery
+    area: realtime_sync
+    state: working
+    summary: >-
+      Sync implements Postgres-backed control state and chat, retained-range recovery, read receipts
+      and bounded replay. The old tracker incorrectly left durable chat as an unspecified unknown.
+      This reviewed source contract is separate from multi-node failure qualification.
+    theory: theory.md#sync-correctness
+    code:
+      - apps/sync/lib/chalk_sync/chat.ex
+      - apps/sync/lib/chalk_sync/chat/postgres.ex
+      - apps/sync/lib/chalk_sync/chat/sql.ex
+      - sdks/typescript/client/src/sync
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Sync implements Postgres-backed control state and chat, retained-range recovery, read
+          receipts and bounded replay. The old tracker incorrectly left durable chat as an
+          unspecified unknown. This reviewed source contract is separate from multi-node failure
+          qualification.
+        artifact: apps/sync/lib/chalk_sync/chat.ex
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: realtime_sync.failover_qualification
+    title: Qualify Sync durability through node/database interruption and recovery
+    area: realtime_sync
+    state: unknown
+    summary: >-
+      Durable authority and recovery mechanisms exist; no current multi-node standby/failover
+      experiment was run. Do not equate source durability with demonstrated deployed topology
+      recovery.
+    theory: theory.md#sync-correctness
+    code:
+      - apps/sync/lib/chalk_sync/chat/postgres.ex
+      - apps/sync/lib/chalk_sync/whiteboard_v1
+      - infrastructure/managed-episode
+    priority: P0
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Interrupt a Sync node after acknowledgement, reconnect another client and compare
+        authoritative state, command receipts and chat history.
+      - >-
+        Exercise database unavailability/recovery, slow consumers and standby takeover; verify no
+        acknowledged update is lost or duplicated.
+    uncertainty: Requires a named topology and a captured fault/recovery result, not another source inventory.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Durable authority and recovery mechanisms exist; no current multi-node standby/failover
+          experiment was run. Do not equate source durability with demonstrated deployed topology
+          recovery.
+        artifact: apps/sync/lib/chalk_sync/chat/postgres.ex
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: collaboration.attachment_retention
+    title: Qualify attachment isolation, expiry and physical object cleanup
+    area: collaboration
+    state: unknown
+    summary: >-
+      Upload/finalize/download APIs, browser/native chat attachment surfaces, expiry checks and
+      leased cleanup already exist. Remaining proof concerns their combined behavior with real
+      object storage and Tenant/Episode ownership; attachments are not an unimplemented feature.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/api/internal/chatattachments/service.go
+      - apps/api/internal/chatattachments/cleanup.go
+      - apps/api/internal/httpapi/chat_attachments.go
+      - sdks/typescript/react-native/src/components/native-space-view/SpaceChatAttachment.tsx
+    priority: P1
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Upload and consume attachments across two authorized clients, then reject another
+        Tenant/Participant without valid access.
+      - >-
+        Verify abandoned/expired uploads and completed retention cleanup remove stored objects,
+        survive retry/lease interruption and cannot be downloaded through stale grants.
+    uncertainty: >-
+      The existing packed browser fixture checks bytes/digests against local storage; real retention
+      and object-deletion qualification was not performed here.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Upload/finalize/download APIs, browser/native chat attachment surfaces, expiry checks and
+          leased cleanup already exist. Remaining proof concerns their combined behavior with real
+          object storage and Tenant/Episode ownership; attachments are not an unimplemented feature.
+        artifact: apps/api/internal/chatattachments/service.go
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: collaboration.whiteboard_delivery
+    title: Qualify the implemented web and embedded native whiteboard together
+    area: collaboration
+    state: unknown
+    summary: >-
+      Public SpacePage renders Chalk, which wires WhiteboardView to the collaboration transport.
+      Native SpaceView.shared renders SpaceWhiteboardSurface before its stage-layout branch when a
+      board is open; the stage placeholder is not proof of a missing Android board. The separate
+      /whiteboard route is blank but is not the in-Space entry point.
+    theory: theory.md#what-chalk-is
+    code:
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
+      - sdks/typescript/react-native/src/components/SpaceView.shared.tsx
+      - sdks/typescript/react-native/src/components/native-space-view/SpaceWhiteboardSurface.tsx
+      - apps/web/src/components/space/SpacePage.tsx
+    priority: P1
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Exercise live web/web and web/physical-native drawing, cursor/view-only permissions, file
+        transfer, reconnect and snapshot recovery.
+      - >-
+        Check math authoring/rendering, touch/keyboard behavior and embedded viewport resizing;
+        distinguish protocol unit proof from current multi-client runtime proof.
+    uncertainty: >-
+      Implementation is present on both surfaces; this audit did not execute a live multi-client or
+      native-device board Episode.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Public SpacePage renders Chalk, which wires WhiteboardView to the collaboration transport.
+          Native SpaceView.shared renders SpaceWhiteboardSurface before its stage-layout branch when
+          a board is open; the stage placeholder is not proof of a missing Android board. The
+          separate /whiteboard route is blank but is not the in-Space entry point.
+        artifact: sdks/typescript/react/src/components/chalk/Chalk.tsx
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: recording.downloadable_artifact
+    title: Qualify recording from control request through downloadable artifact
+    area: recording
+    state: in_progress
+    summary: >-
+      The encrypted capture, render and download pipeline is preserved. The production-placement
+      delta now implements a shared ARM64 control image with three rootless services, durable
+      state/restore/rollback, zero-spare ten-capture/ten-render capacity and bounded fast-follow
+      startup. It has not been deployed or qualified in a live cloud environment.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/api/internal/httpapi/recordings.go
+      - apps/api/internal/recordingpipeline
+      - infrastructure/recorder
+      - infrastructure/managed-episode
+      - docs/recording-transcription.md
+      - infrastructure/managed-episode/recording-control.md
+      - infrastructure/recorder/profiles/cost-first.json
+      - scripts/recorder/README.md
+    priority: P0
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Prove host headroom, TLS peer identity, clock alignment, restart recovery and load behavior
+        in the approved live environment.
+      - >-
+        Measure real ten-worker provider startup and overlap, run a paced one-hour cloud candidate
+        comparison, and measure ten-way render throughput and actual cost.
+    uncertainty: >-
+      The accelerated local probe used synthetic media and a discarding sink; it is not cloud,
+      provider, live-SFU or production qualification.
+    evidence:
+      - kind: source_review
+        scope: Production-placement implementation audit; not a live environment test
+        detail: >-
+          Source inspection confirms the shared ARM64 control image, three rootless services,
+          durable restore/rollback, split zero-spare capacity and bounded fast-follow behavior.
+        artifact: docs/recording-transcription.md
+        revision: 4ebb57f2a609219c3883a846026cd5b6b5792d90
+        environment: Local source inspection
+        date: "2026-09-15"
+        result: pass
+      - kind: observation
+        scope: Accelerated local resource probe; not live or cloud qualification
+        detail: >-
+          A synthetic one-hour stream with three Participants, six tracks and 4 Mbps completed in
+          267.533 seconds with 239,599,616 bytes peak RSS (about 229 MiB). The upload sink discarded
+          output and no SFU or cloud provider was exercised.
+        artifact: scripts/recorder/README.md
+        revision: 4ebb57f2a609219c3883a846026cd5b6b5792d90
+        environment: Local Apple M4 synthetic probe
+        date: "2026-09-15"
+        result: pass
+  - id: recording.scheduled_preparation
+    title: Adopt and smoke-test implemented scheduled recording preparation
+    area: recording
+    state: in_progress
+    summary: >-
+      Durable revision-fenced prepare/get/cancel, a five-minute lead and no-show grace, expiry and
+      atomic start consumption are implemented in the API and generated SDK. No first-party
+      integration adoption or live scheduled smoke has been observed.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/api/internal/httpapi/recording_preparation.go
+      - apps/api/internal/recordingpreparation
+      - apps/api/db/migrations/20260915120000_recording_preparations.sql
+      - sdks/typescript/client/src/generated/http-api.ts
+      - docs/recording-transcription.md
+    priority: P0
+    size: Unknown
+    size_reason: Live adoption and provider-readiness evidence are still unmeasured.
+    remaining:
+      - >-
+        Adopt the contract in an integration and smoke-test schedule, reschedule, cancel, no-show,
+        expiry and atomic consumption in an approved live environment.
+      - >-
+        Measure provider readiness and quota behavior with real ten-worker startup before treating
+        readiness as production admission capacity.
+    uncertainty: >-
+      Readiness is an observation rather than an admission reservation, and no live scheduled smoke
+      has been run.
+    evidence:
+      - kind: source_review
+        scope: Scheduled preparation implementation audit; not a live environment test
+        detail: >-
+          The API, persistence migration and generated SDK implement revision fencing, idempotency,
+          cancellation, expiry and atomic consumption when recording starts.
+        artifact: apps/api/internal/httpapi/recording_preparation.go
+        revision: 4ebb57f2a609219c3883a846026cd5b6b5792d90
+        environment: Local source inspection
+        date: "2026-09-15"
+        result: pass
+  - id: recording.mobile_controls
+    title: Wire recording control and result access into the first-party mobile flow
+    area: recording
+    state: planned
+    summary: >-
+      The mobile Space surfaces do not currently wire recording/transcript controls, while backend
+      recording endpoints and web controls exist. Native media connectivity is not equivalent to
+      first-party recording support.
+    theory: theory.md#what-chalk-is
+    code:
+      - sdks/typescript/react-native/src/components/SpaceView.shared.tsx
+      - sdks/typescript/react-native/src/components/native-space-view/SpaceMoreSheet.tsx
+      - apps/api/internal/httpapi/recordings.go
+    priority: P1
+    size: M
+    size_reason: Several connected implementation and verification changes.
+    remaining:
+      - >-
+        Expose capability-gated start/stop recording, consent/status/failure feedback and authorized
+        result access in the mobile Episode flow.
+      - >-
+        Verify foreground/background recovery and denial behavior against the server-owned recording
+        state.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          The mobile Space surfaces do not currently wire recording/transcript controls, while
+          backend recording endpoints and web controls exist. Native media connectivity is not
+          equivalent to first-party recording support.
+        artifact: sdks/typescript/react-native/src/components/SpaceView.shared.tsx
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: transcription.final_artifact
+    title: Qualify provider transcription through a final authorized Transcript
+    area: transcription
+    state: in_progress
+    summary: >-
+      Direct DeepInfra native Whisper large-v3-turbo is implemented with explicit provider choice;
+      the optional Cloudflare fallback is disabled in the cost-first profile. Contract tests made
+      no provider request, so a final authorized managed recording-to-Transcript outcome remains
+      unproven.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/transcription-dispatcher/src/providers.ts
+      - apps/transcription-dispatcher/src/deepinfra-response.ts
+      - apps/transcription-dispatcher/test/deepinfra.test.ts
+      - apps/transcription-dispatcher/src/retry.ts
+      - apps/api/internal/httpapi/transcription_finalize.go
+      - apps/api/internal/httpapi/transcripts.go
+      - infrastructure/recorder/profiles/cost-first.json
+    priority: P0
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Qualify the exact adapter against an approved corpus and accepted provider privacy/quota
+        posture, then trace an authorized managed recording through the real provider to a final
+        Transcript visible to the correct Participant/Tenant.
+      - >-
+        Exercise provider timeout/failure, retry, cancellation, duplicate finalization and cleanup
+        of intermediate artifacts.
+    uncertainty: >-
+      Contract tests exercised the direct adapter without paid or live provider traffic; no current
+      managed-provider final-Transcript observation was produced.
+    evidence:
+      - kind: source_review
+        scope: Direct DeepInfra adapter audit; not a live provider test
+        detail: >-
+          Source and contract tests enforce explicit provider selection and the native DeepInfra
+          Whisper response shape; the optional Cloudflare adapter remains disabled cost-first.
+        artifact: apps/transcription-dispatcher/test/deepinfra.test.ts
+        revision: 4ebb57f2a609219c3883a846026cd5b6b5792d90
+        environment: Local source inspection
+        date: "2026-09-15"
+        result: pass
+  - id: transcription.live_captions
+    title: Deliver live in-Space captions with consent and privacy handling
+    area: transcription
+    state: planned
+    summary: >-
+      Transcript UI primitives exist, but Chalk initializes captions as disabled and no first-party
+      live caption delivery/consent path was found in the inspected Space wiring. A finished
+      Transcript panel is not live captions.
+    theory: theory.md#what-chalk-is
+    code:
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
+      - sdks/typescript/react/src/components/transcript-panel/TranscriptPanel.tsx
+      - apps/api/internal/httpapi/transcripts.go
+    priority: P2
+    size: L
+    size_reason: Cross-cutting scope; split into bounded deliveries before implementation.
+    remaining:
+      - >-
+        Define and wire live partial/final caption delivery, participant consent, capability checks
+        and stop/cleanup behavior.
+      - >-
+        Verify latency, reconnect, language handling and privacy boundaries without conflating live
+        captions with post-Episode transcription.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Transcript UI primitives exist, but Chalk initializes captions as disabled and no
+          first-party live caption delivery/consent path was found in the inspected Space wiring. A
+          finished Transcript panel is not live captions.
+        artifact: sdks/typescript/react/src/components/chalk/Chalk.tsx
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: transcription.mobile_surfaces
+    title: Add Episode Transcript access and standalone dictation on mobile
+    area: transcription
+    state: planned
+    summary: >-
+      Mobile source contains call/Space, chat, attachment and whiteboard surfaces, but no Episode
+      Transcript or standalone dictation workflow was found. Backend post-Episode transcription
+      remains a separate implemented foundation.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/mobile/src
+      - sdks/typescript/react-native/src/components/SpaceView.shared.tsx
+      - apps/api/internal/httpapi/transcripts.go
+    priority: P2
+    size: L
+    size_reason: Cross-cutting scope; split into bounded deliveries before implementation.
+    remaining:
+      - >-
+        Wire authorized Episode Transcript viewing and loading/failure states into the first-party
+        mobile flow.
+      - >-
+        Treat standalone microphone dictation as a separate bounded delivery: permission,
+        start/stop, upload/processing, editable result and cleanup.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Mobile source contains call/Space, chat, attachment and whiteboard surfaces, but no
+          Episode Transcript or standalone dictation workflow was found. Backend post-Episode
+          transcription remains a separate implemented foundation.
+        artifact: apps/mobile/src
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: sdk_and_embedding.packed_consumer
+    title: Qualify public package imports and web/native consumer behavior
+    area: sdk_and_embedding
+    state: unknown
+    summary: >-
+      Framework-neutral TypeScript, React, React Native and server-only SDK entry points exist. The
+      repository has a real packed web-consumer harness, but its signaling is mocked and it was not
+      rerun by this audit. Source components alone do not certify package exports or downstream
+      builds.
+    theory: theory.md#what-chalk-is
+    code:
+      - tools/sdk-web-consumer-e2e/README.md
+      - sdks/typescript/client/package.json
+      - sdks/typescript/react/package.json
+      - sdks/typescript/react-native/package.json
+    priority: P0
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Run the packed consumer harness against the current archives, including independent consumer
+        typechecking, browser lifecycle/recovery and attachment delivery.
+      - >-
+        Validate React Native release consumers and server-only imports without browser/native
+        dependency leakage.
+    uncertainty: >-
+      Current packed-archive and native consumer results are not established by this source-only
+      reconciliation.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Framework-neutral TypeScript, React, React Native and server-only SDK entry points exist.
+          The repository has a real packed web-consumer harness, but its signaling is mocked and it
+          was not rerun by this audit. Source components alone do not certify package exports or
+          downstream builds.
+        artifact: tools/sdk-web-consumer-e2e/README.md
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: sdk_and_embedding.app_identity
+    title: Carry explicit SDK app identity into server telemetry
+    area: sdk_and_embedding
+    state: planned
+    summary: >-
+      No public appName transport-to-span/log contract was found in the client/API/Sync source scan.
+      Feedback metadata has an app.name field, but that is not the SDK request identity contract.
+    theory: theory.md#what-chalk-is
+    code:
+      - sdks/typescript/client/src
+      - apps/api/internal
+      - apps/sync/lib
+    priority: P1
+    size: M
+    size_reason: Several connected implementation and verification changes.
+    remaining:
+      - >-
+        Add the public appName option and bounded validation, propagate it through HTTP/WebSocket
+        transports and attach it to the intended server telemetry fields.
+      - >-
+        Verify omission, invalid/oversized values and isolation from authentication/authorization
+        decisions.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          No public appName transport-to-span/log contract was found in the client/API/Sync source
+          scan. Feedback metadata has an app.name field, but that is not the SDK request identity
+          contract.
+        artifact: sdks/typescript/client/src
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: sdk_and_embedding.api_contract_parity
+    title: Verify all intended public endpoints are covered by generated contracts
+    area: sdk_and_embedding
+    state: unknown
+    summary: >-
+      OpenAPI and generated TypeScript already contain integration service/connection routes, API
+      keys, status and chat attachments. Integration generation is therefore not an outstanding
+      implementation gap. Completeness across every intended public endpoint needs a fresh
+      inventory-to-contract comparison.
+    theory: theory.md#what-chalk-is
+    code:
+      - contract/generated/openapi.json
+      - sdks/typescript/client/src/generated/http-api.ts
+      - apps/api/internal/httpapi/integrations.go
+      - apps/api/internal/httpapi/router.go
+    priority: P1
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Compare intended public route declarations with OpenAPI paths/operations and generated
+        client entry points; document deliberately internal routes separately.
+      - >-
+        Regenerate and check drift, then exercise a representative Tenant-scoped integration and
+        attachment call through the public client.
+    uncertainty: >-
+      This audit confirmed previously missing integration paths now exist, not exhaustive
+      runtime/schema parity for every endpoint.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          OpenAPI and generated TypeScript already contain integration service/connection routes,
+          API keys, status and chat attachments. Integration generation is therefore not an
+          outstanding implementation gap. Completeness across every intended public endpoint needs a
+          fresh inventory-to-contract comparison.
+        artifact: contract/generated/openapi.json
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: sdk_and_embedding.additional_languages
+    title: Add the retained Swift, Kotlin, Python and Go SDK surfaces
+    area: sdk_and_embedding
+    state: planned
+    summary: >-
+      The current sdks tree contains TypeScript packages only. Native platform bridge files inside
+      react-native are not standalone Swift or Kotlin SDKs. These four retained language targets are
+      not completed work.
+    theory: theory.md#what-chalk-is
+    code:
+      - sdks/typescript
+      - contract/generated/openapi.json
+    priority: P2
+    size: L
+    size_reason: Cross-cutting scope; split into bounded deliveries before implementation.
+    remaining:
+      - Split delivery by language and define supported control/media/Sync capabilities explicitly.
+      - >-
+        Generate or implement each public package and add an independent consumer build plus
+        authorization/error-contract fixtures before calling that language supported.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          The current sdks tree contains TypeScript packages only. Native platform bridge files
+          inside react-native are not standalone Swift or Kotlin SDKs. These four retained language
+          targets are not completed work.
+        artifact: sdks/typescript
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: sdk_and_embedding.iframe_embed
+    title: Provide a supported iframe Space embedding contract
+    area: sdk_and_embedding
+    state: planned
+    summary: >-
+      React components are embeddable and public Space routes exist, but no dedicated iframe
+      lifecycle/origin/message contract was found. SDK embedding must not be relabelled as a
+      complete iframe product.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/web/src/routes/space.tsx
+      - apps/web/src/components/space/SpacePage.tsx
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
+    priority: P2
+    size: M
+    size_reason: Several connected implementation and verification changes.
+    remaining:
+      - >-
+        Define the supported iframe entry, access handoff, allowed origins and parent/child
+        lifecycle messages.
+      - >-
+        Verify microphone/camera permissions, resize, navigation/teardown and expired admission from
+        a separate host origin.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          React components are embeddable and public Space routes exist, but no dedicated iframe
+          lifecycle/origin/message contract was found. SDK embedding must not be relabelled as a
+          complete iframe product.
+        artifact: apps/web/src/routes/space.tsx
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: integrations_and_webhooks.management_ui
+    title: Expose connection and integration policy management in the first-party app
+    area: integrations_and_webhooks
+    state: planned
+    summary: >-
+      Server integration catalog/connection/action endpoints and generated client routes are
+      present. The dashboard Developer page is still a ContractPage rather than an actionable
+      connection/policy management workflow.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/api/internal/httpapi/integrations.go
+      - sdks/typescript/client/src/generated/http-api.ts
+      - apps/web/src/routes/_app.developer.tsx
+      - apps/web/src/components/dashboard/ContractPage.tsx
+    priority: P1
+    size: M
+    size_reason: Several connected implementation and verification changes.
+    remaining:
+      - >-
+        Wire catalog discovery, connect/refresh/disconnect, policy and actionable error states
+        through the generated client.
+      - >-
+        Enforce member permissions and recent-auth requirements for secrets, and show the resulting
+        audit records.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Server integration catalog/connection/action endpoints and generated client routes are
+          present. The dashboard Developer page is still a ContractPage rather than an actionable
+          connection/policy management workflow.
+        artifact: apps/api/internal/httpapi/integrations.go
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: integrations_and_webhooks.delivery_qualification
+    title: Qualify signed webhook delivery, rotation and recovery on a deployment
+    area: integrations_and_webhooks
+    state: unknown
+    summary: >-
+      Versioned contracts and raw-body signature/rotation/idempotency helpers are implemented, with
+      verification and processor fixtures. They do not establish that a current deployed canary
+      delivers or recovers after an outage.
+    theory: theory.md#what-chalk-is
+    code:
+      - sdks/typescript/client/src/webhooks/verify.ts
+      - sdks/typescript/client/src/webhooks/verify.test.ts
+      - sdks/typescript/client/src/webhooks/processor.ts
+      - infrastructure/observability/scripts/e2e-webhook.mjs
+    priority: P1
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Run a redacted deployed canary through signed delivery, overlapping secret rotation,
+        duplicate replay and temporary recipient failure.
+      - >-
+        Verify retry bounds, timestamp rejection and exactly one application-owned effect; preserve
+        delivery/recovery evidence.
+    uncertainty: No current deployed canary or recipient-outage observation was produced.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Versioned contracts and raw-body signature/rotation/idempotency helpers are implemented,
+          with verification and processor fixtures. They do not establish that a current deployed
+          canary delivers or recovers after an outage.
+        artifact: sdks/typescript/client/src/webhooks/verify.ts
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: observability_and_operations.public_status
+    title: Project monitored service health through the public status surface
+    area: observability_and_operations
+    state: working
+    summary: >-
+      The API mounts a public status projection; StatusPage fetches /api/status and handles
+      refresh/failure. Uptime definitions use /healthz, /readyz and the Sync diagnostics route. The
+      old tracker incorrectly treated the page/projection as unspecified unknowns. This does not
+      assert the deployed worker is running or every service is healthy.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps/api/internal/httpapi/status.go
+      - apps/web/src/components/status/StatusPage.tsx
+      - infrastructure/uptime-worker/src/index.ts
+      - apps/api/internal/status/catalog_test.go
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          The API mounts a public status projection; StatusPage fetches /api/status and handles
+          refresh/failure. Uptime definitions use /healthz, /readyz and the Sync diagnostics route.
+          The old tracker incorrectly treated the page/projection as unspecified unknowns. This does
+          not assert the deployed worker is running or every service is healthy.
+        artifact: apps/api/internal/httpapi/status.go
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: observability_and_operations.production_recovery
+    title: Qualify hosted/self-hosted deployment, monitoring and failure recovery
+    area: observability_and_operations
+    state: unknown
+    summary: >-
+      App-tier infrastructure, managed runtime validation, local OpenTelemetry/Grafana and uptime
+      ingestion code exist. This audit did not deploy or observe production telemetry, alert
+      routing, synthetic failure/recovery or hosted release behavior.
+    theory: theory.md#what-chalk-is
+    code:
+      - infrastructure/managed-episode/scripts/validate-runtime
+      - infrastructure/observability
+      - infrastructure/uptime-worker/src/index.ts
+      - docs/observability.md
+    priority: P0
+    size: Unknown
+    size_reason: Requires a scoped environment/device proof before implementation effort can be estimated.
+    remaining:
+      - >-
+        Run the documented runtime validation against named self-hosted and managed revisions,
+        including the hosted web join path.
+      - >-
+        Cause a scoped synthetic failure, observe public status and telemetry/alert delivery, then
+        recover and verify the return to healthy state.
+    uncertainty: >-
+      Repository assets and earlier assessments are not fresh deployment certification; live
+      environment results remain unverified.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          App-tier infrastructure, managed runtime validation, local OpenTelemetry/Grafana and
+          uptime ingestion code exist. This audit did not deploy or observe production telemetry,
+          alert routing, synthetic failure/recovery or hosted release behavior.
+        artifact: infrastructure/managed-episode/scripts/validate-runtime
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: deferred_product_surface.desktop_application
+    title: Define and deliver the retained desktop application scope
+    area: deferred_product_surface
+    state: planned
+    summary: >-
+      No standalone desktop application exists in the current apps tree; web/browser support is not
+      a packaged desktop release. This remains later scope, not a missing v1 release gate.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps
+      - theory.md
+    priority: P2
+    size: L
+    size_reason: Cross-cutting scope; split into bounded deliveries before implementation.
+    remaining:
+      - >-
+        Choose the bounded desktop scope and distribution model, then implement native
+        integration/update behavior and an independent release proof.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          No standalone desktop application exists in the current apps tree; web/browser support is
+          not a packaged desktop release. This remains later scope, not a missing v1 release gate.
+        artifact: apps
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: deferred_product_surface.agent_tutoring_product
+    title: Define the retained agent/tutoring product without conflating it with collaboration
+    area: deferred_product_surface
+    state: planned
+    summary: >-
+      The implemented product is human real-time collaboration. No first-party
+      tutoring/agent-led workflow was found in the current app/SDK inventory; the older roadmap
+      target remains a separate later product decision.
+    theory: theory.md#what-chalk-is
+    code:
+      - apps
+      - sdks/typescript
+      - theory.md
+    priority: P2
+    size: L
+    size_reason: Cross-cutting scope; split into bounded deliveries before implementation.
+    remaining:
+      - >-
+        Specify the participant, agent authority, consent and observable tutoring outcome before
+        implementation.
+      - Build and verify that bounded workflow separately from generic media/Sync infrastructure.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          The implemented product is human real-time collaboration. No first-party
+          tutoring/agent-led workflow was found in the current app/SDK inventory; the older
+          roadmap target remains a separate later product decision.
+        artifact: apps
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass
+  - id: deferred_product_surface.sound_packs
+    title: Add selectable multi-pack sounds beyond the current sound behavior
+    area: deferred_product_surface
+    state: planned
+    summary: >-
+      Sound design guidance and current Space sound settings exist; a Tenant-selectable multi-pack
+      management/delivery flow was not found in the inspected app and SDK wiring.
+    theory: theory.md#what-chalk-is
+    code:
+      - docs/redesign/sound-design.md
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
+      - apps/web/src/components/dashboard/TenantSettingsPage.tsx
+    priority: P2
+    size: M
+    size_reason: Several connected implementation and verification changes.
+    remaining:
+      - >-
+        Define pack identity/assets and Tenant selection/persistence, then wire the selected pack
+        into supported web/native events.
+      - Verify mute/accessibility preferences, loading failures and fallback behavior.
+    evidence:
+      - kind: source_review
+        scope: Current implementation audit; not a live environment test
+        detail: >-
+          Sound design guidance and current Space sound settings exist; a Tenant-selectable
+          multi-pack management/delivery flow was not found in the inspected app and SDK wiring.
+        artifact: docs/redesign/sound-design.md
+        revision: bf71cf26 + local working-tree changes
+        environment: Local source inspection
+        date: "2026-09-08"
+        result: pass

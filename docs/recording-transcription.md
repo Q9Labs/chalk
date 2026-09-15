@@ -20,6 +20,11 @@ measured cost model, and the boundary of that qualification.
 | ASR                                                             | Direct DeepInfra native Whisper turbo; explicit optional Cloudflare fallback, disabled in the cost-first profile                                                                         | Approved provider corpus, privacy acceptance and exact adapter qualification      |
 | Smaller capture profile                                         | Ordered 1 GiB / 2 GiB shared-CPU candidates, disabled without evidence; `c-2` retained                                                                                                   | Paced one-hour cloud comparison against `c-2`                                     |
 
+Automated review of the prior recording implementation reached its 30-minute
+limit without a verdict, so it does not provide review coverage; no retry was
+authorized. The workspace-tracker integration review was separate and did not
+review that prior recording implementation.
+
 Preparation uses the tenant-scoped Space `recording-preparation` resource.
 `PATCH` accepts `starts_at` and `expected_revision` (`0` for the initial intent);
 `GET` returns the current revision, preparation window and observed capacity;

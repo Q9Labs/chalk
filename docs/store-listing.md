@@ -1,13 +1,13 @@
 # Chalk mobile store listing draft
 
 First-submission draft for Android and iOS (`ai.q9labs.chalk.mobile`). Copy
-centers on joining a Space from an invite link, because `product.yaml` keeps
-Space creation out of mobile release builds.
+centers on joining a Space from an invite link. Reconcile release scope with
+[tracker.yaml](../tracker.yaml) and the final native build before submission.
 
 ## Pre-submission blockers (fix before publishing)
 
-- No privacy policy exists (the web privacy route renders blank per
-  `product.yaml`); both stores require a working privacy policy URL.
+- Verify the published privacy policy URL in the submission environment;
+  the old capability inventory is not current proof that the route is absent.
 - No store screenshots or promo assets exist yet; the redesign mockups are
   design references, not store captures.
 - The checked-in iOS Info.plist declares Face ID, photo-library, and
@@ -16,7 +16,7 @@ Space creation out of mobile release builds.
 - No standing test-Space invite URL exists for reviewer access; both stores
   require functional review access, so create one before submission (the
   TODO markers below).
-- `product.yaml` flags real-device native media as unproven; verify on
+- The tracker retains real-device native media as uncertain; verify on
   hardware before going live.
 
 ## Title
@@ -127,9 +127,8 @@ live media.
 ## Claims deliberately avoided (keep it this way)
 
 "Available on Play/App Store" until actually live; Space creation on mobile
-(disabled in release builds); whiteboard on mobile (native rendering
-unshipped per `product.yaml`); durable chat history or file attachments
-(flagged unshipped); recording, captions, or transcription in the mobile
+(unless proven in the final release build); whiteboard on mobile; durable
+chat history or file attachments; recording, captions, or transcription in the mobile
 flow; end-to-end encryption (explicitly false); "completely private" or "no
 data collected"; offline use; macOS support; pricing claims ("free forever",
 "no ads"); Participant counts, HD/4K, latency, or reliability guarantees;

@@ -13,6 +13,8 @@
     "**/tests/results/**",
     "**/*.snap",
     "**/routeTree.gen.ts",
+    "tracker-human.html",
+    "tracker-human.md",
     "apps/api/docs/api-design.html",
     "apps/api/docs/app.js",
     "apps/web/public/privacy/index.html",

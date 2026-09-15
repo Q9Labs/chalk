@@ -2,13 +2,14 @@
 
 Chalk is an open-source monorepo for low-latency real-time collaboration and communication on Cloudflare Realtime. A Space is the durable place where Users and Agents participate; each bounded run is an Episode that can leave Recording and Transcript artifacts. The repository contains the Go control-plane API, Elixir SyncEngine, TypeScript/React/React Native SDKs, first-party web and mobile surfaces, reusable whiteboard/UI packages, and supporting infrastructure.
 
-Implementation status and readiness live in these references, not component or route names:
+## Project documents
 
-- [`product.yaml`](./product.yaml) — canonical, machine-readable capability inventory
-- [`checklist.md`](./checklist.md) — the same inventory as a domain-grouped checklist
-- [`architecture.html`](./architecture.html) — interactive technical architecture and open boundary gaps
-- [`docs/redesign/north-star.md`](./docs/redesign/north-star.md) — intended end state and deliberate v1 exclusions
-- [`docs/sdk-web-quickstart.md`](./docs/sdk-web-quickstart.md) — executable web SDK guide for `SpaceClient`, `AccessGrant`, and `<Chalk />`
+- [Theory](theory.md) — intent, product model and boundaries.
+- [Tracker](tracker-human.md) · [interactive view](tracker-human.html) — outcomes and remaining work.
+- [tracker.yaml](tracker.yaml) — the only editable outcome inventory.
+- [Design](design.md) — visual system and Google Stitch generation guidance.
+
+[Web SDK quickstart](docs/sdk-web-quickstart.md) documents executable SDK usage.
 
 ## Development
 
@@ -90,3 +91,14 @@ Run `pnpm run gate` for the canonical repository quality gate;
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+## Tracker workflow
+
+Edit `tracker.yaml`, then run `pnpm generate:tracker`. `pnpm check:tracker`
+validates states, priorities, sizes, source references and generated-view freshness;
+`pnpm test:tracker` exercises the tooling. Both are part of the canonical gate.
+
+Run `pnpm serve:tracker` for the read-only viewer at
+`http://127.0.0.1:4176/tracker-human.html`. `TRACKER_PORT` overrides the port;
+Ctrl-C stops the server. The HTML also opens directly as a file. Do not edit the
+generated Markdown or HTML views.

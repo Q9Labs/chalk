@@ -10,5 +10,5 @@ reason = "Same locally patched image-size 2.0.2 build-time metro dependency as G
 
 [[IgnoredVulns]]
 id = "GHSA-2q42-4q24-7rgv"
-ignoreUntil = 2026-10-09
+ignoreUntil = 2026-10-15
 reason = "@typespec/compiler is used only by the dev-only contract-fixture-proof tool with noEmit: true; the locked graph has no OpenAPI emitter or versioning package, so the vulnerable version-derived output path is unreachable. Revisit if an emitter or versioning dependency is added, noEmit changes, or upstream ships a fix."
