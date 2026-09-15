@@ -869,6 +869,19 @@ type RecordingPoolHealth struct {
 	DemandRevision string             `json:"demand_revision"`
 }
 
+type RecordingPreparation struct {
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	SpaceID             pgtype.UUID        `json:"space_id"`
+	StartsAt            pgtype.Timestamptz `json:"starts_at"`
+	State               string             `json:"state"`
+	Revision            int64              `json:"revision"`
+	RequestRevision     int64              `json:"request_revision"`
+	RequestKind         string             `json:"request_kind"`
+	ConsumedRecordingID pgtype.UUID        `json:"consumed_recording_id"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
 type RecordingPresentation struct {
 	PresentationHandle         pgtype.UUID        `json:"presentation_handle"`
 	TenantID                   pgtype.UUID        `json:"tenant_id"`

@@ -12,7 +12,7 @@ export interface DispatcherDependencies {
   config: ReleaseConfig;
   control: ControlApi;
   primary?: TranscriptionProvider;
-  fallback: TranscriptionProvider;
+  fallback?: TranscriptionProvider;
   fetch: typeof fetch;
   logger?: DispatcherLogger;
   now?: () => number;
@@ -125,7 +125,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     }
     const transcription = await transcribeWithFallback({
       ...(dependencies.primary === undefined ? {} : { primary: dependencies.primary }),
-      fallback: dependencies.fallback,
+      ...(dependencies.fallback ? { fallback: dependencies.fallback } : {}),
       request: { audio: audio.bytes, contentType: audio.contentType, chunkId: assignment.chunk.chunkId },
       policy: dependencies.config.provider,
       circuit,

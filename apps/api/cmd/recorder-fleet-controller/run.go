@@ -95,6 +95,7 @@ func runLoop(ctx context.Context, interval time.Duration, reconciler reconcileRu
 	}
 	timer := time.NewTimer(0)
 	defer timer.Stop()
+	var cadence reconcileCadence
 	for {
 		select {
 		case <-ctx.Done():
@@ -116,7 +117,7 @@ func runLoop(ctx context.Context, interval time.Duration, reconciler reconcileRu
 			if ctx.Err() != nil {
 				return nil
 			}
-			timer.Reset(interval)
+			timer.Reset(cadence.nextDelay(interval, result.Action, err))
 		}
 	}
 }

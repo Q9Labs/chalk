@@ -301,6 +301,45 @@ for component in api sync redis cloudflared; do
   image="$(jq -er ".images.${component}" "${manifest}")" || fail "manifest is missing the ${component} image"
   [[ "${image}" =~ ${image_pattern} ]] || fail "manifest ${component} image is not digest-addressed"
 done
+if jq -e '.images | has("recorder_control")' "$manifest" >/dev/null; then
+  control_image="$(jq -er '.images.recorder_control' "$manifest")"
+  [[ "$control_image" =~ $image_pattern ]] || fail "recorder control image is not digest-addressed"
+  for role in capture render issuer; do
+    secure_regular_file "${env_root}/recorder-${role}.env"
+  done
+  for role in capture render; do
+    file="${env_root}/recorder-${role}.env"
+    for key in RELEASE_ID IMAGE_ID IMAGE_DIGEST REGION SIZE FIREWALL_ID BOOTSTRAP_ENDPOINT OWNER_TAG SPIFFE_TRUST_DOMAIN SERVER_NAME; do
+      require_env "$file" "CHALK_RECORDER_FLEET_${key}"
+    done
+    require_env "$file" DIGITALOCEAN_TOKEN
+    [[ "$(env_value "$file" CHALK_RECORDER_FLEET_ROLE)" == "$role" ]] || fail "recorder fleet role does not match its unit"
+    [[ "$(env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES)" == 10 ]] || fail "recorder fleet maximum must be ten"
+    [[ "$(env_value "$file" CHALK_RECORDER_FLEET_SLOTS_PER_NODE)" == 1 ]] || fail "recorder fleet must use one Recording per node"
+    if [[ "$role" == capture && "$(env_value "$file" CHALK_RECORDER_FLEET_SIZE)" != c-2 ]]; then
+      qualification="$(env_value "$file" CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256)" || fail "smaller capture profile has no qualification evidence"
+      [[ "$qualification" =~ ^[0-9a-f]{64}$ ]] || fail "capture qualification evidence digest is invalid"
+    fi
+  done
+  for key in PUBLIC_URL CONTROL_PLANE_URL CONTROL_PLANE_SERVER_NAME SPIFFE_TRUST_DOMAIN OWNER_TAG; do
+    require_env "${env_root}/recorder-issuer.env" "CHALK_RECORDER_FLEET_ISSUER_${key}"
+  done
+  for key in URL SERVER_NAME; do
+    require_env "$api_env" "CHALK_RECORDER_FLEET_ISSUER_${key}"
+  done
+  while IFS= read -r relative; do
+    secure_regular_file "${secret_root}/${relative#secret-inputs/}"
+  done < <(jq -r '.inputs[] | select(.kind == "secret-file" and (.id | startswith("recorder-"))) | .destination' "${managed_root}/contracts/runtime-inputs.json")
+  for pair in capture-client render-client issuer-server worker-ca api-issuer; do
+    certificate_matches_private_key "${secret_root}/recorder/${pair}-cert" "${secret_root}/recorder/${pair}-key"
+    openssl x509 -in "${secret_root}/recorder/${pair}-cert" -checkend 3600 -noout >/dev/null || fail "recorder certificate expires within an hour: ${pair}"
+  done
+  for role in capture render; do
+    openssl verify -purpose sslclient -CAfile "${secret_root}/provider-bridge/sync-client-ca.crt" "${secret_root}/recorder/${role}-client-cert" >/dev/null || fail "fleet controller certificate is not trusted by the API"
+  done
+  openssl verify -purpose sslclient -CAfile "${secret_root}/recorder/issuer-controller-ca" "${secret_root}/recorder/api-issuer-cert" >/dev/null || fail "API identity is not trusted by the issuer"
+  openssl verify -purpose sslserver -CAfile "${secret_root}/recorder/issuer-server-ca" "${secret_root}/recorder/issuer-server-cert" >/dev/null || fail "issuer certificate is not trusted by the API"
+fi
 manifest_schema_version="$(jq -er '.schema_version' "${manifest}")" || fail "release manifest schema version is missing"
 case "${manifest_schema_version}" in
   1)

@@ -38,6 +38,14 @@ else
   failures+=(release-identity)
 fi
 
+if [[ -s "$release_manifest" ]] && jq -e '.images | has("recorder_control")' "$release_manifest" >/dev/null; then
+  for role in capture render issuer; do
+    if ! systemctl --user is-active --quiet "chalk-recorder-${role}.service"; then
+      failures+=("unit:chalk-recorder-${role}")
+    fi
+  done
+fi
+
 disk_used="$(df -P / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"
 if [[ ! "${disk_used}" =~ ^[0-9]+$ ]] || ((disk_used >= 90)); then
   failures+=(disk-pressure)

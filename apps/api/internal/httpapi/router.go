@@ -82,6 +82,7 @@ type Options struct {
 	RecordingDownloads         RecordingDownloadService
 	RecordingObjects           RecordingObjectService
 	Recordings                 RecordingService
+	RecordingPreparations      RecordingPreparationService
 	StatusIngestion            StatusIngestionService
 	StatusSnapshot             StatusSnapshotService
 	Spaces                     SpaceService

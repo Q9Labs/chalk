@@ -245,6 +245,15 @@ job_demand as (
           or available_at <= $2::timestamptz
       )
 ),
+preparation_demand as (
+    select count(*)::integer as count, max(preparation.updated_at) as revision
+    from recording_preparations preparation
+    join spaces on spaces.tenant_id = preparation.tenant_id and spaces.id = preparation.space_id
+    where $1::text = 'capture' and preparation.state = 'scheduled'
+      and preparation.starts_at <= $2::timestamptz + interval '5 minutes'
+      and preparation.starts_at > $2::timestamptz - interval '5 minutes'
+      and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
+),
 facts as (
     select
         case when $1::text = 'capture' then reservation_demand.scheduled_prewarms else 0 end::integer as scheduled_prewarms,
@@ -262,15 +271,19 @@ facts as (
         end::integer as base_nodes,
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
+), target as (
+    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, 10 - base_nodes))::integer as prepared_nodes,
+        greatest(facts.revised_at, preparation_demand.revision) as target_revision
+    from facts cross join preparation_demand
 )
 select
-    concat($1::text, ':', coalesce(extract(epoch from revised_at)::bigint, 0), ':', scheduled_prewarms, ':', held_starts, ':', queued_jobs, ':', leased_jobs)::text as revision,
-    (base_nodes + case when $1::text = 'capture' and base_nodes > 0 then 1 else 0 end)::integer as desired_nodes,
-    scheduled_prewarms,
+    concat($1::text, ':', coalesce(extract(epoch from target_revision)::bigint, 0), ':', scheduled_prewarms, ':', held_starts, ':', queued_jobs, ':', leased_jobs, ':', prepared_nodes)::text as revision,
+    (base_nodes + prepared_nodes)::integer as desired_nodes,
+    (scheduled_prewarms + prepared_nodes)::integer as scheduled_prewarms,
     held_starts,
     queued_jobs,
     $2::timestamptz as observed_at
-from facts
+from target
 `
 
 type GetRecordingFleetDemandParams struct {

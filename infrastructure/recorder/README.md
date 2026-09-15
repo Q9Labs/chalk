@@ -5,8 +5,8 @@ immutable pool tags, unattached outbound-only firewalls, release/image
 contracts, the private temporary R2 bucket lifecycle, and the Singapore
 recording KEK. It never creates or replaces runtime Droplets: the external
 recorder reconciler owns scheduled prewarm, scale-to-zero, desired capacity,
-fencing, and replacement, so replacement cannot exceed eleven capture nodes,
-ten render nodes, or the twenty-one-node global cap.
+fencing, and replacement, so replacement cannot exceed ten capture nodes,
+ten render nodes, or the twenty-node global cap.
 
 The default capture pool uses SGP1 CPU-Optimized two-vCPU nodes. Its configured
 per-node admission targets are one serial Episode, forty participants, and sixteen
@@ -15,14 +15,13 @@ The root exposes the contract formula as `desired_capture_nodes`:
 
 ```text
 max(episodes, ceil(participants / 40), ceil(input_mbps / 16))
-+ ready_spare
++ ready_spare (fixed at zero)
 ```
 
 Reservations are checked against ten Episodes, one hundred participants, and
-forty Mbps of aggregate input. Admission also bounds capture reservations plus
-nonterminal render-phase pipelines to ten Episodes. The default eleven-node
-capture pool therefore supports at most ten concurrent captures while retaining
-one ready spare. A smaller capture or render maximum lowers the supported
+forty Mbps of aggregate input. Render-phase pipelines do not occupy capture
+admission. The capture pool supports at most ten concurrent captures with zero
+spare, independently of ten render nodes. A smaller capture or render maximum lowers the supported
 concurrency; operators must reduce the admission ceiling with it before launch.
 The default render target is the measured NYC1 CPU-Optimized eight-vCPU
 `c-8`/`libx264` profile with eight browser-frame producers and a deadline-aware

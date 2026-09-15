@@ -60,6 +60,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 	"github.com/q9labs/chalk/apps/api/internal/recordingorchestrator"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -421,6 +422,10 @@ func run() error {
 		recorderRecordingLifecycle = lifecycleService
 	}
 	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
+	var recordingPreparationService httpapi.RecordingPreparationService
+	if cfg.Capabilities.Recording {
+		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool), spaceService)
+	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	feedbackService := feedback.NewService(feedbackRepository, feedbackObjects).WithTelemetry(observability.NewFeedbackTelemetry(logger))
 	var integrationService httpapi.IntegrationService
@@ -625,6 +630,7 @@ func run() error {
 		RecorderFleetEnvironment:   cfg.Observability.Environment,
 		RecorderWorkerVerifier:     recorderWorkerVerifier,
 		Recordings:                 recordingService,
+		RecordingPreparations:      recordingPreparationService,
 		Spaces:                     spaceService,
 		Episodes:                   episodeService,
 		SyncTokens:                 syncTokenService,

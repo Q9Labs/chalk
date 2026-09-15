@@ -6,14 +6,14 @@ variable "desired_nodes" {
   type = number
 
   validation {
-    condition     = var.desired_nodes >= 0 && var.desired_nodes <= 11 && floor(var.desired_nodes) == var.desired_nodes
-    error_message = "capture desired_nodes must be an integer between zero and eleven."
+    condition     = var.desired_nodes >= 0 && var.desired_nodes <= 10 && floor(var.desired_nodes) == var.desired_nodes
+    error_message = "capture desired_nodes must be an integer between zero and ten."
   }
 }
 
 variable "max_nodes" {
   type    = number
-  default = 11
+  default = 10
 }
 
 variable "node_size" {

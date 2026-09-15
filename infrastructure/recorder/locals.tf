@@ -7,7 +7,7 @@ locals {
   capture_participant_nodes  = var.reserved_capture_participants == 0 ? 0 : ceil(var.reserved_capture_participants / var.capture_participants_per_node)
   capture_bitrate_nodes      = var.reserved_capture_input_mbps == 0 ? 0 : ceil(var.reserved_capture_input_mbps / var.capture_input_mbps_per_node)
   desired_capture_nodes_raw  = max(local.capture_episode_nodes, local.capture_participant_nodes, local.capture_bitrate_nodes) + var.ready_spare
-  desired_capture_nodes      = min(local.desired_capture_nodes_raw, 11)
+  desired_capture_nodes      = min(local.desired_capture_nodes_raw, 10)
   desired_render_nodes       = var.render_desired_nodes
   global_compute_nodes       = local.desired_capture_nodes + local.desired_render_nodes
   control_plane_role         = coalesce(var.control_plane_role_arn, "")
@@ -47,13 +47,13 @@ check "capture_admission_ceiling" {
   }
 
   assert {
-    condition     = local.desired_capture_nodes_raw <= 11
-    error_message = "capture demand requires more than the eleven-node qualified bound; production admission must close."
+    condition     = local.desired_capture_nodes_raw <= 10
+    error_message = "capture demand exceeds the ten-node profile; production admission must close."
   }
 
   assert {
-    condition     = local.global_compute_nodes <= 21
-    error_message = "capture and render demand exceeds the twenty-one-node global recorder compute cap."
+    condition     = local.global_compute_nodes <= 20
+    error_message = "capture and render demand exceeds the twenty-node recorder compute cap."
   }
 }
 
@@ -111,6 +111,11 @@ resource "terraform_data" "apply_gate" {
   }
 
   lifecycle {
+    precondition {
+      condition     = var.capture_node_size == "c-2" || var.capture_profile_evidence_sha256 != null
+      error_message = "Smaller shared-CPU capture profiles remain disabled until the exact profile and image have one-hour cloud qualification evidence."
+    }
+
     precondition {
       condition     = can(regex("^sha256:[0-9a-f]{64}$", coalesce(var.staging_evidence_digest, "")))
       error_message = "recorder mutation is disabled until a redacted staging evidence digest is supplied."

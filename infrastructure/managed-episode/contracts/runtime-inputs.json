@@ -68,6 +68,102 @@
       "suffix": "cloudflare/tunnel-token",
       "destination": "secret-inputs/cloudflare/tunnel-token",
       "kind": "secret-file"
+    },
+    {
+      "id": "recorder-capture-env",
+      "suffix": "recorder/capture.env",
+      "destination": "env/recorder-capture.env",
+      "kind": "env"
+    },
+    {
+      "id": "recorder-render-env",
+      "suffix": "recorder/render.env",
+      "destination": "env/recorder-render.env",
+      "kind": "env"
+    },
+    {
+      "id": "recorder-issuer-env",
+      "suffix": "recorder/issuer.env",
+      "destination": "env/recorder-issuer.env",
+      "kind": "env"
+    },
+    {
+      "id": "recorder-capture-client-cert",
+      "suffix": "recorder/capture-client-cert",
+      "destination": "secret-inputs/recorder/capture-client-cert",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-capture-client-key",
+      "suffix": "recorder/capture-client-key",
+      "destination": "secret-inputs/recorder/capture-client-key",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-render-client-cert",
+      "suffix": "recorder/render-client-cert",
+      "destination": "secret-inputs/recorder/render-client-cert",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-render-client-key",
+      "suffix": "recorder/render-client-key",
+      "destination": "secret-inputs/recorder/render-client-key",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-issuer-server-cert",
+      "suffix": "recorder/issuer-server-cert",
+      "destination": "secret-inputs/recorder/issuer-server-cert",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-issuer-server-key",
+      "suffix": "recorder/issuer-server-key",
+      "destination": "secret-inputs/recorder/issuer-server-key",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-issuer-controller-ca",
+      "suffix": "recorder/issuer-controller-ca",
+      "destination": "secret-inputs/recorder/issuer-controller-ca",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-worker-ca-cert",
+      "suffix": "recorder/worker-ca-cert",
+      "destination": "secret-inputs/recorder/worker-ca-cert",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-worker-ca-key",
+      "suffix": "recorder/worker-ca-key",
+      "destination": "secret-inputs/recorder/worker-ca-key",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-issuer-provider-token",
+      "suffix": "recorder/issuer-provider-token",
+      "destination": "secret-inputs/recorder/issuer-provider-token",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-api-issuer-cert",
+      "suffix": "recorder/api-issuer-cert",
+      "destination": "secret-inputs/recorder/api-issuer-cert",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-api-issuer-key",
+      "suffix": "recorder/api-issuer-key",
+      "destination": "secret-inputs/recorder/api-issuer-key",
+      "kind": "secret-file"
+    },
+    {
+      "id": "recorder-issuer-server-ca",
+      "suffix": "recorder/issuer-server-ca",
+      "destination": "secret-inputs/recorder/issuer-server-ca",
+      "kind": "secret-file"
     }
   ]
 }

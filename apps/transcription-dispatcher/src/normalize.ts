@@ -43,7 +43,10 @@ export function normalizeTranscriptChunk(input: {
     versionContract: input.provider.versionContract,
     attempt: input.attempt,
     measuredAudioMs: input.measuredAudioMs,
+    ...(input.provider.providerIdentity === undefined ? {} : { providerIdentity: input.provider.providerIdentity }),
+    ...(input.provider.executionIdentity === undefined ? {} : { executionIdentity: input.provider.executionIdentity }),
     ...(input.provider.durationMs === undefined ? {} : { providerObservedDurationMs: input.provider.durationMs }),
+    ...(input.provider.providerReportedCostUsd === undefined ? {} : { providerReportedCostUsd: input.provider.providerReportedCostUsd }),
     ...(input.provider.quality === undefined ? {} : { quality: input.provider.quality }),
   };
 }

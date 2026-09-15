@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/q9labs/chalk/apps/api/internal/adapters/recordercontrollease"
 )
 
 func main() {
@@ -21,6 +23,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	lease, err := recordercontrollease.Acquire(config.JournalPath)
+	if err != nil {
+		return err
+	}
+	defer lease.Close()
 	reconciler, err := buildReconciler(config)
 	if err != nil {
 		return err

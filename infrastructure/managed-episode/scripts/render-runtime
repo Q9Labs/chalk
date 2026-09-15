@@ -23,6 +23,11 @@ api_image="$(jq -er '.images.api' "${manifest}")"
 sync_image="$(jq -er '.images.sync' "${manifest}")"
 redis_image="$(jq -er '.images.redis' "${manifest}")"
 cloudflared_image="$(jq -er '.images.cloudflared' "${manifest}")"
+recorder_control_image="$(jq -r '.images.recorder_control // empty' "${manifest}")"
+if [[ -n "$recorder_control_image" && ! "$recorder_control_image" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]]; then
+  echo "recorder control image must be digest-pinned" >&2
+  exit 1
+fi
 database_migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "${manifest}")"
 image_pattern='^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$'
 for image in "${api_image}" "${sync_image}" "${redis_image}" "${cloudflared_image}"; do
@@ -33,11 +38,19 @@ done
 mkdir -p "${output}/quadlet" "${output}/systemd"
 for template in "${managed_root}"/quadlet/*; do
   name="$(basename "${template}" .in)"
+  if [[ "$name" == chalk-recorder-* && -z "$recorder_control_image" ]]; then
+    continue
+  fi
   contents="$(<"${template}")"
   contents="${contents//__API_IMAGE_REFERENCE__/${api_image}}"
   contents="${contents//__SYNC_IMAGE_REFERENCE__/${sync_image}}"
   contents="${contents//__REDIS_IMAGE_REFERENCE__/${redis_image}}"
   contents="${contents//__CLOUDFLARED_IMAGE_REFERENCE__/${cloudflared_image}}"
+  contents="${contents//__RECORDER_CONTROL_IMAGE_REFERENCE__/${recorder_control_image}}"
+  if [[ "$name" == chalk-api.container && -n "$recorder_control_image" ]]; then
+    recorder_api_bindings="$(<"${managed_root}/fragments/recorder-api.container")"
+    contents="${contents/PublishPort=127.0.0.1:18080:8080/${recorder_api_bindings}}"
+  fi
   contents="${contents//__DATABASE_MIGRATION_TARGET__/${database_migration_target}}"
   if [[ "${contents}" == *'__'* ]]; then
     echo "unresolved placeholder in ${name}" >&2
@@ -46,6 +59,9 @@ for template in "${managed_root}"/quadlet/*; do
   printf '%s\n' "${contents}" >"${output}/quadlet/${name}"
 done
 cp "${managed_root}"/systemd/* "${output}/systemd/"
+if [[ -n "$recorder_control_image" ]]; then
+  printf '\n[Unit]\nRequires=chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-issuer.service\nAfter=chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-issuer.service\n' >>"${output}/systemd/chalk-runtime.target"
+fi
 cp "${manifest}" "${output}/release-manifest.json"
 
 echo "PASS runtime=${output}"

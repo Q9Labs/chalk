@@ -3,6 +3,11 @@ output "lambda_function_arn" {
   value       = aws_lambda_function.dispatcher.arn
 }
 
+output "required_egress_destinations" {
+  description = "Provider-specific destinations for the external NAT firewall or proxy policy."
+  value       = local.egress_allowlist
+}
+
 output "lambda_execution_role_arn" {
   description = "Least-privilege dispatcher execution role ARN."
   value       = aws_iam_role.dispatcher.arn

@@ -1,10 +1,40 @@
 # Recording and transcription
 
-Chalk's managed recording path is implemented and production-qualified. An
+Chalk's managed recording path is implemented and has end-to-end evidence from
+a separate qualification environment. The production-placement delta below is
+not yet deployed or cloud-qualified. An
 Episode can move from a durable start command through encrypted capture,
 rendering, download, managed transcription, and deletion of temporary source
 objects. This document records the architecture, the decisions behind it, the
 measured cost model, and the boundary of that qualification.
+
+## Production implementation status (2026-09-15)
+
+| Area                                                            | Implemented                                                                                                                                                                              | Remaining release evidence                                                        |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Existing encrypted capture, rendering, verification and cleanup | Preserved; prior qualification described below                                                                                                                                           | Exact new release end-to-end smoke                                                |
+| Shared backend controls                                         | Separate capture/render fleet processes and direct-TLS issuer; dedicated control image, rootless units, private persistent state, per-state process locks, versioned inputs and rollback | Host headroom, direct peer identity and restart proof in the approved environment |
+| Capacity                                                        | Zero spare; ten capture and ten render nodes; rendering does not consume live-capture admission                                                                                          | Ten-way cold readiness and overlapping capture/render workload                    |
+| Startup cadence                                                 | Successful durable transitions fast-follow at 100 ms for at most 32 steps; idle/error polling remains 5 seconds                                                                          | Provider ready latency, quota and noisy-neighbor behavior                         |
+| Scheduled Space preparation                                     | Durable revision-fenced prepare/get/cancel; five-minute lead and five-minute no-show grace; atomic consumption on real recording start                                                   | Integration adoption and scheduled smoke                                          |
+| ASR                                                             | Direct DeepInfra native Whisper turbo; explicit optional Cloudflare fallback, disabled in the cost-first profile                                                                         | Approved provider corpus, privacy acceptance and exact adapter qualification      |
+| Smaller capture profile                                         | Ordered 1 GiB / 2 GiB shared-CPU candidates, disabled without evidence; `c-2` retained                                                                                                   | Paced one-hour cloud comparison against `c-2`                                     |
+
+Preparation uses the tenant-scoped Space `recording-preparation` resource.
+`PATCH` accepts `starts_at` and `expected_revision` (`0` for the initial intent);
+`GET` returns the current revision, preparation window and observed capacity;
+`POST .../cancel` accepts the revision. Retries of the same command are
+idempotent. A newer revision fences stale reschedules and cancels. Preparation
+does not create an Episode, freeze a presentation or capture media. It becomes
+`warming` only within the lead window, and `ready` only with fresh, unoccupied
+capacity. Readiness is an observation, not a guaranteed admission reservation.
+An actual recording consumes the intent atomically; cancellation never stops
+that recording. Maintenance durably expires unused intents after the grace.
+
+See [shared-host rollout](../infrastructure/managed-episode/recording-control.md)
+and the [cost-first profile](../infrastructure/recorder/profiles/cost-first.json).
+No production enablement, ingress change, secret issuance, paid provider call or
+new cloud resource is authorized by local verification.
 
 ## Architecture
 
@@ -13,7 +43,7 @@ flowchart LR
   participant[Participant UI] --> sync[Sync recording plane]
   sync --> api[API control plane<br/>Postgres authority]
   api --> fleet[External fleet reconciler]
-  fleet --> capture[SGP1 c-2 capture worker]
+  fleet --> capture[Disposable capture worker<br/>c-2 baseline; smaller profile gated]
   capture --> temp[Private R2<br/>encrypted sequenced bundles]
   api --> kms[AWS KMS<br/>context-bound data keys]
   temp --> render[NYC1 c-8 render worker<br/>libx264]
@@ -21,7 +51,7 @@ flowchart LR
   kms --> render
   render --> artifact[Private R2<br/>MP4 + transcript source]
   artifact --> dispatcher[AWS Lambda dispatcher]
-  dispatcher --> asr[Cloudflare Workers AI<br/>Whisper large-v3-turbo]
+  dispatcher --> asr[Direct DeepInfra<br/>Whisper large-v3-turbo]
   asr --> transcript[Normalized transcript.v1]
   transcript --> api
   api --> participant
@@ -50,7 +80,7 @@ The implementation is split at stable boundaries:
 - Render downloads only the accepted bundle set, reconstructs the frozen
   presentation, and produces the final MP4 plus recorder-owned transcription
   sources.
-- The Lambda dispatcher claims fenced transcription chunks, invokes one pinned
+- The Lambda dispatcher claims fenced transcription chunks, invokes one selected
   provider, writes normalized conditional results, finalizes one deterministic
   transcript, and durably retries cleanup until temporary objects are absent.
 - The public API exposes recording and transcript list/get operations and
@@ -75,7 +105,7 @@ The implementation is split at stable boundaries:
    short-lived download authority.
 7. The committed recorder source is split into fenced transcription jobs. The
    Lambda dispatcher sends audio to
-   `@cf/openai/whisper-large-v3-turbo`, normalizes the results, and finalizes the
+   DeepInfra's `openai/whisper-large-v3-turbo`, normalizes the results, and finalizes the
    stable transcript document.
 8. Durable cleanup jobs delete transcript intermediates and recorder sources.
    Completion is accepted only after independent absence checks.
@@ -95,6 +125,20 @@ The implementation is split at stable boundaries:
 | Transcript finalization and source cleanup are durable jobs           | Provider success is not confused with a complete customer artifact, and cleanup survives partial failure.                         |
 
 ## Cost model
+
+The table below is the historical Cloudflare/c-2 qualification baseline, not
+the new deployment's measured invoice. Direct DeepInfra currently lists
+$0.00020 per submitted audio minute, or $24–72 for 2,000–6,000 audio hours.
+That range depends on actual per-Participant audio submitted, retries and
+silence—not merely wall-clock recording time. [DeepInfra model API and price](https://deepinfra.com/openai/whisper-large-v3-turbo/api)
+
+The native adapter persists its requested model and adapter contract separately
+from observed request/model/execution metadata. Missing metadata stays absent;
+optional identity pins fail closed when evidence is missing or mismatched.
+`providerReportedCostUsd` is recorded only when returned by the provider. A
+final transcript sums it only when every chunk reports it. This excludes
+unobserved failed/retried calls and is not an invoice or a fabricated billed
+audio-duration claim. No OpenRouter routing guarantee is claimed.
 
 Prices below are public list prices checked on 2026-09-10. They are an
 incremental artifact-pipeline estimate, not a total Chalk or SFU bill.
@@ -126,7 +170,7 @@ Sources: [DigitalOcean Droplet pricing](https://www.digitalocean.com/pricing/dro
 [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/), and
 [AWS KMS pricing](https://aws.amazon.com/kms/pricing/).
 
-## Production qualification
+## Prior qualification environment
 
 The 2026-09-10 qualification used the immutable recorder release built from
 commit `0f2c5d0a` and exercised the real API, Sync, Cloudflare SFU/R2/Workers AI,

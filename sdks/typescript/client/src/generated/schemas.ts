@@ -255,6 +255,11 @@ export const AuthSchema = Schema.Struct({
 });
 export type Auth = typeof AuthSchema.Type;
 
+export const CancelRecordingPreparationRequestSchema = Schema.Struct({
+  expected_revision: Schema.Number,
+});
+export type CancelRecordingPreparationRequest = typeof CancelRecordingPreparationRequestSchema.Type;
+
 export const ChatAttachmentSchema = Schema.Struct({
   attachmentId: Schema.String,
   byteLength: Schema.Number,
@@ -893,6 +898,12 @@ export const ParticipantRemovalSchema = Schema.Struct({
 });
 export type ParticipantRemoval = typeof ParticipantRemovalSchema.Type;
 
+export const PrepareRecordingRequestSchema = Schema.Struct({
+  expected_revision: Schema.Number,
+  starts_at: DateTimeStringSchema,
+});
+export type PrepareRecordingRequest = typeof PrepareRecordingRequestSchema.Type;
+
 export const PublicAdmissionRequestSchema = Schema.Struct({
   display_name: Schema.String,
   expires_at: DateTimeStringSchema,
@@ -1012,6 +1023,19 @@ export const RecordingListSchema = Schema.Struct({
   recordings: Schema.Array(RecordingSchema),
 });
 export type RecordingList = typeof RecordingListSchema.Type;
+
+export const RecordingPreparationSchema = Schema.Struct({
+  capacity_available: Schema.Boolean,
+  expires_at: DateTimeStringSchema,
+  prepares_at: DateTimeStringSchema,
+  ready: Schema.Boolean,
+  revision: Schema.Number,
+  space_id: SpaceIdSchema,
+  starts_at: DateTimeStringSchema,
+  state: Schema.String,
+  updated_at: DateTimeStringSchema,
+});
+export type RecordingPreparation = typeof RecordingPreparationSchema.Type;
 
 export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
   media_proof: Schema.String.check(Schema.isMinLength(1)),
@@ -1536,6 +1560,25 @@ export const ArriveBySpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type ArriveBySpacePublicInvite429ResponseHeaders = typeof ArriveBySpacePublicInvite429ResponseHeadersSchema.Type;
+
+export const CancelSpaceRecordingPreparationPathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type CancelSpaceRecordingPreparationPathParams = typeof CancelSpaceRecordingPreparationPathParamsSchema.Type;
+
+export const CancelSpaceRecordingPreparationRequestBodySchema = CancelRecordingPreparationRequestSchema;
+export type CancelSpaceRecordingPreparationRequestBody = typeof CancelSpaceRecordingPreparationRequestBodySchema.Type;
+
+export const CancelSpaceRecordingPreparationResponseSchema = RecordingPreparationSchema;
+export type CancelSpaceRecordingPreparationResponse = typeof CancelSpaceRecordingPreparationResponseSchema.Type;
+
+export const CancelSpaceRecordingPreparation429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CancelSpaceRecordingPreparation429ResponseHeaders = typeof CancelSpaceRecordingPreparation429ResponseHeadersSchema.Type;
 
 export const CloseCloudflareSFUTracksPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -2071,6 +2114,15 @@ export const GetSpacePublicInviteArrival429ResponseHeadersSchema = Schema.Struct
 });
 export type GetSpacePublicInviteArrival429ResponseHeaders = typeof GetSpacePublicInviteArrival429ResponseHeadersSchema.Type;
 
+export const GetSpaceRecordingPreparationPathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetSpaceRecordingPreparationPathParams = typeof GetSpaceRecordingPreparationPathParamsSchema.Type;
+
+export const GetSpaceRecordingPreparationResponseSchema = RecordingPreparationSchema;
+export type GetSpaceRecordingPreparationResponse = typeof GetSpaceRecordingPreparationResponseSchema.Type;
+
 export const GetTenantPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -2604,6 +2656,25 @@ export const OnboardTenant429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type OnboardTenant429ResponseHeaders = typeof OnboardTenant429ResponseHeadersSchema.Type;
+
+export const PrepareSpaceRecordingPathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type PrepareSpaceRecordingPathParams = typeof PrepareSpaceRecordingPathParamsSchema.Type;
+
+export const PrepareSpaceRecordingRequestBodySchema = PrepareRecordingRequestSchema;
+export type PrepareSpaceRecordingRequestBody = typeof PrepareSpaceRecordingRequestBodySchema.Type;
+
+export const PrepareSpaceRecordingResponseSchema = RecordingPreparationSchema;
+export type PrepareSpaceRecordingResponse = typeof PrepareSpaceRecordingResponseSchema.Type;
+
+export const PrepareSpaceRecording429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type PrepareSpaceRecording429ResponseHeaders = typeof PrepareSpaceRecording429ResponseHeadersSchema.Type;
 
 export const RedeliverWebhookDeliveryPathParamsSchema = Schema.Struct({
   delivery_id: UUIDSchema,
@@ -4404,6 +4475,82 @@ export const RecordingNotReadyErrorSchema = RecordingNotReadyErrorWireSchema.pip
   }),
 );
 
+export class RecordingPreparationConflictError extends Schema.TaggedErrorClass<RecordingPreparationConflictError>()("RecordingPreparationConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingPreparationConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.conflict"),
+    message: Schema.String,
+  }),
+});
+export const RecordingPreparationConflictErrorSchema = RecordingPreparationConflictErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingPreparationConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingPreparationConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class RecordingPreparationInvalidError extends Schema.TaggedErrorClass<RecordingPreparationInvalidError>()("RecordingPreparationInvalidError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.invalid"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingPreparationInvalidErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.invalid"),
+    message: Schema.String,
+  }),
+});
+export const RecordingPreparationInvalidErrorSchema = RecordingPreparationInvalidErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingPreparationInvalidError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingPreparationInvalidError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class RecordingPreparationNotFoundError extends Schema.TaggedErrorClass<RecordingPreparationNotFoundError>()("RecordingPreparationNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingPreparationNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.not_found"),
+    message: Schema.String,
+  }),
+});
+export const RecordingPreparationNotFoundErrorSchema = RecordingPreparationNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingPreparationNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingPreparationNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class RecordingPreparationPolicyDeniedError extends Schema.TaggedErrorClass<RecordingPreparationPolicyDeniedError>()("RecordingPreparationPolicyDeniedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.policy_denied"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingPreparationPolicyDeniedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording_preparation.policy_denied"),
+    message: Schema.String,
+  }),
+});
+export const RecordingPreparationPolicyDeniedErrorSchema = RecordingPreparationPolicyDeniedErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingPreparationPolicyDeniedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingPreparationPolicyDeniedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class RequestForbiddenError extends Schema.TaggedErrorClass<RequestForbiddenError>()("RequestForbiddenError", {
   error: Schema.Struct({
     code: Schema.Literal("request.forbidden"),
@@ -5712,6 +5859,21 @@ export const ArriveBySpacePublicInviteErrorSchema = Schema.Union([
 ]);
 export type ArriveBySpacePublicInviteError = typeof ArriveBySpacePublicInviteErrorSchema.Type;
 
+export const CancelSpaceRecordingPreparationErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RecordingPreparationConflictErrorSchema,
+  RecordingPreparationInvalidErrorSchema,
+  RecordingPreparationNotFoundErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type CancelSpaceRecordingPreparationError = typeof CancelSpaceRecordingPreparationErrorSchema.Type;
+
 export const CloseCloudflareSFUTracksErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6147,6 +6309,18 @@ export const GetSpacePublicInviteErrorSchema = Schema.Union([
 ]);
 export type GetSpacePublicInviteError = typeof GetSpacePublicInviteErrorSchema.Type;
 
+export const GetSpaceRecordingPreparationErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RecordingPreparationInvalidErrorSchema,
+  RecordingPreparationNotFoundErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetSpaceRecordingPreparationError = typeof GetSpaceRecordingPreparationErrorSchema.Type;
+
 export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
 export type GetTenantError = typeof GetTenantErrorSchema.Type;
 
@@ -6526,6 +6700,22 @@ export const OnboardTenantErrorSchema = Schema.Union([
   TenantInvalidRegionErrorSchema,
 ]);
 export type OnboardTenantError = typeof OnboardTenantErrorSchema.Type;
+
+export const PrepareSpaceRecordingErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RecordingPreparationConflictErrorSchema,
+  RecordingPreparationInvalidErrorSchema,
+  RecordingPreparationPolicyDeniedErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type PrepareSpaceRecordingError = typeof PrepareSpaceRecordingErrorSchema.Type;
 
 export const RedeliverWebhookDeliveryErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6937,6 +7127,7 @@ export const ChalkOperationPolicies = {
   approveSpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   archiveSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   arriveBySpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  cancelSpaceRecordingPreparation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   completeRecentAuthGoogle: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
@@ -6982,6 +7173,7 @@ export const ChalkOperationPolicies = {
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
   onboardTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  prepareSpaceRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshDashboardSpaceSelfAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

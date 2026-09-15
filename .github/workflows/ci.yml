@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      enable_recorder_control:
+        description: First enablement of colocated recording controls (requires approved secrets and direct TLS ingress)
+        required: true
+        default: false
+        type: boolean
       managed_environment:
         description: GitHub Environment and host environment to deploy
         required: true
@@ -66,6 +71,7 @@ jobs:
       build_set: ${{ steps.plan.outputs.build_set }}
       release_id: ${{ steps.plan.outputs.release_id }}
       should_publish: ${{ steps.plan.outputs.should_publish }}
+      recorder_control: ${{ steps.plan.outputs.recorder_control }}
     steps:
       - name: Checkout exact release
         uses: actions/checkout@v4
@@ -111,6 +117,7 @@ jobs:
         env:
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
           PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
+          ENABLE_RECORDER_CONTROL: ${{ inputs.enable_recorder_control }}
         run: |
           set -euo pipefail
           mkdir -p "$PLAN_ROOT"
@@ -140,6 +147,12 @@ jobs:
             infrastructure/managed-episode/scripts/plan-release-components --component both > "$PLAN_ROOT/plan.json"
           fi
 
+          recorder_control="$ENABLE_RECORDER_CONTROL"
+          if [[ -n "$stable_manifest" ]] && jq -e '.images | has("recorder_control")' "$stable_manifest" >/dev/null; then
+            recorder_control=true
+          elif [[ "$ENABLE_RECORDER_CONTROL" == true ]]; then
+            infrastructure/managed-episode/scripts/plan-release-components --component both > "$PLAN_ROOT/plan.json"
+          fi
           jq -e '.build_set == [] or .build_set == ["api"] or .build_set == ["sync"] or .build_set == ["api", "sync"]' "$PLAN_ROOT/plan.json" >/dev/null
           build_set="$(jq -c '.build_set' "$PLAN_ROOT/plan.json")"
           should_publish="$(jq -r 'if (.build_set | length) > 0 then "true" else "false" end' "$PLAN_ROOT/plan.json")"
@@ -152,6 +165,7 @@ jobs:
             printf 'build_set=%s\n' "$build_set"
             printf 'should_publish=%s\n' "$should_publish"
             printf 'release_id=%s\n' "$release_id"
+            printf 'recorder_control=%s\n' "$recorder_control"
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload release plan
@@ -256,12 +270,33 @@ jobs:
           printf 'repository=%s\n' "$repository" >> "$GITHUB_OUTPUT"
           printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
 
+          if [[ "$COMPONENT" == api && "${{ needs.plan-managed.outputs.recorder_control }}" == true ]]; then
+            control_metadata="${RUNNER_TEMP}/recorder-control-metadata.json"
+            docker buildx build \
+              --platform linux/arm64 --provenance=mode=max \
+              --build-context api_source=apps/api \
+              --cache-from type=gha,scope=chalk-recorder-control \
+              --cache-to type=gha,scope=chalk-recorder-control,mode=max \
+              --file infrastructure/managed-episode/images/recorder-control.Dockerfile \
+              --build-arg RELEASE_ID="$RELEASE_ID" --build-arg SOURCE_REVISION="$TARGET_SHA" \
+              --tag "$ECR_REGISTRY/chalk-api:recorder-$RELEASE_ID" \
+              --metadata-file "$control_metadata" --push infrastructure/managed-episode
+            control_digest="$(jq -er '."containerimage.digest"' "$control_metadata")"
+            printf '%s\n' "$ECR_REGISTRY/chalk-api@$control_digest" > "${RUNNER_TEMP}/recorder-control-image.txt"
+            printf 'control_digest=%s\n' "$control_digest" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Wait for managed signing
         run: |
+          digests=("${{ steps.build.outputs.digest }}")
+          if [[ -n "${{ steps.build.outputs.control_digest }}" ]]; then
+            digests+=("${{ steps.build.outputs.control_digest }}")
+          fi
+          for digest in "${digests[@]}"; do
           for attempt in $(seq 1 60); do
-            status="$(aws ecr describe-image-signing-status --repository-name "${{ steps.build.outputs.repository }}" --image-id imageDigest="${{ steps.build.outputs.digest }}" --query 'signingStatuses[0].status' --output text 2>/dev/null || echo PENDING)"
+            status="$(aws ecr describe-image-signing-status --repository-name "${{ steps.build.outputs.repository }}" --image-id imageDigest="$digest" --query 'signingStatuses[0].status' --output text 2>/dev/null || echo PENDING)"
             if [[ "$status" == "COMPLETE" ]]; then
-              exit 0
+              break
             fi
             if [[ "$status" == "FAILED" ]]; then
               echo "managed signing failed for $COMPONENT" >&2
@@ -273,12 +308,15 @@ jobs:
             fi
             sleep 10
           done
+          done
 
       - name: Upload immutable image reference
         uses: actions/upload-artifact@v4
         with:
           name: managed-image-${{ matrix.component }}-${{ env.RELEASE_ID }}
-          path: ${{ runner.temp }}/${{ matrix.component }}-image.txt
+          path: |
+            ${{ runner.temp }}/${{ matrix.component }}-image.txt
+            ${{ runner.temp }}/recorder-control-image.txt
           retention-days: 7
           if-no-files-found: error
 
@@ -329,6 +367,9 @@ jobs:
           fi
           if jq -e '.affected_components | index("api") != null' "$plan" >/dev/null; then
             args+=(--api-image "$(<"$IMAGE_ROOT/api-image.txt")")
+          fi
+          if [[ -f "$IMAGE_ROOT/recorder-control-image.txt" ]]; then
+            args+=(--recorder-control-image "$(<"$IMAGE_ROOT/recorder-control-image.txt")")
           fi
           if jq -e '.affected_components | index("sync") != null' "$plan" >/dev/null; then
             args+=(--sync-image "$(<"$IMAGE_ROOT/sync-image.txt")")

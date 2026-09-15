@@ -31,20 +31,23 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
   if (!fetchImpl) throw new Error("Fetch API is unavailable");
   const signer = new HmacWorkloadSigner({ secret: required(secrets?.workloadAuth, "CONTROL_API_WORKLOAD_AUTH_SECRET"), environment: config.environment, releaseId: config.releaseId, audience: config.controlApiAudience });
   const control = new RecorderControlApiClient({ baseUrl: config.controlApiBaseUrl, signer, fetch: fetchImpl });
-  const fallback = new CloudflareWhisperProvider({
-    fetch: fetchImpl,
-    token: config.cloudflare.token,
-    accountId: config.cloudflare.accountId,
-    modelSlug: config.cloudflare.modelSlug,
-    policy: config.provider,
-    adapterContractVersion: config.cloudflare.adapterContractVersion,
-  });
+  const fallback = config.cloudflare.enabled
+    ? new CloudflareWhisperProvider({
+        fetch: fetchImpl,
+        token: config.cloudflare.token,
+        accountId: config.cloudflare.accountId,
+        modelSlug: config.cloudflare.modelSlug,
+        policy: config.provider,
+        adapterContractVersion: config.cloudflare.adapterContractVersion,
+      })
+    : undefined;
   const primary = config.deepInfra.enabled
     ? new DeepInfraWhisperProvider({
         fetch: fetchImpl,
-        token: config.deepInfra.token as string,
-        executionIdentityPin: config.deepInfra.executionIdentityPin as string,
-        modelVersionPin: config.deepInfra.modelVersionPin as string,
+        token: required(config.deepInfra.token, "DeepInfra token"),
+        versionContract: required(config.deepInfra.adapterContractVersion, "DeepInfra adapter contract"),
+        ...(config.deepInfra.executionIdentityPin ? { executionIdentityPin: config.deepInfra.executionIdentityPin } : {}),
+        ...(config.deepInfra.modelVersionPin ? { modelVersionPin: config.deepInfra.modelVersionPin } : {}),
         policy: config.provider,
       })
     : undefined;
@@ -52,7 +55,7 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
     config,
     control,
     ...(primary === undefined ? {} : { primary }),
-    fallback,
+    ...(fallback ? { fallback } : {}),
     fetch: fetchImpl,
   });
 }
@@ -61,7 +64,7 @@ export async function buildHandlerFromSsm(env: NodeJS.ProcessEnv, client: SsmPar
   const deepInfraEnabled = env.DEEPINFRA_ENABLED === "true";
   const secrets = await loadDispatcherSecrets(client, {
     ...(deepInfraEnabled ? { deepInfraToken: requiredEnv(env, "DEEPINFRA_TOKEN_PARAMETER_ARN") } : {}),
-    cloudflareAiToken: requiredEnv(env, "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN"),
+    ...(env.CLOUDFLARE_AI_ENABLED === "true" ? { cloudflareAiToken: requiredEnv(env, "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN") } : {}),
     workloadAuth: requiredEnv(env, "CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN"),
   });
   return buildHandler(env, secrets);

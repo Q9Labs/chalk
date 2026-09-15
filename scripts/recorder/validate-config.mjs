@@ -4,15 +4,15 @@ import { readFile } from "node:fs/promises";
 import process from "node:process";
 
 export const CAPTURE_LIMITS = Object.freeze({
-  maxEpisodes: 20,
+  maxEpisodes: 10,
   maxParticipants: 100,
-  maxNodes: 11,
+  maxNodes: 10,
 });
 
 export const RENDER_LIMITS = Object.freeze({
   maxNodes: 10,
-  globalComputeNodes: 21,
-  subBudgetMinutes: 20,
+  globalComputeNodes: 20,
+  subBudgetMinutes: 60,
 });
 
 function assertInteger(name, value, minimum, maximum) {
@@ -28,14 +28,16 @@ function assertNonNegative(name, value) {
 }
 
 // fallow-ignore-next-line complexity
-export function desiredCaptureNodes({ episodes, participants, inputMbps, episodesPerNode = 4, participantsPerNode = 40, inputMbpsPerNode = 16, readySpare = 0 }) {
+export function desiredCaptureNodes({ episodes, participants, inputMbps, episodesPerNode = 1, participantsPerNode = 40, inputMbpsPerNode = 16, readySpare = 0 }) {
   assertInteger("episodes", episodes, 0, CAPTURE_LIMITS.maxEpisodes);
   assertInteger("participants", participants, 0, CAPTURE_LIMITS.maxParticipants);
   assertNonNegative("inputMbps", inputMbps);
   assertNonNegative("episodesPerNode", episodesPerNode);
   assertNonNegative("participantsPerNode", participantsPerNode);
   assertNonNegative("inputMbpsPerNode", inputMbpsPerNode);
-  assertInteger("readySpare", readySpare, 0, 1);
+  assertInteger("readySpare", readySpare, 0, 0);
+  if (episodesPerNode !== 1) throw new Error("capture profile requires one Recording per node");
+  if (inputMbps > 40) throw new Error("capture input exceeds the 40 Mbps admission limit");
   if (episodesPerNode === 0 || participantsPerNode === 0 || inputMbpsPerNode === 0) {
     throw new Error("capture density must be positive");
   }
@@ -134,8 +136,9 @@ async function readConfig(path) {
   const parsed = JSON.parse(await readFile(path, "utf8"));
   const capture = desiredCaptureNodes(parsed.capture);
   const render = minimumRenderNodes(parsed.render?.jobs ?? [], parsed.render?.limits);
+  assertInteger("render desiredNodes", parsed.render?.desiredNodes ?? render, 0, RENDER_LIMITS.maxNodes);
   if (capture + (parsed.render?.desiredNodes ?? render) > RENDER_LIMITS.globalComputeNodes) {
-    throw new Error("capture and render demand exceeds the twenty-one-node global recorder compute cap");
+    throw new Error("capture and render demand exceeds the twenty-node recorder compute cap");
   }
   return { desiredCaptureNodes: capture, minimumRenderNodes: render };
 }

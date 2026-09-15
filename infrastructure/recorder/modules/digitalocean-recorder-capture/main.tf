@@ -64,8 +64,8 @@ resource "terraform_data" "runtime_capacity_contract" {
     }
 
     precondition {
-      condition     = var.max_nodes == 11
-      error_message = "capture runtime capacity contract must retain the qualified eleven-node maximum."
+      condition     = var.max_nodes == 10
+      error_message = "capture runtime capacity contract must retain the ten-node maximum."
     }
   }
 }

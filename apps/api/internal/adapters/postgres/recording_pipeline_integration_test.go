@@ -181,7 +181,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	demandQueries := sqlc.New(pool)
 	demandObservedAt := time.Now().UTC()
 	captureDemand, err := demandQueries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{Role: "capture", ObservedAt: pgtype.Timestamptz{Time: demandObservedAt, Valid: true}})
-	if err != nil || captureDemand.DesiredNodes != 2 || captureDemand.HeldStarts != 1 || captureDemand.QueuedJobs != 1 {
+	if err != nil || captureDemand.DesiredNodes != 1 || captureDemand.HeldStarts != 1 || captureDemand.QueuedJobs != 1 {
 		t.Fatalf("cold-start capture demand = %+v, %v", captureDemand, err)
 	}
 	renderDemand, err := demandQueries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{Role: "render", ObservedAt: pgtype.Timestamptz{Time: demandObservedAt, Valid: true}})
@@ -198,19 +198,19 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		t.Fatalf("reserve future capture: %v", err)
 	}
 	notDueDemand, err := demandQueries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{Role: "capture", ObservedAt: pgtype.Timestamptz{Time: demandObservedAt, Valid: true}})
-	if err != nil || notDueDemand.DesiredNodes != 2 || notDueDemand.ScheduledPrewarms != 0 || notDueDemand.HeldStarts != 1 || notDueDemand.QueuedJobs != 1 {
+	if err != nil || notDueDemand.DesiredNodes != 1 || notDueDemand.ScheduledPrewarms != 0 || notDueDemand.HeldStarts != 1 || notDueDemand.QueuedJobs != 1 {
 		t.Fatalf("not-due capture demand = %+v, %v", notDueDemand, err)
 	}
 	dueAt := futureStart.Add(-recordingpipeline.CapturePrewarm)
 	dueDemand, err := demandQueries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{Role: "capture", ObservedAt: pgtype.Timestamptz{Time: dueAt, Valid: true}})
-	if err != nil || dueDemand.DesiredNodes != 3 || dueDemand.ScheduledPrewarms != 1 || dueDemand.HeldStarts != 1 || dueDemand.QueuedJobs != 2 {
+	if err != nil || dueDemand.DesiredNodes != 2 || dueDemand.ScheduledPrewarms != 1 || dueDemand.HeldStarts != 1 || dueDemand.QueuedJobs != 2 {
 		t.Fatalf("due capture demand = %+v, %v", dueDemand, err)
 	}
 	if _, err := pool.Exec(ctx, `update recording_jobs set state = 'leased', attempt_count = 1, fencing_generation = 1, lease_token = 'future-lease', lease_owner = 'future-worker', lease_expires_at = $2, updated_at = now() where recording_id = $1 and kind = 'capture'`, futureReservation.RecordingID.Bytes(), futureStart); err != nil {
 		t.Fatalf("lease future capture fixture: %v", err)
 	}
 	leasedDemand, err := demandQueries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{Role: "capture", ObservedAt: pgtype.Timestamptz{Time: demandObservedAt, Valid: true}})
-	if err != nil || leasedDemand.DesiredNodes != 3 || leasedDemand.ScheduledPrewarms != 0 || leasedDemand.HeldStarts != 1 || leasedDemand.QueuedJobs != 1 {
+	if err != nil || leasedDemand.DesiredNodes != 2 || leasedDemand.ScheduledPrewarms != 0 || leasedDemand.HeldStarts != 1 || leasedDemand.QueuedJobs != 1 {
 		t.Fatalf("leased future capture demand = %+v, %v", leasedDemand, err)
 	}
 	if _, err := pool.Exec(ctx, `update recording_jobs set state = 'pending', attempt_count = 0, fencing_generation = 0, lease_token = null, lease_owner = null, lease_expires_at = null, updated_at = now() where recording_id = $1 and kind = 'capture'`, futureReservation.RecordingID.Bytes()); err != nil {
@@ -434,7 +434,12 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if _, err := pool.Exec(ctx, `insert into sync_recordings(tenant_id, space_id, episode_id, recording_id, status, generation, start_external_operation_id) values($1, $2, $3, $4, 'starting', 1, $5)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), reservation.RecordingID.Bytes(), startOperationID.Bytes()); err != nil {
 		t.Fatalf("seed Sync recording: %v", err)
 	}
-	readyAt := time.Now().UTC().Truncate(time.Microsecond)
+	// The synthetic media origin and database facts need the same clock;
+	// the test host and PostgreSQL container need not share a wall clock.
+	var readyAt time.Time
+	if err := pool.QueryRow(ctx, `select clock_timestamp()`).Scan(&readyAt); err != nil {
+		t.Fatalf("read capture fixture origin: %v", err)
+	}
 	lifecycleService, err := recordinglifecycle.NewService(postgres.NewRecordingLifecycleRepositoryWithPool(pool), time.Now)
 	if err != nil {
 		t.Fatalf("configure recording lifecycle service: %v", err)
@@ -849,6 +854,17 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	completionLease := recordingpipeline.LeaseInput{JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration, LeaseToken: "lease-capture", LeaseOwner: "capture-test", LeaseFor: time.Minute, CaptureEpoch: job.Authority.Envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest}
 	completedCapture, err := repository.CompleteCapture(ctx, completionLease, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be008"))
 	if err != nil || completedCapture.State != recordingpipeline.JobStateSucceeded {
+		source, sourceErr := postgres.NewRecordingPresentationCompletionSourceRepository(sqlc.New(pool)).LoadCompletionSource(ctx, recordingpresentation.CompletionAuthority{
+			JobID: completionLease.JobID, AttemptCount: completionLease.AttemptCount, FencingGeneration: completionLease.FencingGeneration,
+			CaptureEpoch: completionLease.CaptureEpoch, EnvelopeDigest: completionLease.EnvelopeDigest, LeaseToken: completionLease.LeaseToken, LeaseOwner: completionLease.LeaseOwner,
+		})
+		t.Logf("completion source error=%v ready=%v plan origin=%d", sourceErr, source.CaptureReadyAt, source.CapturePlanStartRevision)
+		for _, fact := range source.EpisodeControlTailEvents {
+			t.Logf("control tail revision=%d offset=%s", fact.Revision, fact.CreatedAt.Sub(source.CaptureReadyAt))
+		}
+		for _, fact := range source.CapturePlans {
+			t.Logf("capture plan revision=%d offset=%s", fact.Revision, fact.CreatedAt.Sub(source.CaptureReadyAt))
+		}
 		t.Fatalf("complete capture state=%s: %v", completedCapture.State, err)
 	}
 	// A lost response must replay without rebuilding the presentation or
@@ -1386,15 +1402,9 @@ func TestRecordingReservationAdmissionSerializesCaptureCompletion(t *testing.T) 
 	firstRecordingID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0bed04")
 	secondRecordingID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0bed05")
 	defer func() {
-		_, _ = pool.Exec(ctx, `delete from recording_job_attempt_authorities where job_id in (select id from recording_jobs where tenant_id = $1)`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from recording_jobs where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from recording_pipelines where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from recording_reservations where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from recordings where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from episodes where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from spaces where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from tenants where id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `update recording_capacity set reserved_episodes = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0 where id = 1`)
+		if err := cleanupRecordingAdmissionFixture(ctx, pool, tenantID); err != nil {
+			t.Errorf("clean admission fixture: %v", err)
+		}
 	}()
 	if _, err := pool.Exec(ctx, `insert into tenants (id, name) values ($1, 'recording admission serialization') on conflict do nothing`, tenantID.Bytes()); err != nil {
 		t.Fatalf("seed serialization tenant: %v", err)
@@ -1484,15 +1494,21 @@ func TestRecordingReservationAdmissionSerializesCaptureCompletion(t *testing.T) 
 		t.Fatalf("commit capture completion: %v", err)
 	}
 	result := <-reserveResultChannel
-	if !errors.Is(result.err, recordingpipeline.ErrRecordingCapacityUnavailable) {
-		t.Fatalf("reservation racing render enqueue = %+v, %v; want capacity unavailable", result.reservation, result.err)
+	if result.err != nil || result.reservation.RecordingID != secondInput.RecordingID {
+		t.Fatalf("reservation racing render enqueue = %+v, %v; want independent capture admission", result.reservation, result.err)
 	}
 	var reservedEpisodes, activeRenderPhases int
 	if err := pool.QueryRow(ctx, `select reserved_episodes, (select count(*) from recording_pipelines where capture_completed_at is not null and state in ('render_queued', 'rendering', 'verifying', 'retryable_failure')) from recording_capacity where id = 1`).Scan(&reservedEpisodes, &activeRenderPhases); err != nil {
 		t.Fatalf("read serialized capacity: %v", err)
 	}
-	if reservedEpisodes != 9 || activeRenderPhases != 1 {
-		t.Fatalf("serialized capacity = capture:%d render:%d, want 9+1", reservedEpisodes, activeRenderPhases)
+	if reservedEpisodes != 10 || activeRenderPhases != 1 {
+		t.Fatalf("serialized capacity = capture:%d render:%d, want 10+1", reservedEpisodes, activeRenderPhases)
+	}
+	thirdInput := secondInput
+	thirdInput.IdempotencyKey = "recording-admission-serialization-eleventh"
+	thirdInput.RecordingID = mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0bed10")
+	if _, err := repository.Reserve(ctx, thirdInput, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0bed11")); !errors.Is(err, recordingpipeline.ErrRecordingCapacityUnavailable) {
+		t.Fatalf("eleventh live capture = %v; want capacity unavailable", err)
 	}
 }
 

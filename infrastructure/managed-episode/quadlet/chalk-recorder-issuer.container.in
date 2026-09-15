@@ -1,0 +1,42 @@
+[Unit]
+Description=Chalk direct-TLS recorder identity issuer
+After=network-online.target chalk-api.service
+Requires=chalk-api.service
+
+[Container]
+Image=__RECORDER_CONTROL_IMAGE_REFERENCE__
+Pull=never
+ContainerName=chalk-recorder-issuer
+Entrypoint=/usr/local/bin/recorder-fleet-issuer
+# The issuer binds directly: forwarding would destroy its TCP-peer authorization evidence.
+Network=host
+EnvironmentFile=/run/chalk/env/recorder-issuer.env
+Secret=chalk-recorder-issuer-server-cert,type=mount,target=/run/chalk/server.crt,uid=65532,gid=65532,mode=0400
+Secret=chalk-recorder-issuer-server-key,type=mount,target=/run/chalk/server.key,uid=65532,gid=65532,mode=0400
+Secret=chalk-recorder-issuer-controller-ca,type=mount,target=/run/chalk/controller-ca.crt,uid=65532,gid=65532,mode=0400
+Secret=chalk-recorder-worker-ca-cert,type=mount,target=/run/chalk/worker-ca.crt,uid=65532,gid=65532,mode=0400
+Secret=chalk-recorder-worker-ca-key,type=mount,target=/run/chalk/worker-ca.key,uid=65532,gid=65532,mode=0400
+Secret=chalk-recorder-issuer-provider-token,type=mount,target=/run/chalk/provider-token,uid=65532,gid=65532,mode=0400
+Secret=chalk-sync-provider-server-ca,type=mount,target=/run/chalk/control-api-ca.crt,uid=65532,gid=65532,mode=0400
+Volume=chalk-recorder-issuer.volume:/var/lib/chalk-recorder:U
+User=65532
+Group=65532
+ReadOnly=true
+ReadOnlyTmpfs=true
+Tmpfs=/tmp:rw,nosuid,nodev,noexec,size=16m
+DropCapability=all
+NoNewPrivileges=true
+PidsLimit=64
+PodmanArgs=--memory=256m --cpus=0.5
+LogDriver=journald
+PodmanArgs=--log-opt=tag=chalk-recorder-issuer
+PodmanArgs=--stop-timeout=25
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=90
+TimeoutStopSec=30
+
+[Install]
+WantedBy=chalk-runtime.target

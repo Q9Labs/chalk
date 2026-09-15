@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "capture_max_nodes": 10,
+  "render_max_nodes": 10,
+  "idle_nodes": 0,
+  "ready_spare": 0,
+  "recordings_per_capture_node": 1,
+  "capture_default": "c-2",
+  "capture_candidates": [
+    { "size": "s-1vcpu-1gb", "vcpu": 1, "memory_mib": 1024, "disk_gib": 25, "status": "unqualified" },
+    { "size": "s-1vcpu-2gb", "vcpu": 1, "memory_mib": 2048, "disk_gib": 50, "status": "unqualified" },
+    { "size": "c-2", "vcpu": 2, "memory_mib": 4096, "disk_gib": 25, "status": "prior-capture-baseline" }
+  ],
+  "render_default": "c-8",
+  "transcription_primary": "deepinfra",
+  "transcription_model": "openai/whisper-large-v3-turbo",
+  "transcription_adapter": "deepinfra-native-whisper-turbo.v1",
+  "transcription_fallback_enabled": false,
+  "cloud_qualification_required": true,
+  "qualification": {
+    "recorded_seconds": 3600,
+    "participants": 3,
+    "input_bitrate_bps": 4000000,
+    "concurrent_recordings": 10,
+    "postprocessing_objective_seconds": 3600,
+    "required_scenarios": ["camera-change", "screen-share-change", "reconnect", "slow-upload", "retried-upload"],
+    "required_metrics": ["peak-rss", "cpu", "cpu-steal", "upload-latency", "upload-backlog", "capture-ready-latency", "artifact-verified", "render-complete-latency"]
+  }
+}

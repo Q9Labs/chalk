@@ -221,8 +221,8 @@ variable "vpc_egress_allowlist" {
   ]
 
   validation {
-    condition     = contains(var.vpc_egress_allowlist, "control-api") && contains(var.vpc_egress_allowlist, "api.deepinfra.com") && contains(var.vpc_egress_allowlist, "api.cloudflare.com") && contains(var.vpc_egress_allowlist, "ssm") && contains(var.vpc_egress_allowlist, "kms") && contains(var.vpc_egress_allowlist, "telemetry")
-    error_message = "vpc_egress_allowlist must document control API, DeepInfra, Cloudflare AI, SSM, KMS, and telemetry destinations."
+    condition     = contains(var.vpc_egress_allowlist, "control-api") && contains(var.vpc_egress_allowlist, "ssm") && contains(var.vpc_egress_allowlist, "kms") && contains(var.vpc_egress_allowlist, "telemetry")
+    error_message = "vpc_egress_allowlist must document control API, SSM, KMS, telemetry, and the selected providers' destinations."
   }
 }
 
@@ -269,23 +269,50 @@ variable "deepinfra_enabled" {
 }
 
 variable "deepinfra_execution_identity_pin" {
-  description = "Pinned DeepInfra execution identity, required when DeepInfra is enabled."
+  description = "Optional execution identity assertion; enabling it requires an observable exact match. Never invent an identity."
   type        = string
   default     = ""
 }
 
 variable "deepinfra_model_version_pin" {
-  description = "Pinned DeepInfra model/version contract, required when DeepInfra is enabled."
+  description = "Optional immutable model-version assertion; enabling it requires an observable exact match. Separate from the adapter contract."
   type        = string
   default     = ""
+}
+
+variable "deepinfra_adapter_contract_version" {
+  description = "Version of Chalk's native DeepInfra Whisper adapter, not an observed model revision."
+  type        = string
+  default     = "deepinfra-native-whisper-turbo.v1"
+  validation {
+    condition     = var.deepinfra_adapter_contract_version == "deepinfra-native-whisper-turbo.v1"
+    error_message = "deepinfra_adapter_contract_version must identify the supported native adapter."
+  }
+}
+
+variable "deepinfra_corpus_digest" {
+  description = "Digest of the separately authorized passing DeepInfra qualification corpus."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.deepinfra_corpus_digest == "" || can(regex("^[a-fA-F0-9]{32,128}$", var.deepinfra_corpus_digest))
+    error_message = "deepinfra_corpus_digest must be empty while disabled or a hexadecimal corpus digest."
+  }
+}
+
+variable "cloudflare_enabled" {
+  description = "Explicitly enable Workers AI; with DeepInfra enabled this permits cross-provider fallback. Disabled in the cost-first profile."
+  type        = bool
+  default     = false
 }
 
 variable "cloudflare_account_id" {
   description = "Cloudflare account ID used by the fallback adapter."
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("^[a-f0-9]{32}$", var.cloudflare_account_id))
+    condition     = var.cloudflare_account_id == "" || can(regex("^[a-f0-9]{32}$", var.cloudflare_account_id))
     error_message = "cloudflare_account_id must be a 32-character lowercase account ID."
   }
 }
@@ -304,14 +331,16 @@ variable "cloudflare_model_slug" {
 variable "cloudflare_adapter_contract_version" {
   description = "Versioned Cloudflare adapter contract."
   type        = string
+  default     = ""
 }
 
 variable "cloudflare_corpus_digest" {
   description = "Digest of the last passing Cloudflare conformance corpus."
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("^[a-fA-F0-9]{32,128}$", var.cloudflare_corpus_digest))
+    condition     = var.cloudflare_corpus_digest == "" || can(regex("^[a-fA-F0-9]{32,128}$", var.cloudflare_corpus_digest))
     error_message = "cloudflare_corpus_digest must be a hexadecimal corpus digest."
   }
 }
@@ -396,11 +425,13 @@ variable "circuit_cooldown_ms" {
 variable "deepinfra_token_parameter_arn" {
   description = "Exact SSM SecureString ARN for the environment's DeepInfra token."
   type        = string
+  default     = ""
 }
 
 variable "cloudflare_token_parameter_arn" {
   description = "Exact SSM SecureString ARN for the environment's Cloudflare Workers AI token."
   type        = string
+  default     = ""
 }
 
 variable "api_workload_auth_parameter_arn" {

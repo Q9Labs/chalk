@@ -252,13 +252,13 @@ variable "reserved_capture_input_mbps" {
 }
 
 variable "ready_spare" {
-  description = "One ready spare while capture work is reserved or active, otherwise zero."
+  description = "Cost-first recorder profile has no idle or implicit capture spare."
   type        = number
   default     = 0
 
   validation {
-    condition     = var.ready_spare >= 0 && var.ready_spare <= 1 && floor(var.ready_spare) == var.ready_spare
-    error_message = "ready_spare must be 0 or 1."
+    condition     = var.ready_spare == 0
+    error_message = "ready_spare must be zero for this profile."
   }
 }
 
@@ -298,9 +298,26 @@ variable "render_desired_nodes" {
 }
 
 variable "capture_node_size" {
-  description = "DigitalOcean SGP1 CPU-Optimized 2-vCPU/4-GiB size selected after staging qualification."
+  description = "Capture profile: c-2 is the prior baseline; smaller shared-CPU candidates require exact-profile cloud qualification evidence before apply."
   type        = string
   default     = "c-2"
+
+  validation {
+    condition     = contains(["s-1vcpu-1gb", "s-1vcpu-2gb", "c-2"], var.capture_node_size)
+    error_message = "Select a candidate from the bounded capture qualification profile."
+  }
+}
+
+variable "capture_profile_evidence_sha256" {
+  description = "Redacted one-hour qualification evidence for the exact smaller capture size, region, and sealed image; absence keeps candidates disabled."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.capture_profile_evidence_sha256 == null || can(regex("^[0-9a-f]{64}$", var.capture_profile_evidence_sha256))
+    error_message = "Capture qualification evidence must be a SHA-256 digest."
+  }
 }
 
 variable "render_node_size" {

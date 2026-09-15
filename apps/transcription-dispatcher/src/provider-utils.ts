@@ -151,8 +151,8 @@ export function parseProviderResult(
 }
 
 function parseIdentity(row: Record<string, unknown>): ProviderResult["providerIdentity"] {
-  const requestId = row.request_id ?? row.requestId;
-  const model = row.model;
+  const requestId = row.request_id ?? row.requestId ?? undefined;
+  const model = row.model ?? undefined;
   if (requestId !== undefined && typeof requestId !== "string") throw new ProviderError("provider request identity is invalid", "schema");
   if (model !== undefined && typeof model !== "string") throw new ProviderError("provider model identity is invalid", "schema");
   if (requestId === undefined && model === undefined) return undefined;

@@ -1461,24 +1461,32 @@ func (w *captureBundleWriter) addPacket(ctx context.Context, track CaptureMediaT
 	if media > w.lastMedia {
 		w.lastMedia = media
 	}
-	if err := w.ensureAssembler(ctx); err != nil {
-		return err
-	}
 	input := recordingbundle.MediaPacket{Track: bundleTrack, Packet: recordingbundle.RTPPacket{SequenceNumber: packet.SequenceNumber, ExtendedSequenceNumber: clock.sequence.Extend(packet.SequenceNumber), Timestamp: normalizedTimestamp, SSRC: packet.SSRC, PayloadType: packet.PayloadType, Marker: packet.Marker, Payload: packet.Payload}, MonotonicMilliseconds: mono, MediaMilliseconds: media}
-	err := w.assembler.AddPacket(input)
-	if err == nil {
-		if w.assembler.Closed() {
-			return w.persist(ctx)
+	var err error
+	for attempt := range 2 {
+		if err = w.ensureAssembler(ctx); err != nil {
+			return err
 		}
-		return nil
+		err = w.assembler.AddPacket(input)
+		if err == nil {
+			if w.assembler.Closed() {
+				return w.persist(ctx)
+			}
+			return nil
+		}
+		if !errors.Is(err, recordingbundle.ErrAssemblerClosed) && !errors.Is(err, recordingbundle.ErrDurationLimit) {
+			return err
+		}
+		// A packet with persistent cross-track clock skew may not fit even
+		// after rotation. Do not recursively allocate and upload empty bundles.
+		if attempt == 1 {
+			break
+		}
+		if persistErr := w.persist(ctx); persistErr != nil {
+			return persistErr
+		}
 	}
-	if !errors.Is(err, recordingbundle.ErrAssemblerClosed) && !errors.Is(err, recordingbundle.ErrDurationLimit) {
-		return err
-	}
-	if persistErr := w.persist(ctx); persistErr != nil {
-		return persistErr
-	}
-	return w.addPacket(ctx, track, packet, at)
+	return fmt.Errorf("packet could not fit after bundle rotation: %w", err)
 }
 
 func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan captureplan.Plan, tracks map[string]CaptureMediaTrack, now time.Time) error {

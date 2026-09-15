@@ -40,6 +40,8 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
   let measuredAudioMs = 0;
   let providerObservedDurationMs = 0;
   let hasProviderObservedDuration = false;
+  let providerReportedCostUsd = 0;
+  let allChunksReportCost = true;
   const cues: Array<NormalizedCue & { readonly chunkId: string }> = [];
   const quality = {
     segmentCount: 0,
@@ -57,6 +59,8 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
     versionContracts.add(document.versionContract);
     if (document.language !== undefined) languages.add(document.language);
     measuredAudioMs = boundedSum(measuredAudioMs, document.measuredAudioMs, "finalize measured duration");
+    if (document.providerReportedCostUsd === undefined) allChunksReportCost = false;
+    else providerReportedCostUsd += document.providerReportedCostUsd;
     if (document.providerObservedDurationMs !== undefined) {
       hasProviderObservedDuration = true;
       providerObservedDurationMs = boundedSum(providerObservedDurationMs, document.providerObservedDurationMs, "finalize provider duration");
@@ -98,6 +102,7 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
     attempt: options.attempt,
     measuredAudioMs,
     ...(hasProviderObservedDuration ? { providerObservedDurationMs } : {}),
+    ...(allChunksReportCost ? { providerReportedCostUsd } : {}),
     ...(outputQuality === undefined ? {} : { quality: outputQuality }),
   };
 }
@@ -195,6 +200,7 @@ function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: Final
   if (value.providerObservedDurationMs !== undefined && (!Number.isSafeInteger(value.providerObservedDurationMs) || value.providerObservedDurationMs < 0 || value.providerObservedDurationMs > chunk.episodeEndMs - chunk.episodeStartMs))
     throw new AssignmentError("finalize provider duration is invalid");
   if (value.billedAudioSeconds !== undefined) throw new AssignmentError("finalize billing claim is not authoritative");
+  if (value.providerReportedCostUsd !== undefined && (!Number.isFinite(value.providerReportedCostUsd) || value.providerReportedCostUsd < 0 || value.providerReportedCostUsd > 1_000)) throw new AssignmentError("finalize reported cost is invalid");
   if (value.language !== undefined) boundedText(value.language, "finalize language", 64);
   if (!Array.isArray(value.cues) || value.cues.length > maxCues) throw new AssignmentError("finalize cues are invalid");
   for (const cue of value.cues) {

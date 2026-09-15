@@ -629,12 +629,7 @@ with existing as (
     where recording_capacity.id = 1
       -- Storage retains the prior bound so grandfathered reservations can drain;
       -- these predicates are the launch policy for new admission.
-      and locked_capacity.reserved_episodes + $3::integer + (
-          select count(*)::integer
-          from recording_pipelines
-          where capture_completed_at is not null
-            and state in ('render_queued', 'rendering', 'verifying', 'retryable_failure')
-      ) <= 10
+      and locked_capacity.reserved_episodes + $3::integer <= 10
       and locked_capacity.reserved_participants + $4::integer <= 100
       and locked_capacity.reserved_input_bitrate_bps + $5::bigint <= 40000000
       and exists (
@@ -701,6 +696,15 @@ with existing as (
     returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
+), consumed_preparation as (
+    update recording_preparations preparation
+    set state = 'consumed', consumed_recording_id = reservation.recording_id,
+        revision = preparation.revision + 1, updated_at = now()
+    from reservation
+    where preparation.tenant_id = reservation.tenant_id and preparation.space_id = reservation.space_id
+      and preparation.state = 'scheduled' and reservation.starts_at is null
+      and preparation.starts_at <= now() + interval '5 minutes'
+      and preparation.starts_at > now() - interval '5 minutes'
 ), pipeline as (
     insert into recording_pipelines (recording_id, tenant_id, reservation_id, state)
     select recording_id, tenant_id, id, 'reserved'
@@ -819,7 +823,11 @@ func (q *Queries) CreateRecordingReservation(ctx context.Context, arg CreateReco
 }
 
 const expireRecordingReservations = `-- name: ExpireRecordingReservations :many
-with expired as (
+with expired_preparations as (
+    update recording_preparations
+    set state = 'expired', revision = revision + 1, updated_at = $1::timestamptz
+    where state = 'scheduled' and starts_at <= $1::timestamptz - interval '5 minutes'
+), expired as (
     select recording_reservations.id, recording_reservations.recording_id,
         recording_reservations.participant_count, recording_reservations.input_bitrate_bps
     from recording_reservations

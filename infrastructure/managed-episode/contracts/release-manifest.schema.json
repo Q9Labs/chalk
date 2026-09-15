@@ -24,6 +24,7 @@
       "properties": {
         "api": { "$ref": "#/$defs/image" },
         "sync": { "$ref": "#/$defs/image" },
+        "recorder_control": { "$ref": "#/$defs/image" },
         "redis": { "$ref": "#/$defs/image" },
         "cloudflared": { "$ref": "#/$defs/image" }
       }

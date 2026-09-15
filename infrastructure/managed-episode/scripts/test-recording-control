@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/chalk-recording-control.XXXXXX")"
+trap 'rm -rf -- "$fixture"' EXIT
+fail() { echo "FAIL recording control: $1" >&2; exit 1; }
+api="example.test/chalk-api@sha256:$(printf '%064d' 1)"
+sync="example.test/chalk-sync@sha256:$(printf '%064d' 2)"
+control="example.test/chalk-api@sha256:$(printf '%064d' 3)"
+bash "$managed_root/scripts/generate-release-manifest" --allow-dirty --api-image "$api" --sync-image "$sync" --output "$fixture/disabled.json" >/dev/null
+bash "$managed_root/scripts/render-runtime" "$fixture/disabled.json" "$fixture/disabled" >/dev/null
+[[ ! -e "$fixture/disabled/quadlet/chalk-recorder-issuer.container" ]] || fail "disabled release rendered recorder controls"
+! grep -q 'PublishPort=8443' "$fixture/disabled/quadlet/chalk-api.container" || fail "disabled release exposed worker ingress"
+
+bash "$managed_root/scripts/generate-release-manifest" --allow-dirty --api-image "$api" --sync-image "$sync" --recorder-control-image "$control" --output "$fixture/enabled.json" >/dev/null
+bash "$managed_root/scripts/render-runtime" "$fixture/enabled.json" "$fixture/enabled" >/dev/null
+for role in capture render issuer; do
+  unit="$fixture/enabled/quadlet/chalk-recorder-$role.container"
+  grep -Fqx "Image=$control" "$unit" || fail "control image mismatch"
+  grep -Fqx 'Network=host' "$unit" || fail "control process does not use direct host transport"
+  grep -Fqx "Volume=chalk-recorder-$role.volume:/var/lib/chalk-recorder:U" "$unit" || fail "state is not durable and role-isolated"
+  grep -Fqx 'User=65532' "$unit" || fail "control process is not unprivileged"
+  grep -q '^PodmanArgs=--memory=' "$unit" || fail "control process is not resource-bounded"
+done
+grep -Fqx 'PublishPort=8443:8443' "$fixture/enabled/quadlet/chalk-api.container" || fail "private TLS worker listener missing"
+! grep -q 'worker-ca-key' "$fixture/enabled/quadlet/chalk-api.container" || fail "API received issuer signing key"
+! grep -q 'worker-ca-key' "$fixture/enabled/quadlet/chalk-recorder-capture.container" || fail "fleet controller received issuer signing key"
+grep -q 'Requires=.*chalk-recorder-issuer.service' "$fixture/enabled/systemd/chalk-runtime.target" || fail "controls missing from runtime closure"
+
+bash "$managed_root/scripts/generate-release-manifest" --allow-dirty --stable-manifest "$fixture/enabled.json" --sync-image "$sync" --affected-components sync --output "$fixture/sync.json" >/dev/null
+[[ "$(jq -r '.images.recorder_control' "$fixture/sync.json")" == "$control" ]] || fail "Sync-only release lost recorder image"
+if bash "$managed_root/scripts/generate-release-manifest" --allow-dirty --stable-manifest "$fixture/enabled.json" --api-image "$api" --affected-components api --output "$fixture/invalid.json" >/dev/null 2>&1; then
+  fail "API release reused mismatched control executable"
+fi
+echo "PASS recording control manifest, opt-in rendering, private mounts, and image reuse fences"

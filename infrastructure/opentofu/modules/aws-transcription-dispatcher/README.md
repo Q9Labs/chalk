@@ -6,6 +6,21 @@ account, create a state backend, upload a ZIP, or mutate a production release;
 the caller supplies the existing versioned artifact bucket, exact S3 object
 version, ZIP SHA-256, SSM parameter ARNs, VPC egress, and alarm destinations.
 
+Provider selection is explicit and fails closed. The cost-first target enables
+direct DeepInfra and leaves `cloudflare_enabled = false`. Both provider flags
+default to false until a release supplies privacy acceptance and a qualification
+corpus digest. Only enabled providers require credentials, appear in the SSM
+IAM allowlist, or appear in `required_egress_destinations`. An approved external
+egress implementation must use that filtered output.
+
+DeepInfra uses the documented native multipart `audio` endpoint for
+`openai/whisper-large-v3-turbo`, with adapter contract
+`deepinfra-native-whisper-turbo.v1`. Execution-identity/model-version pins are
+optional assertions against genuinely observed metadata, not invented release
+attestations. Cloudflare fallback requires explicit enablement and its own
+adapter/corpus/credentials. No OpenRouter provider-routing guarantee is used.
+See the [native API](https://deepinfra.com/openai/whisper-large-v3-turbo/api).
+
 The Lambda runs Node.js 22 on arm64 with a bounded timeout, memory, and `/tmp`
 allocation. `timeout_seconds - work_budget_seconds` is a plan-time invariant of
 at least 60 seconds, preserving time for response validation, result upload, and

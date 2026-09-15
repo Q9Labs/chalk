@@ -37,16 +37,18 @@ export interface FallbackResult {
   usedFallback: boolean;
 }
 
-export async function transcribeWithFallback(options: { primary?: TranscriptionProvider; fallback: TranscriptionProvider; request: ProviderRequest; policy: ProviderPolicy; circuit: InvocationCircuit; runtime?: Partial<RetryRuntime> }): Promise<FallbackResult> {
+export async function transcribeWithFallback(options: { primary?: TranscriptionProvider; fallback?: TranscriptionProvider; request: ProviderRequest; policy: ProviderPolicy; circuit: InvocationCircuit; runtime?: Partial<RetryRuntime> }): Promise<FallbackResult> {
   const runtime: RetryRuntime = {
     sleep: options.runtime?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
     random: options.runtime?.random ?? Math.random,
     now: options.runtime?.now ?? Date.now,
   };
   if (!options.primary || options.circuit.isOpen(runtime.now())) {
+    if (!options.fallback) throw new ProviderError("no available transcription provider", "retryable");
     return { result: await invokeProvider(options.fallback, options.request, options.policy, runtime), providerAttempts: 1, usedFallback: true };
   }
   let attempts = 0;
+  let failure: unknown = new ProviderError("transcription attempts exhausted", "retryable");
   for (let retry = 0; retry <= options.policy.maxRetries; retry += 1) {
     attempts += 1;
     try {
@@ -54,6 +56,7 @@ export async function transcribeWithFallback(options: { primary?: TranscriptionP
       options.circuit.recordSuccess();
       return { result, providerAttempts: attempts, usedFallback: false };
     } catch (error) {
+      failure = error;
       const kind = providerFailureKind(error);
       if (kind !== "retryable" && kind !== "timeout") {
         options.circuit.recordFailure(runtime.now());
@@ -64,6 +67,7 @@ export async function transcribeWithFallback(options: { primary?: TranscriptionP
       await runtime.sleep(backoff(options.policy, retry, runtime.random()));
     }
   }
+  if (!options.fallback) throw failure;
   const result = await invokeProvider(options.fallback, options.request, options.policy, runtime);
   return { result, providerAttempts: attempts + 1, usedFallback: true };
 }

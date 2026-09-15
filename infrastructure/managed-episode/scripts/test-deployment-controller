@@ -11,7 +11,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|ssm-contract|all]\n' "$0"
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|ssm-contract|all]\n' "$0"
 }
 
 test_group="all"
@@ -24,7 +24,7 @@ if [[ $# -gt 0 ]]; then
   test_group="$2"
 fi
 case "${test_group}" in
-  all|validation|adoption|inputs|healthy|rollback|restore|ssm-contract) ;;
+  all|validation|adoption|inputs|healthy|rollback|restore|recording|ssm-contract) ;;
   *) fail "unknown test group: ${test_group}" ;;
 esac
 
@@ -32,7 +32,7 @@ group_enabled() {
   local group="$1"
   case "${test_group}:${group}" in
     all:*) return 0 ;;
-    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|ssm-contract:ssm-contract) return 0 ;;
+    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|recording:recording|ssm-contract:ssm-contract) return 0 ;;
     rollback:healthy|restore:healthy|restore:rollback) return 0 ;;
     *) return 1 ;;
   esac
@@ -76,6 +76,11 @@ extra="${FAKE_MIGRATION_EXTRA:---allow-missing-version 20260819120000}"
 printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
 printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nPodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate\nExec=--database-url-file /run/chalk/migrate/database-url --target %s%s\n' "$image" "$target" "${extra:+ ${extra}}" >"$output/quadlet/chalk-api-migrate.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
+if jq -e '.images | has("recorder_control")' "$1" >/dev/null; then
+  for role in capture render issuer; do
+    printf 'Image=%s\n' "$(jq -r '.images.recorder_control' "$1")" >"$output/quadlet/chalk-recorder-${role}.container"
+  done
+fi
 RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
 #!/usr/bin/env bash
@@ -577,6 +582,32 @@ if run_restore "$stable_state" ok >"${fixture_root}/tampered-runtime.log" 2>&1; 
   fail "tampered durable runtime was restored after reboot"
 fi
 grep -Fq 'active rendered runtime hashes do not match pointer' "${fixture_root}/tampered-runtime.log" || fail "durable runtime tampering was not reported"
+fi
+
+if group_enabled recording; then
+recording_state="${fixture_root}/recording-state"
+mkdir -p "$recording_state"
+make_request recording "${fixture_root}/recording-request.json"
+make_manifest recording | jq '.images.recorder_control = .images.api' >"${fixture_root}/recording-manifest.json"
+run_controller "$recording_state" "${fixture_root}/recording-request.json" "${fixture_root}/recording-manifest.json" ok >/dev/null
+jq -e '.inputs | length == 27' "${recording_state}/active-release.json" >/dev/null || fail "recording inputs were not versioned"
+grep -Fqx 'CHALK_RECORDER_FLEET_MAX_NODES=10' "${fixture_root}/run/env/recorder-capture.env" || fail "capture maximum was not pinned"
+grep -Fqx 'CHALK_RECORDER_FLEET_ROLE=render' "${fixture_root}/run/env/recorder-render.env" || fail "render role was not pinned"
+grep -Fqx 'chalk-recorder-worker-ca-key' "${fixture_root}/secret-state" || fail "issuer signing key was not registered"
+run_restore "$recording_state" ok >/dev/null
+grep -Fqx 'CHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT=production' "${fixture_root}/run/env/recorder-issuer.env" || fail "restore lost the issuer environment"
+make_request recording-disabled "${fixture_root}/recording-disabled-request.json"
+make_manifest recording-disabled >"${fixture_root}/recording-disabled-manifest.json"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+if run_controller "$recording_state" "${fixture_root}/recording-disabled-request.json" "${fixture_root}/recording-disabled-manifest.json" 'fail,ok' >/dev/null 2>&1; then
+  fail "unhealthy recorder rollback candidate was accepted"
+fi
+jq -e '.release_id == "recording"' "${recording_state}/active-release.json" >/dev/null || fail "recording stable pointer was replaced"
+for role in capture render issuer; do
+  grep -Fq "systemctl --user stop chalk-recorder-${role}.service" "${fixture_root}/commands.log" || fail "obsolete recorder role was not stopped"
+done
+grep -Fqx 'CHALK_RECORDER_FLEET_ROLE=capture' "${fixture_root}/run/env/recorder-capture.env" || fail "rollback lost recorder configuration"
 fi
 
 if group_enabled ssm-contract; then

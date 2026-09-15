@@ -59,15 +59,18 @@ export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
   if (config.maxBatch < 3 || config.maxBatch > 50) throw new ConfigError("max batch must be between 3 and 50 so reconciliation cannot starve a durable queue");
   if (config.concurrency < 3 || config.concurrency > 50) throw new ConfigError("concurrency must be between 3 and 50 so reconciliation can service every durable queue");
   if (config.timeoutReserveMs < 60_000) throw new ConfigError("timeout reserve must be at least 60 seconds");
-  if (config.cloudflare.modelSlug !== CF_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
-  if (!config.cloudflare.adapterContractVersion || !/^[A-Za-z0-9._-]+$/.test(config.cloudflare.adapterContractVersion)) {
-    throw new ConfigError("Cloudflare adapter contract version is required");
+  if (!config.deepInfra.enabled && !config.cloudflare.enabled) throw new ConfigError("at least one transcription provider must be enabled");
+  if (config.cloudflare.enabled) {
+    if (config.cloudflare.modelSlug !== CF_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
+    if (!config.cloudflare.adapterContractVersion || !/^[A-Za-z0-9._-]+$/.test(config.cloudflare.adapterContractVersion)) {
+      throw new ConfigError("Cloudflare adapter contract version is required");
+    }
+    if (!/^[a-f0-9]{32,128}$/i.test(config.cloudflare.corpusDigest)) throw new ConfigError("Cloudflare corpus digest is required");
   }
-  if (!/^[a-f0-9]{32,128}$/i.test(config.cloudflare.corpusDigest)) throw new ConfigError("Cloudflare corpus digest is required");
   if (config.deepInfra.enabled) {
     if (!config.deepInfra.token) throw new ConfigError("DeepInfra token is required when enabled");
-    if (!config.deepInfra.executionIdentityPin) throw new ConfigError("DeepInfra execution identity pin is required when enabled");
-    if (!config.deepInfra.modelVersionPin) throw new ConfigError("DeepInfra model version pin is required when enabled");
+    if (config.deepInfra.adapterContractVersion !== "deepinfra-native-whisper-turbo.v1") throw new ConfigError("DeepInfra adapter contract is not supported");
+    if (!config.deepInfra.corpusDigest || !/^[a-f0-9]{32,128}$/i.test(config.deepInfra.corpusDigest)) throw new ConfigError("DeepInfra corpus digest is required when enabled");
   }
   if (config.deepInfra.model !== DI_MODEL) throw new ConfigError("DeepInfra model is not release-qualified");
   return config;
@@ -75,6 +78,7 @@ export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
 
 export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?: DispatcherSecrets): ReleaseConfig {
   const deepInfraEnabled = boolean(env, "DEEPINFRA_ENABLED");
+  const cloudflareEnabled = boolean(env, "CLOUDFLARE_AI_ENABLED");
   if (!secrets) throw new ConfigError("provider secrets must be resolved from SSM");
   const config: ReleaseConfig = {
     environment: required(env, "CHALK_ENVIRONMENT"),
@@ -88,20 +92,30 @@ export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?
     deepInfra: {
       enabled: deepInfraEnabled,
       ...(deepInfraEnabled ? { token: requiredSecret(secrets.deepInfraToken, "DeepInfra") } : {}),
-      ...(deepInfraEnabled ? { executionIdentityPin: required(env, "DEEPINFRA_EXECUTION_IDENTITY_PIN") } : {}),
-      ...(deepInfraEnabled ? { modelVersionPin: required(env, "DEEPINFRA_MODEL_VERSION_PIN") } : {}),
+      ...(deepInfraEnabled ? { adapterContractVersion: required(env, "DEEPINFRA_ADAPTER_CONTRACT_VERSION"), corpusDigest: required(env, "DEEPINFRA_CORPUS_DIGEST") } : {}),
+      ...(deepInfraEnabled && env.DEEPINFRA_EXECUTION_IDENTITY_PIN ? { executionIdentityPin: env.DEEPINFRA_EXECUTION_IDENTITY_PIN } : {}),
+      ...(deepInfraEnabled && env.DEEPINFRA_MODEL_VERSION_PIN ? { modelVersionPin: env.DEEPINFRA_MODEL_VERSION_PIN } : {}),
       model: DI_MODEL,
     },
-    cloudflare: {
-      token: requiredSecret(secrets.cloudflareAiToken, "Cloudflare"),
-      accountId: required(env, "CLOUDFLARE_ACCOUNT_ID"),
-      modelSlug: required(env, "CLOUDFLARE_MODEL_SLUG") as ReleaseConfig["cloudflare"]["modelSlug"],
-      adapterContractVersion: required(env, "CLOUDFLARE_ADAPTER_CONTRACT_VERSION"),
-      corpusDigest: required(env, "CLOUDFLARE_CORPUS_DIGEST"),
-    },
+    cloudflare: cloudflareEnabled
+      ? {
+          enabled: true,
+          token: requiredSecret(secrets.cloudflareAiToken, "Cloudflare"),
+          accountId: required(env, "CLOUDFLARE_ACCOUNT_ID"),
+          modelSlug: cloudflareModel(env),
+          adapterContractVersion: required(env, "CLOUDFLARE_ADAPTER_CONTRACT_VERSION"),
+          corpusDigest: required(env, "CLOUDFLARE_CORPUS_DIGEST"),
+        }
+      : { enabled: false },
     provider: policyFromEnv(env),
   };
   return validateReleaseConfig(config);
+}
+
+function cloudflareModel(env: NodeJS.ProcessEnv): typeof CF_MODEL {
+  const model = required(env, "CLOUDFLARE_MODEL_SLUG");
+  if (model !== CF_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
+  return model;
 }
 
 function requiredSecret(value: string | undefined, provider: string): string {

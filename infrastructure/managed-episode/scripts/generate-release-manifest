@@ -7,6 +7,7 @@ default_cloudflared_image="docker.io/cloudflare/cloudflared@sha256:5e49861633763
 default_redis_image="docker.io/library/redis@sha256:82db05459fb850cc3fe2bfa510a054323247bbd0ecb8831272e41fe14b9ead82"
 api_image=""
 sync_image=""
+recorder_control_image=""
 api_image_set=false
 sync_image_set=false
 cloudflared_image="${default_cloudflared_image}"
@@ -41,6 +42,10 @@ while (($# > 0)); do
     --sync-image)
       sync_image="${2:-}"
       sync_image_set=true
+      shift 2
+      ;;
+    --recorder-control-image)
+      recorder_control_image="${2:-}"
       shift 2
       ;;
     --cloudflared-image)
@@ -212,6 +217,13 @@ fi
 if [[ -n "${stable_manifest}" ]]; then
   api_image="${api_image:-$(jq -er '.images.api' "${stable_manifest}")}"
   sync_image="${sync_image:-$(jq -er '.images.sync' "${stable_manifest}")}"
+  stable_recorder_control_image="$(jq -r '.images.recorder_control // empty' "${stable_manifest}")"
+  if [[ "$api_image_set" == false ]]; then
+    [[ -z "$recorder_control_image" ]] || fail "recorder control image changes require an API component release"
+    recorder_control_image="$stable_recorder_control_image"
+  elif [[ -n "$stable_recorder_control_image" && -z "$recorder_control_image" ]]; then
+    fail "an enabled recorder control runtime requires a new control image with every API release"
+  fi
   if [[ "${cloudflared_image_set}" == false ]]; then
     cloudflared_image="$(jq -er '.images.cloudflared' "${stable_manifest}")"
   fi
@@ -226,6 +238,9 @@ validate_image api "${api_image}"
 validate_image sync "${sync_image}"
 validate_image redis "${redis_image}"
 validate_image cloudflared "${cloudflared_image}"
+if [[ -n "$recorder_control_image" ]]; then
+  validate_image recorder_control "$recorder_control_image"
+fi
 
 source_tree_state=clean
 if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
@@ -308,6 +323,7 @@ jq -n \
   --arg source_tree_state "${source_tree_state}" \
   --arg api_image "${api_image}" \
   --arg sync_image "${sync_image}" \
+  --arg recorder_control_image "${recorder_control_image}" \
   --arg redis_image "${redis_image}" \
   --arg cloudflared_image "${cloudflared_image}" \
   --argjson architectures "${architectures_json}" \
@@ -324,12 +340,12 @@ jq -n \
     source_tree_state: $source_tree_state,
     architectures: $architectures,
     affected_components: $affected_components,
-    images: {
+    images: ({
       api: $api_image,
       sync: $sync_image,
       redis: $redis_image,
       cloudflared: $cloudflared_image
-    },
+    } + (if $recorder_control_image == "" then {} else {recorder_control:$recorder_control_image} end)),
     component_releases: $component_releases,
     database_compatibility: $database_compatibility,
     protocol_compatibility: $protocol_compatibility,

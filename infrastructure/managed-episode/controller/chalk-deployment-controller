@@ -10,7 +10,7 @@ readonly CONTROLLER_DIR
 DEFAULT_MANAGED_ROOT="$(cd "${CONTROLLER_DIR}/.." && pwd)"
 readonly DEFAULT_MANAGED_ROOT
 readonly REQUEST_SCHEMA_KEYS='["adopt_existing_release","aws_region","controller_version","environment","excluded_secrets","parameter_prefix","release_id","request_id","requested_at","schema_version","source_revision"]'
-readonly INPUT_IDS='["managed-migrator-database-url","api-env","sync-env","planetscale-sync-proof","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]'
+readonly INPUT_IDS='["managed-migrator-database-url","api-env","sync-env","planetscale-sync-proof","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token","recorder-capture-env","recorder-render-env","recorder-issuer-env","recorder-capture-client-cert","recorder-capture-client-key","recorder-render-client-cert","recorder-render-client-key","recorder-issuer-server-cert","recorder-issuer-server-key","recorder-issuer-controller-ca","recorder-worker-ca-cert","recorder-worker-ca-key","recorder-issuer-provider-token","recorder-api-issuer-cert","recorder-api-issuer-key","recorder-issuer-server-ca"]'
 readonly MIGRATOR_INPUT_ID='managed-migrator-database-url'
 readonly MIGRATOR_SECRET_NAME='chalk-managed-migrator-database-url'
 
@@ -280,7 +280,7 @@ validate_inventory() {
   require_regular_file "$inventory"
   jq -e --argjson expected "$INPUT_IDS" '
     type == "object" and (keys | sort) == ["$id","$schema","inputs","schema_version"] and .schema_version == 1 and
-    (.inputs | type == "array" and length == 11 and
+    (.inputs | type == "array" and length == ($expected | length) and
       (map(.id) == $expected) and
       all(.[];
         type == "object" and
@@ -316,7 +316,7 @@ validate_manifest() {
        (. as $manifest | all(.affected_components[]; . as $component | $manifest.component_releases[$component] == {release_id:$manifest.release_id,source_revision:$manifest.source_revision})))
     else true end) and
     (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
-    (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
+    (.images | type == "object" and ((keys | sort) == ["api","cloudflared","redis","sync"] or (keys | sort) == ["api","cloudflared","recorder_control","redis","sync"]) and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
     (if .schema_version == 2 then
       ((.affected_components | type == "array" and (length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
        (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
@@ -458,6 +458,45 @@ inject_runtime_identity() {
     set_env_value "${stage_root}/env/sync.env" CHALK_SYNC_SOURCE_COMMIT "$sync_source_revision"
     set_env_value "${stage_root}/env/sync.env" OTEL_RESOURCE_ATTRIBUTES "service.name=chalk-sync,service.version=${sync_release_id},deployment.environment.name=production,service.instance.id=${sync_instance_id}"
   fi
+  inject_recorder_runtime_identity
+}
+
+inject_recorder_runtime_identity() {
+  jq -e '.images | has("recorder_control")' "$manifest_path" >/dev/null || return 0
+  jq -e 'all(.[] | select(.id | startswith("recorder-")); .missing == false)' <<<"$input_records_json" >/dev/null || fail "enabled recorder control inputs cannot be excluded"
+  local role file
+  for role in capture render; do
+    file="${stage_root}/env/recorder-${role}.env"
+    require_regular_file "$file"
+    set_env_value "$file" CHALK_RECORDER_FLEET_ROLE "$role"
+    set_env_value "$file" CHALK_RECORDER_FLEET_ENVIRONMENT "$request_environment"
+    set_env_value "$file" CHALK_RECORDER_FLEET_JOURNAL_PATH /var/lib/chalk-recorder/state/journal.json
+    set_env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES 10
+    set_env_value "$file" CHALK_RECORDER_FLEET_SLOTS_PER_NODE 1
+    set_env_value "$file" CHALK_RECORDER_FLEET_GPU false
+    set_env_value "$file" CHALK_RECORDER_FLEET_CONTROLLER_CERT /run/chalk/controller.crt
+    set_env_value "$file" CHALK_RECORDER_FLEET_CONTROLLER_KEY /run/chalk/controller.key
+    set_env_value "$file" CHALK_RECORDER_FLEET_SERVER_CA /run/chalk/control-api-ca.crt
+    set_env_value "$file" CHALK_RECORDER_FLEET_CONTROL_PLANE_URL https://127.0.0.1:8443
+  done
+  file="${stage_root}/env/recorder-issuer.env"
+  require_regular_file "$file"
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT "$request_environment"
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_LISTEN_ADDR :8444
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_STATE_PATH /var/lib/chalk-recorder/state/issuer.json
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_SERVER_CERT /run/chalk/server.crt
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_SERVER_KEY /run/chalk/server.key
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_CONTROLLER_CA /run/chalk/controller-ca.crt
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_WORKER_CA_CERT /run/chalk/worker-ca.crt
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_WORKER_CA_KEY /run/chalk/worker-ca.key
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_DIGITALOCEAN_TOKEN_FILE /run/chalk/provider-token
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_CONTROL_PLANE_SERVER_CA /run/chalk/control-api-ca.crt
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_RENDER_GPU false
+  file="${stage_root}/env/api.env"
+  require_regular_file "$file"
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_CLIENT_CERT /run/chalk/recorder-issuer.crt
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_CLIENT_KEY /run/chalk/recorder-issuer.key
+  set_env_value "$file" CHALK_RECORDER_FLEET_ISSUER_SERVER_CA /run/chalk/recorder-issuer-ca.crt
 }
 
 fetch_deployment_inputs() {
@@ -465,10 +504,12 @@ fetch_deployment_inputs() {
   validate_inventory "$inventory"
   reset_staged_inputs
   local -a ids suffixes destinations kinds names
-  mapfile -t ids < <(jq -r '.inputs[].id' "$inventory")
-  mapfile -t suffixes < <(jq -r '.inputs[].suffix' "$inventory")
-  mapfile -t destinations < <(jq -r '.inputs[].destination' "$inventory")
-  mapfile -t kinds < <(jq -r '.inputs[].kind' "$inventory")
+  local selected_inputs
+  selected_inputs="$(jq --argjson enabled "$(jq 'has("recorder_control")' <<<"$(jq '.images' "$manifest_path")")" '.inputs | if $enabled then . else map(select(.id | startswith("recorder-") | not)) end' "$inventory")"
+  mapfile -t ids < <(jq -r '.[].id' <<<"$selected_inputs")
+  mapfile -t suffixes < <(jq -r '.[].suffix' <<<"$selected_inputs")
+  mapfile -t destinations < <(jq -r '.[].destination' <<<"$selected_inputs")
+  mapfile -t kinds < <(jq -r '.[].kind' <<<"$selected_inputs")
   local index
   for index in "${!ids[@]}"; do
     names[index]="${request_prefix}/${suffixes[index]}"
@@ -578,6 +619,12 @@ install_runtime_files() {
     chalk-cloudflared.container \
     chalk-redis.container \
     chalk-runtime.network \
+    chalk-recorder-capture.container \
+    chalk-recorder-render.container \
+    chalk-recorder-issuer.container \
+    chalk-recorder-capture.volume \
+    chalk-recorder-render.volume \
+    chalk-recorder-issuer.volume \
     chalk-sync.container
   remove_absent_runtime_files "${runtime_source}/systemd" "$runtime_systemd_dir" \
     chalk-runtime.target \
@@ -611,6 +658,9 @@ remove_absent_runtime_files() {
     target="${destination_directory}/${name}"
     [[ ! -e "$target" && ! -L "$target" ]] && continue
     require_regular_file "$target"
+    if [[ "$name" == chalk-recorder-*.container ]]; then
+      run_user_systemctl stop "${name%.container}.service" >/dev/null 2>"${stage_root}/stop-obsolete-recorder.log" || fail "obsolete recorder control process could not be stopped"
+    fi
     rm -- "$target" || fail "obsolete managed runtime file could not be removed: ${name}"
   done
 }
@@ -753,6 +803,8 @@ reconcile_secrets() {
       provider-bridge-sync-client-key) secret_name=chalk-sync-provider-client-key ;;
       provider-bridge-api-server-ca) secret_name=chalk-sync-provider-server-ca ;;
       cloudflare-tunnel-token) secret_name=chalk-cloudflare-tunnel-token ;;
+      recorder-*-env) continue ;;
+      recorder-*) secret_name="chalk-$id" ;;
       *) continue ;;
     esac
     source="${stage_root}/${destination}"
@@ -804,7 +856,7 @@ pull_images() {
     run_user_podman pull "$image" >/dev/null 2>"${stage_root}/podman-pull-error.log" || fail "digest-addressed image pull failed"
     image_architecture="$(run_user_podman image inspect --format '{{.Architecture}}' "$image" 2>"${stage_root}/podman-inspect-error.log")" || fail "pulled image architecture inspection failed"
     [[ "$image_architecture" == "$host_architecture" ]] || fail "pulled image architecture does not match the host"
-  done < <(jq -r '.images | .api, .sync, .redis, .cloudflared' "$manifest_path")
+  done < <(jq -r '.images[]' "$manifest_path")
 }
 
 authenticate_ecr_registries() {
@@ -824,12 +876,17 @@ authenticate_ecr_registries() {
       fail "rootless ECR authentication failed"
     fi
     authenticated_registries+="${registry}"$'\n'
-  done < <(jq -r '.images | .api, .sync, .redis, .cloudflared' "$manifest_path")
+  done < <(jq -r '.images[]' "$manifest_path")
 }
 
 stop_runtime() {
   local unit
   local failed=false
+  for unit in chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-issuer.service; do
+    if [[ -f "${runtime_quadlet_dir}/${unit%.service}.container" ]] && ! run_user_systemctl stop "$unit" >/dev/null 2>"${stage_root}/stop-${unit}.log"; then
+      failed=true
+    fi
+  done
   for unit in chalk-api-migrate.service chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
     if ! run_user_systemctl stop "$unit" >/dev/null 2>"${stage_root}/stop-${unit}.log"; then
       failed=true
@@ -1118,7 +1175,7 @@ load_active_pointer() {
     (
       .excluded_secrets as $excluded |
       .parameter_prefix as $prefix |
-      (.inputs | type == "array" and ((length == 11 and (map(.id) == $allowed)) or (length == 10 and (map(.id) == ($allowed - ["managed-migrator-database-url"])))) and all(.[];
+      (.inputs | type == "array" and (map(.id) as $ids | $ids == $allowed or $ids == ($allowed | map(select(startswith("recorder-") | not))) or $ids == ($allowed | map(select(startswith("recorder-") | not)) - ["managed-migrator-database-url"])) and all(.[];
         type == "object" and
         (keys | sort) == ["destination","id","kind","missing","name","suffix","version"] and
         (.name == ($prefix + "/" + .suffix)) and
@@ -1147,6 +1204,7 @@ load_active_pointer() {
 
 restore_inputs_from_pointer() {
   local pointer_file="$1"
+  request_environment="$(jq -er '.environment' "$pointer_file")"
   local pointer_region
   pointer_region="$(jq -er '.aws_region' "$pointer_file")"
   excluded_json="$(jq -cer '.excluded_secrets' "$pointer_file")"

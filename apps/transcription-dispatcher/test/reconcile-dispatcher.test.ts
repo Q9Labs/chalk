@@ -16,6 +16,7 @@ const config: ReleaseConfig = {
   privacyGateAccepted: true,
   deepInfra: { enabled: false, model: "openai/whisper-large-v3-turbo" },
   cloudflare: {
+    enabled: true,
     token: "test-token",
     accountId: "test-account",
     modelSlug: "@cf/openai/whisper-large-v3-turbo",
@@ -62,27 +63,13 @@ describe("scheduled reconciliation", () => {
       fetch: controlFetch,
     };
 
-    const result = await runDispatcher(
-      { source: "eventbridge.scheduler", kind: "transcription-reconcile" },
-      { getRemainingTimeInMillis: () => 30_000 },
-      dependencies,
-    );
+    const result = await runDispatcher({ source: "eventbridge.scheduler", kind: "transcription-reconcile" }, { getRemainingTimeInMillis: () => 30_000 }, dependencies);
 
     expect(result).toEqual({ claimed: 0, completed: 0, failed: 0 });
-    expect(paths.sort()).toEqual([
-      "/internal/v1/transcription/cleanup/claim",
-      "/internal/v1/transcription/finalize/claim",
-      "/internal/v1/transcription/jobs/claim",
-    ]);
+    expect(paths.sort()).toEqual(["/internal/v1/transcription/cleanup/claim", "/internal/v1/transcription/finalize/claim", "/internal/v1/transcription/jobs/claim"]);
 
     paths.length = 0;
-    await expect(
-      runDispatcher(
-        { source: "wake", journeyId: "" },
-        { getRemainingTimeInMillis: () => 30_000 },
-        dependencies,
-      ),
-    ).resolves.toEqual({ claimed: 0, completed: 0, failed: 0 });
+    await expect(runDispatcher({ source: "wake", journeyId: "" }, { getRemainingTimeInMillis: () => 30_000 }, dependencies)).resolves.toEqual({ claimed: 0, completed: 0, failed: 0 });
     expect(paths).toEqual(["/internal/v1/transcription/jobs/claim"]);
   });
 });

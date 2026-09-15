@@ -2052,7 +2052,7 @@ func (s *captureTestStorage) Commit(_ context.Context, input CaptureBundleCommit
 	return nil
 }
 
-func captureTestID(t *testing.T, value string) utilities.ID {
+func captureTestID(t testing.TB, value string) utilities.ID {
 	t.Helper()
 	id, err := utilities.ParseID(value)
 	if err != nil {
@@ -2147,6 +2147,29 @@ var _ CaptureMediaTrack = (*captureTestTrack)(nil)
 var _ CaptureKeyPort = (*captureTestStorage)(nil)
 var _ CaptureObjectPort = (*captureTestStorage)(nil)
 var _ CaptureBundleSink = (*captureTestStorage)(nil)
+
+func TestCaptureBundleWriterBoundsRotationWithPersistentTrackClockSkew(t *testing.T) {
+	origin := time.UnixMilli(1000).UTC()
+	writer, storage := newCaptureTestWriter(t, origin)
+	audio := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "audio", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
+	video := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "video", OwnerReference: "owner", Kind: captureplane.TrackKindVideo, RequestedLayer: captureplane.TrackLayerAuto}, MID: "1"}, codec: "vp8"}
+	activateCaptureTestTrack(writer, audio, origin, 2)
+	activateCaptureTestTrack(writer, video, origin, 2)
+	for index, timestamp := range []uint32{0, 3_000_000} {
+		packet := &rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(index), Timestamp: timestamp}, Payload: []byte{1}}
+		if err := writer.addPacket(context.Background(), audio, packet, origin.Add(time.Duration(index)*time.Second)); err != nil {
+			t.Fatalf("add leading audio packet: %v", err)
+		}
+	}
+	reserves, uploads := storage.reserves, storage.uploads
+	err := writer.addPacket(context.Background(), video, &rtp.Packet{Payload: []byte{1}}, origin.Add(time.Second))
+	if !errors.Is(err, recordingbundle.ErrDurationLimit) {
+		t.Fatalf("persistently skewed packet error = %v, want duration limit", err)
+	}
+	if storage.reserves-reserves != 1 || storage.uploads-uploads != 1 {
+		t.Fatalf("unbounded rotation: reserves %d -> %d, uploads %d -> %d", reserves, storage.reserves, uploads, storage.uploads)
+	}
+}
 
 func TestCaptureBundleWriterRebasesSnapshotsAfterDelayedStartAndRotation(t *testing.T) {
 	origin := time.UnixMilli(1000).UTC()

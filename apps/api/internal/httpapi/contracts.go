@@ -5,7 +5,8 @@ import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
 type APIAuth string
 
 const (
-	APIAuthSessionOrBearer        APIAuth = "session_or_bearer"
+	APIAuthCookieOrBearer         APIAuth = "session_or_bearer"
+	APIAuthSessionOrBearer                = APIAuthCookieOrBearer
 	APIAuthParticipantMedia       APIAuth = "participant_media"
 	APIAuthParticipantSync        APIAuth = "participant_sync"
 	APIAuthParticipantDiagnostics APIAuth = "participant_diagnostics"
@@ -70,6 +71,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, userEndpoints(nil)...)
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
 	endpoints = append(endpoints, spaceEndpoints(nil, nil)...)
+	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
 	endpoints = append(endpoints, apiKeyEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	// Account-bound Dashboard Space routes are mounted when the concrete

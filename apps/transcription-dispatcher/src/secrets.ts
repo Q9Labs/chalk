@@ -14,36 +14,36 @@ export interface SsmParameterClient {
 
 export interface DispatcherSecrets {
   deepInfraToken?: string;
-  cloudflareAiToken: string;
+  cloudflareAiToken?: string;
   workloadAuth: string;
 }
 
 export interface SecretParameterNames {
   deepInfraToken?: string;
-  cloudflareAiToken: string;
+  cloudflareAiToken?: string;
   workloadAuth: string;
 }
 
 /**
- * Reads exactly the three environment-scoped SSM parameters declared by IaC.
+ * Reads only the enabled providers' environment-scoped SSM parameters and the workload key.
  * Values are returned to the caller for process-memory use and are never logged,
  * serialized, or retained by this loader.
  */
 export async function loadDispatcherSecrets(client: SsmParameterClient, names: SecretParameterNames): Promise<DispatcherSecrets> {
-  const requested = [names.cloudflareAiToken, names.workloadAuth, ...(names.deepInfraToken ? [names.deepInfraToken] : [])];
+  const requested = [names.workloadAuth, ...(names.cloudflareAiToken ? [names.cloudflareAiToken] : []), ...(names.deepInfraToken ? [names.deepInfraToken] : [])];
   if (requested.some((name) => !validParameterName(name))) throw new ConfigError("invalid SSM parameter ARN/name");
   if (new Set(requested).size !== requested.length) throw new ConfigError("SSM parameter names must be distinct");
   const response = await client.send({ input: { Names: requested, WithDecryption: true } });
   if (response.InvalidParameters?.length) throw new ConfigError("required transcription SSM parameter is unavailable");
   const values = new Map((response.Parameters ?? []).flatMap((parameter) => (parameter.Name && parameter.Value ? [[parameter.Name, parameter.Value] as const] : [])));
   if ([...values.keys()].some((name) => !requested.includes(name))) throw new ConfigError("SSM returned an unexpected parameter");
-  const cloudflareAiToken = values.get(names.cloudflareAiToken);
+  const cloudflareAiToken = names.cloudflareAiToken ? values.get(names.cloudflareAiToken) : undefined;
   const workloadAuth = values.get(names.workloadAuth);
-  if (!cloudflareAiToken || !workloadAuth) throw new ConfigError("required transcription secret is unavailable");
+  if (!workloadAuth || (names.cloudflareAiToken && !cloudflareAiToken)) throw new ConfigError("required transcription secret is unavailable");
   const deepInfraToken = names.deepInfraToken ? values.get(names.deepInfraToken) : undefined;
   if (names.deepInfraToken && !deepInfraToken) throw new ConfigError("required DeepInfra secret is unavailable");
   return {
-    cloudflareAiToken,
+    ...(cloudflareAiToken === undefined ? {} : { cloudflareAiToken }),
     workloadAuth,
     ...(deepInfraToken === undefined ? {} : { deepInfraToken }),
   };

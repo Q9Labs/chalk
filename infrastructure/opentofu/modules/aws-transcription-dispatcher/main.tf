@@ -1,9 +1,13 @@
 locals {
-  ssm_parameter_arns = [
-    var.deepinfra_token_parameter_arn,
-    var.cloudflare_token_parameter_arn,
-    var.api_workload_auth_parameter_arn,
-  ]
+  ssm_parameter_arns = concat(
+    [var.api_workload_auth_parameter_arn],
+    var.deepinfra_enabled ? [var.deepinfra_token_parameter_arn] : [],
+    var.cloudflare_enabled ? [var.cloudflare_token_parameter_arn] : [],
+  )
+  egress_allowlist = toset([
+    for destination in var.vpc_egress_allowlist : destination
+    if(destination != "api.deepinfra.com" || var.deepinfra_enabled) && (destination != "api.cloudflare.com" || var.cloudflare_enabled)
+  ])
 
   base_environment = {
     CHALK_ENVIRONMENT                       = var.environment_name
@@ -17,6 +21,9 @@ locals {
     TRANSCRIPTION_TIMEOUT_RESERVE_MS        = tostring(var.completion_reserve_seconds * 1000)
     TRANSCRIPTION_PRIVACY_GATE_ACCEPTED     = tostring(var.privacy_gate_accepted)
     DEEPINFRA_ENABLED                       = tostring(var.deepinfra_enabled)
+    DEEPINFRA_ADAPTER_CONTRACT_VERSION      = var.deepinfra_adapter_contract_version
+    DEEPINFRA_CORPUS_DIGEST                 = var.deepinfra_corpus_digest
+    CLOUDFLARE_AI_ENABLED                   = tostring(var.cloudflare_enabled)
     DEEPINFRA_EXECUTION_IDENTITY_PIN        = var.deepinfra_execution_identity_pin
     DEEPINFRA_MODEL_VERSION_PIN             = var.deepinfra_model_version_pin
     CLOUDFLARE_ACCOUNT_ID                   = var.cloudflare_account_id
@@ -42,7 +49,7 @@ locals {
     DEEPINFRA_TOKEN_PARAMETER_ARN           = var.deepinfra_token_parameter_arn
     CLOUDFLARE_AI_TOKEN_PARAMETER_ARN       = var.cloudflare_token_parameter_arn
     CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN = var.api_workload_auth_parameter_arn
-    CHALK_EGRESS_ALLOWLIST                  = join(",", sort(tolist(var.vpc_egress_allowlist)))
+    CHALK_EGRESS_ALLOWLIST                  = join(",", sort(tolist(local.egress_allowlist)))
   }
 
 }
@@ -189,8 +196,18 @@ resource "aws_lambda_function" "dispatcher" {
     }
 
     precondition {
-      condition     = !var.deepinfra_enabled || (length(var.deepinfra_execution_identity_pin) > 0 && length(var.deepinfra_model_version_pin) > 0)
-      error_message = "DeepInfra execution identity and model version pins are required when the primary provider is enabled."
+      condition     = !var.deepinfra_enabled || (length(var.deepinfra_token_parameter_arn) > 0 && length(var.deepinfra_corpus_digest) > 0 && contains(local.egress_allowlist, "api.deepinfra.com"))
+      error_message = "DeepInfra requires its own credential, conformance corpus digest, and explicit egress destination."
+    }
+
+    precondition {
+      condition     = !var.cloudflare_enabled || (length(var.cloudflare_token_parameter_arn) > 0 && length(var.cloudflare_account_id) > 0 && length(var.cloudflare_adapter_contract_version) > 0 && length(var.cloudflare_corpus_digest) > 0 && contains(local.egress_allowlist, "api.cloudflare.com"))
+      error_message = "An enabled Cloudflare adapter requires its own credentials, conformance evidence, and egress destination."
+    }
+
+    precondition {
+      condition     = var.deepinfra_enabled || var.cloudflare_enabled
+      error_message = "Select at least one qualified transcription provider explicitly."
     }
 
     precondition {

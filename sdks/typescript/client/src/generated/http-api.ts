@@ -1348,6 +1348,26 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.post("cancelSpaceRecordingPreparation", "/v1/tenants/:tenant_id/spaces/:space_id/recording-preparation/cancel", {
+      params: S.CancelSpaceRecordingPreparationPathParamsSchema,
+      payload: S.CancelSpaceRecordingPreparationRequestBodySchema,
+      success: S.CancelSpaceRecordingPreparationResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RecordingPreparationInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RecordingPreparationNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RecordingPreparationConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createPublicSpace", "/v1/public/spaces", {
       headers: S.CreatePublicSpaceRequestHeadersSchema,
       payload: S.CreatePublicSpaceRequestBodySchema,
@@ -1465,6 +1485,22 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getSpaceRecordingPreparation", "/v1/tenants/:tenant_id/spaces/:space_id/recording-preparation", {
+      params: S.GetSpaceRecordingPreparationPathParamsSchema,
+      success: S.GetSpaceRecordingPreparationResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RecordingPreparationInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RecordingPreparationNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("joinDashboardSpaceSelf", "/v1/tenants/:tenant_id/spaces/by-slug/:space_slug/participants/self", {
       params: S.JoinDashboardSpaceSelfPathParamsSchema,
       headers: S.JoinDashboardSpaceSelfRequestHeadersSchema,
@@ -1566,6 +1602,27 @@ const spacesGroup = HttpApiGroup.make("spaces")
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.patch("prepareSpaceRecording", "/v1/tenants/:tenant_id/spaces/:space_id/recording-preparation", {
+      params: S.PrepareSpaceRecordingPathParamsSchema,
+      payload: S.PrepareSpaceRecordingRequestBodySchema,
+      success: S.PrepareSpaceRecordingResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RecordingPreparationInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RecordingPreparationPolicyDeniedErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RecordingPreparationConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],

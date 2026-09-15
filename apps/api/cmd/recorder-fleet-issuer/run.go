@@ -13,12 +13,18 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/recordercontrollease"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	issuer "github.com/q9labs/chalk/apps/api/internal/recorderfleetissuer"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 func run(ctx context.Context, config commandConfig, logger *slog.Logger) error {
+	lease, err := recordercontrollease.Acquire(config.StatePath)
+	if err != nil {
+		return err
+	}
+	defer lease.Close()
 	serverTLS, err := loadServerTLS(config)
 	if err != nil {
 		return err

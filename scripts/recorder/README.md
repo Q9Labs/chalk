@@ -1,5 +1,34 @@
 # Recorder qualification tools
 
+## Cost-first capture resource probe
+
+`bash scripts/recorder/qualify-capture-local.sh` compiles the real capture
+bundler test binary, then uses the existing measurement tool for a compressed
+one-hour synthetic RTP stream: three Participants, six tracks, 4 Mbps total,
+one Go CPU and a 512 MiB Go memory target. It exercises bundle rotation,
+encryption and upload handoff without retaining every object in the fixture.
+This is a throughput/resource probe, not real-time SFU, codec, cloud-SKU or
+render qualification. The Go memory target is not an OS-enforced memory cap.
+
+The September 15 local Apple M4 run passed: 267.533 seconds elapsed,
+239,599,616 bytes peak RSS (about 229 MiB), 233.32 user CPU seconds and 9.43
+system CPU seconds. It emitted 361 bundles. These measurements include the
+test process, bundling, encryption and a discarding upload sink, not an SFU
+connection or actual object-storage upload. They do not establish shared-CPU
+cloud headroom or post-processing cost.
+
+The [cost-first profile](../../infrastructure/recorder/profiles/cost-first.json)
+orders 1 GiB then 2 GiB shared-CPU candidates, with `c-2` as the baseline.
+Do not enable a candidate from local evidence. An authorized cloud comparison
+must use the exact sealed image, check its minimum disk requirement, run only
+the capture daemon, and record RSS/CPU/steal, ready latency, upload latency and
+bounded backlog for a paced hour. Include camera/screen-share changes,
+reconnection, slow/retried uploads and independently verified artifacts.
+Use the existing source fingerprint, command measurement and media analyzers
+below; keep raw artifacts private. Measure ten-way `c-8` render completion
+separately against the one-hour objective, without shortening the eight-hour
+recovery bound.
+
 Recorder evidence must say which boundary it exercised. Use these labels in
 summaries:
 

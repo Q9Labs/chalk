@@ -24,6 +24,7 @@ export interface ProviderResult {
   text: string;
   language?: string;
   durationMs?: number;
+  providerReportedCostUsd?: number;
   segments: ProviderSegment[];
   words?: ProviderWord[];
   provider: "deepinfra" | "cloudflare";
@@ -33,6 +34,7 @@ export interface ProviderResult {
   providerIdentity?: {
     requestId?: string;
     model?: string;
+    modelVersion?: string;
   };
   quality?: {
     meanConfidence?: number;
@@ -203,10 +205,13 @@ export interface NormalizedTranscriptDocument {
   provider: TranscriptProviderSummary;
   model: string;
   versionContract: string;
+  providerIdentity?: ProviderResult["providerIdentity"];
+  executionIdentity?: string;
   attempt: number;
   measuredAudioMs: number;
   providerObservedDurationMs?: number;
   billedAudioSeconds?: number;
+  providerReportedCostUsd?: number;
   quality?: ProviderResult["quality"];
 }
 
@@ -239,15 +244,20 @@ export interface ReleaseConfig {
     token?: string;
     executionIdentityPin?: string;
     modelVersionPin?: string;
+    adapterContractVersion?: string;
+    corpusDigest?: string;
     model: "openai/whisper-large-v3-turbo";
   };
-  cloudflare: {
-    token: string;
-    accountId: string;
-    modelSlug: "@cf/openai/whisper-large-v3-turbo";
-    adapterContractVersion: string;
-    corpusDigest: string;
-  };
+  cloudflare:
+    | { enabled: false }
+    | {
+        enabled: true;
+        token: string;
+        accountId: string;
+        modelSlug: "@cf/openai/whisper-large-v3-turbo";
+        adapterContractVersion: string;
+        corpusDigest: string;
+      };
   provider: ProviderPolicy;
 }
 

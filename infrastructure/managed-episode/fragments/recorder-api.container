@@ -1,0 +1,5 @@
+PublishPort=127.0.0.1:18080:8080
+PublishPort=8443:8443
+Secret=chalk-recorder-api-issuer-cert,type=mount,target=/run/chalk/recorder-issuer.crt,uid=65532,gid=65532,mode=0400
+Secret=chalk-recorder-api-issuer-key,type=mount,target=/run/chalk/recorder-issuer.key,uid=65532,gid=65532,mode=0400
+Secret=chalk-recorder-issuer-server-ca,type=mount,target=/run/chalk/recorder-issuer-ca.crt,uid=65532,gid=65532,mode=0400
