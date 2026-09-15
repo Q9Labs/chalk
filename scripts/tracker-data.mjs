@@ -220,6 +220,9 @@ const headingSlug = (heading) =>
 const assertReferenceParts = (reference, extra) => {
   if (extra.length) fail(reference, "expected at most one fragment separator");
 };
+const assertReferenceScheme = (reference) => {
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(reference)) fail(reference, "URI schemes are not allowed");
+};
 const assertReferencePath = (reference, file) => {
   if (path.isAbsolute(file)) fail(reference, "expected a repository-relative path");
   if (file.split(/[\\/]/).includes("..")) fail(reference, "expected a repository-relative path");
@@ -227,6 +230,7 @@ const assertReferencePath = (reference, file) => {
 };
 const assertReferenceFile = (reference, file) => {
   if (!file) fail(reference, "expected a repository-relative path");
+  assertReferenceScheme(reference);
   assertReferencePath(reference, file);
 };
 const parseReference = (reference) => {

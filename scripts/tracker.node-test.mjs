@@ -295,6 +295,12 @@ it("rejects extra fragment separators instead of validating a different anchor",
   await assert.rejects(checkReference(root, "theory.md#main#extra"), /one fragment/);
 });
 
+it("rejects executable URI schemes even when the reference names a real file", async () => {
+  const root = await roots();
+  await writeFile(path.join(root, "javascript:alert(1)"), "Not a safe link target");
+  await assert.rejects(checkReference(root, "javascript:alert(1)"), /URI schemes/);
+});
+
 it("rejects outside-repository symlinks even for allowlisted files", async (context) => {
   const root = await roots();
   const outside = await roots();
