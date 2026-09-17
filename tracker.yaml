@@ -349,7 +349,8 @@ outcomes:
     area: recording
     state: in_progress
     summary: >-
-      The encrypted capture, render and download pipeline is preserved. The production-placement
+      The real capture, render, download, transcription and cleanup pipeline was qualified on
+      2026-09-10 and is preserved. The production-placement
       delta now implements a shared ARM64 control image with three rootless services, durable
       state/restore/rollback, zero-spare ten-capture/ten-render capacity and bounded fast-follow
       startup. It has not been deployed or qualified in a live cloud environment.
@@ -371,8 +372,9 @@ outcomes:
         Prove host headroom, TLS peer identity, clock alignment, restart recovery and load behavior
         in the approved live environment.
       - >-
-        Measure real ten-worker provider startup and overlap, run a paced one-hour cloud candidate
-        comparison, and measure ten-way render throughput and actual cost.
+        Measure ten-worker startup, overlap, render throughput and cost before claiming measured
+        ten-way performance. Qualify a smaller capture candidate before enabling it; neither
+        experiment repeats or invalidates the unchanged c-2 baseline qualification.
     uncertainty: >-
       The accelerated local probe used synthetic media and a discarding sink; it is not cloud,
       provider, live-SFU or production qualification.
@@ -479,8 +481,8 @@ outcomes:
     summary: >-
       Direct DeepInfra native Whisper large-v3-turbo is implemented with explicit provider choice;
       the optional Cloudflare fallback is disabled in the cost-first profile. Contract tests made
-      no provider request, so a final authorized managed recording-to-Transcript outcome remains
-      unproven.
+      no provider request, so the direct DeepInfra boundary remains unqualified. The prior real
+      Cloudflare-backed recording-to-Transcript and cleanup proof remains valid for that release.
     theory: theory.md#what-chalk-is
     code:
       - apps/transcription-dispatcher/src/providers.ts
@@ -499,8 +501,8 @@ outcomes:
         posture, then trace an authorized managed recording through the real provider to a final
         Transcript visible to the correct Participant/Tenant.
       - >-
-        Exercise provider timeout/failure, retry, cancellation, duplicate finalization and cleanup
-        of intermediate artifacts.
+        Reuse existing lifecycle evidence and recheck provider timeout/failure, retry,
+        cancellation, finalization and cleanup only where the direct adapter changes the boundary.
     uncertainty: >-
       Contract tests exercised the direct adapter without paid or live provider traffic; no current
       managed-provider final-Transcript observation was produced.

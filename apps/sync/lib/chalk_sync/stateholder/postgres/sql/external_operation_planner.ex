@@ -177,4 +177,19 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner do
     returning recording_id
     """
   end
+
+  def validate_recording_capture_deadline do
+    """
+    select pipelines.recording_id
+    from recording_pipelines pipelines
+    join recording_reservations reservations on reservations.id = pipelines.reservation_id
+    where pipelines.tenant_id = $1 and reservations.tenant_id = $1
+      and reservations.space_id = $2 and reservations.episode_id = $3
+      and pipelines.recording_id = $4 and reservations.recording_id = $4
+      and pipelines.capture_epoch = $5
+      and floor(extract(epoch from reservations.ends_at) * 1000)::bigint = $6
+      and reservations.ends_at <= clock_timestamp()
+    for share of pipelines, reservations
+    """
+  end
 end

@@ -167,7 +167,7 @@ describe("recording transcription source contract", () => {
     expect(() => validateSpeakerTurnManifest(keyMismatch, assignment)).toThrow(/does not match/);
   });
 
-  it("maps provider time through source offsets and retains overlap without diarization", () => {
+  it("maps cropped audio time onto the recording and retains overlap without diarization", () => {
     const manifest = validateSpeakerTurnManifest(sourceManifest(), assignment);
     const provider: ProviderResult = {
       text: "hello",
@@ -190,7 +190,34 @@ describe("recording transcription source contract", () => {
       sourceIdentity: assignment.chunk.sourceIdentity,
       sourceTrackClass: assignment.chunk.sourceTrackClass,
     });
-    expect(document.cues).toEqual([expect.objectContaining({ startMs: 10_500, endMs: 11_500, displayNameSnapshot: "Speaker One", overlap: true, identity: assignment.chunk.sourceIdentity })]);
+    expect(document.cues).toEqual([expect.objectContaining({ startMs: 12_500, endMs: 13_500, displayNameSnapshot: "Speaker One", overlap: true, identity: assignment.chunk.sourceIdentity })]);
+  });
+
+  it.each([false, true])("retains cues from a later cropped chunk (word timings: %s)", (withWords) => {
+    const manifest = validateSpeakerTurnManifest(sourceManifest(), assignment);
+    const provider: ProviderResult = {
+      text: "later speech",
+      segments: [{ startSeconds: 1, endSeconds: 2, text: "later speech" }],
+      ...(withWords ? { words: [{ startSeconds: 1.1, endSeconds: 1.8, word: "later speech" }] } : {}),
+      provider: "deepinfra",
+      model: "openai/whisper-large-v3-turbo",
+      versionContract: "model-pin-1",
+    };
+    const document = normalizeTranscriptChunk({
+      jobId: assignment.jobId,
+      episodeId: assignment.episodeId,
+      episodeStartMs: 310_000,
+      episodeEndMs: 320_000,
+      sourceStartMs: 300_000,
+      sourceEndMs: 310_000,
+      manifest: { ...manifest, turns: manifest.turns.map((turn) => ({ ...turn, startMs: turn.startMs + 300_000, endMs: turn.endMs + 300_000 })) },
+      provider,
+      attempt: assignment.attempt,
+      measuredAudioMs: 10_000,
+      sourceIdentity: assignment.chunk.sourceIdentity,
+      sourceTrackClass: assignment.chunk.sourceTrackClass,
+    });
+    expect(document.cues).toEqual([expect.objectContaining({ startMs: withWords ? 311_100 : 311_000, endMs: withWords ? 311_800 : 312_000, text: "later speech", identity: assignment.chunk.sourceIdentity })]);
   });
 });
 

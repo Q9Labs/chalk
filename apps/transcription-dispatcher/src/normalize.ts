@@ -99,7 +99,7 @@ function identityEquals(left: ManifestIdentity | undefined, right: ManifestIdent
 }
 
 function audioTimeToRecording(input: Parameters<typeof normalizeTranscriptChunk>[0], seconds: number): number {
-  return input.episodeStartMs + Math.round(seconds * 1_000) - input.sourceStartMs;
+  return input.episodeStartMs + Math.round(seconds * 1_000);
 }
 
 function overlaps(left: SpeakerTurn, right: SpeakerTurn): boolean {

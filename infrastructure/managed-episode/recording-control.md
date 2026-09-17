@@ -66,14 +66,22 @@ bash scripts/recorder/qualify-capture-local.sh
 
 The deployment tests use fakes. Runtime watchdog checks process liveness and
 existing API/Sync readiness; this is not end-to-end recording evidence.
-Before production approval, separately qualify direct TLS peer authorization,
-certificate rejection, journal/issuer restart continuity, ordinary API/Sync
-health under control load, worker/API/database clock alignment at capture
-readiness, 0→10 readiness, a paced one-hour three-Participant
-capture, and ten-way post-processing. Include camera/screen-share changes,
-reconnects, slow/retried uploads, RSS/CPU/steal/backlog, and verified artifacts.
-Retain the eight-hour recovery safety bound; the one-hour processing objective
-is measured workload behavior, not a shortened recovery TTL.
+Before production approval, qualify the changed control-placement boundaries:
+direct TLS peer authorization, certificate rejection, journal/issuer restart
+continuity, ordinary API/Sync health under control load, and
+worker/API/database clock alignment at capture readiness. Reuse the real
+capture/render/download/transcription/cleanup qualification recorded in
+`docs/recording-transcription.md`; these changes do not erase that evidence.
+
+Separately measure 0→10 readiness and ten-way post-processing before claiming
+measured ten-worker capacity or one-hour throughput. The configured maximum is
+a guardrail, not measured capacity. A paced one-hour three-Participant capture
+comparison is required before enabling a smaller capture candidate, not to
+requalify the unchanged `c-2` baseline. Such comparisons should include
+camera/screen-share changes, reconnects, slow/retried uploads,
+RSS/CPU/steal/backlog, and verified artifacts. Retain the eight-hour recovery
+safety bound; the one-hour processing objective is measured workload behavior,
+not a shortened recovery TTL.
 
 The smaller capture candidates and direct DeepInfra adapter require their own
 approved qualification. Production deployment/enablement, ingress changes,

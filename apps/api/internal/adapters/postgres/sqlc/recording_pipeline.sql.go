@@ -1297,7 +1297,7 @@ select authority.job_id, authority.attempt_count, authority.fencing_generation,
     jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at,
     jobs.attempt_limit, jobs.error_code, jobs.error_detail, jobs.terminal_at,
     jobs.updated_at, jobs.created_at, reservations.space_id,
-    reservations.policy_snapshot_version, reservations.ends_at
+    reservations.policy_snapshot_version, reservations.ends_at, pipelines.capture_completed_at
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -1336,6 +1336,7 @@ type GetRecordingJobAttemptAuthorityByClaimRequestRow struct {
 	SpaceID               pgtype.UUID        `json:"space_id"`
 	PolicySnapshotVersion string             `json:"policy_snapshot_version"`
 	EndsAt                pgtype.Timestamptz `json:"ends_at"`
+	CaptureCompletedAt    pgtype.Timestamptz `json:"capture_completed_at"`
 }
 
 func (q *Queries) GetRecordingJobAttemptAuthorityByClaimRequest(ctx context.Context, claimRequestID pgtype.UUID) (GetRecordingJobAttemptAuthorityByClaimRequestRow, error) {
@@ -1371,6 +1372,7 @@ func (q *Queries) GetRecordingJobAttemptAuthorityByClaimRequest(ctx context.Cont
 		&i.SpaceID,
 		&i.PolicySnapshotVersion,
 		&i.EndsAt,
+		&i.CaptureCompletedAt,
 	)
 	return i, err
 }

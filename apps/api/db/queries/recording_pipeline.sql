@@ -357,7 +357,7 @@ select authority.job_id, authority.attempt_count, authority.fencing_generation,
     jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at,
     jobs.attempt_limit, jobs.error_code, jobs.error_detail, jobs.terminal_at,
     jobs.updated_at, jobs.created_at, reservations.space_id,
-    reservations.policy_snapshot_version, reservations.ends_at
+    reservations.policy_snapshot_version, reservations.ends_at, pipelines.capture_completed_at
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id

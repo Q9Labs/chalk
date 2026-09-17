@@ -139,6 +139,8 @@ select
     jobs.lease_token,
     jobs.lease_expires_at,
     pipelines.capture_ready_at,
+    reservations.ends_at as capture_deadline,
+    (reservations.ends_at <= clock_timestamp())::boolean as capture_deadline_reached,
     sync_recordings.status as recording_status,
     sync_recordings.start_external_operation_id,
     sync_recordings.stop_external_operation_id,
@@ -238,6 +240,8 @@ type LockRecordingCaptureLifecycleAuthorityRow struct {
 	LeaseToken               pgtype.Text        `json:"lease_token"`
 	LeaseExpiresAt           pgtype.Timestamptz `json:"lease_expires_at"`
 	CaptureReadyAt           pgtype.Timestamptz `json:"capture_ready_at"`
+	CaptureDeadline          pgtype.Timestamptz `json:"capture_deadline"`
+	CaptureDeadlineReached   bool               `json:"capture_deadline_reached"`
 	RecordingStatus          string             `json:"recording_status"`
 	StartExternalOperationID pgtype.UUID        `json:"start_external_operation_id"`
 	StopExternalOperationID  pgtype.UUID        `json:"stop_external_operation_id"`
@@ -275,6 +279,8 @@ func (q *Queries) LockRecordingCaptureLifecycleAuthority(ctx context.Context, ar
 		&i.LeaseToken,
 		&i.LeaseExpiresAt,
 		&i.CaptureReadyAt,
+		&i.CaptureDeadline,
+		&i.CaptureDeadlineReached,
 		&i.RecordingStatus,
 		&i.StartExternalOperationID,
 		&i.StopExternalOperationID,

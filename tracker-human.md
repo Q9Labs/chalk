@@ -56,9 +56,10 @@ Details, code references and evidence stay in tracker.yaml.
                  it is not cloud, provider, live-SFU or production qualification.
     **Left**: Prove host headroom, TLS peer identity, clock alignment, restart recovery
               and load behavior in the approved live environment.
-    **Left**: Measure real ten-worker provider startup and overlap, run a paced one-hour
-              cloud candidate comparison, and measure ten-way render throughput and
-              actual cost.
+    **Left**: Measure ten-worker startup, overlap, render throughput and cost before
+              claiming measured ten-way performance. Qualify a smaller capture candidate
+              before enabling it; neither experiment repeats or invalidates the
+              unchanged c-2 baseline qualification.
 
 - [Partly working] Adopt and smoke-test implemented scheduled recording preparation
     **Size**: Unknown — Live adoption and provider-readiness evidence are still
@@ -83,8 +84,9 @@ Details, code references and evidence stay in tracker.yaml.
               privacy/quota posture, then trace an authorized managed recording through
               the real provider to a final Transcript visible to the correct
               Participant/Tenant.
-    **Left**: Exercise provider timeout/failure, retry, cancellation, duplicate
-              finalization and cleanup of intermediate artifacts.
+    **Left**: Reuse existing lifecycle evidence and recheck provider timeout/failure,
+              retry, cancellation, finalization and cleanup only where the direct
+              adapter changes the boundary.
 
 ### Sdk And Embedding
 

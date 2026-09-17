@@ -13,6 +13,8 @@ select
     jobs.lease_token,
     jobs.lease_expires_at,
     pipelines.capture_ready_at,
+    reservations.ends_at as capture_deadline,
+    (reservations.ends_at <= clock_timestamp())::boolean as capture_deadline_reached,
     sync_recordings.status as recording_status,
     sync_recordings.start_external_operation_id,
     sync_recordings.stop_external_operation_id,

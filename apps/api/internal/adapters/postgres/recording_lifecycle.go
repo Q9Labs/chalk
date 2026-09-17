@@ -109,16 +109,9 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 		}
 		return recordinglifecycle.Publication{}, nil
 	}
-	operationID, err := lifecycleOperationID(authorityRow, operationName)
-	if err != nil {
-		return recordinglifecycle.Publication{}, err
-	}
-	payload, err := lifecyclePayload(operationName, authority.RecordingID, operationID, authority.CaptureEpoch)
-	if err != nil {
-		return recordinglifecycle.Publication{}, err
-	}
-	fingerprint := lifecycleRequestFingerprint(payload, occurredAt, noPublisher)
-	publication, replayed, err := r.replay(ctx, queries, ids, operationName, requestKey, fingerprint[:])
+	// A deadline or explicit stop may advance after a lost response. Replay the
+	// committed observation before choosing a stop authority for a new one.
+	publication, replayed, err := r.replay(ctx, queries, ids, operationName, requestKey, authority.CaptureEpoch, occurredAt, noPublisher)
 	if err != nil {
 		return recordinglifecycle.Publication{}, err
 	}
@@ -133,7 +126,22 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 		}
 		return publication, nil
 	}
-	if !lifecycleStatusAllowsNewOperation(authorityRow.RecordingStatus, operationName) {
+	deadlineStop := operationName == recordingCaptureStoppedOperation && authorityRow.CaptureDeadlineReached && !occurredAt.Before(timestamp(authorityRow.CaptureDeadline))
+	var payload []byte
+	if deadlineStop {
+		payload, err = json.Marshal(deadlineStoppedPayload{RecordingID: authority.RecordingID, DeadlineAtMillis: timestamp(authorityRow.CaptureDeadline).UnixMilli(), CaptureEpoch: authority.CaptureEpoch})
+	} else {
+		operationID, operationErr := lifecycleOperationID(authorityRow, operationName)
+		if operationErr != nil {
+			return recordinglifecycle.Publication{}, operationErr
+		}
+		payload, err = lifecyclePayload(operationName, authority.RecordingID, operationID, authority.CaptureEpoch)
+	}
+	if err != nil {
+		return recordinglifecycle.Publication{}, err
+	}
+	fingerprint := lifecycleRequestFingerprint(payload, occurredAt, noPublisher)
+	if !lifecycleStatusAllowsNewOperation(authorityRow.RecordingStatus, operationName) && !(deadlineStop && (authorityRow.RecordingStatus == "starting" || authorityRow.RecordingStatus == "recording")) {
 		return recordinglifecycle.Publication{}, fmt.Errorf("recording status %q rejects %s: %w", authorityRow.RecordingStatus, operationName, recordinglifecycle.ErrAuthorityMismatch)
 	}
 	if operationName == recordingCaptureReadyOperation {
@@ -167,7 +175,7 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 		JourneyID: uuid(journey.ID), ParentJourneyEventID: uuid(journey.ParentEventID), ProducingTraceID: optionalText(traceID), ProducingSpanID: optionalText(spanID), ProducingTraceparent: optionalText(traceparent), ProducingTracestate: optionalText(tracestate), Payload: payload,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		publication, found, replayErr := r.replay(ctx, queries, ids, operationName, requestKey, fingerprint[:])
+		publication, found, replayErr := r.replay(ctx, queries, ids, operationName, requestKey, authority.CaptureEpoch, occurredAt, noPublisher)
 		if replayErr != nil {
 			return recordinglifecycle.Publication{}, replayErr
 		}
@@ -257,6 +265,12 @@ type stoppedPayload struct {
 	CaptureEpoch    int64  `json:"captureEpoch"`
 }
 
+type deadlineStoppedPayload struct {
+	RecordingID      string `json:"recordingId"`
+	DeadlineAtMillis int64  `json:"deadlineAtMs"`
+	CaptureEpoch     int64  `json:"captureEpoch"`
+}
+
 func lifecyclePayload(operationName, recordingID, operationID string, captureEpoch int64) ([]byte, error) {
 	var payload any
 	if operationName == recordingCaptureReadyOperation {
@@ -286,7 +300,7 @@ func lifecycleRequestFingerprint(payload []byte, occurredAt time.Time, noPublish
 	return result
 }
 
-func (r RecordingLifecycleRepository) replay(ctx context.Context, queries recordingLifecycleQuerier, ids lifecycleIDSet, operationName, requestKey string, fingerprint []byte) (recordinglifecycle.Publication, bool, error) {
+func (r RecordingLifecycleRepository) replay(ctx context.Context, queries recordingLifecycleQuerier, ids lifecycleIDSet, operationName, requestKey string, captureEpoch int64, occurredAt time.Time, noPublisher bool) (recordinglifecycle.Publication, bool, error) {
 	operation, err := queries.LockRecordingCaptureLifecycleOperation(ctx, sqlc.LockRecordingCaptureLifecycleOperationParams{TenantID: ids.tenantID, SpaceID: ids.spaceID, EpisodeID: ids.episodeID, OperationName: operationName, RequestKey: requestKey})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordinglifecycle.Publication{}, false, nil
@@ -294,7 +308,24 @@ func (r RecordingLifecycleRepository) replay(ctx context.Context, queries record
 	if err != nil {
 		return recordinglifecycle.Publication{}, false, recordingLifecycleRepositoryError("lock replay operation", err)
 	}
-	if !bytes.Equal(operation.RequestFingerprint, fingerprint) || !operation.RecordingID.Valid || operation.RecordingID != ids.recordingID {
+	var payload struct {
+		RecordingID      string `json:"recordingId"`
+		StartOperationID string `json:"startOperationId,omitempty"`
+		StopOperationID  string `json:"stopOperationId,omitempty"`
+		DeadlineAtMillis int64  `json:"deadlineAtMs,omitempty"`
+		CaptureEpoch     int64  `json:"captureEpoch"`
+	}
+	if err := json.Unmarshal(operation.Payload, &payload); err != nil || payload.CaptureEpoch != captureEpoch || payload.RecordingID != utilities.IDFromBytes(ids.recordingID.Bytes).String() {
+		return recordinglifecycle.Publication{}, false, recordinglifecycle.ErrOperationConflict
+	}
+	// jsonb reorders keys; retain the original typed payload order used by
+	// previously committed ready and explicit-stop request fingerprints.
+	canonicalPayload, err := json.Marshal(payload)
+	if err != nil {
+		return recordinglifecycle.Publication{}, false, recordinglifecycle.ErrOperationConflict
+	}
+	fingerprint := lifecycleRequestFingerprint(canonicalPayload, occurredAt, noPublisher)
+	if !bytes.Equal(operation.RequestFingerprint, fingerprint[:]) || !operation.RecordingID.Valid || operation.RecordingID != ids.recordingID {
 		return recordinglifecycle.Publication{}, false, recordinglifecycle.ErrOperationConflict
 	}
 	publication, err := mapRecordingLifecyclePublication(operation)

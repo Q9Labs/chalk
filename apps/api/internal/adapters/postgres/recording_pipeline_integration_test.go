@@ -920,6 +920,13 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if render.Authority == nil || render.Authority.Envelope.HardDeadline != expectedRenderDeadline {
 		t.Fatalf("render hard deadline = %v, want %s", render.Authority, expectedRenderDeadline)
 	}
+	renderReplay, err := repository.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: render.Authority.ClaimRequestID, Kind: recordingpipeline.JobKindRender, Owner: "render-test", LeaseToken: "retried-render-lease", LeaseFor: 5 * time.Minute})
+	if err != nil {
+		t.Fatalf("replay render claim after lost response: %v", err)
+	}
+	if renderReplay.ID != render.ID || renderReplay.Authority == nil || renderReplay.Authority.LeaseToken != render.Authority.LeaseToken || !bytes.Equal(renderReplay.Authority.EnvelopeBytes, render.Authority.EnvelopeBytes) {
+		t.Fatalf("render claim replay changed the original authority: first=%+v replay=%+v", render.Authority, renderReplay.Authority)
+	}
 	renderInputHandle := mustID(t, render.Authority.Envelope.RenderInputHandle)
 	renderKeyHandle := mustID(t, render.Authority.Envelope.KeyHandle)
 	renderObjectHandle := mustID(t, render.Authority.Envelope.ObjectHandle)

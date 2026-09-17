@@ -364,12 +364,9 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		claimed = mapClaimJob(row)
 		leaseExpiresAt = timestamp(row.LeaseExpiresAt)
 		claimed.CaptureEpoch = row.CaptureEpoch
-		hardDeadline := timestamp(row.EndsAt)
-		if claimed.Kind == recordingpipeline.JobKindRender {
-			if !row.CaptureCompletedAt.Valid {
-				return recordingpipeline.ErrInvalidEnvelope
-			}
-			hardDeadline = timestamp(row.CaptureCompletedAt).Add(recordingpipeline.MaximumRenderDuration)
+		hardDeadline, err := recordingJobDeadline(claimed.Kind, row.EndsAt, row.CaptureCompletedAt)
+		if err != nil {
+			return err
 		}
 		claimFacts := recordingpipeline.ClaimFacts{
 			SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), PolicySnapshotVersion: row.PolicySnapshotVersion,
@@ -1045,7 +1042,11 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	if envelope.JobID != job.ID.String() || envelope.TenantID != job.TenantID.String() || envelope.EpisodeID != job.EpisodeID.String() || envelope.RecordingID != job.RecordingID.String() || envelope.Kind != job.Kind || envelope.AttemptCount != job.AttemptCount || envelope.FencingGeneration != job.FencingGeneration || envelope.CaptureEpoch != job.CaptureEpoch || envelope.SpaceID != utilities.IDFromBytes(row.SpaceID.Bytes).String() || envelope.PolicySnapshotVersion != row.PolicySnapshotVersion || envelope.HardDeadline != timestamp(row.EndsAt).UTC().Format(time.RFC3339Nano) {
+	hardDeadline, err := recordingJobDeadline(job.Kind, row.EndsAt, row.CaptureCompletedAt)
+	if err != nil {
+		return recordingpipeline.Job{}, err
+	}
+	if envelope.JobID != job.ID.String() || envelope.TenantID != job.TenantID.String() || envelope.EpisodeID != job.EpisodeID.String() || envelope.RecordingID != job.RecordingID.String() || envelope.Kind != job.Kind || envelope.AttemptCount != job.AttemptCount || envelope.FencingGeneration != job.FencingGeneration || envelope.CaptureEpoch != job.CaptureEpoch || envelope.SpaceID != utilities.IDFromBytes(row.SpaceID.Bytes).String() || envelope.PolicySnapshotVersion != row.PolicySnapshotVersion || envelope.HardDeadline != hardDeadline.UTC().Format(time.RFC3339Nano) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrInvalidEnvelope
 	}
 	job.Authority = &recordingpipeline.JobAuthority{
@@ -1059,6 +1060,16 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 		IssuedAt:       timestamp(row.IssuedAt),
 	}
 	return job, nil
+}
+
+func recordingJobDeadline(kind recordingpipeline.JobKind, captureDeadline, captureCompletedAt pgtype.Timestamptz) (time.Time, error) {
+	if kind != recordingpipeline.JobKindRender {
+		return timestamp(captureDeadline), nil
+	}
+	if !captureCompletedAt.Valid {
+		return time.Time{}, recordingpipeline.ErrInvalidEnvelope
+	}
+	return timestamp(captureCompletedAt).Add(recordingpipeline.MaximumRenderDuration), nil
 }
 
 func mapFailJob(row sqlc.FailRecordingJobRow) recordingpipeline.Job {

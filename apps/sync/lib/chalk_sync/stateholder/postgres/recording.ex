@@ -200,6 +200,28 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
   defp validate_capture_stopped(
          connection,
          episode,
+         %{payload: %{"deadlineAtMs" => deadline_at_ms, "captureEpoch" => epoch}} = operation,
+         recording_status,
+         _recording_stop_id,
+         metadata
+       )
+       when is_integer(deadline_at_ms) and deadline_at_ms > 0 and is_integer(epoch) and epoch > 0 do
+    recording_id = operation.payload["recordingId"]
+    params = Scope.episode(episode) ++ [Scope.uuid(recording_id), epoch, deadline_at_ms]
+
+    if recording_status in ["starting", "recording", "stopping", "stopped"] and
+         capture_epoch(metadata) <= epoch and
+         Postgrex.query!(connection, PlannerSQL.validate_recording_capture_deadline(), params).num_rows ==
+           1 do
+      {:ok, %{recording_id: recording_id, target: nil, sources: []}}
+    else
+      {:error, :stale_recording_fence}
+    end
+  end
+
+  defp validate_capture_stopped(
+         connection,
+         episode,
          operation,
          recording_status,
          recording_stop_id,

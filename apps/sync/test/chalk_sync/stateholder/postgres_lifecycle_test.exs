@@ -572,6 +572,154 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              recording_stop_rows(fixture, stopped_operation_id, stop_operation_id)
   end
 
+  test "capture deadline stops an active Recording only under the scoped reservation and epoch",
+       %{
+         connections: connections
+       } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    recording_id = activate_recording(connection, fixture, "deadline_stop", 2)
+    recording_uuid = UUID.dump!(recording_id)
+    reservation_uuid = UUID.dump!(UUID.generate())
+    tenant_uuid = UUID.dump!(fixture.episode.tenant_id)
+
+    scope = [
+      tenant_uuid,
+      UUID.dump!(fixture.episode.space_id),
+      UUID.dump!(fixture.episode.episode_id)
+    ]
+
+    on_exit(fn ->
+      Postgrex.query!(connection, "delete from recording_pipelines where recording_id = $1", [
+        recording_uuid
+      ])
+
+      Postgrex.query!(connection, "delete from recording_reservations where recording_id = $1", [
+        recording_uuid
+      ])
+
+      Postgrex.query!(connection, "delete from recordings where id = $1", [recording_uuid])
+      SyncPostgres.cleanup(connection, fixture.episode)
+    end)
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into recordings(tenant_id, space_id, episode_id, id, status, storage_provider)
+      values($1, $2, $3, $4, 'processing', 'cf')
+      """,
+      scope ++ [recording_uuid]
+    )
+
+    future_deadline = System.system_time(:millisecond) + 3_600_000
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into recording_reservations(tenant_id, space_id, episode_id, recording_id, id,
+        idempotency_key, request_fingerprint, policy_snapshot_version, participant_count,
+        max_duration_seconds, input_bitrate_bps, state, ends_at)
+      values($1, $2, $3, $4, $5, 'deadline', decode(repeat('00', 32), 'hex'),
+        'episode_config.v2', 1, 7200, 128000, 'reserved', to_timestamp($6::bigint / 1000.0))
+      """,
+      scope ++ [recording_uuid, reservation_uuid, future_deadline]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into recording_pipelines(tenant_id, recording_id, reservation_id, capture_epoch, state)
+      values($1, $2, $3, 2, 'capturing_segmented')
+      """,
+      [tenant_uuid, recording_uuid, reservation_uuid]
+    )
+
+    {:ok, early} =
+      Operation.new("early_deadline_stop", :recording_capture_stopped, %{
+        "recordingId" => recording_id,
+        "deadlineAtMs" => future_deadline,
+        "captureEpoch" => 2
+      })
+
+    assert {:error, :stale_recording_fence} =
+             Postgres.begin_internal_operation(fixture.episode, early)
+
+    deadline = System.system_time(:millisecond) - 1_000
+
+    Postgrex.query!(
+      connection,
+      "update recording_reservations set ends_at = to_timestamp($2::bigint / 1000.0) where id = $1",
+      [reservation_uuid, deadline]
+    )
+
+    for {suffix, epoch, observed_deadline} <- [
+          {"old_epoch", 1, deadline},
+          {"new_epoch", 3, deadline},
+          {"wrong_deadline", 2, deadline - 1}
+        ] do
+      {:ok, invalid} =
+        Operation.new("deadline_stop_" <> suffix, :recording_capture_stopped, %{
+          "recordingId" => recording_id,
+          "deadlineAtMs" => observed_deadline,
+          "captureEpoch" => epoch
+        })
+
+      assert {:error, :stale_recording_fence} =
+               Postgres.begin_internal_operation(fixture.episode, invalid)
+    end
+
+    {:ok, stopped} =
+      Operation.new("deadline_capture_stopped", :recording_capture_stopped, %{
+        "recordingId" => recording_id,
+        "deadlineAtMs" => deadline,
+        "captureEpoch" => 2
+      })
+
+    assert {:ok, %{external_operation_id: operation_id}} =
+             Postgres.begin_internal_operation(fixture.episode, stopped)
+
+    assert {:ok, :pending} =
+             Postgrex.transaction(Enum.at(connections, 2), fn transaction ->
+               Postgrex.query!(
+                 transaction,
+                 "select recording_id from recording_pipelines where recording_id = $1 for update",
+                 [recording_uuid]
+               )
+
+               assert {:retryable, :decision_unavailable} =
+                        Postgres.finalize_operation(
+                          fixture.episode,
+                          operation_id,
+                          {:confirmed, :local}
+                        )
+
+               assert {:ok, %{status: :pending}} =
+                        Postgres.read_operation(fixture.episode, operation_id)
+
+               :pending
+             end)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, operation_id, {:confirmed, :local})
+
+    assert {:ok, %{result: :applied, delivery: :duplicate}} =
+             Postgres.finalize_operation(fixture.episode, operation_id, {:confirmed, :local})
+
+    assert [["stopped", nil, "active", "stopped"]] =
+             query_rows(
+               fixture,
+               """
+               select recording.status, recording.stop_external_operation_id, episode.status,
+                 control.folded_state #>> '{recording,status}'
+               from sync_recordings recording
+               join episodes episode on episode.id = recording.episode_id
+               join sync_episode_control control on control.tenant_id = recording.tenant_id and control.episode_id = recording.episode_id
+               where recording.tenant_id = $1 and recording.episode_id = $2 and recording.recording_id = $3::uuid
+               """,
+               [recording_uuid]
+             )
+  end
+
   test "capture stopped remains durable when its pending Episode end later fails", %{
     connections: connections
   } do

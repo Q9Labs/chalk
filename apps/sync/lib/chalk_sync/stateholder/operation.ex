@@ -232,6 +232,18 @@ defmodule ChalkSync.Stateholder.Operation do
          :recording_capture_stopped,
          %{
            "recordingId" => recording_id,
+           "deadlineAtMs" => deadline_at_ms,
+           "captureEpoch" => capture_epoch
+         } = payload
+       )
+       when map_size(payload) == 3 and is_integer(deadline_at_ms) and deadline_at_ms > 0 and
+              is_integer(capture_epoch) and capture_epoch > 0,
+       do: validate_uuid(recording_id)
+
+  defp validate_payload(
+         :recording_capture_stopped,
+         %{
+           "recordingId" => recording_id,
            "stopOperationId" => stop_operation_id,
            "captureEpoch" => capture_epoch
          } = payload

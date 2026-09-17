@@ -8,22 +8,27 @@ rendering, download, managed transcription, and deletion of temporary source
 objects. This document records the architecture, the decisions behind it, the
 measured cost model, and the boundary of that qualification.
 
-## Production implementation status (2026-09-15)
+## Production implementation status (2026-09-17)
 
-| Area                                                            | Implemented                                                                                                                                                                              | Remaining release evidence                                                        |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Existing encrypted capture, rendering, verification and cleanup | Preserved; prior qualification described below                                                                                                                                           | Exact new release end-to-end smoke                                                |
-| Shared backend controls                                         | Separate capture/render fleet processes and direct-TLS issuer; dedicated control image, rootless units, private persistent state, per-state process locks, versioned inputs and rollback | Host headroom, direct peer identity and restart proof in the approved environment |
-| Capacity                                                        | Zero spare; ten capture and ten render nodes; rendering does not consume live-capture admission                                                                                          | Ten-way cold readiness and overlapping capture/render workload                    |
-| Startup cadence                                                 | Successful durable transitions fast-follow at 100 ms for at most 32 steps; idle/error polling remains 5 seconds                                                                          | Provider ready latency, quota and noisy-neighbor behavior                         |
-| Scheduled Space preparation                                     | Durable revision-fenced prepare/get/cancel; five-minute lead and five-minute no-show grace; atomic consumption on real recording start                                                   | Integration adoption and scheduled smoke                                          |
-| ASR                                                             | Direct DeepInfra native Whisper turbo; explicit optional Cloudflare fallback, disabled in the cost-first profile                                                                         | Approved provider corpus, privacy acceptance and exact adapter qualification      |
-| Smaller capture profile                                         | Ordered 1 GiB / 2 GiB shared-CPU candidates, disabled without evidence; `c-2` retained                                                                                                   | Paced one-hour cloud comparison against `c-2`                                     |
+| Area                                                            | Implemented                                                                                                                                                                              | Remaining evidence and its scope                                                               |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Existing encrypted capture, rendering, verification and cleanup | Preserved; real end-to-end qualification described below                                                                                                                                 | Reuse that evidence; recheck boundaries changed by the selected release                        |
+| Shared backend controls                                         | Separate capture/render fleet processes and direct-TLS issuer; dedicated control image, rootless units, private persistent state, per-state process locks, versioned inputs and rollback | Host headroom, direct peer identity and restart proof in the approved environment              |
+| Capacity                                                        | Zero spare; ten capture and ten render nodes; rendering does not consume live-capture admission                                                                                          | Ten-way measurements substantiate capacity/throughput claims, not baseline correctness         |
+| Startup cadence                                                 | Successful durable transitions fast-follow at 100 ms for at most 32 steps; idle/error polling remains 5 seconds                                                                          | Recheck changed control placement; fast-follow is not a seconds-level provider-ready guarantee |
+| Scheduled Space preparation                                     | Durable revision-fenced prepare/get/cancel; five-minute lead and five-minute no-show grace; atomic consumption on real recording start                                                   | Integration adoption and scheduled smoke                                                       |
+| ASR                                                             | Direct DeepInfra native Whisper turbo; explicit optional Cloudflare fallback, disabled in the cost-first profile                                                                         | Approved provider corpus, privacy acceptance and exact adapter qualification                   |
+| Smaller capture profile                                         | Ordered 1 GiB / 2 GiB shared-CPU candidates, disabled without evidence; `c-2` retained                                                                                                   | Paced cloud comparison required only before enabling a smaller candidate                       |
 
-Automated review of the prior recording implementation reached its 30-minute
-limit without a verdict, so it does not provide review coverage; no retry was
-authorized. The workspace-tracker integration review was separate and did not
-review that prior recording implementation.
+Earlier automated reviews timed out without a verdict and provide no review
+coverage. The GPT-6 Astra/xhigh review of `79174929` against `c0272cc4` completed
+on 2026-09-17. Its three verified findings are addressed by follow-up fixes:
+cropped ASR timestamps stay chunk-relative, deadline-driven capture completion
+uses the scoped reservation deadline as durable authority, and render-claim
+replay validates the same render deadline as the initial claim. Regression
+coverage includes later audio chunks, deadline/epoch rejection and completion
+replay, and replay of a lost render-claim response. This code review does not
+replace the changed-boundary release evidence listed above.
 
 Preparation uses the tenant-scoped Space `recording-preparation` resource.
 `PATCH` accepts `starts_at` and `expected_revision` (`0` for the initial intent);

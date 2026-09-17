@@ -154,6 +154,54 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	if _, err := service.PublishReady(ctx, conflictingReady); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
 		t.Fatalf("new ready operation after Sync advanced error = %v, want authority mismatch", err)
 	}
+	t.Run("reservation deadline authorizes stopped without a Participant stop", func(t *testing.T) {
+		deadlineTx, err := transaction.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer deadlineTx.Rollback(ctx)
+		deadlineService, err := recordinglifecycle.NewService(NewRecordingLifecycleRepositoryWithTransactor(recordingLifecycleNestedTransactor{transaction: deadlineTx}), time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := recordinglifecycle.StoppedInput{Authority: authority, RequestKey: "deadline_stopped_" + recordingID.String(), StoppedAt: time.Now().UTC()}
+		if _, err := deadlineService.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("stop before reservation deadline = %v, want authority mismatch", err)
+		}
+		deadline := input.StoppedAt.Add(-time.Second).Truncate(time.Microsecond)
+		if _, err := deadlineTx.Exec(ctx, `update recording_reservations set ends_at = $2 where id = $1`, reservationID.Bytes(), deadline); err != nil {
+			t.Fatal(err)
+		}
+		early := input
+		early.StoppedAt = deadline.Add(-time.Millisecond)
+		if _, err := deadlineService.PublishStopped(ctx, early); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("early observation after reservation deadline = %v, want authority mismatch", err)
+		}
+		stopped, err := deadlineService.PublishStopped(ctx, input)
+		if err != nil {
+			t.Fatalf("publish deadline stopped: %v", err)
+		}
+		var payload struct {
+			RecordingID      string `json:"recordingId"`
+			DeadlineAtMillis int64  `json:"deadlineAtMs"`
+			CaptureEpoch     int64  `json:"captureEpoch"`
+		}
+		if err := json.Unmarshal(stopped.Payload, &payload); err != nil || payload.RecordingID != recordingID.String() || payload.DeadlineAtMillis != deadline.UnixMilli() || payload.CaptureEpoch != 1 {
+			t.Fatalf("deadline stopped payload = %s, %v", stopped.Payload, err)
+		}
+		changed := input
+		changed.StoppedAt = input.StoppedAt.Add(-time.Millisecond)
+		if _, err := deadlineService.PublishStopped(ctx, changed); !errors.Is(err, recordinglifecycle.ErrOperationConflict) {
+			t.Fatalf("changed deadline observation replay = %v, want operation conflict", err)
+		}
+		if _, err := deadlineTx.Exec(ctx, `update sync_recordings set status = 'stopped', completed_at = now() where recording_id = $1`, recordingID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		replayed, err := deadlineService.PublishStopped(ctx, input)
+		if err != nil || replayed.ExternalOperationID != stopped.ExternalOperationID {
+			t.Fatalf("replay deadline stopped = %+v, %v", replayed, err)
+		}
+	})
 
 	if _, err := transaction.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload) values($1, $2, $3, $4, 'stop_recording_integration', $5, 'stop_recording', $6, '{}'::jsonb)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), stopOperationID.Bytes(), seedFingerprint[:], recordingID.Bytes()); err != nil {
 		t.Fatalf("seed stop operation: %v", err)
