@@ -20,3 +20,4 @@ run_proof "Membership role migration" "${repository_root}/apps/api/scripts/membe
 run_proof "Space/Episode bridge migration" "${repository_root}/apps/api/scripts/space-episode-bridge-migration-test.sh" "$@"
 run_proof "Sync retained-event repair migration" "${repository_root}/apps/api/scripts/sync-retained-event-schema-repair-migration-test.sh" "$@"
 run_proof "Episode control snapshot repair migration" "${repository_root}/apps/api/scripts/episode-control-snapshot-repair-migration-test.sh" "$@"
+run_proof "Recording release upgrade from pre-recording history" bash "${repository_root}/apps/api/scripts/recording-release-migration-test.sh" "$@"

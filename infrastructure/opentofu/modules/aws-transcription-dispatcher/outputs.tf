@@ -4,8 +4,8 @@ output "lambda_function_arn" {
 }
 
 output "required_egress_destinations" {
-  description = "Provider-specific destinations for the external NAT firewall or proxy policy."
-  value       = local.egress_allowlist
+  description = "Outbound service inventory, filtered to enabled providers; not a network-enforced allowlist."
+  value       = local.egress_destinations
 }
 
 output "lambda_execution_role_arn" {

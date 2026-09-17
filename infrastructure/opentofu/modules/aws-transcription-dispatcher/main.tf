@@ -4,10 +4,11 @@ locals {
     var.deepinfra_enabled ? [var.deepinfra_token_parameter_arn] : [],
     var.cloudflare_enabled ? [var.cloudflare_token_parameter_arn] : [],
   )
-  egress_allowlist = toset([
-    for destination in var.vpc_egress_allowlist : destination
-    if(destination != "api.deepinfra.com" || var.deepinfra_enabled) && (destination != "api.cloudflare.com" || var.cloudflare_enabled)
-  ])
+  egress_destinations = toset(concat(
+    ["control-api", "presigned-object-storage", "ssm", "kms", "telemetry"],
+    var.deepinfra_enabled ? ["api.deepinfra.com"] : [],
+    var.cloudflare_enabled ? ["api.cloudflare.com"] : [],
+  ))
 
   base_environment = {
     CHALK_ENVIRONMENT                       = var.environment_name
@@ -45,11 +46,9 @@ locals {
     CHALK_TRANSCRIPTION_HANDLER             = var.handler
     CHALK_TRANSCRIPTION_WORK_BUDGET         = tostring(var.work_budget_seconds)
     CHALK_COMPLETION_RESERVE_SECONDS        = tostring(var.completion_reserve_seconds)
-    CHALK_VPC_EGRESS_MODE                   = var.vpc_egress_mode
     DEEPINFRA_TOKEN_PARAMETER_ARN           = var.deepinfra_token_parameter_arn
     CLOUDFLARE_AI_TOKEN_PARAMETER_ARN       = var.cloudflare_token_parameter_arn
     CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN = var.api_workload_auth_parameter_arn
-    CHALK_EGRESS_ALLOWLIST                  = join(",", sort(tolist(local.egress_allowlist)))
   }
 
 }
@@ -164,11 +163,6 @@ resource "aws_lambda_function" "dispatcher" {
     size = var.ephemeral_storage_size
   }
 
-  vpc_config {
-    subnet_ids         = var.vpc_subnet_ids
-    security_group_ids = var.vpc_security_group_ids
-  }
-
   environment {
     variables = local.base_environment
   }
@@ -196,13 +190,13 @@ resource "aws_lambda_function" "dispatcher" {
     }
 
     precondition {
-      condition     = !var.deepinfra_enabled || (length(var.deepinfra_token_parameter_arn) > 0 && length(var.deepinfra_corpus_digest) > 0 && contains(local.egress_allowlist, "api.deepinfra.com"))
-      error_message = "DeepInfra requires its own credential, conformance corpus digest, and explicit egress destination."
+      condition     = !var.deepinfra_enabled || (length(var.deepinfra_token_parameter_arn) > 0 && length(var.deepinfra_corpus_digest) > 0)
+      error_message = "DeepInfra requires its own credential and conformance corpus digest."
     }
 
     precondition {
-      condition     = !var.cloudflare_enabled || (length(var.cloudflare_token_parameter_arn) > 0 && length(var.cloudflare_account_id) > 0 && length(var.cloudflare_adapter_contract_version) > 0 && length(var.cloudflare_corpus_digest) > 0 && contains(local.egress_allowlist, "api.cloudflare.com"))
-      error_message = "An enabled Cloudflare adapter requires its own credentials, conformance evidence, and egress destination."
+      condition     = !var.cloudflare_enabled || (length(var.cloudflare_token_parameter_arn) > 0 && length(var.cloudflare_account_id) > 0 && length(var.cloudflare_adapter_contract_version) > 0 && length(var.cloudflare_corpus_digest) > 0)
+      error_message = "An enabled Cloudflare adapter requires its own credentials and conformance evidence."
     }
 
     precondition {
@@ -210,10 +204,6 @@ resource "aws_lambda_function" "dispatcher" {
       error_message = "Select at least one qualified transcription provider explicitly."
     }
 
-    precondition {
-      condition     = length(var.vpc_subnet_ids) > 0 && length(var.vpc_security_group_ids) > 0 && var.vpc_egress_mode == "nat"
-      error_message = "private subnets, security groups, and an external NAT/proxy egress contract are required."
-    }
   }
 
   tags = {

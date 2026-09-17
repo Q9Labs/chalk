@@ -30,8 +30,10 @@ require 'sqs:SendMessage' "$MODULE_DIR/main.tf"
 require 'DEEPINFRA_TOKEN_PARAMETER_ARN' "$MODULE_DIR/main.tf"
 require 'CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN' "$MODULE_DIR/main.tf"
 require 'CONTROL_API_AUDIENCE' "$MODULE_DIR/main.tf"
-require 'vpc_egress_allowlist' "$MODULE_DIR/variables.tf"
-require 'vpc_egress_mode == "nat"' "$MODULE_DIR/variables.tf"
+require 'egress_destinations = toset\(concat\(' "$MODULE_DIR/main.tf"
+if rg -n 'vpc_config|vpc_subnet_ids|vpc_security_group_ids|vpc_egress_mode|aws_nat_gateway|aws_eip|CHALK_EGRESS_ALLOWLIST' "$MODULE_DIR" --glob '*.tf'; then
+  fail "dispatcher must use default Lambda networking without VPC/NAT resources or a claimed network allowlist"
+fi
 require 'ALLOW_DIRTY_SOURCE' "$ROOT_DIR/scripts/transcription-dispatcher/build-release.sh"
 require 'dirty-local-proof' "$ROOT_DIR/scripts/transcription-dispatcher/verify-artifact.sh"
 require 'source_tree_digest' "$ROOT_DIR/scripts/transcription-dispatcher/emit-manifest.mjs"

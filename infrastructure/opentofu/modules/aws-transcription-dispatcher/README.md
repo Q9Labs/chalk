@@ -4,14 +4,14 @@ This reusable module declares the environment-scoped, scale-to-zero
 transcription dispatcher contract. It intentionally does not bootstrap an AWS
 account, create a state backend, upload a ZIP, or mutate a production release;
 the caller supplies the existing versioned artifact bucket, exact S3 object
-version, ZIP SHA-256, SSM parameter ARNs, VPC egress, and alarm destinations.
+version, ZIP SHA-256, SSM parameter ARNs, and alarm destinations.
 
 Provider selection is explicit and fails closed. The cost-first target enables
 direct DeepInfra and leaves `cloudflare_enabled = false`. Both provider flags
 default to false until a release supplies privacy acceptance and a qualification
 corpus digest. Only enabled providers require credentials, appear in the SSM
-IAM allowlist, or appear in `required_egress_destinations`. An approved external
-egress implementation must use that filtered output.
+IAM allowlist, or appear in `required_egress_destinations`. That output is an
+outbound service inventory, not a network-enforced allowlist.
 
 DeepInfra uses the documented native multipart `audio` endpoint for
 `openai/whisper-large-v3-turbo`, with adapter contract
@@ -67,7 +67,15 @@ supplied, non-secret synthetic control/API URL (or a purpose-built external
 artifact workflow) before the registry can honestly represent this component;
 that is an integration blocker, not an IaC resource to invent here.
 
-When VPC attachment is enabled, the caller must supply private subnets and
-security groups plus an external NAT firewall or HTTPS proxy. The allowlist
-documents only the control API, DeepInfra, Cloudflare AI, SSM, KMS, and
-telemetry; interface endpoints do not provide egress to the two provider APIs.
+The dispatcher uses Lambda's default internet access without a customer VPC
+attachment. It needs no NAT gateway, outbound proxy, private subnet, or VPC
+endpoint. The control API must be reachable over authenticated public HTTPS;
+the dispatcher has no direct database access. Object access remains scoped to
+presigned URLs supplied by the control API.
+
+DeepInfra-only selection is enforced by the application configuration and
+direct provider adapter, with redirects rejected and Cloudflare fallback off.
+This does not provide a network sandbox against a compromised function: there
+is no additional destination-filtering firewall. Do not restore a VPC attachment
+or provision recurring networking resources without an explicit deployment
+decision.

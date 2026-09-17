@@ -93,8 +93,8 @@ variable "artifact_sha256_base64" {
   type        = string
 
   validation {
-    condition     = can(base64decode(var.artifact_sha256_base64)) && length(base64decode(var.artifact_sha256_base64)) == 32
-    error_message = "artifact_sha256_base64 must decode to exactly 32 SHA-256 bytes."
+    condition     = can(regex("^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$", var.artifact_sha256_base64))
+    error_message = "artifact_sha256_base64 must be canonical base64 for exactly 32 SHA-256 bytes."
   }
 }
 
@@ -172,57 +172,6 @@ variable "ephemeral_storage_size" {
   validation {
     condition     = var.ephemeral_storage_size >= 512 && var.ephemeral_storage_size <= 4096 && floor(var.ephemeral_storage_size) == var.ephemeral_storage_size
     error_message = "ephemeral_storage_size must be an integer between 512 and 4096 MB."
-  }
-}
-
-variable "vpc_subnet_ids" {
-  description = "Private subnet IDs for provider/API egress. A NAT firewall or HTTPS proxy is required outside this module."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = length(var.vpc_subnet_ids) > 0
-    error_message = "at least one private subnet is required; the dispatcher must not run without a controlled egress path."
-  }
-}
-
-variable "vpc_security_group_ids" {
-  description = "Security groups for the controlled VPC attachment."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = length(var.vpc_security_group_ids) > 0
-    error_message = "at least one security group is required for the controlled VPC egress path."
-  }
-}
-
-variable "vpc_egress_mode" {
-  description = "Documented egress path for a VPC-attached function; an external NAT firewall or HTTPS proxy must allow only the control API, providers, SSM/KMS, and telemetry."
-  type        = string
-  default     = "nat"
-
-  validation {
-    condition     = var.vpc_egress_mode == "nat"
-    error_message = "vpc_egress_mode must be nat; interface endpoints cannot reach DeepInfra or Cloudflare AI APIs."
-  }
-}
-
-variable "vpc_egress_allowlist" {
-  description = "Documented HTTPS egress destinations enforced outside this module by the NAT firewall or proxy."
-  type        = set(string)
-  default = [
-    "control-api",
-    "api.deepinfra.com",
-    "api.cloudflare.com",
-    "ssm",
-    "kms",
-    "telemetry",
-  ]
-
-  validation {
-    condition     = contains(var.vpc_egress_allowlist, "control-api") && contains(var.vpc_egress_allowlist, "ssm") && contains(var.vpc_egress_allowlist, "kms") && contains(var.vpc_egress_allowlist, "telemetry")
-    error_message = "vpc_egress_allowlist must document control API, SSM, KMS, telemetry, and the selected providers' destinations."
   }
 }
 
