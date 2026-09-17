@@ -7,6 +7,7 @@ on:
       - "packages/assets/**"
       - "packages/diagnostics-contracts/**"
       - "packages/facehash/**"
+      - "packages/recording-presentation/**"
       - "packages/ui/**"
       - "packages/whiteboard/**"
       - "sdks/typescript/client/**"
@@ -19,6 +20,7 @@ on:
       - "packages/assets/**"
       - "packages/diagnostics-contracts/**"
       - "packages/facehash/**"
+      - "packages/recording-presentation/**"
       - "packages/ui/**"
       - "packages/whiteboard/**"
       - "sdks/typescript/client/**"
@@ -58,15 +60,5 @@ jobs:
       - name: Install browser runtimes
         run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium firefox webkit
 
-      - name: Build package artifacts
-        run: |
-          pnpm --dir packages/assets run build
-          pnpm --dir packages/diagnostics-contracts run build
-          pnpm --dir packages/facehash run build
-          pnpm --dir packages/ui run build
-          pnpm --dir packages/whiteboard run build
-          pnpm --dir sdks/typescript/client run build
-          pnpm --dir sdks/typescript/react run build
-
       - name: Prove the clean packed consumer
-        run: node tools/sdk-web-consumer-e2e/scripts/run.mjs --skip-build --browsers=chromium,firefox,webkit
+        run: node tools/sdk-web-consumer-e2e/scripts/run.mjs --browsers=chromium,firefox,webkit
