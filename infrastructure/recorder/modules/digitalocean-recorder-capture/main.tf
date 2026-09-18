@@ -19,6 +19,15 @@ resource "digitalocean_firewall" "capture" {
 
   # No inbound rule is intentional. Workers poll the control API and upload
   # through short-lived URLs; operators never SSH to a recorder node.
+  dynamic "outbound_rule" {
+    for_each = length(var.control_addresses) > 0 ? [true] : []
+    content {
+      protocol              = "tcp"
+      port_range            = "8443-8444"
+      destination_addresses = var.control_addresses
+    }
+  }
+
   outbound_rule {
     protocol              = "tcp"
     port_range            = "443"
@@ -47,7 +56,7 @@ resource "digitalocean_firewall" "capture" {
 resource "terraform_data" "runtime_capacity_contract" {
   input = {
     pool                   = local.pool_tag
-    region                 = "sgp1"
+    region                 = var.region
     max_nodes              = var.max_nodes
     desired_nodes          = var.desired_nodes
     node_size              = var.node_size

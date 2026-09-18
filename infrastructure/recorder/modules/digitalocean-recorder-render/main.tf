@@ -19,6 +19,15 @@ resource "digitalocean_firewall" "render" {
 
   # No inbound rule is intentional. Renderers poll the control API and read
   # only the job-scoped encrypted input URLs they receive.
+  dynamic "outbound_rule" {
+    for_each = length(var.control_addresses) > 0 ? [true] : []
+    content {
+      protocol              = "tcp"
+      port_range            = "8443-8444"
+      destination_addresses = var.control_addresses
+    }
+  }
+
   outbound_rule {
     protocol              = "tcp"
     port_range            = "443"

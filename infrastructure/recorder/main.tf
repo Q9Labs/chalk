@@ -8,10 +8,12 @@ module "capture" {
   environment        = var.environment
   desired_nodes      = local.desired_capture_nodes
   node_size          = var.capture_node_size
+  region             = var.capture_region
   image_id           = var.capture_image_id
   image_digest       = local.capture_image_digest
   release_id         = var.release_id
   bootstrap_endpoint = local.capture_bootstrap_endpoint
+  control_addresses  = var.control_addresses
   enable_apply       = var.enable_apply
 }
 
@@ -31,6 +33,7 @@ module "render" {
   image_digest       = local.render_image_digest
   release_id         = var.release_id
   bootstrap_endpoint = local.render_bootstrap_endpoint
+  control_addresses  = var.control_addresses
   enable_apply       = var.enable_apply
 }
 
@@ -54,6 +57,7 @@ data "aws_iam_policy_document" "recording_kms" {
       "kms:Describe*",
       "kms:DisableKey",
       "kms:EnableKey",
+      "kms:EnableKeyRotation",
       "kms:Get*",
       "kms:List*",
       "kms:PutKeyPolicy",
@@ -231,9 +235,15 @@ data "aws_iam_policy_document" "recording_kms" {
     sid    = "DenyRecordingDataOperationsOutsideControlPlane"
     effect = "Deny"
 
-    not_principals {
-      type        = "AWS"
-      identifiers = [local.control_plane_role]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.control_plane_role]
     }
 
     actions = [
@@ -305,7 +315,7 @@ resource "cloudflare_r2_bucket_lifecycle" "recording" {
       }
     },
     {
-      id         = "incomplete-multipart-expire"
+      id         = var.multipart_abort_rule_id
       enabled    = true
       conditions = { prefix = "" }
       abort_multipart_uploads_transition = {
@@ -323,9 +333,9 @@ resource "cloudflare_r2_bucket_cors" "whiteboard" {
   account_id  = var.cloudflare_account_id
   bucket_name = cloudflare_r2_bucket.recording[0].name
 
-  rules = [
+  rules = concat(var.preserved_bucket_cors_rules, [
     {
-      id = "whiteboard-v1-browser-files"
+      id = var.whiteboard_cors_rule_id
       allowed = {
         origins = var.whiteboard_allowed_origins
         methods = ["GET", "PUT"]
@@ -334,5 +344,5 @@ resource "cloudflare_r2_bucket_cors" "whiteboard" {
       expose_headers  = ["ETag"]
       max_age_seconds = 3600
     }
-  ]
+  ])
 }

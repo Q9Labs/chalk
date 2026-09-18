@@ -8,7 +8,11 @@ recorder reconciler owns scheduled prewarm, scale-to-zero, desired capacity,
 fencing, and replacement, so replacement cannot exceed ten capture nodes,
 ten render nodes, or the twenty-node global cap.
 
-The default capture pool uses SGP1 CPU-Optimized two-vCPU nodes. Its configured
+The default capture pool uses BLR1 CPU-Optimized two-vCPU nodes. Confirm current
+regional size availability before applying; `capture_region` is configurable.
+Direct control TLS egress on ports 8443/8444 requires the exact managed-host
+`control_addresses` (/32 or /128); the workers still accept no inbound traffic.
+Its configured
 per-node admission targets are one serial Episode, forty participants, and sixteen
 Mbps; these are capacity inputs, not a claim of regional load qualification.
 The root exposes the contract formula as `desired_capture_nodes`:

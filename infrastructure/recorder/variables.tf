@@ -27,6 +27,31 @@ variable "staging_evidence_digest" {
   }
 }
 
+variable "capture_region" {
+  description = "Capture worker region; verify the selected size is currently available before applying."
+  type        = string
+  default     = "blr1"
+
+  validation {
+    condition     = can(regex("^[a-z]{3}[0-9]+$", var.capture_region))
+    error_message = "capture_region must be a DigitalOcean region slug."
+  }
+}
+
+variable "control_addresses" {
+  description = "Exact managed control host addresses allowed on direct TLS ports 8443 and 8444."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for address in var.control_addresses :
+      can(cidrhost(address, 0)) && (strcontains(address, ":") ? endswith(address, "/128") : endswith(address, "/32"))
+    ])
+    error_message = "control_addresses must contain only individual IPv4 /32 or IPv6 /128 addresses."
+  }
+}
+
 variable "capture_provider_token" {
   description = "Short-lived DigitalOcean token scoped to capture Droplet, firewall, tag, image, action, and inventory operations."
   type        = string
@@ -87,6 +112,33 @@ variable "recording_bucket_adoption_plan_digest" {
     condition     = var.recording_bucket_adoption_plan_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.recording_bucket_adoption_plan_digest))
     error_message = "recording_bucket_adoption_plan_digest must be sha256:<64 lowercase hexadecimal characters>."
   }
+}
+
+variable "preserved_bucket_cors_rules" {
+  description = "Inventoried unrelated CORS rules retained when adopting a shared bucket."
+  type = list(object({
+    id = optional(string)
+    allowed = object({
+      origins = list(string)
+      methods = list(string)
+      headers = optional(list(string))
+    })
+    expose_headers  = optional(list(string))
+    max_age_seconds = optional(number)
+  }))
+  default = []
+}
+
+variable "whiteboard_cors_rule_id" {
+  description = "Existing compatible browser-file rule ID to preserve during adoption."
+  type        = string
+  default     = "whiteboard-v1-browser-files"
+}
+
+variable "multipart_abort_rule_id" {
+  description = "Existing seven-day incomplete multipart rule ID to preserve during adoption."
+  type        = string
+  default     = "incomplete-multipart-expire"
 }
 
 variable "whiteboard_allowed_origins" {

@@ -2,6 +2,15 @@ variable "environment" {
   type = string
 }
 
+variable "control_addresses" {
+  type    = list(string)
+  default = []
+}
+
+variable "region" {
+  type = string
+}
+
 variable "desired_nodes" {
   type = number
 
