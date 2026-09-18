@@ -231,6 +231,16 @@ printf '%s' "$((index + 1))" >"$index_file"
 [[ "$value" == ok ]]
 HEALTH
 chmod 0755 "${fixture_root}/bin/"{aws,podman,systemctl} "${fixture_root}/health"
+cat >"${fixture_root}/bin/quadlet-generator" <<'QUADLET'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == '--user --dryrun' ]]
+[[ -d "${QUADLET_UNIT_DIRS:?}" ]]
+printf 'quadlet-generator %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
+[[ "${FAKE_QUADLET_GENERATION_FAILURE:-false}" != true ]]
+QUADLET
+chmod 0755 "${fixture_root}/bin/quadlet-generator"
+export CHALK_QUADLET_GENERATOR_BIN="${fixture_root}/bin/quadlet-generator"
 cp "${fixture_root}/health" "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
 chmod 0755 "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
 
@@ -318,6 +328,22 @@ if run_controller "$wrong_region_state" "${fixture_root}/wrong-region-request.js
   fail "cross-region ECR image was accepted"
 fi
 grep -Fq 'ECR image registry does not match the deployment region' "${fixture_root}/wrong-region.log" || fail "cross-region ECR rejection was not reported"
+fi
+
+if group_enabled validation; then
+quadlet_state="${fixture_root}/quadlet-state"
+mkdir -p "$quadlet_state"
+make_request invalid-quadlet "${fixture_root}/quadlet-request.json"
+make_manifest invalid-quadlet >"${fixture_root}/quadlet-manifest.json"
+: >"${fixture_root}/commands.log"
+if FAKE_QUADLET_GENERATION_FAILURE=true run_controller "$quadlet_state" "${fixture_root}/quadlet-request.json" "${fixture_root}/quadlet-manifest.json" >"${fixture_root}/quadlet-failure.log" 2>&1; then
+  fail "host-incompatible Quadlets were accepted"
+fi
+grep -Fq 'host Quadlet generation failed before runtime cutover' "${fixture_root}/quadlet-failure.log" || fail "Quadlet preflight rejection was not reported"
+if grep -Eq 'systemctl|podman (pull|secret)' "${fixture_root}/commands.log"; then
+  fail "Quadlet preflight rejection changed the live runtime"
+fi
+[[ ! -e "${quadlet_state}/active-release.json" ]] || fail "invalid Quadlet release was promoted"
 fi
 
 adoption_state="${fixture_root}/adoption-state"

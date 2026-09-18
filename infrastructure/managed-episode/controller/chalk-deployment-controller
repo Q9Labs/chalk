@@ -20,6 +20,7 @@ runtime_user="${CHALK_RUNTIME_USER:-chalk}"
 systemd_root="${CHALK_CONTROLLER_SYSTEMD_ROOT:-/etc/systemd/system}"
 systemctl_bin="${CHALK_SYSTEMCTL_BIN:-systemctl}"
 podman_bin="${CHALK_PODMAN_BIN:-podman}"
+quadlet_generator_bin="${CHALK_QUADLET_GENERATOR_BIN:-/usr/lib/systemd/system-generators/podman-system-generator}"
 aws_bin="${CHALK_AWS_BIN:-aws}"
 health_script="${CHALK_HEALTH_SCRIPT:-}"
 health_attempts="${CHALK_HEALTH_ATTEMPTS:-12}"
@@ -606,6 +607,14 @@ run_user_systemctl() {
 
 run_user_podman() {
   run_user_command "$podman_bin" "$@"
+}
+
+validate_host_quadlets() {
+  local runtime_source="$1"
+  require_command "$quadlet_generator_bin"
+  if ! QUADLET_UNIT_DIRS="${runtime_source}/quadlet" "$quadlet_generator_bin" --user --dryrun >"${stage_root}/quadlet-generation.log" 2>&1; then
+    fail "host Quadlet generation failed before runtime cutover"
+  fi
 }
 
 install_runtime_files() {
@@ -1294,6 +1303,7 @@ deploy() {
     --sync-proof "${stage_root}/evidence/planetscale-sync-proof.json" \
     --rendered-root "$rendered_root" \
     --excluded-secrets "$missing_inputs_csv" >"${stage_root}/validate.log" 2>&1 || fail "candidate runtime validation failed"
+  validate_host_quadlets "$rendered_root"
   pull_images
   local stable_exists=false
   local stable_was_adopted=false

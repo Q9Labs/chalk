@@ -7,7 +7,7 @@ Requires=chalk-api.service
 Image=__RECORDER_CONTROL_IMAGE_REFERENCE__
 Pull=never
 ContainerName=chalk-recorder-issuer
-Entrypoint=/usr/local/bin/recorder-fleet-issuer
+PodmanArgs=--entrypoint=/usr/local/bin/recorder-fleet-issuer
 # The issuer binds directly: forwarding would destroy its TCP-peer authorization evidence.
 Network=host
 EnvironmentFile=/run/chalk/env/recorder-issuer.env
