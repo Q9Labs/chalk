@@ -57,6 +57,7 @@ install -d -m 0755 "$release_root/bin" "$release_root/renderer"
   "${go_environment[@]}" go build -trimpath -ldflags='-s -w' -o "$release_root/bin/chalk-recorder-bootstrap" ./cmd/recorder-node-bootstrap
 )
 "${pnpm_environment[@]}" pnpm --dir "$source_root" --filter @chalk/recording-renderer deploy --prod --legacy "$release_root/renderer"
+node "$script_root/relocate-renderer.mjs" "$release_root/renderer" "$source_root/apps/recording-renderer"
 install -d "$release_root/renderer/dist"
 cp -a "$source_root/apps/recording-renderer/dist/." "$release_root/renderer/dist/"
 
