@@ -989,6 +989,7 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 		defer close(done)
 		defer cancel()
 		var lossFeedback captureVideoLossFeedback
+		var packetWindow capturePacketWindow
 		for {
 			if err := readerCtx.Err(); err != nil {
 				return
@@ -1014,6 +1015,9 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 				return
 			}
 			receivedAt := time.Now()
+			if !packetWindow.accept(packet.SSRC, packet.SequenceNumber) {
+				continue
+			}
 			if video && lossFeedback.Observe(packet.SSRC, packet.SequenceNumber, receivedAt) {
 				if err := peer.RequestKeyFrame(captureplane.ProviderReference(mid)); err != nil {
 					sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, err: fmt.Errorf("request keyframe after RTP loss for capture MID %s: %w", mid, err)})

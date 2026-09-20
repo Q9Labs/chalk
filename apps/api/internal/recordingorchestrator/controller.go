@@ -2,6 +2,7 @@ package recordingorchestrator
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
@@ -50,5 +51,16 @@ func (c Controller) Stop(ctx context.Context, input provideroperations.Operation
 		return provideroperations.ErrInvalidOperationID
 	}
 	_, err = c.pipeline.RequestStop(ctx, input.TenantID, input.EpisodeID, input.RecordingID, operationID)
+	if errors.Is(err, recordingpipeline.ErrStopConflict) {
+		pipeline, lookupErr := c.pipeline.GetPipeline(ctx, input.TenantID, input.RecordingID)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		// Episode shutdown may follow an earlier manual stop. A terminally
+		// failed capture is already stopped; keep its original stop authority.
+		if pipeline.State == recordingpipeline.StateTerminalFailure {
+			return nil
+		}
+	}
 	return err
 }
