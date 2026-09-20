@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -44,6 +45,12 @@ func (r RecordingRenderRepository) ResolveInput(ctx context.Context, authority r
 		}
 		if err != nil {
 			return fmt.Errorf("authorize recording render input: %w", err)
+		}
+		policy, err := queries.GetRecordingTranscriptionPolicyForCommit(ctx, sqlc.GetRecordingTranscriptionPolicyForCommitParams{
+			TenantID: uuid(authority.TenantID), SpaceID: uuid(authority.SpaceID), EpisodeID: uuid(authority.EpisodeID), RecordingID: uuid(authority.RecordingID),
+		})
+		if err != nil {
+			return fmt.Errorf("load recording render transcription policy: %w", err)
 		}
 		presentation, err := queries.GetRecordingPresentationForRender(ctx, sqlc.GetRecordingPresentationForRenderParams{
 			TenantID: uuid(authority.TenantID), SpaceID: uuid(authority.SpaceID), EpisodeID: uuid(authority.EpisodeID),
@@ -80,9 +87,10 @@ func (r RecordingRenderRepository) ResolveInput(ctx context.Context, authority r
 			return err
 		}
 		stored = recordingrender.StoredInput{
-			SchemaVersion: recordingrender.InputSchemaVersion,
-			Authority:     authority,
-			Capture:       capture,
+			SchemaVersion:     recordingrender.InputSchemaVersion,
+			TranscriptionMode: artifactpolicy.TranscriptionMode(policy.TranscriptionMode),
+			Authority:         authority,
+			Capture:           capture,
 			Presentation: recordingrender.Presentation{
 				Handle: id(presentation.PresentationHandle), SchemaVersion: presentation.SchemaVersion,
 				ProfileVersion: presentation.ProfileVersion, DurationMillis: presentation.DurationMillis,

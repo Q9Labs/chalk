@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
@@ -956,6 +957,9 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	storedRenderInput, err := renderRepository.ResolveInput(ctx, renderAuthority)
 	if err != nil {
 		t.Fatalf("resolve recording input under renewed lease: %v", err)
+	}
+	if storedRenderInput.TranscriptionMode != artifactpolicy.TranscriptionOnDemand {
+		t.Fatalf("render input lost the immutable Episode transcription policy: %q", storedRenderInput.TranscriptionMode)
 	}
 	if len(storedRenderInput.Capture) != 2 || storedRenderInput.Capture[0].SequenceNumber != 0 || storedRenderInput.Capture[0].CaptureEpoch != 1 || storedRenderInput.Capture[0].KeyHandle != historicalKeyHandle ||
 		storedRenderInput.Capture[1].SequenceNumber != 2 || storedRenderInput.Capture[1].CaptureEpoch != renderAuthority.CaptureEpoch || storedRenderInput.Capture[1].KeyHandle != renderAuthority.KeyHandle {

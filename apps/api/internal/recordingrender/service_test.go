@@ -3,9 +3,11 @@ package recordingrender
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -17,8 +19,9 @@ func TestResolveRenderInputSignsEveryExactObjectVersionWithinLease(t *testing.T)
 	authority := renderAuthorityForTest(t, now.Add(3*time.Minute))
 	presentationDigest := digestForTest(0x41)
 	stored := StoredInput{
-		SchemaVersion: InputSchemaVersion,
-		Authority:     authority,
+		SchemaVersion:     InputSchemaVersion,
+		TranscriptionMode: artifactpolicy.TranscriptionDisabled,
+		Authority:         authority,
 		Capture: []CaptureObject{{
 			ObjectFacts:  ObjectFacts{ObjectKey: "capture/0.enc", ObjectVersion: "capture-v1", ObjectETag: "capture-etag", ContentType: "application/octet-stream", ByteSize: 1024, SHA256: digestForTest(0x11)},
 			CaptureEpoch: authority.CaptureEpoch, CaptureJobID: idForTest(t, "10000000-0000-4000-8000-000000000010"), KeyHandle: authority.KeyHandle, EnvelopeDigest: digestForTest(0x12),
@@ -34,7 +37,8 @@ func TestResolveRenderInputSignsEveryExactObjectVersionWithinLease(t *testing.T)
 		},
 	}
 	store := &renderStoreForTest{now: now}
-	service, err := NewService(objectstorage.NewService(store), renderKMSForTest{}, &renderRepositoryForTest{stored: stored}, Config{KeyID: "recording-key", GrantTTL: 10 * time.Minute, Now: func() time.Time { return now }})
+	repository := &renderRepositoryForTest{stored: stored}
+	service, err := NewService(objectstorage.NewService(store), renderKMSForTest{}, repository, Config{KeyID: "recording-key", GrantTTL: 10 * time.Minute, Now: func() time.Time { return now }})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -60,6 +64,23 @@ func TestResolveRenderInputSignsEveryExactObjectVersionWithinLease(t *testing.T)
 	if resolved.Presentation.ObjectVersion != "presentation-v2" || resolved.Assets[0].ObjectVersion != "asset-v4" {
 		t.Fatalf("resolved input did not preserve immutable object versions")
 	}
+	for _, mode := range []artifactpolicy.TranscriptionMode{
+		artifactpolicy.TranscriptionDisabled, artifactpolicy.TranscriptionOnDemand,
+		artifactpolicy.TranscriptionAutomatic, "", "unrecognized",
+	} {
+		repository.stored.TranscriptionMode = mode
+		resolved, err := service.ResolveRenderInput(context.Background(), authority)
+		if mode.Validate() != nil {
+			if !errors.Is(err, ErrInputIncomplete) {
+				t.Fatalf("invalid transcription mode %q error = %v", mode, err)
+			}
+			continue
+		}
+		if err != nil || resolved.TranscriptionMode != mode {
+			t.Fatalf("resolved transcription mode = %q, want %q, error = %v", resolved.TranscriptionMode, mode, err)
+		}
+	}
+
 }
 
 func TestResolveRenderInputAllowsImmutableETagWithoutProviderVersion(t *testing.T) {
@@ -68,8 +89,9 @@ func TestResolveRenderInputAllowsImmutableETagWithoutProviderVersion(t *testing.
 	authority := renderAuthorityForTest(t, now.Add(3*time.Minute))
 	presentationDigest := digestForTest(0x41)
 	stored := StoredInput{
-		SchemaVersion: InputSchemaVersion,
-		Authority:     authority,
+		SchemaVersion:     InputSchemaVersion,
+		TranscriptionMode: artifactpolicy.TranscriptionDisabled,
+		Authority:         authority,
 		Capture: []CaptureObject{{
 			ObjectFacts:  ObjectFacts{ObjectKey: "capture/0.enc", ObjectETag: "capture-etag", ContentType: "application/octet-stream", ByteSize: 1024, SHA256: digestForTest(0x11)},
 			CaptureEpoch: authority.CaptureEpoch, CaptureJobID: idForTest(t, "10000000-0000-4000-8000-000000000010"), KeyHandle: authority.KeyHandle, EnvelopeDigest: digestForTest(0x12),
@@ -129,7 +151,8 @@ func TestValidateStoredInputAllowsSequenceHolesAndRejectsDuplicates(t *testing.T
 	authority := renderAuthorityForTest(t, time.Now().UTC().Add(time.Minute))
 	presentationDigest := digestForTest(0x41)
 	stored := StoredInput{
-		SchemaVersion: InputSchemaVersion, Authority: authority,
+		SchemaVersion:     InputSchemaVersion,
+		TranscriptionMode: artifactpolicy.TranscriptionDisabled, Authority: authority,
 		Presentation: Presentation{
 			Handle: idForTest(t, "10000000-0000-4000-8000-000000000009"), SchemaVersion: PresentationSchemaVersion, ProfileVersion: "composite_720p_v1",
 			DurationMillis: 1000, SHA256: presentationDigest, CaptureReadyAt: time.Now().UTC(),

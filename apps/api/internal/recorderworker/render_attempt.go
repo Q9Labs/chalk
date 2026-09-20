@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingdecode"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -335,6 +336,9 @@ func withRenderAuthority[T any](attempt *ProductionRenderAttempt, call func(reco
 }
 
 func (attempt *ProductionRenderAttempt) validateResolvedInput(input recordingrender.ResolvedInput) error {
+	if input.TranscriptionMode.Validate() != nil {
+		return fmt.Errorf("%w: missing or invalid transcription policy", ErrInvalidProductionRenderAttempt)
+	}
 	envelope := attempt.claim.Envelope
 	presentationSHA, err := hex.DecodeString(envelope.PresentationSHA256)
 	readyAt, readyErr := time.Parse(time.RFC3339Nano, *envelope.CaptureReadyAt)
@@ -465,6 +469,9 @@ func clearDecodeDataKeys(keys []recordingdecode.DataKey) {
 }
 
 func (attempt *ProductionRenderAttempt) persistTranscription(ctx context.Context, input recordingrender.ResolvedInput, timeline recordingpresentation.Timeline, decodedRoot string, index recordingdecode.Index) (*recordingrender.TranscriptionSource, error) {
+	if input.TranscriptionMode == artifactpolicy.TranscriptionDisabled {
+		return nil, nil
+	}
 	authority := attempt.currentAuthority()
 	sources := make([]recordingdecode.Source, 0)
 	for _, source := range index.Sources {

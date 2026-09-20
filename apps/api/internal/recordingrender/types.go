@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -108,10 +109,11 @@ type Presentation struct {
 }
 
 type StoredInput struct {
-	SchemaVersion string
-	Authority     Authority
-	Capture       []CaptureObject
-	Presentation  Presentation
+	SchemaVersion     string
+	TranscriptionMode artifactpolicy.TranscriptionMode
+	Authority         Authority
+	Capture           []CaptureObject
+	Presentation      Presentation
 }
 
 type DownloadGrant struct {
@@ -133,6 +135,7 @@ type DownloadableCaptureObject struct {
 
 type ResolvedInput struct {
 	SchemaVersion              string
+	TranscriptionMode          artifactpolicy.TranscriptionMode
 	TenantID                   utilities.ID
 	SpaceID                    utilities.ID
 	EpisodeID                  utilities.ID

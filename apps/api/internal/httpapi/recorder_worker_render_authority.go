@@ -150,18 +150,19 @@ type recorderRenderPresentationResponse struct {
 }
 
 type recorderRenderInputResponse struct {
-	SchemaVersion  string                                `json:"schema_version"`
-	TenantID       string                                `json:"tenant_id"`
-	SpaceID        string                                `json:"space_id"`
-	EpisodeID      string                                `json:"episode_id"`
-	RecordingID    string                                `json:"recording_id"`
-	CaptureEpoch   int64                                 `json:"capture_epoch"`
-	CaptureReadyAt string                                `json:"capture_ready_at"`
-	DurationMillis int64                                 `json:"duration_ms"`
-	Capture        []recorderRenderCaptureObjectResponse `json:"capture"`
-	Presentation   recorderRenderPresentationResponse    `json:"presentation"`
-	AssetManifest  recorderRenderObjectFactsResponse     `json:"asset_manifest"`
-	Assets         []recorderRenderObjectFactsResponse   `json:"assets"`
+	SchemaVersion     string                                `json:"schema_version"`
+	TranscriptionMode string                                `json:"transcription_mode"`
+	TenantID          string                                `json:"tenant_id"`
+	SpaceID           string                                `json:"space_id"`
+	EpisodeID         string                                `json:"episode_id"`
+	RecordingID       string                                `json:"recording_id"`
+	CaptureEpoch      int64                                 `json:"capture_epoch"`
+	CaptureReadyAt    string                                `json:"capture_ready_at"`
+	DurationMillis    int64                                 `json:"duration_ms"`
+	Capture           []recorderRenderCaptureObjectResponse `json:"capture"`
+	Presentation      recorderRenderPresentationResponse    `json:"presentation"`
+	AssetManifest     recorderRenderObjectFactsResponse     `json:"asset_manifest"`
+	Assets            []recorderRenderObjectFactsResponse   `json:"assets"`
 }
 
 type recorderRenderKeyResponse struct {
@@ -465,7 +466,8 @@ func recordingRenderObjectReference(body recorderRenderObjectReferenceBody) (rec
 func recorderRenderInputResponseValue(input recordingrender.ResolvedInput) recorderRenderInputResponse {
 	response := recorderRenderInputResponse{
 		SchemaVersion: input.SchemaVersion, TenantID: input.TenantID.String(), SpaceID: input.SpaceID.String(),
-		EpisodeID: input.EpisodeID.String(), RecordingID: input.RecordingID.String(), CaptureEpoch: input.CaptureEpoch,
+		TranscriptionMode: string(input.TranscriptionMode),
+		EpisodeID:         input.EpisodeID.String(), RecordingID: input.RecordingID.String(), CaptureEpoch: input.CaptureEpoch,
 		CaptureReadyAt: utilities.FormatTimestamp(input.CaptureReadyAt), DurationMillis: input.DurationMillis,
 		Capture: make([]recorderRenderCaptureObjectResponse, 0, len(input.Capture)),
 		Presentation: recorderRenderPresentationResponse{

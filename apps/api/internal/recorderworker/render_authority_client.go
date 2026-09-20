@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
@@ -76,16 +77,17 @@ type renderCaptureResponse struct {
 }
 
 type renderInputResponse struct {
-	SchemaVersion  string                  `json:"schema_version"`
-	TenantID       string                  `json:"tenant_id"`
-	SpaceID        string                  `json:"space_id"`
-	EpisodeID      string                  `json:"episode_id"`
-	RecordingID    string                  `json:"recording_id"`
-	CaptureEpoch   int64                   `json:"capture_epoch"`
-	CaptureReadyAt string                  `json:"capture_ready_at"`
-	DurationMillis int64                   `json:"duration_ms"`
-	Capture        []renderCaptureResponse `json:"capture"`
-	Presentation   struct {
+	SchemaVersion     string                           `json:"schema_version"`
+	TranscriptionMode artifactpolicy.TranscriptionMode `json:"transcription_mode"`
+	TenantID          string                           `json:"tenant_id"`
+	SpaceID           string                           `json:"space_id"`
+	EpisodeID         string                           `json:"episode_id"`
+	RecordingID       string                           `json:"recording_id"`
+	CaptureEpoch      int64                            `json:"capture_epoch"`
+	CaptureReadyAt    string                           `json:"capture_ready_at"`
+	DurationMillis    int64                            `json:"duration_ms"`
+	Capture           []renderCaptureResponse          `json:"capture"`
+	Presentation      struct {
 		Handle         string               `json:"handle"`
 		SchemaVersion  string               `json:"schema_version"`
 		ProfileVersion string               `json:"profile_version"`
@@ -448,6 +450,9 @@ func applySignedObjectHeaders(request *http.Request, headers map[string][]string
 }
 
 func decodeResolvedRenderInput(authority recordingrender.Authority, response renderInputResponse) (recordingrender.ResolvedInput, error) {
+	if response.TranscriptionMode.Validate() != nil {
+		return recordingrender.ResolvedInput{}, ProtocolError{Err: errors.New("recording render transcription policy is missing or invalid")}
+	}
 	tenantID, e1 := utilities.ParseID(response.TenantID)
 	spaceID, e2 := utilities.ParseID(response.SpaceID)
 	episodeID, e3 := utilities.ParseID(response.EpisodeID)
@@ -469,7 +474,7 @@ func decodeResolvedRenderInput(authority recordingrender.Authority, response ren
 	if err != nil {
 		return recordingrender.ResolvedInput{}, err
 	}
-	result := recordingrender.ResolvedInput{SchemaVersion: response.SchemaVersion, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RecordingID: recordingID, CaptureEpoch: response.CaptureEpoch, CaptureReadyAt: captureReadyAt, DurationMillis: response.DurationMillis, Presentation: presentation, PresentationHandle: presentationHandle, PresentationSchemaVersion: response.Presentation.SchemaVersion, PresentationProfileVersion: response.Presentation.ProfileVersion, PresentationSHA256: presentationSHA256, AssetManifest: assetManifest, Capture: make([]recordingrender.DownloadableCaptureObject, 0, len(response.Capture)), Assets: make([]recordingrender.DownloadableObject, 0, len(response.Assets))}
+	result := recordingrender.ResolvedInput{SchemaVersion: response.SchemaVersion, TranscriptionMode: response.TranscriptionMode, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RecordingID: recordingID, CaptureEpoch: response.CaptureEpoch, CaptureReadyAt: captureReadyAt, DurationMillis: response.DurationMillis, Presentation: presentation, PresentationHandle: presentationHandle, PresentationSchemaVersion: response.Presentation.SchemaVersion, PresentationProfileVersion: response.Presentation.ProfileVersion, PresentationSHA256: presentationSHA256, AssetManifest: assetManifest, Capture: make([]recordingrender.DownloadableCaptureObject, 0, len(response.Capture)), Assets: make([]recordingrender.DownloadableObject, 0, len(response.Assets))}
 	for _, capture := range response.Capture {
 		object, err := decodeDownloadableRenderObject(capture.renderObjectResponse)
 		if err != nil {

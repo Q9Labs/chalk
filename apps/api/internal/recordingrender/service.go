@@ -75,8 +75,9 @@ func (s Service) ResolveRenderInput(ctx context.Context, authority Authority) (R
 	}
 
 	resolved := ResolvedInput{
-		SchemaVersion: InputSchemaVersion,
-		TenantID:      authority.TenantID, SpaceID: authority.SpaceID, EpisodeID: authority.EpisodeID,
+		SchemaVersion:     InputSchemaVersion,
+		TranscriptionMode: stored.TranscriptionMode,
+		TenantID:          authority.TenantID, SpaceID: authority.SpaceID, EpisodeID: authority.EpisodeID,
 		RecordingID: authority.RecordingID, CaptureEpoch: authority.CaptureEpoch,
 		CaptureReadyAt: stored.Presentation.CaptureReadyAt, DurationMillis: stored.Presentation.DurationMillis,
 		PresentationHandle: stored.Presentation.Handle, PresentationSchemaVersion: stored.Presentation.SchemaVersion,
@@ -266,6 +267,9 @@ func (s Service) download(ctx context.Context, facts ObjectFacts, expiresAt time
 }
 
 func validateStoredInput(stored StoredInput) error {
+	if stored.TranscriptionMode.Validate() != nil {
+		return ErrInputIncomplete
+	}
 	if len(stored.Capture) == 0 {
 		return ErrInputIncomplete
 	}

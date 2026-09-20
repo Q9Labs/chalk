@@ -10,9 +10,54 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestResolvedRenderInputRequiresAuthoritativeTranscriptionMode(t *testing.T) {
+	now := time.Now().UTC()
+	authority, err := renderAuthorityFromClaim(productionRenderClaimForTest(t, now), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	object := renderObjectResponse{
+		ObjectKey: "presentation/frozen.json", ObjectETag: "immutable-etag",
+		ContentType: "application/json", ByteSize: 42, SHA256: strings.Repeat("a", 64),
+		Download: renderDownloadResponse{Method: http.MethodGet, URL: "https://objects.example.test/frozen.json", ExpiresAt: now.Add(time.Hour).Format(time.RFC3339Nano)},
+	}
+	response := renderInputResponse{
+		SchemaVersion: recordingrender.InputSchemaVersion,
+		TenantID:      authority.TenantID.String(), SpaceID: authority.SpaceID.String(),
+		EpisodeID: authority.EpisodeID.String(), RecordingID: authority.RecordingID.String(),
+		CaptureEpoch: authority.CaptureEpoch, CaptureReadyAt: now.Format(time.RFC3339Nano),
+		DurationMillis: 337_551, AssetManifest: object,
+	}
+	response.Presentation.Handle = authority.RenderInputHandle.String()
+	response.Presentation.SchemaVersion = recordingrender.PresentationSchemaVersion
+	response.Presentation.ProfileVersion = "composite_720p_v1"
+	response.Presentation.DurationMillis = response.DurationMillis
+	response.Presentation.SHA256 = object.SHA256
+	response.Presentation.Object = object
+	for _, mode := range []artifactpolicy.TranscriptionMode{
+		artifactpolicy.TranscriptionDisabled, artifactpolicy.TranscriptionOnDemand,
+		artifactpolicy.TranscriptionAutomatic, "", "unrecognized",
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			response.TranscriptionMode = mode
+			resolved, err := decodeResolvedRenderInput(authority, response)
+			if mode.Validate() != nil {
+				if err == nil {
+					t.Fatal("missing or invalid transcription mode was accepted")
+				}
+				return
+			}
+			if err != nil || resolved.TranscriptionMode != mode {
+				t.Fatalf("transcription mode = %q, error = %v", resolved.TranscriptionMode, err)
+			}
+		})
+	}
+}
 
 func TestAccessRenderKeySelectsHistoricalEpochAndFencesResponse(t *testing.T) {
 	now := time.Now().UTC()
